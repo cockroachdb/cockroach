@@ -3291,14 +3291,16 @@ type storageInternalKeysIterator struct {
 
 var storageInternalKeysGeneratorType = types.MakeLabeledTuple(
 	[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int,
-		types.Int, types.Int},
+		types.Int, types.Int, types.Int, types.Int},
 	[]string{
 		"level",
 		"node_id",
 		"store_id",
 		"snapshot_pinned_keys",
 		"snapshot_pinned_keys_bytes",
+		"point_key_delete_is_latest_count",
 		"point_key_delete_count",
+		"point_key_set_is_latest_count",
 		"point_key_set_count",
 		"range_delete_count",
 		"range_key_set_count",
@@ -3346,7 +3348,9 @@ func (s *storageInternalKeysIterator) Values() (tree.Datums, error) {
 		tree.NewDInt(tree.DInt(s.storeID)),
 		tree.NewDInt(tree.DInt(metricsInfo.SnapshotPinnedKeys)),
 		tree.NewDInt(tree.DInt(metricsInfo.SnapshotPinnedKeysBytes)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeyDeleteIsLatestCount)),
 		tree.NewDInt(tree.DInt(metricsInfo.PointKeyDeleteCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeySetIsLatestCount)),
 		tree.NewDInt(tree.DInt(metricsInfo.PointKeySetCount)),
 		tree.NewDInt(tree.DInt(metricsInfo.RangeDeleteCount)),
 		tree.NewDInt(tree.DInt(metricsInfo.RangeKeySetCount)),
