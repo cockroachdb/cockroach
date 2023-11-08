@@ -543,14 +543,14 @@ func (r *Replica) leasePostApplyLocked(
 	// lease is valid and owned by the replica before processing.
 	if iAmTheLeaseHolder && leaseChangingHands &&
 		LeaseCheckPreferencesOnAcquisitionEnabled.Get(&r.store.cfg.Settings.SV) {
-		preferenceStatus := checkStoreAgainstLeasePreferences(r.store.StoreID(), r.store.Attrs(),
+		preferenceStatus := CheckStoreAgainstLeasePreferences(r.store.StoreID(), r.store.Attrs(),
 			r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
 		switch preferenceStatus {
-		case leasePreferencesOK, leasePreferencesLessPreferred:
+		case LeasePreferencesOK, LeasePreferencesLessPreferred:
 			// We could also enqueue the lease when we are a less preferred
 			// leaseholder, however the replicate queue will eventually get to it and
 			// we already satisfy _some_ preference.
-		case leasePreferencesViolating:
+		case LeasePreferencesViolating:
 			log.VEventf(ctx, 2,
 				"acquired lease violates lease preferences, enqueuing for transfer [lease=%v preferences=%v]",
 				newLease, r.mu.conf.LeasePreferences)
