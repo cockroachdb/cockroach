@@ -632,6 +632,10 @@ def go_deps():
         name = "com_github_azure_azure_sdk_for_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/Azure/azure-sdk-for-go",
+        patch_args = ["-p1"],
+        patches = [
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_azure_azure_sdk_for_go.patch",
+        ],
         sha256 = "7232ccaf96ab411dce27e8c61f4ec0e20835f60e192ffc7b56b7c3a308e29978",
         strip_prefix = "github.com/Azure/azure-sdk-for-go@v57.1.0+incompatible",
         urls = [
