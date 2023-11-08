@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -556,7 +557,12 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// Initialize the database with a lot of ranges so that there are
 			// definitely a large number of leases on the node that we shut down
 			// before it starts draining.
-			c.Run(ctx, c.Node(1), "./cockroach workload init kv --splits 100")
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.Run(ctx, c.Node(1),
+				fmt.Sprintf("./cockroach workload init kv --splits 100 '%s'", pgurl))
 
 			m := c.NewMonitor(ctx, c.Nodes(1, nodes))
 			m.ExpectDeath()

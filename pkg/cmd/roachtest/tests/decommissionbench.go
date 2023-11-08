@@ -16,6 +16,7 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	t "log"
 	"math"
 	"os"
 	"path/filepath"
@@ -399,6 +400,12 @@ func setupDecommissionBench(
 		}
 
 		t.Status(fmt.Sprintf("initializing cluster with %d warehouses", benchSpec.warehouses))
+		// Add the connection string here as the port is not decided until c.Start() is called.
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		importCmd = fmt.Sprintf("%s '%s'", importCmd, pgurl)
 		c.Run(ctx, c.Node(pinnedNode), importCmd)
 
 		if benchSpec.snapshotRate != 0 {
@@ -430,7 +437,7 @@ func setupDecommissionBench(
 		}
 
 		// Wait for initial up-replication.
-		err := WaitFor3XReplication(ctx, t, db)
+		err = WaitFor3XReplication(ctx, t, db)
 		require.NoError(t, err)
 	}
 }
@@ -600,7 +607,8 @@ func runDecommissionBench(
 	rampDuration := 3 * time.Minute
 	rampStarted := make(chan struct{})
 	importCmd := fmt.Sprintf(
-		`./cockroach workload fixtures import tpcc --warehouses=%d`, benchSpec.warehouses,
+		`./cockroach workload fixtures import tpcc --warehouses=%d`,
+		benchSpec.warehouses,
 	)
 	workloadCmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
 		"--histograms=%s/stats.json --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
@@ -692,7 +700,7 @@ func runDecommissionBench(
 
 		m.ExpectDeath()
 		defer m.ResetDeaths()
-		err := runSingleDecommission(ctx, h, pinnedNode, benchSpec.decommissionNode, &targetNodeAtomic, benchSpec.snapshotRate,
+		err := runSingleDecommission(ctx, c, h, pinnedNode, benchSpec.decommissionNode, &targetNodeAtomic, benchSpec.snapshotRate,
 			benchSpec.whileDown, benchSpec.drainFirst, false /* reuse */, benchSpec.whileUpreplicating,
 			true /* estimateDuration */, benchSpec.slowWrites, tickByName,
 		)
@@ -744,7 +752,8 @@ func runDecommissionBenchLong(
 	rampDuration := 3 * time.Minute
 	rampStarted := make(chan struct{})
 	importCmd := fmt.Sprintf(
-		`./cockroach workload fixtures import tpcc --warehouses=%d`, benchSpec.warehouses,
+		`./cockroach workload fixtures import tpcc --warehouses=%d`,
+		benchSpec.warehouses,
 	)
 	workloadCmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --max-rate=%d --duration=%s "+
 		"--histograms=%s/stats.json --ramp=%s --tolerate-errors {pgurl:1-%d}", maxRate, benchSpec.warehouses,
@@ -812,7 +821,7 @@ func runDecommissionBenchLong(
 
 		for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= benchSpec.duration; {
 			m.ExpectDeath()
-			err := runSingleDecommission(ctx, h, pinnedNode, benchSpec.decommissionNode, &targetNodeAtomic, benchSpec.snapshotRate,
+			err := runSingleDecommission(ctx, c, h, pinnedNode, benchSpec.decommissionNode, &targetNodeAtomic, benchSpec.snapshotRate,
 				benchSpec.whileDown, benchSpec.drainFirst, true /* reuse */, benchSpec.whileUpreplicating,
 				true /* estimateDuration */, benchSpec.slowWrites, tickByName,
 			)
@@ -851,6 +860,7 @@ func runDecommissionBenchLong(
 // cluster, with the upreplication duration tracked by upreplicateTicker.
 func runSingleDecommission(
 	ctx context.Context,
+	c cluster.Cluster,
 	h *decommTestHelper,
 	pinnedNode int,
 	target int,
@@ -919,7 +929,12 @@ func runSingleDecommission(
 
 	if drainFirst {
 		h.t.Status(fmt.Sprintf("draining node%d", target))
-		if err := h.c.RunE(ctx, h.c.Node(target), "./cockroach node drain --self --insecure"); err != nil {
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, h.t.L(), c.Node(target))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cmd := fmt.Sprintf("./cockroach node drain --url=%s --self --insecure", pgurl)
+		if err := h.c.RunE(ctx, h.c.Node(target), cmd); err != nil {
 			return err
 		}
 	}

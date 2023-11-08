@@ -179,7 +179,11 @@ func setupTPCC(
 			// Do nothing.
 		case usingImport:
 			t.Status("loading fixture" + estimatedSetupTimeStr)
-			c.Run(ctx, crdbNodes[:1], tpccImportCmd(opts.Warehouses, opts.ExtraSetupArgs))
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.Run(ctx, crdbNodes[:1], tpccImportCmd(opts.Warehouses, opts.ExtraSetupArgs, pgurl))
 		case usingInit:
 			t.Status("initializing tables" + estimatedSetupTimeStr)
 			extraArgs := opts.ExtraSetupArgs
@@ -1302,6 +1306,11 @@ func loadTPCCBench(
 	var pgurl string
 	if b.SharedProcessMT {
 		pgurl = fmt.Sprintf("{pgurl%s:%s}", roachNodes[:1], appTenantName)
+	} else {
+		pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 	cmd := tpccImportCmd(loadWarehouses, loadArgs, pgurl)
 	if err = c.RunE(ctx, roachNodes[:1], cmd); err != nil {
