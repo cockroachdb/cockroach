@@ -478,8 +478,8 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 	msg := redact.StringBuilder{}
 	msg.SafeString("failed preemptive refresh")
 	if refreshErr != nil {
-		if refreshErr, ok := refreshErr.GetDetail().(*kvpb.RefreshFailedError); ok {
-			msg.Printf(" due to a conflict: %s on key %s", refreshErr.FailureReason(), refreshErr.Key)
+		if rfErr, ok := refreshErr.GetDetail().(*kvpb.RefreshFailedError); ok {
+			msg.Printf(" due to a conflict: %s on key %s", rfErr.FailureReason(), rfErr.Key)
 		} else {
 			msg.Printf(" - unknown error: %s", refreshErr)
 		}
