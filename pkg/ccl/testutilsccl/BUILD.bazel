@@ -10,6 +10,7 @@ go_library(
         "//pkg/base",
         "//pkg/jobs",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/execinfra",
         "//pkg/sql/sqltestutils",
