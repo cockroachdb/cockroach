@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -73,9 +74,12 @@ func registerAutoUpgrade(r registry.Registry) {
 
 		decommissionAndStop := func(node int) error {
 			t.WorkerStatus("decommission")
-			port := fmt.Sprintf("{pgport:%d}", node)
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(node))
+			if err != nil {
+				return err
+			}
 			if err := c.RunE(ctx, c.Node(node),
-				fmt.Sprintf("./cockroach node decommission %d --insecure --port=%s", node, port)); err != nil {
+				fmt.Sprintf("./cockroach node decommission %d --insecure --url=%s", node, pgurl)); err != nil {
 				return err
 			}
 			t.WorkerStatus("stop")

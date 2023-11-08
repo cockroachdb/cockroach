@@ -237,7 +237,7 @@ func registerPgjdbc(r registry.Registry) {
 
 const pgjdbcDatabaseParams = `
 server=localhost
-port=26257
+port={pgport:1}
 secondaryServer=localhost
 secondaryPort=5433
 secondaryServer2=localhost

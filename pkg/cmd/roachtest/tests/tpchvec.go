@@ -575,6 +575,11 @@ func smithcmpTestRun(
 	if err := c.RunE(ctx, firstNode, fmt.Sprintf("curl %s > %s", configURL, configFile)); err != nil {
 		t.Fatal(err)
 	}
+	// smithcmp cannot access the pgport env variable, so we must edit the config file here
+	// to tell it the port to use.
+	if err := c.RunE(ctx, firstNode, fmt.Sprintf(`port=$(echo -n {pgport:1}) && sed -i "s|26257|$port|g" %s`, configFile)); err != nil {
+		t.Fatal(err)
+	}
 	cmd := fmt.Sprintf("./%s %s", tpchVecSmithcmp, configFile)
 	if err := c.RunE(ctx, firstNode, cmd); err != nil {
 		t.Fatal(err)

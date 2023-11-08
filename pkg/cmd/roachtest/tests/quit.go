@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -384,9 +385,13 @@ func registerQuitTransfersLeases(r registry.Registry) {
 	// kill. If the drain is successful, the leases are transferred
 	// successfully even if if the process terminates non-gracefully.
 	registerTest("drain", "v20.1.0", func(ctx context.Context, t test.Test, c cluster.Cluster, nodeID int) {
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeID))
+		if err != nil {
+			t.Fatal(err)
+		}
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(nodeID),
 			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
-			fmt.Sprintf("--port={pgport:%d}", nodeID),
+			fmt.Sprintf("--url=%s", pgurl),
 		)
 		t.L().Printf("cockroach node drain:\n%s\n", result.Stdout+result.Stdout)
 		if err != nil {
@@ -427,9 +432,13 @@ func registerQuitTransfersLeases(r registry.Registry) {
 		// - we add one to bring the value back between 1 and NodeCount
 		//   inclusive.
 		otherNodeID := (nodeID % c.Spec().NodeCount) + 1
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(otherNodeID))
+		if err != nil {
+			t.Fatal(err)
+		}
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(otherNodeID),
 			"./cockroach", "node", "drain", "--insecure", "--logtostderr=INFO",
-			fmt.Sprintf("--port={pgport:%d}", otherNodeID),
+			fmt.Sprintf("--url=%s", pgurl),
 			fmt.Sprintf("%d", nodeID),
 		)
 		t.L().Printf("cockroach node drain:\n%s\n", result.Stdout+result.Stderr)

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -118,9 +119,13 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		m.Go(func(ctx context.Context) error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
+				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
+				if err != nil {
+					t.Fatal(err)
+				}
 				return c.RunE(ctx,
 					c.Node(id),
-					fmt.Sprintf("./cockroach node drain %d --insecure --drain-wait=%s", id, duration.String()),
+					fmt.Sprintf("./cockroach node drain %d --insecure --drain-wait=%s --url=%s", id, duration.String(), pgurl),
 				)
 			}
 			return drain(id)

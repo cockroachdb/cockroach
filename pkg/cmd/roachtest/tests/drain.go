@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -126,6 +127,10 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 
 	m.Go(func(ctx context.Context) error {
 		t.Status(fmt.Sprintf("start draining node %d", nodeToDrain))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDrain))
+		if err != nil {
+			t.Fatal(err)
+		}
 		results, err := c.RunWithDetailsSingleNode(
 			ctx,
 			t.L(),
@@ -135,7 +140,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 			// of server.shutdown.initial_wait, server.shutdown.connections.timeout,
 			// server.shutdown.transactions.timeout times two, and
 			// server.shutdown.lease_transfer_iteration.timeout.
-			"./cockroach node drain --self --insecure --drain-wait=10s",
+			fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=10s --url=%s", pgurl),
 		)
 		if err != nil {
 			return err
@@ -255,9 +260,13 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 	m := c.NewMonitor(ctx, c.Node(nodeToDrain))
 	m.Go(func(ctx context.Context) error {
 		t.Status(fmt.Sprintf("draining node %d", nodeToDrain))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDrain))
+		if err != nil {
+			t.Fatal(err)
+		}
 		return c.RunE(ctx,
 			c.Node(nodeToDrain),
-			"./cockroach node drain --self --insecure --drain-wait=600s",
+			fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=600s --url=%s", pgurl),
 		)
 	})
 
@@ -332,13 +341,15 @@ func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) 
 	c.Stop(ctx, t.L(), stopOpts, c.Node(2))
 
 	t.Status("start draining node 3")
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(3))
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Ignore the error, since the command is expected to time out.
 	results, _ := c.RunWithDetailsSingleNode(
 		ctx,
 		t.L(),
-		c.Node(3),
-		"./cockroach node drain --self --insecure --drain-wait=10s",
-	)
+		c.Node(3), fmt.Sprintf("./cockroach node drain --self --insecure --drain-wait=10s --url=%s", pgurl))
 	t.L().Printf("drain output:\n%s\n%s\n", results.Stdout, results.Stderr)
 	require.Regexp(t, "(cluster settings require a value of at least|could not check drain related cluster settings)", results.Stderr)
 }
