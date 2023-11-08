@@ -3006,8 +3006,17 @@ func (kl *keyLocks) acquireLock(
 	}
 	// Update the tracking to include this transaction's lock.
 	kl.lockAcquiredOrDiscovered(tl)
-	// Inform active waiters since lock has transitioned to held.
-	kl.informActiveWaiters()
+	// We may need to recompute wait queues after removing locking requests that
+	// belong to the transaction that acquired the lock
+	// (releaseLockingRequestsFromTxn), as doing so could allow requests that were
+	// actively waiting previously to now proceed. Such cases are rare while lock
+	// promotion is disallowed, but still possible.
+	//
+	// recomputeWaitQueues will also call informActiveWaiters, letting them know
+	// that the lock has transitioned to held. In cases where the lock is acquired
+	// by a different transaction than the one which holds the claim, this call to
+	// informActiveWaiters will also cause them to push the new lock holder.
+	kl.recomputeWaitQueues(st)
 	return nil
 }
 
