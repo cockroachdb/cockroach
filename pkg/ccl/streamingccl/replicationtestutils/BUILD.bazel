@@ -44,6 +44,7 @@ go_library(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
