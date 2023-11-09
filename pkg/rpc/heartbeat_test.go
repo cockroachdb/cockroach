@@ -262,8 +262,8 @@ func TestTenantVersionCheck(t *testing.T) {
 	clock := timeutil.NewManualTime(timeutil.Unix(0, 5))
 	maxOffset := time.Nanosecond
 	st := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
+		clusterversion.Latest.Version(),
+		clusterversion.MinSupported.Version(),
 		true /* initialize */)
 	heartbeat := &HeartbeatService{
 		clock:              clock,
