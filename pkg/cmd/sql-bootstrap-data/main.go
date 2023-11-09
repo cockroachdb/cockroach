@@ -26,8 +26,8 @@ import (
 // (but still supported) versions.
 //
 // To run:
-//   bazel build //pkg/cmd/sql-bootstrap-data:sql-bootstrap-data
-//   _bazel/bin/pkg/cmd/sql-bootstrap-data/sql-bootstrap-data_/sql-bootstrap-data
+//   ./dev build sql-bootstrap-data
+//   ./bin/sql-bootstrap-data
 
 func main() {
 	version := clusterversion.Latest.ReleaseSeries()
@@ -36,7 +36,8 @@ func main() {
 	// tenant); the tenant-specific prefix is stripped out of the keys.
 	tenantKeys, tenantHash := bootstrap.GetAndHashInitialValuesToString(12345)
 
-	fmt.Printf("\n// Add the following declarations at the end of initial_values.go:\n")
+	fmt.Printf("\n// Commit the generated files and " +
+		" add the following declarations to the end of initial_values.go:\n")
 	writeDataFile(version, "system.keys", systemKeys)
 	writeDataFile(version, "system.sha256", systemHash)
 	writeDataFile(version, "tenant.keys", tenantKeys)
