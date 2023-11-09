@@ -50,6 +50,12 @@ func WithSessionData(sd *sessiondata.SessionData) Option {
 	return (*sessionDataOption)(sd)
 }
 
+// WithSkipDescriptorCache forces the internal executor to avoid all leasing
+// infrastructure.
+func WithSkipDescriptorCache() Option {
+	return skipDescriptorCache(true)
+}
+
 // TxnConfig is the config to be set for txn.
 type TxnConfig struct {
 	ExecutorConfig
@@ -79,11 +85,16 @@ func (tc *TxnConfig) Init(opts ...TxnOption) {
 // ExecutorConfig is the configuration used by the implementation of DB to
 // set up the Executor.
 type ExecutorConfig struct {
-	sessionData *sessiondata.SessionData
+	sessionData         *sessiondata.SessionData
+	skipDescriptorCache bool
 }
 
 func (ec *ExecutorConfig) GetSessionData() *sessiondata.SessionData {
 	return ec.sessionData
+}
+
+func (ec *ExecutorConfig) GetSkipDescriptorCache() bool {
+	return ec.skipDescriptorCache
 }
 
 // Init is used to initialize an ExecutorConfig.
@@ -111,3 +122,9 @@ type admissionPriority admissionpb.WorkPriority
 func (a admissionPriority) applyTxn(config *TxnConfig) {
 	config.priority = (*admissionpb.WorkPriority)(&a)
 }
+
+type skipDescriptorCache bool
+
+func (s skipDescriptorCache) applyTxn(o *TxnConfig) { o.skipDescriptorCache = bool(s) }
+
+func (s skipDescriptorCache) applyEx(o *ExecutorConfig) { o.skipDescriptorCache = bool(s) }

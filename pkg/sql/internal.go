@@ -131,6 +131,10 @@ type InternalExecutor struct {
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
 
+	// skipDescriptorCache disables the leasing layer for the internal executor,
+	// which is primary used to avoid deadlock risk with the lease manager.
+	skipDescriptorCache bool
+
 	// extraTxnState is to store extra transaction state info that
 	// will be passed to an internal executor. It should only be set when the
 	// internal executor is used under a not-nil txn.
@@ -285,6 +289,7 @@ func (ie *InternalExecutor) initConnEx(
 				ex.extraTxnState.descCollection.SetSyntheticDescriptors(ie.syntheticDescriptors)
 				ex.extraTxnState.shouldResetSyntheticDescriptors = true
 			}
+			ex.extraTxnState.skipDescriptorCache = ie.skipDescriptorCache
 		}
 		ex = ie.s.newConnExecutor(
 			ctx,
@@ -360,6 +365,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
 			ex.extraTxnState.roleExistsCache = ie.extraTxnState.roleExistsCache
+			ex.extraTxnState.skipDescriptorCache = ie.skipDescriptorCache
 			ex.initPlanner(ctx, &ex.planner)
 		}
 	}
@@ -1609,6 +1615,7 @@ type internalExecutorCommitTxnFunc func(ctx context.Context) error
 func (ief *InternalDB) newInternalExecutorWithTxn(
 	ctx context.Context,
 	sd *sessiondata.SessionData,
+	skipDescriptorCache bool,
 	settings *cluster.Settings,
 	txn *kv.Txn,
 	descCol *descs.Collection,
@@ -1630,9 +1637,10 @@ func (ief *InternalDB) newInternalExecutorWithTxn(
 		memAcc: ief.monitor.MakeBoundAccount(),
 	}
 	ie := InternalExecutor{
-		s:          ief.server,
-		mon:        ief.monitor,
-		memMetrics: ief.memMetrics,
+		s:                   ief.server,
+		mon:                 ief.monitor,
+		memMetrics:          ief.memMetrics,
+		skipDescriptorCache: skipDescriptorCache,
 		extraTxnState: &extraTxnState{
 			txn:                txn,
 			descCollection:     descCol,
@@ -1761,6 +1769,7 @@ func (ief *InternalDB) txn(
 			ie, commitTxnFn := ief.newInternalExecutorWithTxn(
 				ctx,
 				cfg.GetSessionData(),
+				cfg.GetSkipDescriptorCache(),
 				cf.GetClusterSettings(),
 				kvTxn,
 				descsCol,
