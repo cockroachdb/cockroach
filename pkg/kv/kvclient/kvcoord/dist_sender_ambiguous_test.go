@@ -297,7 +297,7 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 		},
 	}
 	getInterceptingTransportFactory := func(nID roachpb.NodeID) kvcoord.TransportFactory {
-		return func(options kvcoord.SendOptions, dialer *nodedialer.Dialer, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
+		return func(options kvcoord.SendOptions, dialer *nodedialer.Dialer, slice roachpb.ReplicaSet) (kvcoord.Transport, error) {
 			transport, tErr := kvcoord.GRPCTransportFactory(options, dialer, slice)
 			interceptor := &interceptingTransport{
 				Transport: transport,

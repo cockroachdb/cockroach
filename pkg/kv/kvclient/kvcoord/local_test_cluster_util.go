@@ -99,7 +99,7 @@ func NewDistSenderForLocalTestCluster(
 			TransportFactory: func(
 				opts SendOptions,
 				nodeDialer *nodedialer.Dialer,
-				replicas ReplicaSlice,
+				replicas roachpb.ReplicaSet,
 			) (Transport, error) {
 				transport, err := senderTransportFactory(opts, nodeDialer, replicas)
 				if err != nil {
