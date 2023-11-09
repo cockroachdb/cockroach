@@ -21,55 +21,69 @@ type RunOptions struct {
 	// example, inspects the previous result's output, and decides not to
 	// retry any further, by returning false.
 	ShouldRetryFn func(*RunResultDetails) bool
-	// FailSlow will cause the Parallel function to wait for all nodes to
-	// finish when encountering a command error on any node. The default
-	// behaviour is to exit immediately on the first error, in which case the
-	// slice of ParallelResults will only contain the one error result.
-	// Named as such to make clear that this is not enabled by default.
-	FailSlow bool
+	// FailOption will decide if the operation will wait for all nodes to finish
+	// when encountering a command error, or fail immediately. The default
+	// behaviour depends on the context in which RunOptions are used. It is
+	// recommended to check the documentation of the function you are using to see
+	// what the default behaviour is.
+	FailOption FailOption
+
 	// These are private to roachprod
+	Nodes       Nodes
 	Concurrency int
 	Display     string
 }
 
-type RunOption func(runOpts *RunOptions)
+type FailOption int8
 
-// WithRetryOpts specifies retry behaviour
-func WithRetryOpts(retryOpts retry.Options) RunOption {
-	return func(runOpts *RunOptions) {
-		runOpts.RetryOptions = &retryOpts
+const (
+	// FailDefault will use the default behaviour of the function you are using.
+	FailDefault FailOption = iota
+	// FailFast will exit immediately on the first error, in which case the slice
+	// of ParallelResults will only contain the one error result.
+	FailFast
+	// FailSlow will wait for all nodes to finish when encountering a command
+	// error on any node.
+	FailSlow
+)
+
+func OnNodes(nodes Nodes) RunOptions {
+	return RunOptions{
+		Nodes: nodes,
 	}
 }
 
-// WithRetryDisabled disables retries for a command,
-// and is a friendly equivalent to `WithRetryOpts(nil)`
-func WithRetryDisabled() RunOption {
-	return func(runOpts *RunOptions) {
-		runOpts.RetryOptions = nil
-	}
+func (r RunOptions) WithRetryOpts(retryOpts retry.Options) RunOptions {
+	r.RetryOptions = &retryOpts
+	return r
 }
 
-// WithRetryFn is only applicable when retryOpts is not nil
-func WithRetryFn(fn func(*RunResultDetails) bool) RunOption {
-	return func(runOpts *RunOptions) {
-		runOpts.ShouldRetryFn = fn
-	}
+func (r RunOptions) WithRetryDisabled() RunOptions {
+	r.RetryOptions = nil
+	return r
 }
 
-func WithFailSlow(failSlow bool) RunOption {
-	return func(runOpts *RunOptions) {
-		runOpts.FailSlow = failSlow
-	}
+func (r RunOptions) WithRetryFn(fn func(*RunResultDetails) bool) RunOptions {
+	r.ShouldRetryFn = fn
+	return r
 }
 
-func WithConcurrency(concurrency int) RunOption {
-	return func(runOpts *RunOptions) {
-		runOpts.Concurrency = concurrency
-	}
+func (r RunOptions) WithFailSlow() RunOptions {
+	r.FailOption = FailSlow
+	return r
 }
 
-func WithDisplay(display string) RunOption {
-	return func(runOpts *RunOptions) {
-		runOpts.Display = display
-	}
+func (r RunOptions) WithFailFast() RunOptions {
+	r.FailOption = FailFast
+	return r
+}
+
+func (r RunOptions) WithConcurrency(concurrency int) RunOptions {
+	r.Concurrency = concurrency
+	return r
+}
+
+func (r RunOptions) WithDisplay(display string) RunOptions {
+	r.Display = display
+	return r
 }

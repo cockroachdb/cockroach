@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -138,7 +139,10 @@ func roundToSeconds(d time.Duration) time.Duration {
 }
 
 func roachprodRun(clusterName string, cmdArray []string) error {
-	return roachprod.Run(context.Background(), l, clusterName, "", "", false, os.Stdout, os.Stderr, cmdArray)
+	return roachprod.Run(
+		context.Background(), l, clusterName, "", "", false,
+		os.Stdout, os.Stderr, cmdArray, install.RunOptions{},
+	)
 }
 
 func run() error {
