@@ -420,7 +420,7 @@ vectorized: true
 
 # ------------------------------------------------------------------------------
 # Tests with subqueries.
-# 
+#
 # Row-level locking clauses only apply to subqueries in the FROM clause of a
 # SELECT statement. They don't apply to subqueries in the projection or in
 # the filter.
@@ -2667,3 +2667,263 @@ project
 
 statement ok
 RESET enable_durable_locking_for_serializable
+
+subtest lock_op_optimizations
+
+statement ok
+SET optimizer_use_lock_op_for_serializable = true
+
+# Push the locking down into the scan.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a = 5 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 1 (missing stats)
+  table: t@t_pkey
+  spans: /5/0
+  locking strength: for update
+
+# Push the locking down into the scan.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a > 2 AND a < 7 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• scan
+  columns: (a, b)
+  estimated row count: 4 (missing stats)
+  table: t@t_pkey
+  spans: /3-/7
+  parallel
+  locking strength: for update
+
+# Same as above but we can't push the locking down due to the filter.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t WHERE a > 2 AND a < 7 AND b % 2 = 0 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • filter
+    │ columns: (a, b)
+    │ estimated row count: 1 (missing stats)
+    │ filter: (b % 2) = 0
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 4 (missing stats)
+          table: t@t_pkey
+          spans: /3-/7
+          parallel
+
+# Scan on a secondary index. In this case we can't push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT b, a FROM u WHERE b = 5 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (b, a)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: u@u_b_idx
+      spans: /5-/6
+
+# Push the locking down into the index join.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM u WHERE b = 5 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ key columns: a
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: u@u_b_idx
+      spans: /5-/6
+
+# Push the locking down into the lookup join.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b WHERE t.a = 5 FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1 (missing stats)
+│ table: u@u_pkey
+│ equality: (b) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /5/0
+
+# Same as above but with another predicate in the join. In this case we can't
+# push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b AND u.c < t.b WHERE t.a = 5 FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1 (missing stats)
+│ table: u@u_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@u_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │ pred: c < a
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Lookup join on a secondary index. In this case we can't push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT t.*, u.b, u.a FROM t JOIN u ON u.b = t.b WHERE t.a = 5 FOR UPDATE OF u
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, b, a)
+│ estimated row count: 10 (missing stats)
+│ table: u@u_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b)
+    │ estimated row count: 10 (missing stats)
+    │ table: u@u_b_idx
+    │ equality: (b) = (b)
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Lookup join on a different table. In this case we can't push the locking down.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t JOIN u ON u.a = t.b WHERE t.a = 5 FOR UPDATE OF t
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, a, b, c)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b, c)
+    │ estimated row count: 1 (missing stats)
+    │ table: u@u_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Self-lookup join, locking the left side. Cannot push down locking.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t t1 INNER LOOKUP JOIN t t2 ON t2.a = t1.b WHERE t1.a = 5 FOR UPDATE OF t1
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, a, b)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (a) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, a, b)
+    │ estimated row count: 1 (missing stats)
+    │ table: t@t_pkey
+    │ equality: (b) = (a)
+    │ equality cols are key
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
+
+# Self-lookup join, locking the right side. Can push down locking.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t t1 INNER LOOKUP JOIN t t2 ON t2.a = t1.b WHERE t1.a = 5 FOR UPDATE OF t2
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (a, b, a, b)
+│ estimated row count: 1 (missing stats)
+│ table: t@t_pkey
+│ equality: (b) = (a)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 1 (missing stats)
+      table: t@t_pkey
+      spans: /5/0
+
+statement ok
+RESET optimizer_use_lock_op_for_serializable
