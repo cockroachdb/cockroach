@@ -316,21 +316,21 @@ export default function (props: GraphDashboardProps) {
           <>
             <Metric
               key={nid}
-              name="cr.node.admission.wait_sum.kv"
+              name="cr.node.admission.wait_durations.kv-sum"
               title={"KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               nonNegativeRate
             />
             <Metric
               key={nid}
-              name="cr.node.admission.wait_sum.kv-stores"
+              name="cr.node.admission.wait_durations.kv-stores-sum"
               title={"KV write " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               nonNegativeRate
             />
             <Metric
               key={nid}
-              name="cr.node.admission.wait_sum.sql-kv-response"
+              name="cr.node.admission.wait_durations.sql-kv-response-sum"
               title={
                 "SQL-KV response " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
@@ -339,7 +339,7 @@ export default function (props: GraphDashboardProps) {
             />
             <Metric
               key={nid}
-              name="cr.node.admission.wait_sum.sql-sql-response"
+              name="cr.node.admission.wait_durations.sql-sql-response-sum"
               title={
                 "SQL-SQL response " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
