@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -39,7 +40,11 @@ var Mode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_control.mode",
 	"determines the 'mode' of flow control we use for replication traffic in KV, if enabled",
-	ApplyToElastic.String(),
+	util.ConstantWithMetamorphicTestChoice(
+		"kv.snapshot.ingest_as_write_threshold",
+		modeDict[ApplyToElastic], /* default value */
+		modeDict[ApplyToAll],     /* other value */
+	).(string),
 	map[int64]string{
 		int64(ApplyToElastic): modeDict[ApplyToElastic],
 		int64(ApplyToAll):     modeDict[ApplyToAll],
