@@ -595,7 +595,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "AdminSplit" for more information on this pattern.
 func (r *Replica) AdminMerge(
-	ctx context.Context, args kvpb.AdminMergeRequest, reason string,
+	ctx context.Context, args kvpb.AdminMergeRequest, reason redact.RedactableString,
 ) (kvpb.AdminMergeResponse, *kvpb.Error) {
 	var reply kvpb.AdminMergeResponse
 
