@@ -13,6 +13,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"sync"
 	"time"
 
@@ -60,8 +61,10 @@ func remoteWorker(
 				break
 			}
 			start := timeutil.Now()
-			runResult, err := roachprod.RunWithDetails(context.Background(), log, clusterNode,
-				"", "", false, command.Args)
+			runResult, err := roachprod.RunWithDetails(
+				context.Background(), log, clusterNode, "" /* SSHOptions */, "", /* processTag */
+				false /* secure */, command.Args, install.RunOptions{},
+			)
 			duration := timeutil.Since(start)
 			var stdout, stderr string
 			var exitStatus int

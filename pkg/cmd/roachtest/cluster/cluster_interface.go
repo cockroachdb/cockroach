@@ -94,27 +94,19 @@ type Cluster interface {
 	// Use it when you need output details such as stdout or stderr, or remote exit status.
 	RunWithDetails(ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string) ([]install.RunResultDetails, error)
 
-	RunWithDetailsExt(ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args []string, opts ...install.RunOption) ([]install.RunResultDetails, error)
-
 	// Run is fatal on errors.
 	// Use it when an error means the test should fail.
 	Run(ctx context.Context, node option.NodeListOption, args ...string)
 
-	RunExt(ctx context.Context, node option.NodeListOption, args []string, opts ...install.RunOption)
-
 	// RunE runs a command on the specified nodes and returns an error.
 	// Use it when you need to run a command and only care if it ran successfully or not.
 	RunE(ctx context.Context, node option.NodeListOption, args ...string) error
-
-	RunEExt(ctx context.Context, node option.NodeListOption, args []string, opts ...install.RunOption) error
 
 	// RunWithDetailsSingleNode is just like RunWithDetails but used when 1) operating
 	// on a single node AND 2) an error from roachprod itself would be treated the same way
 	// you treat an error from the command. This makes error checking easier / friendlier
 	// and helps us avoid code replication.
 	RunWithDetailsSingleNode(ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args ...string) (install.RunResultDetails, error)
-
-	RunWithDetailsSingleNodeExt(ctx context.Context, testLogger *logger.Logger, nodes option.NodeListOption, args []string, opts ...install.RunOption) (install.RunResultDetails, error)
 
 	// Metadata about the provisioned nodes.
 
