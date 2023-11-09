@@ -34,16 +34,22 @@ type kvWriter struct {
 	newWriter bootstrap.KVWriter
 
 	settingsWatcher *settingswatcher.SettingsWatcher
+	knobs           *StorageTestingKnobs
 }
 
 func newKVWriter(
-	codec keys.SQLCodec, db *kv.DB, id descpb.ID, settingsWatcher *settingswatcher.SettingsWatcher,
+	codec keys.SQLCodec,
+	db *kv.DB,
+	id descpb.ID,
+	settingsWatcher *settingswatcher.SettingsWatcher,
+	knobs *StorageTestingKnobs,
 ) *kvWriter {
 	return &kvWriter{
 		db:              db,
 		newWriter:       bootstrap.MakeKVWriter(codec, leaseTableWithID(id)),
 		oldWriter:       bootstrap.MakeKVWriter(codec, systemschema.V22_2_LeaseTable()),
 		settingsWatcher: settingsWatcher,
+		knobs:           knobs,
 	}
 }
 
@@ -61,7 +67,11 @@ func leaseTableWithID(id descpb.ID) catalog.TableDescriptor {
 func (w *kvWriter) versionGuard(
 	ctx context.Context, txn *kv.Txn,
 ) (settingswatcher.VersionGuard, error) {
-	return w.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.TODO_Delete_V23_1_SystemRbrCleanup)
+	targetVersion := clusterversion.TODO_Delete_V23_1_SystemRbrCleanup
+	if w.knobs.ForceVersionGuardReads {
+		targetVersion = clusterversion.Latest
+	}
+	return w.settingsWatcher.MakeVersionGuard(ctx, txn, targetVersion)
 }
 
 func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {

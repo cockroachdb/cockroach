@@ -34,6 +34,9 @@ type StorageTestingKnobs struct {
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
+	// ForceVersionGuardReads forces us to always read the versions from the
+	// system.settings table, until we are at the latest version.
+	ForceVersionGuardReads bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

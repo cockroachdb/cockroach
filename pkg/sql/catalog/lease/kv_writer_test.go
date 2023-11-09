@@ -83,7 +83,7 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 	settingsWatcher := s.SettingsWatcher().(*settingswatcher.SettingsWatcher)
 	w := teeWriter{
 		a: newInternalExecutorWriter(ie, "defaultdb.public.lease1"),
-		b: newKVWriter(codec, kvDB, lease2ID, settingsWatcher),
+		b: newKVWriter(codec, kvDB, lease2ID, settingsWatcher, &StorageTestingKnobs{}),
 	}
 	start := kvDB.Clock().Now()
 	groups := generateWriteOps(2<<10, 1<<10)
