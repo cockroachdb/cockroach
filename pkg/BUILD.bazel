@@ -1992,6 +1992,7 @@ GO_TARGETS = [
     "//pkg/sql/randgen:randgen_test",
     "//pkg/sql/rangeprober:range_prober",
     "//pkg/sql/rangeprober:rangeprober",
+    "//pkg/sql/regionliveness:regionliveness",
     "//pkg/sql/regions:regions",
     "//pkg/sql/regions:regions_test",
     "//pkg/sql/roleoption:roleoption",
