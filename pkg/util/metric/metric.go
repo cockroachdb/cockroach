@@ -323,7 +323,6 @@ func newHistogram(
 	return h
 }
 
-var _ tick.Periodic = (*Histogram)(nil)
 var _ PrometheusExportable = (*Histogram)(nil)
 var _ WindowedHistogram = (*Histogram)(nil)
 
@@ -358,6 +357,15 @@ type IHistogram interface {
 	Iterable
 	PrometheusExportable
 	WindowedHistogram
+	// Periodic exposes tick-related functions as part of the public API.
+	// TODO(obs-infra): This shouldn't be necessary, but we need to expose tick functions
+	// to metric.AggHistogram so that it has the ability to rotate the underlying histogram
+	// windows. The real solution is to merge the two packages and make this piece of the API
+	// package-private, but such a solution is not easily backported. This solution is meant
+	// to be temporary, and the merging of packages will happen on master which will provide
+	// a more holistic solution. Afterwards, interfaces involving ticking can be returned to
+	// package-private.
+	tick.Periodic
 
 	RecordValue(n int64)
 	Total() (int64, float64)
@@ -366,12 +374,21 @@ type IHistogram interface {
 
 var _ IHistogram = &Histogram{}
 
+// NextTick returns the next tick timestamp of the underlying tick.Ticker
+// used by this Histogram.  Generally not useful - this is part of a band-aid
+// fix and should be expected to be removed.
+// TODO(obs-infra): remove this once pkg/util/aggmetric is merged with this package.
 func (h *Histogram) NextTick() time.Time {
 	h.windowed.RLock()
 	defer h.windowed.RUnlock()
 	return h.windowed.NextTick()
 }
 
+// Tick triggers a tick of this Histogram, regardless of whether we've passed
+// the next tick interval. Generally, this should not be used by any caller other
+// than aggmetric.AggHistogram. Future work will remove the need to expose this function
+// as part of the public API.
+// TODO(obs-infra): remove this once pkg/util/aggmetric is merged with this package.
 func (h *Histogram) Tick() {
 	h.windowed.Lock()
 	defer h.windowed.Unlock()
