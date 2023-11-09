@@ -387,7 +387,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&controlSchedulesNode{}):                    "control schedules",
 	reflect.TypeOf(&createDatabaseNode{}):                      "create database",
 	reflect.TypeOf(&createExtensionNode{}):                     "create extension",
-	reflect.TypeOf(&createExternalConectionNode{}):             "create external connection",
+	reflect.TypeOf(&createExternalConnectionNode{}):            "create external connection",
 	reflect.TypeOf(&createFunctionNode{}):                      "create function",
 	reflect.TypeOf(&createIndexNode{}):                         "create index",
 	reflect.TypeOf(&createSequenceNode{}):                      "create sequence",

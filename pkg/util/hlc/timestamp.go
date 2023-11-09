@@ -442,7 +442,7 @@ func (t ClockTimestamp) String() string { return t.ToTimestamp().String() }
 // SafeValue implements the redact.SafeValue interface.
 func (t ClockTimestamp) SafeValue() {}
 
-// IsEmpty retruns true if t is an empty ClockTimestamp.
+// IsEmpty returns true if t is an empty ClockTimestamp.
 func (t ClockTimestamp) IsEmpty() bool { return Timestamp(t).IsEmpty() }
 
 // Forward is like Timestamp.Forward, but for ClockTimestamps.
