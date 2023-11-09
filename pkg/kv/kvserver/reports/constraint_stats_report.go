@@ -367,8 +367,9 @@ func makeConstraintConformanceVisitor(
 	v := constraintConformanceVisitor{
 		cfg:           cfg,
 		storeResolver: storeResolver,
+		report:        make(ConstraintReport),
 	}
-	v.reset(ctx)
+	v.init(ctx)
 	return v
 }
 
@@ -383,14 +384,7 @@ func (v *constraintConformanceVisitor) Report() ConstraintReport {
 	return v.report
 }
 
-// reset is part of the rangeVisitor interface.
-func (v *constraintConformanceVisitor) reset(ctx context.Context) {
-	*v = constraintConformanceVisitor{
-		cfg:           v.cfg,
-		storeResolver: v.storeResolver,
-		report:        make(ConstraintReport, len(v.report)),
-	}
-
+func (v *constraintConformanceVisitor) init(ctx context.Context) {
 	// Iterate through all the zone configs to create report entries for all the
 	// zones that have constraints. Otherwise, just iterating through the ranges
 	// wouldn't create entries for constraints that aren't violated, and
