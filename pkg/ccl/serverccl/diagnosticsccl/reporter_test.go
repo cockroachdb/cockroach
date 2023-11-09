@@ -207,7 +207,7 @@ func TestServerReport(t *testing.T) {
 		"cluster.label":                            "<redacted>",
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "1m30s",
-		"version":                                  clusterversion.TestingBinaryVersion.String(),
+		"version":                                  clusterversion.Latest.String(),
 		"cluster.secret":                           "<redacted>",
 	} {
 		got, ok := last.AlteredSettings[key]

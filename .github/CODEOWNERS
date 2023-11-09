@@ -105,6 +105,7 @@
 /pkg/sql/revoke*.go          @cockroachdb/sql-foundations
 /pkg/sql/schema*.go          @cockroachdb/sql-foundations
 /pkg/sql/zone*.go            @cockroachdb/sql-foundations
+/pkg/cmd/sql-bootstrap-data/ @cockroachdb/sql-foundations
 
 # Beware to not assign the CLI package directory to a single team, at
 # least until we heavily refactor the package to extract team-specific

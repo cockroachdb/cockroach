@@ -15,6 +15,7 @@ package bootstrap
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"sort"
@@ -655,4 +656,19 @@ func TestingUserDescID(offset uint32) uint32 {
 // user table data key in a simple unit test setting.
 func TestingUserTableDataMin(codec keys.SQLCodec) roachpb.Key {
 	return codec.TablePrefix(testingMinUserDescID(codec))
+}
+
+// GetAndHashInitialValuesToString generates the bootstrap keys and sha-256 that
+// can be used to generate data files (to be included in future releases).
+func GetAndHashInitialValuesToString(tenantID uint64) (initialValues string, hash string) {
+	codec := keys.SystemSQLCodec
+	if tenantID > 0 {
+		codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
+	}
+	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+
+	initialValues = InitialValuesToString(ms)
+	h := sha256.Sum256([]byte(initialValues))
+	hash = hex.EncodeToString(h[:])
+	return initialValues, hash
 }
