@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/roachpb",

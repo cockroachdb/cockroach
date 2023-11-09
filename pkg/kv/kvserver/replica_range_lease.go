@@ -1550,20 +1550,20 @@ func (r *Replica) hasCorrectLeaseTypeRLocked(lease roachpb.Lease) bool {
 	return hasExpirationLease == r.shouldUseExpirationLeaseRLocked()
 }
 
-// leasePreferencesStatus represents the state of satisfying lease preferences.
-type leasePreferencesStatus int
+// LeasePreferencesStatus represents the state of satisfying lease preferences.
+type LeasePreferencesStatus int
 
 const (
-	_ leasePreferencesStatus = iota
-	// leasePreferencesViolating indicates the checked store does not satisfy any
+	_ LeasePreferencesStatus = iota
+	// LeasePreferencesViolating indicates the checked store does not satisfy any
 	// lease preference applied.
-	leasePreferencesViolating
-	// leasePreferencesLessPreferred indicates the checked store satisfies _some_
+	LeasePreferencesViolating
+	// LeasePreferencesLessPreferred indicates the checked store satisfies _some_
 	// preference, however not the most preferred.
-	leasePreferencesLessPreferred
-	// leasePreferencesOK indicates the checked store satisfies the first
+	LeasePreferencesLessPreferred
+	// LeasePreferencesOK indicates the checked store satisfies the first
 	// preference, or no lease preferences are applied.
-	leasePreferencesOK
+	LeasePreferencesOK
 )
 
 // LeaseViolatesPreferences checks if this replica owns the lease and if it
@@ -1584,30 +1584,30 @@ func (r *Replica) LeaseViolatesPreferences(ctx context.Context, conf *roachpb.Sp
 	storeAttrs := r.store.Attrs()
 	nodeAttrs := r.store.nodeDesc.Attrs
 	nodeLocality := r.store.nodeDesc.Locality
-	preferenceStatus := checkStoreAgainstLeasePreferences(
+	preferenceStatus := CheckStoreAgainstLeasePreferences(
 		storeID, storeAttrs, nodeAttrs, nodeLocality, preferences)
-	return preferenceStatus == leasePreferencesViolating
+	return preferenceStatus == LeasePreferencesViolating
 }
 
-// checkStoreAgainstLeasePreferences returns whether the given store would
+// CheckStoreAgainstLeasePreferences returns whether the given store would
 // violate, be less preferred or ok, leaseholder, according the the lease
 // preferences.
-func checkStoreAgainstLeasePreferences(
+func CheckStoreAgainstLeasePreferences(
 	storeID roachpb.StoreID,
 	storeAttrs, nodeAttrs roachpb.Attributes,
 	nodeLocality roachpb.Locality,
 	preferences []roachpb.LeasePreference,
-) leasePreferencesStatus {
+) LeasePreferencesStatus {
 	if len(preferences) == 0 {
-		return leasePreferencesOK
+		return LeasePreferencesOK
 	}
 	for i, preference := range preferences {
 		if constraint.CheckConjunction(storeAttrs, nodeAttrs, nodeLocality, preference.Constraints) {
 			if i > 0 {
-				return leasePreferencesLessPreferred
+				return LeasePreferencesLessPreferred
 			}
-			return leasePreferencesOK
+			return LeasePreferencesOK
 		}
 	}
-	return leasePreferencesViolating
+	return LeasePreferencesViolating
 }
