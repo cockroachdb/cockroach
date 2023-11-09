@@ -1568,6 +1568,10 @@ type connExecutor struct {
 		// createdSequences keeps track of sequences created in the current transaction.
 		// The map key is the sequence descpb.ID.
 		createdSequences map[descpb.ID]struct{}
+
+		// skipDescriptorCache disables the leasing descriptor cache for this
+		// transaction.
+		skipDescriptorCache bool
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -3671,12 +3675,15 @@ func (ex *connExecutor) initPlanner(ctx context.Context, p *planner) {
 	p.schemaResolver.descCollection = p.Descriptors()
 	p.schemaResolver.authAccessor = p
 	p.reducedAuditConfig = &auditlogging.ReducedAuditConfig{}
+	p.skipDescriptorCache = ex.extraTxnState.skipDescriptorCache
 }
 
 func (ex *connExecutor) resetPlanner(
 	ctx context.Context, p *planner, txn *kv.Txn, stmtTS time.Time,
 ) {
 	p.resetPlanner(ctx, txn, stmtTS, ex.sessionData(), ex.state.mon)
+	// Retain if we should be avoiding the descriptor cache.
+	p.skipDescriptorCache = ex.extraTxnState.skipDescriptorCache
 	autoRetryReason := ex.state.mu.autoRetryReason
 	// If we are retrying due to an unsatisfiable timestamp bound which is
 	// retriable, it means we were unable to serve the previous minimum timestamp
