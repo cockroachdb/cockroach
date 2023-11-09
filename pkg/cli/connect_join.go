@@ -35,10 +35,11 @@ import (
 const nodeJoinTimeout = 1 * time.Minute
 
 var connectJoinCmd = &cobra.Command{
-	Use:   "join <join-token>",
-	Short: "request the TLS certs for a new node from an existing node",
-	Args:  cobra.MinimumNArgs(1),
-	RunE:  clierrorplus.MaybeDecorateError(runConnectJoin),
+	Use:        "join <join-token>",
+	Short:      "request the TLS certs for a new node from an existing node",
+	Args:       cobra.MinimumNArgs(1),
+	RunE:       clierrorplus.MaybeDecorateError(runConnectJoin),
+	Deprecated: "self generated certificates are no longer support functionality use '--insecure' instead",
 }
 
 func requestPeerCA(
