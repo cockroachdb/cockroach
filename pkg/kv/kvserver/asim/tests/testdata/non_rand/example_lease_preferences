@@ -1,0 +1,52 @@
+# This test demonstrates setting and asserting on lease preferences. The
+# cluster topology is identical to example_conformance.
+gen_cluster nodes=5
+----
+
+set_locality node=1 locality=region=a
+----
+
+set_locality node=2 locality=region=a
+----
+
+set_locality node=3 locality=region=b
+----
+
+set_locality node=4 locality=region=b
+----
+
+set_locality node=5 locality=region=b
+----
+
+# Setup three span configs, the first span config should produce no violations
+# as all the voters are required to be in the same region as the preference.
+# The second span config lease preferences will be only satisfiable by a less
+# preferred preference (not the first preference in the preference list). The
+# last span config will be impossible to satisfy, so should produce a violation.
+set_span_config 
+[0,1000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=b']]
+----
+
+set_span_config 
+[1000,2000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=a'],['+region=b']]
+----
+
+set_span_config 
+[2000,10000): num_replicas=3 num_voters=3 constraints={'+region=b':3} lease_preferences=[['+region=c']]
+----
+
+assertion type=conformance lease-violating=1 lease-less-preferred=1
+----
+
+eval duration=10m
+----
+OK
+
+topology
+----
+a
+  └── [1 2]
+b
+  └── [3 4 5]
+
+# vim:ft=sh

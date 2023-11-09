@@ -412,20 +412,26 @@ func TestDataDriven(t *testing.T) {
 						Stores:    stores,
 					})
 				case "conformance":
-					var under, over, unavailable, violating int
+					var under, over, unavailable, violating, leaseViolating, leaseLessPref int
 					under = assertion.ConformanceAssertionSentinel
 					over = assertion.ConformanceAssertionSentinel
 					unavailable = assertion.ConformanceAssertionSentinel
 					violating = assertion.ConformanceAssertionSentinel
+					leaseLessPref = assertion.ConformanceAssertionSentinel
+					leaseViolating = assertion.ConformanceAssertionSentinel
 					scanIfExists(t, d, "under", &under)
 					scanIfExists(t, d, "over", &over)
 					scanIfExists(t, d, "unavailable", &unavailable)
 					scanIfExists(t, d, "violating", &violating)
+					scanIfExists(t, d, "lease-violating", &leaseViolating)
+					scanIfExists(t, d, "lease-less-preferred", &leaseLessPref)
 					assertions = append(assertions, assertion.ConformanceAssertion{
-						Underreplicated: under,
-						Overreplicated:  over,
-						Violating:       violating,
-						Unavailable:     unavailable,
+						Underreplicated:           under,
+						Overreplicated:            over,
+						ViolatingConstraints:      violating,
+						Unavailable:               unavailable,
+						ViolatingLeasePreferences: leaseViolating,
+						LessPreferredLeases:       leaseLessPref,
 					})
 				}
 				return ""

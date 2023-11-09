@@ -135,6 +135,9 @@ func (f hardCodedInitialValues) build(
 // The following variables hold hardcoded bootstrap data for older versions (as
 // produced by the final release version). For each version, we have system and
 // non-system keys, and each set of keys has an associated SHA-256.
+//
+// These files can be auto-generated for the latest version with the
+// sql-bootstrap-data CLI tool (see pkg/cmd/sql-bootstrap-data).
 
 //go:embed data/23_1_system.keys
 var v23_1_system_keys string
