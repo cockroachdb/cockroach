@@ -40,10 +40,10 @@ type VersionGuard struct {
 
 // MakeVersionGuard constructs a version guard for the transaction.
 func (s *SettingsWatcher) MakeVersionGuard(
-	ctx context.Context, txn *kv.Txn, maxGate clusterversion.Key,
+	ctx context.Context, txn *kv.Txn, maxGate clusterversion.Key, forceVersionGuardReads bool,
 ) (VersionGuard, error) {
 	activeVersion := s.settings.Version.ActiveVersion(ctx)
-	if activeVersion.IsActive(maxGate) {
+	if activeVersion.IsActive(maxGate) && !forceVersionGuardReads {
 		return VersionGuard{activeVersion: activeVersion}, nil
 	}
 

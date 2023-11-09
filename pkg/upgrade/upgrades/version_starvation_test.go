@@ -45,6 +45,11 @@ func TestLeasingClusterVersionStarvation(t *testing.T) {
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
+				SQLLeaseManager: &lease.ManagerTestingKnobs{
+					LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
+						ForceVersionGuardReads: true,
+					},
+				},
 				UpgradeManager: &upgradebase.TestingKnobs{
 					InterlockPausePoint:               upgradebase.AfterVersionBumpRPC,
 					InterlockReachedPausePointChannel: &waitToStartBump,
@@ -53,7 +58,7 @@ func TestLeasingClusterVersionStarvation(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V23_2),
+						clusterversion.MinSupported),
 				},
 			},
 		},
@@ -67,7 +72,6 @@ func TestLeasingClusterVersionStarvation(t *testing.T) {
 		false)
 
 	clusterArgs.ServerArgs.Settings = st
-
 	tc := testcluster.StartTestCluster(t, 1, clusterArgs)
 	lease.LeaseDuration.Override(ctx, &st.SV, 0)
 	lease.LeaseRenewalDuration.Override(ctx, &st.SV, 0)

@@ -661,7 +661,7 @@ func (s *Storage) getDualWriteCodec(version *settingswatcher.VersionGuard) *rowC
 func (s *Storage) versionGuard(
 	ctx context.Context, txn *kv.Txn,
 ) (settingswatcher.VersionGuard, error) {
-	return s.settingsWatch.MakeVersionGuard(ctx, txn, clusterversion.TODO_Delete_V23_1_SystemRbrCleanup)
+	return s.settingsWatch.MakeVersionGuard(ctx, txn, clusterversion.TODO_Delete_V23_1_SystemRbrCleanup, false /*forceVersionGuardReads*/)
 }
 
 // generateAvailableInstanceRows allocates available instance IDs, and store

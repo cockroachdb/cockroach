@@ -142,7 +142,7 @@ func TestVersionGuard(t *testing.T) {
 
 			watcher := settingswatcher.New(nil, s.Codec(), settings, nil, nil, nil)
 			require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				guard, err := watcher.MakeVersionGuard(ctx, txn, maxVersion)
+				guard, err := watcher.MakeVersionGuard(ctx, txn, maxVersion, false /*force versin guard reads*/)
 				if err != nil {
 					return err
 				}
