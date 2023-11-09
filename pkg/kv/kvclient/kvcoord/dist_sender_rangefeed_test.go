@@ -172,7 +172,7 @@ func makeTransportFactory(
 	return func(
 		options kvcoord.SendOptions,
 		dialer *nodedialer.Dialer,
-		slice kvcoord.ReplicaSlice,
+		slice roachpb.ReplicaSet,
 	) (kvcoord.Transport, error) {
 		transport, err := kvcoord.GRPCTransportFactory(options, dialer, slice)
 		if err != nil {

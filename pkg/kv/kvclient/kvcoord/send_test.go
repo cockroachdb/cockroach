@@ -154,13 +154,13 @@ func TestSendToOneClient(t *testing.T) {
 // firstNErrorTransport is a mock transport that sends an error on
 // requests to the first N addresses, then succeeds.
 type firstNErrorTransport struct {
-	replicas  ReplicaSlice
+	replicas  roachpb.ReplicaSet
 	numErrors int
 	numSent   int
 }
 
 func (f *firstNErrorTransport) IsExhausted() bool {
-	return f.numSent >= len(f.replicas)
+	return f.numSent >= len(f.replicas.Descriptors())
 }
 
 func (f *firstNErrorTransport) Release() {}
@@ -183,7 +183,7 @@ func (f *firstNErrorTransport) NextInternalClient(
 }
 
 func (f *firstNErrorTransport) NextReplica() roachpb.ReplicaDescriptor {
-	return f.replicas[f.numSent].ReplicaDescriptor
+	return f.replicas.Descriptors()[f.numSent]
 }
 
 func (f *firstNErrorTransport) SkipReplica() {
@@ -244,7 +244,7 @@ func TestComplexScenarios(t *testing.T) {
 			func(
 				_ SendOptions,
 				_ *nodedialer.Dialer,
-				replicas ReplicaSlice,
+				replicas roachpb.ReplicaSet,
 			) (Transport, error) {
 				return &firstNErrorTransport{
 					replicas:  replicas,
