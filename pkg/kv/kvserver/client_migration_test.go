@@ -243,7 +243,7 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 	blockApplicationCh := make(chan struct{})
 
 	// We're going to be migrating from startV to endV.
-	startV := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	startV := clusterversion.Latest.Version()
 	endV := roachpb.Version{Major: 1000042}
 
 	ctx := context.Background()

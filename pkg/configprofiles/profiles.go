@@ -167,7 +167,7 @@ func makeTask(description string, nonTxnSQL, txnSQL []string) autoconfigpb.Task 
 		// We set MinVersion to BinaryVersionKey to ensure the tasks only
 		// start executing after all other version migrations have been
 		// completed.
-		MinVersion: clusterversion.ByKey(clusterversion.BinaryVersionKey),
+		MinVersion: clusterversion.Latest.Version(),
 		Payload: &autoconfigpb.Task_SimpleSQL{
 			SimpleSQL: &autoconfigpb.SimpleSQL{
 				NonTransactionalStatements: nonTxnSQL,

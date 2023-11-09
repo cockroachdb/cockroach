@@ -92,7 +92,7 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 		stores[r.StoreID] = struct{}{}
 	}
 	require.Equal(t, 2, len(stores), "collected replicas from stores")
-	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+	require.Equal(t, clusterversion.Latest.Version(), replicas.Version,
 		"collected version info from stores")
 }
 
@@ -157,7 +157,7 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 	require.Equal(t, totalRanges*2, totalReplicas, "number of collected replicas")
 	require.Equal(t, totalRanges, len(replicas.Descriptors),
 		"number of collected descriptors from metadata")
-	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+	require.Equal(t, clusterversion.Latest.Version(), replicas.Version,
 		"collected version info from stores")
 }
 
@@ -371,7 +371,7 @@ func TestStageVersionCheck(t *testing.T) {
 	tc.StopServer(3)
 
 	adminClient := tc.Server(0).GetAdminClient(t)
-	v := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	v := clusterversion.Latest.Version()
 	v.Internal++
 	// To avoid crafting real replicas we use StaleLeaseholderNodeIDs to force
 	// node to stage plan for verification.
@@ -403,7 +403,7 @@ func TestStageVersionCheck(t *testing.T) {
 	p, ok, err := ps.LoadPlan()
 	require.NoError(t, err, "failed to read node 0 plan")
 	require.True(t, ok, "plan was not staged")
-	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), p.Version,
+	require.Equal(t, clusterversion.Latest.Version(), p.Version,
 		"plan version was not updated")
 }
 

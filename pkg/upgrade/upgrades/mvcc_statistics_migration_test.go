@@ -34,7 +34,7 @@ func TestMVCCStatisticsMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey),
+					BinaryVersionOverride:          clusterversion.MinSupported.Version(),
 				},
 			},
 		},

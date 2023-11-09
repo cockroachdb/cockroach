@@ -285,7 +285,7 @@ func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 		))
 	}
 
-	binaryMinSupportedVersion := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	binaryMinSupportedVersion := clusterversion.MinSupported.Version()
 	if !binaryMinSupportedVersion.LessEq(*sv) {
 		vea.Report(errors.AssertionFailedf(
 			`attempting to set system database schema version to version lower than binary min supported version (%#v): %#v`,
@@ -294,7 +294,7 @@ func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 		))
 	}
 
-	binaryVersion := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	binaryVersion := clusterversion.Latest.Version()
 	if !sv.LessEq(binaryVersion) {
 		vea.Report(errors.AssertionFailedf(
 			`attempting to set system database schema version to version higher than binary version (%#v): %#v`,

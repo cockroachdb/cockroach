@@ -245,8 +245,8 @@ func testMigrationWithFailures(
 
 	// We're going to be migrating from the minimum supported version to the
 	// "next" version. We'll be injecting the migration for the next version.
-	startKey := clusterversion.BinaryMinSupportedVersionKey
-	startCV := clusterversion.ByKey(startKey)
+	startKey := clusterversion.MinSupported
+	startCV := startKey.Version()
 	endCV := startCV
 	endCV.Internal += 2
 
