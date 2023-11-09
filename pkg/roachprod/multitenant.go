@@ -56,7 +56,7 @@ func StartServiceForVirtualCluster(
 		startCluster = sc
 	} else {
 		// If we are starting a service in external process mode, `Start`
-		// is called on the nodes where the SQL server procesed should be
+		// is called on the nodes where the SQL server processed should be
 		// created.
 		ec, err := newCluster(l, externalCluster, clusterSettingsOpts...)
 		if err != nil {
