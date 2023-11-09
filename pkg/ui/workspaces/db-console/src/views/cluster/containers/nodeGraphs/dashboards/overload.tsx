@@ -110,27 +110,23 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="KV Admission Slots"
+      title="KV Admission Slots Exhausted"
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
     >
-      <Axis label="slots">
+      <Axis label="duration (micros/sec)">
         {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.admission.granter.total_slots.kv"
-              title={"Total Slots " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-            />
-            <Metric
-              key={nid}
-              name="cr.node.admission.granter.used_slots.kv"
-              title={"Used Slots " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-            />
-          </>
+          <Metric
+            key={nid}
+            name="cr.node.admission.granter.slots_exhausted_duration.kv"
+            title={
+              "Admission Slots Exhausted " +
+              nodeDisplayName(nodeDisplayNameByID, nid)
+            }
+            sources={[nid]}
+            nonNegativeRate
+          />
         ))}
       </Axis>
     </LineGraph>,
