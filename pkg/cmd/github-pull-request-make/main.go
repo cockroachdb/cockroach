@@ -279,9 +279,9 @@ func main() {
 			target, ok := os.LookupEnv(targetEnv)
 			var duration time.Duration
 			if ok && target == "stressrace" {
-				duration = (30 * time.Minute) / time.Duration(len(pkgs))
+				duration = (40 * time.Minute) / time.Duration(len(pkgs))
 			} else {
-				duration = (20 * time.Minute) / time.Duration(len(pkgs))
+				duration = (30 * time.Minute) / time.Duration(len(pkgs))
 			}
 			minDuration := (2 * time.Minute) * time.Duration(len(pkg.tests))
 			if duration < minDuration {
