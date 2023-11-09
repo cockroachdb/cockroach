@@ -48,7 +48,7 @@ func init() {
 	alphaRangeDescriptorDB = mockRangeDescriptorDBForDescs(
 		append(alphaRangeDescriptors, TestMetaRangeDescriptor)...,
 	)
-	tf = func(options SendOptions, slice ReplicaSlice) (Transport, error) {
+	tf = func(options SendOptions, slice roachpb.ReplicaSet) (Transport, error) {
 		panic("transport not set up for use")
 	}
 }

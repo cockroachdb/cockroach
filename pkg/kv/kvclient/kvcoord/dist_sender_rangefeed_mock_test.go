@@ -146,7 +146,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 						NodeDescs:       g,
 						RPCRetryOptions: &retry.Options{MaxRetries: 10},
 						Stopper:         stopper,
-						TransportFactory: func(options SendOptions, slice ReplicaSlice) (Transport, error) {
+						TransportFactory: func(options SendOptions, slice roachpb.ReplicaSet) (Transport, error) {
 							return transport, nil
 						},
 						RangeDescriptorDB: rangeDB,
