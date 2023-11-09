@@ -58,7 +58,6 @@ go_test(
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

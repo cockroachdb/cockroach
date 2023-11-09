@@ -264,11 +264,12 @@ func makeReplicationStatsVisitor(
 	ctx context.Context, cfg *config.SystemConfig, nodeChecker nodeChecker,
 ) replicationStatsVisitor {
 	v := replicationStatsVisitor{
-		cfg:         cfg,
-		nodeChecker: nodeChecker,
-		report:      make(RangeReport),
+		cfg:           cfg,
+		nodeChecker:   nodeChecker,
+		report:        make(RangeReport),
+		prevNumVoters: -1,
 	}
-	v.reset(ctx)
+	v.init(ctx)
 	return v
 }
 
@@ -282,15 +283,7 @@ func (v *replicationStatsVisitor) Report() RangeReport {
 	return v.report
 }
 
-// reset is part of the rangeVisitor interface.
-func (v *replicationStatsVisitor) reset(ctx context.Context) {
-	*v = replicationStatsVisitor{
-		cfg:           v.cfg,
-		nodeChecker:   v.nodeChecker,
-		prevNumVoters: -1,
-		report:        make(RangeReport, len(v.report)),
-	}
-
+func (v *replicationStatsVisitor) init(ctx context.Context) {
 	// Iterate through all the zone configs to create report entries for all the
 	// zones that have constraints. Otherwise, just iterating through the ranges
 	// wouldn't create entries for zones that don't apply to any ranges.

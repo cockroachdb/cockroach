@@ -540,10 +540,6 @@ type rangeVisitor interface {
 	// The idea is that, if failed() returns true, the report that the visitor
 	// produces will be considered incomplete and not persisted.
 	failed() bool
-
-	// reset resets the visitor's state, preparing it for visit() calls starting
-	// at the first range. This is called on retriable errors during range iteration.
-	reset(ctx context.Context)
 }
 
 // visitorError is returned by visitRanges when one or more visitors failed.
@@ -579,27 +575,19 @@ func visitRanges(
 
 	// Iterate over all the ranges.
 	for {
+		// Check for context cancellation.
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		// Grab the next range.
 		rd, err := rangeStore.Next(ctx)
 		if err != nil {
-			if errIsRetriable(err) {
-				visitors = origVisitors
-				for _, v := range visitors {
-					v.reset(ctx)
-				}
-				// The iterator has been positioned to the beginning.
-				continue
-			} else {
-				return err
-			}
+			return err
 		}
 		if rd.RangeID == 0 {
 			// We're done.
 			break
-		}
-
-		// Check for context cancellation.
-		if err := ctx.Err(); err != nil {
-			return err
 		}
 
 		newKey, err := resolver.resolveRange(ctx, &rd, cfg)
@@ -643,17 +631,13 @@ type RangeIterator interface {
 	// Returns an empty RangeDescriptor when all the ranges have been exhausted. In that case,
 	// the iterator is not to be used any more (except for calling Close(), which will be a no-op).
 	//
-	// The returned error can be a retriable one (i.e.
-	// *kvpb.TransactionRetryWithProtoRefreshError, possibly wrapped). In that case, the iterator
-	// is reset automatically; the next Next() call ( should there be one) will
-	// return the first descriptor.
-	// In case of any other error, the iterator is automatically closed.
+	// In case of an error, the iterator is automatically closed.
 	// It can't be used any more (except for calling Close(), which will be a noop).
 	Next(context.Context) (roachpb.RangeDescriptor, error)
 
 	// Close destroys the iterator, releasing resources. It does not need to be
 	// called after Next() indicates exhaustion by returning an empty descriptor,
-	// or after Next() returns non-retriable errors.
+	// or after Next() returns an error.
 	Close(context.Context)
 }
 
@@ -734,6 +718,15 @@ func (r *meta2RangeIter) readBatch(ctx context.Context) (retErr error) {
 	}
 	if r.txn == nil {
 		r.txn = r.db.NewTxn(ctx, "rangeStoreImpl")
+		// Set a fixed timestamp to disable uncertainty intervals. This forgoes
+		// linearizability (which isn't at all important for this use case) for the
+		// guarantee that no retryable errors will be returned, so we don't need to
+		// worry about handling them in order to maintain a consistent view across
+		// batches. Uncertainty errors are the only form of retryable error that can
+		// be returned for read-only transactions.
+		if err := r.txn.SetFixedTimestamp(ctx, r.txn.ReadTimestamp()); err != nil {
+			return err
+		}
 	}
 
 	b := r.txn.NewBatch()
@@ -759,14 +752,8 @@ func (r *meta2RangeIter) readBatch(ctx context.Context) (retErr error) {
 	return nil
 }
 
-func errIsRetriable(err error) bool {
-	return errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil))
-}
-
 // handleErr manipulates the iterator's state in response to an error.
-// In case of retriable error, the iterator is reset such that the next Next()
-// call returns the first range. In case of any other error, resources are
-// released and the iterator shouldn't be used any more.
+// Resources are released and the iterator shouldn't be used any more.
 // A nil error may be passed, in which case handleErr is a no-op.
 //
 // handleErr is idempotent.
@@ -774,20 +761,18 @@ func (r *meta2RangeIter) handleErr(ctx context.Context, err error) {
 	if err == nil {
 		return
 	}
-	if !errIsRetriable(err) {
-		if r.txn != nil {
-			log.Eventf(ctx, "non-retriable error: %s", err)
-			// On any non-retriable error, rollback.
-			if rollbackErr := r.txn.Rollback(ctx); rollbackErr != nil {
-				log.Eventf(ctx, "rollback failed: %s", rollbackErr)
-			}
-			r.txn = nil
-		}
-		r.reset()
-		r.readingDone = true
-	} else {
-		r.reset()
+	if errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
+		log.Warningf(ctx, "unexpected retryable error from "+
+			"read-only transaction with fixed read timestamp: %s", err)
 	}
+	if r.txn != nil {
+		if rollbackErr := r.txn.Rollback(ctx); rollbackErr != nil {
+			log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+		}
+		r.txn = nil
+	}
+	r.reset()
+	r.readingDone = true
 }
 
 // reset the iterator. The next Next() call will return the first range.
