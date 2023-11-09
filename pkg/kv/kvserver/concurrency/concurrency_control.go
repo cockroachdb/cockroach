@@ -742,6 +742,10 @@ type lockTable interface {
 
 	// String returns a debug string representing the state of the lockTable.
 	String() string
+
+	// TestingSetMaxLocks updates the locktable's lock limit. This can be used to
+	// force the locktable to exceed its limit and clear locks.
+	TestingSetMaxLocks(maxLocks int64)
 }
 
 // lockTableGuard is a handle to a request as it waits on conflicting locks in a
@@ -1021,4 +1025,18 @@ type requestQueuer interface {
 	// Clear empties the queue(s) and causes all waiting requests to
 	// return. If disable is true, future requests must not be enqueued.
 	Clear(disable bool)
+}
+
+// verifiableLockTable is a lock table that is able to verify structural and
+// correctness properties.
+type verifiableLockTable interface {
+	lockTable
+	// verify ensures structural and correctness properties hold for each of the
+	// locks stored in the lock table. Verification is expensive and should only
+	// be performed for test builds.
+	verify()
+
+	// verifyKey ensures structural and correctness properties hold for all locks
+	// stored in the lock table for the given key.
+	verifyKey(roachpb.Key)
 }
