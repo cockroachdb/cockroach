@@ -271,7 +271,7 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 ) (ServiceDescriptors, error) {
 	var mu syncutil.Mutex
 	var servicesToRegister ServiceDescriptors
-	err := c.Parallel(ctx, l, c.Nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	err := c.Parallel(ctx, l, OnNodes(c.Nodes), func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		services := make(ServiceDescriptors, 0)
 		res := &RunResultDetails{Node: node}
 		if _, ok := serviceMap[node][ServiceTypeSQL]; !ok {
@@ -387,44 +387,45 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	l.Printf("%s: starting nodes", c.Name)
 
 	// SSH retries are disabled by passing nil RetryOpts
-	if err := c.Parallel(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		// NB: if cockroach started successfully, we ignore the output as it is
-		// some harmless start messaging.
-		res, err := c.startNode(ctx, l, node, startOpts)
-		if err != nil || res.Err != nil {
-			// If err is non-nil, then this will not be retried, but if res.Err is non-nil, it will be.
-			return res, errors.CombineErrors(err, res.Err)
-		}
-
-		// We reserve a few special operations (bootstrapping, and setting
-		// cluster settings) to the InitTarget.
-		if startOpts.Target == StartDefault {
-			if startOpts.GetInitTarget() != node || startOpts.SkipInit {
-				return res, nil
-			}
-		}
-
-		// For single node non-virtual clusters, this can be skipped
-		// because during the c.StartNode call above, the
-		// `--start-single-node` flag will handle all of this for us.
-		shouldInit := startOpts.Target == StartDefault && !c.useStartSingleNode()
-		if shouldInit {
-			if initRes, err := c.initializeCluster(ctx, l, node); err != nil || initRes.Err != nil {
+	if err := c.Parallel(ctx, l, OnNodes(nodes).WithConcurrency(parallelism),
+		func(ctx context.Context, node Node) (*RunResultDetails, error) {
+			// NB: if cockroach started successfully, we ignore the output as it is
+			// some harmless start messaging.
+			res, err := c.startNode(ctx, l, node, startOpts)
+			if err != nil || res.Err != nil {
 				// If err is non-nil, then this will not be retried, but if res.Err is non-nil, it will be.
-				return initRes, errors.CombineErrors(err, res.Err)
+				return res, errors.CombineErrors(err, res.Err)
 			}
-		}
 
-		if startOpts.GetInitTarget() == node {
-			if err := c.waitForDefaultTargetCluster(ctx, l, startOpts); err != nil {
-				return res, errors.Wrap(err, "failed to wait for default target cluster")
+			// We reserve a few special operations (bootstrapping, and setting
+			// cluster settings) to the InitTarget.
+			if startOpts.Target == StartDefault {
+				if startOpts.GetInitTarget() != node || startOpts.SkipInit {
+					return res, nil
+				}
 			}
-			c.createAdminUserForSecureCluster(ctx, l, startOpts)
-			return c.setClusterSettings(ctx, l, node, startOpts.VirtualClusterName)
-		}
 
-		return res, err
-	}, WithConcurrency(parallelism)); err != nil {
+			// For single node non-virtual clusters, this can be skipped
+			// because during the c.StartNode call above, the
+			// `--start-single-node` flag will handle all of this for us.
+			shouldInit := startOpts.Target == StartDefault && !c.useStartSingleNode()
+			if shouldInit {
+				if initRes, err := c.initializeCluster(ctx, l, node); err != nil || initRes.Err != nil {
+					// If err is non-nil, then this will not be retried, but if res.Err is non-nil, it will be.
+					return initRes, errors.CombineErrors(err, res.Err)
+				}
+			}
+
+			if startOpts.GetInitTarget() == node {
+				if err := c.waitForDefaultTargetCluster(ctx, l, startOpts); err != nil {
+					return res, errors.Wrap(err, "failed to wait for default target cluster")
+				}
+				c.createAdminUserForSecureCluster(ctx, l, startOpts)
+				return c.setClusterSettings(ctx, l, node, startOpts.VirtualClusterName)
+			}
+
+			return res, err
+		}); err != nil {
 		return err
 	}
 
@@ -571,21 +572,22 @@ func (c *SyncedCluster) ExecSQL(
 	args []string,
 ) ([]*RunResultDetails, error) {
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
-		if err != nil {
-			return nil, err
-		}
-		var cmd string
-		if c.IsLocal() {
-			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
-		}
-		cmd += cockroachNodeBinary(c, node) + " sql --url " +
-			c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode) + " " +
-			ssh.Escape(args)
+	results, _, err := c.ParallelE(ctx, l, OnNodes(nodes).WithDisplay(display).WithFailSlow(),
+		func(ctx context.Context, node Node) (*RunResultDetails, error) {
+			desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+			if err != nil {
+				return nil, err
+			}
+			var cmd string
+			if c.IsLocal() {
+				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+			}
+			cmd += cockroachNodeBinary(c, node) + " sql --url " +
+				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode) + " " +
+				ssh.Escape(args)
 
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
-	}, WithDisplay(display), WithFailSlow(true))
+			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
+		})
 
 	return results, err
 }
