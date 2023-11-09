@@ -11,6 +11,7 @@
 package concurrency
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -3794,6 +3796,240 @@ func (kl *keyLocks) testingAssertCompatibleLockMode(
 	return nil
 }
 
+// testingVerify asserts properties about all locks held on and waiters waiting
+// on a given key. Verification is expensive, so it should only be done in
+// testing builds.
+//
+// REQUIRES: kl.mu to be locked.
+func (kl *keyLocks) testingVerify(st *cluster.Settings) error {
+	// 1. Ensure all lock holders are compatible with each other.
+	for e1 := kl.holders.Front(); e1 != nil; e1 = e1.Next() {
+		h1 := e1.Value
+		if h1.getLockHolderTxn() == nil {
+			return errors.AssertionFailedf("lock cannot be held by non-transactional request")
+		}
+		for e2 := kl.holders.Front(); e2 != nil; e2 = e2.Next() {
+			h2 := e2.Value
+			if h2.getLockHolderTxn() == nil {
+				return errors.AssertionFailedf("lock cannot be held by non-transactional request")
+			}
+			if h1.getLockHolderTxn().ID == h2.getLockHolderTxn().ID {
+				continue // locks are compatible with themselves; nothing to check
+			}
+			if lock.Conflicts(h1.getLockMode(), h2.getLockMode(), &st.SV) {
+				return errors.AssertionFailedf(
+					"lock holders incompatible with each other; %s holds lock with "+
+						"strength %s and %s holds lock with strength %s; lock: %s",
+					h1.getLockHolderTxn(), h1.getLockMode().Strength,
+					h2.getLockHolderTxn(), h2.getLockMode().Strength,
+					kl,
+				)
+			}
+		}
+	}
+	// 2. Ensure all (active) waiters conflict with atleast one of the lock
+	// holders.
+	// 2a. Waiting readers:
+
+	// NB: Non-locking reads:
+	// 1. Only conflict with intents (and exclusive locks, if dictated by the
+	// lock.ExclusiveLocksBlockNonLockingReads cluster setting). Both of these
+	// strengths are incompatible with shared locks, and as such, there can be
+	// <= 1 lock holders for this key.
+	// 2. Do not conflict with any claimants. So there must be >= 1 lock holders
+	// on this key.
+	//
+	// This gives us the following condition if the list of waiting readers is
+	// non-empty:
+	if kl.waitingReaders.Len() != 0 && kl.holders.Len() != 1 {
+		return errors.AssertionFailedf(
+			"unexpected number of lock holders when waiting readers are present: %s", kl,
+		)
+	}
+	for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
+		// Ensure each of the readers does indeed conflict with the lock holder.
+		reader := e.Value
+		if reader.txn != nil && kl.holders.Front().Value.getLockHolderTxn().ID == reader.txn.ID {
+			return errors.AssertionFailedf(
+				"waiting non-locking reader belongs to the lock holder txn %s", kl,
+			)
+		}
+		if !lock.Conflicts(kl.holders.Front().Value.getLockMode(), reader.curLockMode(), &st.SV) {
+			return errors.AssertionFailedf("non locking reader %v does not conflict with lock holder %s",
+				reader, kl,
+			)
+		}
+	}
+	// 2b. Queued locking requests.
+	for e1 := kl.queuedLockingRequests.Front(); e1 != nil; e1 = e1.Next() {
+		qlr := e1.Value
+		if !qlr.active { // not actively waiting; nothing to check
+			continue
+		}
+		// If a locking request is actively waiting at a key, it must either:
+		// 1. Conflict with one of the lock holders.
+		// 2. OR Conflict with one of the queued locking requests in front (read:
+		// lower sequence number) of it.
+		conflicts := false
+		for e2 := kl.holders.Front(); e2 != nil; e2 = e2.Next() {
+			holder := e2.Value
+			if qlr.guard.txn != nil && holder.getLockHolderTxn().ID == qlr.guard.txn.ID {
+				continue // requests can't conflict with locks held by their own transaction
+			}
+
+			if lock.Conflicts(holder.getLockMode(), qlr.mode, &st.SV) {
+				conflicts = true
+				break
+			}
+		}
+		if !conflicts {
+			// No conflict found with lock holder(s); check other queued locking
+			// requests waiting in front of the request.
+			for e2 := kl.queuedLockingRequests.Front(); e2 != nil; e2 = e2.Next() {
+				req := e2.Value
+				if req.guard.seqNum >= qlr.guard.seqNum {
+					break
+				}
+				if lock.Conflicts(req.mode, qlr.mode, &st.SV) {
+					conflicts = true
+					break
+				}
+			}
+		}
+		if !conflicts {
+			return errors.AssertionFailedf(
+				"queued locking request %d does not conflict with holder/waiting requests %s",
+				qlr.guard.seqNum, kl,
+			)
+		}
+	}
+	// 3. Ensure queued locking requests are stored in sorted sequence number
+	// order.
+	for e1 := kl.queuedLockingRequests.Front(); e1 != nil; e1 = e1.Next() {
+		qlr := e1.Value
+		for e2 := e1.Next(); e2 != nil; e2 = e2.Next() {
+			if qlr.guard.seqNum >= e2.Value.guard.seqNum {
+				return errors.AssertionFailedf(
+					"queued locking requests should be stored in sequence number order %s", kl,
+				)
+			}
+		}
+	}
+
+	// 4. Ensure invariants around distinguished waiters hold.
+	distinguishedCandidateFound := false
+	if kl.waitingReaders.Len() > 0 {
+		// Any reader waiting at a lock should be a suitable candidate for being a
+		// distinguished waiter, as readers only wait actively and wait for locks
+		// held by other transactions (i.e they cannot be in waitSelf state).
+		distinguishedCandidateFound = true
+	}
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+		claimantTxn, _ := kl.claimantTxn()
+		// Distinguished waiters must actively wait in a lock's wait queue...
+		if e.Value.active &&
+			// ...AND they must not belong to the claimant transaction, as
+			// transactions don't push themselves.
+			!e.Value.guard.isSameTxn(claimantTxn) {
+			distinguishedCandidateFound = true
+		}
+	}
+
+	if distinguishedCandidateFound {
+		if kl.distinguishedWaiter == nil {
+			return errors.AssertionFailedf(
+				"suitable candidate for distinguished waiter exists, but none selected",
+			)
+		}
+		// Ensure the distinguishedWaiter is actually in the wait queues.
+		distinguishedFound := false
+		for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
+			if e.Value == kl.distinguishedWaiter {
+				distinguishedFound = true
+				e.Value.mu.Lock()
+				if e.Value.mu.state.kind != waitForDistinguished {
+					return errors.AssertionFailedf("unexpected waiting state for distinguished waiter")
+				}
+				e.Value.mu.Unlock()
+			}
+		}
+		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+			if e.Value.guard == kl.distinguishedWaiter {
+				distinguishedFound = true
+				e.Value.guard.mu.Lock()
+				if e.Value.guard.mu.state.kind != waitForDistinguished {
+					return errors.AssertionFailedf("unexpected waiting state for distinguished waiter")
+				}
+				e.Value.guard.mu.Unlock()
+				if !e.Value.active {
+					return errors.AssertionFailedf("distinguished waiter should be actively waiting")
+				}
+			}
+		}
+		if !distinguishedFound {
+			return errors.AssertionFailedf("distinguished waiter not found in wait queue")
+		}
+	} else {
+		if kl.distinguishedWaiter != nil {
+			return errors.AssertionFailedf(
+				"no suitable candidate for distinguished waiter found, but one exists",
+			)
+		}
+	}
+
+	// 5. Assert some invariants around the queuedLockingRequests wait queue if
+	// the lock isn't held.
+	if !kl.isLocked() {
+		if kl.queuedLockingRequests.Len() > 0 {
+			// 5a. The first request should have a (possibly joint) claim. As such, it
+			// should be inactive.
+			if kl.queuedLockingRequests.Front().Value.active {
+				return errors.AssertionFailedf("first request should be an inactive waiter for unheld lock")
+			}
+			// 5b. It should also be a transactional request, as non-transactional
+			// requests cannot establish claims.
+			if kl.queuedLockingRequests.Front().Value.guard.txn == nil {
+				return errors.AssertionFailedf("first request should be transactional for unheld lock")
+			}
+			// Note that we can't make any assertions about (what looks like) joint
+			// claims, because claims can be broken.
+		}
+	}
+
+	// 6. Verify the waiting state on each of the waiters.
+	for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
+		claimantTxn, _ := kl.claimantTxn()
+		e.Value.mu.Lock()
+		if e.Value.mu.state.kind == waitSelf {
+			return errors.AssertionFailedf("readers should never wait for themselves")
+		}
+		if e.Value.mu.state.txn != nil && e.Value.mu.state.txn.ID != claimantTxn.ID {
+			return errors.AssertionFailedf("mismatch between claimant txn ID and waiting state txn ID")
+		}
+		e.Value.mu.Unlock()
+	}
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+		if !e.Value.active {
+			// Waiting state, in the context of this lock, is only meaningful for
+			// actively waiting requests.
+			continue
+		}
+		claimantTxn, _ := kl.claimantTxn()
+		e.Value.guard.mu.Lock()
+		if e.Value.guard.isSameTxn(claimantTxn) && e.Value.guard.mu.state.kind != waitSelf {
+			return errors.AssertionFailedf("locking request should be in waitSelf")
+		} else if e.Value.guard.mu.state.kind == waitSelf && !e.Value.guard.isSameTxn(claimantTxn) {
+			return errors.AssertionFailedf("locking request should not be in waitSelf state")
+		}
+		if e.Value.guard.mu.state.txn != nil && e.Value.guard.mu.state.txn.ID != claimantTxn.ID {
+			return errors.AssertionFailedf("mismatch between claimant txn ID and waiting state txn ID")
+		}
+		e.Value.guard.mu.Unlock()
+	}
+
+	return nil
+}
+
 // Delete removes the specified lock from the tree.
 // REQUIRES: t.mu is locked.
 func (t *treeMu) Delete(l *keyLocks) {
@@ -3873,6 +4109,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockT
 		g.notRemovableLock.decrementNotRemovable()
 		g.notRemovableLock = nil
 	}
+	t.verify()
 	return g, nil
 }
 
@@ -3928,6 +4165,7 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 	}
 
 	t.tryGCLocks(&t.locks, locksToGC)
+	t.verify()
 }
 
 // AddDiscoveredLock implements the lockTable interface.
@@ -4036,7 +4274,11 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	if checkMaxLocks {
 		t.checkMaxKeysLockedAndTryClear()
 	}
-	return true, err
+	if err != nil {
+		return true, err
+	}
+	t.verify()
+	return true, nil
 }
 
 // AcquireLock implements the lockTable interface.
@@ -4116,7 +4358,11 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	if checkMaxLocks {
 		t.checkMaxKeysLockedAndTryClear()
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	t.verify()
+	return nil
 }
 
 // checkMaxKeysLockedAndTryClear checks if the request is tracking more lock
@@ -4220,6 +4466,7 @@ func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*keyLocks) {
 // UpdateLocks implements the lockTable interface.
 func (t *lockTableImpl) UpdateLocks(up *roachpb.LockUpdate) error {
 	_ = t.updateLockInternal(up)
+	t.verify()
 	return nil
 }
 
@@ -4291,6 +4538,7 @@ func (t *lockTableImpl) PushedTransactionUpdated(txn *roachpb.Transaction) {
 	// could be more proactive if we knew which locks in lockTableImpl were held
 	// by txn.
 	t.txnStatusCache.add(txn)
+	t.verify()
 }
 
 // Enable implements the lockTable interface.
@@ -4423,6 +4671,33 @@ func (t *lockTableImpl) String() string {
 	}
 	t.locks.mu.RUnlock()
 	return sb.String()
+}
+
+// verify ensures structural and correctness properties hold for each of the
+// locks stored in the lock table. We only do so for test builds as verification
+// is expensive.
+//
+// ACQUIRES: t.mu
+func (t *lockTableImpl) verify() {
+	if !buildutil.CrdbTestBuild {
+		return // only perform verification for test builds
+	}
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+	iter := t.locks.MakeIter()
+	for iter.First(); iter.Valid(); iter.Next() {
+		l := iter.Cur()
+		l.mu.Lock()
+		err := l.testingVerify(t.settings)
+		if err != nil {
+			l.mu.Unlock()
+			t.locks.mu.RUnlock()
+			t.locks.mu.RLock()
+			log.Infof(context.TODO(), "%s", t.String())
+			panic(err)
+		}
+		l.mu.Unlock()
+	}
 }
 
 // assert panics with the supplied message if the condition does not hold true.
