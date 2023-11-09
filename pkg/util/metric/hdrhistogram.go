@@ -13,6 +13,7 @@ package metric
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/codahale/hdrhistogram"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -39,7 +40,7 @@ type HdrHistogram struct {
 	mu     struct {
 		syncutil.Mutex
 		cumulative *hdrhistogram.Histogram
-		*tickHelper
+		*tick.Ticker
 		sliding *hdrhistogram.WindowedHistogram
 	}
 }
@@ -62,13 +63,12 @@ func NewHdrHistogram(
 	wHist := hdrhistogram.NewWindowed(WindowedHistogramWrapNum, 0, maxVal, sigFigs)
 	h.mu.cumulative = hdrhistogram.New(0, maxVal, sigFigs)
 	h.mu.sliding = wHist
-	h.mu.tickHelper = &tickHelper{
-		nextT:        now(),
-		tickInterval: duration / WindowedHistogramWrapNum,
-		onTick: func() {
+	h.mu.Ticker = tick.NewTicker(
+		now(),
+		duration/WindowedHistogramWrapNum,
+		func() {
 			wHist.Rotate()
-		},
-	}
+		})
 	return h
 }
 
@@ -117,14 +117,12 @@ func (h *HdrHistogram) Min() int64 {
 
 // Inspect calls the closure with the empty string and the receiver.
 func (h *HdrHistogram) Inspect(f func(interface{})) {
-	h.maybeTick()
+	func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		tick.MaybeTick(h.mu.Ticker)
+	}()
 	f(h)
-}
-
-func (h *HdrHistogram) maybeTick() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	maybeTick(h.mu.tickHelper)
 }
 
 // GetType returns the prometheus type enum for this metric.
@@ -139,7 +137,7 @@ func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	bars := func() []hdrhistogram.Bar {
 		h.mu.Lock()
 		defer h.mu.Unlock()
-		maybeTick(h.mu.tickHelper)
+		tick.MaybeTick(h.mu.Ticker)
 		return h.mu.cumulative.Distribution()
 	}()
 	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
@@ -182,7 +180,7 @@ func (h *HdrHistogram) TotalWindowed() (int64, float64) {
 func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {
 	hist := &prometheusgo.Histogram{}
 
-	maybeTick(h.mu.tickHelper)
+	tick.MaybeTick(h.mu.Ticker)
 	mergedHist := h.mu.sliding.Merge()
 	bars := mergedHist.Distribution()
 	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
