@@ -11,8 +11,6 @@
 package bootstrap
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -79,7 +77,7 @@ func TestInitialValuesToString(t *testing.T) {
 			}
 			var expectedHash string
 			d.ScanArgs(t, "hash", &expectedHash)
-			initialValues, actualHash := getAndHashInitialValuesToString(tenantID)
+			initialValues, actualHash := GetAndHashInitialValuesToString(tenantID)
 			if expectedHash != actualHash {
 				t.Errorf(`Unexpected hash value %s for %s.
 If you're seeing this error message, this means that the bootstrapped system
@@ -96,14 +94,6 @@ schema has changed. Assuming that this is expected:
 			return initialValues
 		})
 	})
-}
-
-func getAndHashInitialValuesToString(tenantID uint64) (initialValues string, hash string) {
-	ms := makeMetadataSchema(tenantID)
-	initialValues = InitialValuesToString(ms)
-	h := sha256.Sum256([]byte(initialValues))
-	hash = hex.EncodeToString(h[:])
-	return initialValues, hash
 }
 
 func TestRoundTripInitialValuesStringRepresentation(t *testing.T) {
@@ -165,7 +155,7 @@ func TestSystemDatabaseSchemaBootstrapVersionBumped(t *testing.T) {
 	// If you need to update this value (i.e. failed this test), check whether
 	// you need to bump systemschema.SystemDatabaseSchemaBootstrapVersion too.
 	const prevSystemHash = "cd85ebe773d840ecaf39fd4ccbba6345f54d7414a95b5bf5be2fa4102c26c650"
-	_, curSystemHash := getAndHashInitialValuesToString(0 /* tenantID */)
+	_, curSystemHash := GetAndHashInitialValuesToString(0 /* tenantID */)
 
 	if prevSystemHash != curSystemHash {
 		t.Fatalf(
