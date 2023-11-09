@@ -145,7 +145,7 @@ var stubRPCSendFn simpleSendFn = func(
 func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 	return func(
 		_ SendOptions,
-		replicas ReplicaSlice,
+		replicas roachpb.ReplicaSet,
 	) (Transport, error) {
 		return &simpleTransportAdapter{
 			fn:       fn,
@@ -419,7 +419,7 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(SendOptions, []roachpb.ReplicaDescriptor) error
 
 	var transportFactory TransportFactory = func(
-		opts SendOptions, replicas ReplicaSlice,
+		opts SendOptions, replicas roachpb.ReplicaSet,
 	) (Transport, error) {
 		reps := replicas.Descriptors()
 		if err := verifyCall(opts, reps); err != nil {
@@ -3391,7 +3391,7 @@ func TestSenderTransport(t *testing.T) {
 			) (r *kvpb.BatchResponse, e *kvpb.Error) {
 				return
 			},
-		))(SendOptions{}, ReplicaSlice{{}})
+		))(SendOptions{}, roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{{}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4210,7 +4210,7 @@ func TestConnectionClass(t *testing.T) {
 	// class will capture the connection class used for the last transport
 	// created.
 	var class rpc.ConnectionClass
-	var transportFactory TransportFactory = func(opts SendOptions, replicas ReplicaSlice) (Transport, error) {
+	var transportFactory TransportFactory = func(opts SendOptions, replicas roachpb.ReplicaSet) (Transport, error) {
 		class = opts.class
 		return adaptSimpleTransport(
 			func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
@@ -5287,20 +5287,10 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 		}
 	}
 
-	makeReplicaInfo := func(replicaID int, region string) ReplicaInfo {
-		return ReplicaInfo{
-			ReplicaDescriptor: roachpb.ReplicaDescriptor{
-				ReplicaID: roachpb.ReplicaID(replicaID),
-			},
-			Locality: makeLocality(region),
-		}
-	}
-
 	for _, tc := range []struct {
 		name          string
 		cfg           *DistSenderConfig
 		desc          *roachpb.RangeDescriptor
-		replicas      ReplicaSlice
 		curReplica    *roachpb.ReplicaDescriptor
 		expectedRead  tenantcostmodel.NetworkCost
 		expectedWrite tenantcostmodel.NetworkCost
@@ -5368,12 +5358,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 					{Key: "region", Value: "eu-central1"},
 				}},
 			},
-			desc: newRangeDescriptor(10),
-			replicas: []ReplicaInfo{
-				makeReplicaInfo(1, "foo"),
-				makeReplicaInfo(2, "bar"),
-				makeReplicaInfo(3, ""), // Missing region.
-			},
+			desc:          newRangeDescriptor(10),
 			curReplica:    &roachpb.ReplicaDescriptor{ReplicaID: 3},
 			expectedRead:  0,
 			expectedWrite: 0,
@@ -5479,7 +5464,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 				tc.cfg.Stopper = stopper
 				tc.cfg.RangeDescriptorDB = rddb
 				tc.cfg.Settings = st
-				tc.cfg.TransportFactory = func(SendOptions, ReplicaSlice) (Transport, error) {
+				tc.cfg.TransportFactory = func(SendOptions, roachpb.ReplicaSet) (Transport, error) {
 					assert.Fail(t, "test should not try and use the transport factory")
 					return nil, nil
 				}
