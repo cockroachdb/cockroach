@@ -247,8 +247,6 @@ func validateStageSubgraph(ts scpb.TargetState, stage Stage, g *scgraph.Graph) e
 			// marked as no-op or is the next in the queue.
 			if len(queue) > 0 && oe == queue[0] {
 				queue = queue[1:]
-			} else if !g.IsNoOp(oe) {
-				continue
 			}
 
 			current[i] = oe.To()

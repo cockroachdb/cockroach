@@ -49,12 +49,6 @@ a given corpus file.
 				return nil
 			}
 			switch args[1] {
-			case "op":
-				opRules, err := rules.MarshalOpRules()
-				if err != nil {
-					return err
-				}
-				fmt.Printf("rules\n----\n%s", opRules)
 			case "dep":
 				depRules, err := rules.MarshalDepRules()
 				if err != nil {

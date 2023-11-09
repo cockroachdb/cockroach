@@ -54,10 +54,6 @@ func TestRulesYAML(t *testing.T) {
 				out, err := registry.MarshalDepRules()
 				require.NoError(t, err)
 				return out
-			case "oprules":
-				out, err := registry.MarshalOpRules()
-				require.NoError(t, err)
-				return out
 			}
 			d.Fatalf(t, "deprules, oprules, and rules are the only commands, got %s", d.Cmd)
 			return ""
