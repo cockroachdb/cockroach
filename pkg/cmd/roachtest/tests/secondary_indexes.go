@@ -67,7 +67,7 @@ INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12);
 			node, db := h.RandomDB(r, h.Context().ToVersionNodes)
 			l.Printf("connecting to n%d", node)
 
-			if _, err := db.Exec(`DELETE FROM t WHERE x = 13`); err != nil {
+			if _, err := db.Exec(`DELETE FROM t WHERE x = 13 OR x = 20`); err != nil {
 				return err
 			}
 			if _, err := db.Exec(`INSERT INTO t VALUES (13, 14, 15, 16)`); err != nil {
