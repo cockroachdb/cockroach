@@ -38,7 +38,8 @@ var connectCmd = &cobra.Command{
 	Short: "Create certificates for securely connecting with clusters\n",
 	Long: `
 Bootstrap security certificates for connecting to new or existing clusters.`,
-	RunE: UsageAndErr,
+	RunE:       UsageAndErr,
+	Deprecated: "self generated certificates are no longer support functionality use '--insecure' instead",
 }
 
 func init() {
@@ -54,8 +55,9 @@ var connectInitCmd = &cobra.Command{
 Connects to other nodes and negotiates an initialization bundle for use with
 secure inter-node connections.
 `,
-	Args: cobra.NoArgs,
-	RunE: clierrorplus.MaybeDecorateError(runConnectInit),
+	Args:       cobra.NoArgs,
+	RunE:       clierrorplus.MaybeDecorateError(runConnectInit),
+	Deprecated: "self generated certificates are no longer support functionality use '--insecure' instead",
 }
 
 // runConnectInit connects to other nodes and negotiates an initialization bundle
