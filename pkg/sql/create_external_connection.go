@@ -30,7 +30,7 @@ import (
 
 const externalConnectionOp = "CREATE EXTERNAL CONNECTION"
 
-type createExternalConectionNode struct {
+type createExternalConnectionNode struct {
 	n *tree.CreateExternalConnection
 }
 
@@ -38,10 +38,10 @@ type createExternalConectionNode struct {
 func (p *planner) CreateExternalConnection(
 	ctx context.Context, n *tree.CreateExternalConnection,
 ) (planNode, error) {
-	return &createExternalConectionNode{n: n}, nil
+	return &createExternalConnectionNode{n: n}, nil
 }
 
-func (c *createExternalConectionNode) startExec(params runParams) error {
+func (c *createExternalConnectionNode) startExec(params runParams) error {
 	return params.p.createExternalConnection(params, c.n)
 }
 
@@ -170,6 +170,6 @@ func logAndSanitizeExternalConnectionURI(ctx context.Context, externalConnection
 	return nil
 }
 
-func (c *createExternalConectionNode) Next(_ runParams) (bool, error) { return false, nil }
-func (c *createExternalConectionNode) Values() tree.Datums            { return nil }
-func (c *createExternalConectionNode) Close(_ context.Context)        {}
+func (c *createExternalConnectionNode) Next(_ runParams) (bool, error) { return false, nil }
+func (c *createExternalConnectionNode) Values() tree.Datums            { return nil }
+func (c *createExternalConnectionNode) Close(_ context.Context)        {}
