@@ -25,7 +25,9 @@ import (
 // Locality information.
 type ReplicaInfo struct {
 	roachpb.ReplicaDescriptor
-	Tiers []roachpb.Tier
+	Locality        roachpb.Locality
+	tierMatchLength int
+	latency         time.Duration
 }
 
 // A ReplicaSlice is a slice of ReplicaInfo.
@@ -123,7 +125,7 @@ func NewReplicaSlice(
 		}
 		rs = append(rs, ReplicaInfo{
 			ReplicaDescriptor: r,
-			Tiers:             nd.Locality.Tiers,
+			Locality:          nd.Locality,
 		})
 	}
 	if len(rs) == 0 {
@@ -165,20 +167,6 @@ func (rs ReplicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
-// localityMatch returns the number of consecutive locality tiers
-// which match between a and b.
-func localityMatch(a, b []roachpb.Tier) int {
-	if len(a) == 0 {
-		return 0
-	}
-	for i := range a {
-		if i >= len(b) || a[i] != b[i] {
-			return i
-		}
-	}
-	return len(a)
-}
-
 // A LatencyFunc returns the latency from this node to a remote
 // node and a bool indicating whether the latency is valid.
 type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
@@ -207,13 +195,19 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		shuffle.Shuffle(rs)
 		return
 	}
+	// populate the tier match length and locality before starting the loop.
+	for i := range rs {
+		rs[i].tierMatchLength = locality.SharedPrefix(rs[i].Locality)
+
+		if latencyFn != nil {
+			if l, ok := latencyFn(rs[i].NodeID); ok {
+				rs[i].latency = l
+			}
+		}
+	}
 
 	// Sort replicas by latency and then attribute affinity.
 	sort.Slice(rs, func(i, j int) bool {
-		// Replicas on the same node have the same latency.
-		if rs[i].NodeID == rs[j].NodeID {
-			return false // i == j
-		}
 		// Replicas on the local node sort first.
 		if rs[i].NodeID == nodeID {
 			return true // i < j
@@ -222,18 +216,18 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 			return false // j < i
 		}
 
-		if latencyFn != nil {
-			latencyI, okI := latencyFn(rs[i].NodeID)
-			latencyJ, okJ := latencyFn(rs[j].NodeID)
-			if okI && okJ {
-				return latencyI < latencyJ
-			}
+		// Use latency if there are non-zero values for both.
+		if rs[i].latency != 0 && rs[j].latency != 0 && rs[i].latency != rs[j].latency {
+			return rs[i].latency < rs[j].latency
 		}
-		attrMatchI := localityMatch(locality.Tiers, rs[i].Tiers)
-		attrMatchJ := localityMatch(locality.Tiers, rs[j].Tiers)
-		// Longer locality matches sort first (the assumption is that
-		// they'll have better latencies).
-		return attrMatchI > attrMatchJ
+
+		// If the region is different choose the closer one.
+		if rs[i].tierMatchLength != rs[j].tierMatchLength {
+			return rs[i].tierMatchLength > rs[j].tierMatchLength
+		}
+
+		// If everything else is equal sort by node id.
+		return rs[i].NodeID < rs[j].NodeID
 	})
 }
 
