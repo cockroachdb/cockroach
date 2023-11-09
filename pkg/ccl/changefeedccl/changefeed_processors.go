@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
@@ -91,7 +92,7 @@ type changeAggregator struct {
 	// eventConsumer consumes the event.
 	eventConsumer eventConsumer
 
-	lastHighWaterFlush time.Time     // last time high watermark was checkpointed.
+	nextHighWaterFlush time.Time     // next time high watermark may be flushed.
 	flushFrequency     time.Duration // how often high watermark can be checkpointed.
 	lastSpanFlush      time.Time     // last time expensive, span based checkpoint was written.
 
@@ -586,6 +587,23 @@ var aggregatorHeartbeatFrequency = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+var aggregatorFlushJitter = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"changefeed.aggregator.flush_jitter",
+	"jitter aggregator flushes as a fraction of min_checkpoint_frequency",
+	0.1, /* 10% */
+	settings.NonNegativeFloat,
+	settings.WithPublic,
+)
+
+func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) time.Time {
+	if j == 0 {
+		return s.Now().Add(d)
+	}
+	nextFlush := d + time.Duration(rand.Int63n(int64(j*float64(d))))
+	return s.Now().Add(nextFlush)
+}
+
 // Next is part of the RowSource interface.
 func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	shouldEmitHeartBeat := func() bool {
@@ -747,12 +765,20 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
+	// NB: if we miss flush window, and the flush frequency is fairly high (minutes),
+	// it might be a while before frontier advances again (particularly if
+	// the number of ranges and closed timestamp settings are high).
+	// TODO(yevgeniy): Consider doing something similar to how job checkpointing
+	//  works in the frontier where if we missed the window to checkpoint, we will attempt
+	//  the checkpoint at the next opportune moment.
 	checkpointFrontier := advanced &&
-		(forceFlush || timeutil.Since(ca.lastHighWaterFlush) > ca.flushFrequency)
+		(forceFlush || timeutil.Now().After(ca.nextHighWaterFlush))
 
+	sv := &ca.flowCtx.Cfg.Settings.SV
 	if checkpointFrontier {
 		defer func() {
-			ca.lastHighWaterFlush = timeutil.Now()
+			ca.nextHighWaterFlush = nextFlushWithJitter(
+				timeutil.DefaultTimeSource{}, ca.flushFrequency, aggregatorFlushJitter.Get(sv))
 		}()
 		return ca.flushFrontier()
 	}
@@ -761,8 +787,8 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	// either in backfills or if the highwater mark is excessively lagging behind
 	checkpointSpans := ca.spec.JobID != 0 && /* enterprise changefeed */
 		(resolved.Timestamp.Equal(ca.frontier.BackfillTS()) ||
-			ca.frontier.hasLaggingSpans(ca.spec.Feed.StatementTime, &ca.flowCtx.Cfg.Settings.SV)) &&
-		canCheckpointSpans(&ca.flowCtx.Cfg.Settings.SV, ca.lastSpanFlush)
+			ca.frontier.hasLaggingSpans(ca.spec.Feed.StatementTime, sv)) &&
+		canCheckpointSpans(sv, ca.lastSpanFlush)
 
 	if checkpointSpans {
 		defer func() {
