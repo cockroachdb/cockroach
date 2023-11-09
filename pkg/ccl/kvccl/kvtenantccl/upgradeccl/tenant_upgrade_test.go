@@ -382,7 +382,7 @@ func TestTenantUpgrade(t *testing.T) {
 //   - v0 corresponds to the bootstrapped version of the tenant,
 //   - v1, v2 correspond to adjacent releases.
 func v0v1v2() (roachpb.Version, roachpb.Version, roachpb.Version) {
-	v0 := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	v0 := clusterversion.MinSupported.Version()
 	v1 := clusterversion.Latest.Version()
 	v2 := clusterversion.Latest.Version()
 	if v1.Internal > 2 {

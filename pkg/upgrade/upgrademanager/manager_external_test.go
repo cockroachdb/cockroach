@@ -67,7 +67,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	endCV := clusterversion.BinaryVersionKey
+	endCV := clusterversion.Latest
 	if clusterversion.ByKey(endCV).Internal == 2 {
 		skip.IgnoreLint(t, "test cannot run until there is a new version key")
 	}
@@ -261,7 +261,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 			false, // initializeVersion
 		)
 		require.NoError(t, clusterversion.Initialize(ctx,
-			clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey), &settings.SV))
+			clusterversion.MinSupported.Version(), &settings.SV))
 		return settings
 	}
 
@@ -560,7 +560,7 @@ func TestPauseMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	endCV := clusterversion.BinaryVersionKey
+	endCV := clusterversion.Latest
 	startCV := endCV - 1
 
 	type migrationEvent struct {
@@ -819,9 +819,9 @@ func TestMigrationFailure(t *testing.T) {
 	ctx := context.Background()
 
 	// Configure the range of versions used by the test
-	startVersionKey := clusterversion.BinaryMinSupportedVersionKey
+	startVersionKey := clusterversion.MinSupported
 	startVersion := clusterversion.ByKey(startVersionKey)
-	endVersionKey := clusterversion.BinaryVersionKey
+	endVersionKey := clusterversion.Latest
 	endVersion := clusterversion.ByKey(endVersionKey)
 
 	// Pick a random version in to fail at

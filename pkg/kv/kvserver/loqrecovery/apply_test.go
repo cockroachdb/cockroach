@@ -56,7 +56,7 @@ func TestApplyVerifiesVersion(t *testing.T) {
 	}
 
 	t.Run("apply plan version is higher than cluster", func(t *testing.T) {
-		aboveCurrent := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		aboveCurrent := clusterversion.Latest.Version()
 		aboveCurrent.Major += 1
 		plan := loqrecoverypb.ReplicaUpdatePlan{
 			PlanID:    uuid.MakeV4(),
@@ -67,7 +67,7 @@ func TestApplyVerifiesVersion(t *testing.T) {
 	})
 
 	t.Run("apply plan version lower than current", func(t *testing.T) {
-		belowMin := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+		belowMin := clusterversion.MinSupported.Version()
 		belowMin.Minor -= 1
 		plan := loqrecoverypb.ReplicaUpdatePlan{
 			PlanID:    uuid.MakeV4(),

@@ -66,8 +66,8 @@ var legacyInfoFormatVersion = clusterversion.ByKey(clusterversion.TODO_Delete_V2
 // could be either loaded from files or received from cluster.
 func checkVersionAllowedByBinary(version roachpb.Version) error {
 	return checkVersionAllowedImpl(version,
-		clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey),
-		clusterversion.ByKey(clusterversion.BinaryVersionKey))
+		clusterversion.MinSupported.Version(),
+		clusterversion.Latest.Version())
 }
 
 func checkVersionAllowedImpl(version, minSupported, binaryVersion roachpb.Version) error {

@@ -44,7 +44,7 @@ func TestGrantExecuteToPublicOnAllFunctions(t *testing.T) {
 
 	var (
 		v0 = clusterversion.MinSupported.Version()
-		v1 = clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		v1 = clusterversion.Latest.Version()
 	)
 	ctx := context.Background()
 
@@ -123,7 +123,7 @@ func BenchmarkGrantExecuteToPublicOnAllFunctions(b *testing.B) {
 
 	var (
 		v0 = clusterversion.MinSupported.Version()
-		v1 = clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		v1 = clusterversion.Latest.Version()
 	)
 
 	ctx := context.Background()
