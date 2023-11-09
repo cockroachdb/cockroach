@@ -73,6 +73,7 @@ var telemetrySamplingMode = settings.RegisterEnumSetting(
 		telemetryModeStatement:   "statement",
 		telemetryModeTransaction: "transaction",
 	},
+	settings.WithPublic,
 )
 
 var telemetryTrackedTxnsLimit = settings.RegisterIntSetting(
@@ -82,6 +83,7 @@ var telemetryTrackedTxnsLimit = settings.RegisterIntSetting(
 		"all statements to telemetry",
 	10000,
 	settings.NonNegativeInt,
+	settings.WithPublic,
 )
 
 // TelemetryLoggingMetrics keeps track of the last time at which an event
