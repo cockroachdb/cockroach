@@ -160,7 +160,9 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock, cfg.Settings)
+	lt := maybeWrapInVerifyingLockTable(
+		newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock, cfg.Settings),
+	)
 	*m = managerImpl{
 		st: cfg.Settings,
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
@@ -648,7 +650,7 @@ func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
 
 // TestingSetMaxLocks implements the TestingAccessor interface.
 func (m *managerImpl) TestingSetMaxLocks(maxLocks int64) {
-	m.lt.(*lockTableImpl).setMaxKeysLocked(maxLocks)
+	m.lt.TestingSetMaxLocks(maxLocks)
 }
 
 func (r *Request) isSingle(m kvpb.Method) bool {
