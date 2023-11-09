@@ -10,6 +10,7 @@ bulkio.backup.file_size	byte size	128 MiB	target size for individual data files 
 bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail
 bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads
 bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up
+changefeed.aggregator.flush_jitter	float	0	jitter aggregator flushes as a fraction of min_checkpoint_frequency
 changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request
 changefeed.balance_range_distribution.enable	boolean	false	if enabled, the ranges are balanced equally among all nodes
 changefeed.batch_reduction_retry_enabled	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes
