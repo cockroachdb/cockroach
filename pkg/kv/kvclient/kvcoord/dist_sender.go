@@ -2305,7 +2305,7 @@ func (ds *DistSender) sendToReplicas(
 		metrics:                &ds.metrics,
 		dontConsiderConnHealth: ds.dontConsiderConnHealth,
 	}
-	transport, err := ds.transportFactory(opts, replicas)
+	transport, err := ds.transportFactory(opts, replicas.AsReplicaSet())
 	if err != nil {
 		return nil, err
 	}
