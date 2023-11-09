@@ -3807,6 +3807,252 @@ func (kl *keyLocks) testingAssertCompatibleLockMode(
 	return nil
 }
 
+// verify asserts properties about all locks held on and waiters waiting on a
+// given key. Verification is expensive, so it should only be done in testing
+// builds.
+//
+// REQUIRES: kl.mu to be locked.
+func (kl *keyLocks) verify(st *cluster.Settings) error {
+	// 1. Ensure all lock holders are compatible with each other.
+	for e1 := kl.holders.Front(); e1 != nil; e1 = e1.Next() {
+		h1 := e1.Value
+		if h1.getLockHolderTxn() == nil {
+			return errors.AssertionFailedf("lock cannot be held by non-transactional request")
+		}
+		for e2 := kl.holders.Front(); e2 != nil; e2 = e2.Next() {
+			h2 := e2.Value
+			if h2.getLockHolderTxn() == nil {
+				return errors.AssertionFailedf("lock cannot be held by non-transactional request")
+			}
+			if h1.getLockHolderTxn().ID == h2.getLockHolderTxn().ID {
+				if h1 != h2 {
+					return errors.AssertionFailedf(
+						"same transaction should not be present twice in the holders list",
+					)
+				}
+				continue // locks are compatible with themselves; nothing to check
+			}
+			if lock.Conflicts(h1.getLockMode(), h2.getLockMode(), &st.SV) {
+				return errors.AssertionFailedf(
+					"lock holders incompatible with each other; %s holds lock with "+
+						"strength %s and %s holds lock with strength %s; lock: %s",
+					h1.getLockHolderTxn(), h1.getLockMode().Strength,
+					h2.getLockHolderTxn(), h2.getLockMode().Strength,
+					kl,
+				)
+			}
+		}
+	}
+
+	// 2. Ensure queued locking requests are stored in sorted sequence number
+	// order.
+	for e1 := kl.queuedLockingRequests.Front(); e1 != nil; e1 = e1.Next() {
+		if e1.Prev() != nil && e1.Prev().Value.guard.seqNum >= e1.Value.guard.seqNum {
+			return errors.AssertionFailedf(
+				"queued locking requests should be stored in sequence number order %s", kl,
+			)
+		}
+	}
+
+	// 3. Ensure all (active) waiters conflict with at least one of the lock
+	// holders.
+	// 3a. Waiting readers:
+
+	// NB: Non-locking reads:
+	// 1. Only conflict with intents (and exclusive locks, if dictated by the
+	// lock.ExclusiveLocksBlockNonLockingReads cluster setting). Both of these
+	// strengths are incompatible with shared locks, and as such, there can be
+	// <= 1 lock holders for this key.
+	// 2. Do not conflict with any claimants. So there must be >= 1 lock holders
+	// on this key.
+	//
+	// This gives us the following condition if the list of waiting readers is
+	// non-empty:
+	if kl.waitingReaders.Len() != 0 && kl.holders.Len() != 1 {
+		return errors.AssertionFailedf(
+			"unexpected number of lock holders when waiting readers are present: %s", kl,
+		)
+	}
+	for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
+		// Ensure each of the readers does indeed conflict with the lock holder.
+		reader := e.Value
+		if reader.txn != nil && kl.holders.Front().Value.getLockHolderTxn().ID == reader.txn.ID {
+			return errors.AssertionFailedf(
+				"waiting non-locking reader belongs to the lock holder txn %s", kl,
+			)
+		}
+		if !lock.Conflicts(kl.holders.Front().Value.getLockMode(), reader.curLockMode(), &st.SV) {
+			return errors.AssertionFailedf("non locking reader %v does not conflict with lock holder %s",
+				reader, kl,
+			)
+		}
+	}
+	// 3b. Queued locking requests.
+	for e1 := kl.queuedLockingRequests.Front(); e1 != nil; e1 = e1.Next() {
+		qlr := e1.Value
+
+		// Queued locking requests should not belong to a transaction that already
+		// holds a lock.
+		if qlr.guard.txnMeta() != nil {
+			if _, found := kl.heldBy[qlr.guard.txnMeta().ID]; found {
+				return errors.AssertionFailedf("queued locking request belongs to the lock holder txn %s", kl)
+			}
+		}
+		if !qlr.active { // not actively waiting; nothing more to check for inactive waiters
+			continue
+		}
+		// If a locking request is actively waiting at a key, it must either:
+		// 1. Conflict with one of the lock holders.
+		// 2. OR Conflict with one of the queued locking requests in front (read:
+		// lower sequence number) of it.
+		conflicts := false
+		for e2 := kl.holders.Front(); e2 != nil; e2 = e2.Next() {
+			holder := e2.Value
+			if qlr.guard.txn != nil && holder.getLockHolderTxn().ID == qlr.guard.txn.ID {
+				continue // requests can't conflict with locks held by their own transaction
+			}
+
+			if lock.Conflicts(holder.getLockMode(), qlr.mode, &st.SV) {
+				conflicts = true
+				break
+			}
+		}
+		if !conflicts {
+			// No conflict found with lock holder(s); check other queued locking
+			// requests waiting in front of the request.
+			for e2 := kl.queuedLockingRequests.Front(); ; e2 = e2.Next() {
+				req := e2.Value
+				if req.guard.seqNum >= qlr.guard.seqNum {
+					break
+				}
+				if lock.Conflicts(req.mode, qlr.mode, &st.SV) {
+					conflicts = true
+					break
+				}
+			}
+		}
+		if !conflicts {
+			return errors.AssertionFailedf(
+				"queued locking request %d does not conflict with holder/waiting requests %s",
+				qlr.guard.seqNum, kl,
+			)
+		}
+	}
+
+	// 4. Ensure invariants around distinguished waiters hold.
+	distinguishedCandidateFound := false
+	if kl.waitingReaders.Len() > 0 {
+		// Any reader waiting at a lock should be a suitable candidate for being a
+		// distinguished waiter, as readers only wait actively and wait for locks
+		// held by other transactions (i.e they cannot be in waitSelf state).
+		distinguishedCandidateFound = true
+	}
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+		claimantTxn, _ := kl.claimantTxn()
+		// Distinguished waiters must actively wait in a lock's wait queue...
+		if e.Value.active &&
+			// ...AND they must not belong to the claimant transaction, as
+			// transactions don't push themselves.
+			!e.Value.guard.isSameTxn(claimantTxn) {
+			distinguishedCandidateFound = true
+		}
+	}
+
+	if distinguishedCandidateFound {
+		if kl.distinguishedWaiter == nil {
+			return errors.AssertionFailedf(
+				"suitable candidate for distinguished waiter exists, but none selected",
+			)
+		}
+		// Ensure the distinguishedWaiter is actually in the wait queues.
+		distinguishedFound := false
+		for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
+			if e.Value == kl.distinguishedWaiter {
+				distinguishedFound = true
+				e.Value.mu.Lock()
+				if e.Value.mu.state.kind != waitForDistinguished {
+					return errors.AssertionFailedf("unexpected waiting state for distinguished waiter")
+				}
+				e.Value.mu.Unlock()
+			}
+		}
+		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+			if e.Value.guard == kl.distinguishedWaiter {
+				distinguishedFound = true
+				e.Value.guard.mu.Lock()
+				if e.Value.guard.mu.state.kind != waitForDistinguished {
+					return errors.AssertionFailedf("unexpected waiting state for distinguished waiter")
+				}
+				e.Value.guard.mu.Unlock()
+				if !e.Value.active {
+					return errors.AssertionFailedf("distinguished waiter should be actively waiting")
+				}
+			}
+		}
+		if !distinguishedFound {
+			return errors.AssertionFailedf("distinguished waiter not found in wait queue")
+		}
+	} else {
+		if kl.distinguishedWaiter != nil {
+			return errors.AssertionFailedf(
+				"no suitable candidate for distinguished waiter found, but one exists",
+			)
+		}
+	}
+
+	// 5. Assert some invariants around the queuedLockingRequests wait queue if
+	// the lock isn't held.
+	if !kl.isLocked() {
+		if kl.queuedLockingRequests.Len() > 0 {
+			// 5a. The first request should have a (possibly joint) claim. As such, it
+			// should be inactive.
+			if kl.queuedLockingRequests.Front().Value.active {
+				return errors.AssertionFailedf("first request should be an inactive waiter for unheld lock")
+			}
+			// 5b. It should also be a transactional request, as non-transactional
+			// requests cannot establish claims.
+			if kl.queuedLockingRequests.Front().Value.guard.txn == nil {
+				return errors.AssertionFailedf("first request should be transactional for unheld lock")
+			}
+			// Note that we can't make any assertions about (what looks like) joint
+			// claims, because claims can be broken.
+		}
+	}
+
+	// 6. Verify the waiting state on each of the waiters.
+	for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
+		claimantTxn, _ := kl.claimantTxn()
+		e.Value.mu.Lock()
+		if e.Value.mu.state.kind == waitSelf {
+			return errors.AssertionFailedf("readers should never wait for themselves")
+		}
+		if e.Value.mu.state.txn != nil && e.Value.mu.state.txn.ID != claimantTxn.ID {
+			return errors.AssertionFailedf("mismatch between claimant txn ID and waiting state txn ID")
+		}
+		e.Value.mu.Unlock()
+	}
+	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+		if !e.Value.active {
+			// Waiting state, in the context of this lock, is only meaningful for
+			// actively waiting requests.
+			continue
+		}
+		claimantTxn, _ := kl.claimantTxn()
+		e.Value.guard.mu.Lock()
+		if e.Value.guard.isSameTxn(claimantTxn) && e.Value.guard.mu.state.kind != waitSelf {
+			return errors.AssertionFailedf("locking request should be in waitSelf")
+		} else if e.Value.guard.mu.state.kind == waitSelf && !e.Value.guard.isSameTxn(claimantTxn) {
+			return errors.AssertionFailedf("locking request should not be in waitSelf state")
+		}
+		if e.Value.guard.mu.state.txn != nil && e.Value.guard.mu.state.txn.ID != claimantTxn.ID {
+			return errors.AssertionFailedf("mismatch between claimant txn ID and waiting state txn ID")
+		}
+		e.Value.guard.mu.Unlock()
+	}
+
+	return nil
+}
+
 // Delete removes the specified lock from the tree.
 // REQUIRES: t.mu is locked.
 func (t *treeMu) Delete(l *keyLocks) {
@@ -4049,7 +4295,10 @@ func (t *lockTableImpl) AddDiscoveredLock(
 	if checkMaxLocks {
 		t.checkMaxKeysLockedAndTryClear()
 	}
-	return true, err
+	if err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 // AcquireLock implements the lockTable interface.
@@ -4129,7 +4378,10 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	if checkMaxLocks {
 		t.checkMaxKeysLockedAndTryClear()
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // checkMaxKeysLockedAndTryClear checks if the request is tracking more lock
@@ -4426,8 +4678,17 @@ func (t *lockTableImpl) Metrics() LockTableMetrics {
 
 // String implements the lockTable interface.
 func (t *lockTableImpl) String() string {
-	var sb redact.StringBuilder
 	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+	return t.stringRLocked()
+}
+
+// stringRLocked is like String but the caller is responsible for acquiring a
+// read lock on t.locks.mu.
+//
+// REQUIRES: t.locks.mu to be RLocked.
+func (t *lockTableImpl) stringRLocked() string {
+	var sb redact.StringBuilder
 	sb.Printf("num=%d\n", t.locks.numKeysLocked.Load())
 	iter := t.locks.MakeIter()
 	for iter.First(); iter.Valid(); iter.Next() {
@@ -4436,9 +4697,56 @@ func (t *lockTableImpl) String() string {
 		l.safeFormat(&sb, &t.txnStatusCache)
 		l.mu.Unlock()
 	}
-	t.locks.mu.RUnlock()
 	return sb.String()
 }
+
+// TestingSetMaxLocks implements the lockTable interface.
+func (t *lockTableImpl) TestingSetMaxLocks(maxKeysLocked int64) {
+	t.setMaxKeysLocked(maxKeysLocked)
+}
+
+// verify implements the verifiableLockTable interface.
+//
+// ACQUIRES: t.mu
+func (t *lockTableImpl) verify() {
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+	iter := t.locks.MakeIter()
+	for iter.First(); iter.Valid(); iter.Next() {
+		l := iter.Cur()
+		err := func() error {
+			l.mu.Lock()
+			defer l.mu.Unlock()
+			return l.verify(t.settings)
+		}()
+		if err != nil {
+			panic(fmt.Sprintf("lock table %s\nerror: %v", t.stringRLocked(), err))
+		}
+	}
+}
+
+// verifyKey implements the verifiableLockTable interface.
+//
+// ACQUIRES: t.mu
+func (t *lockTableImpl) verifyKey(key roachpb.Key) {
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+	iter := t.locks.MakeIter()
+	iter.FirstOverlap(&keyLocks{key: key})
+	if !iter.Valid() {
+		return // no locks exist on this key
+	}
+	l := iter.Cur()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if err := l.verify(t.settings); err != nil {
+		panic(fmt.Sprintf(
+			"error verifying key %s; lock table %s\nerror: %v", key, t.stringRLocked(), err,
+		))
+	}
+}
+
+var _ verifiableLockTable = &lockTableImpl{}
 
 // assert panics with the supplied message if the condition does not hold true.
 func assert(condition bool, msg string) {
