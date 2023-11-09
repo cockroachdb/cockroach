@@ -742,6 +742,10 @@ type lockTable interface {
 
 	// String returns a debug string representing the state of the lockTable.
 	String() string
+
+	// TestingSetMaxLocks updates the locktable's lock limit. This can be used to
+	// force the locktable to exceed its limit and clear locks.
+	TestingSetMaxLocks(maxLocks int64)
 }
 
 // lockTableGuard is a handle to a request as it waits on conflicting locks in a
