@@ -13409,13 +13409,13 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 	}
 
 	status := upToDateRaftStatus(replicas(1, 3, 5))
-	assert.Equal(t, "", splitSnapshotWarningStr(12, status))
+	assert.EqualValues(t, "", splitSnapshotWarningStr(12, status))
 
 	pr := status.Progress[2]
 	pr.State = tracker.StateProbe
 	status.Progress[2] = pr
 
-	assert.Equal(
+	assert.EqualValues(
 		t,
 		"; r12/2 is being probed (may or may not need a Raft snapshot)",
 		splitSnapshotWarningStr(12, status),
@@ -13423,7 +13423,7 @@ func TestSplitSnapshotWarningStr(t *testing.T) {
 
 	pr.State = tracker.StateSnapshot
 
-	assert.Equal(
+	assert.EqualValues(
 		t,
 		"; r12/2 is being probed (may or may not need a Raft snapshot)",
 		splitSnapshotWarningStr(12, status),
