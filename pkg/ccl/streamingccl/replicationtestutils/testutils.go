@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -461,8 +462,8 @@ func (c *TenantStreamingClusters) SrcExec(exec srcInitExecFunc) {
 
 func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJobID jobspb.JobID) {
 	timeout := 45 * time.Second
-	if skip.NightlyStress() {
-		timeout *= 3
+	if skip.Stress() || util.RaceEnabled {
+		timeout *= 5
 	}
 	testutils.SucceedsWithin(t, func() error {
 		payload := jobutils.GetJobPayload(t, db, ingestionJobID)
