@@ -18,7 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -68,7 +71,10 @@ func (c *serverController) sqlMux(
 			tenantName = roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&c.st.SV))
 		}
 
-		s, err := c.getServer(ctx, tenantName)
+		s, _, err := c.getServer(ctx, tenantName)
+		if err != nil && c.shouldWaitForTenantServer(tenantName) {
+			s, err = c.waitForTenantServer(ctx, tenantName)
+		}
 		if err != nil {
 			log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 			c.sendSQLRoutingError(ctx, conn, tenantName)
@@ -80,6 +86,66 @@ func (c *serverController) sqlMux(
 	default:
 		return errors.AssertionFailedf("programming error: missing case %v", status.State)
 	}
+}
+
+// shouldWaitForTenantServer returns true if the serverController
+// should wait for the tenant to become active when routing a
+// connection.
+func (c *serverController) shouldWaitForTenantServer(name roachpb.TenantName) bool {
+	// We never wait for the system tenant because if it isn't
+	// available, something is very wrong.
+	if name == catconstants.SystemTenantName {
+		return false
+	}
+
+	// For now, we only ever wait on connections to the default
+	// tenant. The default tenant name is validated at the time it
+	// is set. While it is possible that this was deleted before,
+	// that would have to happen from an authorized user.
+	//
+	// TODO(ssd): We can remove this restriction once we plumb the
+	// tenant watcher into the server controller. That will allow
+	// us to query the known set of tenants without hitting the
+	// DB.
+	if name != roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&c.st.SV)) {
+		return false
+	}
+
+	return multitenant.WaitForClusterStartTimeout.Get(&c.st.SV) > 0
+}
+
+func (c *serverController) waitForTenantServer(
+	ctx context.Context, name roachpb.TenantName,
+) (onDemandServer, error) {
+	// Note that requests that come in after the first request may time out
+	// in less time than the WaitForClusterStartTimeout. This seems fine for
+	// now since cluster startup should be relatively quick and if it isn't,
+	// waiting longer isn't going to help.
+	opts := singleflight.DoOpts{Stop: c.stopper, InheritCancelation: false}
+	futureRes, _ := c.tenantWaiter.DoChan(ctx, string(name), opts, func(ctx context.Context) (interface{}, error) {
+		t := timeutil.NewTimer()
+		defer t.Stop()
+		t.Reset(multitenant.WaitForClusterStartTimeout.Get(&c.st.SV))
+		for {
+			s, waitCh, err := c.getServer(ctx, name)
+			if err == nil {
+				return s, nil
+			}
+			log.Infof(ctx, "waiting for server for %s to become available", name)
+			select {
+			case <-waitCh:
+			case <-t.C:
+				t.Read = true
+				log.Infof(ctx, "timed out waiting for server for %s to become available", name)
+				return nil, err
+			}
+		}
+	})
+	res := futureRes.WaitForResult(ctx)
+	if res.Err != nil {
+		return nil, res.Err
+	}
+	return res.Val.(onDemandServer), nil
 }
 
 func (t *systemServerWrapper) handleCancel(

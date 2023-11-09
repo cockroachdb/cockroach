@@ -176,7 +176,10 @@ func (c *serverController) createServerEntryLocked(
 	if err != nil {
 		return nil, err
 	}
+
 	c.mu.servers[tenantName] = entry
+	close(c.mu.newServerCh)
+	c.mu.newServerCh = make(chan struct{})
 	return entry, nil
 }
 
@@ -307,8 +310,8 @@ func (c *serverController) drain(ctx context.Context) (stillRunning int) {
 }
 
 func (c *serverController) getAllEntries() (res map[roachpb.TenantName]serverState) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	res = make(map[roachpb.TenantName]serverState, len(c.mu.servers))
 	for name, e := range c.mu.servers {
 		res[name] = e
