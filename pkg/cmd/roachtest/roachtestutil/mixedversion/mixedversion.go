@@ -247,6 +247,7 @@ type (
 		minUpgrades            int
 		maxUpgrades            int
 		predecessorFunc        predecessorFunc
+		settings               []install.ClusterSettingOption
 	}
 
 	CustomOption func(*testOptions)
@@ -344,6 +345,14 @@ func NumUpgrades(n int) CustomOption {
 	return func(opts *testOptions) {
 		opts.minUpgrades = n
 		opts.maxUpgrades = n
+	}
+}
+
+// ClusterSettingOption adds a cluster setting option, in addition to the
+// default set of options.
+func ClusterSettingOption(opt ...install.ClusterSettingOption) CustomOption {
+	return func(opts *testOptions) {
+		opts.settings = append(opts.settings, opt...)
 	}
 }
 
@@ -684,6 +693,7 @@ type startStep struct {
 	rt        test.Test
 	version   *clusterupgrade.Version
 	crdbNodes option.NodeListOption
+	settings  []install.ClusterSettingOption
 }
 
 func (s startStep) ID() int                { return s.id }
@@ -703,7 +713,7 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, c cluster.Cluster,
 
 	startOpts := option.DefaultStartOptsNoBackups()
 	clusterSettings := append(
-		append([]install.ClusterSettingOption{}, defaultClusterSettings...),
+		append([]install.ClusterSettingOption{}, s.settings...),
 		install.BinaryOption(binaryPath),
 	)
 	return clusterupgrade.StartWithSettings(ctx, l, c, s.crdbNodes, startOpts, clusterSettings...)
@@ -772,10 +782,11 @@ func (s preserveDowngradeOptionStep) Run(
 // then the new binary will be uploaded and the `cockroach` process
 // will restart using the new binary.
 type restartWithNewBinaryStep struct {
-	id      int
-	version *clusterupgrade.Version
-	rt      test.Test
-	node    int
+	id       int
+	version  *clusterupgrade.Version
+	rt       test.Test
+	node     int
+	settings []install.ClusterSettingOption
 }
 
 func (s restartWithNewBinaryStep) ID() int                { return s.id }
@@ -802,7 +813,7 @@ func (s restartWithNewBinaryStep) Run(
 		// scheduled backup if necessary.
 		option.DefaultStartOptsNoBackups(),
 		s.version,
-		defaultClusterSettings...,
+		s.settings...,
 	)
 }
 
