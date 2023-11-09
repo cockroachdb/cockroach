@@ -144,7 +144,7 @@ func adaptSimpleTransport(fn simpleSendFn) TransportFactory {
 	return func(
 		_ SendOptions,
 		_ *nodedialer.Dialer,
-		replicas ReplicaSlice,
+		replicas roachpb.ReplicaSet,
 	) (Transport, error) {
 		return &simpleTransportAdapter{
 			fn:       fn,
@@ -418,7 +418,7 @@ func TestSendRPCOrder(t *testing.T) {
 	var verifyCall func(SendOptions, []roachpb.ReplicaDescriptor) error
 
 	var transportFactory TransportFactory = func(
-		opts SendOptions, dialer *nodedialer.Dialer, replicas ReplicaSlice,
+		opts SendOptions, dialer *nodedialer.Dialer, replicas roachpb.ReplicaSet,
 	) (Transport, error) {
 		reps := replicas.Descriptors()
 		if err := verifyCall(opts, reps); err != nil {
@@ -3483,7 +3483,7 @@ func TestSenderTransport(t *testing.T) {
 			) (r *kvpb.BatchResponse, e *kvpb.Error) {
 				return
 			},
-		))(SendOptions{}, &nodedialer.Dialer{}, ReplicaSlice{{}})
+		))(SendOptions{}, &nodedialer.Dialer{}, roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{{}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -4318,7 +4318,7 @@ func TestConnectionClass(t *testing.T) {
 	// created.
 	var class rpc.ConnectionClass
 	var transportFactory TransportFactory = func(
-		opts SendOptions, dialer *nodedialer.Dialer, replicas ReplicaSlice,
+		opts SendOptions, dialer *nodedialer.Dialer, replicas roachpb.ReplicaSet,
 	) (Transport, error) {
 		class = opts.class
 		return adaptSimpleTransport(

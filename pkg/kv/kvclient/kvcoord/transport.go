@@ -50,7 +50,7 @@ type SendOptions struct {
 // The caller is responsible for ordering the replicas in the slice according to
 // the order in which the should be tried.
 type TransportFactory func(
-	SendOptions, *nodedialer.Dialer, ReplicaSlice,
+	SendOptions, *nodedialer.Dialer, roachpb.ReplicaSet,
 ) (Transport, error)
 
 // Transport objects can send RPCs to one or more replicas of a range.
@@ -103,24 +103,24 @@ const (
 // During race builds, we wrap this to hold on to and read all obtained
 // requests in a tight loop, exposing data races; see transport_race.go.
 func grpcTransportFactoryImpl(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, rs ReplicaSlice,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, rs roachpb.ReplicaSet,
 ) (Transport, error) {
 	transport := grpcTransportPool.Get().(*grpcTransport)
 	// Grab the saved slice memory from grpcTransport.
 	replicas := transport.replicas
 
-	if cap(replicas) < len(rs) {
-		replicas = make([]roachpb.ReplicaDescriptor, len(rs))
+	descriptors := rs.Descriptors()
+	if cap(replicas) < len(descriptors) {
+		replicas = make([]roachpb.ReplicaDescriptor, len(descriptors))
 	} else {
-		replicas = replicas[:len(rs)]
+		replicas = replicas[:len(descriptors)]
 	}
 
 	// We'll map the index of the replica descriptor in its slice to its health.
 	var health util.FastIntMap
-	for i := range rs {
-		r := &rs[i]
-		replicas[i] = r.ReplicaDescriptor
-		healthy := nodeDialer.ConnHealth(r.NodeID, opts.class) == nil
+	for i, desc := range descriptors {
+		replicas[i] = desc
+		healthy := nodeDialer.ConnHealth(desc.NodeID, opts.class) == nil
 		if healthy {
 			health.Set(i, healthHealthy)
 		} else {
@@ -320,10 +320,10 @@ func (h *byHealth) Less(i, j int) bool {
 // without a full RPC stack.
 func SenderTransportFactory(tracer *tracing.Tracer, sender kv.Sender) TransportFactory {
 	return func(
-		_ SendOptions, _ *nodedialer.Dialer, replicas ReplicaSlice,
+		_ SendOptions, _ *nodedialer.Dialer, replicas roachpb.ReplicaSet,
 	) (Transport, error) {
 		// Always send to the first replica.
-		replica := replicas[0].ReplicaDescriptor
+		replica := replicas.First()
 		return &senderTransport{tracer, sender, replica, false}, nil
 	}
 }

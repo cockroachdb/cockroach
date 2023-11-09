@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -92,7 +93,7 @@ func (tr raceTransport) SendNext(
 // a) the server doesn't hold on to any memory, and
 // b) the server doesn't mutate the request
 func GRPCTransportFactory(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas roachpb.ReplicaSet,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {
 		if err := nodeDialer.Stopper().RunAsyncTask(

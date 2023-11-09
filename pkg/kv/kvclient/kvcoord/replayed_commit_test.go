@@ -55,7 +55,7 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 		TransportFactory: func(
 			options kvcoord.SendOptions,
 			dialer *nodedialer.Dialer,
-			slice kvcoord.ReplicaSlice,
+			slice roachpb.ReplicaSet,
 		) (kvcoord.Transport, error) {
 			tf, err := kvcoord.GRPCTransportFactory(options, dialer, slice)
 			if err != nil {

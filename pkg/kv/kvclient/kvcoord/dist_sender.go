@@ -2309,7 +2309,7 @@ func (ds *DistSender) sendToReplicas(
 		metrics:                &ds.metrics,
 		dontConsiderConnHealth: ds.dontConsiderConnHealth,
 	}
-	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
+	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas.AsReplicaSet())
 	if err != nil {
 		return nil, err
 	}
