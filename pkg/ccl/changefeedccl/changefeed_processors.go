@@ -91,7 +91,7 @@ type changeAggregator struct {
 	// eventConsumer consumes the event.
 	eventConsumer eventConsumer
 
-	lastHighWaterFlush time.Time     // last time high watermark was checkpointed.
+	nextHighWaterFlush time.Time     // next time high watermark may be flushed.
 	flushFrequency     time.Duration // how often high watermark can be checkpointed.
 	lastSpanFlush      time.Time     // last time expensive, span based checkpoint was written.
 
@@ -586,6 +586,22 @@ var aggregatorHeartbeatFrequency = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+var aggregatorFlushJitter = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"changefeed.aggregator.flush_jitter",
+	"add the following jitter as a fraction of min_checkpoint_frequency",
+	0.1, /* 10% */
+	settings.NonNegativeFloat,
+)
+
+func flushFrequencyWithJitter(d time.Duration, sv *settings.Values) time.Duration {
+	j := aggregatorFlushJitter.Get(sv)
+	if j == 0 {
+		return d
+	}
+	return time.Duration(float64(d) * (1 + j))
+}
+
 // Next is part of the RowSource interface.
 func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	shouldEmitHeartBeat := func() bool {
@@ -747,12 +763,18 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
+	// NB: if we miss flush window, and the flush frequency is fairly high (minutes),
+	// it might be a while before frontier advances again (particularly if
+	// the number of ranges and closed timestamp settings are high).
+	// TODO(yevgeniy): Consider doing something similar to how job checkpointing
+	//  works in the frontier where if we missed the window to checkpoint, we will attempt
+	//  the checkpoint at the next opportune moment.
 	checkpointFrontier := advanced &&
-		(forceFlush || timeutil.Since(ca.lastHighWaterFlush) > ca.flushFrequency)
+		(forceFlush || timeutil.Now().After(ca.nextHighWaterFlush))
 
 	if checkpointFrontier {
 		defer func() {
-			ca.lastHighWaterFlush = timeutil.Now()
+			ca.nextHighWaterFlush = timeutil.Now().Add(flushFrequencyWithJitter(ca.flushFrequency, &ca.flowCtx.Cfg.Settings.SV))
 		}()
 		return ca.flushFrontier()
 	}
