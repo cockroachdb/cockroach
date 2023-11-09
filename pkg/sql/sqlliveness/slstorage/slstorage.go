@@ -269,7 +269,7 @@ func (s *Storage) getDualWriteCodec(version *settingswatcher.VersionGuard) keyCo
 func (s *Storage) versionGuard(
 	ctx context.Context, txn *kv.Txn,
 ) (settingswatcher.VersionGuard, error) {
-	return s.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.TODO_Delete_V23_1_SystemRbrCleanup)
+	return s.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.TODO_Delete_V23_1_SystemRbrCleanup, false /*forceVersionGuardReads*/)
 }
 
 // This function will launch a singleflight goroutine for the session which
