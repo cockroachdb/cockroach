@@ -1022,3 +1022,13 @@ type requestQueuer interface {
 	// return. If disable is true, future requests must not be enqueued.
 	Clear(disable bool)
 }
+
+// verifiableLockTable is a lock table that is able to verify structural and
+// correctness properties.
+type verifiableLockTable interface {
+	lockTable
+	// verify ensures structural and correctness properties hold for each of the
+	// locks stored in the lock table. Verification is expensive and should only
+	// be performed for test builds.
+	verify()
+}
