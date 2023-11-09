@@ -58,13 +58,13 @@ func runTest(t *testing.T, variant sharedtestutil.TestVariant, test sharedtestut
 	defer close(resumeChannel)
 	defer close(completedChannel)
 
-	bv := clusterversion.TestingBinaryVersion
-	msv := clusterversion.TestingBinaryMinSupportedVersion
+	bv := clusterversion.Latest.Version()
+	msv := clusterversion.MinSupported.Version()
 
 	// If there are any non-empty errors expected on the upgrade, then we're
 	// expecting it to fail.
 	expectingUpgradeToFail := test.ExpUpgradeErr[variant][0] != ""
-	finalUpgradeVersion := clusterversion.TestingBinaryVersion
+	finalUpgradeVersion := clusterversion.Latest.Version()
 	if expectingUpgradeToFail {
 		finalUpgradeVersion = msv
 	}

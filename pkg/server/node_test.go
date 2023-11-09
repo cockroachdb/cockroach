@@ -69,8 +69,8 @@ func TestBootstrapCluster(t *testing.T) {
 	defer e.Close()
 
 	initCfg := initServerCfg{
-		minSupportedVersion:     clusterversion.TestingBinaryMinSupportedVersion,
-		latestVersion:           clusterversion.TestingBinaryVersion,
+		minSupportedVersion:     clusterversion.MinSupported.Version(),
+		latestVersion:           clusterversion.Latest.Version(),
 		defaultSystemZoneConfig: *zonepb.DefaultZoneConfigRef(),
 		defaultZoneConfig:       *zonepb.DefaultSystemZoneConfigRef(),
 	}
@@ -252,8 +252,8 @@ func TestCorruptedClusterID(t *testing.T) {
 
 	cv := clusterversion.TestingClusterVersion
 	initCfg := initServerCfg{
-		minSupportedVersion:     clusterversion.TestingBinaryMinSupportedVersion,
-		latestVersion:           clusterversion.TestingBinaryVersion,
+		minSupportedVersion:     clusterversion.MinSupported.Version(),
+		latestVersion:           clusterversion.Latest.Version(),
 		defaultSystemZoneConfig: *zonepb.DefaultZoneConfigRef(),
 		defaultZoneConfig:       *zonepb.DefaultSystemZoneConfigRef(),
 	}

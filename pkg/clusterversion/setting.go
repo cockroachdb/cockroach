@@ -208,7 +208,7 @@ func (cv *clusterVersionSetting) ValidateBinaryVersions(
 
 // SettingsListDefault is part of the VersionSettingImpl interface.
 func (cv *clusterVersionSetting) SettingsListDefault() string {
-	return Latest.Version().String()
+	return Latest.String()
 }
 
 func (cv *clusterVersionSetting) validateBinaryVersions(

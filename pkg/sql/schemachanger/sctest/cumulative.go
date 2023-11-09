@@ -375,7 +375,7 @@ func pause(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
 			t.Logf("job %d is paused", jobID)
 
 			// Upgrade the cluster, if applicable.
-			tdb.Exec(t, "SET CLUSTER SETTING VERSION=$1", clusterversion.TestingBinaryVersion.String())
+			tdb.Exec(t, "SET CLUSTER SETTING VERSION=$1", clusterversion.Latest.String())
 
 			// Resume the job and check that it succeeds.
 			tdb.Exec(t, "RESUME JOB $1", jobID)

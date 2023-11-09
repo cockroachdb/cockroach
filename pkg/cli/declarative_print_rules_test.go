@@ -32,7 +32,7 @@ func TestDeclarativeRules(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		version := clusterversion.TestingBinaryVersion
+		version := clusterversion.Latest.Version()
 		versionString := strings.Split(version.String(), "-")[0]
 		opOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s op", versionString))
 		if err != nil {

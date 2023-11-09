@@ -158,9 +158,8 @@ func (og *operationGenerator) getSupportedDeclarativeOp(
 ) (opType, error) {
 	for {
 		op := opType(og.params.declarativeOps.Int())
-		if !clusterversion.TestingBinaryMinSupportedVersion.Equal(
-			clusterversion.ByKey(opDeclarativeVersion[op])) {
-			notSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.ByKey(opDeclarativeVersion[op]))
+		if opVerKey := opDeclarativeVersion[op]; opVerKey != clusterversion.MinSupported {
+			notSupported, err := isClusterVersionLessThan(ctx, tx, opVerKey.Version())
 			if err != nil {
 				return op, err
 			}
