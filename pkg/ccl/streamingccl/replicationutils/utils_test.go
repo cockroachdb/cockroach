@@ -53,8 +53,8 @@ func TestScanSST(t *testing.T) {
 	require.True(t, roachpb.Key("ca").Compare(roachpb.Key("c")) > 0)
 
 	cs := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
+		clusterversion.Latest.Version(),
+		clusterversion.MinSupported.Version(),
 		true, /* initializeVersion */
 	)
 	data, start, end := storageutils.MakeSST(t, cs, []interface{}{

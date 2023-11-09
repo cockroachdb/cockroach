@@ -1793,7 +1793,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 
 	ctx := context.Background()
 	v1 := roachpb.Version{Major: 1}
-	v2 := clusterversion.TestingBinaryVersion
+	v2 := clusterversion.Latest.Version()
 
 	testData := []struct {
 		name          string

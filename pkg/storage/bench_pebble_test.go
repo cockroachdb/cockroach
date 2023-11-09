@@ -62,7 +62,7 @@ func setupMVCCInMemPebbleWithSeparatedIntents(b testing.TB) Engine {
 func setupPebbleInMemPebbleForLatestRelease(b testing.TB, _ string) Engine {
 	ctx := context.Background()
 	s := cluster.MakeClusterSettings()
-	if err := clusterversion.Initialize(ctx, clusterversion.TestingBinaryVersion,
+	if err := clusterversion.Initialize(ctx, clusterversion.Latest.Version(),
 		&s.SV); err != nil {
 		b.Fatalf("failed to set current cluster version: %+v", err)
 	}

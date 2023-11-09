@@ -25,8 +25,8 @@ import (
 func TestMakeMetricsAndRegisterOnVersionChangeCallback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	s1 := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryMinSupportedVersion, true)
-	s2 := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryMinSupportedVersion, true)
+	s1 := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.MinSupported.Version(), true)
+	s2 := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.MinSupported.Version(), true)
 
 	m1 := clusterversion.MakeMetricsAndRegisterOnVersionChangeCallback(&s1.SV)
 	m2 := clusterversion.MakeMetricsAndRegisterOnVersionChangeCallback(&s2.SV)
@@ -35,7 +35,7 @@ func TestMakeMetricsAndRegisterOnVersionChangeCallback(t *testing.T) {
 	require.Equal(t, int64(0), m2.PreserveDowngradeLastUpdated.Value())
 
 	// Test that the metrics returned are independent.
-	clusterversion.PreserveDowngradeVersion.Override(ctx, &s1.SV, clusterversion.TestingBinaryVersion.String())
+	clusterversion.PreserveDowngradeVersion.Override(ctx, &s1.SV, clusterversion.Latest.String())
 	testutils.SucceedsSoon(t, func() error {
 		if int64(0) >= m1.PreserveDowngradeLastUpdated.Value() {
 			return errors.New("metric is zero. expected positive number.")
@@ -44,7 +44,7 @@ func TestMakeMetricsAndRegisterOnVersionChangeCallback(t *testing.T) {
 	})
 	require.Equal(t, int64(0), m2.PreserveDowngradeLastUpdated.Value())
 
-	clusterversion.PreserveDowngradeVersion.Override(ctx, &s2.SV, clusterversion.TestingBinaryVersion.String())
+	clusterversion.PreserveDowngradeVersion.Override(ctx, &s2.SV, clusterversion.Latest.String())
 	testutils.SucceedsSoon(t, func() error {
 		if int64(0) >= m2.PreserveDowngradeLastUpdated.Value() {
 			return errors.New("metric is zero. expected positive number.")

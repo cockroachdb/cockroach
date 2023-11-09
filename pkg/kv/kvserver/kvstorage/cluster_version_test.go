@@ -97,7 +97,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 	// stores with. create a store.
 	// For example's sake, let's assume that minV is 1.0. Then binV is 1.1 and
 	// development versions are 1.0-1 and 1.0-2.
-	minV := clusterversion.TestingBinaryMinSupportedVersion
+	minV := clusterversion.MinSupported.Version()
 	binV := minV
 	binV.Minor += 1
 

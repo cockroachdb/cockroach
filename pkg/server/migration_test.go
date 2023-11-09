@@ -231,8 +231,9 @@ func TestMigrationPurgeOutdatedReplicas(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	migrationServer := s.MigrationServer().(*migrationServer)
+	version := clusterversion.Latest.Version()
 	if _, err := migrationServer.PurgeOutdatedReplicas(context.Background(), &serverpb.PurgeOutdatedReplicasRequest{
-		Version: &clusterversion.TestingBinaryVersion,
+		Version: &version,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -251,8 +252,8 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
+		clusterversion.Latest.Version(),
+		clusterversion.MinSupported.Version(),
 		false, /* initializeVersion */
 	)
 	automaticUpgrade := make(chan struct{})
@@ -261,7 +262,7 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
 				DisableAutomaticVersionUpgrade: automaticUpgrade,
-				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
 				AfterRunPermanentUpgrades: func() {
@@ -270,7 +271,7 @@ func TestUpgradeHappensAfterMigrations(t *testing.T) {
 					for i := 0; i < N; i++ {
 						runtime.Gosched()
 					}
-					require.True(t, st.Version.ActiveVersion(ctx).Less(clusterversion.TestingBinaryVersion))
+					require.True(t, st.Version.ActiveVersion(ctx).Less(clusterversion.Latest.Version()))
 				},
 			},
 		},

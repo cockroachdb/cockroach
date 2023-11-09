@@ -68,8 +68,8 @@ func TestRestoreOldSequences(t *testing.T) {
 func restoreOldSequencesTest(exportDir string, isSchemaOnly bool) func(t *testing.T) {
 	return func(t *testing.T) {
 		params := base.TestServerArgs{}
-		params.Settings = cluster.MakeTestingClusterSettingsWithVersions(clusterversion.TestingBinaryVersion,
-			clusterversion.TestingBinaryMinSupportedVersion, false /* initializeVersion */)
+		params.Settings = cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(),
+			clusterversion.MinSupported.Version(), false /* initializeVersion */)
 		const numAccounts = 1000
 		_, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 			InitManualReplication, base.TestClusterArgs{ServerArgs: params})

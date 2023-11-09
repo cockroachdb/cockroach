@@ -256,8 +256,8 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 
 	settingsForUpgrade := func() *cluster.Settings {
 		settings := cluster.MakeTestingClusterSettingsWithVersions(
-			clusterversion.TestingBinaryVersion,
-			clusterversion.TestingBinaryMinSupportedVersion,
+			clusterversion.Latest.Version(),
+			clusterversion.MinSupported.Version(),
 			false, // initializeVersion
 		)
 		require.NoError(t, clusterversion.Initialize(ctx,
@@ -290,7 +290,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			Server: &server.TestingKnobs{
-				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 			UpgradeManager: &upgradebase.TestingKnobs{
@@ -349,7 +349,7 @@ FROM system.job_info WHERE job_id = $1 AND info_key = 'legacy_payload')`, jobID)
 			TenantID: roachpb.MustMakeTenantID(10),
 			TestingKnobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+					BinaryVersionOverride:          clusterversion.MinSupported.Version(),
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -466,7 +466,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// We're going to be migrating from the MinSupportedVersion to imaginary future versions.
-	current := clusterversion.TestingBinaryMinSupportedVersion
+	current := clusterversion.MinSupported.Version()
 	versions := []roachpb.Version{current}
 	for i := int32(1); i <= 4; i++ {
 		v := current
@@ -681,7 +681,7 @@ func TestPrecondition(t *testing.T) {
 		version.Internal += 1
 		return version
 	}
-	v0 := clusterversion.TestingBinaryMinSupportedVersion
+	v0 := clusterversion.MinSupported.Version()
 	v0_fence := fence(v0)
 	v1 := next(v0)
 	v1_fence := fence(v1)

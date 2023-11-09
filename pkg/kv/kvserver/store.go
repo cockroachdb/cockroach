@@ -298,7 +298,7 @@ var raftStepDownOnRemoval = util.ConstantWithMetamorphicTestBool("raft-step-down
 
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
-	return testStoreConfig(clock, clusterversion.TestingBinaryVersion)
+	return testStoreConfig(clock, clusterversion.Latest.Version())
 }
 
 // TestStoreConfigWithVersion is the same as TestStoreConfig but allows to pass a cluster version.

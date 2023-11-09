@@ -41,8 +41,8 @@ func TestSQLInstance(t *testing.T) {
 	var ambientCtx log.AmbientContext
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 42)))
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
+		clusterversion.Latest.Version(),
+		clusterversion.MinSupported.Version(),
 		true /* initializeVersion */)
 	slinstance.DefaultTTL.Override(ctx, &settings.SV, 20*time.Millisecond)
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
@@ -110,8 +110,8 @@ func TestSQLInstanceRelease(t *testing.T) {
 
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 42)))
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
+		clusterversion.Latest.Version(),
+		clusterversion.MinSupported.Version(),
 		true /* initializeVersion */)
 	slinstance.DefaultTTL.Override(ctx, &settings.SV, 20*time.Millisecond)
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)

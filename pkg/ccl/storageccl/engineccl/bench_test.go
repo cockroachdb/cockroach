@@ -52,7 +52,7 @@ func loadTestData(
 ) storage.Engine {
 	ctx := context.Background()
 
-	verStr := fmt.Sprintf("v%s", clusterversion.TestingBinaryVersion.String())
+	verStr := fmt.Sprintf("v%s", clusterversion.Latest.String())
 	name := fmt.Sprintf("%s_v%s_%d_%d_%d_%d", dirPrefix, verStr, numKeys, numBatches, batchTimeSpan, valueBytes)
 	dir := testfixtures.ReuseOrGenerate(tb, name, func(dir string) {
 		eng, err := storage.Open(

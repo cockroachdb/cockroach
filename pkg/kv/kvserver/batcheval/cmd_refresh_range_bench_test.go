@@ -215,7 +215,7 @@ func setupData(
 ) (storage.Engine, string) {
 	// Include the current version in the fixture name, or we may inadvertently
 	// run against a left-over fixture that is no longer supported.
-	verStr := fmt.Sprintf("v%s", clusterversion.TestingBinaryVersion.String())
+	verStr := fmt.Sprintf("v%s", clusterversion.Latest.String())
 	orderStr := "linear"
 	if opts.randomKeyOrder {
 		orderStr = "random"

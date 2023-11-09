@@ -79,7 +79,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 			Clock:             hlc.NewClockForTesting(nil),
 			AmbientCtx:        log.MakeTestingAmbientContext(tr),
 			DefaultSpanConfig: roachpb.TestingDefaultSpanConfig(),
-			Settings:          cluster.MakeTestingClusterSettingsWithVersions(clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryVersion, true),
+			Settings:          cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.Latest.Version(), true),
 		},
 	}
 
