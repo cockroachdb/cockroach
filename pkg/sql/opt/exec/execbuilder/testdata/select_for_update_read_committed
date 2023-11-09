@@ -38,20 +38,13 @@ vectorized: true
 • project
 │ columns: (aisle)
 │
-└── • lookup join (semi)
-    │ columns: (person, aisle)
-    │ estimated row count: 1 (missing stats)
-    │ table: supermarket@supermarket_pkey
-    │ equality: (person) = (person)
-    │ equality cols are key
-    │ locking strength: for update
-    │ locking durability: guaranteed
-    │
-    └── • scan
-          columns: (person, aisle)
-          estimated row count: 1 (missing stats)
-          table: supermarket@supermarket_pkey
-          spans: /"matilda"/0
+└── • scan
+      columns: (person, aisle)
+      estimated row count: 1 (missing stats)
+      table: supermarket@supermarket_pkey
+      spans: /"matilda"/0
+      locking strength: for update
+      locking durability: guaranteed
 
 query T
 EXPLAIN (OPT)
@@ -112,21 +105,13 @@ vectorized: true
     └── • project
         │ columns: (aisle)
         │
-        └── • lookup join (semi)
-            │ columns: (person, aisle)
-            │ estimated row count: 1 (missing stats)
-            │ table: supermarket@supermarket_pkey
-            │ equality: (person) = (person)
-            │ equality cols are key
-            │ locking strength: for update
-            │ locking durability: guaranteed
-            │
-            └── • scan
-                  columns: (person, aisle)
-                  estimated row count: 1 (missing stats)
-                  table: supermarket@supermarket_pkey
-                  spans: /"matilda"/0
-                  locking strength: for update
+        └── • scan
+              columns: (person, aisle)
+              estimated row count: 1 (missing stats)
+              table: supermarket@supermarket_pkey
+              spans: /"matilda"/0
+              locking strength: for update
+              locking durability: guaranteed
 
 query T
 EXPLAIN (OPT)
@@ -178,20 +163,13 @@ vectorized: true
         └── • project
             │ columns: (aisle)
             │
-            └── • lookup join (semi)
-                │ columns: (person, aisle)
-                │ estimated row count: 1 (missing stats)
-                │ table: supermarket@supermarket_pkey
-                │ equality: (person) = (person)
-                │ equality cols are key
-                │ locking strength: for update
-                │ locking durability: guaranteed
-                │
-                └── • scan
-                      columns: (person, aisle)
-                      estimated row count: 1 (missing stats)
-                      table: supermarket@supermarket_pkey
-                      spans: /"matilda"/0
+            └── • scan
+                  columns: (person, aisle)
+                  estimated row count: 1 (missing stats)
+                  table: supermarket@supermarket_pkey
+                  spans: /"matilda"/0
+                  locking strength: for update
+                  locking durability: guaranteed
 
 query T
 EXPLAIN (OPT)
