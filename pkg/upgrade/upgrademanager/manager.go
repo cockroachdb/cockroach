@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -58,7 +57,7 @@ type Manager struct {
 	codec     keys.SQLCodec
 	settings  *cluster.Settings
 	knobs     upgradebase.TestingKnobs
-	clusterID uuid.UUID
+	clusterID *base.ClusterIDContainer
 }
 
 // GetUpgrade returns the upgrade associated with this key.
@@ -88,7 +87,7 @@ func NewManager(
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	clusterID uuid.UUID,
+	clusterID *base.ClusterIDContainer,
 	testingKnobs *upgradebase.TestingKnobs,
 ) *Manager {
 	var knobs upgradebase.TestingKnobs
@@ -212,7 +211,7 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	// because upgrades run in order.
 	latest := permanentUpgrades[len(permanentUpgrades)-1]
 	lastVer := latest.Version()
-	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID)
+	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID.Get())
 	lastUpgradeCompleted, err := startup.RunIdempotentWithRetryEx(ctx,
 		m.deps.Stopper.ShouldQuiesce(),
 		"check if migration completed",
@@ -702,7 +701,7 @@ func (m *Manager) runMigration(
 				InternalExecutor: m.ie,
 				JobRegistry:      m.jr,
 				TestingKnobs:     &m.knobs,
-				ClusterID:        m.clusterID,
+				ClusterID:        m.clusterID.Get(),
 			}); err != nil {
 				return err
 			}
@@ -755,7 +754,7 @@ func (m *Manager) getOrCreateMigrationJob(
 ) (alreadyCompleted, alreadyExisting bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
 	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID)
+		enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID.Get())
 		alreadyCompleted, err = migrationstable.CheckIfMigrationCompleted(
 			ctx, version, txn.KV(), txn, enterpriseEnabled, migrationstable.ConsistentRead,
 		)
@@ -890,7 +889,7 @@ func (m *Manager) checkPreconditions(ctx context.Context, versions []roachpb.Ver
 			LeaseManager:     m.lm,
 			InternalExecutor: m.ie,
 			JobRegistry:      m.jr,
-			ClusterID:        m.clusterID,
+			ClusterID:        m.clusterID.Get(),
 		}); err != nil {
 			return errors.Wrapf(
 				err,
