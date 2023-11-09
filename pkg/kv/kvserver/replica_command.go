@@ -68,6 +68,27 @@ const mergeApplicationTimeout = 5 * time.Second
 var sendSnapshotTimeout = envutil.EnvOrDefaultDuration(
 	"COCKROACH_RAFT_SEND_SNAPSHOT_TIMEOUT", 1*time.Hour)
 
+// SplitBySizePercentile is the percentile which size based splits will split
+// at. The default 50th percentile will result in the left and right hand side
+// ranges post split being approximately equal in size.
+var SplitBySizePercentile = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.range_split.size_split_point_percentile",
+	"percentile to split at when performing size based splits, 50 will "+
+		"result in a split point which evenly divides bytes between the left and "+
+		"right hand size",
+	50,
+	func(v int64) error {
+		if v < 10 {
+			return errors.Errorf("cannot be set to a percentile lower than 10: %d", v)
+		}
+		if v > 90 {
+			return errors.Errorf("cannot be set to a percentile higher than 90: %d", v)
+		}
+		return nil
+	},
+)
+
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
 	ctx context.Context, args kvpb.AdminSplitRequest, reason string,
@@ -322,7 +343,8 @@ func (r *Replica) adminSplitWithDescriptor(
 		if len(args.SplitKey) == 0 {
 			// Find a key to split by size.
 			var err error
-			targetSize := r.GetMaxBytes(ctx) / 2
+			splitPointPercentile := (float64(SplitBySizePercentile.Get(&r.ClusterSettings().SV)) / 100)
+			targetSize := int64(float64(r.GetMaxBytes(ctx)) * splitPointPercentile)
 			foundSplitKey, err = storage.MVCCFindSplitKey(
 				ctx, r.store.TODOEngine(), desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
