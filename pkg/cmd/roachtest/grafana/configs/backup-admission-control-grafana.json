@@ -3336,7 +3336,7 @@
                 "uid": "localprom"
               },
               "editorMode": "code",
-              "expr": "rate(admission_wait_sum_kv_stores[$__rate_interval])",
+              "expr": "rate(admission_wait_durations_kv_stores_sum[$__rate_interval])",
               "interval": "",
               "legendFormat": "KV stores {node=\"{{node}}\"}",
               "range": true,
@@ -3348,7 +3348,7 @@
                 "uid": "localprom"
               },
               "editorMode": "code",
-              "expr": "rate(admission_wait_sum_kv[$__rate_interval])",
+              "expr": "rate(admission_wait_durations_kv_sum[$__rate_interval])",
               "hide": false,
               "interval": "",
               "legendFormat": "KV {node=\"{{node}}\"}",
@@ -3361,7 +3361,7 @@
                 "uid": "localprom"
               },
               "editorMode": "code",
-              "expr": "rate(admission_wait_sum_sql_kv_response[$__rate_interval])",
+              "expr": "rate(admission_wait_durations_sql_kv_response_sum[$__rate_interval])",
               "hide": false,
               "interval": "",
               "legendFormat": "SQL-KV {node=\"{{node}}\"}",
@@ -3374,7 +3374,7 @@
                 "uid": "localprom"
               },
               "editorMode": "code",
-              "expr": "rate(admission_wait_sum_sql_sql_response[$__rate_interval])",
+              "expr": "rate(admission_wait_durations_sql_sql_response_sum[$__rate_interval])",
               "hide": false,
               "interval": "",
               "legendFormat": "SQL-SQL {node=\"{{node}}\"}",
@@ -3387,7 +3387,7 @@
                 "uid": "localprom"
               },
               "editorMode": "code",
-              "expr": "rate(admission_wait_sum_sql_leaf_start[$__rate_interval])",
+              "expr": "rate(admission_wait_durations_sql_leaf_start_sum[$__rate_interval])",
               "hide": false,
               "interval": "",
               "legendFormat": "SQL leaf start {node=\"{{node}}\"}",
@@ -3400,7 +3400,7 @@
                 "uid": "localprom"
               },
               "editorMode": "code",
-              "expr": "rate(admission_wait_sum_sql_root_start[$__rate_interval])",
+              "expr": "rate(admission_wait_durations_sql_root_start_sum[$__rate_interval])",
               "hide": false,
               "interval": "",
               "legendFormat": "SQL root start {node=\"{{node}}\"}",

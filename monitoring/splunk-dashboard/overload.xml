@@ -332,10 +332,10 @@ by net.host.name</query>
       <chart>
         <search>
           <query>| mstats 
-rate_sum(admission_wait_sum_kv) as KV_request_rate,
-rate_sum(admission_wait_sum_kv_stores) as KV_write_request_rate,
-rate_sum(admission_wait_sum_sql_kv_response) as SQL-KV_response_rate,
-rate_sum(admission_wait_sum_sql_sql_response) as SQL-SQL_response_rate
+rate_sum(admission_wait_duration_kv_sum) as KV_request_rate,
+rate_sum(admission_wait_duration_kv_stores_sum) as KV_write_request_rate,
+rate_sum(admission_wait_duration_sql_kv_response_sum) as SQL-KV_response_rate,
+rate_sum(admission_wait_duration_sql_sql_response_sum) as SQL-SQL_response_rate
 where index=$index_name$ AND cluster_id=$cluster_id$ 
 span=10s by net.host.name
 | timechart span=10s 
