@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"runtime/pprof"
 	"time"
@@ -181,10 +182,16 @@ func (r *Replica) SendWithWriteBytes(
 	var writeBytes *kvadmission.StoreWriteBytes
 	if isReadOnly {
 		log.Event(ctx, "read-only path")
+		if ba.AdmissionHeader == (kvpb.AdmissionHeader{}) {
+			panic(fmt.Sprintf("empty admission header provided by %v", ba))
+		}
 		fn := (*Replica).executeReadOnlyBatch
 		br, _, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
 	} else if ba.IsWrite() {
 		log.Event(ctx, "read-write path")
+		if ba.AdmissionHeader == (kvpb.AdmissionHeader{}) {
+			panic(fmt.Sprintf("empty admission header provided by %v", ba))
+		}
 		fn := (*Replica).executeWriteBatch
 		br, writeBytes, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
 	} else if ba.IsAdmin() {

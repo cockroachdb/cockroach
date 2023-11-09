@@ -1026,7 +1026,7 @@ func (ir *IntentResolver) resolveIntents(
 	reqs := resolveIntentReqs(intents, opts, singleReq[:])
 	h := opts.AdmissionHeader
 	if h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
-		log.Warningf(ctx, "empty admission header provided by %s", string(debug.Stack()))
+		log.Fatalf(ctx, "empty admission header provided by %s", string(debug.Stack()))
 	}
 	// Send the requests ...
 	if opts.sendImmediately {
