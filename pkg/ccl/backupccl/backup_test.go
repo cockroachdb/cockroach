@@ -4884,7 +4884,7 @@ func TestBackupRestoreIncrementalAddTableMissing(t *testing.T) {
 	)
 }
 
-func TestBackupRestoreIncrementalTrucateTable(t *testing.T) {
+func TestBackupRestoreIncrementalTruncateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
