@@ -1166,6 +1166,8 @@ GO_TARGETS = [
     "//pkg/cmd/smithcmp:smithcmp_lib",
     "//pkg/cmd/smithtest:smithtest",
     "//pkg/cmd/smithtest:smithtest_lib",
+    "//pkg/cmd/sql-bootstrap-data:sql-bootstrap-data",
+    "//pkg/cmd/sql-bootstrap-data:sql-bootstrap-data_lib",
     "//pkg/cmd/teamcity-trigger:teamcity-trigger",
     "//pkg/cmd/teamcity-trigger:teamcity-trigger_lib",
     "//pkg/cmd/teamcity-trigger:teamcity-trigger_test",
