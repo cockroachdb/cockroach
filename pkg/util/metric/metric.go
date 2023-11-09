@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
@@ -166,26 +167,18 @@ var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
 
-type periodic interface {
-	nextTick() time.Time
-	tick()
-}
-
 var now = timeutil.Now
 
 // TestingSetNow changes the clock used by the metric system. For use by
-// testing to precisely control the clock.
+// testing to precisely control the clock. Also sets the time in the `tick`
+// package, since that is used ubiquitously here.
 func TestingSetNow(f func() time.Time) func() {
+	tickNowResetFn := tick.TestingSetNow(f)
 	origNow := now
 	now = f
 	return func() {
 		now = origNow
-	}
-}
-
-func maybeTick(m periodic) {
-	for m.nextTick().Before(now()) {
-		m.tick()
+		tickNowResetFn()
 	}
 }
 
@@ -278,22 +271,21 @@ func newHistogram(meta Metadata, duration time.Duration, buckets []float64) *His
 		Metadata: meta,
 		cum:      cum,
 	}
-	h.windowed.tickHelper = &tickHelper{
-		nextT: now(),
+	h.windowed.Ticker = tick.NewTicker(
+		now(),
 		// We want to divide the total window duration by the number of windows
 		// because we need to rotate the windows at uniformly distributed
 		// intervals within a histogram's total duration.
-		tickInterval: duration / WindowedHistogramWrapNum,
-		onTick: func() {
+		duration/WindowedHistogramWrapNum,
+		func() {
 			h.windowed.prev = h.windowed.cur
 			h.windowed.cur = prometheus.NewHistogram(opts)
-		},
-	}
-	h.windowed.tickHelper.onTick()
+		})
+	h.windowed.Ticker.OnTick()
 	return h
 }
 
-var _ periodic = (*Histogram)(nil)
+var _ tick.Periodic = (*Histogram)(nil)
 var _ PrometheusExportable = (*Histogram)(nil)
 var _ WindowedHistogram = (*Histogram)(nil)
 
@@ -319,7 +311,7 @@ type Histogram struct {
 		// need an RLock to record into it. But write lock
 		// is held while rotating.
 		syncutil.RWMutex
-		*tickHelper
+		*tick.Ticker
 		prev, cur prometheus.Histogram
 	}
 }
@@ -336,16 +328,16 @@ type IHistogram interface {
 
 var _ IHistogram = &Histogram{}
 
-func (h *Histogram) nextTick() time.Time {
+func (h *Histogram) NextTick() time.Time {
 	h.windowed.RLock()
 	defer h.windowed.RUnlock()
-	return h.windowed.nextTick()
+	return h.windowed.NextTick()
 }
 
-func (h *Histogram) tick() {
+func (h *Histogram) Tick() {
 	h.windowed.Lock()
 	defer h.windowed.Unlock()
-	h.windowed.tick()
+	h.windowed.Tick()
 }
 
 // Windowed returns a copy of the current windowed histogram.
@@ -406,9 +398,11 @@ func (h *Histogram) GetMetadata() Metadata {
 
 // Inspect calls the closure.
 func (h *Histogram) Inspect(f func(interface{})) {
-	h.windowed.Lock()
-	maybeTick(&h.windowed)
-	h.windowed.Unlock()
+	func() {
+		h.windowed.Lock()
+		defer h.windowed.Unlock()
+		tick.MaybeTick(&h.windowed)
+	}()
 	f(h)
 }
 
