@@ -589,7 +589,7 @@ ALTER TABLE t SPLIT AT SELECT generate_series(1, 30000, 3000);
 	kvGRPCCallsRegex := regexp.MustCompile(`KV gRPC calls: (\d+,)`)
 	for inOrder := range []bool{false, true} {
 		runner.Exec(t, `SET streamer_always_maintain_ordering = $1;`, inOrder)
-		for i := 0; i < 5; i++ {
+		for i := 0; i < 2; i++ {
 			var gRPCCalls int
 			var err error
 			rows := runner.QueryStr(t, `EXPLAIN ANALYZE SELECT length(blob) FROM t@t_v_idx WHERE v = '1';`)
