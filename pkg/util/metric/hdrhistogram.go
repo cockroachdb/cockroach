@@ -125,6 +125,27 @@ func (h *HdrHistogram) Inspect(f func(interface{})) {
 	f(h)
 }
 
+// NextTick returns the next tick timestamp of the underlying tick.Ticker
+// used by this HdrHistogram. Generally not useful - this is part of a band-aid
+// fix and should be expected to be removed.
+// TODO(obs-infra): remove this once pkg/util/aggmetric is merged with this package.
+func (h *HdrHistogram) NextTick() time.Time {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.mu.NextTick()
+}
+
+// Tick triggers a tick of this HdrHistogram, regardless of whether we've passed
+// the next tick interval. Generally, this should not be used by any caller other
+// than aggmetric.AggHistogram. Future work will remove the need to expose this function
+// as part of the public API.
+// TODO(obs-infra): remove this once pkg/util/aggmetric is merged with this package.
+func (h *HdrHistogram) Tick() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.mu.Tick()
+}
+
 // GetType returns the prometheus type enum for this metric.
 func (h *HdrHistogram) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_HISTOGRAM.Enum()
