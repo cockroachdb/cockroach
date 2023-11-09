@@ -170,7 +170,7 @@ func locality(t *testing.T, locStrs []string) roachpb.Locality {
 func info(t *testing.T, nid roachpb.NodeID, sid roachpb.StoreID, locStrs []string) ReplicaInfo {
 	return ReplicaInfo{
 		ReplicaDescriptor: desc(nid, sid),
-		Tiers:             locality(t, locStrs).Tiers,
+		Locality:          locality(t, locStrs),
 	}
 }
 
