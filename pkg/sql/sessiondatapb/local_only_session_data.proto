@@ -463,6 +463,10 @@ message LocalOnlySessionData {
   // internal errors due to incomplete functional dependencies, and also
   // fixes a bug that incorrectly truncated the provided ordering (see #113072).
   bool optimizer_use_provided_ordering_fix = 115;
+  // DisableChangefeedReplication, when true, disables changefeed events from
+  // being emitted for changes to data made in a session.
+  // TODO(yang): Plumb this session variable down to KV.
+  bool disable_changefeed_replication = 116;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

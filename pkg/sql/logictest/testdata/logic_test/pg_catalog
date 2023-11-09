@@ -2816,6 +2816,7 @@ default_transaction_read_only                              off                 N
 default_transaction_use_follower_reads                     off                 NULL      NULL        NULL        string
 default_with_oids                                          off                 NULL      NULL        NULL        string
 descriptor_validation                                      on                  NULL      NULL        NULL        string
+disable_changefeed_replication                             off                 NULL      NULL        NULL        string
 disable_hoist_projection_in_join_limitation                off                 NULL      NULL        NULL        string
 disable_partially_distributed_plans                        off                 NULL      NULL        NULL        string
 disable_plan_gists                                         off                 NULL      NULL        NULL        string
@@ -2983,6 +2984,7 @@ default_transaction_read_only                              off                 N
 default_transaction_use_follower_reads                     off                 NULL  user     NULL      off                 off
 default_with_oids                                          off                 NULL  user     NULL      off                 off
 descriptor_validation                                      on                  NULL  user     NULL      on                  on
+disable_changefeed_replication                             off                 NULL  user     NULL      off                 off
 disable_hoist_projection_in_join_limitation                off                 NULL  user     NULL      off                 off
 disable_partially_distributed_plans                        off                 NULL  user     NULL      off                 off
 disable_plan_gists                                         off                 NULL  user     NULL      off                 off
@@ -3146,6 +3148,7 @@ default_transaction_use_follower_reads                     NULL    NULL     NULL
 default_with_oids                                          NULL    NULL     NULL     NULL        NULL
 descriptor_validation                                      NULL    NULL     NULL     NULL        NULL
 direct_columnar_scans_enabled                              NULL    NULL     NULL     NULL        NULL
+disable_changefeed_replication                             NULL    NULL     NULL     NULL        NULL
 disable_hoist_projection_in_join_limitation                NULL    NULL     NULL     NULL        NULL
 disable_partially_distributed_plans                        NULL    NULL     NULL     NULL        NULL
 disable_plan_gists                                         NULL    NULL     NULL     NULL        NULL
