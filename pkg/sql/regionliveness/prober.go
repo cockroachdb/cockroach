@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -79,13 +80,19 @@ func (l *livenessProber) ProbeLiveness(ctx context.Context, region string) error
 		return nil
 	}
 	const probeQuery = `
-SELECT * FROM system.sql_instances WHERE crdb_region=$1::system.crdb_internal_region
+SELECT count(*) FROM system.sql_instances WHERE crdb_region=$1::system.crdb_internal_region
 `
 	err := timeutil.RunWithTimeout(ctx, "probe-liveness", time.Second*15,
 		func(ctx context.Context) error {
 			return l.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				_, err := txn.Exec(ctx, "probe-sql-instance", txn.KV(), probeQuery, region)
-				return err
+				_, err := txn.QueryRowEx(
+					ctx, "probe-sql-instance", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+					probeQuery, region,
+				)
+				if err != nil {
+					return err
+				}
+				return nil
 			})
 		})
 
@@ -137,17 +144,19 @@ func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRe
 		return regionStatus, nil
 	}
 	// Detect and down regions and remove them.
-	rows, err := executor.QueryBuffered(ctx, "query-region-liveness", txn,
-		"SELECT * FROM system.region_liveness")
+	rows, err := executor.QueryBufferedEx(
+		ctx, "query-region-liveness", txn, sessiondata.NodeUserSessionDataOverride,
+		"SELECT crdb_region, unavailable_at FROM system.region_liveness",
+	)
 	if err != nil {
 		return nil, err
 	}
 	for _, row := range rows {
 		enum, _ := tree.AsDEnum(row[0])
-		timestamp := tree.MustBeDTimestamp(row[1])
+		unavailableAt := tree.MustBeDTimestamp(row[1])
 		// Region is now officially unavailable, so lets remove
 		// it.
-		if txn.ReadTimestamp().GoTime().After(timestamp.Time) {
+		if txn.ReadTimestamp().GoTime().After(unavailableAt.Time) {
 			delete(regionStatus, enum.LogicalRep)
 		}
 	}
@@ -158,5 +167,5 @@ func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRe
 // when checking for region liveness.
 func IsQueryTimeoutErr(err error) bool {
 	return pgerror.GetPGCode(err) == pgcode.QueryCanceled ||
-		errors.Is(err, &timeutil.TimeoutError{})
+		errors.HasType(err, (*timeutil.TimeoutError)(nil))
 }
