@@ -127,3 +127,14 @@ var DumpFrontierEntries = settings.RegisterDurationSetting(
 	0,
 	settings.NonNegativeDuration,
 )
+
+// ReplicateSpanConfigsEnabled controls whether we replicate span
+// configurations from the source system tenant to the destination system
+// tenant.
+var ReplicateSpanConfigsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"physical_replication.consumer.span_configs.enabled",
+	"controls whether we replicate span configurations from the source system tenant to the "+
+		"destination system tenant",
+	true,
+)
