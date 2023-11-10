@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
@@ -72,7 +73,8 @@ func TestGrantExecuteToPublicOnAllFunctions(t *testing.T) {
 			tdb.Exec(t, fmt.Sprintf("CREATE FUNCTION f%d() RETURNS INT LANGUAGE SQL AS 'SELECT 1'", i))
 		}
 
-		// Revoke the public execute privileges on the function descriptors.
+		// Revoke the public execute privileges on the function descriptors and
+		// revert the version.
 		for i := 0; i < numFuncs; i++ {
 			funcName := fmt.Sprintf("f%d", i)
 			fn := desctestutils.TestingGetFunctionDescriptor(kvDB, keys.SystemSQLCodec, "test", "public", funcName)
@@ -88,6 +90,7 @@ func TestGrantExecuteToPublicOnAllFunctions(t *testing.T) {
 				if err != nil {
 					return err
 				}
+				mut.Privileges.Version = catpb.Version21_2
 				return txn.Put(ctx, descKey, mut.DescriptorProto())
 			}))
 		}
