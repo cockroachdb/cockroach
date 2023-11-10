@@ -574,9 +574,23 @@ func (w *WindowerSpec) summary() (string, []string) {
 
 // summary implements the diagramCellType interface.
 func (s *ChangeAggregatorSpec) summary() (string, []string) {
-	var details []string
-	for _, watch := range s.Watches {
-		details = append(details, watch.Span.String())
+	var spanStr strings.Builder
+	if len(s.Watches) > 0 {
+		spanStr.WriteString(fmt.Sprintf("Watches [%d]: ", len(s.Watches)))
+		const limit = 3
+		for i := 0; i < len(s.Watches) && i < limit; i++ {
+			if i > 0 {
+				spanStr.WriteString(", ")
+			}
+			spanStr.WriteString(s.Watches[i].Span.String())
+		}
+		if len(s.Watches) > limit {
+			spanStr.WriteString("...")
+		}
+	}
+
+	details := []string{
+		spanStr.String(),
 	}
 	return "ChangeAggregator", details
 }
