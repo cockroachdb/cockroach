@@ -38,7 +38,7 @@ type InitialValuesOpts struct {
 // new cluster. This generates the values assuming a cluster version equal to
 // the latest binary, unless explicitly overridden.
 func (opts InitialValuesOpts) GenerateInitialValues() ([]roachpb.KeyValue, []roachpb.RKey, error) {
-	versionKey := clusterversion.BinaryVersionKey
+	versionKey := clusterversion.Latest
 	if opts.OverrideKey != 0 {
 		versionKey = opts.OverrideKey
 	}

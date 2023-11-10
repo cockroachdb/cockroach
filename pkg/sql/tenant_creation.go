@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	tenantCreationMinSupportedVersionKey = clusterversion.BinaryMinSupportedVersionKey
+	tenantCreationMinSupportedVersionKey = clusterversion.MinSupported
 )
 
 // CreateTenant implements the tree.TenantOperator interface.
@@ -166,7 +166,7 @@ func (p *planner) createTenantInternal(
 		// using this override.
 		tenantVersion.Version = clusterversion.ByKey(p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride)
 		bootstrapVersionOverride = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride
-	} else if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.BinaryVersionKey) {
+	} else if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Latest) {
 		// The cluster is not running the latest version.
 		// Use the previous major version to create the tenant and bootstrap it
 		// just like the previous major version binary would, using hardcoded
@@ -177,7 +177,7 @@ func (p *planner) createTenantInternal(
 		// The cluster is running the latest version.
 		// Use this version to create the tenant and bootstrap it using the host
 		// cluster's bootstrapping logic.
-		tenantVersion.Version = clusterversion.ByKey(clusterversion.BinaryVersionKey)
+		tenantVersion.Version = clusterversion.Latest.Version()
 		bootstrapVersionOverride = 0
 	}
 
