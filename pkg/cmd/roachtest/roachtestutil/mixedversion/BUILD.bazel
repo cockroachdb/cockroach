@@ -42,6 +42,7 @@ go_test(
         "runner_test.go",
     ],
     args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     embed = [":mixedversion"],
     deps = [
         "//pkg/cmd/roachtest/cluster",
@@ -51,8 +52,10 @@ go_test(
         "//pkg/roachpb",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
+        "//pkg/testutils/datapathutils",
         "//pkg/util/intsets",
         "//pkg/util/version",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
 )
