@@ -23,7 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql"
+	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -124,8 +125,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	if !languageFound {
 		panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no language specified"))
 	}
-	if language == tree.RoutineLangPLpgSQL && !activeVersion.IsActive(clusterversion.V23_2) {
-		panic(unimplemented.New("PLpgSQL", "PLpgSQL is not supported until version 23.2"))
+	if language == tree.RoutineLangPLpgSQL {
+		if !activeVersion.IsActive(clusterversion.V23_2) {
+			panic(unimplemented.New("PLpgSQL", "PLpgSQL is not supported until version 23.2"))
+		}
+		if err := plpgsql.CheckClusterSupportsPLpgSQL(b.evalCtx.Settings); err != nil {
+			panic(err)
+		}
 	}
 
 	// Track the dependencies in the arguments, return type, and statements in
@@ -242,7 +248,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 
 		// Parse the function body.
-		stmt, err := plpgsql.Parse(funcBodyStr)
+		stmt, err := plpgsqlparser.Parse(funcBodyStr)
 		if err != nil {
 			panic(err)
 		}
