@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_22_2"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_23_1"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_23_2"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
@@ -163,7 +162,6 @@ var rulesForReleases = []rulesForRelease{
 	{activeVersion: clusterversion.V24_1, rulesRegistry: current.GetRegistry()},
 	{activeVersion: clusterversion.V23_2, rulesRegistry: release_23_2.GetRegistry()},
 	{activeVersion: clusterversion.V23_1, rulesRegistry: release_23_1.GetRegistry()},
-	{activeVersion: clusterversion.TODO_Delete_V22_2, rulesRegistry: release_22_2.GetRegistry()},
 }
 
 // minVersionForRules the oldest version supported by the rules.
@@ -221,17 +219,6 @@ func getMinValidVersionForRules(
 	return activeVersion
 }
 
-// Deprecated.
-//
-// TODO(postamar): remove once the release_22_2 ruleset is also removed
-func applyOpRules(
-	ctx context.Context, activeVersion clusterversion.ClusterVersion, g *scgraph.Graph,
-) (*scgraph.Graph, error) {
-	activeVersion = getMinValidVersionForRules(ctx, activeVersion)
-	registry := GetRulesRegistryForRelease(ctx, activeVersion)
-	return registry.ApplyOpRules(ctx, g)
-}
-
 func applyDepRules(
 	ctx context.Context, activeVersion clusterversion.ClusterVersion, g *scgraph.Graph,
 ) error {
@@ -254,10 +241,6 @@ func buildGraph(
 	err = g.Validate()
 	if err != nil {
 		panic(errors.Wrapf(err, "validate graph"))
-	}
-	g, err = applyOpRules(ctx, activeVersion, g)
-	if err != nil {
-		panic(errors.Wrapf(err, "mark op edges as no-op"))
 	}
 	return g
 }

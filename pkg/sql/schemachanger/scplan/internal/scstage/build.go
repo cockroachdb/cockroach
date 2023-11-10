@@ -708,9 +708,6 @@ func (sb stageBuilder) build() Stage {
 		s.After[i] = t.n.CurrentStatus
 	}
 	for _, e := range sb.opEdges {
-		if sb.bc.g.IsNoOp(e) {
-			continue
-		}
 		s.EdgeOps = append(s.EdgeOps, e.Op()...)
 	}
 	return s

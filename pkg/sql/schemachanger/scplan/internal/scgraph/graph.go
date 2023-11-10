@@ -14,7 +14,6 @@ package scgraph
 
 import (
 	"reflect"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -54,14 +53,6 @@ type Graph struct {
 	// opToOpEdge maps from an operation back to the
 	// opEdge that generated it as an index.
 	opToOpEdge map[scop.Op]*OpEdge
-
-	// noOpOpEdges that are marked optimized out, and will not generate
-	// any operations.
-	//
-	// Deprecated.
-	//
-	// TODO(postamar): remove once release_22_2 ruleset is also removed
-	noOpOpEdges map[*OpEdge]map[RuleName]struct{}
 
 	entities *rel.Database
 }
@@ -127,7 +118,6 @@ func New(cs scpb.CurrentState) (*Graph, error) {
 		targetIdxMap: map[*scpb.Target]targetIdx{},
 		opEdgesFrom:  map[*screl.Node]*OpEdge{},
 		opEdgesTo:    map[*screl.Node]*OpEdge{},
-		noOpOpEdges:  map[*OpEdge]map[RuleName]struct{}{},
 		opToOpEdge:   map[scop.Op]*OpEdge{},
 		entities:     db,
 	}
@@ -222,11 +212,6 @@ func (g *Graph) ShallowClone() *Graph {
 		opEdges:      g.opEdges,
 		opToOpEdge:   g.opToOpEdge,
 		entities:     g.entities,
-		noOpOpEdges:  make(map[*OpEdge]map[RuleName]struct{}),
-	}
-	// Any decorations for mutations will be copied.
-	for edge, noop := range g.noOpOpEdges {
-		clone.noOpOpEdges[edge] = noop
 	}
 	return clone
 }
@@ -356,52 +341,6 @@ func (g *Graph) AddDepEdge(
 	}
 	return g.depEdges.insertOrUpdate(rule, kind, from, to)
 
-}
-
-// MarkAsNoOp marks an edge as no-op, so that no operations are emitted from
-// this edge during planning.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 ruleset is also removed
-func (g *Graph) MarkAsNoOp(edge *OpEdge, rule ...RuleName) {
-	m := make(map[RuleName]struct{})
-	for _, r := range rule {
-		m[r] = struct{}{}
-	}
-	g.noOpOpEdges[edge] = m
-}
-
-// IsNoOp checks if an edge is marked as an edge that should emit no operations.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 ruleset is also removed
-func (g *Graph) IsNoOp(edge *OpEdge) bool {
-	if len(edge.op) == 0 {
-		return true
-	}
-	_, isNoOp := g.noOpOpEdges[edge]
-	return isNoOp
-}
-
-// NoOpRules returns the rules which caused the edge to not emit any operations.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 ruleset is also removed
-func (g *Graph) NoOpRules(edge *OpEdge) (rules []RuleName) {
-	if !g.IsNoOp(edge) {
-		return nil
-	}
-	m := g.noOpOpEdges[edge]
-	for rule := range m {
-		rules = append(rules, rule)
-	}
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i] < rules[j]
-	})
-	return rules
 }
 
 // Order returns the number of nodes in this graph.
