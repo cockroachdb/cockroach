@@ -1717,26 +1717,33 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 		},
 	}
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilistic, 112959,
-		),
-	})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			// TODO(herko): This test manipulates the query string directly and needs
-			// to be updated to support a cluster option in order to support shared
-			// process virtual clusters.
-			pgURL, cleanupFunc := sqlutils.PGUrl(
-				t, s.AdvSQLAddr(), "TestParseSearchPathInConnectionString" /* prefix */, url.User(username.RootUser),
+			pgURL, cleanupFunc := s.PGUrl(
+				t, serverutils.CertsDirPrefix("TestParseSearchPathInConnectionString"),
+				serverutils.User(username.RootUser),
 			)
 			defer cleanupFunc()
 
-			pgURL.RawQuery += "&" + tc.query
+			tcValues, err := url.ParseQuery(tc.query)
+			require.NoError(t, err)
+
+			// Combine existing query params with the test case query params.
+			values := pgURL.Query()
+			for k := range tcValues {
+				if values.Has(k) {
+					values.Set(k, values.Get(k)+" "+tcValues.Get(k))
+				} else {
+					values.Set(k, tcValues.Get(k))
+				}
+			}
+			pgURL.RawQuery = values.Encode()
+
 			c, connErr := pgx.Connect(ctx, pgURL.String())
 			if tc.expectedErr != "" {
 				require.ErrorContains(t, connErr, tc.expectedErr)
@@ -1745,7 +1752,7 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 			require.NoError(t, connErr)
 
 			var sp string
-			err := c.QueryRow(ctx, `SHOW search_path`).Scan(&sp)
+			err = c.QueryRow(ctx, `SHOW search_path`).Scan(&sp)
 			require.NoError(t, err)
 			require.Equal(t, tc.expectedSearchPath, sp)
 		})
