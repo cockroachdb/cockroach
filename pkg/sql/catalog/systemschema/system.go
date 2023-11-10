@@ -2247,7 +2247,7 @@ var (
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
-			tbl.Privileges.Version = catpb.Version21_2
+			tbl.Privileges.Version = catpb.Version23_2
 			tbl.Privileges.Users = append(tbl.Privileges.Users, catpb.UserPrivileges{
 				UserProto:  username.PublicRoleName().EncodeProto(),
 				Privileges: privilege.List{privilege.SELECT}.ToBitField(),

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -72,7 +73,8 @@ func grantExecuteToPublicOnAllFunctions(
 	}
 
 	for batch := nextBatch(); len(batch) > 0; batch = nextBatch() {
-		// Grant the EXECUTE privilege to each descriptor in the batch.
+		// Grant the EXECUTE privilege to each descriptor in the batch and
+		// upgrade the privilege descriptor version.
 		err := d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			descs, err := txn.Descriptors().MutableByID(txn.KV()).Descs(ctx, batch)
 			if err != nil {
@@ -80,7 +82,7 @@ func grantExecuteToPublicOnAllFunctions(
 			}
 			kvBatch := txn.KV().NewBatch()
 			for _, desc := range descs {
-				if desc.GetPrivileges().CheckPrivilege(username.PublicRoleName(), privilege.EXECUTE) {
+				if desc.GetPrivileges().Version >= catpb.Version23_2 {
 					continue
 				}
 				desc.GetPrivileges().Grant(
@@ -88,6 +90,7 @@ func grantExecuteToPublicOnAllFunctions(
 					privilege.List{privilege.EXECUTE},
 					false, /* withGrantOption */
 				)
+				desc.GetPrivileges().SetVersion(catpb.Version23_2)
 				if err := txn.Descriptors().WriteDescToBatch(
 					ctx, false /* kvTrace */, desc, kvBatch,
 				); err != nil {

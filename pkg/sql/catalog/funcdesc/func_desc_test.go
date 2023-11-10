@@ -827,6 +827,9 @@ func TestStripDanglingBackReferences(t *testing.T) {
 						ColumnIDs: []descpb.ColumnID{1},
 					},
 				},
+				Privileges: &catpb.PrivilegeDescriptor{
+					Version: catpb.Version23_2,
+				},
 			},
 			expectedOutput: descpb.FunctionDescriptor{
 				Name: "foo",
@@ -836,6 +839,9 @@ func TestStripDanglingBackReferences(t *testing.T) {
 						ID:        104,
 						ColumnIDs: []descpb.ColumnID{1},
 					},
+				},
+				Privileges: &catpb.PrivilegeDescriptor{
+					Version: catpb.Version23_2,
 				},
 			},
 			validIDs: catalog.MakeDescriptorIDSet(104, 105),

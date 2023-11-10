@@ -123,7 +123,7 @@ upsert descriptor #105
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  version: "1"
 upsert descriptor #100
   ...
@@ -173,7 +173,7 @@ upsert descriptor #105
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  state: ADD
   +  version: "1"
 upsert descriptor #100
@@ -330,7 +330,7 @@ upsert descriptor #104
   +  version: "3"
 upsert descriptor #105
   ...
-       version: 2
+       version: 3
      state: ADD
   -  version: "1"
   +  version: "2"
@@ -364,7 +364,7 @@ upsert descriptor #104
   +  version: "4"
 upsert descriptor #105
   ...
-       version: 2
+       version: 3
      state: ADD
   -  version: "2"
   +  version: "3"
@@ -394,7 +394,7 @@ upsert descriptor #104
   +  version: "5"
 upsert descriptor #105
   ...
-       version: 2
+       version: 3
      state: ADD
   -  version: "3"
   +  version: "4"
@@ -437,7 +437,7 @@ upsert descriptor #104
   +  version: "6"
 upsert descriptor #105
   ...
-       version: 2
+       version: 3
      state: ADD
   -  version: "4"
   +  version: "5"
@@ -611,7 +611,7 @@ upsert descriptor #105
      modificationTime: {}
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  state: ADD
   -  version: "5"
   +  version: "6"

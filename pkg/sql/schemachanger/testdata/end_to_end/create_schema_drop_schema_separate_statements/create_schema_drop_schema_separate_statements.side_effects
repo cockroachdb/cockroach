@@ -37,7 +37,7 @@ upsert descriptor #104
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  version: "1"
 upsert descriptor #100
   ...
@@ -71,7 +71,7 @@ upsert descriptor #100
 upsert descriptor #104
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   +  state: DROP
      version: "1"
 checking for feature: CREATE SCHEMA
@@ -102,7 +102,7 @@ upsert descriptor #105
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  version: "1"
 upsert descriptor #100
   ...
@@ -135,7 +135,7 @@ upsert descriptor #105
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  version: "1"
 upsert descriptor #100
   ...

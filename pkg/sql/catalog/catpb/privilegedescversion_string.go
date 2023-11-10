@@ -11,6 +11,7 @@ func _() {
 	_ = x[InitialVersion-0]
 	_ = x[OwnerVersion-1]
 	_ = x[Version21_2-2]
+	_ = x[Version23_2-3]
 }
 
 func (i PrivilegeDescVersion) String() string {
@@ -21,6 +22,8 @@ func (i PrivilegeDescVersion) String() string {
 		return "OwnerVersion"
 	case Version21_2:
 		return "Version21_2"
+	case Version23_2:
+		return "Version23_2"
 	default:
 		return "PrivilegeDescVersion(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

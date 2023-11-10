@@ -30,7 +30,7 @@ delete object namespace entry {104 105 table_regional_by_row} -> 108
 upsert descriptor #106
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  referencingDescriptorIds:
   -  - 108
      regionConfig:
@@ -41,7 +41,7 @@ upsert descriptor #106
 upsert descriptor #107
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  referencingDescriptorIds:
   -  - 108
   -  version: "2"
@@ -81,7 +81,7 @@ upsert descriptor #106
      - logicalRepresentation: us-east1
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  referencingDescriptorIds:
   -  - 108
      regionConfig:
@@ -104,7 +104,7 @@ upsert descriptor #107
      kind: ALIAS
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  referencingDescriptorIds:
   -  - 108
   -  version: "2"
@@ -181,7 +181,7 @@ upsert descriptor #107
      kind: ALIAS
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  version: "3"
   +  version: "4"
 upsert descriptor #108

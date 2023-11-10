@@ -48,9 +48,9 @@ import (
 //	roachprod start local
 //	# If the version is v1.0.7 then you need to enable enterprise with the
 //	# enterprise.enabled cluster setting.
-//	roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_versions/create.sql)"
+//	roachprod sql local:1 -- -e "$(cat pkg/ccl/backupccl/testdata/restore_old_versions/cluster/create.sql)"
 //	# Create an S3 bucket to store the backup.
-//	roachprod sql local:1 -- -e "BACKUP DATABASE test TO 's3://<bucket-name>/${VERSION}?AWS_ACCESS_KEY_ID=<...>&AWS_SECRET_ACCESS_KEY=<...>'"
+//	roachprod sql local:1 -- -e "BACKUP INTO 's3://<bucket-name>/${VERSION}?AWS_ACCESS_KEY_ID=<...>&AWS_SECRET_ACCESS_KEY=<...>'"
 //	# Then download the backup from s3 and plop the files into the appropriate
 //	# testdata directory.
 func TestRestoreOldVersions(t *testing.T) {
@@ -242,6 +242,17 @@ ORDER BY
 				sqlDB.Exec(t, fmt.Sprintf("SELECT * FROM system.%s", systemTableName))
 			}
 		}
+
+		// The "craig" user should be able to use the function because the
+		// EXECUTE privilege is added to the public role.
+		sqlDB.Exec(t, "SET ROLE = craig")
+		sqlDB.CheckQueryResults(t, "SELECT add(10, 3)", [][]string{{"13"}})
+
+		sqlDB.CheckQueryResults(t, "SHOW GRANTS ON FUNCTION add", [][]string{
+			{"data", "public", "100129", "add(int8, int8)", "admin", "ALL", "true"},
+			{"data", "public", "100129", "add(int8, int8)", "public", "EXECUTE", "false"},
+			{"data", "public", "100129", "add(int8, int8)", "root", "ALL", "true"},
+		})
 	}
 }
 
