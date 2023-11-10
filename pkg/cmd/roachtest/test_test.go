@@ -43,7 +43,7 @@ const defaultParallelism = 10
 
 func mkReg(t *testing.T) testRegistryImpl {
 	t.Helper()
-	return makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
+	return makeTestRegistry(spec.GCE)
 }
 
 func nilLogger() *logger.Logger {
@@ -318,7 +318,7 @@ func TestRunnerTestTimeout(t *testing.T) {
 		Name:             `timeout`,
 		Owner:            OwnerUnitTest,
 		Timeout:          10 * time.Millisecond,
-		Cluster:          spec.MakeClusterSpec(spec.GCE, "", 0),
+		Cluster:          spec.MakeClusterSpec(spec.GCE, 0),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -355,7 +355,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Name:             "a",
 				Owner:            OwnerUnitTest,
 				Run:              dummyRun,
-				Cluster:          spec.MakeClusterSpec(spec.GCE, "", 0),
+				Cluster:          spec.MakeClusterSpec(spec.GCE, 0),
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Nightly),
 			},
@@ -367,7 +367,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Name:             "illegal *[]",
 				Owner:            OwnerUnitTest,
 				Run:              dummyRun,
-				Cluster:          spec.MakeClusterSpec(spec.GCE, "", 0),
+				Cluster:          spec.MakeClusterSpec(spec.GCE, 0),
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Nightly),
 			},
@@ -377,7 +377,7 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r := makeTestRegistry(spec.GCE, "", "", false /* preferSSD */)
+			r := makeTestRegistry(spec.GCE)
 			err := r.prepareSpec(&c.spec)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
@@ -404,7 +404,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	r.Add(registry.TestSpec{
 		Name:             "boom",
 		Owner:            OwnerUnitTest,
-		Cluster:          spec.MakeClusterSpec(spec.GCE, "", 0),
+		Cluster:          spec.MakeClusterSpec(spec.GCE, 0),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
