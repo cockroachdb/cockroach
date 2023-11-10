@@ -112,8 +112,8 @@ type ServerInfo struct {
 	ClusterID string
 	// Organization is the cluster organization of the remote server.
 	Organization string
-	// VirtualClusterName is the name of the virtual cluster the SQL
-	// client is connected to.
+	// VirtualClusterName is the name of the virtual cluster the SQL client is
+	// connected to. Empty if no application VCs have been defined.
 	VirtualClusterName string
 }
 
