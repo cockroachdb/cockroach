@@ -23,6 +23,14 @@ var now = timeutil.Now
 //
 // NB: metric.TestingSetNow calls into this, so it's preferable to use that
 // function instead if you're working on things related to the metric package.
+//
+// NB: aggmetric.TestingSetNow also calls into this, so again, it's preferable
+// to use that function instead if you're working on things related to the
+// aggmetric package.
+//
+// TODO(obs): I know this is janky. It's temporary. An upcoming patch will
+// merge this package, pkg/util/metric, and pkg/util/aggmetric, after which
+// we can get rid of all this TestingSetNow chaining.
 func TestingSetNow(f func() time.Time) func() {
 	origNow := now
 	now = f
