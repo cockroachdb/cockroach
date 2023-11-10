@@ -13,6 +13,7 @@ package skip
 import (
 	"flag"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
@@ -170,6 +171,22 @@ func UnderNonTestBuild(t SkippableTest) {
 	}
 }
 
+// UnderDuress skips the test if we are running under any of the
+// conditions we have observed as producing slow builds.
+func UnderDuressWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	if Duress() {
+		skipReason := fmt.Sprintf("duress (current config %s)", testConfig())
+		maybeSkip(t, withIssue(skipReason, githubIssueID), args...)
+	}
+}
+
+// Duress catures the conditions that currently lead us to
+// believe that tests may be slower than normal.
+func Duress() bool {
+	return util.RaceEnabled || Stress() || syncutil.DeadlockEnabled
+}
+
 // UnderBench returns true iff a test is currently running under `go
 // test -bench`.  When true, tests should avoid writing data on
 // stdout/stderr from goroutines that run asynchronously with the
@@ -179,6 +196,20 @@ func UnderBench() bool {
 	// test executable with `-test.bench 1`.
 	f := flag.Lookup("test.bench")
 	return f != nil && f.Value.String() != ""
+}
+
+func testConfig() string {
+	configs := []string{}
+	if Stress() {
+		configs = append(configs, "stress")
+	}
+	if util.RaceEnabled {
+		configs = append(configs, "race")
+	}
+	if syncutil.DeadlockEnabled {
+		configs = append(configs, "deadlock")
+	}
+	return strings.Join(configs, ",")
 }
 
 func withIssue(reason string, githubIssueID int) string {
