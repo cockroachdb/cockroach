@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/errors"
@@ -183,6 +184,10 @@ func localityMatch(a, b []roachpb.Tier) int {
 // node and a bool indicating whether the latency is valid.
 type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
 
+// HealthFunc returns true if the node should be considered alive. Unhealthy
+// nodes are sorted behind healthy nodes.
+type HealthFunc func(roachpb.NodeID) bool
+
 // OptimizeReplicaOrder sorts the replicas in the order in which
 // they're to be used for sending RPCs (meaning in the order in which
 // they'll be probed for the lease). Lower latency and "closer"
@@ -199,7 +204,11 @@ type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
 // leaseholder is known by the caller, the caller will move it to the
 // front if appropriate.
 func (rs ReplicaSlice) OptimizeReplicaOrder(
-	nodeID roachpb.NodeID, latencyFn LatencyFunc, locality roachpb.Locality,
+	st *cluster.Settings,
+	nodeID roachpb.NodeID,
+	healthFn HealthFunc,
+	latencyFn LatencyFunc,
+	locality roachpb.Locality,
 ) {
 	// If we don't know which node we're on or its locality, and we don't have
 	// latency information to other nodes, send the RPCs randomly.
@@ -210,10 +219,22 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 
 	// Sort replicas by latency and then attribute affinity.
 	sort.Slice(rs, func(i, j int) bool {
-		// Replicas on the same node have the same latency.
+		// Replicas on the same node have the same score.
 		if rs[i].NodeID == rs[j].NodeID {
 			return false // i == j
 		}
+
+		if !FollowerReadsUnhealthy.Get(&st.SV) {
+			// Sort healthy nodes before unhealthy nodes.
+			// NB: This is checked before checking if we are on the local node because
+			// if we are unhealthy, then we prefer to choose a different follower.
+			healthI := healthFn(rs[i].NodeID)
+			healthJ := healthFn(rs[j].NodeID)
+			if healthI != healthJ {
+				return healthI
+			}
+		}
+
 		// Replicas on the local node sort first.
 		if rs[i].NodeID == nodeID {
 			return true // i < j

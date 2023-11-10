@@ -211,6 +211,7 @@ const (
 	NetworkMap
 	LossOfQuorum
 	ReplicaGCQueue
+	DistSender
 )
 
 func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
@@ -270,6 +271,8 @@ func (nv NodeVitality) IsLive(usage VitalityUsage) bool {
 		return nv.isAlive()
 	case ReplicaGCQueue:
 		return nv.isAlive()
+	case DistSender:
+		return nv.isAvailableNotDraining()
 	}
 
 	// TODO(baptist): Should be an assertion that we don't know this uasge.
