@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -139,7 +139,7 @@ func TestServerControllerWaitForDefaultCluster(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlRunner := sqlutils.MakeSQLRunner(db)
-	if util.RaceEnabled {
+	if skip.Duress() {
 		sqlRunner.Exec(t, "SET CLUSTER SETTING server.controller.mux_virtual_cluster_wait.timeout = '1m'")
 	}
 
