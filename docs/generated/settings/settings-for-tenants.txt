@@ -297,6 +297,8 @@ sql.stats.system_tables_autostats.enabled	boolean	true	when true, enables automa
 sql.telemetry.query_sampling.enabled	boolean	false	when set to true, executed queries will emit an event on the telemetry logging channel	application
 sql.telemetry.query_sampling.internal.enabled	boolean	false	when set to true, internal queries will be sampled in telemetry logging	application
 sql.telemetry.query_sampling.max_event_frequency	integer	8	the max event frequency at which we sample executions for telemetry, note that it is recommended that this value shares a log-line limit of 10  logs per second on the telemetry pipeline with all other telemetry events. If sampling mode is set to 'transaction', all statements associated with a single transaction are counted as 1 unit.	application
+sql.telemetry.query_sampling.mode	enumeration	statement	the execution level used for telemetry sampling. If set to 'statement', events are sampled at the statement execution level. If set to 'transaction', events are sampled at the txn execution level, i.e. all statements for a txn will be logged and are counted together as one sampled event (events are still emitted one per statement) [statement = 0, transaction = 1]	application
+sql.telemetry.txn_mode.tracking_limit	integer	10000	the maximum number of transactions tracked at one time for which we will send all statements to telemetry	application
 sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up orphaned temporary objects	application
 sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up	application
 sql.log.all_statements.enabled	boolean	false	set to true to enable logging of all executed statements	application
