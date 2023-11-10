@@ -219,17 +219,6 @@ func getMinValidVersionForRules(
 	return activeVersion
 }
 
-// Deprecated.
-//
-// TODO(postamar): remove once the release_22_2 ruleset is also removed
-func applyOpRules(
-	ctx context.Context, activeVersion clusterversion.ClusterVersion, g *scgraph.Graph,
-) (*scgraph.Graph, error) {
-	activeVersion = getMinValidVersionForRules(ctx, activeVersion)
-	registry := GetRulesRegistryForRelease(ctx, activeVersion)
-	return registry.ApplyOpRules(ctx, g)
-}
-
 func applyDepRules(
 	ctx context.Context, activeVersion clusterversion.ClusterVersion, g *scgraph.Graph,
 ) error {
@@ -252,10 +241,6 @@ func buildGraph(
 	err = g.Validate()
 	if err != nil {
 		panic(errors.Wrapf(err, "validate graph"))
-	}
-	g, err = applyOpRules(ctx, activeVersion, g)
-	if err != nil {
-		panic(errors.Wrapf(err, "mark op edges as no-op"))
 	}
 	return g
 }

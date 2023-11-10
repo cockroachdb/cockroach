@@ -34,10 +34,6 @@ func TestDeclarativeRules(t *testing.T) {
 		}
 		version := clusterversion.Latest.Version()
 		versionString := strings.Split(version.String(), "-")[0]
-		opOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s op", versionString))
-		if err != nil {
-			t.Fatal(err)
-		}
 		depOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s dep", versionString))
 		if err != nil {
 			t.Fatal(err)
@@ -52,9 +48,6 @@ func TestDeclarativeRules(t *testing.T) {
 				" "+clusterversion.ByKey(clusterversion.V24_1).String()+"\n",
 				" latest\n",
 				-1)
-		})
-		datadriven.RunTest(t, datapathutils.TestDataPath(t, "declarative-rules", "oprules"), func(t *testing.T, td *datadriven.TestData) string {
-			return opOut
 		})
 		datadriven.RunTest(t, datapathutils.TestDataPath(t, "declarative-rules", "deprules"), func(t *testing.T, td *datadriven.TestData) string {
 			return depOut

@@ -61,44 +61,6 @@ func (r *Registry) ApplyDepRules(ctx context.Context, g *scgraph.Graph) error {
 	return nil
 }
 
-// ApplyOpRules marks op edges as no-op in a shallow copy of the graph according
-// to the registered rules.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 is also removed
-func (r *Registry) ApplyOpRules(ctx context.Context, g *scgraph.Graph) (*scgraph.Graph, error) {
-	db := g.Database()
-	m := make(map[*screl.Node][]scgraph.RuleName)
-	for _, rule := range r.opRules {
-		var added int
-		start := timeutil.Now()
-		err := rule.q.Iterate(db, func(r rel.Result) error {
-			added++
-			n := r.Var(rule.from).(*screl.Node)
-			m[n] = append(m[n], rule.name)
-			return nil
-		})
-		if err != nil {
-			return nil, errors.Wrapf(err, "applying op rule %s", rule.name)
-		}
-		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(
-				ctx, "applying op rule %s %d took %v",
-				rule.name, added, timeutil.Since(start),
-			)
-		}
-	}
-	// Mark any op edges from these nodes as no-op.
-	ret := g.ShallowClone()
-	for from, rules := range m {
-		if opEdge, ok := g.GetOpEdgeFrom(from); ok {
-			ret.MarkAsNoOp(opEdge, rules...)
-		}
-	}
-	return ret, nil
-}
-
 func (r *Registry) MarshalDepRules() (string, error) {
 	s := append(([]registeredDepRule)(nil), r.depRules...)
 	sort.SliceStable(s, func(i, j int) bool {
@@ -111,22 +73,9 @@ func (r *Registry) MarshalDepRules() (string, error) {
 	return string(out), nil
 }
 
-func (r *Registry) MarshalOpRules() (string, error) {
-	s := append(([]registeredOpRule)(nil), r.opRules...)
-	sort.SliceStable(s, func(i, j int) bool {
-		return s[i].name < s[j].name
-	})
-	out, err := yaml.Marshal(s)
-	if err != nil {
-		return "", errors.Wrapf(err, "failed to marshal oprules")
-	}
-	return string(out), nil
-}
-
 // Registry contains all the dep and op rules.
 type Registry struct {
 	depRules []registeredDepRule
-	opRules  []registeredOpRule
 }
 
 type registeredDepRule struct {
@@ -134,15 +83,6 @@ type registeredDepRule struct {
 	from, to rel.Var
 	q        *rel.Query
 	kind     scgraph.DepEdgeKind
-}
-
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 is also removed
-type registeredOpRule struct {
-	name scgraph.RuleName
-	from rel.Var
-	q    *rel.Query
 }
 
 func NewRegistry() *Registry {
@@ -167,21 +107,6 @@ func (r *Registry) RegisterDepRule(
 		from: from.Node,
 		to:   to.Node,
 		q:    screl.MustQuery(c...),
-	})
-}
-
-// RegisterOpRule adds a graph q that will label as no-op the op edge originating
-// from this Node. There can only be one such edge per Node, as per the edge
-// definitions in opgen.
-//
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 is also removed
-func (r *Registry) RegisterOpRule(rn scgraph.RuleName, from rel.Var, q *rel.Query) {
-	r.opRules = append(r.opRules, registeredOpRule{
-		name: rn,
-		from: from,
-		q:    q,
 	})
 }
 
@@ -308,27 +233,6 @@ func (r registeredDepRule) MarshalYAML() (interface{}, error) {
 			{Kind: yaml.ScalarNode, Value: r.kind.String()},
 			{Kind: yaml.ScalarNode, Value: "to"},
 			{Kind: yaml.ScalarNode, Value: string(r.to)},
-			{Kind: yaml.ScalarNode, Value: "query"},
-			&query,
-		},
-	}, nil
-}
-
-// Deprecated.
-//
-// TODO(postamar): remove once release_22_2 is also removed
-func (r registeredOpRule) MarshalYAML() (interface{}, error) {
-	var query yaml.Node
-	if err := query.Encode(r.q.Clauses()); err != nil {
-		return nil, err
-	}
-	return &yaml.Node{
-		Kind: yaml.MappingNode,
-		Content: []*yaml.Node{
-			{Kind: yaml.ScalarNode, Value: "name"},
-			{Kind: yaml.ScalarNode, Value: string(r.name)},
-			{Kind: yaml.ScalarNode, Value: "from"},
-			{Kind: yaml.ScalarNode, Value: string(r.from)},
 			{Kind: yaml.ScalarNode, Value: "query"},
 			&query,
 		},
