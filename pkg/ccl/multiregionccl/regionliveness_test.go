@@ -22,12 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	sql2 "github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
-	regions2 "github.com/cockroachdb/cockroach/pkg/sql/regions"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -45,10 +46,13 @@ func TestRegionLivenessProber(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Enable settings required for configuring a tenant's system database as multi-region.
+	// Enable settings required for configuring a tenant's system database as
+	// multi-region. and enable region liveness for testing.
 	makeSettings := func() *cluster.Settings {
 		cs := cluster.MakeTestingClusterSettings()
 		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		slinstance.DefaultTTL.Override(ctx, &cs.SV, 10*time.Second)
+		regionliveness.RegionLivenessEnabled.Override(ctx, &cs.SV, true)
 		return cs
 	}
 
@@ -57,7 +61,7 @@ func TestRegionLivenessProber(t *testing.T) {
 		"us-west",
 		"us-south",
 	}
-	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(t,
+	testCluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(t,
 		expectedRegions,
 		1,
 		base.TestingKnobs{},
@@ -70,34 +74,31 @@ func TestRegionLivenessProber(t *testing.T) {
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
 	blockProbeQuery := atomic.Bool{}
+	defer regionliveness.TestingSetProbeLivenessTimeout(500 * time.Millisecond)()
 
-	for _, s := range cluster.Servers {
+	for _, s := range testCluster.Servers {
 		tenantArgs := base.TestTenantArgs{
 			Settings: makeSettings(),
 			TenantID: id,
 			Locality: s.Locality(),
 			TestingKnobs: base.TestingKnobs{
-				SQLExecutor: &sql2.ExecutorTestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
 					BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
-						const probeQuery = "SELECT * FROM system.sql_instances WHERE crdb_region = $1::system.crdb_internal_region"
-						if strings.Contains(stmt, probeQuery) &&
-							blockProbeQuery.Swap(false) {
+						const probeQuery = "SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.crdb_internal_region"
+						if strings.Contains(stmt, probeQuery) && blockProbeQuery.Swap(false) {
 							// Timeout this query intentionally.
-							time.Sleep(15 * time.Second)
+							time.Sleep(1 * time.Second)
 						}
 					},
 				},
 			},
 		}
-		ts, sql := serverutils.StartTenant(t, s, tenantArgs)
+		ts, tenantDB := serverutils.StartTenant(t, s, tenantArgs)
 		tenants = append(tenants, ts)
-		tenantSQL = append(tenantSQL, sql)
+		tenantSQL = append(tenantSQL, tenantDB)
 	}
-	// Enable region liveness for testing.
-	_, err = tenantSQL[0].Exec("SET CLUSTER SETTING sql.region_liveness.enabled=true")
-	require.NoError(t, err)
 	// Convert into a multi-region DB.
-	_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system SET PRIMARY REGION '%s'", cluster.Servers[0].Locality().Tiers[0].Value))
+	_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system SET PRIMARY REGION '%s'", testCluster.Servers[0].Locality().Tiers[0].Value))
 	require.NoError(t, err)
 	for i := 1; i < len(expectedRegions); i++ {
 		_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system ADD REGION '%s'", expectedRegions[i]))
@@ -105,9 +106,9 @@ func TestRegionLivenessProber(t *testing.T) {
 	}
 	idb := tenants[0].InternalDB().(isql.DB)
 	cf := tenants[0].CollectionFactory().(*descs.CollectionFactory)
-	statusServer := tenants[0].SQLServer().(*sql2.Server).GetExecutorConfig().TenantStatusServer
+	statusServer := tenants[0].SQLServer().(*sql.Server).GetExecutorConfig().TenantStatusServer
 	providerFactory := func(txn *kv.Txn) regionliveness.RegionProvider {
-		return regions2.NewProvider(tenants[0].Codec(), statusServer, txn, cf.NewCollection(ctx))
+		return regions.NewProvider(tenants[0].Codec(), statusServer, txn, cf.NewCollection(ctx))
 	}
 	regionProber := regionliveness.NewLivenessProber(idb, providerFactory, tenants[0].ClusterSettings())
 	// Validates the expected regions versus the region liveness set.
@@ -123,18 +124,18 @@ func TestRegionLivenessProber(t *testing.T) {
 
 	// Validate all regions in the cluster are correctly reported as live.
 	testTxn := tenants[0].DB().NewTxn(ctx, "test-txn")
-	regions, err := regionProber.QueryLiveness(ctx, testTxn)
+	liveRegions, err := regionProber.QueryLiveness(ctx, testTxn)
 	require.NoError(t, err)
-	checkExpectedRegions(expectedRegions, regions)
+	checkExpectedRegions(expectedRegions, liveRegions)
 	// Attempt to probe all regions, they should be all up still.
 	for _, region := range expectedRegions {
 		require.NoError(t, regionProber.ProbeLiveness(ctx, region))
 	}
 	// Validate all regions in the cluster are still reported as live.
 	testTxn = tenants[0].DB().NewTxn(ctx, "test-txn")
-	regions, err = regionProber.QueryLiveness(ctx, testTxn)
+	liveRegions, err = regionProber.QueryLiveness(ctx, testTxn)
 	require.NoError(t, err)
-	checkExpectedRegions(expectedRegions, regions)
+	checkExpectedRegions(expectedRegions, liveRegions)
 	// Probe the liveness of the region, but timeout the query
 	// intentionally to make it seem dead.
 	blockProbeQuery.Store(true)
