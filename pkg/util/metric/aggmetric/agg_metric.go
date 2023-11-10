@@ -100,6 +100,16 @@ func (cs *childSet) Each(
 	})
 }
 
+// apply applies the given applyFn to every item in the childSet
+func (cs *childSet) apply(applyFn func(item btree.Item)) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.mu.tree.Ascend(func(item btree.Item) bool {
+		applyFn(item)
+		return true
+	})
+}
+
 func (cs *childSet) add(metric childMetric) {
 	lvs := metric.labelValues()
 	if len(lvs) != len(cs.labels) {

@@ -12,7 +12,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/metric",
+        "//pkg/util/metric/tick",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
         "@com_github_google_btree//:btree",
@@ -25,8 +27,8 @@ go_test(
     size = "small",
     srcs = ["agg_metric_test.go"],
     data = glob(["testdata/**"]),
+    embed = [":aggmetric"],
     deps = [
-        ":aggmetric",
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/testutils/datapathutils",
