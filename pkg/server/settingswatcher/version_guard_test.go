@@ -44,9 +44,9 @@ func TestVersionGuard(t *testing.T) {
 		checkVersions   map[clusterversion.Key]bool
 	}
 
-	initialVersion := clusterversion.TODO_Delete_V22_2
-	startVersion := clusterversion.TODO_Delete_V23_1Start
-	maxVersion := clusterversion.V23_1
+	initialVersion := clusterversion.MinSupported
+	startVersion := clusterversion.MinSupported + 1
+	maxVersion := clusterversion.PreviousRelease
 
 	tests := []testCase{
 		{
