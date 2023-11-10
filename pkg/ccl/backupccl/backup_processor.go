@@ -85,6 +85,13 @@ var (
 		true,
 	)
 
+	preSplitExports = settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		"bulkio.backup.presplit_request_spans.enabled",
+		"split the spans that will be requests before requesting them",
+		util.ConstantWithMetamorphicTestBool("backup-presplit-spans", true),
+	)
+
 	sendExportRequestWithVerboseTracing = settings.RegisterBoolSetting(
 		settings.TenantWritable,
 		"bulkio.backup.export_request_verbose_tracing",
@@ -239,13 +246,12 @@ func (bp *backupDataProcessor) ConsumerClosed() {
 }
 
 type spanAndTime struct {
-	// spanIdx is a unique identifier of this object.
-	spanIdx    int
-	span       roachpb.Span
-	firstKeyTS hlc.Timestamp
-	start, end hlc.Timestamp
-	attempts   int
-	lastTried  time.Time
+	span         roachpb.Span
+	firstKeyTS   hlc.Timestamp
+	start, end   hlc.Timestamp
+	attempts     int
+	lastTried    time.Time
+	finishesSpec bool
 }
 
 type exportedSpan struct {
@@ -267,21 +273,50 @@ func runBackupProcessor(
 	clusterSettings := flowCtx.Cfg.Settings
 
 	totalSpans := len(spec.Spans) + len(spec.IntroducedSpans)
-	todo := make(chan spanAndTime, totalSpans)
-	var spanIdx int
-	for _, s := range spec.IntroducedSpans {
-		todo <- spanAndTime{
-			spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: hlc.Timestamp{},
-			end: spec.BackupStartTime,
+	requestSpans := make([]spanAndTime, 0, totalSpans)
+	rangeSizedSpans := preSplitExports.Get(&flowCtx.EvalCtx.Settings.SV)
+
+	splitSpans := func(spans []roachpb.Span, start, end hlc.Timestamp) error {
+		for _, fullSpan := range spans {
+			remainingSpan := fullSpan
+
+			if rangeSizedSpans {
+				rdi, err := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).RangeDescIteratorFactory.NewIterator(ctx, fullSpan)
+				if err != nil {
+					return err
+				}
+				for ; rdi.Valid(); rdi.Next() {
+					rangeDesc := rdi.CurRangeDescriptor()
+					rangeSpan := roachpb.Span{Key: rangeDesc.StartKey.AsRawKey(), EndKey: rangeDesc.EndKey.AsRawKey()}
+					subspan := remainingSpan.Intersect(rangeSpan)
+					if !subspan.Valid() {
+						return errors.AssertionFailedf("%s not in %s of %s", rangeSpan, remainingSpan, fullSpan)
+					}
+					requestSpans = append(requestSpans, spanAndTime{span: subspan, start: start, end: end})
+					remainingSpan.Key = subspan.EndKey
+				}
+			}
+
+			if remainingSpan.Valid() {
+				requestSpans = append(requestSpans, spanAndTime{span: remainingSpan, start: start, end: end})
+			}
+			requestSpans[len(requestSpans)-1].finishesSpec = true
 		}
-		spanIdx++
+		return nil
 	}
-	for _, s := range spec.Spans {
-		todo <- spanAndTime{
-			spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: spec.BackupStartTime,
-			end: spec.BackupEndTime,
-		}
-		spanIdx++
+
+	if err := splitSpans(spec.IntroducedSpans, hlc.Timestamp{}, spec.BackupStartTime); err != nil {
+		return err
+	}
+	if err := splitSpans(spec.Spans, spec.BackupStartTime, spec.BackupEndTime); err != nil {
+		return err
+	}
+
+	log.Infof(ctx, "backup processor is assigned %d spans covering %d ranges", totalSpans, len(requestSpans))
+
+	todo := make(chan spanAndTime, len(requestSpans))
+	for i := range requestSpans {
+		todo <- requestSpans[i]
 	}
 
 	destURI := spec.DefaultURI
@@ -529,7 +564,7 @@ func runBackupProcessor(
 					}
 
 					var completedSpans int32
-					if resp.ResumeSpan == nil {
+					if span.finishesSpec && resp.ResumeSpan == nil {
 						completedSpans = 1
 					}
 
