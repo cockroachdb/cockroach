@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -414,5 +415,65 @@ func TestProcessorsImplementDiagramCellType(t *testing.T) {
 	pcu := reflect.ValueOf(ProcessorCoreUnion{})
 	for i := 0; i < pcu.NumField(); i++ {
 		require.Implements(t, (*diagramCellType)(nil), pcu.Field(i).Interface())
+	}
+}
+
+func TestChangeAggregatorSpec(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		name            string
+		aggregatorSpec  ChangeAggregatorSpec
+		expectedWatches []string
+	}{
+		{
+			name:            "no watches",
+			aggregatorSpec:  ChangeAggregatorSpec{},
+			expectedWatches: []string{""},
+		},
+		{
+			name: "limit",
+			aggregatorSpec: ChangeAggregatorSpec{
+				Watches: []ChangeAggregatorSpec_Watch{
+					{
+						Span: roachpb.Span{Key: roachpb.Key("a")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("b")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("c")},
+					},
+				},
+			},
+			expectedWatches: []string{"Watches [3]: a, b, c"},
+		},
+		{
+			name: "overlimit",
+			aggregatorSpec: ChangeAggregatorSpec{
+				Watches: []ChangeAggregatorSpec_Watch{
+					{
+						Span: roachpb.Span{Key: roachpb.Key("a")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("b")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("c")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("d")},
+					},
+				},
+			},
+			expectedWatches: []string{"Watches [4]: a, b, c..."},
+		},
+	}
+
+	for _, td := range testData {
+		t.Run(td.name, func(t *testing.T) {
+			_, details := td.aggregatorSpec.summary()
+			require.Equal(t, td.expectedWatches, details)
+		})
 	}
 }
