@@ -110,7 +110,9 @@ func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int
 	cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCPUProfile)
 }
 
-func (cp *CPUProfiler) takeCPUProfile(ctx context.Context, path string) (success bool) {
+func (cp *CPUProfiler) takeCPUProfile(
+	ctx context.Context, path string, _ ...interface{},
+) (success bool) {
 	if err := debug.CPUProfileDo(cp.st, cluster.CPUProfileWithLabels, func() error {
 		// Try writing a CPU profile.
 		f, err := os.Create(path)
