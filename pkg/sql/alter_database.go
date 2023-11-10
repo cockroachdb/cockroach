@@ -2326,6 +2326,15 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		}
 	}
 
+	currentZone := zonepb.NewZoneConfig()
+	if currentZoneConfigWithRaw, err := params.p.Descriptors().GetZoneConfig(
+		params.ctx, params.p.Txn(), n.desc.ID,
+	); err != nil {
+		return err
+	} else if currentZoneConfigWithRaw != nil {
+		currentZone = currentZoneConfigWithRaw.ZoneConfigProto()
+	}
+
 	if deleteZone {
 		switch n.n.LocalityLevel {
 		case tree.LocalityLevelGlobal:
@@ -2388,7 +2397,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 		}
 
 		if err := validateZoneAttrsAndLocalities(
-			params.ctx, params.p.InternalSQLTxn().Regions(), params.p.ExecCfg(), newZone,
+			params.ctx, params.p.InternalSQLTxn().Regions(), params.p.ExecCfg(), currentZone, newZone,
 		); err != nil {
 			return err
 		}
@@ -2433,7 +2442,7 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 
 	// Validate if the zone config extension is compatible with the database.
 	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(
-		params.ctx, params.p.InternalSQLTxn().Regions(), params.ExecCfg(), updatedRegionConfig, true, /* validateLocalities */
+		params.ctx, params.p.InternalSQLTxn().Regions(), params.ExecCfg(), updatedRegionConfig, currentZone, true, /* validateLocalities */
 	)
 	if err != nil {
 		return err
