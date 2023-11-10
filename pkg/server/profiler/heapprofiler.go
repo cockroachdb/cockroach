@@ -69,7 +69,7 @@ func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, curHeap int64) {
 
 // takeHeapProfile returns true if and only if the profile dump was
 // taken successfully.
-func takeHeapProfile(ctx context.Context, path string) (success bool) {
+func takeHeapProfile(ctx context.Context, path string, _ ...interface{}) (success bool) {
 	// Try writing a go heap profile.
 	f, err := os.Create(path)
 	if err != nil {
