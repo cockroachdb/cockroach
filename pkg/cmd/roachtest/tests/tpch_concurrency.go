@@ -199,6 +199,9 @@ func registerTPCHConcurrency(r registry.Registry) {
 	// the test as "weekly").
 	const timeout = 18 * time.Hour
 
+	// We run this test without runtime assertions as it pushes the VMs way past
+	// the overload point, so it cannot withstand any metamorphic perturbations.
+	cockroachBinary := registry.StandardCockroach
 	r.Add(registry.TestSpec{
 		Name:             "tpch_concurrency",
 		Owner:            registry.OwnerSQLQueries,
@@ -206,6 +209,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(numNodes),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  cockroachBinary,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, false /* disableStreamer */)
 		},
@@ -218,10 +222,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(numNodes),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
-		// We run this test without runtime assertions as it pushes the VMs way
-		// past the overload point, so it cannot withstand any metamorphic
-		// perturbations.
-		CockroachBinary: registry.StandardCockroach,
+		CockroachBinary:  cockroachBinary,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
 		},
