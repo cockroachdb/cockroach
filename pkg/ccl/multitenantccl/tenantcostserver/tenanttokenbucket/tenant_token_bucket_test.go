@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -45,27 +46,36 @@ type testState struct {
 }
 
 func (ts *testState) String() string {
-	return fmt.Sprintf("Current RUs: %.10g\n", ts.RUCurrent)
+	return fmt.Sprintf(
+		strings.Join(
+			[]string{
+				"Burst Limit: %.10g",
+				"Refill Rate: %.10g",
+				"Current RUs: %.10g",
+				"Average RUs: %.10g",
+			}, "\n"),
+		ts.RUBurstLimit, ts.RURefillRate, ts.RUCurrent, ts.RUCurrentAvg,
+	)
 }
 
 var testStateCommands = map[string]func(*testState, *testing.T, *datadriven.TestData) string{
-	"init":    (*testState).init,
-	"update":  (*testState).update,
-	"request": (*testState).request,
+	"reconfigure": (*testState).reconfigure,
+	"update":      (*testState).update,
+	"request":     (*testState).request,
 }
 
-func (ts *testState) init(t *testing.T, d *datadriven.TestData) string {
+func (ts *testState) reconfigure(t *testing.T, d *datadriven.TestData) string {
 	var vals struct {
+		Limit   float64
 		Rate    float64
-		Initial float64
+		Current float64
 	}
 	if err := yaml.UnmarshalStrict([]byte(d.Input), &vals); err != nil {
-		d.Fatalf(t, "failed to unmarshal init values: %v", err)
+		d.Fatalf(t, "failed to unmarshal reconfigure values: %v", err)
 	}
-	ts.State = State{
-		RURefillRate: vals.Rate,
-		RUCurrent:    vals.Initial,
-	}
+	ts.State.Reconfigure(
+		context.Background(), roachpb.TenantID{}, vals.Current, vals.Rate, vals.Limit,
+		time.Time{}, 0, time.Time{}, 0)
 	return ts.String()
 }
 
