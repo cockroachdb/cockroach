@@ -40,6 +40,11 @@ const (
 	// These descriptors should have all the correct privileges and the owner field
 	// explicitly set. These descriptors should be strictly validated.
 	Version21_2
+
+	// Version23_2 corresponds to descriptors created in 23.2 and onwards. These
+	// descriptors that are function descriptions should have EXECUTE privileges
+	// for the public role.
+	Version23_2
 )
 
 // Owner accesses the owner field.
@@ -122,7 +127,7 @@ func NewCustomSuperuserPrivilegeDescriptor(
 				WithGrantOption: priv.ToBitField(),
 			},
 		},
-		Version: Version21_2,
+		Version: Version23_2,
 	}
 }
 
@@ -161,7 +166,7 @@ func NewPrivilegeDescriptor(
 				WithGrantOption: grantOption.ToBitField(),
 			},
 		},
-		Version: Version21_2,
+		Version: Version23_2,
 	}
 }
 
@@ -199,6 +204,14 @@ func NewPublicSchemaPrivilegeDescriptor(includeCreatePriv bool) *PrivilegeDescri
 	} else {
 		p.Grant(username.PublicRoleName(), privilege.List{privilege.USAGE}, false)
 	}
+	return p
+}
+
+// NewBaseFunctionPrivilegeDescriptor returns a privilege descriptor
+// with default privileges for a function descriptor.
+func NewBaseFunctionPrivilegeDescriptor(owner username.SQLUsername) *PrivilegeDescriptor {
+	p := NewBasePrivilegeDescriptor(owner)
+	p.Grant(username.PublicRoleName(), privilege.List{privilege.EXECUTE}, false)
 	return p
 }
 
