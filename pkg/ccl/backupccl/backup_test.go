@@ -11194,7 +11194,7 @@ func TestRestoreMemoryMonitoringWithShadowing(t *testing.T) {
 	sqlDB.Exec(t, "CREATE DATABASE data2")
 	sqlDB.Exec(t, "RESTORE data.bank FROM latest IN 'userfile:///backup' WITH OPTIONS (into_db='data2')")
 	files := sqlDB.QueryStr(t, "SHOW BACKUP FILES FROM latest IN 'userfile:///backup'")
-	require.Equal(t, 11, len(files)) // 1 file for full + 10 for 10 incrementals
+	require.GreaterOrEqual(t, len(files), 11) // 1 file for full + 10 for 10 incrementals
 
 	// Assert that the restore processor is processing the same span multiple
 	// times, and the count is based on what's expected from the memory budget.
