@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -500,4 +501,115 @@ func testTxnCommitterRetryAfterStaging(t *testing.T, errorOnRetry bool) {
 		require.True(t, sawRetry)
 		require.Equal(t, int64(1), tc.metrics.ParallelCommitAutoRetries.Count())
 	}
+}
+
+// TestTxnCommitterDisables1PC_DifferentBatch ensures the txn committer disables
+// one phase commit for transactions that have acquired a replicated lock in a
+// different batch than the one with an EndTxn request.
+func TestTxnCommitterDisables1PC_DifferentBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "replicated", func(t *testing.T, replicated bool) {
+		ctx := context.Background()
+		tc, mockSender := makeMockTxnCommitter()
+		defer tc.stopper.Stop(ctx)
+
+		txn := makeTxnProto()
+		keyA := roachpb.Key("a")
+
+		// Verify that the txn key is attached to committing EndTxn requests.
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		dur := lock.Unreplicated
+		if replicated {
+			dur = lock.Replicated
+		}
+		ba.Add(&kvpb.GetRequest{
+			RequestHeader:        kvpb.RequestHeader{Key: keyA},
+			KeyLockingDurability: dur,
+			KeyLockingStrength:   lock.Exclusive,
+		})
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.Equal(t, keyA, ba.Requests[0].GetInner().Header().Key)
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+
+		br, pErr := tc.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+
+		ba.Requests = nil
+		ba.Add(&kvpb.EndTxnRequest{Commit: true})
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.Equal(t, roachpb.Key(txn.Key), ba.Requests[0].GetInner().Header().Key)
+			require.Equal(t, replicated, ba.Requests[0].GetInner().(*kvpb.EndTxnRequest).Disable1PC)
+
+			br = ba.CreateReply()
+			br.Txn = ba.Txn
+			br.Txn.Status = roachpb.COMMITTED
+			return br, nil
+		})
+
+		br, pErr = tc.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+	})
+}
+
+// TestTxnCommitterDisables1PC_SameBatch ensures the txn committer disables
+// one phase commit for transactions that have acquired a replicated lock in the
+// same batch as the one with an EndTxn request.
+func TestTxnCommitterDisables1PC_SameBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "replicated", func(t *testing.T, replicated bool) {
+		ctx := context.Background()
+		tc, mockSender := makeMockTxnCommitter()
+		defer tc.stopper.Stop(ctx)
+
+		txn := makeTxnProto()
+		keyA := roachpb.Key("a")
+
+		// Verify that the txn key is attached to committing EndTxn requests.
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: &txn}
+		dur := lock.Unreplicated
+		if replicated {
+			dur = lock.Replicated
+		}
+		ba.Add(&kvpb.GetRequest{
+			RequestHeader:        kvpb.RequestHeader{Key: keyA},
+			KeyLockingDurability: dur,
+			KeyLockingStrength:   lock.Exclusive,
+		})
+		// Attach LockSpans to EndTxn request to avoid the elided EndTxn
+		// optimization.
+		intents := []roachpb.Span{{Key: keyA}}
+		ba.Add(&kvpb.EndTxnRequest{Commit: true, LockSpans: intents})
+
+		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 2)
+			require.Equal(t, keyA, ba.Requests[0].GetInner().Header().Key)
+			require.Equal(t, roachpb.Key(txn.Key), ba.Requests[1].GetInner().Header().Key)
+			require.Equal(t, replicated, ba.Requests[1].GetInner().(*kvpb.EndTxnRequest).Disable1PC)
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			br.Txn.Status = roachpb.COMMITTED
+			return br, nil
+		})
+
+		br, pErr := tc.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+	})
 }
