@@ -24,7 +24,8 @@ import (
 )
 
 type sinkTelemetryData struct {
-	emittedBytes atomic.Int64
+	emittedBytes    atomic.Int64
+	emittedMessages atomic.Int64
 }
 
 type periodicTelemetryLogger struct {
@@ -41,6 +42,10 @@ type telemetryLogger interface {
 	// recordEmittedBytes records the number of emitted bytes without
 	// publishing logs.
 	recordEmittedBytes(numBytes int)
+
+	// recordEmittedMessages records the number of emitted messages without
+	// publishing logs.
+	recordEmittedMessages(numMessages int)
 
 	// maybeFlushLogs flushes buffered metrics to logs depending
 	// on the semantics of the implementation.
@@ -73,9 +78,18 @@ func (ptl *periodicTelemetryLogger) resetEmittedBytes() int64 {
 	return ptl.sinkTelemetryData.emittedBytes.Swap(0)
 }
 
+// recordEmittedMessages implements the telemetryLogger interface.
+func (ptl *periodicTelemetryLogger) recordEmittedMessages(numMessages int) {
+	ptl.sinkTelemetryData.emittedMessages.Add(int64(numMessages))
+}
+
+func (ptl *periodicTelemetryLogger) resetEmittedMessages() int64 {
+	return ptl.sinkTelemetryData.emittedMessages.Swap(0)
+}
+
 // recordEmittedBytes implements the telemetryLogger interface.
 func (ptl *periodicTelemetryLogger) maybeFlushLogs() {
-	loggingInterval := ContinuousTelemetryInterval.Get(&ptl.settings.SV).Nanoseconds()
+	loggingInterval := continuousTelemetryInterval.Get(&ptl.settings.SV).Nanoseconds()
 	if loggingInterval == 0 {
 		return
 	}
@@ -97,13 +111,14 @@ func (ptl *periodicTelemetryLogger) maybeFlushLogs() {
 		CommonChangefeedEventDetails: ptl.changefeedDetails,
 		JobId:                        int64(ptl.job.ID()),
 		EmittedBytes:                 ptl.resetEmittedBytes(),
+		EmittedMessages:              ptl.resetEmittedMessages(),
 		LoggingInterval:              loggingInterval,
 	}
 	log.StructuredEvent(ptl.ctx, continuousTelemetryEvent)
 }
 
 func (ptl *periodicTelemetryLogger) close() {
-	loggingInterval := ContinuousTelemetryInterval.Get(&ptl.settings.SV).Nanoseconds()
+	loggingInterval := continuousTelemetryInterval.Get(&ptl.settings.SV).Nanoseconds()
 	if loggingInterval == 0 {
 		return
 	}
@@ -112,6 +127,7 @@ func (ptl *periodicTelemetryLogger) close() {
 		CommonChangefeedEventDetails: ptl.changefeedDetails,
 		JobId:                        int64(ptl.job.ID()),
 		EmittedBytes:                 ptl.resetEmittedBytes(),
+		EmittedMessages:              ptl.resetEmittedMessages(),
 		LoggingInterval:              loggingInterval,
 		Closing:                      true,
 	}
@@ -158,6 +174,7 @@ func (r *telemetryMetricsRecorder) recordOneMessage() recordOneMessageCallback {
 	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
 		r.inner.recordOneMessage()(mvcc, bytes, compressedBytes)
 		r.telemetryLogger.recordEmittedBytes(bytes)
+		r.telemetryLogger.recordEmittedMessages(1)
 		r.telemetryLogger.maybeFlushLogs()
 	}
 }
@@ -167,6 +184,7 @@ func (r *telemetryMetricsRecorder) recordEmittedBatch(
 ) {
 	r.inner.recordEmittedBatch(startTime, numMessages, mvcc, bytes, compressedBytes)
 	r.telemetryLogger.recordEmittedBytes(bytes)
+	r.telemetryLogger.recordEmittedMessages(numMessages)
 	r.telemetryLogger.maybeFlushLogs()
 }
 
@@ -198,9 +216,9 @@ func (r *telemetryMetricsRecorder) recordSinkIOInflightChange(delta int64) {
 	r.inner.recordSinkIOInflightChange(delta)
 }
 
-// ContinuousTelemetryInterval determines the interval at which each node emits telemetry events
+// continuousTelemetryInterval determines the interval at which each node emits telemetry events
 // during the lifespan of each enterprise changefeed.
-var ContinuousTelemetryInterval = settings.RegisterDurationSetting(
+var continuousTelemetryInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.telemetry.continuous_logging.interval",
 	"determines the interval at which each node emits continuous telemetry events"+
