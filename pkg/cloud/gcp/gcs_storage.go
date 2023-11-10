@@ -386,7 +386,7 @@ func (g *gcsStorage) Close() error {
 // https://github.com/googleapis/google-cloud-go/issues/784
 // Remove if this error ever becomes part of the default retry predicate.
 func shouldRetry(err error) bool {
-	if defaultShouldRetry(err) {
+	if gcs.ShouldRetry(err) {
 		return true
 	}
 
