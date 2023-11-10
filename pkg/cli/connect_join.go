@@ -39,6 +39,8 @@ var connectJoinCmd = &cobra.Command{
 	Short: "request the TLS certs for a new node from an existing node",
 	Args:  cobra.MinimumNArgs(1),
 	RunE:  clierrorplus.MaybeDecorateError(runConnectJoin),
+	Deprecated: "self generated certificates are no longer supported functionality.\n" +
+		"Use a CA generated certificate for production cluster or --insecure for test clusters instead.\n",
 }
 
 func requestPeerCA(
