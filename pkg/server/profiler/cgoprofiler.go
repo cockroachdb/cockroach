@@ -71,8 +71,9 @@ func (o *NonGoAllocProfiler) MaybeTakeProfile(ctx context.Context, curNonGoAlloc
 	o.maybeTakeProfile(ctx, curNonGoAlloc, takeJemallocProfile)
 }
 
-// takeJemallocProfile returns true if and only if the jemalloc dump was taken successfully or jemalloc was not enabled.
-func takeJemallocProfile(ctx context.Context, path string) (success bool) {
+// takeJemallocProfile returns true if and only if the jemalloc dump was taken
+// successfully or jemalloc was not enabled.
+func takeJemallocProfile(ctx context.Context, path string, _ ...interface{}) (success bool) {
 	if jemallocHeapDump == nil {
 		return true
 	}

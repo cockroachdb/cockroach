@@ -70,7 +70,7 @@ func NewStatsProfiler(
 func (o *StatsProfiler) MaybeTakeProfile(
 	ctx context.Context, curRSS int64, ms *status.GoMemStats, cs *status.CGoMemStats,
 ) {
-	o.maybeTakeProfile(ctx, curRSS, func(ctx context.Context, path string) bool { return saveStats(ctx, path, ms, cs) })
+	o.maybeTakeProfile(ctx, curRSS, func(ctx context.Context, path string, _ ...interface{}) bool { return saveStats(ctx, path, ms, cs) })
 }
 
 func saveStats(
