@@ -5782,7 +5782,7 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		// Hack: since setting a zero value disabled, set a negative value to ensure we always log.
 		interval := -10 * time.Millisecond
-		ContinuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
+		continuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
@@ -5794,7 +5794,7 @@ func TestChangefeedContinuousTelemetry(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			beforeCreate := timeutil.Now()
 			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo VALUES (%d) RETURNING cluster_logical_timestamp()`, i))
-			verifyLogsWithEmittedBytes(t, jobID, beforeCreate.UnixNano(), interval.Nanoseconds(), false)
+			verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeCreate.UnixNano(), interval.Nanoseconds(), false)
 		}
 	}
 
@@ -5808,7 +5808,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		interval := 24 * time.Hour
-		ContinuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
+		continuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
 		beforeCreate := timeutil.Now()
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
@@ -5817,7 +5817,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		jobID := foo.(cdctest.EnterpriseTestFeed).JobID()
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
-		verifyLogsWithEmittedBytes(t, jobID, beforeCreate.UnixNano(), interval.Nanoseconds(), false)
+		verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeCreate.UnixNano(), interval.Nanoseconds(), false)
 
 		// Insert more rows. No logs should be created for these since we recently
 		// published them above and the interval is 24h.
@@ -5832,7 +5832,7 @@ func TestChangefeedContinuousTelemetryOnTermination(t *testing.T) {
 		// Close the changefeed and ensure logs were created after closing.
 		beforeClose := timeutil.Now()
 		require.NoError(t, foo.Close())
-		verifyLogsWithEmittedBytes(t, jobID, beforeClose.UnixNano(), interval.Nanoseconds(), true)
+		verifyLogsWithEmittedBytesAndMessages(t, jobID, beforeClose.UnixNano(), interval.Nanoseconds(), true)
 	}
 
 	// TODO(#89421): include pubsub once it supports metrics
@@ -5846,7 +5846,7 @@ func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		// Hack: since setting a zero value disabled, set a negative value to ensure we always log.
 		interval := -100 * time.Millisecond
-		ContinuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
+		continuousTelemetryInterval.Override(context.Background(), &s.Server.ClusterSettings().SV, interval)
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE foo2 (id INT PRIMARY KEY)`)
@@ -5859,13 +5859,13 @@ func TestChangefeedContinuousTelemetryDifferentJobs(t *testing.T) {
 		beforeInsert := timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (1)`)
-		verifyLogsWithEmittedBytes(t, job1, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
-		verifyLogsWithEmittedBytes(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
+		verifyLogsWithEmittedBytesAndMessages(t, job1, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
+		verifyLogsWithEmittedBytesAndMessages(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
 		require.NoError(t, foo.Close())
 
 		beforeInsert = timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo2 VALUES (2)`)
-		verifyLogsWithEmittedBytes(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
+		verifyLogsWithEmittedBytesAndMessages(t, job2, beforeInsert.UnixNano(), interval.Nanoseconds(), false)
 		require.NoError(t, foo2.Close())
 	}
 
