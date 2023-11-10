@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -65,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -14767,4 +14769,103 @@ func TestReplayWithBumpedTimestamp(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+// TestLockAcquisition1PCInteractions ensures transactions (regardless of
+// isolation level) that acquire replicated locks do not commit using one phase
+// commit.
+func TestLockAcquisitions1PCInteractions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Construct a new DB with a fresh set of TxnMetrics. This allows the test to
+	// precisely assert on successful 1PC attempts without having to worry about
+	// other transactions in the system affecting them, such as node liveness
+	// heartbeats.
+	metrics := kvcoord.MakeTxnMetrics(metric.TestSampleInterval)
+	distSender := s.DistSenderI().(*kvcoord.DistSender)
+	tcsFactoryCfg := kvcoord.TxnCoordSenderFactoryConfig{
+		AmbientCtx: s.AmbientCtx(),
+		Settings:   s.ClusterSettings(),
+		Clock:      s.Clock(),
+		Stopper:    s.Stopper(),
+		Metrics:    metrics,
+	}
+	tcsFactory := kvcoord.NewTxnCoordSenderFactory(tcsFactoryCfg, distSender)
+	testDB := kv.NewDBWithContext(s.AmbientCtx(), tcsFactory, s.Clock(), kvDB.Context())
+
+	run := func(
+		t *testing.T,
+		acquireReplicated bool,
+		iso isolation.Level,
+		external bool,
+		acquisitionInETBatch bool,
+	) {
+		successful1PCBefore := metrics.Commits1PC.Count()
+
+		// Perform a range split between key A and B.
+		keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+		_, _, err := s.SplitRange(keyB)
+		require.NoError(t, err)
+
+		// Write a value to a key A and B.
+		_, err = testDB.Inc(ctx, keyA, 1)
+		require.Nil(t, err)
+		_, err = testDB.Inc(ctx, keyB, 1)
+		require.Nil(t, err)
+
+		// Create a new transaction.
+		txn := testDB.NewTxn(ctx, "test")
+		err = txn.SetIsoLevel(iso)
+		require.NoError(t, err)
+
+		b := txn.NewBatch()
+		// Ensure the txn record is anchored on a key in the same range as the one
+		// we will send the EndTxn request to. This is required for us to consider
+		// attempting a 1PC.
+		b.GetForUpdate(keyA, kvpb.BestEffort)
+
+		lockDur := kvpb.BestEffort
+		if acquireReplicated {
+			lockDur = kvpb.GuaranteedDurability
+		}
+
+		if external {
+			b.GetForUpdate(keyB, lockDur)
+		} else {
+			b.GetForUpdate(keyA, lockDur)
+		}
+		if !acquisitionInETBatch {
+			// Run the locking read batch first.
+			err = txn.Run(ctx, b)
+			require.NoError(t, err)
+			// Then create a new batch to commit.
+			b = txn.NewBatch()
+		}
+		b.Inc(keyA, 1)
+		err = txn.CommitInBatch(ctx, b)
+		require.NoError(t, err)
+
+		successful1PCAfter := metrics.Commits1PC.Count()
+		if acquireReplicated {
+			require.Equal(t, successful1PCBefore, successful1PCAfter)
+		} else {
+			require.Greater(t, successful1PCAfter, successful1PCBefore)
+		}
+	}
+
+	testutils.RunTrueAndFalse(t, "replicated", func(t *testing.T, acquireReplicated bool) {
+		isolation.RunEachLevel(t, func(t *testing.T, iso isolation.Level) {
+			testutils.RunTrueAndFalse(t, "external", func(t *testing.T, external bool) {
+				testutils.RunTrueAndFalse(t, "acquisitionInETBatch",
+					func(t *testing.T, acquisitionInETBatch bool) {
+						run(t, acquireReplicated, iso, external, acquisitionInETBatch)
+					})
+			})
+		})
+	})
 }

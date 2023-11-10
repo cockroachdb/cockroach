@@ -795,6 +795,7 @@ func (r *Replica) newBatchedEngine(
 //     condition is isolation level dependent.
 //  3. the transaction is not in its first epoch and the EndTxn request does
 //     not require one phase commit.
+//  4. the EndTxn request explicitly disables one phase commit.
 func isOnePhaseCommit(ba *kvpb.BatchRequest) bool {
 	if ba.Txn == nil {
 		return false
@@ -817,6 +818,9 @@ func isOnePhaseCommit(ba *kvpb.BatchRequest) bool {
 	}
 	arg, _ := ba.GetArg(kvpb.EndTxn)
 	etArg := arg.(*kvpb.EndTxnRequest)
+	if etArg.Disable1PC {
+		return false // explicitly disabled
+	}
 	if retry, _, _ := batcheval.IsEndTxnTriggeringRetryError(ba.Txn, etArg.Deadline); retry {
 		return false
 	}
