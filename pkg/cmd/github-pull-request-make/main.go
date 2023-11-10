@@ -279,9 +279,9 @@ func main() {
 			target, ok := os.LookupEnv(targetEnv)
 			var duration time.Duration
 			if ok && target == "stressrace" {
-				duration = (40 * time.Minute) / time.Duration(len(pkgs))
-			} else {
 				duration = (30 * time.Minute) / time.Duration(len(pkgs))
+			} else {
+				duration = (20 * time.Minute) / time.Duration(len(pkgs))
 			}
 			minDuration := (2 * time.Minute) * time.Duration(len(pkg.tests))
 			if duration < minDuration {
@@ -354,12 +354,11 @@ func main() {
 				}
 				args = append(args, fmt.Sprintf("--test_filter=%s", strings.Join(filters, "|")))
 				args = append(args, "--test_env=COCKROACH_NIGHTLY_STRESS=true")
-				args = append(args, "--test_arg=-test.timeout", fmt.Sprintf("--test_arg=%s", timeout))
 				// Give the entire test 1 more minute than the duration to wrap up.
 				args = append(args, fmt.Sprintf("--test_timeout=%d", int((duration+1*time.Minute).Seconds())))
 				args = append(args, "--test_output", "streamed")
 
-				args = append(args, "--run_under", fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' -stderr -maxfails 1 -maxtime %s -p %d", bazelStressTarget, bazciPath, duration, parallelism))
+				args = append(args, "--run_under", fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' -stderr -maxfails 1 -maxtime %s -p %d -timeout %s", bazelStressTarget, bazciPath, duration, parallelism, timeout))
 				cmd := exec.Command("bazci", args...)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
