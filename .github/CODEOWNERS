@@ -381,6 +381,7 @@
 /pkg/ccl/oidcccl/            @cockroachdb/obs-inf-prs
 /pkg/ccl/partitionccl/       @cockroachdb/sql-foundations
 /pkg/ccl/pgcryptoccl/        @cockroachdb/sql-foundations
+/pkg/ccl/plpgsqlccl/         @cockroachdb/sql-queries-prs
 
 #!/pkg/ccl/serverccl/        @cockroachdb/unowned
 /pkg/ccl/serverccl/diagnosticsccl/ @cockroachdb/obs-inf-prs
