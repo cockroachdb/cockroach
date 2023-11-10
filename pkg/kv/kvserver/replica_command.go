@@ -3209,6 +3209,7 @@ func (r *Replica) followerSendSnapshot(
 		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
 			resp, err := r.store.cfg.Transport.SendSnapshot(
 				ctx,
+				r.store.ClusterID(),
 				r.store.cfg.StorePool,
 				header,
 				snap,
