@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"time"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -273,7 +273,7 @@ func (mq *mergeQueue) process(
 	mergedStats.Add(rhsStats)
 
 	lhsLoadSplitSnap := lhsRepl.loadBasedSplitter.Snapshot(ctx, mq.store.Clock().PhysicalTime())
-	var loadMergeReason string
+	var loadMergeReason redact.RedactableString
 	if lhsRepl.SplitByLoadEnabled() {
 		var canMergeLoad bool
 		if canMergeLoad, loadMergeReason = canMergeRangeLoad(
@@ -387,7 +387,7 @@ func (mq *mergeQueue) process(
 	}
 
 	log.VEventf(ctx, 2, "merging to produce range: %s-%s", mergedDesc.StartKey, mergedDesc.EndKey)
-	reason := fmt.Sprintf("lhs+rhs size (%s+%s=%s) below threshold (%s) %s",
+	reason := redact.Sprintf("lhs+rhs size (%s+%s=%s) below threshold (%s) %s",
 		humanizeutil.IBytes(lhsStats.Total()),
 		humanizeutil.IBytes(rhsStats.Total()),
 		humanizeutil.IBytes(mergedStats.Total()),
@@ -448,7 +448,7 @@ func (mq *mergeQueue) updateChan() <-chan time.Time {
 
 func canMergeRangeLoad(
 	ctx context.Context, lhs, rhs split.LoadSplitSnapshot,
-) (can bool, reason string) {
+) (can bool, reason redact.RedactableString) {
 	// When load is a consideration for splits and, by extension, merges, the
 	// mergeQueue is fairly conservative. In an effort to avoid thrashing and to
 	// avoid overreacting to temporary fluctuations in load, the mergeQueue will
@@ -471,7 +471,7 @@ func canMergeRangeLoad(
 	// just after changing the split objective to a different value, where
 	// there is a mismatch.
 	if lhs.SplitObjective != rhs.SplitObjective {
-		return false, fmt.Sprintf("LHS load measurement is a different type (%s) than the RHS (%s)",
+		return false, redact.Sprintf("LHS load measurement is a different type (%s) than the RHS (%s)",
 			lhs.SplitObjective,
 			rhs.SplitObjective,
 		)
@@ -486,7 +486,7 @@ func canMergeRangeLoad(
 	conservativeLoadBasedSplitThreshold := 0.5 * lhs.Threshold
 
 	if merged >= conservativeLoadBasedSplitThreshold {
-		return false, fmt.Sprintf("lhs+rhs %s (%s+%s=%s) above threshold (%s)",
+		return false, redact.Sprintf("lhs+rhs %s (%s+%s=%s) above threshold (%s)",
 			obj,
 			obj.Format(lhs.Max),
 			obj.Format(rhs.Max),
@@ -495,7 +495,7 @@ func canMergeRangeLoad(
 		)
 	}
 
-	return true, fmt.Sprintf("lhs+rhs %s (%s+%s=%s) below threshold (%s)",
+	return true, redact.Sprintf("lhs+rhs %s (%s+%s=%s) below threshold (%s)",
 		obj,
 		obj.Format(lhs.Max),
 		obj.Format(rhs.Max),
