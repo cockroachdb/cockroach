@@ -132,4 +132,8 @@ const (
 	// FixSecondaryIndexEncodingType indicates that a secondary index had its
 	// encoding type fixed, so it is not incorrectly marked as a primary index.
 	FixSecondaryIndexEncodingType
+
+	// GrantExecuteOnFunctionToPublicRole indicates that EXECUTE was granted
+	// to the public role for a function.
+	GrantExecuteOnFunctionToPublicRole
 )
