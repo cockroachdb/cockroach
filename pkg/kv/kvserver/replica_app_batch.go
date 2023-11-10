@@ -550,14 +550,31 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 		}
 	}
 
-	// Apply the write batch to RockDB. Entry application is done without
-	// syncing to disk. The atomicity guarantees of the batch and the fact that
-	// the applied state is stored in this batch, ensure that if the batch ends
-	// up not being durably committed then the entries in this batch will be
-	// applied again upon startup. However, if we're removing the replica's data
-	// then we sync this batch as it is not safe to call postDestroyRaftMuLocked
-	// before ensuring that the replica's data has been synchronously removed.
-	// See handleChangeReplicasResult().
+	// Apply the write batch to Pebble. Entry application is done without syncing
+	// to disk. The atomicity guarantees of the batch, and the fact that the
+	// applied state is stored in this batch, ensure that if the batch ends up not
+	// being durably committed then the entries in this batch will be applied
+	// again upon startup. However, if we're removing the replica's data then we
+	// sync this batch as it is not safe to call postDestroyRaftMuLocked before
+	// ensuring that the replica's data has been synchronously removed. See
+	// handleChangeReplicasResult().
+	//
+	// TODO(#38566, #113135): we should sync here also if the command truncates
+	// the log and removes at least one sideloaded entry. Sideloaded entries live
+	// in a separate special engine, and are removed as a side effect of applying
+	// this command, but not atomically with it.
+	//
+	// TODO(#36262, #93248): once the legacy log truncation mechanism is removed,
+	// and the behaviour under "kv.raft_log.loosely_coupled_truncation.enabled"
+	// cluster setting is the default, we will no longer need to sync here upon
+	// log truncations. The sync will happen by other means with a lag.
+	//
+	// TODO(sep-raft-log): when the log and state machine engines are completely
+	// separated, we must either sync here unconditionally upon log truncation
+	// (which would be expensive), or apply the side effects (remove the entries)
+	// asynchronously when sure that the state machine engine has synced the
+	// application of this command. I.e. the loosely coupled truncation migration
+	// mentioned above likely needs to be done first.
 	sync := b.changeRemovesReplica
 	if err := b.batch.Commit(sync); err != nil {
 		return errors.Wrapf(err, "unable to commit Raft entry batch")
