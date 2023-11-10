@@ -1402,27 +1402,6 @@ func TestTenantLogic_plpgsql_builtins(
 	runLogicTest(t, "plpgsql_builtins")
 }
 
-func TestTenantLogic_plpgsql_cursor(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "plpgsql_cursor")
-}
-
-func TestTenantLogic_plpgsql_record(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "plpgsql_record")
-}
-
-func TestTenantLogic_plpgsql_unsupported(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "plpgsql_unsupported")
-}
-
 func TestTenantLogic_poison_after_push(
 	t *testing.T,
 ) {
@@ -1472,13 +1451,6 @@ func TestTenantLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
-func TestTenantLogic_procedure_plpgsql(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "procedure_plpgsql")
-}
-
 func TestTenantLogic_procedure_privileges(
 	t *testing.T,
 ) {
@@ -1526,13 +1498,6 @@ func TestTenantLogic_redact_descriptor(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "redact_descriptor")
-}
-
-func TestTenantLogic_refcursor(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "refcursor")
 }
 
 func TestTenantLogic_rename_atomic(
@@ -2305,13 +2270,6 @@ func TestTenantLogic_udf_options(
 	runLogicTest(t, "udf_options")
 }
 
-func TestTenantLogic_udf_plpgsql(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_plpgsql")
-}
-
 func TestTenantLogic_udf_prepare(
 	t *testing.T,
 ) {
@@ -2394,13 +2352,6 @@ func TestTenantLogic_udf_upsert(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_upsert")
-}
-
-func TestTenantLogic_udf_volatility_check(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_volatility_check")
 }
 
 func TestTenantLogic_union(
@@ -2641,11 +2592,53 @@ func TestTenantLogicCCL_pgcrypto_builtins(
 	runCCLLogicTest(t, "pgcrypto_builtins")
 }
 
+func TestTenantLogicCCL_plpgsql_cursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_cursor")
+}
+
+func TestTenantLogicCCL_plpgsql_record(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_record")
+}
+
+func TestTenantLogicCCL_plpgsql_unsupported(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "plpgsql_unsupported")
+}
+
+func TestTenantLogicCCL_procedure_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "procedure_plpgsql")
+}
+
+func TestTenantLogicCCL_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "read_committed")
+}
+
 func TestTenantLogicCCL_redact_descriptor(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "redact_descriptor")
+}
+
+func TestTenantLogicCCL_refcursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "refcursor")
 }
 
 func TestTenantLogicCCL_schema_change_in_txn(
@@ -2681,6 +2674,20 @@ func TestTenantLogicCCL_tenant_unsupported(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "tenant_unsupported")
+}
+
+func TestTenantLogicCCL_udf_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_plpgsql")
+}
+
+func TestTenantLogicCCL_udf_volatility_check(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_volatility_check")
 }
 
 func TestTenantLogicCCL_zone_config_secondary_tenants(

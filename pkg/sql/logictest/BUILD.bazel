@@ -37,6 +37,7 @@ filegroup(
         "//conditions:default": [],
     }),
     visibility = [
+        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-upgrade-to-master:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-upgrade-to-master:__pkg__",
     ],
 )
