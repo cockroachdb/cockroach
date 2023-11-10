@@ -1520,25 +1520,11 @@ func TestLogic_plpgsql_builtins(
 	runLogicTest(t, "plpgsql_builtins")
 }
 
-func TestLogic_plpgsql_cursor(
+func TestLogic_plpgsql_license(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "plpgsql_cursor")
-}
-
-func TestLogic_plpgsql_record(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "plpgsql_record")
-}
-
-func TestLogic_plpgsql_unsupported(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "plpgsql_unsupported")
+	runLogicTest(t, "plpgsql_license")
 }
 
 func TestLogic_poison_after_push(
@@ -1597,13 +1583,6 @@ func TestLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
-func TestLogic_procedure_plpgsql(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "procedure_plpgsql")
-}
-
 func TestLogic_procedure_privileges(
 	t *testing.T,
 ) {
@@ -1658,13 +1637,6 @@ func TestLogic_redact_descriptor(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "redact_descriptor")
-}
-
-func TestLogic_refcursor(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "refcursor")
 }
 
 func TestLogic_rename_atomic(
@@ -2493,13 +2465,6 @@ func TestLogic_udf_options(
 	runLogicTest(t, "udf_options")
 }
 
-func TestLogic_udf_plpgsql(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_plpgsql")
-}
-
 func TestLogic_udf_prepare(
 	t *testing.T,
 ) {
@@ -2582,13 +2547,6 @@ func TestLogic_udf_upsert(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_upsert")
-}
-
-func TestLogic_udf_volatility_check(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "udf_volatility_check")
 }
 
 func TestLogic_union(
