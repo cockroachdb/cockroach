@@ -181,6 +181,7 @@ go_test(
         "generative_split_and_scatter_processor_test.go",
         "key_rewriter_test.go",
         "main_test.go",
+        "online_restore_test.go",
         "partitioned_backup_test.go",
         "restore_data_processor_test.go",
         "restore_entry_cover_generated_test.go",  # keep

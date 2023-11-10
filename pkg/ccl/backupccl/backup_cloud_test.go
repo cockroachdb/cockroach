@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
@@ -106,6 +107,32 @@ func setupS3URI(
 	}
 	uri.RawQuery = values.Encode()
 	return uri
+}
+
+func TestOnlineRestoreS3(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if os.Getenv("COCKROACH_UNSAFE_RESTORE") != "true" {
+		skip.IgnoreLint(t, "set COCKROACH_UNSAFE_RESTORE env var to true")
+	}
+
+	const numAccounts = 1000
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	creds, bucket := requiredS3CredsAndBucket(t)
+	prefix := fmt.Sprintf("TestOnlineRestoreS3-%d", timeutil.Now().UnixNano())
+	uri := setupS3URI(t, sqlDB, bucket, prefix, creds)
+	externalStorage := uri.String()
+
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
+
+	params := base.TestClusterArgs{}
+	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, "", InitManualReplication, params)
+	defer cleanupFnRestored()
+
+	bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
 }
 
 // TestBackupRestoreGoogleCloudStorage hits the real GCS and so could
