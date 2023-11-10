@@ -1987,6 +1987,7 @@ func (n *Node) ResetQuorum(
 	// replicas from this fresh snapshot.
 	if err := kvserver.SendEmptySnapshot(
 		ctx,
+		n.clusterID.Get(),
 		n.storeCfg.Settings,
 		n.storeCfg.Tracer(),
 		conn,
