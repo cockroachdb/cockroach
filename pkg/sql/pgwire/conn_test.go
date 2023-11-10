@@ -1755,11 +1755,7 @@ func TestParseSearchPathInConnectionString(t *testing.T) {
 func TestSetSessionArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilistic, 112959,
-		),
-	})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
@@ -1767,20 +1763,23 @@ func TestSetSessionArguments(t *testing.T) {
 	_, err := s.SQLConn(t, serverutils.DBName("defaultdb")).Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
 	require.NoError(t, err)
 
-	// TODO(herko): This test manipulates the query string directly and needs to
-	// be updated to support a cluster option in order to support shared process
-	// virtual clusters.
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
+	pgURL, cleanupFunc := s.PGUrl(
+		t, serverutils.CertsDirPrefix("testConnClose"), serverutils.User(username.RootUser),
 	)
 	defer cleanupFunc()
 
-	pgURL.RawQuery += `&options=` + `  --user=test -c    search_path=public,testsp,"Abc",Def %20 ` +
+	testOptionValues, err := url.ParseQuery(`options=` + `  --user=test -c    search_path=public,testsp,"Abc",Def %20 ` +
 		"--default-transaction-isolation=read\\ uncommitted   " +
 		"-capplication_name=test  " +
 		"--DateStyle=ymd\\ ,\\ iso\\  " +
 		"-c intervalstyle%3DISO_8601 " +
-		"-ccustom_option.custom_option=test2"
+		"-ccustom_option.custom_option=test2")
+	require.NoError(t, err)
+
+	query := pgURL.Query()
+	query.Set("options", query.Get("options")+" "+testOptionValues.Get("options"))
+	pgURL.RawQuery = query.Encode()
+
 	noBufferDB, err := gosql.Open("postgres", pgURL.String())
 
 	if err != nil {
