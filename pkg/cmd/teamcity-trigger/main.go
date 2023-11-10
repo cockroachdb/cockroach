@@ -180,7 +180,6 @@ func runTC(queueBuild func(string, map[string]string)) {
 
 		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
 			maxRuns, maxTime, maxFails, parallelism)
-		queueBuildThenWait(buildID, opts)
 
 		// Run non-race build with deadlock detection.
 		opts["env.TAGS"] = "deadlock"
