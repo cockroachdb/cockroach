@@ -107,6 +107,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"SpanAccess": {},
 						"SpanScope":  {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split": {
+						"SplitObjective": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities": {
 						"ID": {},
 					},

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/redact"
 )
 
 // SplitObjective is a type that specifies a load based splitting objective.
@@ -27,7 +28,7 @@ const (
 	SplitCPU
 )
 
-// String returns a human readable string representation of the dimension.
+// String returns a human-readable string representation of the dimension.
 func (d SplitObjective) String() string {
 	switch d {
 	case SplitQPS:
@@ -39,13 +40,16 @@ func (d SplitObjective) String() string {
 	}
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (SplitObjective) SafeValue() {}
+
 // Format returns a formatted string for a value.
-func (d SplitObjective) Format(value float64) string {
+func (d SplitObjective) Format(value float64) redact.SafeString {
 	switch d {
 	case SplitQPS:
-		return fmt.Sprintf("%.1f", value)
+		return redact.SafeString(fmt.Sprintf("%.1f", value))
 	case SplitCPU:
-		return string(humanizeutil.Duration(time.Duration(int64(value))))
+		return humanizeutil.Duration(time.Duration(int64(value)))
 	default:
 		panic(fmt.Sprintf("cannot format value: unknown objective with ordinal %d", d))
 	}
