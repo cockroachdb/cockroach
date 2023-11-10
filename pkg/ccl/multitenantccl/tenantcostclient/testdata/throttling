@@ -1,18 +1,13 @@
 # By default, the test provider grants all RUs immediately. Test cases where it
 # instead throttles usage to a limited rate.
 
-# Wait for initial 10K RUs to be granted.
-wait-for-event
-token-bucket-response
-----
-
 # Set up throttling at 1K RU/s.
 configure
 throttle: 1000
 ----
 
-# Issue 8K RU write to consume all tokens in the bucket and create 2K debt.
-write bytes=8189952
+# Issue 3K RU write to consume all tokens in the bucket and create 2K debt.
+write bytes=3069952
 ----
 
 wait-for-event
@@ -21,7 +16,7 @@ token-bucket-response
 
 token-bucket
 ----
-2000.00 RU filling @ 1000.00 RU/s
+2000.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
 
 # Issue 4K RU write that should block as long as it takes to accumulate 2K RUs
 # with a 1K fill rate.
@@ -43,7 +38,7 @@ await label=w1
 
 token-bucket
 ----
-0.00 RU filling @ 1000.00 RU/s
+0.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU)
 
 # Create 20K debt in bucket.
 pgwire-egress
@@ -62,7 +57,7 @@ advance wait=true
 
 token-bucket
 ----
--19000.00 RU filling @ 1000.00 RU/s (1000.00 waiting debt @ 500.00 RU/s)
+-19000.00 RU filling @ 1000.00 RU/s (limited to 15000.00 RU) (1000.00 waiting debt @ 500.00 RU/s)
 
 # The debt in the token bucket is greater than what one trickle duration can
 # cover. Ensure that another write blocks for entire trickle duration, plus
@@ -85,7 +80,7 @@ token-bucket-response
 # trickle, as well as the RU from the new trickle.
 token-bucket
 ----
--15000.00 RU filling @ 1100.00 RU/s
+-15000.00 RU filling @ 1100.00 RU/s (limited to 16000.00 RU)
 
 timers
 ----
