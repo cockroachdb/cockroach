@@ -25,7 +25,7 @@ import (
 
 func TestMakeFileName(t *testing.T) {
 	store := dumpstore.NewStore("mydir", nil, nil)
-	joy := newProfileStore(store, HeapFileNamePrefix, ".test", nil)
+	joy := newProfileStore(store, heapFileNamePrefix, ".test", nil)
 
 	ts := time.Date(2020, 6, 15, 13, 19, 19, 543000000, time.UTC)
 	assert.Equal(t,
@@ -64,7 +64,7 @@ func TestParseFileName(t *testing.T) {
 		{"memprof.2020-06-15T13_19_19.5.123456", time.Date(2020, 6, 15, 13, 19, 19, 500000000, time.UTC), 123456, false},
 	}
 
-	s := profileStore{prefix: HeapFileNamePrefix}
+	s := profileStore{prefix: heapFileNamePrefix}
 	for _, tc := range testData {
 		ok, ts, heapUsage := s.parseFileName(context.Background(), tc.f)
 		if ok != !tc.expError {
@@ -194,7 +194,7 @@ func TestCleanupLastRampup(t *testing.T) {
 		},
 	}
 
-	s := profileStore{prefix: HeapFileNamePrefix}
+	s := profileStore{prefix: heapFileNamePrefix}
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			files := populate(t, t.TempDir(), tc.startFiles)
