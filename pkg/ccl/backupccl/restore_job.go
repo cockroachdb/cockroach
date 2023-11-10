@@ -431,6 +431,7 @@ func restore(
 				details.URIs,
 				backupLocalityInfo,
 				progCh,
+				tracingAggCh,
 				genSpan,
 			)
 		}
@@ -3223,9 +3224,11 @@ func sendAddRemoteSSTs(
 	uris []string,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) error {
 	defer close(progCh)
+	defer close(tracingAggCh)
 
 	if !onlineRestoreGate {
 		return errors.AssertionFailedf("experimental restore mode not supported")
