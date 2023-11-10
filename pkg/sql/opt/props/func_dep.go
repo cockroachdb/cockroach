@@ -1152,6 +1152,7 @@ func (f *FuncDepSet) AddFrom(fdset *FuncDepSet) {
 		fd := &fdset.deps[i]
 		f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 	}
+	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
 // AddEquivFrom is similar to AddFrom, except that it only adds equivalence
