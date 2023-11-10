@@ -263,7 +263,7 @@ func CreatePrivilegesFromDefaultPrivileges(
 		}
 	}
 
-	newPrivs.Version = catpb.Version21_2
+	newPrivs.Version = catpb.Version23_2
 	return newPrivs, nil
 }
 

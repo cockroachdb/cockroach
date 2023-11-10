@@ -385,3 +385,123 @@ query-sql
 SELECT f()
 ----
 pq: unknown function: f()
+
+# Test that backing up and restoring a cluster with a function on 23.2 does not
+# grant EXECUTE privileges on the public role for functions where that privilege
+# has been revoked.
+new-cluster name=s4
+----
+
+exec-sql cluster=s4
+CREATE DATABASE db1;
+USE db1;
+CREATE USER u1;
+CREATE FUNCTION add(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x + y';
+REVOKE EXECUTE ON FUNCTION ADD FROM public;
+SET ROLE = u1;
+----
+
+query-sql
+SELECT add(1, 2)
+----
+pq: user u1 does not have EXECUTE privilege on function add
+
+query-sql
+SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON FUNCTION add]
+----
+db1 public add(int8, int8) admin ALL true
+db1 public add(int8, int8) root ALL true
+
+exec-sql
+SET ROLE = root
+----
+
+exec-sql cluster=s4
+BACKUP INTO 'nodelocal://1/test/'
+----
+
+# Start a new cluster with the same IO dir.
+new-cluster name=s5 share-io-dir=s4
+----
+
+# Restore into the new cluster.
+exec-sql cluster=s5
+RESTORE FROM LATEST IN 'nodelocal://1/test/'
+----
+
+exec-sql cluster=s5
+USE db1;
+SET ROLE = u1;
+----
+
+query-sql cluster=s5
+SELECT add(1, 2)
+----
+pq: user u1 does not have EXECUTE privilege on function add
+
+query-sql cluster=s5
+SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON FUNCTION add]
+----
+db1 public add(int8, int8) admin ALL true
+db1 public add(int8, int8) root ALL true
+
+# Backing up and restoring a database with a function resets privileges on
+# functions to the default privileges because we cannot be sure if the same
+# users are present in the new cluster.
+new-cluster name=s6
+----
+
+exec-sql cluster=s6
+CREATE DATABASE db1;
+USE db1;
+CREATE USER u1;
+CREATE FUNCTION add(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x + y';
+REVOKE EXECUTE ON FUNCTION ADD FROM public;
+SET ROLE = u1;
+----
+
+query-sql
+SELECT add(1, 2)
+----
+pq: user u1 does not have EXECUTE privilege on function add
+
+query-sql
+SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON FUNCTION add]
+----
+db1 public add(int8, int8) admin ALL true
+db1 public add(int8, int8) root ALL true
+
+exec-sql
+SET ROLE = root
+----
+
+exec-sql cluster=s6
+BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
+----
+
+# Restore into the new cluster.
+exec-sql cluster=s6
+RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
+----
+
+exec-sql cluster=s6
+USE db1_new;
+SET ROLE = u1;
+----
+
+# The user now has EXECUTE privilege via the public role.
+query-sql cluster=s6
+SELECT add(1, 2)
+----
+3
+
+query-sql cluster=s6
+SELECT database_name, schema_name, routine_signature, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON FUNCTION add]
+----
+db1_new public add(int8, int8) admin ALL true
+db1_new public add(int8, int8) public EXECUTE false
+db1_new public add(int8, int8) root ALL true
