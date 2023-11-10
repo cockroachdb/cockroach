@@ -632,12 +632,6 @@ const PreviousRelease Key = V23_2
 // only need to check that the cluster has upgraded to 24.1.
 const V24_1 = Latest
 
-// DEPRECATED: use MinSupported.
-const BinaryMinSupportedVersionKey = MinSupported
-
-// DEPRECATED: use Latest.
-const BinaryVersionKey = Latest
-
 // developmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
 // and associated upgrade implementations are frozen.
