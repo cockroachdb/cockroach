@@ -29,7 +29,6 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	const restartNode = 3
 
 	t.Status("installing cockroach")
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=raft_log_queue=3")
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)

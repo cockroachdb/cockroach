@@ -259,7 +259,16 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 		return nil
 	}
 
-	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message, tests.UsingRuntimeAssertions(t))
+	var metamorphicBuild bool
+	switch t.spec.CockroachBinary {
+	case registry.StandardCockroach:
+		metamorphicBuild = false
+	case registry.RuntimeAssertionsCockroach:
+		metamorphicBuild = true
+	default:
+		metamorphicBuild = tests.UsingRuntimeAssertions(t)
+	}
+	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message, metamorphicBuild)
 	if err != nil {
 		return err
 	}
