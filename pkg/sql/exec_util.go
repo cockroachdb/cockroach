@@ -3427,6 +3427,10 @@ func (m *sessionDataMutator) SetStreamerOutOfOrderEagerMemoryUsageFraction(val f
 	m.data.StreamerOutOfOrderEagerMemoryUsageFraction = val
 }
 
+func (m *sessionDataMutator) SetStreamerHeadOfLineOnlyFraction(val float64) {
+	m.data.StreamerHeadOfLineOnlyFraction = val
+}
+
 func (m *sessionDataMutator) SetUnboundedParallelScans(val bool) {
 	m.data.UnboundedParallelScans = val
 }
