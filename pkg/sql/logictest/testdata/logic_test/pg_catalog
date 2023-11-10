@@ -2915,6 +2915,7 @@ standard_conforming_strings                                on                  N
 statement_timeout                                          0                   NULL      NULL        NULL        string
 streamer_always_maintain_ordering                          off                 NULL      NULL        NULL        string
 streamer_enabled                                           on                  NULL      NULL        NULL        string
+streamer_head_of_line_only_fraction                        0.8                 NULL      NULL        NULL        string
 streamer_in_order_eager_memory_usage_fraction              0.5                 NULL      NULL        NULL        string
 streamer_out_of_order_eager_memory_usage_fraction          0.8                 NULL      NULL        NULL        string
 strict_ddl_atomicity                                       off                 NULL      NULL        NULL        string
@@ -3083,6 +3084,7 @@ standard_conforming_strings                                on                  N
 statement_timeout                                          0                   NULL  user     NULL      0s                  0s
 streamer_always_maintain_ordering                          off                 NULL  user     NULL      off                 off
 streamer_enabled                                           on                  NULL  user     NULL      on                  on
+streamer_head_of_line_only_fraction                        0.8                 NULL  user     NULL      0.8                 0.8
 streamer_in_order_eager_memory_usage_fraction              0.5                 NULL  user     NULL      0.5                 0.5
 streamer_out_of_order_eager_memory_usage_fraction          0.8                 NULL  user     NULL      0.8                 0.8
 strict_ddl_atomicity                                       off                 NULL  user     NULL      off                 off
@@ -3251,6 +3253,7 @@ standard_conforming_strings                                NULL    NULL     NULL
 statement_timeout                                          NULL    NULL     NULL     NULL        NULL
 streamer_always_maintain_ordering                          NULL    NULL     NULL     NULL        NULL
 streamer_enabled                                           NULL    NULL     NULL     NULL        NULL
+streamer_head_of_line_only_fraction                        NULL    NULL     NULL     NULL        NULL
 streamer_in_order_eager_memory_usage_fraction              NULL    NULL     NULL     NULL        NULL
 streamer_out_of_order_eager_memory_usage_fraction          NULL    NULL     NULL     NULL        NULL
 strict_ddl_atomicity                                       NULL    NULL     NULL     NULL        NULL

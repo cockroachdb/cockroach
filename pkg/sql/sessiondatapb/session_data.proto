@@ -127,6 +127,11 @@ message SessionData {
   // streamer's memory budget that might be used for issuing requests eagerly,
   // in the OutOfOrder mode.
   double streamer_out_of_order_eager_memory_usage_fraction = 29;
+  // StreamerHeadOfLineOnlyFraction controls the fraction of the available
+  // streamer's memory budget that will be used to set the TargetBytes limit on
+  // head-of-the-line request in case the "eager" memory usage limit has been
+  // exceeded.
+  double streamer_head_of_line_only_fraction = 30;
 }
 
 // DataConversionConfig contains the parameters that influence the output
