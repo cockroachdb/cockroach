@@ -126,3 +126,10 @@ func TestCCLLogic_show_create(
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "show_create")
 }
+
+func TestCCLLogic_udf_volatility_check(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_volatility_check")
+}
