@@ -191,9 +191,6 @@ const (
 	// This is a permanent migration which should exist forever.
 	Permanent_V22_2SQLSchemaTelemetryScheduledJobs
 
-	// TODO_Delete_V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
-	TODO_Delete_V22_2
-
 	// TODO_Delete_V23_1Start demarcates the start of cluster versions stepped
 	// through during the process of upgrading from 22.2 to 23.1.
 	TODO_Delete_V23_1Start
@@ -489,7 +486,7 @@ const (
 	V23_2
 
 	// V24_1Start demarcates the start of cluster versions stepped through during
-	// the process of upgrading from previous supported releases to 24.1.
+	// the process of upgrading from 23.2 to 24.1.
 	V24_1Start
 
 	// *************************************************
@@ -530,8 +527,6 @@ var versionTable = [numKeys]roachpb.Version{
 
 	// Permanent upgrades from previous versions.
 	Permanent_V22_2SQLSchemaTelemetryScheduledJobs: {Major: 22, Minor: 1, Internal: 42},
-
-	TODO_Delete_V22_2: {Major: 22, Minor: 2, Internal: 0},
 
 	// v23.1 versions. Internal versions must be even.
 	TODO_Delete_V23_1Start:                                           {Major: 22, Minor: 2, Internal: 2},
