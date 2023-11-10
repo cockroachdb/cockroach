@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -574,19 +575,37 @@ func (p *ScheduledProcessor) Filter() *Filter {
 // is guaranteed that only single request is modifying processor at any given
 // time. It is advisable to use provided processor reference for operations
 // rather than using one within closure itself.
-// If request can't be queued or processor stoppedC is closed then default
-// value is returned.
+//
+// If the processor is stopped concurrently with the request queueing, it may or
+// may not be processed. If the request is ever processed, its return value is
+// guaranteed to be returned here. Otherwise, the zero value is returned and the
+// request is never processed.
 func runRequest[T interface{}](
 	p *ScheduledProcessor, f func(ctx context.Context, p *ScheduledProcessor) T,
 ) (r T) {
 	result := make(chan T, 1)
 	p.enqueueRequest(func(ctx context.Context) {
 		result <- f(ctx, p)
+		// Assert that we never process requests after stoppedC is closed. This is
+		// necessary to coordinate catchup iter ownership and avoid double-closing.
+		if buildutil.CrdbTestBuild {
+			select {
+			case <-p.stoppedC:
+				log.Fatalf(ctx, "processing request on stopped processor")
+			default:
+			}
+		}
 	})
 	select {
 	case r = <-result:
 		return r
 	case <-p.stoppedC:
+		// If the request was processed concurrently with a stop, there's a 50%
+		// chance we didn't take the result branch. Check again.
+		select {
+		case r = <-result:
+		default:
+		}
 		return r
 	}
 }
