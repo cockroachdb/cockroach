@@ -122,14 +122,16 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		// These elements need v22.1 so they can be used without checking any version gates.
 		return true
 	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
-		return version.IsActive(clusterversion.TODO_Delete_V22_2)
+		// These elements need v22.2 so they can be used without checking any version gates.
+		return true
 	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData, *scpb.TablePartitioning,
 		*scpb.Function, *scpb.FunctionName, *scpb.FunctionVolatility, *scpb.FunctionLeakProof,
 		*scpb.FunctionNullInputBehavior, *scpb.FunctionBody, *scpb.FunctionParamDefaultExpression,
 		*scpb.ColumnNotNull, *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated,
 		*scpb.ForeignKeyConstraintUnvalidated, *scpb.IndexZoneConfig, *scpb.TableSchemaLocked, *scpb.CompositeType,
 		*scpb.CompositeTypeAttrType, *scpb.CompositeTypeAttrName:
-		return version.IsActive(clusterversion.V23_1)
+		// These elements need v23.1 so they can be used without checking any version gates.
+		return true
 	case *scpb.SequenceOption:
 		return version.IsActive(clusterversion.V23_2)
 	default:

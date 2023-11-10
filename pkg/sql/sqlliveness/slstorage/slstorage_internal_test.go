@@ -62,36 +62,6 @@ func TestGetEncoder(t *testing.T) {
 			readCodec: isRbr,
 			dualCodec: isNil,
 		},
-		{
-			name:      "v22_2",
-			version:   clusterversion.TODO_Delete_V22_2,
-			readCodec: isRbt,
-			dualCodec: isNil,
-		},
-		{
-			name:      "TODO_Delete_V23_1_SystemRbrDualWrite",
-			version:   clusterversion.TODO_Delete_V23_1_SystemRbrDualWrite,
-			readCodec: isRbt,
-			dualCodec: isRbr,
-		},
-		{
-			name:      "TODO_Delete_V23_1_SystemRbrReadNew",
-			version:   clusterversion.TODO_Delete_V23_1_SystemRbrReadNew,
-			readCodec: isRbr,
-			dualCodec: isRbt,
-		},
-		{
-			name:      "TODO_Delete_V23_1_SystemRbrSingleWrite",
-			version:   clusterversion.TODO_Delete_V23_1_SystemRbrSingleWrite,
-			readCodec: isRbr,
-			dualCodec: isNil,
-		},
-		{
-			name:      "TODO_Delete_V23_1_SystemRbrCleanup",
-			version:   clusterversion.TODO_Delete_V23_1_SystemRbrCleanup,
-			readCodec: isRbr,
-			dualCodec: isNil,
-		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
