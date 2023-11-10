@@ -75,7 +75,7 @@ upsert descriptor #104
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
@@ -152,7 +152,7 @@ upsert descriptor #104
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:

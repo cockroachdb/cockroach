@@ -82,7 +82,7 @@ upsert descriptor #110
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  returnType:
   +    type:
   +      family: IntFamily
@@ -109,7 +109,7 @@ upsert descriptor #101
      modificationTime: {}
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  version: "1"
   +  version: "2"
 upsert descriptor #104
@@ -226,7 +226,7 @@ upsert descriptor #110
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  returnType:
   +    type:
   +      family: IntFamily
@@ -253,7 +253,7 @@ upsert descriptor #101
      modificationTime: {}
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  version: "1"
   +  version: "2"
 upsert descriptor #104

@@ -13,8 +13,11 @@ package funcdesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -112,6 +115,18 @@ func (fdb *functionDescriptorBuilder) RunRestoreChanges(
 	// Upgrade the declarative schema changer state.
 	if scpb.MigrateDescriptorState(version, fdb.maybeModified.ParentID, fdb.maybeModified.DeclarativeSchemaChangerState) {
 		fdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
+	}
+	// Grant EXECUTE privilege on the function for the public role if the
+	// descriptor was created before v23.2. This mimics the
+	// grantExecuteToPublicOnAllFunctions descriptor upgrade.
+	desc := fdb.maybeModified
+	if desc.GetPrivileges().Version < catpb.Version23_2 {
+		desc.GetPrivileges().Grant(
+			username.PublicRoleName(),
+			privilege.List{privilege.EXECUTE},
+			false, /* withGrantOption */
+		)
+		desc.GetPrivileges().SetVersion(catpb.Version23_2)
 	}
 	return nil
 }
