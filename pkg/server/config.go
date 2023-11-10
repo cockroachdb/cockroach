@@ -802,6 +802,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 			addCfgOpt(storage.MaxSize(sizeInBytes))
 			addCfgOpt(storage.CacheSize(cfg.CacheSize))
+			addCfgOpt(storage.RemoteStorageFactory(cfg.ExternalStorageAccessor))
 
 			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
 		} else {
