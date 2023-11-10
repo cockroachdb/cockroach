@@ -178,6 +178,19 @@ func TerminateOnMigration() Option {
 	}
 }
 
+// UseSpotInstances creates a spot instance or equivalent of a cloud provider.
+// Using this option creates SpotVMs instead of on demand VMS. SpotVMS are
+// cheaper but can be terminated at any time by the cloud provider.
+// This option is only supported by GCE for now.
+// See https://cloud.google.com/compute/docs/instances/spot,
+// https://azure.microsoft.com/en-in/products/virtual-machines/spot
+// and https://aws.amazon.com/ec2/spot/ for more details.
+func UseSpotInstances() Option {
+	return func(spec *ClusterSpec) {
+		spec.UseSpot = true
+	}
+}
+
 // SetFileSystem is an Option which can be used to set
 // the underlying file system to be used.
 func SetFileSystem(fs fileSystemType) Option {

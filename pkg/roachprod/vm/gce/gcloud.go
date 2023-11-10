@@ -271,9 +271,9 @@ func DefaultProviderOpts() *ProviderOpts {
 		PDVolumeType:         "pd-ssd",
 		PDVolumeSize:         500,
 		TerminateOnMigration: false,
+		UseSpot:              false,
 		useSharedUser:        true,
 		preemptible:          false,
-		useSpot:              false,
 	}
 }
 
@@ -295,17 +295,17 @@ type ProviderOpts struct {
 	PDVolumeType     string
 	PDVolumeSize     int
 	UseMultipleDisks bool
+	// use spot instances (i.e., latest version of preemptibles which can run > 24 hours)
+	UseSpot bool
+
 	// GCE allows two availability policies in case of a maintenance event (see --maintenance-policy via gcloud),
 	// 'TERMINATE' or 'MIGRATE'. The default is 'MIGRATE' which we denote by 'TerminateOnMigration == false'.
 	TerminateOnMigration bool
-
 	// useSharedUser indicates that the shared user rather than the personal
 	// user should be used to ssh into the remote machines.
 	useSharedUser bool
 	// use preemptible instances
 	preemptible bool
-	// use spot instances (i.e., latest version of preemptibles which can run > 24 hours)
-	useSpot bool
 }
 
 // Provider is the GCE implementation of the vm.Provider interface.
@@ -835,7 +835,7 @@ func (o *ProviderOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 			strings.Join(defaultZones, ",")))
 	flags.BoolVar(&o.preemptible, ProviderName+"-preemptible", false,
 		"use preemptible GCE instances (lifetime cannot exceed 24h)")
-	flags.BoolVar(&o.useSpot, ProviderName+"-use-spot", false,
+	flags.BoolVar(&o.UseSpot, ProviderName+"-use-spot", false,
 		"use spot GCE instances (like preemptible but lifetime can exceed 24h)")
 	flags.BoolVar(&o.TerminateOnMigration, ProviderName+"-terminateOnMigration", false,
 		"use 'TERMINATE' maintenance policy (for GCE live migrations)")
@@ -1046,7 +1046,7 @@ func (p *Provider) Create(
 		// Preemptible instances require the following arguments set explicitly
 		args = append(args, "--maintenance-policy", "TERMINATE")
 		args = append(args, "--no-restart-on-failure")
-	} else if providerOpts.useSpot {
+	} else if providerOpts.UseSpot {
 		args = append(args, "--provisioning-model", "SPOT")
 	} else {
 		if providerOpts.TerminateOnMigration {
