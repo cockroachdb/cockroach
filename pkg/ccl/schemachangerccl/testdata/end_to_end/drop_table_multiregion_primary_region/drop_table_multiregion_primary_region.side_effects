@@ -30,7 +30,7 @@ delete object namespace entry {104 105 table_regional_by_table} -> 108
 upsert descriptor #106
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  referencingDescriptorIds:
   -  - 108
      regionConfig:
@@ -73,7 +73,7 @@ upsert descriptor #106
      - logicalRepresentation: us-east1
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  referencingDescriptorIds:
   -  - 108
      regionConfig:
