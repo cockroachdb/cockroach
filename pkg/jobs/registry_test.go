@@ -115,7 +115,7 @@ func TestRegistryGC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{
 				// This test directly modifies `system.jobs` and makes over its contents
@@ -137,7 +137,8 @@ func TestRegistryGC(t *testing.T) {
 			JobsTestingKnobs: NewTestingKnobsWithShortIntervals(),
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -243,9 +244,13 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 				{sqlActivityJob}, {oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
 				{newRunningJob}, {newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
 
-			if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
-				t.Fatal(err)
-			}
+			testutils.SucceedsSoon(t, func() error {
+				if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
+					return err
+				}
+				return nil
+			})
+
 			db.CheckQueryResults(t, `SELECT id FROM system.jobs ORDER BY id`, [][]string{
 				{sqlActivityJob}, {oldRunningJob}, {oldRevertFailedJob}, {newRunningJob},
 				{newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
@@ -269,7 +274,7 @@ func TestRegistryGCPagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{
 				// This test directly modifies `system.jobs` and makes over its contents
@@ -293,7 +298,8 @@ func TestRegistryGCPagination(t *testing.T) {
 		},
 	})
 	db := sqlutils.MakeSQLRunner(sqlDB)
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	for i := 0; i < 2*cleanupPageSize+1; i++ {
 		payload, err := protoutil.Marshal(&jobspb.Payload{})
