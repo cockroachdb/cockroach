@@ -515,6 +515,11 @@ message Transaction {
   // admissionpb.WorkPriority.
   sint32 admission_priority = 19;
 
+  // When set to true, all of the transaction's writes will be filtered out by
+  // rangefeeds, and will not be available in changefeeds. This allows users to
+  // choose which writes are exported on a per-transaction basis.
+  bool omit_in_rangefeeds = 20;
+
   reserved 3, 6, 9, 13, 14;
 }
 
