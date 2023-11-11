@@ -95,7 +95,7 @@ func registerTenantSpanStatsMixedVersion(r registry.Registry) {
 
 			mvt.InMixedVersion("fetch span stats - mixed", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 				// Skip finalizing state.
-				if h.Context().Finalizing {
+				if h.Context.Finalizing {
 					return nil
 				}
 
