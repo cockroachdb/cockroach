@@ -125,7 +125,7 @@ INSERT INTO blocks VALUES (1, b'\x01')
 query TT
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE blocks
 ----
-blocks_pkey  590700560494856555
+blocks_pkey  -9087023432987872405
 
 # Verify that we can show fingerprints from a read-only transaction (#39204).
 statement ok
