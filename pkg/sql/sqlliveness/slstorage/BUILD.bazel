@@ -23,7 +23,6 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/systemschema",
-        "//pkg/sql/enum",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sqlliveness",
         "//pkg/util/admission/admissionpb",
