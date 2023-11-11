@@ -336,6 +336,15 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			skipIssue:    111619,
 		},
 		{
+			desc: "drop column with composite index + fk",
+			setup: []string{
+				"ALTER TABLE tbl ADD COLUMN i INT NOT NULL DEFAULT unique_rowid()",
+				"CREATE UNIQUE INDEX idx ON tbl (val, i)",
+				"CREATE TABLE tbl_ref (val int primary key, i int, CONSTRAINT \"j_k_fk\" FOREIGN KEY (val, i) REFERENCES tbl(val, i))",
+			},
+			schemaChange: "DROP INDEX tbl@idx CASCADE",
+		},
+		{
 			desc:         "create unique index",
 			schemaChange: "CREATE UNIQUE INDEX idx ON tbl (insert_phase_ordinal, operation_phase_ordinal, operation)",
 		},
