@@ -67,8 +67,8 @@ INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12);
 			// Run the following statements in a node running the next
 			// version, if any; otherwise, pick a random node.
 			nodes := c.All()
-			if h.Context().MixedBinary() {
-				nodes = h.Context().NodesInNextVersion()
+			if h.Context.MixedBinary() {
+				nodes = h.Context.NodesInNextVersion()
 			}
 
 			if err := h.ExecWithGateway(r, nodes, `DELETE FROM t WHERE x = 13 OR x = 20`); err != nil {

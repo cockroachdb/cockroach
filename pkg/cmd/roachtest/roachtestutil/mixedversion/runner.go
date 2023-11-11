@@ -36,19 +36,6 @@ import (
 )
 
 type (
-	// Helper is the struct passed to user-functions providing helper
-	// functions that mixed-version tests can use.
-	Helper struct {
-		ctx         context.Context
-		testContext *Context
-		// bgCount keeps track of the number of background tasks started
-		// with `helper.Background()`. The counter is used to generate
-		// unique log file names.
-		bgCount    int64
-		runner     *testRunner
-		stepLogger *logger.Logger
-	}
-
 	// backgroundEvent is the struct sent by background steps when they
 	// finish (successfully or not).
 	backgroundEvent struct {
@@ -488,10 +475,10 @@ func (tr *testRunner) newHelper(
 	ctx context.Context, l *logger.Logger, testContext Context,
 ) *Helper {
 	return &Helper{
-		ctx:         ctx,
-		runner:      tr,
-		stepLogger:  l,
-		testContext: &testContext,
+		Context:    &testContext,
+		ctx:        ctx,
+		runner:     tr,
+		stepLogger: l,
 	}
 }
 
