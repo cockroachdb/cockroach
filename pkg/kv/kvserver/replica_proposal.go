@@ -655,6 +655,10 @@ func addSSTablePreApply(
 			Size:            sst.BackingFileSize,
 			SmallestUserKey: start.Encode(),
 			LargestUserKey:  end.Encode(),
+
+			// TODO(msbutler): I guess we need to figure out if the backing external
+			// file has point or range keys in the target span.
+			HasPointKey: true,
 		}
 		tBegin := timeutil.Now()
 		defer func() {
