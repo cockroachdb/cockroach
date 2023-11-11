@@ -25,6 +25,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
+// Helper is the struct passed to user-functions providing helper
+// functions that mixed-version tests can use.
+type Helper struct {
+	Context *Context
+
+	ctx context.Context
+	// bgCount keeps track of the number of background tasks started
+	// with `helper.Background()`. The counter is used to generate
+	// unique log file names.
+	bgCount    int64
+	runner     *testRunner
+	stepLogger *logger.Logger
+}
+
 func (h *Helper) RandomNode(prng *rand.Rand, nodes option.NodeListOption) int {
 	return nodes[prng.Intn(len(nodes))]
 }
@@ -65,7 +79,7 @@ func (h *Helper) Exec(rng *rand.Rand, query string, args ...interface{}) error {
 // set of nodes that should be used as gateway. Especially useful in
 // combination with Context methods, for example:
 //
-//	h.ExecWithGateway(rng, h.Context().NodesInNextVersion(), "SELECT 1")
+//	h.ExecWithGateway(rng, h.Context.NodesInNextVersion(), "SELECT 1")
 func (h *Helper) ExecWithGateway(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
 ) error {
@@ -77,12 +91,6 @@ func (h *Helper) ExecWithGateway(
 
 func (h *Helper) Connect(node int) *gosql.DB {
 	return h.runner.conn(node)
-}
-
-// Context returns the test context associated with a certain step. It
-// is made available for user-functions (see runHookStep).
-func (h *Helper) Context() *Context {
-	return h.testContext
 }
 
 // Background allows test authors to create functions that run in the
@@ -144,7 +152,7 @@ func (h *Helper) ExpectDeaths(n int) {
 // change by means other than an upgrade (e.g., a cluster wipe). Use
 // `clusterupgrade.ClusterVersion` in that case.
 func (h *Helper) ClusterVersion(rng *rand.Rand) (roachpb.Version, error) {
-	if h.Context().Finalizing {
+	if h.Context.Finalizing {
 		n, db := h.RandomDB(rng, h.runner.crdbNodes)
 		h.stepLogger.Printf("querying cluster version through node %d", n)
 		cv, err := clusterupgrade.ClusterVersion(h.ctx, db)

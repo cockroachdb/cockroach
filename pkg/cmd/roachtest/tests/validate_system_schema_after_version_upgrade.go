@@ -80,7 +80,7 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 	mvt.AfterUpgradeFinalized(
 		"obtain system schema from the upgraded cluster",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			if !h.Context().ToVersion.IsCurrent() {
+			if !h.Context.ToVersion.IsCurrent() {
 				// Only validate the system schema if we're upgrading to the version
 				// under test.
 				return nil
