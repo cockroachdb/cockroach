@@ -503,31 +503,12 @@ func registerBackup(r registry.Registry) {
 						return err
 					}
 
-					fingerprint := func(db string) (string, error) {
-						var b strings.Builder
-
-						query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, "bank")
-						rows, err := conn.QueryContext(ctx, query)
-						if err != nil {
-							return "", err
-						}
-						defer rows.Close()
-						for rows.Next() {
-							var name, fp string
-							if err := rows.Scan(&name, &fp); err != nil {
-								return "", err
-							}
-							fmt.Fprintf(&b, "%s: %s\n", name, fp)
-						}
-
-						return b.String(), rows.Err()
-					}
-
-					originalBank, err := fingerprint("bank")
+					table := "bank"
+					originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restore, err := fingerprint("restoreDB")
+					restore, err := fingerprint(ctx, conn, "restoreDB" /* db */, table)
 					if err != nil {
 						return err
 					}
@@ -641,35 +622,16 @@ func registerBackup(r registry.Registry) {
 					}
 
 					t.Status(`fingerprint`)
-					fingerprint := func(db string) (string, error) {
-						var b strings.Builder
-
-						query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, "bank")
-						rows, err := conn.QueryContext(ctx, query)
-						if err != nil {
-							return "", err
-						}
-						defer rows.Close()
-						for rows.Next() {
-							var name, fp string
-							if err := rows.Scan(&name, &fp); err != nil {
-								return "", err
-							}
-							fmt.Fprintf(&b, "%s: %s\n", name, fp)
-						}
-
-						return b.String(), rows.Err()
-					}
-
-					originalBank, err := fingerprint("bank")
+					table := "bank"
+					originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restoreA, err := fingerprint("restoreA")
+					restoreA, err := fingerprint(ctx, conn, "restoreA" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restoreB, err := fingerprint("restoreB")
+					restoreB, err := fingerprint(ctx, conn, "restoreB" /* db */, table)
 					if err != nil {
 						return err
 					}
