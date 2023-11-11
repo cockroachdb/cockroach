@@ -982,6 +982,7 @@ func MakeTransaction(
 		ReadTimestamp:          now,
 		GlobalUncertaintyLimit: gul,
 		AdmissionPriority:      int32(admissionPriority),
+		OmitInRangefeeds:       false,
 	}
 }
 
@@ -1347,6 +1348,8 @@ func (t *Transaction) Update(o *Transaction) {
 	// handled the case of t being uninitialized at the beginning of this
 	// function.
 	t.AdmissionPriority = o.AdmissionPriority
+	// OmitInRangefeeds doesn't change.
+	t.OmitInRangefeeds = o.OmitInRangefeeds
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
