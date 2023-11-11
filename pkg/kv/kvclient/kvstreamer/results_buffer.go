@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -541,34 +542,27 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 	defer b.Unlock()
 	res := b.resultScratch[:0]
 	for len(b.buffered) > 0 && b.buffered[0].Position == b.headOfLinePosition && b.buffered[0].subRequestIdx == b.headOfLineSubRequestIdx {
-		result, toConsume, err := b.buffered[0].get(ctx, b)
-		if err != nil {
-			b.setErrorLocked(err)
-			return nil, false, err
-		}
-		if toConsume > 0 {
-			if err = b.budget.consumeLocked(ctx, toConsume, len(res) == 0 /* allowDebt */); err != nil {
+		if r := &b.buffered[0]; r.onDisk {
+			// The buffered result is currently on disk. Ensure that we have
+			// enough budget to keep it in memory before deserializing it.
+			if err := b.budget.consumeLocked(ctx, r.memoryTok.toRelease, len(res) == 0 /* allowDebt */); err != nil {
 				if len(res) > 0 {
 					// Most likely this error means that we'd put the budget in
 					// debt if we kept this result in-memory. However, there are
 					// already some results to return to the client, so we'll
 					// return them and attempt to proceed with the current
 					// result the next time the client asks.
-
-					// The buffered result has been updated in-place to hold the
-					// deserialized Result, but since we didn't have the budget
-					// to keep it in-memory, we need to spill it. Note that we
-					// don't need to update the disk buffer since the
-					// serialized Result is still stored with the same resultID,
-					// we only need to make sure to lose the references to
-					// Get/Scan responses.
-					b.buffered[0].spill(b.buffered[0].diskResultID)
 					break
 				}
 				b.setErrorLocked(err)
 				return nil, false, err
 			}
+			if err := b.diskBuffer.Deserialize(ctx, &r.Result, r.diskResultID); err != nil {
+				b.setErrorLocked(err)
+				return nil, false, err
+			}
 		}
+		result := b.buffered[0].Result
 		res = append(res, result)
 		b.heapRemoveFirst()
 		if result.subRequestDone {
@@ -641,6 +635,14 @@ func (b *inOrderResultsBuffer) spill(
 	//
 	// Iterate in reverse order so that the results with higher priority values
 	// are spilled first (this could matter if the query has a LIMIT).
+	defer func(origAtLeastBytes int64, origSpilled int) {
+		if b.numSpilled != origSpilled {
+			log.VEventf(ctx, 2,
+				"spilled %d results to release %d bytes (asked for %d bytes)",
+				b.numSpilled-origSpilled, origAtLeastBytes-atLeastBytes, origAtLeastBytes,
+			)
+		}
+	}(atLeastBytes, b.numSpilled)
 	for idx := len(b.buffered) - 1; idx >= 0; idx-- {
 		if r := &b.buffered[idx]; !r.onDisk && r.Position > spillingPriority {
 			diskResultID, err := b.diskBuffer.Serialize(ctx, &b.buffered[idx].Result)
@@ -714,19 +716,4 @@ func (r *inOrderBufferedResult) spill(diskResultID int) {
 		onDisk:       true,
 		diskResultID: diskResultID,
 	}
-}
-
-// get returns the Result, deserializing it from disk if necessary. toConsume
-// indicates how much memory needs to be consumed from the budget to hold this
-// Result in-memory.
-func (r *inOrderBufferedResult) get(
-	ctx context.Context, b *inOrderResultsBuffer,
-) (_ Result, toConsume int64, _ error) {
-	if !r.onDisk {
-		return r.Result, 0, nil
-	}
-	if err := b.diskBuffer.Deserialize(ctx, &r.Result, r.diskResultID); err != nil {
-		return Result{}, 0, err
-	}
-	return r.Result, r.memoryTok.toRelease, nil
 }
