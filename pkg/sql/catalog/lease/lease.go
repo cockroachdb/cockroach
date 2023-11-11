@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -1409,9 +1408,6 @@ SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME 
 `
 		)
 		query := queryWithRegion
-		if !m.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_SystemRbrReadNew) {
-			query = queryWithoutRegion
-		}
 		sqlQuery := fmt.Sprintf(query, timeThreshold, instanceID)
 		var rows []tree.Datums
 		retryOptions := base.DefaultRetryOptions()

@@ -17,7 +17,6 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -522,19 +521,13 @@ const (
 // NewTableStatisticProto converts a row of datums from system.table_statistics
 // into a TableStatisticsProto. Note that any user-defined types in the
 // HistogramData will be unresolved.
-func NewTableStatisticProto(
-	datums tree.Datums, partialStatisticsColumnsVerActive bool,
-) (*TableStatisticProto, error) {
+func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 	if datums == nil || datums.Len() == 0 {
 		return nil, nil
 	}
 
 	hgIndex := histogramIndex
 	numStats := statsLen
-	if !partialStatisticsColumnsVerActive {
-		hgIndex = histogramIndex - 1
-		numStats = statsLen - 2
-	}
 	// Validate the input length.
 	if datums.Len() != numStats {
 		return nil, errors.Errorf("%d values returned from table statistics lookup. Expected %d", datums.Len(), numStats)
@@ -562,23 +555,21 @@ func NewTableStatisticProto(
 	// It's ok for expectedTypes to be in a different order than the input datums
 	// since we don't rely on a precise order of expectedTypes when we check them
 	// below.
-	if partialStatisticsColumnsVerActive {
-		expectedTypes = append(expectedTypes,
-			[]struct {
-				fieldName    string
-				fieldIndex   int
-				expectedType *types.T
-				nullable     bool
-			}{
-				{
-					"partialPredicate", partialPredicateIndex, types.String, true,
-				},
-				{
-					"fullStatisticID", fullStatisticsIdIndex, types.Int, true,
-				},
-			}...,
-		)
-	}
+	expectedTypes = append(expectedTypes,
+		[]struct {
+			fieldName    string
+			fieldIndex   int
+			expectedType *types.T
+			nullable     bool
+		}{
+			{
+				"partialPredicate", partialPredicateIndex, types.String, true,
+			},
+			{
+				"fullStatisticID", fullStatisticsIdIndex, types.Int, true,
+			},
+		}...,
+	)
 
 	for _, v := range expectedTypes {
 		if !datums[v.fieldIndex].ResolvedType().Equivalent(v.expectedType) &&
@@ -606,13 +597,11 @@ func NewTableStatisticProto(
 	if datums[nameIndex] != tree.DNull {
 		res.Name = string(*datums[nameIndex].(*tree.DString))
 	}
-	if partialStatisticsColumnsVerActive {
-		if datums[partialPredicateIndex] != tree.DNull {
-			res.PartialPredicate = string(*datums[partialPredicateIndex].(*tree.DString))
-		}
-		if datums[fullStatisticsIdIndex] != tree.DNull {
-			res.FullStatisticID = uint64(*datums[fullStatisticsIdIndex].(*tree.DInt))
-		}
+	if datums[partialPredicateIndex] != tree.DNull {
+		res.PartialPredicate = string(*datums[partialPredicateIndex].(*tree.DString))
+	}
+	if datums[fullStatisticsIdIndex] != tree.DNull {
+		res.FullStatisticID = uint64(*datums[fullStatisticsIdIndex].(*tree.DInt))
 	}
 	if datums[hgIndex] != tree.DNull {
 		res.HistogramData = &HistogramData{}
@@ -629,11 +618,11 @@ func NewTableStatisticProto(
 // parseStats converts the given datums to a TableStatistic object. It might
 // need to run a query to get user defined type metadata.
 func (sc *TableStatisticsCache) parseStats(
-	ctx context.Context, datums tree.Datums, partialStatisticsColumnsVerActive bool,
+	ctx context.Context, datums tree.Datums,
 ) (*TableStatistic, error) {
 	var tsp *TableStatisticProto
 	var err error
-	tsp, err = NewTableStatisticProto(datums, partialStatisticsColumnsVerActive)
+	tsp, err = NewTableStatisticProto(datums)
 	if err != nil {
 		return nil, err
 	}
@@ -779,16 +768,11 @@ func (tsp *TableStatisticProto) IsAuto() bool {
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID, forecast bool,
 ) ([]*TableStatistic, error) {
-	partialStatisticsColumnsVerActive := sc.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddPartialStatisticsColumns)
-	var partialPredicateCol string
-	var fullStatisticIDCol string
-	if partialStatisticsColumnsVerActive {
-		partialPredicateCol = `
+	partialPredicateCol := `
 "partialPredicate",`
-		fullStatisticIDCol = `
+	fullStatisticIDCol := `
 ,"fullStatisticID"
 `
-	}
 	getTableStatisticsStmt := fmt.Sprintf(`
 SELECT
 	"tableID",
@@ -820,7 +804,7 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 	var statsList []*TableStatistic
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		stats, err := sc.parseStats(ctx, it.Cur(), partialStatisticsColumnsVerActive)
+		stats, err := sc.parseStats(ctx, it.Cur())
 		if err != nil {
 			log.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
 			continue

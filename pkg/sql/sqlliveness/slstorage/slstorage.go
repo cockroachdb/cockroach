@@ -247,29 +247,13 @@ func (s *Storage) isAlive(
 }
 
 func (s *Storage) getReadCodec(version *settingswatcher.VersionGuard) keyCodec {
-	if version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew) {
-		return s.newKeyCodec
-	}
-	return s.oldKeyCodec
-}
-
-func (s *Storage) getDualWriteCodec(version *settingswatcher.VersionGuard) keyCodec {
-	switch {
-	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrSingleWrite):
-		return nil
-	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew):
-		return s.oldKeyCodec
-	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrDualWrite):
-		return s.newKeyCodec
-	default:
-		return nil
-	}
+	return s.newKeyCodec
 }
 
 func (s *Storage) versionGuard(
 	ctx context.Context, txn *kv.Txn,
 ) (settingswatcher.VersionGuard, error) {
-	return s.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.TODO_Delete_V23_1_SystemRbrCleanup)
+	return s.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.MinSupported)
 }
 
 // This function will launch a singleflight goroutine for the session which
@@ -376,13 +360,6 @@ func (s *Storage) deleteOrFetchSession(
 		deleted, expiration = true, hlc.Timestamp{}
 		ba := txn.NewBatch()
 		ba.Del(k)
-		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-			dualKey, err := dualCodec.encode(sid)
-			if err != nil {
-				return err
-			}
-			ba.Del(dualKey)
-		}
 
 		return txn.CommitInBatch(ctx, ba)
 	}); err != nil {
@@ -526,15 +503,6 @@ func (s *Storage) Insert(
 		v := encodeValue(expiration)
 		batch.InitPut(k, &v, true)
 
-		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-			dualKey, err := dualCodec.encode(sid)
-			if err != nil {
-				return err
-			}
-			dualValue := encodeValue(expiration)
-			batch.InitPut(dualKey, &dualValue, true)
-		}
-
 		return txn.CommitInBatch(ctx, batch)
 	}); err != nil {
 		s.metrics.WriteFailures.Inc(1)
@@ -573,14 +541,6 @@ func (s *Storage) Update(
 		v := encodeValue(expiration)
 		ba := txn.NewBatch()
 		ba.Put(k, &v)
-		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-			dualKey, err := dualCodec.encode(sid)
-			if err != nil {
-				return err
-			}
-			dualValue := encodeValue(expiration)
-			ba.Put(dualKey, &dualValue)
-		}
 		return txn.CommitInBatch(ctx, ba)
 	})
 	if err != nil || !sessionExists {
@@ -612,13 +572,6 @@ func (s *Storage) Delete(ctx context.Context, session sqlliveness.SessionID) err
 		}
 		batch.Del(key)
 
-		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-			dualKey, err := dualCodec.encode(session)
-			if err != nil {
-				return err
-			}
-			batch.Del(dualKey)
-		}
 		return txn.CommitInBatch(ctx, batch)
 	})
 }
