@@ -10,11 +10,9 @@ package backupccl
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -24,10 +22,6 @@ import (
 func TestOnlineRestoreBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	if os.Getenv("COCKROACH_UNSAFE_RESTORE") != "true" {
-		skip.IgnoreLint(t, "set COCKROACH_UNSAFE_RESTORE env var to true")
-	}
 
 	const numAccounts = 1000
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
