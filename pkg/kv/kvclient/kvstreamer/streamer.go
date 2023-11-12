@@ -231,9 +231,14 @@ type Streamer struct {
 	// budget at which point the streamer stops sending non-head-of-the-line
 	// requests eagerly.
 	eagerMemUsageLimitBytes int64
-	budget                  *budget
-	lockStrength            lock.Strength
-	lockDurability          lock.Durability
+	// headOfLineOnlyFraction controls the fraction of the available streamer's
+	// memory budget that will be used to set the TargetBytes limit on
+	// head-of-the-line request in case the "eager" memory usage limit has been
+	// exceeded. In such case, only head-of-the-line request will be sent.
+	headOfLineOnlyFraction float64
+	budget                 *budget
+	lockStrength           lock.Strength
+	lockDurability         lock.Durability
 
 	streamerStatistics
 
@@ -387,13 +392,19 @@ func NewStreamer(
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
 	}
+	// sd can be nil in tests.
+	headOfLineOnlyFraction := 0.8
+	if sd != nil {
+		headOfLineOnlyFraction = sd.StreamerHeadOfLineOnlyFraction
+	}
 	s := &Streamer{
-		distSender:     distSender,
-		stopper:        stopper,
-		sd:             sd,
-		budget:         newBudget(acc, limitBytes),
-		lockStrength:   lockStrength,
-		lockDurability: lockDurability,
+		distSender:             distSender,
+		stopper:                stopper,
+		sd:                     sd,
+		headOfLineOnlyFraction: headOfLineOnlyFraction,
+		budget:                 newBudget(acc, limitBytes),
+		lockStrength:           lockStrength,
+		lockDurability:         lockDurability,
 	}
 
 	if kvPairsRead == nil {
@@ -1171,6 +1182,18 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 		// significantly in size.
 		if targetBytes < singleRangeReqs.minTargetBytes {
 			targetBytes = singleRangeReqs.minTargetBytes
+		}
+		if headOfLine && w.s.budget.mu.acc.Used() > w.s.eagerMemUsageLimitBytes {
+			// Given that the eager memory usage limit has already been
+			// exceeded, we won't issue any more requests for now, so rather
+			// than use the estimate on the response size, this head-of-the-line
+			// batch will use most of the available budget, as controlled by the
+			// session variable.
+			if headOfLineOnly := int64(float64(availableBudget) * w.s.headOfLineOnlyFraction); headOfLineOnly > targetBytes {
+				targetBytes = headOfLineOnly
+				// Ensure that we won't issue any more requests for now.
+				budgetIsExhausted = true
+			}
 		}
 		if targetBytes+responsesOverhead > availableBudget {
 			// We don't have enough budget to account for both the TargetBytes
