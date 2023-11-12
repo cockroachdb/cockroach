@@ -841,11 +841,13 @@ type restoreSpecs struct {
 	// restored user space tables.
 	fingerprint int
 
-	testName   string
 	setUpStmts []string
 
 	// skip, if non-empty, skips the test with the given reason.
 	skip string
+
+	// testname is set automatically.
+	testName string
 }
 
 func (sp *restoreSpecs) initTestName() {
@@ -918,7 +920,7 @@ func (rd *restoreDriver) getAOST(ctx context.Context) {
 	conn := rd.c.Conn(ctx, rd.t.L(), 1)
 	defer conn.Close()
 	err := conn.QueryRowContext(ctx, rd.sp.getAostCmd()).Scan(&aost)
-	require.NoError(rd.t, err)
+	require.NoError(rd.t, err, fmt.Sprintf("aost cmd failed: %s", rd.sp.getAostCmd()))
 	rd.aost = aost
 }
 
