@@ -113,10 +113,6 @@ func TestOnlineRestoreS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	if os.Getenv("COCKROACH_UNSAFE_RESTORE") != "true" {
-		skip.IgnoreLint(t, "set COCKROACH_UNSAFE_RESTORE env var to true")
-	}
-
 	const numAccounts = 1000
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
