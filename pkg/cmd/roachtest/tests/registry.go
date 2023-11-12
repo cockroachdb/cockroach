@@ -115,6 +115,7 @@ func RegisterTests(r registry.Registry) {
 	registerRestart(r)
 	registerRestore(r)
 	registerRestoreNodeShutdown(r)
+	registerOnlineRestore(r)
 	registerRoachmart(r)
 	registerRoachtest(r)
 	registerRubyPG(r)
