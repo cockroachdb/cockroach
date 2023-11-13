@@ -2593,6 +2593,29 @@ project
  └── projections
       └── col2:4::INT2 [as=col1:3, outer=(4), immutable]
 
+# Regression test for #114250 - don't generate a trivial constrained scan that
+# scans the whole table using the table's check constraints.
+exec-ddl
+CREATE TABLE t114250 (x INT PRIMARY KEY USING HASH, y INT NOT NULL);
+----
+
+opt expect-not=GenerateConstrainedScans
+SELECT x FROM t114250 WHERE y = 5;
+----
+project
+ ├── columns: x:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: x:1!null y:2!null
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan t114250
+      │    ├── columns: x:1!null y:2!null
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── y:2 = 5 [outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
+
 # --------------------------------------------------
 # GenerateInvertedIndexScans
 # --------------------------------------------------

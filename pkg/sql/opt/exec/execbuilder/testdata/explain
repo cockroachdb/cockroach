@@ -2396,3 +2396,25 @@ inner-join (hash)
  │    └── unfiltered-cols: (6-9)
  └── filters
       └── k:6 = a:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# Regression test for #114250 - the EXPLAIN output should indicate a full scan.
+statement ok
+CREATE TABLE t114250 (x INT PRIMARY KEY USING HASH, y INT NOT NULL);
+
+query T
+EXPLAIN SELECT x FROM t114250 WHERE y = 5;
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: y = 5
+│
+└── • scan
+      missing stats
+      table: t114250@t114250_pkey
+      spans: FULL SCAN
+·
+index recommendations: 1
+1. type: index creation
+   SQL command: CREATE INDEX ON test.public.t114250 (y);
