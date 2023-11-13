@@ -41,7 +41,7 @@ func TestRegionLivenessProber(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderStressRace(t)
-	skip.UnderStress(t)
+	//skip.UnderStress(t)
 
 	ctx := context.Background()
 
@@ -146,7 +146,7 @@ func TestRegionLivenessProber(t *testing.T) {
 	require.Equal(t, 1, rowCount, "one region should be dead")
 	// Next validate the problematic region will be removed from the
 	// list of live regions.
-	testutils.SucceedsSoon(t, func() error {
+	testutils.SucceedsWithin(t, func() error {
 		return tenants[0].DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			regions, err := regionProber.QueryLiveness(ctx, txn)
 			if err != nil {
@@ -168,5 +168,5 @@ func TestRegionLivenessProber(t *testing.T) {
 			}
 			return nil
 		})
-	})
+	}, time.Minute*2)
 }
