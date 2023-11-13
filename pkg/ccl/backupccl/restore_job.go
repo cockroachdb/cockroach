@@ -3282,10 +3282,14 @@ func sendAddRemoteSSTs(
 	for entry := range restoreSpanEntriesCh {
 		for _, file := range entry.Files {
 
-			log.Infof(ctx, "Experimental restore: sending span %s of file %s",
-				file.BackupFileEntrySpan, file.Path)
-
 			restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
+			log.Infof(ctx, "Experimental restore: sending span %s of file (path: %s, span: %s), with intersecting subspan %s",
+				file.BackupFileEntrySpan, file.Path, file.BackupFileEntrySpan, restoringSubspan)
+
+			if !restoringSubspan.Valid() {
+				log.Warningf(ctx, "backup file does not intersect with the restoring span")
+				continue
+			}
 
 			// NB: Since the restored span is a subset of the BackupFileEntrySpan,
 			// these counts may be an overestimate of what actually gets restored.
