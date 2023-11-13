@@ -557,6 +557,7 @@ func newJoinReader(
 			flowCtx.Stopper(),
 			jr.txn,
 			flowCtx.EvalCtx.Settings,
+			flowCtx.EvalCtx.SessionData(),
 			spec.LockingWaitPolicy,
 			spec.LockingStrength,
 			streamerBudgetLimit,

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -169,6 +170,7 @@ func NewStreamingKVFetcher(
 	stopper *stop.Stopper,
 	txn *kv.Txn,
 	st *cluster.Settings,
+	sd *sessiondata.SessionData,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockStrength descpb.ScanLockingStrength,
 	streamerBudgetLimit int64,
@@ -185,6 +187,7 @@ func NewStreamingKVFetcher(
 		stopper,
 		txn,
 		st,
+		sd,
 		getWaitPolicy(lockWaitPolicy),
 		streamerBudgetLimit,
 		streamerBudgetAcc,
