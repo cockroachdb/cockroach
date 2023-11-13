@@ -240,11 +240,19 @@ func (c Constraint) String() string {
 }
 
 // Contains returns true if the constraint contains every span in the given
-// constraint. The columns of the constraint must be a prefix of the columns of
-// other.
+// constraint.
 func (c *Constraint) Contains(evalCtx *eval.Context, other *Constraint) bool {
-	if !c.Columns.IsPrefixOf(&other.Columns) {
-		panic(errors.AssertionFailedf("columns must be a prefix of other columns"))
+	// The columns of the constraint must have a common prefix with the columns
+	// from other constraint.
+	prefixLength := c.Columns.PrefixLength(&other.Columns)
+	if prefixLength == 0 {
+		return false
+	}
+
+	// Only one of the constraints can have spans longer than the common prefix
+	// length.
+	if c.maxSpanKeyLength() > prefixLength && other.maxSpanKeyLength() > prefixLength {
+		return false
 	}
 
 	// An unconstrained constraint contains all constraints.
@@ -301,6 +309,20 @@ func (c *Constraint) Contains(evalCtx *eval.Context, other *Constraint) bool {
 
 	// Return true if containment was proven for each span in right.
 	return rightIndex == right.Count()
+}
+
+func (c *Constraint) maxSpanKeyLength() int {
+	var maxLength int
+	for i := 0; i < c.Spans.Count(); i++ {
+		startLength, endLength := c.Spans.Get(i).StartKey().Length(), c.Spans.Get(i).EndKey().Length()
+		if startLength > maxLength {
+			maxLength = startLength
+		}
+		if endLength > maxLength {
+			maxLength = endLength
+		}
+	}
+	return maxLength
 }
 
 // ContainsSpan returns true if the constraint contains the given span (or a
