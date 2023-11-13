@@ -415,11 +415,7 @@ func TestClientAddrOverride(t *testing.T) {
 	defer sc.Close(t)
 
 	// Start a server.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilistic, 112867,
-		),
-	})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 	ts := s.ApplicationLayer()
