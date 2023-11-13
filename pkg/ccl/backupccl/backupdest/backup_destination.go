@@ -540,7 +540,7 @@ func ResolveBackupManifests(
 			mem.Shrink(ctx, ownedMemSize)
 		}
 	}()
-	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0],
+	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0], fullyResolvedBaseDirectory[0],
 		encryption, kmsEnv)
 	if err != nil {
 		return nil, nil, nil, 0, err
@@ -692,7 +692,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 
 		var memSize int64
 		mainBackupManifests[i], memSize, err = backupinfo.ReadBackupManifestFromStore(ctx, mem,
-			stores[0], encryption, kmsEnv)
+			stores[0], uris[0], encryption, kmsEnv)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}

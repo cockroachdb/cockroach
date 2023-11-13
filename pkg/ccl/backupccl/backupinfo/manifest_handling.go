@@ -152,7 +152,7 @@ func ReadBackupManifestFromURI(
 		return backuppb.BackupManifest{}, 0, err
 	}
 	defer exportStore.Close()
-	return ReadBackupManifestFromStore(ctx, mem, exportStore, encryption, kmsEnv)
+	return ReadBackupManifestFromStore(ctx, mem, exportStore, uri, encryption, kmsEnv)
 }
 
 // ReadBackupManifestFromStore reads and unmarshalls a BackupManifest from the
@@ -161,6 +161,7 @@ func ReadBackupManifestFromStore(
 	ctx context.Context,
 	mem *mon.BoundAccount,
 	exportStore cloud.ExternalStorage,
+	storeURI string,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (backuppb.BackupManifest, int64, error) {
@@ -213,6 +214,7 @@ func ReadBackupManifestFromStore(
 		}
 	}
 	manifest.Dir = exportStore.Conf()
+	manifest.Dir.URI = storeURI
 	return manifest, memSize, nil
 }
 
