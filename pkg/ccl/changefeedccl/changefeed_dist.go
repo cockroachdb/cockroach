@@ -29,11 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -315,14 +315,32 @@ func startDistChangefeed(
 	return ctxgroup.GoAndWait(ctx, execPlan)
 }
 
-var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
+// The bin packing choice gives preference to leaseholder replicas if possible.
+var replicaOracleChoice = replicaoracle.BinPackingChoice
+
+const (
+	// DISTRIBUTION_STRATEGY_NONE employs no load balancing on the changefeed
+	// side. We defer to distsql to select nodes and distribute work.
+	DISTRIBUTION_STRATEGY_NONE = iota
+	// DISTRIBUTION_STRATEGY_BALANCED_SIMPLE defers to distsql for selecting the
+	// set of nodes to distribute work to. However, changefeeds will try to
+	// distribute work evenly across this set of nodes.
+	DISTRIBUTION_STRATEGY_BALANCED_SIMPLE
+	// TODO(jayant): add DISTRIBUTION_STRATEGY_BALANCED_FULL which takes
+	// full control of node selection and distribution.
+)
+
+var rangeDistributionStrategy = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
-	"changefeed.balance_range_distribution.enable",
-	"if enabled, the ranges are balanced equally among all nodes. "+
-		"Note that this is supported only in export mode with initial_scan=only.",
-	util.ConstantWithMetamorphicTestBool(
-		"changefeed.balance_range_distribution.enabled", false),
-	settings.WithName("changefeed.balance_range_distribution.enabled"),
+	"changefeed.default_range_distribution_strategy",
+	"configures how work is distributed among nodes for a given changefeed. "+
+		"for the most balanced distribution, use `balanced_simple`. changing this setting "+
+		"will not override locality restrictions",
+	"none",
+	map[int64]string{
+		int64(DISTRIBUTION_STRATEGY_NONE):            "none",
+		int64(DISTRIBUTION_STRATEGY_BALANCED_SIMPLE): "balanced_simple",
+	},
 	settings.WithPublic)
 
 func makePlan(
@@ -335,6 +353,8 @@ func makePlan(
 	drainingNodes []roachpb.NodeID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
+		sv := &execCtx.ExecCfg().Settings.SV
+		maybeCfKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed
 		var blankTxn *kv.Txn
 
 		distMode := sql.DistributionTypeAlways
@@ -350,15 +370,40 @@ func makePlan(
 			}
 		}
 
-		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
-			sql.DistributionType(distMode), physicalplan.DefaultReplicaChooser, locFilter)
-		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
-		if err != nil {
-			return nil, nil, err
+		rangeDistribution := rangeDistributionStrategy.Get(sv)
+		oracle := replicaoracle.NewOracle(replicaOracleChoice, dsp.ReplicaOracleConfig(locFilter))
+		var planCtx *sql.PlanningCtx
+		var spanPartitions []sql.SpanPartition
+		var err error
+		switch {
+		case distMode == sql.DistributionTypeNone || rangeDistribution == int64(DISTRIBUTION_STRATEGY_NONE):
+			planCtx = dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
+				blankTxn, sql.DistributionType(distMode), oracle, locFilter)
+			spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
+			if err != nil {
+				return nil, nil, err
+			}
+		case rangeDistribution == int64(DISTRIBUTION_STRATEGY_BALANCED_SIMPLE):
+			planCtx = dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil, /* planner */
+				blankTxn, sql.DistributionType(distMode), oracle, locFilter)
+			spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
+			if err != nil {
+				return nil, nil, err
+			}
+			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
+			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
+
+			spanPartitions, err = rebalanceSpanPartitions(
+				ctx, &distResolver{distSender}, rebalanceThreshold.Get(sv), spanPartitions)
+			if err != nil {
+				return nil, nil, err
+			}
+		default:
+			return nil, nil, errors.AssertionFailedf("could not reconcile dist strategy %d and dist mode %d",
+				rangeDistribution, distMode)
 		}
 
-		cfKnobs := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed
-		if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil &&
+		if knobs, ok := maybeCfKnobs.(*TestingKnobs); ok && knobs != nil &&
 			knobs.FilterDrainingNodes != nil && len(drainingNodes) > 0 {
 			spanPartitions, err = knobs.FilterDrainingNodes(spanPartitions, drainingNodes)
 			if err != nil {
@@ -366,25 +411,9 @@ func makePlan(
 			}
 		}
 
-		sv := &execCtx.ExecCfg().Settings.SV
-		if enableBalancedRangeDistribution.Get(sv) {
-			scanType, err := changefeedbase.MakeStatementOptions(details.Opts).GetInitialScanType()
-			if err != nil {
-				return nil, nil, err
-			}
-
-			// Currently, balanced range distribution supported only in export mode.
-			// TODO(yevgeniy): Consider lifting this restriction.
-			if scanType == changefeedbase.OnlyInitialScan {
-				sender := execCtx.ExecCfg().DB.NonTransactionalSender()
-				distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
-
-				spanPartitions, err = rebalanceSpanPartitions(
-					ctx, &distResolver{distSender}, rebalanceThreshold.Get(sv), spanPartitions)
-				if err != nil {
-					return nil, nil, err
-				}
-			}
+		if knobs, ok := maybeCfKnobs.(*TestingKnobs); ok && knobs != nil &&
+			knobs.SpanPartitionsCallback != nil {
+			knobs.SpanPartitionsCallback(spanPartitions)
 		}
 
 		// Use the same checkpoint for all aggregators; each aggregator will only look at
@@ -434,7 +463,7 @@ func makePlan(
 			UserProto:    execCtx.User().EncodeProto(),
 		}
 
-		if knobs, ok := cfKnobs.(*TestingKnobs); ok && knobs != nil && knobs.OnDistflowSpec != nil {
+		if knobs, ok := maybeCfKnobs.(*TestingKnobs); ok && knobs != nil && knobs.OnDistflowSpec != nil {
 			knobs.OnDistflowSpec(aggregatorSpecs, &changeFrontierSpec)
 		}
 
