@@ -91,18 +91,20 @@ func (c *Columns) Equals(other *Columns) bool {
 	return true
 }
 
-// IsPrefixOf returns true if the columns in c are a prefix of the columns in
-// other.
-func (c *Columns) IsPrefixOf(other *Columns) bool {
-	if c.firstCol != other.firstCol || len(c.otherCols) > len(other.otherCols) {
-		return false
-	}
-	for i := range c.otherCols {
-		if c.otherCols[i] != other.otherCols[i] {
-			return false
-		}
-	}
-	return true
+// PrefixLength returns the length of the common prefix between the columns in c
+// and the columns in other.
+func (c *Columns) PrefixLength(other *Columns) int {
+  if c.firstCol != other.firstCol {
+    return 0
+  }
+  length := 1
+  for i := 0; i < len(c.otherCols) && i < len(other.otherCols); i++ {
+    if c.otherCols[i] != other.otherCols[i] {
+      break
+    }
+    length++
+  }
+  return length
 }
 
 // IsStrictSuffixOf returns true if the columns in c are a strict suffix of the

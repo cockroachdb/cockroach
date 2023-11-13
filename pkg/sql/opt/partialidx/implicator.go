@@ -559,12 +559,6 @@ func (im *Implicator) atomImpliesAtom(
 	eConstraint := eSet.Constraint(0)
 	predConstraint := predSet.Constraint(0)
 
-	// If the columns in predConstraint are not a prefix of the columns in
-	// eConstraint, then predConstraint cannot contain eConstraint.
-	if !predConstraint.Columns.IsPrefixOf(&eConstraint.Columns) {
-		return false
-	}
-
 	// If predConstraint contains eConstraint, then eConstraint implies
 	// predConstraint.
 	if predConstraint.Contains(im.evalCtx, eConstraint) {
@@ -581,8 +575,7 @@ func (im *Implicator) atomImpliesAtom(
 		// between 17 and 18. Therefore, there is no need to apply (a > 17) as a
 		// filter after the partial index scan.
 		exactMatches.addIf(e, func() bool {
-			return eConstraint.Columns.IsPrefixOf(&predConstraint.Columns) &&
-				eConstraint.Contains(im.evalCtx, predConstraint)
+			return eConstraint.Contains(im.evalCtx, predConstraint)
 		})
 		return true
 	}
