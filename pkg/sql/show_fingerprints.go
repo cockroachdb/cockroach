@@ -285,6 +285,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	index := n.indexes[n.run.rowIdx]
 
 	cols := make([]string, 0, len(n.tableDesc.PublicColumns()))
+	var numBytesCols int
 	addColumn := func(col catalog.Column) {
 		var colNameOrExpr string
 		if col.IsExpressionIndexColumn() {
@@ -299,8 +300,9 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		switch col.GetType().Family() {
 		case types.BytesFamily:
 			cols = append(cols, fmt.Sprintf("%s:::bytes", colNameOrExpr))
+			numBytesCols++
 		default:
-			cols = append(cols, fmt.Sprintf("%s::string::bytes", colNameOrExpr))
+			cols = append(cols, fmt.Sprintf("%s::string", colNameOrExpr))
 		}
 	}
 
@@ -329,6 +331,22 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 				return false, err
 			}
 			addColumn(col)
+		}
+	}
+
+	if len(cols) != numBytesCols && numBytesCols != 0 {
+		// Currently, cols has a mix of BYTES and STRING types, but fnv64
+		// requires all arguments to be of the same type. We'll cast less
+		// frequent type to the other.
+		from, to := "::bytes", "::string"
+		if numBytesCols > len(cols)/2 {
+			// BYTES is more frequent.
+			from, to = "::string", "::bytes"
+		}
+		for i := range cols {
+			if strings.HasSuffix(cols[i], from) {
+				cols[i] = cols[i] + to
+			}
 		}
 	}
 
