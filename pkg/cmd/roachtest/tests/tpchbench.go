@@ -34,9 +34,6 @@ type tpchBenchSpec struct {
 	benchType       string
 	url             string
 	numRunsPerQuery int
-	// minVersion specifies the minimum version of CRDB nodes. If omitted, it
-	// will default to v19.1.0.
-	minVersion string
 	// maxLatency is the expected maximum time that a query will take to execute
 	// needed to correctly initialize histograms.
 	maxLatency time.Duration
@@ -165,10 +162,6 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 
 	// Add a load generator node.
 	numNodes := b.Nodes + 1
-	minVersion := b.minVersion
-	if minVersion == `` {
-		minVersion = "v19.1.0" // needed for import
-	}
 
 	r.Add(registry.TestSpec{
 		Name:             strings.Join(nameParts, "/"),
@@ -201,7 +194,6 @@ func registerTPCHBench(r registry.Registry) {
 			benchType:       `tpch`,
 			url:             `https://raw.githubusercontent.com/cockroachdb/cockroach/master/pkg/workload/querybench/tpch-queries`,
 			numRunsPerQuery: 3,
-			minVersion:      `v19.2.0`,
 			maxLatency:      500 * time.Second,
 		},
 	}
