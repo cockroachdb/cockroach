@@ -102,6 +102,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/physicalplan",
+        "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/privilege",
         "//pkg/sql/protoreflect",
         "//pkg/sql/roleoption",
@@ -183,6 +184,7 @@ go_test(
     srcs = [
         "alter_changefeed_test.go",
         "avro_test.go",
+        "changefeed_dist_test.go",
         "changefeed_test.go",
         "csv_test.go",
         "encoder_test.go",

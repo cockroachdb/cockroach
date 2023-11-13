@@ -638,7 +638,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	// behind, which is well above the 60s targetSteadyLatency we have in some tests.
 	settings.ClusterSettings["changefeed.slow_span_log_threshold"] = "30s"
 	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
-	settings.ClusterSettings["changefeed.balance_range_distribution.enable"] = "true"
+	settings.ClusterSettings["changefeed.range_distribution_strategy"] = "balanced_simple"
 
 	settings.Env = append(settings.Env, envVars...)
 
