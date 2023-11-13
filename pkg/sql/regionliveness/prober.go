@@ -12,6 +12,7 @@ package regionliveness
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -38,6 +39,23 @@ var RegionLivenessEnabled = settings.RegisterBoolSetting(settings.ApplicationLev
 // and not quarantined due to expiration.
 type LiveRegions map[string]struct{}
 
+// ForEach does ordered iteration over the regions.
+func (l LiveRegions) ForEach(fn func(region string) error) error {
+	regions := make([]string, 0, len(l))
+	for r := range l {
+		regions = append(regions, r)
+	}
+	sort.Slice(regions, func(a, b int) bool {
+		return regions[a] < regions[b]
+	})
+	for _, r := range regions {
+		if err := fn(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Prober used to determine the set of regions which are still alive.
 type Prober interface {
 	// ProbeLiveness can be used after a timeout to label a regions as unavailable.
@@ -45,6 +63,9 @@ type Prober interface {
 	// QueryLiveness can be used to get the list of regions which are currently
 	// accessible.
 	QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRegions, error)
+	// GetTableTimeout gets maximum timeout waiting on a table before issuing
+	//// liveness queries.
+	GetTableTimeout() (bool, time.Duration)
 }
 
 // RegionProvider abstracts the lookup of regions (see regions.Provider).
@@ -132,6 +153,7 @@ SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.crdb_in
 		}
 		return txn.KV().UpdateDeadline(ctx, readTS)
 	})
+
 }
 
 // QueryLiveness implements Prober.
@@ -147,7 +169,6 @@ func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRe
 	for region := range regions.Regions {
 		regionStatus[region] = struct{}{}
 	}
-
 	// If region liveness is disabled, return nil.
 	if !RegionLivenessEnabled.Get(&l.settings.SV) {
 		return regionStatus, nil
@@ -172,9 +193,21 @@ func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRe
 	return regionStatus, nil
 }
 
+// GetTableTimeout gets maximum timeout waiting on a table before issuing
+// liveness queries.
+func (l *livenessProber) GetTableTimeout() (bool, time.Duration) {
+	return RegionLivenessEnabled.Get(&l.settings.SV), probeLivenessTimeout
+}
+
 // IsQueryTimeoutErr determines if a query timeout error was hit, specifically
 // when checking for region liveness.
 func IsQueryTimeoutErr(err error) bool {
 	return pgerror.GetPGCode(err) == pgcode.QueryCanceled ||
 		errors.HasType(err, (*timeutil.TimeoutError)(nil))
+}
+
+// IsMissingRegionEnumErr determines if a query hit an error because of a missing
+// because of the region enum.
+func IsMissingRegionEnumErr(err error) bool {
+	return pgerror.GetPGCode(err) == pgcode.InvalidTextRepresentation
 }

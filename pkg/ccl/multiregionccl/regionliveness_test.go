@@ -103,12 +103,12 @@ func TestRegionLivenessProber(t *testing.T) {
 		_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system ADD REGION '%s'", expectedRegions[i]))
 		require.NoError(t, err)
 	}
-	idb := tenants[0].InternalDB().(isql.DB)
 	cf := tenants[0].CollectionFactory().(*descs.CollectionFactory)
 	statusServer := tenants[0].SQLServer().(*sql.Server).GetExecutorConfig().TenantStatusServer
 	providerFactory := func(txn *kv.Txn) regionliveness.RegionProvider {
 		return regions.NewProvider(tenants[0].Codec(), statusServer, txn, cf.NewCollection(ctx))
 	}
+	idb := tenants[0].InternalDB().(isql.DB)
 	regionProber := regionliveness.NewLivenessProber(idb, providerFactory, tenants[0].ClusterSettings())
 	// Validates the expected regions versus the region liveness set.
 	checkExpectedRegions := func(expectedRegions []string, regions regionliveness.LiveRegions) {
