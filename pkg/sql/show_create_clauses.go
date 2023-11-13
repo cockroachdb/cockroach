@@ -45,7 +45,7 @@ type tableComments struct {
 }
 
 type comment struct {
-	subID   int
+	subID   int // the column, or index, or constraint ID that this comment is associated to.
 	comment string
 }
 

@@ -1572,6 +1572,7 @@ statement ok
 COMMENT ON INDEX pkey IS 'idx';
 COMMENT ON CONSTRAINT pkey ON pkey_comment IS 'const';
 
+# Create a unique secondary index and add a comment on it.
 statement ok
 CREATE UNIQUE INDEX i2 ON pkey_comment(c);
 
@@ -1592,7 +1593,8 @@ COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
 statement ok
 ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
 
-# No comment exists inside the CREATE statement
+# Skip legacy schema changer because it will give a new name to the new primary
+# index, instead of reusing the old primary index name.
 skipif config local-legacy-schema-changer
 query T
 SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
@@ -1601,6 +1603,10 @@ COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
 COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
 COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3';
 COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const'
+
+# Ensure `SHOW CREATE` does not break (issue #114081).
+statement ok
+SHOW CREATE pkey_comment;
 
 subtest test-index-deduplication
 
