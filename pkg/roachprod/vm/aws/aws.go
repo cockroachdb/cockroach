@@ -1206,42 +1206,43 @@ func runSpotInstance(l *logger.Logger, p *Provider, args []string, regionName st
 		return err
 	}
 	// If the spot request is accepted, the run-instances command will return an instance-id.
-	if len(runInstancesOutput.Instances) == 0 {
-		return errors.Errorf("No instances found for spot request, likely the spot request had bad parameter")
-	}
-	instanceId := runInstancesOutput.Instances[0].InstanceID
-	spotInstanceRequestId, err := getSpotInstanceRequestId(l, p, regionName, instanceId)
-	if err != nil {
-		return err
-	}
+	if len(runInstancesOutput.Instances) > 0 {
+		instanceId := runInstancesOutput.Instances[0].InstanceID
+		spotInstanceRequestId, err := getSpotInstanceRequestId(l, p, regionName, instanceId)
+		if err != nil {
+			return err
+		}
 
-	// Loop every 10 seconds till the spot instance is fulfilled, for a maximum of 2 minutes.
-	startTime := timeutil.Now()
-	duration := waitForSpotDuration
-	for {
-		describeSpotInstanceRequestsOutput, err := describeSpotInstanceRequest(l, p, regionName, spotInstanceRequestId)
-		if err != nil {
-			return err
-		}
-		spotRequestFulfilled, err := processSpotInstanceRequestStatus(l, describeSpotInstanceRequestsOutput, spotInstanceRequestId, instanceId)
-		if err != nil {
-			return err
-		}
-		if spotRequestFulfilled {
-			return nil
-		}
-		// This part of the code depends on demand/supply of AWS and can be hard to test.
-		// One way to manually test is tested by commenting out return nil above and check cancellation after 2 minutes.
-		if timeutil.Since(startTime) >= duration {
-			l.Printf("waitForSpotDuration passed, cancel the spot instance request and exit loop")
-			err := cancelSpotRequest(l, p, regionName, spotInstanceRequestId)
+		// Loop every 10 seconds till the spot instance is fulfilled, for a maximum of 2 minutes.
+		startTime := timeutil.Now()
+		duration := waitForSpotDuration
+		for {
+			describeSpotInstanceRequestsOutput, err := describeSpotInstanceRequest(l, p, regionName, spotInstanceRequestId)
 			if err != nil {
 				return err
 			}
-			return errors.New("waitForSpotDuration over")
+			spotRequestFulfilled, err := processSpotInstanceRequestStatus(l, describeSpotInstanceRequestsOutput, spotInstanceRequestId, instanceId)
+			if err != nil {
+				return err
+			}
+			if spotRequestFulfilled {
+				return nil
+			}
+			// This part of the code depends on demand/supply of AWS and can be hard to test.
+			// One way to manually test is tested by commenting out return nil above and check cancellation after 2 minutes.
+			if timeutil.Since(startTime) >= duration {
+				l.Printf("waitForSpotDuration passed, cancel the spot instance request and exit loop")
+				err := cancelSpotRequest(l, p, regionName, spotInstanceRequestId)
+				if err != nil {
+					return err
+				}
+				return errors.New("waitForSpotDuration over")
+			}
+			l.Printf("Sleeping for 10 seconds before checking the status of the spot instance request again")
+			time.Sleep(10 * time.Second)
 		}
-		l.Printf("Sleeping for 10 seconds before checking the status of the spot instance request again")
-		time.Sleep(10 * time.Second)
+	} else {
+		return errors.Errorf("No instances found for spot request, likely the spot request had bad parameter")
 	}
 }
 
@@ -1286,22 +1287,23 @@ func processSpotInstanceRequestStatus(
 	spotInstanceRequestId string,
 	instanceId string,
 ) (fullFilled bool, err error) {
-	if len(describeSpotInstanceRequestsOutput.SpotInstanceRequests) == 0 {
-		return false, errors.Errorf("No Spot Instance Request found for instance-id: %s", instanceId)
-	}
-	requestState := describeSpotInstanceRequestsOutput.SpotInstanceRequests[0].State
-	requestStatusCode := describeSpotInstanceRequestsOutput.SpotInstanceRequests[0].Status.Code
-	if requestState == "closed" || requestState == "cancelled" || requestState == "failed" {
-		return false, errors.Errorf("Spot request %s for instance %s not active with state: %s",
-			spotInstanceRequestId, instanceId, requestState)
-	}
-	if requestStatusCode == "fulfilled" {
-		l.Printf("Spot request %s for instance %s fulfilled.", spotInstanceRequestId, instanceId)
-		return true, nil
+	if len(describeSpotInstanceRequestsOutput.SpotInstanceRequests) > 0 {
+		requestState := describeSpotInstanceRequestsOutput.SpotInstanceRequests[0].State
+		requestStatusCode := describeSpotInstanceRequestsOutput.SpotInstanceRequests[0].Status.Code
+		if requestState == "closed" || requestState == "cancelled" || requestState == "failed" {
+			return false, errors.Errorf("Spot request %s for instance %s not active with state: %s",
+				spotInstanceRequestId, instanceId, requestState)
+		}
+		if requestStatusCode == "fulfilled" {
+			l.Printf("Spot request %s for instance %s fulfilled.", spotInstanceRequestId, instanceId)
+			return true, nil
+		} else {
+			// Spot instance request is not fulfilled yet, but active,  continue looping.
+			l.Printf("Spot request %s for instance %s not fulfilled yet, status.code: %s., state: %s",
+				spotInstanceRequestId, instanceId, requestStatusCode, requestState)
+		}
 	} else {
-		// Spot instance request is not fulfilled yet, but active,  continue looping.
-		l.Printf("Spot request %s for instance %s not fulfilled yet, status.code: %s., state: %s",
-			spotInstanceRequestId, instanceId, requestStatusCode, requestState)
+		return false, errors.Errorf("No Spot Instance Request found for instance-id: %s", instanceId)
 	}
 	return false, nil
 }
