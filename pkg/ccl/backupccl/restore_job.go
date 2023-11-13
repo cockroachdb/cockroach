@@ -3223,10 +3223,7 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 }
 
 func sendAddRemoteSSTWorker(
-	execCtx sql.JobExecContext,
-	uris []string,
-	urisForDirs map[string]string,
-	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
+	execCtx sql.JobExecContext, restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		var toAdd []execinfrapb.RestoreFileSpec
@@ -3250,13 +3247,8 @@ func sendAddRemoteSSTWorker(
 				// these counts may be an overestimate of what actually gets restored.
 				counts := file.BackupFileEntryCounts
 
-				uri, ok := urisForDirs[file.Dir.String()]
-				if !ok {
-					return errors.AssertionFailedf("URI not found for %s", file.Dir.String())
-				}
-
 				loc := kvpb.AddSSTableRequest_RemoteFile{
-					Locator:         uri,
+					Locator:         file.Dir.URI,
 					Path:            file.Path,
 					BackingFileSize: uint64(counts.DataSize),
 				}
@@ -3351,36 +3343,6 @@ func sendAddRemoteSSTs(
 		return errors.AssertionFailedf("online restore can only restore data from a full backup")
 	}
 
-	// We lost the string URIs for the backup storage locations very early in the
-	// process of planning the restore, when the backups were resolved, and the
-	// parsed proto versions -- which we usually prefer -- were attached to the
-	// backup manifests and the individual files during span generation. However
-	// for telling pebble the locations of the files we need those raw string URIs
-	// again. We could plumb them side-by-side with the proto versions, but for
-	// now we'll just reverse engineer them: we'll make a map that has the proto
-	// version of every URI we might have parsed -- all the default backup URIs
-	// and any locality bucket URIs -- to the raw URI that produces that proto.
-	// We can then look in this map using the proto attached to each file to find
-	// the URI for that file.
-	// TODO(dt/butler): should we plumb the original string instead?
-	urisForDirs := make(map[string]string)
-	for _, u := range uris {
-		dir, err := cloud.ExternalStorageConfFromURI(u, username.SQLUsername{})
-		if err != nil {
-			return err
-		}
-		urisForDirs[dir.String()] = u
-	}
-	for _, loc := range backupLocalityInfo {
-		for _, u := range loc.URIsByOriginalLocalityKV {
-			dir, err := cloud.ExternalStorageConfFromURI(u, username.SQLUsername{})
-			if err != nil {
-				return err
-			}
-			urisForDirs[dir.String()] = u
-		}
-	}
-
 	restoreSpanEntriesCh := make(chan execinfrapb.RestoreSpanEntry, 1)
 
 	grp := ctxgroup.WithContext(ctx)
@@ -3390,7 +3352,7 @@ func sendAddRemoteSSTs(
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, uris, urisForDirs, restoreSpanEntriesCh))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh))
 	}
 
 	if err := grp.Wait(); err != nil {
