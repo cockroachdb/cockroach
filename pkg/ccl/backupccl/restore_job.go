@@ -370,6 +370,11 @@ func restore(
 		return emptyRowCount, errors.Wrapf(err, "counting number of import spans")
 	}
 
+	// requestFinishedCh is pinged every time restore completes the ingestion of a
+	// restoreSpanEntry. Each ping updates the 'fraction completed' job progress.
+	// Note that online restore pings this channel directly, every time a remote
+	// addsstable completes, while conventional restore pings the channel after
+	// updating the progress frontier.
 	requestFinishedCh := make(chan struct{}, numImportSpans) // enough buffer to never block
 
 	// tasks are the concurrent tasks that are run during the restore.
@@ -394,21 +399,26 @@ func restore(
 			return genSpan(ctx, progressTracker.inFlightSpanFeeder)
 		})
 	}
+
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-	generativeCheckpointLoop := func(ctx context.Context) error {
-		defer close(requestFinishedCh)
-		for progress := range progCh {
-			if spanDone, err := progressTracker.ingestUpdate(ctx, progress); err != nil {
-				return err
-			} else if spanDone {
-				// Signal that the processor has finished importing a span, to update job
-				// progress.
-				requestFinishedCh <- struct{}{}
+	if !details.ExperimentalOnline {
+		// Online restore tracks progress by pinging requestFinishCh instead
+		generativeCheckpointLoop := func(ctx context.Context) error {
+			defer close(requestFinishedCh)
+			for progress := range progCh {
+				if spanDone, err := progressTracker.ingestUpdate(ctx, progress); err != nil {
+					return err
+				} else if spanDone {
+					// Signal that the processor has finished importing a span, to update job
+					// progress.
+					requestFinishedCh <- struct{}{}
+				}
 			}
+			return nil
 		}
-		return nil
+
+		tasks = append(tasks, generativeCheckpointLoop)
 	}
-	tasks = append(tasks, generativeCheckpointLoop)
 
 	// tracingAggLoop is responsible for draining the channel on which processors
 	// in the DistSQL flow will send back their tracing aggregator stats. These
@@ -443,7 +453,7 @@ func restore(
 				encryption,
 				details.URIs,
 				backupLocalityInfo,
-				progCh,
+				requestFinishedCh,
 				tracingAggCh,
 				genSpan,
 			)
@@ -3228,6 +3238,7 @@ func sendAddRemoteSSTWorker(
 	uris []string,
 	urisForDirs map[string]string,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
+	requestFinishedCh <-chan struct{},
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		remainingBytesInTargetRange := int64(512 << 20)
@@ -3314,6 +3325,7 @@ func sendAddRemoteSSTWorker(
 					log.Infof(ctx, "Experimental restore: addSST span %s recording: %s", restoringSubspan, recording)
 				}
 			}
+			<-requestFinishedCh
 		}
 		return nil
 	}
@@ -3330,11 +3342,11 @@ func sendAddRemoteSSTs(
 	encryption *jobspb.BackupEncryptionOptions,
 	uris []string,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
-	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	requestFinishedCh chan struct{},
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) error {
-	defer close(progCh)
+	defer close(requestFinishedCh)
 	defer close(tracingAggCh)
 
 	if encryption != nil {
@@ -3383,7 +3395,7 @@ func sendAddRemoteSSTs(
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, uris, urisForDirs, restoreSpanEntriesCh))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, uris, urisForDirs, restoreSpanEntriesCh, requestFinishedCh))
 	}
 
 	if err := grp.Wait(); err != nil {
