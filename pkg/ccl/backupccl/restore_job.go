@@ -304,6 +304,11 @@ func restore(
 		return emptyRowCount, err
 	}
 
+	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
+	if details.ExperimentalOnline {
+		targetSize = targetOnlineRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
+	}
+
 	var filter spanCoveringFilter
 	if filter, err = func() (spanCoveringFilter, error) {
 		progressTracker.mu.Lock()
@@ -312,7 +317,7 @@ func restore(
 			progressTracker.mu.checkpointFrontier,
 			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
 			introducedSpanFrontier,
-			targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV),
+			targetSize,
 			progressTracker.useFrontier)
 	}(); err != nil {
 		return roachpb.RowCount{}, err
