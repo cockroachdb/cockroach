@@ -6851,6 +6851,8 @@ func ComputeStatsWithVisitors(
 	nowNanos int64,
 	visitors ComputeStatsVisitors,
 ) (enginepb.MVCCStats, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "ComputeStatsWithVisitors")
+	defer sp.Finish()
 	if isLockTableKey(start) {
 		return computeLockTableStatsWithVisitors(ctx, r, start, end, nowNanos, visitors.LockTableKey)
 	}
