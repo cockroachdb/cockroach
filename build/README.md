@@ -14,18 +14,17 @@ instructions](https://docs.docker.com/engine/installation/).
 
 There are development and deploy images available.
 
-### Development
+### `bazel`/`bazelbuilder`
 
-The development image is a bulky image containing a complete build toolchain.
-It is well suited to hacking around and running the tests (including the
-acceptance tests). To fetch this image, run `./builder.sh pull`. The image can
-be run conveniently via `./builder.sh`.
+`cockroachdb/bazel` is a Docker image containing basic requirements for
+building the Cockroach binary using Bazel. It can be run using `./dev builder`.
 
-Note that if you use the builder image, you should ensure that your
-Docker installation grants 4GB or more of RAM to containers. On some
-systems, the default configuration limits containers to 2GB memory
-usage and this can be insufficient to build/link a CockroachDB
-executable.
+Note that if you use this image, you should ensure that your Docker installation
+grants 4GB or more of RAM to containers. On some systems, the default
+configuration limits containers to 2GB memory usage and this can be insufficient
+to build/link a CockroachDB executable.
+
+There is a FIPS analogue to this image as well.
 
 ### Deployment
 
@@ -35,38 +34,15 @@ contains only the main CockroachDB binary, libgeos libraries, and licenses. To
 fetch this image, run `docker pull cockroachdb/cockroach` in the usual fashion.
 
 To build the image yourself, use the Dockerfile in the `deploy` directory after
-building a release version of the binary with the development image described in
-the previous section. The CockroachDB binary will be built inside of that
-development container, then placed into the minimal deployment container. The
-resulting image `cockroachdb/cockroach` can be run via `docker run` in the
-usual fashion. To be more specific, the steps to do this are:
+fetching a cross-built version of `cockroach` from CI, or by building yourself
+using `./dev build cockroach geos --cross{=linuxarm}`. Copy the `cockroach`,
+`libgeos.so`, and `libgeos_c.so` files into `build/deploy` then run
+`docker build` in that directory.
 
-```
-go/src/github.com/cockroachdb/cockroach $ ./build/builder.sh mkrelease linux-gnu
-go/src/github.com/cockroachdb/cockroach $ cp ./cockroach-linux-2.6.32-gnu-amd64 build/deploy/cockroach
-go/src/github.com/cockroachdb/cockroach $ cp ./lib.docker_amd64/libgeos_c.so ./lib.docker_amd64/libgeos.so build/deploy/
-go/src/github.com/cockroachdb/cockroach $ cp -r licenses build/deploy/
-go/src/github.com/cockroachdb/cockroach $ cd build/deploy && docker build -t cockroachdb/cockroach .
-```
+# Updating toolchains
 
-The list of valid/recognized targets is available in the script
-`build/build/mkrelease.sh`, for example `amd64-linux-gnu` and
-`amd64-darwin`. Note that this script supports experimental targets
-which may or may not work (and are not officially supported).
-
-# Upgrading / extending the Docker image
-
-## Toolchains
-
-The `cockroachdb/builder` image has a number of cross-compilers
-installed for various targets. We build those cross-compilers in a
-separate step prior to the actual image build, and pull in tarballs
-to install them during the image build. This saves time and allows us to
-use the same toolchains for the Bazel build.
-
-Toolchains may need to be rebuilt infrequently. Follow this process to
-do so (if you don't need to update the toolchains, proceed to "basic
-process" below):
+Cross toolchains may need to be rebuilt infrequently. Follow this process to
+do so:
 
 - Edit files in `build/toolchains/toolchainbuild` as desired.
 - Run `build/toolchains/toolchainbuild/buildtoolchains.sh` to test --
@@ -80,35 +56,14 @@ process" below):
   These will publish the new toolchains to a new subdirectory in Google cloud
   storage, and the build log will additionally contain the sha256 of
   every tarball created.
-- Update the URL's in `build/builder/Dockerfile` and their sha256's
-  accordingly. Then proceed to follow the "Basic process" steps below.
+- Update `build/toolchains/REPOSITORIES.bzl` with new sha256's for every
+  toolchain, and `build/toolchains/crosstool-ng/toolchain.bzl` with new
+  URL's.
 
-## Basic Process
+# Updating the golang version
 
-NOTE: This describes how to update the old-fashioned `make`-based builder
-image. This is no longer maintained. Wherever it's used, you should stop
-using it.
-
-- Edit `build/builder/Dockerfile` as desired.
-- Run `build/builder.sh init` to test -- this will build the image locally.
-  The result of `init` is a docker image version which you can subsequently
-  stick into the `version` variable inside the `builder.sh` script for
-  testing locally.
-- When you're happy with the result, commit your changes, submit a pull request,
-  and have it reviewed.
-- Ask someone with permissions to run the `Build and Push new Builder Image`
-  build configuration in TeamCity. This will build and push the new Docker image
-  to [DockerHub](https://hub.docker.com/repository/docker/cockroachdb/builder).
-- Copy the tag of the new image (which will look like `YYYYMMDD-NNNNNN`) into
-  `build/builder.sh`, re-commit your changes, and update the pull request. You
-  can now merge the pull request once you've got a sign-off.
-- Finally, use the tag of the new image to update the `builder.dockerImage`
-  configuration parameter in TeamCity under the [`Cockroach`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Cockroach&tab=projectParams) and [`Internal`](https://teamcity.cockroachdb.com/admin/editProject.html?projectId=Internal&tab=projectParams) projects.
-
-## Updating the golang version
-
-Please copy this checklist (based on [Basic Process](#basic-process)) into the relevant commit message, with a link
-back to this document and perform these steps:
+Please copy this checklist into the relevant commit messageand perform these
+steps:
 
 * [ ] Adjust the Pebble tests to run in new version.
 * [ ] Update `build/teamcity/internal/release/build-and-publish-patched-go/impl.sh` with the new version and adjust SHA256 sums as necessary.
@@ -122,17 +77,14 @@ back to this document and perform these steps:
 * [ ] Bump the default installed version of Go in `bootstrap-debian.sh` ([source](./bootstrap/bootstrap-debian.sh)).
 * [ ] Replace other mentions of the older version of go (grep for `golang:<old_version>` and `go<old_version>`).
 
-You can test the new builder image in TeamCity by using the custom parameters
-UI (the "..." icon next to the "Run" button) to verify the image before
-committing the change.
+# Updating the `bazelbuilder` image
 
-## Updating the nodejs version
-
-Please follow the instructions above on updating the golang version, omitting the go-version-check.sh step.
-
-## Updating the `bazelbuilder` image
-
-The `bazelbuilder` image is used exclusively for performing builds using Bazel. Only add dependencies to the image that are necessary for performing Bazel builds. (Since the Bazel build downloads most dependencies as needed, updates to the Bazel builder image should be very infrequent.) The `bazelbuilder` image is published both for `amd64` and `arm64` platforms. You can go through the process of publishing a new Bazel build
+The `bazelbuilder` image is used exclusively for performing builds using Bazel.
+Only add dependencies to the image that are necessary for performing Bazel
+builds. (Since the Bazel build downloads most dependencies as needed, updates to
+the Bazel builder image should be very infrequent.) The `bazelbuilder` image is
+published both for `amd64` and `arm64` platforms. To update the image, perform
+the following steps:
 
 - Edit `build/bazelbuilder/Dockerfile` as desired.
 - Build the image by triggering the `Build and Push Bazel Builder Image` build in TeamCity. The generated image will be published to https://hub.docker.com/r/cockroachdb/bazel.

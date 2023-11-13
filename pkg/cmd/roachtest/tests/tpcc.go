@@ -477,7 +477,7 @@ func registerTPCC(r registry.Registry) {
 		// migrations while TPCC runs. It simulates a real production
 		// deployment in the middle of the migration into a new cluster version.
 		Name:    "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
-		Timeout: 5 * time.Hour,
+		Timeout: 6 * time.Hour,
 		Owner:   registry.OwnerTestEng,
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.

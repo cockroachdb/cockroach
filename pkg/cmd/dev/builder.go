@@ -76,8 +76,6 @@ func (d *dev) getDockerRunArgs(
 		return
 	}
 
-	// Apply the same munging for the UID/GID that we do in build/builder.sh.
-	// Quoth a comment from there:
 	// Attempt to run in the container with the same UID/GID as we have on the host,
 	// as this results in the correct permissions on files created in the shared
 	// volumes. This isn't always possible, however, as IDs less than 100 are
