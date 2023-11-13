@@ -1572,6 +1572,7 @@ statement ok
 COMMENT ON INDEX pkey IS 'idx';
 COMMENT ON CONSTRAINT pkey ON pkey_comment IS 'const';
 
+# Create a unique secondary index and add a comment on it.
 statement ok
 CREATE UNIQUE INDEX i2 ON pkey_comment(c);
 
@@ -1592,7 +1593,9 @@ COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
 statement ok
 ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
 
-# No comment exists inside the CREATE statement
+# Verify that all comments are appropriately carried over. The output of `SHOW
+# CREATE` between LSC and DSC are slightly different so we query them
+# separately.
 skipif config local-legacy-schema-changer
 query T
 SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
@@ -1601,6 +1604,16 @@ COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
 COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
 COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3';
 COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const'
+
+onlyif config local-legacy-schema-changer
+query T
+SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+----
+COMMENT ON INDEX public.pkey_comment@pkey_comment_pkey IS 'idx';
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
+COMMENT ON CONSTRAINT pkey_comment_pkey ON public.pkey_comment IS 'const';
+COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+
 
 subtest test-index-deduplication
 
