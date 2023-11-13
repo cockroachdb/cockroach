@@ -183,7 +183,6 @@ func CanWriteData(stmt Statement) bool {
 
 // ReturnsAtMostOneRow returns true if the statement returns either no rows or
 // a single row.
-// TODO(harding): Expand this list.
 func ReturnsAtMostOneRow(stmt Statement) bool {
 	switch stmt.(type) {
 	// Import operations.
