@@ -922,6 +922,14 @@ func (p *Pebble) GetStoreID() (int32, error) {
 	return storeID, nil
 }
 
+func (p *Pebble) Download(ctx context.Context, span roachpb.Span) error {
+	if p == nil {
+		return nil
+	}
+	// TODO(adityamaru): Wire this up to pebble once it supports downloading.
+	return nil
+}
+
 type remoteStorageAdaptor struct {
 	p       *Pebble
 	ctx     context.Context

@@ -599,6 +599,13 @@ message EngineStatsResponse {
   repeated EngineStatsInfo stats = 1 [ (gogoproto.nullable) = false ];
 }
 
+message DownloadSpanRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+}
+
+message DownloadSpanResponse {}
+
 message TraceEvent {
   google.protobuf.Timestamp time = 1
       [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
@@ -2415,6 +2422,12 @@ service Status {
   rpc ProblemRanges(ProblemRangesRequest) returns (ProblemRangesResponse) {
     option (google.api.http) = {
       get : "/_status/problemranges"
+    };
+  }
+
+  rpc DownloadSpan(DownloadSpanRequest) returns (DownloadSpanResponse) {
+    option (google.api.http) = {
+      get : "/_status/downloadspans"
     };
   }
 

@@ -880,6 +880,22 @@ func (c *connector) HotRangesV2(
 	return resp, nil
 }
 
+// DownloadSpan implements the serverpb.TenantStatusServer interface
+func (c *connector) DownloadSpan(
+	ctx context.Context, req *serverpb.DownloadSpanRequest,
+) (*serverpb.DownloadSpanResponse, error) {
+	var resp *serverpb.DownloadSpanResponse
+	r := *req
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.DownloadSpan(ctx, &r)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 // WithTxn implements the spanconfig.KVAccessor interface.
 func (c *connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("not applicable")
