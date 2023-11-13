@@ -42,7 +42,6 @@ func TestRegionLivenessProber(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderStressRace(t)
-	skip.UnderStress(t)
 
 	ctx := context.Background()
 
