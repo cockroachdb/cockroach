@@ -19,7 +19,6 @@ import (
 	"github.com/apache/arrow/go/v11/parquet/file"
 	"github.com/apache/arrow/go/v11/parquet/metadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -182,7 +181,7 @@ func NewWriter(sch *SchemaDefinition, sink io.Writer, opts ...Option) (*Writer, 
 	}
 	// Add additional metadata required to use the reader utility functions in
 	// testutils.go.
-	if buildutil.CrdbTestBuild {
+	if includeParquestReaderMetadata {
 		if err := WithMetadata(MakeReaderMetadata(sch)).apply(&cfg); err != nil {
 			return nil, err
 		}
