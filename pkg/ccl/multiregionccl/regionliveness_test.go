@@ -96,14 +96,36 @@ func TestRegionLivenessProber(t *testing.T) {
 		tenants = append(tenants, ts)
 		tenantSQL = append(tenantSQL, tenantDB)
 	}
+	idb := tenants[0].InternalDB().(isql.DB)
+	// Sanity: Confirm that the database is not seen as multi-region yet.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		isMR, err := regionliveness.IsMultiRegionSystemDB(ctx, txn, txn.KV())
+		if err != nil {
+			return err
+		}
+		if isMR {
+			return errors.AssertionFailedf("database is incorrectly seen as multi-region")
+		}
+		return nil
+	}))
 	// Convert into a multi-region DB.
 	_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system SET PRIMARY REGION '%s'", testCluster.Servers[0].Locality().Tiers[0].Value))
 	require.NoError(t, err)
+	// Sanity: Confirm that the database is seen as multi-region yet.
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		isMR, err := regionliveness.IsMultiRegionSystemDB(ctx, txn, txn.KV())
+		if err != nil {
+			return err
+		}
+		if !isMR {
+			return errors.AssertionFailedf("database is incorrectly seen as non multi-region")
+		}
+		return nil
+	}))
 	for i := 1; i < len(expectedRegions); i++ {
 		_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system ADD REGION '%s'", expectedRegions[i]))
 		require.NoError(t, err)
 	}
-	idb := tenants[0].InternalDB().(isql.DB)
 	cf := tenants[0].CollectionFactory().(*descs.CollectionFactory)
 	statusServer := tenants[0].SQLServer().(*sql.Server).GetExecutorConfig().TenantStatusServer
 	providerFactory := func(txn *kv.Txn) regionliveness.RegionProvider {
