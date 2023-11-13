@@ -355,13 +355,6 @@ var upgrades = []upgradebase.Upgrade{
 		createRegionLivenessTables,
 		upgrade.RestoreActionNotRequired("ephemeral table that is not backed up or restored"),
 	),
-	upgrade.NewTenantUpgrade(
-		"grant EXECUTE on all functions to the public role",
-		toCV(clusterversion.V23_2_GrantExecuteToPublic),
-		upgrade.NoPrecondition,
-		grantExecuteToPublicOnAllFunctions,
-		upgrade.RestoreActionNotRequired("TODO explain why this migration does not need to consider restore"),
-	),
 	upgrade.NewPermanentTenantUpgrade(
 		"create system.mvcc_statistics table and job",
 		toCV(clusterversion.Permanent_V23_2_MVCCStatisticsTable),
