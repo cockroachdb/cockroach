@@ -576,6 +576,7 @@ var nonZeroTxn = Transaction{
 	ReadTimestampFixed: true,
 	IgnoredSeqNums:     []enginepb.IgnoredSeqNumRange{{Start: 888, End: 999}},
 	AdmissionPriority:  1,
+	OmitInRangefeeds:   true,
 }
 
 func TestTransactionUpdate(t *testing.T) {
