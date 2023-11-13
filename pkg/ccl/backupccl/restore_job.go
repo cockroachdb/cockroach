@@ -93,6 +93,14 @@ var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"backup.restore.online_worker_count",
+	"workers to use for online restore worker phase",
+	8,
+	settings.PositiveInt,
+)
+
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
 // splitting up the target key-space to send out the actual work of restoring.
 //
@@ -3348,7 +3356,11 @@ func sendAddRemoteSSTs(
 	grp.GoCtx(func(ctx context.Context) error {
 		return genSpan(ctx, restoreSpanEntriesCh)
 	})
-	grp.GoCtx(sendAddRemoteSSTWorker(execCtx, uris, urisForDirs, restoreSpanEntriesCh))
+
+	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
+	for i := 0; i < restoreWorkers; i++ {
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, uris, urisForDirs, restoreSpanEntriesCh))
+	}
 
 	if err := grp.Wait(); err != nil {
 		return errors.Wrap(err, "failed to generate and send remote file spans")
