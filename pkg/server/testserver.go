@@ -1383,10 +1383,12 @@ func (ts *testServer) StartSharedProcessTenant(
 	hts.t.status = sqlServerWrapper.tenantStatus
 
 	tt := &testTenant{
-		sql:            sqlServer,
-		Cfg:            sqlServer.cfg,
-		SQLCfg:         sqlServerWrapper.sqlCfg,
-		pgPreServer:    sqlServerWrapper.pgPreServer,
+		sql:    sqlServer,
+		Cfg:    sqlServer.cfg,
+		SQLCfg: sqlServerWrapper.sqlCfg,
+		// Shared process tenants do not create their own SQL servers. Instead, we
+		// use the `pgPreServer` from the server this tenant is serviced from.
+		pgPreServer:    ts.pgPreServer,
 		pgL:            sqlServerWrapper.loopbackPgL,
 		httpTestServer: hts,
 		drain:          sqlServerWrapper.drainServer,
