@@ -81,6 +81,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/sql/sqltestutils",
         "//pkg/testutils",

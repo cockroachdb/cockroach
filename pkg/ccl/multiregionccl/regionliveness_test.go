@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	regions2 "github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -41,7 +42,6 @@ func TestRegionLivenessProber(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderStressRace(t)
-	skip.UnderStress(t)
 
 	ctx := context.Background()
 
@@ -49,6 +49,7 @@ func TestRegionLivenessProber(t *testing.T) {
 	makeSettings := func() *cluster.Settings {
 		cs := cluster.MakeTestingClusterSettings()
 		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		slinstance.DefaultTTL.Override(ctx, &cs.SV, time.Second*10)
 		return cs
 	}
 
