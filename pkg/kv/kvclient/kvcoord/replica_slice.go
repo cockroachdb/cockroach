@@ -24,9 +24,16 @@ import (
 
 // ReplicaInfo extends the Replica structure with the associated node
 // Locality information.
+// NB: tierMatchLength, latency and healthy are only computed and used within
+// OptimizeReplicaOrder. They measure these properties as the distance from the
+// current node.
+// TODO(baptist): Convert ReplicaInfo and ReplicaSlice package scope.
 type ReplicaInfo struct {
 	roachpb.ReplicaDescriptor
-	Tiers []roachpb.Tier
+	Locality        roachpb.Locality
+	tierMatchLength int
+	latency         time.Duration
+	healthy         bool
 }
 
 // A ReplicaSlice is a slice of ReplicaInfo.
@@ -124,7 +131,7 @@ func NewReplicaSlice(
 		}
 		rs = append(rs, ReplicaInfo{
 			ReplicaDescriptor: r,
-			Tiers:             nd.Locality.Tiers,
+			Locality:          nd.Locality,
 		})
 	}
 	if len(rs) == 0 {
@@ -166,20 +173,6 @@ func (rs ReplicaSlice) MoveToFront(i int) {
 	rs[0] = front
 }
 
-// localityMatch returns the number of consecutive locality tiers
-// which match between a and b.
-func localityMatch(a, b []roachpb.Tier) int {
-	if len(a) == 0 {
-		return 0
-	}
-	for i := range a {
-		if i >= len(b) || a[i] != b[i] {
-			return i
-		}
-	}
-	return len(a)
-}
-
 // A LatencyFunc returns the latency from this node to a remote
 // node and a bool indicating whether the latency is valid.
 type LatencyFunc func(roachpb.NodeID) (time.Duration, bool)
@@ -216,45 +209,46 @@ func (rs ReplicaSlice) OptimizeReplicaOrder(
 		shuffle.Shuffle(rs)
 		return
 	}
+	// Populate the health, tier match length and locality before the sort loop.
+	for i := range rs {
+		rs[i].tierMatchLength = locality.SharedPrefix(rs[i].Locality)
 
-	// Sort replicas by latency and then attribute affinity.
-	sort.Slice(rs, func(i, j int) bool {
-		// Replicas on the same node have the same score.
-		if rs[i].NodeID == rs[j].NodeID {
-			return false // i == j
+		// Latency to the local node is always the "best" use the special -1
+		// value to sort before any node other than itself.
+		// NB: -1 => Local node, 0 => unknown, >0 => remote node.
+		if rs[i].NodeID == nodeID {
+			rs[i].latency = -1
+		} else if latencyFn != nil {
+			if l, ok := latencyFn(rs[i].NodeID); ok {
+				rs[i].latency = l
+			}
 		}
 
 		if !FollowerReadsUnhealthy.Get(&st.SV) {
-			// Sort healthy nodes before unhealthy nodes.
-			// NB: This is checked before checking if we are on the local node because
-			// if we are unhealthy, then we prefer to choose a different follower.
-			healthI := healthFn(rs[i].NodeID)
-			healthJ := healthFn(rs[j].NodeID)
-			if healthI != healthJ {
-				return healthI
-			}
+			rs[i].healthy = healthFn(rs[i].NodeID)
+		}
+	}
+
+	// Sort replicas by latency and then attribute affinity.
+	sort.Slice(rs, func(i, j int) bool {
+		// Always sort healthy nodes before unhealthy nodes.
+		if rs[i].healthy != rs[j].healthy {
+			return rs[i].healthy
 		}
 
-		// Replicas on the local node sort first.
-		if rs[i].NodeID == nodeID {
-			return true // i < j
-		}
-		if rs[j].NodeID == nodeID {
-			return false // j < i
+		// Use latency if they are different. The local node has a latency of -1
+		// so will sort before any other node.
+		if rs[i].latency != rs[j].latency {
+			return rs[i].latency < rs[j].latency
 		}
 
-		if latencyFn != nil {
-			latencyI, okI := latencyFn(rs[i].NodeID)
-			latencyJ, okJ := latencyFn(rs[j].NodeID)
-			if okI && okJ {
-				return latencyI < latencyJ
-			}
+		// If the region is different choose the closer one.
+		if rs[i].tierMatchLength != rs[j].tierMatchLength {
+			return rs[i].tierMatchLength > rs[j].tierMatchLength
 		}
-		attrMatchI := localityMatch(locality.Tiers, rs[i].Tiers)
-		attrMatchJ := localityMatch(locality.Tiers, rs[j].Tiers)
-		// Longer locality matches sort first (the assumption is that
-		// they'll have better latencies).
-		return attrMatchI > attrMatchJ
+
+		// If everything else is equal sort by node id.
+		return rs[i].NodeID < rs[j].NodeID
 	})
 }
 
