@@ -3229,7 +3229,56 @@ func sendAddRemoteSSTWorker(
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
-		remainingBytesInTargetRange := int64(512 << 20)
+		var toAdd []execinfrapb.RestoreFileSpec
+		var batchSize int64
+		const targetBatchSize = 384 << 20
+
+		flush := func() error {
+			if len(toAdd) == 0 {
+				return nil
+			}
+
+			expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
+			if err := execCtx.ExecCfg().DB.AdminSplit(ctx, toAdd[len(toAdd)-1].BackupFileEntrySpan.Key, expiration); err != nil {
+				log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+			}
+
+			for _, file := range toAdd {
+				// NB: Since the restored span is a subset of the BackupFileEntrySpan,
+				// these counts may be an overestimate of what actually gets restored.
+				counts := file.BackupFileEntryCounts
+
+				uri, ok := urisForDirs[file.Dir.String()]
+				if !ok {
+					return errors.AssertionFailedf("URI not found for %s", file.Dir.String())
+				}
+
+				loc := kvpb.AddSSTableRequest_RemoteFile{
+					Locator:         uri,
+					Path:            file.Path,
+					BackingFileSize: uint64(counts.DataSize),
+				}
+				// TODO(dt): see if KV has any better ideas for making these up.
+				fileStats := &enginepb.MVCCStats{
+					ContainsEstimates: 1,
+					KeyBytes:          counts.DataSize / 2,
+					ValBytes:          counts.DataSize / 2,
+					LiveBytes:         counts.DataSize,
+					KeyCount:          counts.Rows + counts.IndexEntries,
+					LiveCount:         counts.Rows + counts.IndexEntries,
+				}
+				var err error
+				_, _, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx,
+					file.BackupFileEntrySpan, loc,
+					fileStats)
+				if err != nil {
+					return err
+				}
+			}
+			toAdd = nil
+			batchSize = 0
+			return nil
+		}
 
 		for entry := range restoreSpanEntriesCh {
 			for _, file := range entry.Files {
@@ -3242,56 +3291,24 @@ func sendAddRemoteSSTWorker(
 					continue
 				}
 
-				// NB: Since the restored span is a subset of the BackupFileEntrySpan,
-				// these counts may be an overestimate of what actually gets restored.
-				counts := file.BackupFileEntryCounts
-
-				if counts.DataSize > remainingBytesInTargetRange {
-					log.Infof(ctx, "Experimental restore: need to split since %d > %d",
-						counts.DataSize, remainingBytesInTargetRange,
-					)
-					expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
-					if err := execCtx.ExecCfg().DB.AdminSplit(ctx, restoringSubspan.Key, expiration); err != nil {
-						log.Warningf(ctx, "failed to split during experimental restore: %v", err)
-					}
-					if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, restoringSubspan.Key, 4<<20); err != nil {
-						log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
+				file.BackupFileEntrySpan = restoringSubspan
+				// If we've queued up a batch size of files, split before the next one
+				// then flush the ones we queued. We do this accumulate-into-batch, then
+				// split, then flush so that when we split we are splitting an empty
+				// span rather than one we have added to, since we add with estimated
+				// stats and splitting a span with estimated stats is slow.
+				if batchSize > targetBatchSize {
+					if err := flush(); err != nil {
+						return err
 					}
 				}
 
-				if file.BackingFileSize == 0 {
-					// This backup is from <23.2. Just make up a number.
-					file.BackingFileSize = 16 << 20
-				}
-				uri, ok := urisForDirs[file.Dir.String()]
-				if !ok {
-					return errors.AssertionFailedf("URI not found for %s", file.Dir.String())
-				}
-
-				loc := kvpb.AddSSTableRequest_RemoteFile{
-					Locator:         uri,
-					Path:            file.Path,
-					BackingFileSize: file.BackingFileSize,
-				}
-				// TODO(dt): see if KV has any better ideas for making these up.
-				fileStats := &enginepb.MVCCStats{
-					ContainsEstimates: 1,
-					KeyBytes:          counts.DataSize / 2,
-					ValBytes:          counts.DataSize / 2,
-					LiveBytes:         counts.DataSize,
-					KeyCount:          counts.Rows + counts.IndexEntries,
-					LiveCount:         counts.Rows + counts.IndexEntries,
-				}
-				var err error
-				_, remainingBytesInTargetRange, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx,
-					restoringSubspan, loc,
-					fileStats)
-				if err != nil {
-					return err
-				}
+				// Add this file to the batch to flush after we put a split to its RHS.
+				toAdd = append(toAdd, file)
+				batchSize += file.BackupFileEntryCounts.DataSize
 			}
 		}
-		return nil
+		return flush()
 	}
 }
 
