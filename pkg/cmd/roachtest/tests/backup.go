@@ -100,7 +100,10 @@ func importBankDataSplit(
 
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
-	c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings())
+	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+	// See #113816 for why this is needed for now (probably until #94850 is
+	// resolved).
+	c.Run(ctx, c.Node(1), "./cockroach sql --insecure -e 'SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = false;'")
 	runImportBankDataSplit(ctx, rows, ranges, t, c)
 	return dest
 }
@@ -503,31 +506,12 @@ func registerBackup(r registry.Registry) {
 						return err
 					}
 
-					fingerprint := func(db string) (string, error) {
-						var b strings.Builder
-
-						query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, "bank")
-						rows, err := conn.QueryContext(ctx, query)
-						if err != nil {
-							return "", err
-						}
-						defer rows.Close()
-						for rows.Next() {
-							var name, fp string
-							if err := rows.Scan(&name, &fp); err != nil {
-								return "", err
-							}
-							fmt.Fprintf(&b, "%s: %s\n", name, fp)
-						}
-
-						return b.String(), rows.Err()
-					}
-
-					originalBank, err := fingerprint("bank")
+					table := "bank"
+					originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restore, err := fingerprint("restoreDB")
+					restore, err := fingerprint(ctx, conn, "restoreDB" /* db */, table)
 					if err != nil {
 						return err
 					}
@@ -641,35 +625,16 @@ func registerBackup(r registry.Registry) {
 					}
 
 					t.Status(`fingerprint`)
-					fingerprint := func(db string) (string, error) {
-						var b strings.Builder
-
-						query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, "bank")
-						rows, err := conn.QueryContext(ctx, query)
-						if err != nil {
-							return "", err
-						}
-						defer rows.Close()
-						for rows.Next() {
-							var name, fp string
-							if err := rows.Scan(&name, &fp); err != nil {
-								return "", err
-							}
-							fmt.Fprintf(&b, "%s: %s\n", name, fp)
-						}
-
-						return b.String(), rows.Err()
-					}
-
-					originalBank, err := fingerprint("bank")
+					table := "bank"
+					originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restoreA, err := fingerprint("restoreA")
+					restoreA, err := fingerprint(ctx, conn, "restoreA" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restoreB, err := fingerprint("restoreB")
+					restoreB, err := fingerprint(ctx, conn, "restoreB" /* db */, table)
 					if err != nil {
 						return err
 					}
@@ -744,7 +709,7 @@ func runBackupMVCCRangeTombstones(
 ) {
 	if !config.skipClusterSetup {
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
-		c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings())
+		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 	}
 	t.Status("starting csv servers")
 	c.Run(ctx, c.All(), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
