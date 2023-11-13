@@ -58,6 +58,9 @@ func runMismatchedLocalityTest(ctx context.Context, t test.Test, c cluster.Clust
 	// Verify that we can add and drop regions for the database. There's no longer
 	// any node with the old localities, but that's fine.
 	db = c.Conn(ctx, t.L(), 3)
+	if err := WaitFor3XReplication(ctx, t, db); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.Exec(`ALTER DATABASE defaultdb ADD REGION "venus";`); err != nil {
 		t.Fatal(err)
 	}
