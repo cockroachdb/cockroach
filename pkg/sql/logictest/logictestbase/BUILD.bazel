@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "logictestbase",
@@ -11,4 +11,11 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/roachpb",
     ],
+)
+
+go_test(
+    name = "logictestbase_test",
+    srcs = ["logictestbase_test.go"],
+    embed = [":logictestbase"],
+    deps = ["//pkg/clusterversion"],
 )

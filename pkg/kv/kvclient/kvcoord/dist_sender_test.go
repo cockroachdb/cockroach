@@ -5417,11 +5417,12 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 			ReplicaDescriptor: roachpb.ReplicaDescriptor{
 				ReplicaID: roachpb.ReplicaID(replicaID),
 			},
-			Tiers: []roachpb.Tier{
-				{Key: "az", Value: fmt.Sprintf("az%d", rand.Intn(10))},
-				{Key: "region", Value: region},
-				{Key: "dc", Value: fmt.Sprintf("dc%d", rand.Intn(10))},
-			},
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{Key: "az", Value: fmt.Sprintf("az%d", rand.Intn(10))},
+					{Key: "region", Value: region},
+					{Key: "dc", Value: fmt.Sprintf("dc%d", rand.Intn(10))},
+				}},
 		}
 	}
 
