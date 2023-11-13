@@ -96,7 +96,16 @@ func bankOnlineRestore(
 	sqlDB.Exec(t, "CREATE DATABASE data")
 	sqlDB.Exec(t, fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage))
 
+	require.Equal(t, checkLinkingProgress(t, sqlDB), float32(1.0))
+
 	var restoreRowCount int
 	sqlDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
 	require.Equal(t, numAccounts, restoreRowCount)
+}
+
+func checkLinkingProgress(t *testing.T, sqlDB *sqlutils.SQLRunner) float32 {
+	var linkingJobID jobspb.JobID
+	sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created LIMIT 1`).Scan(&linkingJobID)
+	prog := jobutils.GetJobProgress(t, sqlDB, linkingJobID)
+	return prog.GetFractionCompleted()
 }

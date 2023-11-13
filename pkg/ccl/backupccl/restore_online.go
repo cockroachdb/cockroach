@@ -62,11 +62,11 @@ func sendAddRemoteSSTs(
 	encryption *jobspb.BackupEncryptionOptions,
 	uris []string,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
-	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+	requestFinishedCh chan<- struct{},
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) error {
-	defer close(progCh)
+	defer close(requestFinishedCh)
 	defer close(tracingAggCh)
 
 	if encryption != nil {
@@ -85,7 +85,7 @@ func sendAddRemoteSSTs(
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh))
 	}
 
 	if err := grp.Wait(); err != nil {
@@ -111,7 +111,9 @@ func sendAddRemoteSSTs(
 }
 
 func sendAddRemoteSSTWorker(
-	execCtx sql.JobExecContext, restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
+	execCtx sql.JobExecContext,
+	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
+	requestFinishedCh chan<- struct{},
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		var toAdd []execinfrapb.RestoreFileSpec
@@ -201,6 +203,7 @@ func sendAddRemoteSSTWorker(
 				toAdd = append(toAdd, file)
 				batchSize += file.BackupFileEntryCounts.DataSize
 			}
+			requestFinishedCh <- struct{}{}
 		}
 		return flush(nil)
 	}
