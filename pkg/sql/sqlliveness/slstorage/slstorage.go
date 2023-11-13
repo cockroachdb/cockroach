@@ -15,7 +15,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -87,8 +86,7 @@ type Storage struct {
 	metrics         Metrics
 	gcInterval      func() time.Duration
 	newTimer        func() timeutil.TimerI
-	newKeyCodec     keyCodec
-	oldKeyCodec     keyCodec
+	keyCodec        keyCodec
 
 	mu struct {
 		syncutil.Mutex
@@ -122,7 +120,6 @@ func NewTestingStorage(
 	table catalog.TableDescriptor,
 	newTimer func() timeutil.TimerI,
 ) *Storage {
-	const rbtIndexID = 1
 	s := &Storage{
 		settings:        settings,
 		settingsWatcher: settingsWatcher,
@@ -130,8 +127,7 @@ func NewTestingStorage(
 		clock:           clock,
 		db:              db,
 		codec:           codec,
-		newKeyCodec:     &rbrEncoder{codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID()))},
-		oldKeyCodec:     &rbtEncoder{codec.IndexPrefix(uint32(table.GetID()), rbtIndexID)},
+		keyCodec:        &rbrEncoder{codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID()))},
 		newTimer:        newTimer,
 		gcInterval: func() time.Duration {
 			baseInterval := GCInterval.Get(&settings.SV)
@@ -246,17 +242,6 @@ func (s *Storage) isAlive(
 	return res.Val.(bool), nil
 }
 
-func (s *Storage) getReadCodec(version *settingswatcher.VersionGuard) keyCodec {
-	return s.newKeyCodec
-}
-
-func (s *Storage) versionGuard(
-	ctx context.Context, txn *kv.Txn,
-) (settingswatcher.VersionGuard, error) {
-	// TODO(radu): this guard is no longer necessary.
-	return s.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.MinSupported)
-}
-
 // This function will launch a singleflight goroutine for the session which
 // will populate its result into the caches underneath the mutex. The result
 // value will be a bool. The singleflight goroutine does not cancel its work
@@ -328,13 +313,7 @@ func (s *Storage) deleteOrFetchSession(
 		// Reset captured variable in case of retry.
 		deleted, expiration, prevExpiration = false, hlc.Timestamp{}, hlc.Timestamp{}
 
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-
-		readCodec := s.getReadCodec(&version)
-		k, err := readCodec.encode(sid)
+		k, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
 		}
@@ -468,11 +447,8 @@ func (s *Storage) fetchExpiredSessionIDs(ctx context.Context) ([]sqlliveness.Ses
 
 	var result []sqlliveness.SessionID
 	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-		result, err = findRows(ctx, txn, s.getReadCodec(&version))
+		var err error
+		result, err = findRows(ctx, txn, s.keyCodec)
 		return err
 	}); err != nil {
 		return nil, err
@@ -492,12 +468,7 @@ func (s *Storage) Insert(
 	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
 
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-		readCodec := s.getReadCodec(&version)
-		k, err := readCodec.encode(sid)
+		k, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
 		}
@@ -521,14 +492,7 @@ func (s *Storage) Update(
 ) (sessionExists bool, err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err = s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-
-		readCodec := s.getReadCodec(&version)
-
-		k, err := readCodec.encode(sid)
+		k, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
 		}
@@ -559,15 +523,9 @@ func (s *Storage) Update(
 // tasks using the session have stopped.
 func (s *Storage) Delete(ctx context.Context, session sqlliveness.SessionID) error {
 	return s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-
 		batch := txn.NewBatch()
 
-		readCodec := s.getReadCodec(&version)
-		key, err := readCodec.encode(session)
+		key, err := s.keyCodec.encode(session)
 		if err != nil {
 			return err
 		}
