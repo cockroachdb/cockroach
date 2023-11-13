@@ -199,12 +199,13 @@ func (s *eventStore) startEventIntake(ctx context.Context, stopper *stop.Stopper
 }
 
 func (s *eventStore) startResolver(ctx context.Context, stopper *stop.Stopper) {
+	// Handles resolution interval changes.
+	var resolutionIntervalChanged = make(chan struct{}, 1)
+	TxnIDResolutionInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
+		resolutionIntervalChanged <- struct{}{}
+	})
+
 	_ = stopper.RunAsyncTask(ctx, "contention-event-resolver", func(ctx context.Context) {
-		// Handles resolution interval changes.
-		var resolutionIntervalChanged = make(chan struct{}, 1)
-		TxnIDResolutionInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
-			resolutionIntervalChanged <- struct{}{}
-		})
 
 		initialDelay := s.resolutionIntervalWithJitter()
 		timer := timeutil.NewTimer()
