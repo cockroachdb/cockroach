@@ -3214,6 +3214,79 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 	return nil
 }
 
+func sendAddRemoteSSTWorker(
+	execCtx sql.JobExecContext,
+	uris []string,
+	urisForDirs map[string]string,
+	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
+) func(context.Context) error {
+	return func(ctx context.Context) error {
+		remainingBytesInTargetRange := int64(512 << 20)
+
+		for entry := range restoreSpanEntriesCh {
+			for _, file := range entry.Files {
+				restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
+				log.Infof(ctx, "Experimental restore: sending span %s of file (path: %s, span: %s), with intersecting subspan %s",
+					file.BackupFileEntrySpan, file.Path, file.BackupFileEntrySpan, restoringSubspan)
+
+				if !restoringSubspan.Valid() {
+					log.Warningf(ctx, "backup file does not intersect with the restoring span")
+					continue
+				}
+
+				// NB: Since the restored span is a subset of the BackupFileEntrySpan,
+				// these counts may be an overestimate of what actually gets restored.
+				counts := file.BackupFileEntryCounts
+
+				if counts.DataSize > remainingBytesInTargetRange {
+					log.Infof(ctx, "Experimental restore: need to split since %d > %d",
+						counts.DataSize, remainingBytesInTargetRange,
+					)
+					expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
+					if err := execCtx.ExecCfg().DB.AdminSplit(ctx, restoringSubspan.Key, expiration); err != nil {
+						log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+					}
+					if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, restoringSubspan.Key, 4<<20); err != nil {
+						log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
+					}
+				}
+
+				if file.BackingFileSize == 0 {
+					// This backup is from <23.2. Just make up a number.
+					file.BackingFileSize = 16 << 20
+				}
+				uri, ok := urisForDirs[file.Dir.String()]
+				if !ok {
+					return errors.AssertionFailedf("URI not found for %s", file.Dir.String())
+				}
+
+				loc := kvpb.AddSSTableRequest_RemoteFile{
+					Locator:         uri,
+					Path:            file.Path,
+					BackingFileSize: file.BackingFileSize,
+				}
+				// TODO(dt): see if KV has any better ideas for making these up.
+				fileStats := &enginepb.MVCCStats{
+					ContainsEstimates: 1,
+					KeyBytes:          counts.DataSize / 2,
+					ValBytes:          counts.DataSize / 2,
+					LiveBytes:         counts.DataSize,
+					KeyCount:          counts.Rows + counts.IndexEntries,
+					LiveCount:         counts.Rows + counts.IndexEntries,
+				}
+				var err error
+				_, remainingBytesInTargetRange, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx,
+					restoringSubspan, loc,
+					fileStats)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+}
+
 // sendAddRemoteSSTs is a stubbed out, very simplisitic version of restore used
 // to test out ingesting "remote" SSTs. It will be replaced with a real distsql
 // plan and processors in the future.
@@ -3238,14 +3311,6 @@ func sendAddRemoteSSTs(
 	if len(uris) > 1 {
 		return errors.AssertionFailedf("online restore can only restore data from a full backup")
 	}
-
-	restoreSpanEntriesCh := make(chan execinfrapb.RestoreSpanEntry, 1)
-
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
-		return genSpan(ctx, restoreSpanEntriesCh)
-	})
-	remainingBytesInTargetRange := int64(512 << 20)
 
 	// We lost the string URIs for the backup storage locations very early in the
 	// process of planning the restore, when the backups were resolved, and the
@@ -3277,66 +3342,16 @@ func sendAddRemoteSSTs(
 		}
 	}
 
-	for entry := range restoreSpanEntriesCh {
-		for _, file := range entry.Files {
+	restoreSpanEntriesCh := make(chan execinfrapb.RestoreSpanEntry, 1)
 
-			restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
-			log.Infof(ctx, "Experimental restore: sending span %s of file (path: %s, span: %s), with intersecting subspan %s",
-				file.BackupFileEntrySpan, file.Path, file.BackupFileEntrySpan, restoringSubspan)
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(func(ctx context.Context) error {
+		return genSpan(ctx, restoreSpanEntriesCh)
+	})
+	grp.GoCtx(sendAddRemoteSSTWorker(execCtx, uris, urisForDirs, restoreSpanEntriesCh))
 
-			if !restoringSubspan.Valid() {
-				log.Warningf(ctx, "backup file does not intersect with the restoring span")
-				continue
-			}
-
-			// NB: Since the restored span is a subset of the BackupFileEntrySpan,
-			// these counts may be an overestimate of what actually gets restored.
-			counts := file.BackupFileEntryCounts
-
-			if counts.DataSize > remainingBytesInTargetRange {
-				log.Infof(ctx, "Experimental restore: need to split since %d > %d",
-					counts.DataSize, remainingBytesInTargetRange,
-				)
-				expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
-				if err := execCtx.ExecCfg().DB.AdminSplit(ctx, restoringSubspan.Key, expiration); err != nil {
-					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
-				}
-				if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, restoringSubspan.Key, 4<<20); err != nil {
-					log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
-				}
-			}
-
-			if file.BackingFileSize == 0 {
-				// This backup is from <23.2. Just make up a number.
-				file.BackingFileSize = uint64(16 << 20)
-			}
-			uri, ok := urisForDirs[file.Dir.String()]
-			if !ok {
-				return errors.AssertionFailedf("URI not found for %s", file.Dir.String())
-			}
-
-			loc := kvpb.AddSSTableRequest_RemoteFile{
-				Locator:         uri,
-				Path:            file.Path,
-				BackingFileSize: file.BackingFileSize,
-			}
-			// TODO(dt): see if KV has any better ideas for making these up.
-			fileStats := &enginepb.MVCCStats{
-				ContainsEstimates: 1,
-				KeyBytes:          counts.DataSize / 2,
-				ValBytes:          counts.DataSize / 2,
-				LiveBytes:         counts.DataSize,
-				KeyCount:          counts.Rows + counts.IndexEntries,
-				LiveCount:         counts.Rows + counts.IndexEntries,
-			}
-			var err error
-			_, remainingBytesInTargetRange, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx,
-				restoringSubspan, loc,
-				fileStats)
-			if err != nil {
-				return err
-			}
-		}
+	if err := grp.Wait(); err != nil {
+		return errors.Wrap(err, "failed to generate and send remote file spans")
 	}
 
 	downloadSpans := dataToRestore.getSpans()
