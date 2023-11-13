@@ -456,6 +456,7 @@ func registerTPCC(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly, registry.ReleaseQualification),
 		Tags:              registry.Tags(`default`, `release_qualification`, `aws`),
 		Cluster:           headroomSpec,
+		Timeout:           4 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
