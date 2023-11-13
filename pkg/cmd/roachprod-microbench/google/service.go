@@ -364,7 +364,7 @@ func (srv *Service) updatePerms(ctx context.Context, spreadsheetID string) error
 	// with the link.
 	perm := &drive.Permission{
 		Type: "anyone",
-		Role: "writer",
+		Role: "reader",
 	}
 	_, err := srv.drive.Permissions.Create(spreadsheetID, perm).Context(ctx).Do()
 	return errors.Wrap(err, "update Spreadsheet permissions")
