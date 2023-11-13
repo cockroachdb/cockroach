@@ -309,12 +309,6 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		createRegionLivenessTables,
 	),
-	upgrade.NewTenantUpgrade(
-		"grant EXECUTE on all functions to the public role",
-		toCV(clusterversion.V23_2_GrantExecuteToPublic),
-		upgrade.NoPrecondition,
-		grantExecuteToPublicOnAllFunctions,
-	),
 	upgrade.NewPermanentTenantUpgrade(
 		"create system.mvcc_statistics table and job",
 		toCV(clusterversion.Permanent_V23_2_MVCCStatisticsTable),
