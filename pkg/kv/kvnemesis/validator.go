@@ -421,9 +421,7 @@ func (v *validator) processOp(op Operation) {
 			// consider the read as an observation if it found and returned a value,
 			// otherwise no lock would have been acquired on the non-existent key.
 			// Gets do not acquire gap locks.
-			// TODO(nvanbenschoten): uncomment this once we have addressed #113768.
-			//observe = t.GuaranteedDurability && read.Value.IsPresent()
-			observe = false
+			observe = t.GuaranteedDurability && read.Value.IsPresent()
 		default:
 			panic("unexpected")
 		}
@@ -723,17 +721,16 @@ func (v *validator) processOp(op Operation) {
 			// Furthermore, we only consider the individual keys that were returned to
 			// be locked, not the entire span that was scanned. Scans do not acquire
 			// gap locks.
-			// TODO(nvanbenschoten): uncomment this once we have addressed #113768.
-			//if t.GuaranteedDurability {
-			//	for _, kv := range t.Result.Values {
-			//		read := &observedRead{
-			//			Key:        kv.Key,
-			//			SkipLocked: t.SkipLocked,
-			//			Value:      roachpb.Value{RawBytes: kv.Value},
-			//		}
-			//		v.curObservations = append(v.curObservations, read)
-			//	}
-			//}
+			if t.GuaranteedDurability {
+				for _, kv := range t.Result.Values {
+					read := &observedRead{
+						Key:        kv.Key,
+						SkipLocked: t.SkipLocked,
+						Value:      roachpb.Value{RawBytes: kv.Value},
+					}
+					v.curObservations = append(v.curObservations, read)
+				}
+			}
 		default:
 			panic("unexpected")
 		}
