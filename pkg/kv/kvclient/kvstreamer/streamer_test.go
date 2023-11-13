@@ -652,7 +652,12 @@ func TestStreamerVaryingResponseSizes(t *testing.T) {
 	skip.UnderStress(t, "the test is too memory intensive")
 	skip.UnderRace(t, "the test is too memory intensive")
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	// Start a cluster with large --max-sql-memory parameter since we're
+	// inserting relatively large amount of data.
+	const rootPoolSize = 1 << 30 /* 1GiB */
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: rootPoolSize,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	runner := sqlutils.MakeSQLRunner(db)
