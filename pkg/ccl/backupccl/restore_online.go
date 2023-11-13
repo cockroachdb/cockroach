@@ -18,15 +18,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -35,6 +40,14 @@ var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	"backup.restore.online_worker_count",
 	"workers to use for online restore worker phase",
 	8,
+	settings.PositiveInt,
+)
+
+var onlineRestoreDownloadWorkers = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"backup.restore.online_download_worker_count",
+	"workers to use for online restore download phase",
+	1,
 	settings.PositiveInt,
 )
 
@@ -228,5 +241,162 @@ func checkRewritesAreNoops(rewrites jobspb.DescRewriteMap) error {
 			return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: descriptor rewrites not supported but required (%d -> %d)", oldID, rw.ID)
 		}
 	}
+	return nil
+}
+
+func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
+	ctx context.Context, execCtx sql.JobExecContext, details jobspb.RestoreDetails,
+) (uint64, error) {
+	total := r.job.Progress().Details.(*jobspb.Progress_Restore).Restore.TotalDownloadRequired
+
+	// If this is a resumption of a job that has already calculated the total
+	// spans to download, we can skip this step.
+	if total != 0 {
+		return total, nil
+	}
+
+	// If this is the first resumption of this job, we need to find out the total
+	// amount we expect to download and persist it so that we can indicate our
+	// progress as that number goes down later.
+	log.Infof(ctx, "calculating total download size (across all stores) to complete restore")
+	if err := r.job.NoTxn().RunningStatus(ctx, "Calculating total download size..."); err != nil {
+		return 0, errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+	}
+
+	for _, span := range details.DownloadSpans {
+		resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
+			Spans: []roachpb.Span{span},
+		})
+		if err != nil {
+			return 0, err
+		}
+		for _, stats := range resp.SpanToStats {
+			total += stats.ExternalFileBytes
+		}
+	}
+
+	if total == 0 {
+		return total, nil
+	}
+
+	if err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		md.Progress.GetRestore().TotalDownloadRequired = total
+		md.Progress.RunningStatus = fmt.Sprintf("Downloading %s of restored data...", sz(total))
+		ju.UpdateProgress(md.Progress)
+		return nil
+	}); err != nil {
+		return 0, errors.Wrapf(err, "failed to update job %d", errors.Safe(r.job.ID()))
+	}
+
+	return total, nil
+}
+
+func (r *restoreResumer) sendDownloadWorker(
+	execCtx sql.JobExecContext, downloadSpansCh chan roachpb.Span,
+) func(context.Context) error {
+	return func(ctx context.Context) error {
+		ctx, tsp := tracing.ChildSpan(ctx, "backupccl.sendDownloadWorker")
+		defer tsp.Finish()
+		for sp := range downloadSpansCh {
+			log.VInfof(ctx, 1, "sending download request for span %s", sp)
+			var resp *serverpb.DownloadSpanResponse
+			var err error
+			if resp, err = execCtx.ExecCfg().TenantStatusServer.DownloadSpan(ctx, &serverpb.DownloadSpanRequest{
+				Span: sp,
+			}); err != nil {
+				return err
+			}
+			if len(resp.ErrorsByNodeID) > 0 {
+				return errors.Newf("failed to download span %s on all nodes: %v", sp, resp.ErrorsByNodeID)
+			}
+		}
+		return nil
+	}
+}
+
+// waitForDownloadToComplete waits until there are no more ExternalFileBytes
+// remaining to be downloaded for the restore.
+func (r *restoreResumer) waitForDownloadToComplete(
+	ctx context.Context, execCtx sql.JobExecContext, details jobspb.RestoreDetails,
+) error {
+	ctx, tsp := tracing.ChildSpan(ctx, "backupccl.waitForDownloadToComplete")
+	defer tsp.Finish()
+	total, err := r.maybeCalculateTotalDownloadSpans(ctx, execCtx, details)
+	if err != nil {
+		return errors.Wrap(err, "failed to calculate total number of spans to download")
+	}
+
+	// Download is already complete or there is nothing to be downloaded, in
+	// either case we can mark the job as done.
+	if total == 0 {
+		return r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			return 1.0
+		})
+	}
+
+	var lastProgressUpdate time.Time
+	for rt := retry.StartWithCtx(
+		ctx, retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second * 10},
+	); ; rt.Next() {
+
+		var remaining uint64
+		for _, span := range details.DownloadSpans {
+			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
+				Spans: []roachpb.Span{span},
+			})
+			if err != nil {
+				return err
+			}
+			for _, stats := range resp.SpanToStats {
+				remaining += stats.ExternalFileBytes
+			}
+		}
+
+		fractionComplete := float32(total-remaining) / float32(total)
+		log.Infof(ctx, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
+			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
+		)
+
+		if remaining == 0 {
+			return nil
+		}
+
+		if timeutil.Since(lastProgressUpdate) > time.Minute {
+			if err := r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				return fractionComplete
+			}); err != nil {
+				return err
+			}
+			lastProgressUpdate = timeutil.Now()
+		}
+	}
+}
+
+func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+
+	grp := ctxgroup.WithContext(ctx)
+	downloadSpansCh := make(chan roachpb.Span, len(details.DownloadSpans))
+	grp.GoCtx(func(ctx context.Context) error {
+		defer close(downloadSpansCh)
+		for _, span := range details.DownloadSpans {
+			downloadSpansCh <- span
+		}
+		return nil
+	})
+
+	restoreWorkers := int(onlineRestoreDownloadWorkers.Get(&execCtx.ExecCfg().Settings.SV))
+	for i := 0; i < restoreWorkers; i++ {
+		grp.GoCtx(r.sendDownloadWorker(execCtx, downloadSpansCh))
+	}
+
+	grp.GoCtx(func(ctx context.Context) error {
+		return r.waitForDownloadToComplete(ctx, execCtx, details)
+	})
+
+	if err := grp.Wait(); err != nil {
+		return errors.Wrap(err, "failed to generate and send download spans")
+	}
+
 	return nil
 }
