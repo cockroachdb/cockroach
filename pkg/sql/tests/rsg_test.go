@@ -297,7 +297,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.HasPrefix(s, "SET SESSION CHARACTERISTICS AS TRANSACTION") {
 			return errors.New("setting session characteristics is unsupported")
 		}
-		if strings.HasPrefix(s, "DROP DATABASE ident") {
+		if strings.HasPrefix(s, "DROP DATABASE") {
 			return errors.New("dropping the database is likely to timeout since it needs to drop a lot of dependent objects")
 		}
 		if strings.Contains(s, "READ ONLY") || strings.Contains(s, "read_only") {
