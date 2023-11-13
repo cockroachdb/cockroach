@@ -35,7 +35,8 @@ type Policy byte
 var (
 	// RandomChoice chooses lease replicas randomly.
 	RandomChoice = RegisterPolicy(newRandomOracle)
-	// BinPackingChoice bin-packs the choices.
+	// BinPackingChoice gives preference to leaseholders if possible, otherwise
+	// bin-packs the choices
 	BinPackingChoice = RegisterPolicy(newBinPackingOracle)
 	// ClosestChoice chooses the node closest to the current node.
 	ClosestChoice = RegisterPolicy(newClosestOracle)

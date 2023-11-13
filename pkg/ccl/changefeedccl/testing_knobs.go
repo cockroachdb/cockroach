@@ -77,6 +77,10 @@ type TestingKnobs struct {
 
 	// OnDrain returns the channel to select on to detect node drain
 	OnDrain func() <-chan struct{}
+
+	// SpanPartitionsCallback is called with the span partition
+	// when the changefeed is planned.
+	SpanPartitionsCallback func([]sql.SpanPartition)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
