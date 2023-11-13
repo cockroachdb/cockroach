@@ -77,6 +77,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -3231,6 +3232,14 @@ func sendAddRemoteSSTWorker(
 	return func(ctx context.Context) error {
 		remainingBytesInTargetRange := int64(512 << 20)
 
+		// Verbose trace every split, scatter and AddSST request.
+		sp := tracing.SpanFromContext(ctx)
+		tracingOpts := make([]tracing.SpanOption, 0)
+		tracingOpts = append(tracingOpts, tracing.WithParent(sp))
+		if log.V(1) {
+			tracingOpts = append(tracingOpts, tracing.WithRecording(tracingpb.RecordingVerbose))
+		}
+
 		for entry := range restoreSpanEntriesCh {
 			for _, file := range entry.Files {
 				restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
@@ -3251,11 +3260,21 @@ func sendAddRemoteSSTWorker(
 						counts.DataSize, remainingBytesInTargetRange,
 					)
 					expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
-					if err := execCtx.ExecCfg().DB.AdminSplit(ctx, restoringSubspan.Key, expiration); err != nil {
+					splitCtx, splitSpan := sp.Tracer().StartSpanCtx(ctx, "backupccl.OnlineRestoreSplit", tracingOpts...)
+					recording := splitSpan.FinishAndGetConfiguredRecording()
+					if err := execCtx.ExecCfg().DB.AdminSplit(splitCtx, restoringSubspan.Key, expiration); err != nil {
 						log.Warningf(ctx, "failed to split during experimental restore: %v", err)
 					}
-					if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, restoringSubspan.Key, 4<<20); err != nil {
+					if log.V(1) {
+						log.Infof(ctx, "Experimental restore: split span at %s recording: %s", restoringSubspan.Key, recording)
+					}
+					scatterCtx, scatterSpan := sp.Tracer().StartSpanCtx(ctx, "backupccl.OnlineRestoreScatter", tracingOpts...)
+					recording = scatterSpan.FinishAndGetConfiguredRecording()
+					if _, err := execCtx.ExecCfg().DB.AdminScatter(scatterCtx, restoringSubspan.Key, 4<<20); err != nil {
 						log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
+					}
+					if log.V(1) {
+						log.Infof(ctx, "Experimental restore: scatter span at %s recording: %s", restoringSubspan.Key, recording)
 					}
 				}
 
@@ -3282,12 +3301,17 @@ func sendAddRemoteSSTWorker(
 					KeyCount:          counts.Rows + counts.IndexEntries,
 					LiveCount:         counts.Rows + counts.IndexEntries,
 				}
+				addSSTCtx, addSSTSpan := sp.Tracer().StartSpanCtx(ctx, "backupccl.OnlineRestoreAddSST", tracingOpts...)
 				var err error
-				_, remainingBytesInTargetRange, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx,
+				_, remainingBytesInTargetRange, err = execCtx.ExecCfg().DB.AddRemoteSSTable(addSSTCtx,
 					restoringSubspan, loc,
 					fileStats)
+				recording := addSSTSpan.FinishAndGetConfiguredRecording()
 				if err != nil {
 					return err
+				}
+				if log.V(1) {
+					log.Infof(ctx, "Experimental restore: addSST span %s recording: %s", restoringSubspan, recording)
 				}
 			}
 		}
