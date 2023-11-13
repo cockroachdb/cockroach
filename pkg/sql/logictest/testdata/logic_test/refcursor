@@ -21,7 +21,8 @@ subtest table
 
 # Table that references REFCURSOR.
 statement ok
-CREATE TABLE t (x REFCURSOR);
+CREATE TABLE t (x REFCURSOR, y REFCURSOR[]);
+INSERT INTO t VALUES ('foo', '{bar}'), ('baz', '{}');
 
 # Add a REFCURSOR column.
 statement ok
@@ -612,5 +613,54 @@ CREATE INDEX ON t112099_no_index (x) STORING (y, r);
 
 statement ok
 DROP TABLE t112099_no_index;
+
+subtest functions
+
+# String functions are not allowed.
+statement error pgcode 22023 pq: unsupported binary operator
+SELECT x || x FROM t;
+
+# Min/max are not allowed for REFCURSOR.
+statement error pgcode 42883 pq: unknown signature: min\(refcursor\)
+SELECT min(x) FROM t;
+
+statement error pgcode 42883 pq: unknown signature: max\(refcursor\)
+SELECT max(x) FROM t;
+
+# TODO(#113651): Min/max should work with REFCURSOR[].
+statement error pgcode 42883 pq: unknown signature
+SELECT min(y) FROM t;
+
+statement error pgcode 42883 pq: unknown signature
+SELECT max(y) FROM t;
+
+# Any-type-matching window functions are allowed.
+query TTTT rowsort
+SELECT lag(x) OVER w, lead(x) OVER w, first_value(x) OVER w, last_value(x) OVER w FROM t WINDOW w AS (ORDER BY x);
+----
+NULL  foo   baz  baz
+baz   NULL  baz  foo
+
+# TODO(#113651): Window functions should work with REFCURSOR[].
+statement error pgcode 42883 pq: unknown signature
+SELECT lag(y) OVER w, lead(y) OVER w, first_value(y) OVER w, last_value(y) OVER w FROM t WINDOW w AS ();
+
+# Array functions are allowed.
+query TT
+SELECT array_agg(x ORDER BY x, y), array_cat_agg(y ORDER BY x, y) FROM t;
+----
+{baz,foo}  {bar}
+
+query TT
+SELECT array_append(y, x), array_prepend(x, y) FROM t ORDER BY x, y;
+----
+{baz}      {baz}
+{bar,foo}  {foo,bar}
+
+query TT
+SELECT array_remove(y, 'baz'), array_replace(y, 'baz', 'foo') FROM t ORDER BY x, y;
+----
+{}     {}
+{bar}  {bar}
 
 subtest end
