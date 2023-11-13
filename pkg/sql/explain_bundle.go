@@ -900,7 +900,7 @@ func (c *stmtEnvCollector) PrintRelevantCreateUdf(
 ) error {
 	// The select function_name returns a DOidWrapper,
 	// we need to cast it to string for queryRows function to process.
-	// TODO: consider getting the udf sql body statements from the memo metadata.
+	// TODO(#104976): consider getting the udf sql body statements from the memo metadata.
 	functionNameQuery := "SELECT function_name::STRING as function_name_str FROM [SHOW FUNCTIONS]"
 	udfNames, err := c.queryRows(functionNameQuery)
 	if err != nil {
