@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/logtags"
@@ -925,6 +926,19 @@ func (p *Pebble) GetStoreID() (int32, error) {
 		return 0, errors.AssertionFailedf("GetStoreID must be called after calling SetStoreID")
 	}
 	return storeID, nil
+}
+
+func (p *Pebble) Download(ctx context.Context, span roachpb.Span) error {
+	ctx, sp := tracing.ChildSpan(ctx, "pebble.Download")
+	defer sp.Finish()
+	if p == nil {
+		return nil
+	}
+	downloadSpan := pebble.DownloadSpan{
+		StartKey: span.Key,
+		EndKey:   span.EndKey,
+	}
+	return p.db.Download(ctx, []pebble.DownloadSpan{downloadSpan})
 }
 
 type remoteStorageAdaptor struct {
