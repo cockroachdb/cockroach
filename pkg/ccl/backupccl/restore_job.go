@@ -3277,13 +3277,6 @@ func sendAddRemoteSSTs(
 		}
 	}
 
-	openedStorages := make(map[cloudpb.ExternalStorage]cloud.ExternalStorage)
-	defer func() {
-		for _, es := range openedStorages {
-			es.Close()
-		}
-	}()
-
 	for entry := range restoreSpanEntriesCh {
 		for _, file := range entry.Files {
 
@@ -3314,19 +3307,8 @@ func sendAddRemoteSSTs(
 			}
 
 			if file.BackingFileSize == 0 {
-				if _, ok := openedStorages[file.Dir]; !ok {
-					es, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorage(ctx, file.Dir)
-					if err != nil {
-						return err
-					}
-					openedStorages[file.Dir] = es
-				}
-
-				sz, err := openedStorages[file.Dir].Size(ctx, file.Path)
-				if err != nil {
-					return err
-				}
-				file.BackingFileSize = uint64(sz)
+				// This backup is from <23.2. Just make up a number.
+				file.BackingFileSize = uint64(16 << 20)
 			}
 			uri, ok := urisForDirs[file.Dir.String()]
 			if !ok {
