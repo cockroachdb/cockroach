@@ -56,6 +56,13 @@ var targetRestoreSpanSize = settings.RegisterByteSizeSetting(
 	384<<20,
 )
 
+var targetOnlineRestoreSpanSize = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"backup.restore_span.online_target_size",
+	"target size to which base spans of an online restore are merged to produce a restore span (0 disables)",
+	8<<30,
+)
+
 // backupManifestFileIterator exposes methods that can be used to iterate over
 // the `BackupManifest_Files` field of a manifest.
 type backupManifestFileIterator interface {
