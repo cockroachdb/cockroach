@@ -80,8 +80,9 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 		// state. This step is to account for the known behavior difference between
 		// the two schema changers.
 		// Only run when not in a transaction (otherwise certain DDL combo can make
-		// sql queries issued during modification break; see commit message).
-		if !isInATransaction(ctx, t, legacyConn) && !syntaxError {
+		// sql queries issued during modification break; see commit message) and
+		// `line` is single DDL statement.
+		if !isInATransaction(ctx, t, legacyConn) && !syntaxError && singleDDLStmt(line) {
 			line = modifyBlacklistedStmt(ctx, t, line, legacyConn)
 		}
 
@@ -106,6 +107,14 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 			}
 		}
 	}
+}
+
+func singleDDLStmt(line string) bool {
+	parsedStmts, err := parser.Parse(line)
+	if err != nil {
+		return false
+	}
+	return len(parsedStmts) == 1 && parsedStmts[0].AST.StatementType() == tree.TypeDDL
 }
 
 func containsCommit(line string) bool {
@@ -183,12 +192,14 @@ func modifyBlacklistedStmt(
 }
 
 // modifyAlterPKWithSamePKColsButDifferentSharding modifies any ALTER PK stmt in
-// `line` if the current/old primary index is hash-sharded and the new primary
-// index is also hash-sharded on the same key columns (but with a different
-// "bucket_count") by appending a `DROP COLUMN IF EXISTS
-// crdb_intenral_old_cols_shard` to it, so that legacy schema changer will
-// converge to declarative schema changer (in which ALTER PK will already drop
-// the old shard column).
+// `line` if the current/old primary index is hash-sharded and ALTER PK would
+// leave the shard column unused, in which case the declarative schema changer
+// would also drop it (but legacy schema changer wouldn't).
+// To have a converged behavior, if `parsedStmts` contains such a ALTER PK, we
+// would append a `ALTER TABLE .. DROP COLUMN IF EXISTS old-shard-col` to it, so
+// that legacy schema changer will also have that old shard column dropped.
+// See commentary on `needsToDropOldShardColFn` for criteria of such ALTER PK.
+//
 // The returned boolean indicates if such a modification happened.
 func modifyAlterPKWithSamePKColsButDifferentSharding(
 	ctx context.Context, t *testing.T, parsedStmts statements.Statements, conn *gosql.Conn,
@@ -237,8 +248,9 @@ WHERE id = '%v'::REGCLASS;`, name.String()))
 
 	// needsToDropOldShardColFn is a helper to determine if we need to drop the old
 	// shard column from the old PK after altering to the new PK.
-	// Currently, we do if both the old and new PK are hash-sharded on the same
-	// columns with different shard buckets.
+	// Currently, we do if (the old PK is hash-sharded) && (the new PK is key'ed on
+	// same columns as the old PK) && (new PK is not hash-sharded || new PK is
+	// hash-sharded but with a different bucket_count).
 	needsToDropOldShardColFn := func(
 		tableName *tree.UnresolvedObjectName, newPKColumns tree.IndexElemList, newPKShardingDef *tree.ShardedIndexDef, newPKStorageParams tree.StorageParams,
 	) (needsToDrop bool, oldShardColToDrop string) {
@@ -269,14 +281,14 @@ WHERE id = '%v'::REGCLASS;`, name.String()))
 			return true
 		}
 
-		if newPKShardingDef == nil {
-			return false, ""
-		}
 		isSharded, shardColName, shardBuckets, columnNames := getPKShardingInfo(tableName)
 		if !isSharded {
 			return false, ""
 		}
-		if !sameColumns(columnNames, newPKColumns) || sameShardBuckets(int32(shardBuckets), newPKShardingDef, newPKStorageParams) {
+		if !sameColumns(columnNames, newPKColumns) {
+			return false, ""
+		}
+		if newPKShardingDef != nil && sameShardBuckets(int32(shardBuckets), newPKShardingDef, newPKStorageParams) {
 			return false, ""
 		}
 		return true, shardColName
