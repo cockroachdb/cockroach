@@ -3419,6 +3419,18 @@ func (m *sessionDataMutator) SetStreamerAlwaysMaintainOrdering(val bool) {
 	m.data.StreamerAlwaysMaintainOrdering = val
 }
 
+func (m *sessionDataMutator) SetStreamerInOrderEagerMemoryUsageFraction(val float64) {
+	m.data.StreamerInOrderEagerMemoryUsageFraction = val
+}
+
+func (m *sessionDataMutator) SetStreamerOutOfOrderEagerMemoryUsageFraction(val float64) {
+	m.data.StreamerOutOfOrderEagerMemoryUsageFraction = val
+}
+
+func (m *sessionDataMutator) SetStreamerHeadOfLineOnlyFraction(val float64) {
+	m.data.StreamerHeadOfLineOnlyFraction = val
+}
+
 func (m *sessionDataMutator) SetUnboundedParallelScans(val bool) {
 	m.data.UnboundedParallelScans = val
 }
