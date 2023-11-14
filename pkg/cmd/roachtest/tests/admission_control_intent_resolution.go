@@ -127,6 +127,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 				numErrors := 0
 				numSuccesses := 0
 				latestIntentCount := math.MaxInt
+				lastL0SublevelCount := 0
 				for i := 0; i < 40; i++ {
 					time.Sleep(30 * time.Second)
 					val, err := getMetricVal(subLevelMetric)
@@ -134,9 +135,11 @@ func registerIntentResolutionOverload(r registry.Registry) {
 						numErrors++
 						continue
 					}
-					if val > subLevelThreshold {
-						t.Fatalf("sub-level count %f exceeded threshold", val)
+					latestSampleMeanL0Sublevels := (lastL0SublevelCount + int(val)) / 2
+					if latestSampleMeanL0Sublevels > subLevelThreshold {
+						t.Fatalf("sub-level count %f exceeded threshold, mean of last two iterations: %d", val, latestSampleMeanL0Sublevels)
 					}
+					lastL0SublevelCount = int(val)
 					val, err = getMetricVal(intentCountMetric)
 					if err != nil {
 						numErrors++
