@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -57,12 +58,15 @@ func (s *systemStatusServer) DownloadSpan(
 	}
 
 	// Send Download request to all stores on all nodes.
-	remoteRequest := serverpb.DownloadSpanRequest{NodeID: "local"}
+	remoteRequest := serverpb.DownloadSpanRequest{NodeID: "local", Span: req.Span}
 	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.DownloadSpanResponse, error) {
 		return status.DownloadSpan(ctx, &remoteRequest)
 	}
 	responseFn := func(nodeID roachpb.NodeID, downloadSpanResp *serverpb.DownloadSpanResponse) {}
-	errorFn := func(nodeID roachpb.NodeID, err error) {}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		log.Errorf(ctx, "could not run download for node %d: %v",
+			nodeID, err)
+	}
 
 	if err := iterateNodes(ctx, s.serverIterator, s.stopper, "download spans",
 		noTimeout,
