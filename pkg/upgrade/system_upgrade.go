@@ -155,7 +155,7 @@ func NewSystemUpgrade(
 // version. Note however that the upgrade will still run at most once.
 func NewPermanentSystemUpgrade(
 	description string,
-	v roachpb.Version,
+	v clusterversion.Key,
 	fn SystemUpgradeFunc,
 	v22_2StartupMigrationName string,
 	restore RestoreBehavior,
@@ -163,7 +163,7 @@ func NewPermanentSystemUpgrade(
 	return &SystemUpgrade{
 		upgrade: upgrade{
 			description:               description,
-			v:                         v,
+			v:                         v.Version(),
 			permanent:                 true,
 			v22_2StartupMigrationName: v22_2StartupMigrationName,
 			restore:                   restore,

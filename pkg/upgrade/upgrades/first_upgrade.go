@@ -204,12 +204,12 @@ WHERE
 
 // newFirstUpgrade creates a TenantUpgrade that corresponds to the first
 // (Vxy_zStart) internal version of a release.
-func newFirstUpgrade(v roachpb.Version) *upgrade.TenantUpgrade {
-	if v.Internal != 2 {
+func newFirstUpgrade(v clusterversion.Key) *upgrade.TenantUpgrade {
+	if v.Version().Internal != 2 {
 		panic("not the first internal release")
 	}
 	return upgrade.NewTenantUpgrade(
-		firstUpgradeDescription(v),
+		firstUpgradeDescription(v.Version()),
 		v,
 		FirstUpgradeFromReleasePrecondition,
 		FirstUpgradeFromRelease,
