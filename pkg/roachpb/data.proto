@@ -616,6 +616,8 @@ message LockStateInfo {
   // The readers and writers currently waiting on the lock.  Stable ordering
   // is not guaranteed.
   repeated kv.kvserver.concurrency.lock.Waiter waiters = 6 [(gogoproto.nullable) = false];
+  // The strength of the lock is being held at.
+  kv.kvserver.concurrency.lock.Strength lock_strength = 7;
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
