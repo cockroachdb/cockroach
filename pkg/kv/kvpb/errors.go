@@ -1214,8 +1214,25 @@ var _ ErrorDetailInterface = &RaftGroupDeletedError{}
 
 // NewReplicaCorruptionError creates a new error indicating a corrupt replica.
 // The supplied error is used to provide additional detail in the error message.
+// NB: Take caution when marking errors as replica corruption errors to be sure
+// that they are actually indicative of replica corruption and should be treated
+// as such; for example while in general a failures to apply a command might be,
+// a timeout or context cancellation error may not be, especially if a user
+// request controls that cancellation/timeout. See the helper below in
+// MaybeWrapReplicaCorruptionError.
 func NewReplicaCorruptionError(err error) *ReplicaCorruptionError {
 	return &ReplicaCorruptionError{ErrorMsg: err.Error()}
+}
+
+// MaybeWrapReplicaCorruptionError wraps a passed error as a replica corruption
+// error unless it matches the error in the passed context, which would suggest
+// the whole operation was cancelled due to the latter rather than indicating a
+// fault which implies replica corruption.
+func MaybeWrapReplicaCorruptionError(ctx context.Context, err error) error {
+	if errors.Is(err, ctx.Err()) {
+		return err
+	}
+	return NewReplicaCorruptionError(err)
 }
 
 func (e *ReplicaCorruptionError) Error() string {
