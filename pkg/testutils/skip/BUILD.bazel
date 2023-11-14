@@ -10,6 +10,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build/bazel",
+        "//pkg/clusterversion",
+        "//pkg/roachpb",
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/envutil",

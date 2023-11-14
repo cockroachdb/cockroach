@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -169,6 +171,18 @@ func UnderNonTestBuild(t SkippableTest) {
 	if !buildutil.CrdbTestBuild {
 		maybeSkip(t, "crdb_test tag required for this test")
 	}
+}
+
+// WhenMinSupportedVersionIsAtLeast skips this test if
+// clusterversion.MinSupported is >= the given version.
+//
+// Used for upgrade tests that require support for a previous version; it allows
+// experimenting with bumping MinSupported and limiting how many things must be
+// fixed in the same PR that bumps it.
+func WhenMinSupportedVersionIsAtLeast(t SkippableTest, major, minor int) {
+	v := roachpb.Version{Major: int32(major), Minor: int32(minor)}
+	if clusterversion.MinSupported.Version().AtLeast(v) {
+		maybeSkip(t, "test disabled when MinVersion >= %d.%d", major, minor)
 }
 
 // UnderDuress skips the test if we are running under any of the

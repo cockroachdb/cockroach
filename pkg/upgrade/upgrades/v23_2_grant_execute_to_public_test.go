@@ -37,10 +37,11 @@ import (
 )
 
 func TestGrantExecuteToPublicOnAllFunctions(t *testing.T) {
+	skip.WhenMinSupportedVersionIsAtLeast(t, 23, 2)
+	skip.UnderRace(t)
+
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t)
 
 	var (
 		v0 = clusterversion.MinSupported.Version()
@@ -118,6 +119,7 @@ func TestGrantExecuteToPublicOnAllFunctions(t *testing.T) {
 }
 
 func BenchmarkGrantExecuteToPublicOnAllFunctions(b *testing.B) {
+	skip.WhenMinSupportedVersionIsAtLeast(b, 23, 2)
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 

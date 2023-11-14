@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,6 +34,8 @@ import (
 )
 
 func TestStmtDiagForPlanGistMigration(t *testing.T) {
+	skip.WhenMinSupportedVersionIsAtLeast(t, 23, 2)
+
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
