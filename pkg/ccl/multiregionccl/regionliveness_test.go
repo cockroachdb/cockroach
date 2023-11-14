@@ -174,3 +174,113 @@ func TestRegionLivenessProber(t *testing.T) {
 		})
 	})
 }
+
+func TestRegionLivenessProberForLeases(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t)
+	skip.UnderStress(t)
+
+	ctx := context.Background()
+
+	// Enable settings required for configuring a tenant's system database as
+	// multi-region. and enable region liveness for testing.
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		slinstance.DefaultTTL.Override(ctx, &cs.SV, 10*time.Second)
+		regionliveness.RegionLivenessEnabled.Override(ctx, &cs.SV, true)
+		return cs
+	}
+
+	expectedRegions := []string{
+		"us-east",
+		"us-south",
+		"us-west",
+	}
+	detectLeaseWait := atomic.Bool{}
+	defer regionliveness.TestingSetProbeLivenessTimeout(1 * time.Second)()
+
+	testCluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(t,
+		expectedRegions,
+		1,
+		base.TestingKnobs{},
+		multiregionccltestutils.WithSettings(makeSettings()))
+	defer cleanup()
+
+	id, err := roachpb.MakeTenantID(11)
+	require.NoError(t, err)
+
+	var tenantSQL []*gosql.DB
+	targetCount := atomic.Int64{}
+
+	for _, s := range testCluster.Servers {
+		tenantArgs := base.TestTenantArgs{
+			Settings: makeSettings(),
+			TenantID: id,
+			Locality: s.Locality(),
+			TestingKnobs: base.TestingKnobs{
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
+						if !detectLeaseWait.Load() {
+							return
+						}
+						const probeQuery = "SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.public.crdb_internal_region"
+						const leaseQuery = "SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME"
+						// Fail intentionally, when we go to probe the first region.
+						if strings.Contains(stmt, leaseQuery) {
+							if targetCount.Add(1) != 1 {
+								return
+							}
+							time.Sleep(time.Second * 2)
+						} else if strings.Contains(stmt, probeQuery) {
+							time.Sleep(time.Second * 2)
+							targetCount.Swap(0)
+							detectLeaseWait.Swap(false)
+						}
+					},
+				},
+			},
+		}
+		_, tenantDB := serverutils.StartTenant(t, s, tenantArgs)
+		tenantSQL = append(tenantSQL, tenantDB)
+	}
+	// Convert into a multi-region DB.
+	_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system SET PRIMARY REGION '%s'", testCluster.Servers[0].Locality().Tiers[0].Value))
+	require.NoError(t, err)
+	for i := 1; i < len(expectedRegions); i++ {
+		_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system ADD REGION '%s'", expectedRegions[i]))
+		require.NoError(t, err)
+	}
+	_, err = tenantSQL[0].Exec("ALTER DATABASE system SURVIVE ZONE FAILURE")
+	require.NoError(t, err)
+	// Create a new table and have it used on all nodes.
+	_, err = tenantSQL[0].Exec("CREATE TABLE t1(j int)")
+	require.NoError(t, err)
+	for _, c := range tenantSQL {
+		_, err = c.Exec("SELECT * FROM t1")
+		require.NoError(t, err)
+	}
+	row := tenantSQL[0].QueryRow("SELECT 't1'::REGCLASS::OID")
+	var tableID int
+	require.NoError(t, row.Scan(&tableID))
+	// Issue a schema change which should mark this region as dead, and fail
+	// out because our probe query will time out.
+	detectLeaseWait.Swap(true)
+	_, err = tenantSQL[1].Exec("ALTER TABLE t1 ADD COLUMN i INT")
+	require.ErrorContainsf(t, err, "count-lease timed out reading from a region", "failed to timeout")
+	// Keep an active lease on node 1, but it will be seen as ignored eventually
+	// because the region will start to get quarantined.
+	tx, err := tenantSQL[0].Begin()
+	require.NoError(t, err)
+	_, err = tx.Exec("SELECT * FROM t1")
+	require.NoError(t, err)
+	// Second attempt should skip the dead region for both
+	// CountLeases and WaitForNoVersion.
+	testutils.SucceedsSoon(t, func() error {
+		_, err = tenantSQL[1].Exec("ALTER TABLE t1 ADD COLUMN i INT")
+		_, err = tenantSQL[1].Exec("DROP TABLE t1")
+		return err
+	})
+	require.NoError(t, tx.Rollback())
+}

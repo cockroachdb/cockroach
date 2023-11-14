@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
@@ -119,27 +121,101 @@ func (m *Manager) getSessionBasedLeasingMode() SessionBasedLeasingMode {
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
-	ctx context.Context, id descpb.ID, retryOpts retry.Options,
+	ctx context.Context,
+	id descpb.ID,
+	cachedDatabaseRegions regionliveness.CachedDatabaseRegions,
+	retryOpts retry.Options,
 ) error {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
-		// Check to see if there are any leases that still exist on the previous
-		// version of the descriptor.
 		now := m.storage.clock.Now()
-		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d AND expiration > $1)`,
-			now.AsOfSystemTime(),
-			id)
-		values, err := m.storage.db.Executor().QueryRowEx(
-			ctx, "count-leases", nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
-			stmt, now.GoTime(),
-		)
+		txn := m.storage.db.KV().NewTxn(ctx, "wait-for-no-version")
+		err := txn.SetFixedTimestamp(ctx, now)
 		if err != nil {
 			return err
 		}
-		if values == nil {
-			return errors.New("failed to count leases")
+		// Fetch the regions for the system database that are alive.
+		prober := regionliveness.NewLivenessProber(m.storage.db, cachedDatabaseRegions, m.settings)
+		liveRegions, err := prober.QueryLiveness(ctx, txn)
+		if err != nil {
+			return err
 		}
-		count := int(tree.MustBeDInt(values[0]))
+		// Check to see if there are any leases that still exist on the previous
+		// version of the descriptor.
+		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d AND expiration > $1)`,
+			now.AsOfSystemTime(),
+			id)
+
+		var count int
+		// Counts leases for non-multi-region environments.
+		countLeases := func() error {
+			var values tree.Datums
+			values, err = m.storage.db.Executor().QueryRowEx(
+				ctx, "count-leases", txn, /* txn */
+				sessiondata.RootUserSessionDataOverride,
+				stmt, now.GoTime(),
+			)
+			if err != nil {
+				return err
+			}
+			if values == nil {
+				return errors.New("failed to count leases")
+			}
+			count = int(tree.MustBeDInt(values[0]))
+			return nil
+		}
+		// Counts leases by region for multi-region enabled environments.
+		countLeasesByRegion := func() error {
+			stmt += " AND crdb_region=$2::system.crdb_internal_region"
+			return liveRegions.ForEach(func(region string) error {
+				var values tree.Datums
+				queryRegionRows := func(countCtx context.Context) error {
+					var err error
+					values, err = m.storage.db.Executor().QueryRowEx(
+						countCtx, "count-leases", txn, /* txn */
+						sessiondata.RootUserSessionDataOverride,
+						stmt, now.GoTime(), region,
+					)
+					return err
+				}
+				if hasTimeout, timeout := prober.GetTableTimeout(); hasTimeout {
+					err = timeutil.RunWithTimeout(ctx, "count-leases-region", timeout, queryRegionRows)
+				} else {
+					err = queryRegionRows(ctx)
+				}
+				if err != nil {
+					if regionliveness.IsQueryTimeoutErr(err) {
+						// Probe and mark the region potentially.
+						probeErr := prober.ProbeLiveness(ctx, region)
+						if probeErr != nil {
+							err = errors.WithSecondaryError(err, probeErr)
+						}
+						return errors.Wrap(err, "WaitForNoVersion timed out readin from region")
+					}
+					return err
+				}
+				if values == nil {
+					return errors.New("failed to count leases")
+				}
+				count += int(tree.MustBeDInt(values[0]))
+				return nil
+			})
+		}
+
+		if cachedDatabaseRegions.IsMultiRegion() {
+			err = countLeasesByRegion()
+		} else {
+			err = countLeases()
+		}
+		if err != nil {
+			return err
+		}
+
+		if err := txn.Commit(ctx); err != nil {
+			if errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
+				continue
+			}
+			return err
+		}
 		if count == 0 {
 			break
 		}
@@ -149,6 +225,10 @@ func (m *Manager) WaitForNoVersion(
 		}
 	}
 	return nil
+}
+
+type RegionProvider interface {
+	Regions(context.Context, *serverpb.RegionsRequest) (*serverpb.RegionsResponse, error)
 }
 
 // WaitForOneVersion returns once there are no unexpired leases on the
@@ -163,7 +243,10 @@ func (m *Manager) WaitForNoVersion(
 // If the descriptor is not found, an error will be returned. The error
 // can be detected by using errors.Is(err, catalog.ErrDescriptorNotFound).
 func (m *Manager) WaitForOneVersion(
-	ctx context.Context, id descpb.ID, retryOpts retry.Options,
+	ctx context.Context,
+	id descpb.ID,
+	regions regionliveness.CachedDatabaseRegions,
+	retryOpts retry.Options,
 ) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -193,7 +276,7 @@ func (m *Manager) WaitForOneVersion(
 		// version of the descriptor.
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
-		count, err := CountLeases(ctx, m.storage.db, descs, now)
+		count, err := CountLeases(ctx, m.storage.db, regions, m.settings, descs, now)
 		if err != nil {
 			return nil, err
 		}

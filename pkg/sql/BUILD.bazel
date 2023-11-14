@@ -464,6 +464,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/protoreflect",
         "//pkg/sql/querycache",
+        "//pkg/sql/regionliveness",
         "//pkg/sql/regions",
         "//pkg/sql/roleoption",
         "//pkg/sql/row",
