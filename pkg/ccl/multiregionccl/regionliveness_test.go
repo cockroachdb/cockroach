@@ -147,6 +147,11 @@ func TestRegionLivenessProber(t *testing.T) {
 	// list of live regions.
 	testutils.SucceedsSoon(t, func() error {
 		return tenants[0].DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Attempt to keep on pushing out the unavailable_at time,
+			// these calls should be no-ops.
+			blockProbeQuery.Store(true)
+			require.NoError(t, regionProber.ProbeLiveness(ctx, expectedRegions[1]))
+			// Check if the time has expired yet.
 			regions, err := regionProber.QueryLiveness(ctx, txn)
 			if err != nil {
 				return err
