@@ -20,6 +20,7 @@ go_library(
         "//pkg/base",
         "//pkg/ccl/baseccl",
         "//pkg/ccl/cliccl/cliflagsccl",
+        "//pkg/ccl/securityccl/fipsccl",
         "//pkg/ccl/sqlproxyccl",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/ccl/storageccl/engineccl/enginepbccl",
@@ -41,6 +42,7 @@ go_library(
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_spf13_cobra//:cobra",
     ],
 )
