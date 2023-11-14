@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -98,6 +99,14 @@ var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	"backup.restore.online_worker_count",
 	"workers to use for online restore worker phase",
 	8,
+	settings.PositiveInt,
+)
+
+var onlineRestoreDownloadWorkers = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"backup.restore.online_download_worker_count",
+	"workers to use for online restore download phase",
+	1,
 	settings.PositiveInt,
 )
 
@@ -3401,52 +3410,79 @@ func init() {
 	)
 }
 
-func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
-	details := r.job.Details().(jobspb.RestoreDetails)
+func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
+	ctx context.Context, execCtx sql.JobExecContext, details jobspb.RestoreDetails,
+) (uint64, error) {
 	total := r.job.Progress().Details.(*jobspb.Progress_Restore).Restore.TotalDownloadRequired
+
+	// If this is a resumption of a job that has already calculated the total
+	// spans to download, we can skip this step.
+	if total != 0 {
+		return total, nil
+	}
 
 	// If this is the first resumption of this job, we need to find out the total
 	// amount we expect to download and persist it so that we can indiciate our
 	// progress as that number goes down later.
-	if total == 0 {
-		log.Infof(ctx, "calculating total download size (across all stores) to complete restore")
-		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return jobs.RunningStatus("Calculating total download size..."), nil
-		}); err != nil {
-			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
-		}
+	log.Infof(ctx, "calculating total download size (across all stores) to complete restore")
+	if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		return "Calculating total download size...", nil
+	}); err != nil {
+		return 0, errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+	}
 
-		for _, span := range details.DownloadSpans {
-			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
-				Spans: []roachpb.Span{span},
-			})
-			if err != nil {
-				return err
-			}
-			for _, stats := range resp.SpanToStats {
-				total += stats.ExternalFileBytes
-			}
+	for _, span := range details.DownloadSpans {
+		resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
+			Spans: []roachpb.Span{span},
+		})
+		if err != nil {
+			return 0, err
 		}
-
-		if total == 0 {
-			return nil
-		}
-
-		if err := r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-			prog := details.(*jobspb.Progress_Restore).Restore
-			prog.TotalDownloadRequired = total
-			return 0.0
-		}); err != nil {
-			return err
-		}
-
-		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return jobs.RunningStatus(fmt.Sprintf("Downloading %s of restored data...", sz(total))), nil
-		}); err != nil {
-			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+		for _, stats := range resp.SpanToStats {
+			total += stats.ExternalFileBytes
 		}
 	}
 
+	if total == 0 {
+		return total, nil
+	}
+
+	if err := r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+		prog := details.(*jobspb.Progress_Restore).Restore
+		prog.TotalDownloadRequired = total
+		return 0.0
+	}); err != nil {
+		return 0, err
+	}
+
+	if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		return jobs.RunningStatus(fmt.Sprintf("Downloading %s of restored data...", sz(total))), nil
+	}); err != nil {
+		return 0, errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
+	}
+
+	return total, nil
+}
+
+func (r *restoreResumer) sendDownloadWorker(
+	execCtx sql.JobExecContext, downloadSpansCh chan roachpb.Span,
+) func(context.Context) error {
+	return func(ctx context.Context) error {
+		for sp := range downloadSpansCh {
+			log.Infof(ctx, "sending download request for span %s", sp)
+			if _, err := execCtx.ExecCfg().TenantStatusServer.DownloadSpan(ctx, &serverpb.DownloadSpanRequest{
+				Span: sp,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+func (r *restoreResumer) waitForDownloadToComplete(
+	ctx context.Context, execCtx sql.JobExecContext, details jobspb.RestoreDetails, total uint64,
+) error {
 	var lastProgressUpdate time.Time
 	for rt := retry.StartWithCtx(
 		ctx, retry.Options{InitialBackoff: time.Second * 10, Multiplier: 1.2, MaxBackoff: time.Minute * 5},
@@ -3483,6 +3519,37 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 			lastProgressUpdate = timeutil.Now()
 		}
 	}
+}
+
+func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
+
+	var total uint64
+	var err error
+	if total, err = r.maybeCalculateTotalDownloadSpans(ctx, execCtx, details); err != nil {
+		return errors.Wrap(err, "failed to calculate total number of spans to download")
+	}
+
+	grp := ctxgroup.WithContext(ctx)
+	downloadSpansCh := make(chan roachpb.Span, len(details.DownloadSpans))
+	grp.GoCtx(func(ctx context.Context) error {
+		defer close(downloadSpansCh)
+		for _, span := range details.DownloadSpans {
+			downloadSpansCh <- span
+		}
+		return nil
+	})
+
+	restoreWorkers := int(onlineRestoreDownloadWorkers.Get(&execCtx.ExecCfg().Settings.SV))
+	for i := 0; i < restoreWorkers; i++ {
+		grp.GoCtx(r.sendDownloadWorker(execCtx, downloadSpansCh))
+	}
+
+	if err := grp.Wait(); err != nil {
+		return errors.Wrap(err, "failed to generate and send download spans")
+	}
+
+	return r.waitForDownloadToComplete(ctx, execCtx, details, total)
 }
 
 type sz int64
