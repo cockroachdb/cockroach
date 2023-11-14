@@ -2363,9 +2363,9 @@ func (r *Replica) GetResponseMemoryAccount() *mon.BoundAccount {
 
 // GetEngineCapacity returns the store's underlying engine capacity; other
 // StoreCapacity fields not related to engine capacity are not populated.
-func (r *Replica) GetEngineCapacity() (roachpb.StoreCapacity, error) {
+func (r *Replica) GetEngineCapacity(skipCountingUsed bool) (roachpb.StoreCapacity, error) {
 	// TODO(sep-raft-log): need to expose log engine capacity.
-	return r.store.TODOEngine().Capacity()
+	return r.store.TODOEngine().Capacity(skipCountingUsed)
 }
 
 // GetApproximateDiskBytes returns an approximate measure of bytes in the store

@@ -924,7 +924,7 @@ type Engine interface {
 	// Attrs returns the engine/store attributes.
 	Attrs() roachpb.Attributes
 	// Capacity returns capacity details for the engine's available storage.
-	Capacity() (roachpb.StoreCapacity, error)
+	Capacity(skipCountingUsed bool) (roachpb.StoreCapacity, error)
 	// Properties returns the low-level properties for the engine's underlying storage.
 	Properties() roachpb.StoreProperties
 	// Compact forces compaction over the entire database.

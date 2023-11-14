@@ -1829,7 +1829,7 @@ func (p *Pebble) Properties() roachpb.StoreProperties {
 }
 
 // Capacity implements the Engine interface.
-func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
+func (p *Pebble) Capacity(skipCountingUsed bool) (roachpb.StoreCapacity, error) {
 	dir := p.path
 	if dir != "" {
 		var err error
@@ -1862,6 +1862,14 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	}
 	fsuTotal := int64(du.TotalBytes)
 	fsuAvail := int64(du.AvailBytes)
+
+	if skipCountingUsed {
+		return roachpb.StoreCapacity{
+			Capacity:  fsuTotal,
+			Available: fsuAvail,
+			Used:      0,
+		}, nil
+	}
 
 	// If the emergency ballast isn't appropriately sized, try to resize it.
 	// This is a no-op if the ballast is already sized or if there's not

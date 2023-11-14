@@ -266,8 +266,10 @@ func (rec *SpanSetReplicaEvalContext) GetMaxBytes(ctx context.Context) int64 {
 }
 
 // GetEngineCapacity implements the batcheval.EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetEngineCapacity() (roachpb.StoreCapacity, error) {
-	return rec.i.GetEngineCapacity()
+func (rec *SpanSetReplicaEvalContext) GetEngineCapacity(
+	skipCountingUsed bool,
+) (roachpb.StoreCapacity, error) {
+	return rec.i.GetEngineCapacity(skipCountingUsed)
 }
 
 // GetApproximateDiskBytes implements the batcheval.EvalContext interface.
