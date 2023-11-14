@@ -277,7 +277,10 @@ func (ex *connExecutor) prepare(
 		if origin != PreparedStatementOriginSessionMigration {
 			return nil, err
 		} else {
-			log.Warningf(ctx, "could not prepare statement during session migration: %v", err)
+			f := tree.NewFmtCtx(tree.FmtMarkRedactionNode | tree.FmtSimple)
+			f.FormatNode(stmt.AST)
+			redactableStmt := f.CloseAndGetString()
+			log.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
 		}
 	}
 
