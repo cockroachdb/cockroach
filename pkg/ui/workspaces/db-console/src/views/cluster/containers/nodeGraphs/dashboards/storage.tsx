@@ -43,6 +43,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Capacity"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={<CapacityGraphTooltip tooltipSelection={tooltipSelection} />}
       showMetricsInTooltip={true}
@@ -71,6 +72,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Log Commit Latency: 99th Percentile"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`The 99th %ile latency for commits to the Raft Log. This measures
           essentially an fdatasync to the storage engine's write-ahead log.`}
@@ -91,6 +93,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Log Commit Latency: 50th Percentile"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`The 50th %ile latency for commits to the Raft Log. This measures
           essentially an fdatasync to the storage engine's write-ahead log.`}
@@ -111,6 +114,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Command Commit Latency: 99th Percentile"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`The 99th %ile latency for commits of Raft commands. This measures
           applying a batch to the storage engine (including writes to the
@@ -132,6 +136,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Command Commit Latency: 50th Percentile"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`The 50th %ile latency for commits of Raft commands. This measures
           applying a batch to the storage engine (including writes to the
@@ -153,6 +158,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Read Amplification"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`The average number of real read operations executed per logical read
           operation ${tooltipSelection}.`}
@@ -173,6 +179,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="SSTables"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`The number of SSTables in use ${tooltipSelection}.`}
       showMetricsInTooltip={true}
@@ -192,6 +199,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="File Descriptors"
       sources={nodeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`The number of open file descriptors ${tooltipSelection}, compared with
           the file descriptor limit.`}
@@ -206,6 +214,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Flushes"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`Bytes written by memtable flushes ${tooltipSelection}.`}
       showMetricsInTooltip={true}
@@ -226,6 +235,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="WAL Bytes Written"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`Bytes written to WAL files ${tooltipSelection}.`}
       showMetricsInTooltip={true}
@@ -246,6 +256,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Compactions"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`Bytes written by compactions ${tooltipSelection}.`}
       showMetricsInTooltip={true}
@@ -266,6 +277,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Ingestions"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`Bytes written by sstable ingestions ${tooltipSelection}.`}
       showMetricsInTooltip={true}
@@ -286,6 +298,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Write Stalls"
       sources={storeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`The number of intentional write stalls per second ${tooltipSelection}.
           Write stalls are used to backpressure incoming writes during periods
@@ -304,6 +317,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Time Series Writes"
       sources={nodeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={`The number of successfully written time series samples, and number of
           errors attempting to write time series, per second ${tooltipSelection}.`}
@@ -326,6 +340,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Time Series Bytes Written"
       sources={nodeSources}
+      isKvGraph={true}
       tenantSource={tenantSource}
       tooltip={
         <div>
