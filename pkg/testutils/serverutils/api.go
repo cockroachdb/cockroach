@@ -457,6 +457,8 @@ type ApplicationLayerInterface interface {
 
 	// DistSQLPlanningNodeID returns the NodeID to use by the DistSQL span resolver.
 	DistSQLPlanningNodeID() roachpb.NodeID
+
+	ExternalStorageAccessor() interface{}
 }
 
 // TenantControlInterface defines the API of a test server that can

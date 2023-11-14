@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -199,6 +200,8 @@ func (s *systemStatusServer) getLocalStats(
 func (s *systemStatusServer) statsForSpan(
 	ctx context.Context, span roachpb.Span,
 ) (*roachpb.SpanStats, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "systemStatusServer.statsForSpan")
+	defer sp.Finish()
 
 	var descriptors []roachpb.RangeDescriptor
 	scanner := rangedesc.NewScanner(s.db)
