@@ -783,7 +783,7 @@ func RunCommitTrigger(
 			ctx, rec, batch, *ms, ct.SplitTrigger, txn.WriteTimestamp,
 		)
 		if err != nil {
-			return result.Result{}, kvpb.NewReplicaCorruptionError(err)
+			return result.Result{}, kvpb.MaybeWrapReplicaCorruptionError(ctx, err)
 		}
 		*ms = newMS
 		return res, nil
@@ -791,7 +791,7 @@ func RunCommitTrigger(
 	if mt := ct.GetMergeTrigger(); mt != nil {
 		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
 		if err != nil {
-			return result.Result{}, kvpb.NewReplicaCorruptionError(err)
+			return result.Result{}, kvpb.MaybeWrapReplicaCorruptionError(ctx, err)
 		}
 		return res, nil
 	}

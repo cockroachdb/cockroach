@@ -7770,6 +7770,17 @@ func TestNewReplicaCorruptionError(t *testing.T) {
 			t.Errorf("%d: expected '%s' but got '%s'", i, tc.expErr, errStr)
 		}
 	}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+
+	if !errors.HasType(kvpb.MaybeWrapReplicaCorruptionError(ctx, errors.New("foo")), &kvpb.ReplicaCorruptionError{}) {
+		t.Fatal("MaybeWrapReplicaCorruptionError should wrap a non-ctx err")
+	}
+
+	cancel(errors.New("we're done here"))
+	if errors.HasType(kvpb.MaybeWrapReplicaCorruptionError(ctx, ctx.Err()), &kvpb.ReplicaCorruptionError{}) {
+		t.Fatal("MaybeWrapReplicaCorruptionError should not wrap a ctx err")
+	}
 }
 
 func TestSyncSnapshot(t *testing.T) {
