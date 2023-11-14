@@ -516,6 +516,7 @@
 /pkg/scheduledjobs/          @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/security/               @cockroachdb/prodsec @cockroachdb/server-prs
 /pkg/security/clientsecopts/ @cockroachdb/sql-foundations @cockroachdb/prodsec
+/pkg/ccl/securityccl/        @cockroachdb/prodsec
 #!/pkg/settings/             @cockroachdb/unowned
 /pkg/spanconfig/                         @cockroachdb/kv-prs @cockroachdb/sql-foundations 
 /pkg/spanconfig/spanconfigbounds/        @cockroachdb/sql-foundations
