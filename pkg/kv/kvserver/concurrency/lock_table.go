@@ -2000,24 +2000,26 @@ func (kl *keyLocks) informActiveWaiters() {
 	// We need to find a (possibly new) distinguished waiter if either:
 	//   There isn't one for this lock.
 	if kl.distinguishedWaiter == nil ||
-		// OR it belongs to the same transaction that waiters in the lock wait queue
-		// are waiting on, because a transaction doesn't push itself (it just sits
-		// tight).
+		// OR it belongs to the claimant transaction, because a transaction doesn't
+		// push itself (it just sits tight in the waitSelf state).
 		//
-		// NB: Note that if the distinguishedWaiter belongs to the same transaction
-		// that waiters in the lock wait queue are waiting on, then the lock cannot
-		// be held by it. This is because if it were, this request would no longer
-		// be waiting in lock wait queues (via a call to releaseLockingRequestsFromTxn).
-		// This is asserted below.
+		// NB: Note that if the distinguished waiter belongs to the same transaction
+		// as the claimant, then the lock must not be held. That's because:
+		// 1. Lock holders are preferred to inactive waiters by claimantTxn().
+		// 2. AND a request (in this case the distinguished waiter) does not wait in
+		// a lock's wait queue if its transaction already holds the lock.
+		//
+		// TODO(arul): The second point above won't hold once we enable lock
+		// promotions from Shared to Exclusive. The assertion below, and some
+		// concepts here, should be revisited then.
 		kl.distinguishedWaiter.isSameTxn(waitForState.txn) {
 		// Ensure that if we're trying to find a new distinguished waiter because
 		// all waiters on the lock are waiting on the (old) distinguished waiter,
 		// the lock is not held.
 		assert(
-			kl.distinguishedWaiter == nil || !kl.isLocked(), fmt.Sprintf(
-				"distinguished waiter waiting from txn %s waiting on itself with un-held lock",
-				waitForState.txn,
-			))
+			kl.distinguishedWaiter == nil || !kl.isLocked(),
+			"unexpected distinguished waiter for unlocked key",
+		)
 
 		findDistinguished = true
 		kl.distinguishedWaiter = nil // we'll find a new one
