@@ -33,6 +33,8 @@ import (
 )
 
 func TestStmtDiagForPlanGistMigration(t *testing.T) {
+	clusterversion.SkipWhenMinSupportedVersionIsAtLeast(t, 23, 2)
+
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
