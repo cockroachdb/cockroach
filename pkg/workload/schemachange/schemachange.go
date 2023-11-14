@@ -17,6 +17,9 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/trace"
 	"io"
 	"os"
 	"regexp"
@@ -35,7 +38,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/spf13/pflag"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
@@ -90,6 +92,7 @@ type schemaChange struct {
 	declarativeSchemaChangerPct     int
 	declarativeSchemaMaxStmtsPerTxn int
 	traceFilePath                   string
+	schemaWorkloadResultAnnotator   *schemaWorkloadResultAnnotator
 }
 
 var schemaChangeMeta = workload.Meta{
@@ -160,10 +163,12 @@ func (s *schemaChange) Ops(
 	// managing the life cycle of this workload so we keep tracing localized to
 	// this function.
 	tracerProvider, err := s.initTracerProvider()
+	// Initialize workload result annotator to compute metrics on the workload performance.
+	s.schemaWorkloadResultAnnotator = &schemaWorkloadResultAnnotator{}
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-
+	tracerProvider.RegisterSpanProcessor(s.schemaWorkloadResultAnnotator)
 	tracer := tracerProvider.Tracer("schemachange")
 
 	// NB: The schemaChange.Ops span ends when this function returns, NOT when
@@ -225,9 +230,10 @@ func (s *schemaChange) Ops(
 			defer cancel()
 
 			pool.Close()
+
 			closeErr := s.closeJSONLogFile()
 			shutdownErr := tracerProvider.Shutdown(ctx)
-
+			s.schemaWorkloadResultAnnotator.logWorkloadStats(stdoutLog)
 			return errors.CombineErrors(closeErr, shutdownErr)
 		},
 	}
@@ -281,6 +287,7 @@ func (s *schemaChange) Ops(
 				artifactsLog: artifactsLog,
 			},
 			isHoldingEntryLocks: false,
+			tracer:              tracer,
 		}
 
 		s.workers = append(s.workers, w)
@@ -345,6 +352,7 @@ type schemaChangeWorker struct {
 	opGen               *operationGenerator
 	isHoldingEntryLocks bool
 	logger              *logger
+	tracer              trace.Tracer
 }
 
 var (
@@ -396,7 +404,7 @@ func (w *schemaChangeWorker) WrapWithErrorState(err error) error {
 }
 
 func (w *schemaChangeWorker) runInTxn(
-	ctx context.Context, tx pgx.Tx, useDeclarativeSchemaChanger bool,
+	ctx context.Context, tx pgx.Tx, useDeclarativeSchemaChanger bool, workloadMetrics map[string]attribute.Value,
 ) error {
 	w.logger.startLog(w.id)
 	w.logger.writeLog("BEGIN")
@@ -414,6 +422,7 @@ func (w *schemaChangeWorker) runInTxn(
 		// will not fail. To prevent the covering up of unexpected behavior as outlined above, no further ops
 		// should be generated if there are any errors in the expected commit errors set.
 		if !w.opGen.expectedCommitErrors.empty() {
+			incWorkloadMetric(numSchemaOpsExpectedFailed, workloadMetrics)
 			break
 		}
 
@@ -458,8 +467,10 @@ func (w *schemaChangeWorker) runInTxn(
 				}
 				return err
 			}
+			incWorkloadMetric(numSchemaOpsSucceeded, workloadMetrics)
 			w.recordInHist(timeutil.Since(start), operationOk)
 		}
+		incWorkloadMetric(numSchemaOps, workloadMetrics)
 	}
 	return nil
 }
@@ -480,10 +491,18 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 			return err
 		}
 	}
+
 	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection and begin a txn")
 	}
+
+	// Initialize workload metrics.
+	workloadMetrics := initWorkloadMetrics()
+	_, workerSpan := w.tracer.Start(ctx, schemaWorkerSpanName)
+	// The worker span is for a single schema change worker and captures workload
+	// metrics specific for the schema operations run by the worker.
+	defer func() { endSchemaWorkerSpan(workerSpan, workloadMetrics) }()
 
 	// Enable extra schema changes, if they are available this moment.
 	if !w.workload.declarativeStatementsEnabled.Load() {
@@ -494,7 +513,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		if !cannotEnableSchemaChanges {
 			_, err = w.pool.Get().Exec(ctx, `SET CLUSTER SETTING sql.schema.force_declarative_statements="+CREATE SCHEMA, +CREATE SEQUENCE"`)
 			if err != nil {
-				return errors.Wrap(err, "cannot to enable extra schema changes")
+				return errors.Wrap(err, "cannot enable extra schema changes")
 			}
 			w.workload.declarativeStatementsEnabled.Store(true)
 		}
@@ -511,7 +530,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	defer watchDog.Stop()
 	start := timeutil.Now()
 	w.opGen.resetTxnState()
-	err = w.runInTxn(ctx, tx, useDeclarativeSchemaChanger)
+	err = w.runInTxn(ctx, tx, useDeclarativeSchemaChanger, workloadMetrics)
 
 	if err != nil {
 		// Rollback in all cases to release the txn object and its conn pool. Wrap the original
@@ -526,7 +545,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 			}
 		}
 
-		w.logger.flushLogWithError(tx, err)
+		w.logger.flushLogWithError(err)
 		switch {
 		case errors.Is(err, errRunInTxnFatalSentinel):
 			w.preErrorHook()
@@ -554,7 +573,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 				errors.Wrap(err, "***UNEXPECTED COMMIT ERROR; Received a non pg error"),
 				errRunInTxnFatalSentinel,
 			)
-			w.logger.flushLogWithError(tx, err)
+			w.logger.flushLogWithError(err)
 			w.preErrorHook()
 			return err
 		}
@@ -563,7 +582,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		// to rollback.
 		if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 			w.recordInHist(timeutil.Since(start), txnCommitError)
-			w.logger.flushLog(tx, fmt.Sprintf("TXN RETRY ERROR; %v", pgErr))
+			w.logger.flushLog(fmt.Sprintf("TXN RETRY ERROR; %v", pgErr))
 			return nil
 		}
 
@@ -585,26 +604,27 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 					errors.Wrapf(err, "***UNEXPECTED COMMIT ERROR; Received an unexpected commit error")),
 				errRunInTxnFatalSentinel,
 			)
-			w.logger.flushLogWithError(tx, err)
+			w.logger.flushLogWithError(err)
 			w.preErrorHook()
 			return err
 		}
 
 		// Error was anticipated, so it is acceptable.
 		w.recordInHist(timeutil.Since(start), txnCommitError)
-		w.logger.flushLog(tx, "COMMIT; Successfully got expected commit error")
+		w.logger.flushLog("COMMIT; Successfully got expected commit error")
 		return nil
 	}
 	if !w.opGen.expectedCommitErrors.empty() {
 		err := w.WrapWithErrorState(errors.Newf("***FAIL; Failed to receive a commit error when at least one commit error was expected"))
-		w.logger.flushLogWithError(tx, err)
+		w.logger.flushLogWithError(err)
 		w.preErrorHook()
 		return errors.Mark(err, errRunInTxnFatalSentinel)
 	}
 
 	// If there were no errors while committing the txn.
-	w.logger.flushLog(tx, "")
+	w.logger.flushLog("")
 	w.recordInHist(timeutil.Since(start), txnOk)
+	workloadMetrics[txnCommitted] = attribute.BoolValue(true)
 	return nil
 }
 
@@ -622,7 +642,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 func (w *schemaChangeWorker) preErrorHook() {
 	w.workload.dumpLogsOnce.Do(func() {
 		for _, worker := range w.workload.workers {
-			worker.logger.flushLogAndLock(nil, "Flushed by pre-error hook", false)
+			worker.logger.flushLogAndLock("Flushed by pre-error hook", false)
 			worker.logger.artifactsLog = nil
 		}
 		_ = w.workload.closeJSONLogFile()
@@ -696,7 +716,7 @@ func (l *logger) addExpectedErrors(execErrors errorCodeSet, commitErrors errorCo
 // flushLogWithError outputs the currentLogEntry of the schemaChangeWorker, with
 // an error message (any available error state information is also added).
 // It is a noop if l.verbose < 0.
-func (l *logger) flushLogWithError(tx pgx.Tx, err error) {
+func (l *logger) flushLogWithError(err error) {
 	if l.verbose < 1 {
 		return
 	}
@@ -713,23 +733,23 @@ func (l *logger) flushLogWithError(tx pgx.Tx, err error) {
 		}
 	}()
 
-	l.flushLogAndLock(tx, err.Error(), true)
+	l.flushLogAndLock(err.Error(), true)
 	defer l.currentLogEntry.mu.Unlock()
 }
 
 // flushLog outputs the currentLogEntry of the schemaChangeWorker.
 // It is a noop if l.verbose < 0.
-func (l *logger) flushLog(tx pgx.Tx, message string) {
+func (l *logger) flushLog(message string) {
 	if l.verbose < 1 {
 		return
 	}
-	l.flushLogAndLock(tx, message, true)
+	l.flushLogAndLock(message, true)
 	defer l.currentLogEntry.mu.Unlock()
 }
 
 // flushLogAndLock prints the currentLogEntry of the schemaChangeWorker and does not release
 // the lock for w.currentLogEntry upon returning. The lock will not be acquired if l.verbose < 1.
-func (l *logger) flushLogAndLock(_ pgx.Tx, message string, stdout bool) {
+func (l *logger) flushLogAndLock(message string, stdout bool) {
 	if l.verbose < 1 {
 		return
 	}
