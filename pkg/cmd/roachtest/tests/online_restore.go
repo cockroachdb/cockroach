@@ -72,7 +72,9 @@ func registerOnlineRestore(r registry.Registry) {
 						return errors.Wrapf(err, "failure to run setup statements")
 					}
 					defer db.Close()
-
+					if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
+						return err
+					}
 					t.Status(`Running online restore: linking phase`)
 					metricCollector := rd.initRestorePerfMetrics(ctx, durationGauge)
 					restoreCmd := rd.restoreCmd("DATABASE tpce", "WITH EXPERIMENTAL DEFERRED COPY")

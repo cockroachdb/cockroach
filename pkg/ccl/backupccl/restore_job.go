@@ -3313,6 +3313,7 @@ func sendAddRemoteSSTWorker(
 				// stats and splitting a span with estimated stats is slow.
 				if batchSize > targetBatchSize {
 					if err := flush(file.BackupFileEntrySpan.Key); err != nil {
+						log.Infof(ctx, "flush failed: %v", err)
 						return err
 					}
 				}
@@ -3322,7 +3323,11 @@ func sendAddRemoteSSTWorker(
 				batchSize += file.BackupFileEntryCounts.DataSize
 			}
 		}
-		return flush(nil)
+		if err := flush(nil); err != nil {
+			log.Infof(ctx, "flush failed: %v", err)
+			return err
+		}
+		return nil
 	}
 }
 
