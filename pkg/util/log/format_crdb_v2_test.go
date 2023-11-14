@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
 )
@@ -265,6 +266,9 @@ func TestCrdbV2Decode(t *testing.T) {
 					if err := d.Decode(&e); err != nil {
 						if err == io.EOF {
 							break
+						}
+						if errors.Is(err, ErrMalformedLogEntry) {
+							continue
 						}
 						td.Fatalf(t, "error while decoding: %v", err)
 					}
