@@ -13,14 +13,11 @@ package instancestorage
 import (
 	"context"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -213,26 +210,6 @@ type migrationCache struct {
 		syncutil.Mutex
 		cache instanceCache
 	}
-}
-
-// onVersionReached installs a callback that runs once the version is reached.
-// If the version was reached before installing the callback, the callback is run
-// synchronously.
-func onVersionReached(
-	ctx context.Context, settings *cluster.Settings, expect clusterversion.Key, do func(),
-) {
-	var once sync.Once
-
-	onVersionChanged := func(rpcContext context.Context, version clusterversion.ClusterVersion) {
-		if !version.IsActive(expect) {
-			return
-		}
-		once.Do(do)
-	}
-
-	settings.Version.SetOnChange(onVersionChanged)
-
-	onVersionChanged(ctx, settings.Version.ActiveVersion(ctx))
 }
 
 func (c *migrationCache) Close() {

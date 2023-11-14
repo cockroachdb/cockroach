@@ -145,11 +145,8 @@ func (s *Storage) GetAllInstancesDataForTest(
 	var rows []instancerow
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-		rows, err = s.getInstanceRows(ctx, nil /*global*/, &version, txn, lock.WaitPolicy_Block)
+		var err error
+		rows, err = s.getInstanceRows(ctx, nil /*global*/, txn, lock.WaitPolicy_Block)
 		return err
 	}); err != nil {
 		return nil, err

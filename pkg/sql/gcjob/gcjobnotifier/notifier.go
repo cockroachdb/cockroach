@@ -173,12 +173,6 @@ func (n *Notifier) maybeNotify() {
 	n.notifyLocked()
 }
 
-func (n *Notifier) notify() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.notifyLocked()
-}
-
 func (n *Notifier) notifyLocked() {
 	for c := range n.mu.notifyees {
 		select {

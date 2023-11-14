@@ -3911,13 +3911,6 @@ func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 	return ex.resetTransactionOnSchemaChangeRetry(ctx)
 }
 
-func (ex *connExecutor) handleWaitingForDescriptorIDGeneratorMigration(ctx context.Context) error {
-	if err := ex.planner.waitForDescriptorIDGeneratorMigration(ctx); err != nil {
-		return err
-	}
-	return ex.resetTransactionOnSchemaChangeRetry(ctx)
-}
-
 // initStatementResult initializes res according to a query.
 //
 // cols represents the columns of the result rows. Should be nil if
