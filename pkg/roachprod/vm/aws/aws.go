@@ -258,13 +258,114 @@ type Provider struct {
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
-	return false
+	return true
 }
 
+// CloudTrailEvent represents a single event from the CloudTrail lookup.
+type CloudTrailEvent struct {
+	Time      string `json:"Time"`
+	Name      string `json:"Name"`
+	Resources []struct {
+		ResourceType string `json:"ResourceType"`
+		ResourceName string `json:"ResourceName"`
+	} `json:"Resources"`
+}
+
+// CloudTrailEvents is a slice of CloudTrailEvent
+type CloudTrailEvents []CloudTrailEvent
+
+// GetPreemptedSpotVMs uses cloudtrail events and describe-instance to find preempted spot VMs.
 func (p *Provider) GetPreemptedSpotVMs(
 	l *logger.Logger, vms vm.List, since time.Time,
 ) ([]vm.PreemptedVM, error) {
-	return nil, nil
+	var preemptedVMs []vm.PreemptedVM
+	// Iterate over all VMs and check if they have been terminated.
+	for _, vmNode := range vms {
+		if !vmNode.Preemptible {
+			continue
+			// rest of the code is only for preemptible(spot) VMs
+		}
+		var preemptedVM vm.PreemptedVM
+		// Check if the instance was terminated using cloudtrail events, this is the most reliable source as the events are
+		// guaranteed to be available for 90 days. It also has time of the events which help triaging.
+		// Note: Cloudtrail events do not have a deterministic way to tell if the instance was terminated due to
+		// spot termination. So, we just check if the instance was terminated or stopped.
+		interruptedTime, err := getInterruptedTimeFromCloudTrailEvents(l, p, vmNode.ProviderID, since)
+		if err != nil {
+			return nil, err
+		}
+		if !interruptedTime.IsZero() {
+			preemptedVM = vm.PreemptedVM{VM: vmNode, VMName: vmNode.Name, PreemptedAt: interruptedTime}
+		} else {
+			// If the instance was not found in cloudtrail, check using describe-instance, because cloudtrail events
+			// may be delayed at times. This is not as reliable as cloudtrail events, because terminated instances appear in
+			// describe-instances only for a shor time(1 hr ?) post termination.
+			// Note: Describe-instance has StateReason code which deterministically tells us if the instance was terminated
+			// due to spot termination. But it does not have time at which the termination event occurred.
+			az := p.Config.getAvailabilityZone(vmNode.Zone)
+			if az == nil {
+				return nil, errors.Errorf("unknown zone %s", vmNode.Zone)
+			}
+			describeInstancesResponse, err := describeInstance(l, p, az.region.Name, vmNode.ProviderID)
+			if err != nil {
+				return nil, err
+			}
+			if len(describeInstancesResponse.Reservations) > 0 &&
+				len(describeInstancesResponse.Reservations[0].Instances) > 0 {
+				// Found the instance in describe-instances, check if it is terminated.
+				instance := describeInstancesResponse.Reservations[0].Instances[0]
+				isTerminatedOrStopped := instance.State.Name == "terminated" || instance.State.Name == "stopped"
+				isSpotTermination := instance.StateReason.Code == "Server.SpotInstanceTermination" ||
+					instance.StateReason.Code == "Server.SpotInstanceShutdown"
+				if isTerminatedOrStopped && isSpotTermination {
+					preemptedVM = vm.PreemptedVM{VM: vmNode, VMName: vmNode.Name}
+				}
+			} else {
+				// Reaching here means the instance was not found in describe-instances nor in cloudtrail.
+				// This is unexpected, so we return an error.
+				return nil, errors.Errorf("instance %s not found in describe-instances or cloudtrail", vmNode.ProviderID)
+			}
+		}
+		preemptedVMs = append(preemptedVMs, preemptedVM)
+	}
+	return preemptedVMs, nil
+}
+
+func getInterruptedTimeFromCloudTrailEvents(
+	l *logger.Logger, p *Provider, instanceID string, since time.Time,
+) (time.Time, error) {
+	var zeroTime time.Time
+	ctArgs := []string{"cloudtrail",
+		"lookup-events",
+		"--lookup-attributes", "AttributeKey=ResourceName,AttributeValue=" + instanceID,
+		"--start-time", since.Format(time.RFC3339),
+		"--query", "Events[*].{Time: eventTime, Name: eventName, Resources: Resources}",
+		"--output", "json",
+	}
+	var cloudTrailEvents CloudTrailEvents
+	if err := p.runJSONCommand(l, ctArgs, &cloudTrailEvents); err != nil {
+		return zeroTime, err
+	}
+	for _, cloudTrailEvent := range cloudTrailEvents {
+		if cloudTrailEvent.Name == "TerminateInstances" ||
+			cloudTrailEvent.Name == "StopInstances" {
+			t, err := parseTime(cloudTrailEvent.Time)
+			if err != nil {
+				return zeroTime, err
+			}
+			return t, nil
+		}
+	}
+	return zeroTime, nil
+}
+
+func parseTime(timeStr string) (time.Time, error) {
+	t, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		fmt.Println("Error parsing time:", err)
+		return time.Time{}, err
+	}
+	return t, nil
 }
 
 const (
@@ -896,6 +997,10 @@ type DescribeInstancesOutput struct {
 				Code int
 				Name string
 			}
+			StateReason struct {
+				Code    string `json:"Code"`
+				Message string `json:"Message"`
+			} `json:"StateReason"`
 			RootDeviceName string
 
 			BlockDeviceMappings []struct {
@@ -1311,13 +1416,7 @@ func processSpotInstanceRequestStatus(
 func getSpotInstanceRequestId(
 	l *logger.Logger, p *Provider, regionName string, instanceId string,
 ) (string, error) {
-	diArgs := []string{
-		"ec2", "describe-instances",
-		"--region", regionName,
-		"--instance-ids", instanceId,
-	}
-	var describeInstancesResponse DescribeInstancesOutput
-	err := p.runJSONCommand(l, diArgs, &describeInstancesResponse)
+	describeInstancesResponse, err := describeInstance(l, p, regionName, instanceId)
 	if err != nil {
 		return "", err
 	}
@@ -1330,6 +1429,19 @@ func getSpotInstanceRequestId(
 	}
 	spotInstanceRequestId := describeInstancesResponse.Reservations[0].Instances[0].SpotInstanceRequestId
 	return spotInstanceRequestId, nil
+}
+
+func describeInstance(
+	l *logger.Logger, p *Provider, regionName string, instanceId string,
+) (DescribeInstancesOutput, error) {
+	diArgs := []string{
+		"ec2", "describe-instances",
+		"--region", regionName,
+		"--instance-ids", instanceId,
+	}
+	var describeInstancesResponse DescribeInstancesOutput
+	err := p.runJSONCommand(l, diArgs, &describeInstancesResponse)
+	return describeInstancesResponse, err
 }
 
 func genDeviceMapping(ebsVolumes ebsVolumeList, args []string) ([]string, error) {
