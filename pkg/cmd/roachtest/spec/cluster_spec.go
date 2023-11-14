@@ -167,7 +167,7 @@ func awsMachineSupportsSSD(machineType string) bool {
 }
 
 func getAWSOpts(
-	machineType string, zones []string, volumeSize, ebsThroughput int, localSSD bool,
+	machineType string, zones []string, volumeSize, ebsThroughput int, localSSD bool, useSpotVM bool,
 ) vm.ProviderOpts {
 	opts := aws.DefaultProviderOpts()
 	if volumeSize != 0 {
@@ -184,6 +184,7 @@ func getAWSOpts(
 	if len(zones) != 0 {
 		opts.CreateZones = zones
 	}
+	opts.UseSpot = useSpotVM
 	return opts
 }
 
@@ -425,7 +426,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	switch cloud {
 	case AWS:
 		providerOpts = getAWSOpts(machineType, zones, s.VolumeSize, s.AWS.VolumeThroughput,
-			createVMOpts.SSDOpts.UseLocalSSD)
+			createVMOpts.SSDOpts.UseLocalSSD, s.UseSpotVMs)
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
