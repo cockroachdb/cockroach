@@ -467,6 +467,10 @@ message LocalOnlySessionData {
   // being emitted for changes to data made in a session.
   // TODO(yang): Plumb this session variable down to KV.
   bool disable_changefeed_replication = 116;
+  // InternalExecutorRowsAffectedRetryLimit determines the maximum number of
+  // retries that the InternalExecutor can perform transparently when executing
+  // Exec{Ex} function calls (which it translates into "rows affected" mode).
+  int64 internal_executor_rows_affected_retry_limit = 117;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

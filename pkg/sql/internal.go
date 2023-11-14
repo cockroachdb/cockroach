@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -202,6 +203,15 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 	}
 }
 
+var ieRowsAffectedRetryLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.defaults.internal_executor_rows_affected_retry_limit",
+	"limit on the number of retries that can be transparently performed "+
+		"by the InternalExecutor's Exec{Ex} methods",
+	5,
+	settings.NonNegativeInt,
+)
+
 func (ie *InternalExecutor) runWithEx(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -263,11 +273,12 @@ func (ie *InternalExecutor) initConnEx(
 		w:    w,
 		mode: mode,
 		sync: syncCallback,
-		resetRowsAffected: func() {
-			var zero int
-			_ = w.addResult(ctx, ieIteratorResult{rowsAffected: &zero})
-		},
 	}
+	clientComm.rowsAffectedState.rewind = func() {
+		var zero int
+		_ = w.addResult(ctx, ieIteratorResult{rowsAffected: &zero})
+	}
+	clientComm.rowsAffectedState.numRewindsLimit = sd.InternalExecutorRowsAffectedRetryLimit
 
 	applicationStats := ie.s.sqlStats.GetApplicationStats(sd.ApplicationName, true /* internal */)
 	sds := sessiondata.NewStack(sd)
@@ -833,6 +844,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	}
 	// We always override the injection knob based on the override struct.
 	sd.InjectRetryErrorsEnabled = o.InjectRetryErrorsEnabled
+	if o.RowsAffectedRetryLimit > 0 {
+		sd.InternalExecutorRowsAffectedRetryLimit = o.RowsAffectedRetryLimit
+	}
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(
@@ -1314,11 +1328,20 @@ type internalClientComm struct {
 	// mode determines how the results of the query execution are consumed.
 	mode ieExecutionMode
 
-	// resetRowsAffected is a callback that sends a single ieIteratorResult
-	// object to w in order to set the number of rows affected to zero. Only
-	// used in rowsAffectedIEExecutionMode when discarding a result (indicating
-	// that a command will be retried).
-	resetRowsAffected func()
+	// rowsAffectedState is only used in rowsAffectedIEExecutionMode.
+	rowsAffectedState struct {
+		// rewind is a callback that sends a single ieIteratorResult object to w
+		// in order to set the number of rows affected to zero. Used when
+		// discarding a result (indicating that a command will be retried).
+		rewind func()
+		// numRewinds tracks the number of times rewind() has been called.
+		numRewinds int64
+		// numRewindsLimit is the limit on the number of times we will perform
+		// the transparent retry. Once numRewinds reaches numRewindsLimit, the
+		// internal executor machinery will no longer retry and, instead, will
+		// return the error to the client.
+		numRewindsLimit int64
+	}
 
 	// sync, if set, is called whenever a Sync is executed with all accumulated
 	// results since the last Sync.
@@ -1358,7 +1381,8 @@ func (icc *internalClientComm) createRes(pos CmdPos) *streamingCommandResult {
 			// "finalized").
 			icc.results = icc.results[:len(icc.results)-1]
 			if icc.mode == rowsAffectedIEExecutionMode {
-				icc.resetRowsAffected()
+				icc.rowsAffectedState.numRewinds++
+				icc.rowsAffectedState.rewind()
 			}
 		},
 	}
@@ -1455,12 +1479,18 @@ func (icc *internalClientComm) Close() {}
 
 // ClientPos is part of the ClientLock interface.
 func (icc *internalClientComm) ClientPos() CmdPos {
-	if icc.mode == rowsAffectedIEExecutionMode {
+	if icc.mode == rowsAffectedIEExecutionMode &&
+		icc.rowsAffectedState.numRewinds < icc.rowsAffectedState.numRewindsLimit {
 		// With the "rows affected" mode, any command can be rewound since we
 		// assume that only a single command results in actual "rows affected",
 		// and in Discard we will reset the number to zero (if we were in
 		// process of evaluation that command when we encountered the retry
 		// error).
+		//
+		// However, to prevent stack overflow due to large (infinite?) number of
+		// retries we also need to check that we haven't reached the limit yet.
+		// If we have, then we fall back to the general logic below of
+		// determining whether we can retry.
 		return -1
 	}
 	// Find the latest result that cannot be rewound.

@@ -257,6 +257,7 @@ var sqlDefaultSettings = map[InternalKey]struct{}{
 	"sql.defaults.idle_in_transaction_session_timeout":                          {},
 	"sql.defaults.implicit_select_for_update.enabled":                           {},
 	"sql.defaults.insert_fast_path.enabled":                                     {},
+	"sql.defaults.internal_executor_rows_affected_retry_limit":                  {},
 	"sql.defaults.intervalstyle":                                                {},
 	"sql.defaults.intervalstyle.enabled":                                        {},
 	"sql.defaults.large_full_scan_rows":                                         {},
