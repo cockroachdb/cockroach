@@ -15,11 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -55,6 +57,8 @@ func CheckTwoVersionInvariant(
 	clock *hlc.Clock,
 	db isql.DB,
 	descsCol *Collection,
+	regionProviderFactory regionliveness.RegionProviderFactory,
+	settings *clustersettings.Settings,
 	txn *kv.Txn,
 	onRetryBackoff func(),
 ) error {
@@ -88,7 +92,7 @@ func CheckTwoVersionInvariant(
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
 	count, err := lease.CountLeases(
-		ctx, db, withNewVersion, txn.ProvisionalCommitTimestamp(),
+		ctx, db, regionProviderFactory, settings, withNewVersion, txn.ProvisionalCommitTimestamp(),
 	)
 	if err != nil {
 		return err
@@ -115,7 +119,7 @@ func CheckTwoVersionInvariant(
 	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
 		// Use the current clock time.
 		now := clock.Now()
-		count, err := lease.CountLeases(ctx, db, withNewVersion, now)
+		count, err := lease.CountLeases(ctx, db, regionProviderFactory, settings, withNewVersion, now)
 		if err != nil {
 			return err
 		}

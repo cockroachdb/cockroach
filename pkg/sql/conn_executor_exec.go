@@ -44,6 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1328,12 +1330,15 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 	if knobs := ex.server.cfg.SchemaChangerTestingKnobs; knobs != nil {
 		inRetryBackoff = knobs.TwoVersionLeaseViolation
 	}
-
 	return descs.CheckTwoVersionInvariant(
 		ctx,
 		ex.server.cfg.Clock,
 		ex.server.cfg.InternalDB,
 		ex.extraTxnState.descCollection,
+		func(txn *kv.Txn) (regionliveness.RegionProvider, func()) {
+			return regions.NewProvider(ex.server.GetExecutorConfig().Codec, ex.server.cfg.TenantStatusServer, txn, ex.extraTxnState.descCollection), func() {}
+		},
+		ex.server.cfg.Settings,
 		ex.state.mu.txn,
 		inRetryBackoff,
 	)

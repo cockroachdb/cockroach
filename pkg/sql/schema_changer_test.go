@@ -49,6 +49,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -106,6 +108,13 @@ func TestSchemaChangeProcess(t *testing.T) {
 		execCfg.Clock,
 		execCfg.Settings,
 		s.SettingsWatcher().(*settingswatcher.SettingsWatcher),
+		func(txn *kv.Txn) (provider regionliveness.RegionProvider, cleanup func()) {
+			cf := execCfg.CollectionFactory.NewCollection(ctx)
+			return regions.NewProvider(execCfg.Codec, execCfg.TenantStatusServer, txn, cf),
+				func() {
+					cf.ReleaseAll(ctx)
+				}
+		},
 		execCfg.Codec,
 		lease.ManagerTestingKnobs{},
 		stopper,

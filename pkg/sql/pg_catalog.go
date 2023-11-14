@@ -1806,6 +1806,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 			// float entry for the rows.
 			typOID := tree.NewDOid(catid.TypeIDToOID(e.GetID()))
 			for i := 0; i < e.NumEnumMembers(); i++ {
+				// Skip mutations.
+				if e.TypeDesc().EnumMembers[i].Direction != descpb.TypeDescriptor_EnumMember_NONE {
+					continue
+				}
 				if err := addRow(
 					h.EnumEntryOid(typOID, e.GetMemberPhysicalRepresentation(i)),
 					typOID,

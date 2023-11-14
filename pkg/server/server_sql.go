@@ -94,6 +94,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rangeprober"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -672,6 +674,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		lmKnobs = *leaseManagerTestingKnobs.(*lease.ManagerTestingKnobs)
 	}
 
+	var collectionFactory *descs.CollectionFactory
 	leaseMgr := lease.NewLeaseManager(
 		cfg.AmbientCtx,
 		cfg.nodeIDContainer,
@@ -679,6 +682,13 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.clock,
 		cfg.Settings,
 		settingsWatcher,
+		func(txn *kv.Txn) (regionliveness.RegionProvider, func()) {
+			cf := collectionFactory.NewCollection(ctx)
+			return regions.NewProvider(codec, cfg.tenantStatusServer, txn, cf),
+				func() {
+					cf.ReleaseAll(ctx)
+				}
+		},
 		codec,
 		lmKnobs,
 		cfg.stopper,
@@ -783,7 +793,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		)
 	}
 
-	collectionFactory := descs.NewCollectionFactory(
+	collectionFactory = descs.NewCollectionFactory(
 		ctx,
 		cfg.Settings,
 		leaseMgr,

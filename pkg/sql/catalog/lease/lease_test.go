@@ -47,6 +47,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -255,6 +257,14 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			cfgCpy.Clock,
 			cfgCpy.Settings,
 			t.server.SettingsWatcher().(*settingswatcher.SettingsWatcher),
+			func(txn *kv.Txn) (provider regionliveness.RegionProvider, cleanup func()) {
+				ctx := context.Background()
+				cf := cfgCpy.CollectionFactory.NewCollection(ctx)
+				return regions.NewProvider(cfgCpy.Codec, cfgCpy.TenantStatusServer, txn, cf),
+					func() {
+						cf.ReleaseAll(ctx)
+					}
+			},
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,
 			t.server.AppStopper(),
