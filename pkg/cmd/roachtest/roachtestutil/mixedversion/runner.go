@@ -11,6 +11,7 @@
 package mixedversion
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
@@ -19,10 +20,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -386,9 +387,12 @@ func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
 		return
 	}
 
-	l.Printf("released versions: %s", formatVersions(releasedVersions))
-	l.Printf("logical binary versions: %s", formatVersions(binaryVersions))
-	l.Printf("cluster versions: %s", formatVersions(clusterVersions))
+	tw := newTableWriter(len(releasedVersions))
+	tw.AddRow("released versions", toString(releasedVersions)...)
+	tw.AddRow("logical binary versions", toString(binaryVersions)...)
+	tw.AddRow("cluster versions", toString(clusterVersions)...)
+
+	l.Printf("current cluster configuration:\n%s", tw.String())
 }
 
 // loggerFor creates a logger instance to be used by a test step. Logs
@@ -614,32 +618,73 @@ func (tf *testFailure) Error() string {
 	}
 	tf.summarized = true
 
-	var lines []string
-	debugInfo := func(label, value string) {
-		lines = append(lines, fmt.Sprintf("%-40s%s", label+":", value))
+	lines := []string{
+		tf.description,
+		fmt.Sprintf("test random seed: %d\n", tf.seed),
 	}
 
-	debugInfo("test random seed", strconv.FormatInt(tf.seed, 10))
-
+	tw := newTableWriter(len(tf.binaryVersions))
 	if tf.testContext != nil {
 		releasedVersions := make([]*clusterupgrade.Version, 0, len(tf.testContext.CockroachNodes))
 		for _, node := range tf.testContext.CockroachNodes {
 			releasedVersions = append(releasedVersions, tf.testContext.NodeVersion(node))
 		}
-		debugInfo("released versions", formatVersions(releasedVersions))
+		tw.AddRow("released versions", toString(releasedVersions)...)
 	}
 
-	debugInfo("logical binary versions", formatVersions(tf.binaryVersions))
-	debugInfo(
-		"cluster versions before failure",
-		formatVersions(tf.clusterVersionsBefore),
-	)
+	tw.AddRow("logical binary versions", toString(tf.binaryVersions)...)
+	tw.AddRow("cluster versions before failure", toString(tf.clusterVersionsBefore)...)
 
 	if cv := tf.clusterVersionsAfter; cv != nil {
-		debugInfo("cluster versions after failure", formatVersions(cv))
+		tw.AddRow("cluster versions after failure", toString(cv)...)
 	}
 
+	lines = append(lines, tw.String())
 	return strings.Join(lines, "\n")
+}
+
+// tableWriter is a thin wrapper around the `tabwriter` package used
+// by the test runner to display logical and released binary versions
+// in a tabular format.
+type tableWriter struct {
+	buffer *bytes.Buffer
+	w      *tabwriter.Writer
+}
+
+// newTableWriter creates a tableWriter to display tabular data for
+// the given number of nodes.
+func newTableWriter(numNodes int) *tableWriter {
+	var buffer bytes.Buffer
+	const (
+		minWidth = 3
+		tabWidth = 4
+		padding  = 5
+		padchar  = ' '
+		flags    = 0
+	)
+
+	tw := tabwriter.NewWriter(&buffer, minWidth, tabWidth, padding, padchar, flags)
+	writer := &tableWriter{buffer: &buffer, w: tw}
+
+	var nodeValues []string
+	for j := 1; j <= numNodes; j++ {
+		nodeValues = append(nodeValues, fmt.Sprintf("n%d", j))
+	}
+
+	writer.AddRow("", nodeValues...)
+	return writer
+}
+
+// AddRow adds a row to the table with the given title and values.
+func (tw *tableWriter) AddRow(title string, values ...string) {
+	cells := append([]string{title}, values...)
+	fmt.Fprintf(tw.w, "%s", strings.Join(cells, "\t"))
+	fmt.Fprintf(tw.w, "\n")
+}
+
+func (tw *tableWriter) String() string {
+	_ = tw.w.Flush()
+	return tw.buffer.String()
 }
 
 func renameFailedLogger(l *logger.Logger) error {
@@ -692,14 +737,13 @@ func waitForChannel(ch chan error, desc string, l *logger.Logger) {
 	}
 }
 
-func formatVersions[T fmt.Stringer](versions []T) string {
-	var pairs []string
-	for idx, v := range versions {
-		nodeLabel := fmt.Sprintf("n%d:", idx+1)
-		pairs = append(pairs, fmt.Sprintf("%-5s%-12s", nodeLabel, v.String()))
+func toString[T fmt.Stringer](xs []T) []string {
+	var result []string
+	for _, x := range xs {
+		result = append(result, x.String())
 	}
 
-	return strings.Join(pairs, " ")
+	return result
 }
 
 // isContextCanceled returns a boolean indicating whether the context
