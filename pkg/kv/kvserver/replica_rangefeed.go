@@ -86,7 +86,7 @@ var RangeFeedUseScheduler = settings.RegisterBoolSetting(
 	"use shared fixed pool of workers for all range feeds instead of a "+
 		"worker per range (worker pool size is determined by "+
 		"COCKROACH_RANGEFEED_SCHEDULER_WORKERS env variable)",
-	util.ConstantWithMetamorphicTestBool("kv_rangefeed_scheduler_enabled", false),
+	util.ConstantWithMetamorphicTestBool("kv_rangefeed_scheduler_enabled", true),
 )
 
 // RangefeedSchedulerDisabled is a kill switch for scheduler based rangefeed
