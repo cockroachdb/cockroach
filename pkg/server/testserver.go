@@ -1080,6 +1080,10 @@ func (t *testTenant) DistSQLPlanningNodeID() roachpb.NodeID {
 	return 0
 }
 
+func (ts *testTenant) ExternalStorageAccessor() interface{} {
+	return ts.sql.cfg.ExternalStorageAccessor
+}
+
 // LeaseManager is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) LeaseManager() interface{} {
 	return t.sql.leaseMgr
@@ -1873,6 +1877,10 @@ func (ts *testServer) UpdateChecker() interface{} {
 // DiagnosticsReporter implements the serverutils.ApplicationLayerInterface.
 func (ts *testServer) DiagnosticsReporter() interface{} {
 	return ts.topLevelServer.sqlServer.diagnosticsReporter
+}
+
+func (ts *testServer) ExternalStorageAccessor() interface{} {
+	return ts.Cfg.ExternalStorageAccessor
 }
 
 type v2AuthDecorator struct {

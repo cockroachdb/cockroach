@@ -926,8 +926,11 @@ func (p *Pebble) Download(ctx context.Context, span roachpb.Span) error {
 	if p == nil {
 		return nil
 	}
-	// TODO(adityamaru): Wire this up to pebble once it supports downloading.
-	return nil
+	downloadSpan := pebble.DownloadSpan{
+		StartKey: span.Key,
+		EndKey:   span.EndKey,
+	}
+	return p.db.Download(ctx, []pebble.DownloadSpan{downloadSpan})
 }
 
 type remoteStorageAdaptor struct {
