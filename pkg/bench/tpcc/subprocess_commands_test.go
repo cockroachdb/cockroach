@@ -104,7 +104,7 @@ var (
 		pgURL, ok := envutil.EnvString(pgurlEnvVar, 0)
 		require.True(t, ok)
 		ql := makeQueryLoad(t, pgURL)
-		defer ql.Close(context.Background())
+		defer func() { _ = ql.Close(context.Background()) }()
 		eventAddr, ok := envutil.EnvString(eventEnvVar, 0)
 		require.True(t, ok)
 		sendEvent(t, eventAddr, runStartEvent)

@@ -188,7 +188,7 @@ func TestTenantBackupNemesis(t *testing.T) {
 		}
 		defer func() {
 			if ops.Close != nil {
-				ops.Close(ctx)
+				_ = ops.Close(ctx)
 			}
 		}()
 		fn := ops.WorkerFns[0]

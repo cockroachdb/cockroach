@@ -727,12 +727,13 @@ func (o *kvOp) tryHandleWriteErr(name string, start time.Time, err error) error 
 	return err
 }
 
-func (o *kvOp) close(context.Context) {
+func (o *kvOp) close(context.Context) error {
 	if empty := o.numEmptyResults.Load(); empty != 0 {
 		fmt.Printf("Number of reads that didn't return any results: %d.\n", empty)
 	}
 	fmt.Printf("Write sequence could be resumed by passing --write-seq=%s to the next run.\n",
 		o.g.state())
+	return nil
 }
 
 type sequence struct {
