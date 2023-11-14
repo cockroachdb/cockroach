@@ -19,6 +19,7 @@ go_library(
         "//pkg/build",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/testutils/skip",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/metric",
