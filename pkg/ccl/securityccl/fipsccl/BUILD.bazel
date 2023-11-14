@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "fipsccl",
+    srcs = [
+        "build_boring.go",  # keep
+        "build_noboring.go",
+        "fips_linux.go",
+        "fips_nolinux.go",
+    ],
+    cgo = True,
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/securityccl/fipsccl",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
