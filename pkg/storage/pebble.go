@@ -1829,7 +1829,7 @@ func (p *Pebble) Properties() roachpb.StoreProperties {
 }
 
 // Capacity implements the Engine interface.
-func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
+func (p *Pebble) Capacity(skipCountingUsed bool) (roachpb.StoreCapacity, error) {
 	dir := p.path
 	if dir != "" {
 		var err error
@@ -1882,41 +1882,44 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 		}
 	}
 
-	// Pebble has detailed accounting of its own disk space usage, and it's
-	// incrementally updated which helps avoid O(# files) work here.
-	m := p.db.Metrics()
-	totalUsedBytes := int64(m.DiskSpaceUsage())
+	var totalUsedBytes int64
+	if !skipCountingUsed {
+		// Pebble has detailed accounting of its own disk space usage, and it's
+		// incrementally updated which helps avoid O(# files) work here.
+		m := p.db.Metrics()
+		totalUsedBytes = int64(m.DiskSpaceUsage())
 
-	// We don't have incremental accounting of the disk space usage of files
-	// in the auxiliary directory. Walk the auxiliary directory and all its
-	// subdirectories, adding to the total used bytes.
-	if errOuter := filepath.Walk(p.auxDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// This can happen if CockroachDB removes files out from under us -
-			// just keep going to get the best estimate we can.
-			if oserror.IsNotExist(err) {
+		// We don't have incremental accounting of the disk space usage of files
+		// in the auxiliary directory. Walk the auxiliary directory and all its
+		// subdirectories, adding to the total used bytes.
+		if errOuter := filepath.Walk(p.auxDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				// This can happen if CockroachDB removes files out from under us -
+				// just keep going to get the best estimate we can.
+				if oserror.IsNotExist(err) {
+					return nil
+				}
+				// Special-case: if the store-dir is configured using the root of some fs,
+				// e.g. "/mnt/db", we might have special fs-created files like lost+found
+				// that we can't read, so just ignore them rather than crashing.
+				if oserror.IsPermission(err) && filepath.Base(path) == "lost+found" {
+					return nil
+				}
+				return err
+			}
+			if path == p.ballastPath {
+				// Skip the ballast. Counting it as used is likely to confuse
+				// users, and it's more akin to space that is just unavailable
+				// like disk space often restricted to a root user.
 				return nil
 			}
-			// Special-case: if the store-dir is configured using the root of some fs,
-			// e.g. "/mnt/db", we might have special fs-created files like lost+found
-			// that we can't read, so just ignore them rather than crashing.
-			if oserror.IsPermission(err) && filepath.Base(path) == "lost+found" {
-				return nil
+			if info.Mode().IsRegular() {
+				totalUsedBytes += info.Size()
 			}
-			return err
-		}
-		if path == p.ballastPath {
-			// Skip the ballast. Counting it as used is likely to confuse
-			// users, and it's more akin to space that is just unavailable
-			// like disk space often restricted to a root user.
 			return nil
+		}); errOuter != nil {
+			return roachpb.StoreCapacity{}, errOuter
 		}
-		if info.Mode().IsRegular() {
-			totalUsedBytes += info.Size()
-		}
-		return nil
-	}); errOuter != nil {
-		return roachpb.StoreCapacity{}, errOuter
 	}
 
 	// If no size limitation have been placed on the store size or if the

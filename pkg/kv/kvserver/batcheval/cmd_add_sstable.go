@@ -145,7 +145,7 @@ func EvalAddSSTable(
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
 
 	if min := addSSTableCapacityRemainingLimit.Get(&cArgs.EvalCtx.ClusterSettings().SV); min > 0 {
-		cap, err := cArgs.EvalCtx.GetEngineCapacity()
+		cap, err := cArgs.EvalCtx.GetEngineCapacity(true)
 		if err != nil {
 			return result.Result{}, err
 		}

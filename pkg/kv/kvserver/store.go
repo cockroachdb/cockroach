@@ -2839,7 +2839,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		}
 	}
 
-	capacity, err := s.TODOEngine().Capacity()
+	capacity, err := s.TODOEngine().Capacity(false)
 	if err != nil {
 		return roachpb.StoreCapacity{}, err
 	}
