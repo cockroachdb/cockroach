@@ -3233,14 +3233,16 @@ func sendAddRemoteSSTWorker(
 		var batchSize int64
 		const targetBatchSize = 384 << 20
 
-		flush := func() error {
+		flush := func(splitAt roachpb.Key) error {
 			if len(toAdd) == 0 {
 				return nil
 			}
 
-			expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
-			if err := execCtx.ExecCfg().DB.AdminSplit(ctx, toAdd[len(toAdd)-1].BackupFileEntrySpan.Key, expiration); err != nil {
-				log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+			if len(splitAt) > 0 {
+				expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
+				if err := execCtx.ExecCfg().DB.AdminSplit(ctx, splitAt, expiration); err != nil {
+					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+				}
 			}
 
 			for _, file := range toAdd {
@@ -3281,6 +3283,7 @@ func sendAddRemoteSSTWorker(
 		}
 
 		for entry := range restoreSpanEntriesCh {
+			firstSplitDone := false
 			for _, file := range entry.Files {
 				restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
 				log.Infof(ctx, "Experimental restore: sending span %s of file (path: %s, span: %s), with intersecting subspan %s",
@@ -3292,13 +3295,24 @@ func sendAddRemoteSSTWorker(
 				}
 
 				file.BackupFileEntrySpan = restoringSubspan
+				if !firstSplitDone {
+					expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
+					if err := execCtx.ExecCfg().DB.AdminSplit(ctx, restoringSubspan.Key, expiration); err != nil {
+						log.Warningf(ctx, "failed to split during experimental restore: %v", err)
+					}
+					if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, restoringSubspan.Key, 4<<20); err != nil {
+						log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
+					}
+					firstSplitDone = true
+				}
+
 				// If we've queued up a batch size of files, split before the next one
 				// then flush the ones we queued. We do this accumulate-into-batch, then
 				// split, then flush so that when we split we are splitting an empty
 				// span rather than one we have added to, since we add with estimated
 				// stats and splitting a span with estimated stats is slow.
 				if batchSize > targetBatchSize {
-					if err := flush(); err != nil {
+					if err := flush(file.BackupFileEntrySpan.Key); err != nil {
 						return err
 					}
 				}
@@ -3308,7 +3322,7 @@ func sendAddRemoteSSTWorker(
 				batchSize += file.BackupFileEntryCounts.DataSize
 			}
 		}
-		return flush()
+		return flush(nil)
 	}
 }
 
