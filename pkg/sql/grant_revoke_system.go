@@ -15,14 +15,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -38,27 +35,6 @@ import (
 func (n *changeNonDescriptorBackedPrivilegesNode) ReadingOwnWrites() {}
 
 func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) error {
-	privilegesTableHasUserIDCol := params.p.ExecCfg().Settings.Version.IsActive(params.ctx,
-		clusterversion.TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn)
-	if !params.p.ExecCfg().Settings.Version.IsActive(
-		params.ctx,
-		clusterversion.TODO_Delete_V23_1AllowNewSystemPrivileges,
-	) {
-		if n.desiredprivs.Contains(privilege.MODIFYSQLCLUSTERSETTING) {
-			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using MODIFYSQLCLUSTERSETTING system privilege")
-		}
-		if n.desiredprivs.Contains(privilege.VIEWJOB) {
-			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using VIEWJOB system privilege")
-		}
-		if n.desiredprivs.Contains(privilege.REPLICATION) {
-			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using REPLICATION system privilege")
-		}
-		if n.desiredprivs.Contains(privilege.MANAGEVIRTUALCLUSTER) {
-			return pgerror.New(pgcode.FeatureNotSupported, "upgrade must be finalized before using MANAGEVIRTUALCLUSTER system privilege")
-		}
-
-	}
-
 	if err := params.p.preChangePrivilegesValidation(params.ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
 		return err
 	}
@@ -84,11 +60,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 
 		deleteStmt := fmt.Sprintf(
 			`DELETE FROM system.%s VALUES WHERE username = $1 AND path = $2`, catconstants.SystemPrivilegeTableName)
-		upsertStmt := fmt.Sprintf(
-			`UPSERT INTO system.%s (username, path, privileges, grant_options) VALUES ($1, $2, $3, $4)`,
-			catconstants.SystemPrivilegeTableName)
-		if privilegesTableHasUserIDCol {
-			upsertStmt = fmt.Sprintf(`
+		upsertStmt := fmt.Sprintf(`
 UPSERT INTO system.%s (username, path, privileges, grant_options, user_id)
 VALUES ($1, $2, $3, $4, (
 	SELECT CASE $1
@@ -96,8 +68,7 @@ VALUES ($1, $2, $3, $4, (
 		ELSE (SELECT user_id FROM system.users WHERE username = $1)
 	END
 ))`,
-				catconstants.SystemPrivilegeTableName, username.PublicRole, username.PublicRoleID)
-		}
+			catconstants.SystemPrivilegeTableName, username.PublicRole, username.PublicRoleID)
 
 		if n.isGrant {
 			// Privileges are valid, write them to the system.privileges table.

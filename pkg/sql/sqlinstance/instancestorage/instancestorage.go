@@ -80,7 +80,7 @@ type Storage struct {
 	db            *kv.DB
 	slReader      sqlliveness.Reader
 	oldRowCodec   rowCodec
-	newRowCodec   rowCodec
+	rowCodec      rowCodec
 	settings      *cluster.Settings
 	settingsWatch *settingswatcher.SettingsWatcher
 	clock         *hlc.Clock
@@ -125,8 +125,7 @@ func NewTestingStorage(
 ) *Storage {
 	s := &Storage{
 		db:            db,
-		newRowCodec:   makeRowCodec(codec, table, true),
-		oldRowCodec:   makeRowCodec(codec, table, false),
+		rowCodec:      makeRowCodec(codec, table, true),
 		slReader:      slReader,
 		clock:         clock,
 		f:             f,
@@ -223,15 +222,6 @@ func (s *Storage) ReleaseInstance(
 		}
 		batch.Put(key, value)
 
-		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-			dualKey := dualCodec.encodeKey(region, instanceID)
-			dualValue, err := dualCodec.encodeAvailableValue()
-			if err != nil {
-				return err
-			}
-			batch.Put(dualKey, dualValue)
-		}
-
 		return txn.CommitInBatch(ctx, batch)
 	})
 }
@@ -309,14 +299,6 @@ func (s *Storage) createInstanceRow(
 			}
 			b.Put(rowCodec.encodeKey(region, availableID), value)
 
-			if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-				dualValue, err := dualCodec.encodeValue(rpcAddr, sqlAddr, sessionID, locality, binaryVersion)
-				if err != nil {
-					return err
-				}
-				b.Put(dualCodec.encodeKey(region, availableID), dualValue)
-			}
-
 			return txn.CommitInBatch(ctx, b)
 		}); err != nil {
 			return base.SQLInstanceID(0), err
@@ -372,19 +354,8 @@ func (s *Storage) createInstanceRow(
 // newInstanceCache constructs an instanceCache backed by a range feed over the
 // sql_instances table. newInstanceCache blocks until the initial scan is
 // complete.
-func (s *Storage) newInstanceCache(
-	ctx context.Context, stopper *stop.Stopper,
-) (instanceCache, error) {
-	if !s.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_SystemRbrReadNew) {
-		oldCache := func(ctx context.Context) (instanceCache, error) {
-			return newRangeFeedCache(ctx, s.oldRowCodec, s.clock, s.f)
-		}
-		newCache := func(ctx context.Context) (instanceCache, error) {
-			return newRangeFeedCache(ctx, s.newRowCodec, s.clock, s.f)
-		}
-		return newMigrationCache(ctx, stopper, s.settings, oldCache, newCache)
-	}
-	return newRangeFeedCache(ctx, s.newRowCodec, s.clock, s.f)
+func (s *Storage) newInstanceCache(ctx context.Context) (instanceCache, error) {
+	return newRangeFeedCache(ctx, s.rowCodec, s.clock, s.f)
 }
 
 // getAvailableInstanceIDForRegion retrieves an available instance ID for the
@@ -466,7 +437,6 @@ func (s *Storage) reclaimRegion(ctx context.Context, region []byte) error {
 		toReclaim, toDelete := idsToReclaim(target, instances, isExpired)
 
 		readCodec := s.getReadCodec(&version)
-		dualCodec := s.getDualWriteCodec(&version)
 
 		writeBatch := txn.NewBatch()
 		for _, instance := range toReclaim {
@@ -475,20 +445,9 @@ func (s *Storage) reclaimRegion(ctx context.Context, region []byte) error {
 				return err
 			}
 			writeBatch.Put(readCodec.encodeKey(region, instance), availableValue)
-
-			if dualCodec != nil {
-				dualValue, err := dualCodec.encodeAvailableValue()
-				if err != nil {
-					return err
-				}
-				writeBatch.Put(dualCodec.encodeKey(region, instance), dualValue)
-			}
 		}
 		for _, instance := range toDelete {
 			writeBatch.Del(readCodec.encodeKey(region, instance))
-			if dualCodec != nil {
-				writeBatch.Del(dualCodec.encodeKey(region, instance))
-			}
 		}
 
 		return txn.CommitInBatch(ctx, writeBatch)
@@ -639,29 +598,14 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 }
 
 func (s *Storage) getReadCodec(version *settingswatcher.VersionGuard) *rowCodec {
-	if version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew) {
-		return &s.newRowCodec
-	}
-	return &s.oldRowCodec
-}
-
-func (s *Storage) getDualWriteCodec(version *settingswatcher.VersionGuard) *rowCodec {
-	switch {
-	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrSingleWrite):
-		return nil
-	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew):
-		return &s.oldRowCodec
-	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrDualWrite):
-		return &s.newRowCodec
-	default:
-		return nil
-	}
+	return &s.rowCodec
 }
 
 func (s *Storage) versionGuard(
 	ctx context.Context, txn *kv.Txn,
 ) (settingswatcher.VersionGuard, error) {
-	return s.settingsWatch.MakeVersionGuard(ctx, txn, clusterversion.TODO_Delete_V23_1_SystemRbrCleanup)
+	// TODO(radu): this guard is no longer necessary.
+	return s.settingsWatch.MakeVersionGuard(ctx, txn, clusterversion.MinSupported)
 }
 
 // generateAvailableInstanceRows allocates available instance IDs, and store
@@ -684,7 +628,6 @@ func (s *Storage) generateAvailableInstanceRows(
 		}
 
 		readCodec := s.getReadCodec(&version)
-		dualCodec := s.getDualWriteCodec(&version)
 
 		b := txn.NewBatch()
 		for _, row := range idsToAllocate(target, regions, instances) {
@@ -693,13 +636,6 @@ func (s *Storage) generateAvailableInstanceRows(
 				return errors.Wrapf(err, "failed to encode row for instance id %d", row.instanceID)
 			}
 			b.Put(readCodec.encodeKey(row.region, row.instanceID), value)
-			if dualCodec != nil {
-				dualValue, err := dualCodec.encodeAvailableValue()
-				if err != nil {
-					return errors.Wrapf(err, "failed to encode dual write row for instance id %d", row.instanceID)
-				}
-				b.Put(dualCodec.encodeKey(row.region, row.instanceID), dualValue)
-			}
 		}
 		return txn.CommitInBatch(ctx, b)
 	})

@@ -3287,10 +3287,6 @@ var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
 func errIsRetriable(err error) bool {
 	return errors.HasInterface(err, (*pgerror.ClientVisibleRetryError)(nil)) ||
 		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError) ||
-		// Note that this error is not handled internally and can make it to the
-		// client in implicit transactions. This is not great; it should
-		// be marked as a client visible retry error.
-		errors.Is(err, descidgen.ErrDescIDSequenceMigrationInProgress) ||
 		descs.IsTwoVersionInvariantViolationError(err)
 }
 
@@ -3749,13 +3745,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		payloadErr = p.errorCause()
 		if descID := scerrors.ConcurrentSchemaChangeDescID(payloadErr); descID != descpb.InvalidID {
 			if err := ex.handleWaitingForConcurrentSchemaChanges(ex.Ctx(), descID); err != nil {
-				return advanceInfo{}, err
-			}
-		}
-		// Similarly, if the descriptor ID generator is not available because of
-		// an ongoing migration, wait for the migration to complete first.
-		if errors.Is(payloadErr, descidgen.ErrDescIDSequenceMigrationInProgress) {
-			if err := ex.handleWaitingForDescriptorIDGeneratorMigration(ex.Ctx()); err != nil {
 				return advanceInfo{}, err
 			}
 		}

@@ -214,6 +214,8 @@ func (gj gcJobs) sort() {
 
 // createGCJobRecord creates the job record for a GC job, setting some
 // properties which are common for all GC jobs.
+//
+// TODO(radu): we should remove useLegacyJob, it is no longer used.
 func createGCJobRecord(
 	id jobspb.JobID,
 	description string,

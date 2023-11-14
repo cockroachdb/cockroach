@@ -72,7 +72,6 @@ func TestGetEncoder(t *testing.T) {
 			guard := settingswatcher.TestMakeVersionGuard(version)
 
 			checkCodec(t, tc.readCodec, storage.getReadCodec(&guard))
-			checkCodec(t, tc.dualCodec, storage.getDualWriteCodec(&guard))
 		})
 	}
 }
