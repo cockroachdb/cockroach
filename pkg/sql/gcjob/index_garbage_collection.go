@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -42,7 +43,11 @@ func deleteIndexData(
 	// Before deleting any indexes, ensure that old versions of the table descriptor
 	// are no longer in use. This is necessary in the case of truncate, where we
 	// schedule a GC Job in the transaction that commits the truncation.
-	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID)
+	cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, execCfg.DB, execCfg.LeaseManager)
+	if err != nil {
+		return err
+	}
+	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, cachedRegions, parentID)
 	if isMissingDescriptorError(err) {
 		handleTableDescriptorDeleted(ctx, parentID, progress)
 		return nil
@@ -91,7 +96,11 @@ func gcIndexes(
 	// Before deleting any indexes, ensure that old versions of the table descriptor
 	// are no longer in use. This is necessary in the case of truncate, where we
 	// schedule a GC Job in the transaction that commits the truncation.
-	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, parentID)
+	cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, execCfg.DB, execCfg.LeaseManager)
+	if err != nil {
+		return err
+	}
+	parentDesc, err := sql.WaitToUpdateLeases(ctx, execCfg.LeaseManager, cachedRegions, parentID)
 	if isMissingDescriptorError(err) {
 		handleTableDescriptorDeleted(ctx, parentID, progress)
 		return nil
