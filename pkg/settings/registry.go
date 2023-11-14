@@ -230,6 +230,7 @@ var retiredSettings = map[InternalKey]struct{}{
 
 	// removed as of 24.1
 	"storage.mvcc.range_tombstones.enabled": {},
+	"kv.rangefeed.scheduler.enabled":        {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults
