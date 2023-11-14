@@ -658,6 +658,14 @@ type backupSpecs struct {
 
 	// workload defines the backed up workload.
 	workload backupWorkload
+
+	// nonRevisionHistory is true if the backup is not a revision history backup
+	// (note that the default backup in the restore roachtests contains revision
+	// history).
+	//
+	// TODO(msbutler): if another fixture requires a different backup option,
+	// create a new backupOpts struct.
+	nonRevisionHistory bool
 }
 
 func (bs backupSpecs) storagePrefix() string {
@@ -670,13 +678,17 @@ func (bs backupSpecs) storagePrefix() string {
 func (bs backupSpecs) backupCollection() string {
 	// N.B. AWS buckets are _regional_ whereas GCS buckets are _multi-regional_. Thus, in order to avoid egress (cost),
 	// we use us-east-2 for AWS, which is the default region for all roachprod clusters. (See roachprod/vm/aws/aws.go)
+	properties := ""
+	if bs.nonRevisionHistory {
+		properties = "/rev-history=false"
+	}
 	switch bs.storagePrefix() {
 	case "s3":
-		return fmt.Sprintf(`'s3://cockroach-fixtures-us-east-2/backups/%s/%s/inc-count=%d?AUTH=implicit'`,
-			bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain)
+		return fmt.Sprintf(`'s3://cockroach-fixtures-us-east-2/backups/%s/%s/inc-count=%d%s?AUTH=implicit'`,
+			bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain, properties)
 	case "gs":
-		return fmt.Sprintf(`'gs://cockroach-fixtures/backups/%s/%s/inc-count=%d?AUTH=implicit'`,
-			bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain)
+		return fmt.Sprintf(`'gs://cockroach-fixtures/backups/%s/%s/inc-count=%d%s?AUTH=implicit'`,
+			bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain, properties)
 	default:
 		panic(fmt.Sprintf("unknown storage prefix: %s", bs.storagePrefix()))
 	}
@@ -706,6 +718,10 @@ func makeBackupSpecs(override backupSpecs, specs backupSpecs) backupSpecs {
 
 	if override.numBackupsInChain != 0 {
 		specs.numBackupsInChain = override.numBackupsInChain
+	}
+
+	if override.nonRevisionHistory != specs.nonRevisionHistory {
+		specs.nonRevisionHistory = override.nonRevisionHistory
 	}
 
 	if override.workload != nil {
@@ -825,11 +841,13 @@ type restoreSpecs struct {
 	// restored user space tables.
 	fingerprint int
 
-	testName   string
 	setUpStmts []string
 
 	// skip, if non-empty, skips the test with the given reason.
 	skip string
+
+	// testname is set automatically.
+	testName string
 }
 
 func (sp *restoreSpecs) initTestName() {
@@ -902,7 +920,7 @@ func (rd *restoreDriver) getAOST(ctx context.Context) {
 	conn := rd.c.Conn(ctx, rd.t.L(), 1)
 	defer conn.Close()
 	err := conn.QueryRowContext(ctx, rd.sp.getAostCmd()).Scan(&aost)
-	require.NoError(rd.t, err)
+	require.NoError(rd.t, err, fmt.Sprintf("aost cmd failed: %s", rd.sp.getAostCmd()))
 	rd.aost = aost
 }
 
