@@ -2039,6 +2039,7 @@ var _ walkableStmt = &Restore{}
 var _ walkableStmt = &SelectClause{}
 var _ walkableStmt = &Select{}
 var _ walkableStmt = &SetClusterSetting{}
+var _ walkableStmt = &SetTransaction{}
 var _ walkableStmt = &SetVar{}
 var _ walkableStmt = &ShowFingerprints{}
 var _ walkableStmt = &ShowTenantClusterSetting{}
