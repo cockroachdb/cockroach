@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -36,8 +37,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -119,27 +120,24 @@ func (m *Manager) getSessionBasedLeasingMode() SessionBasedLeasingMode {
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
 func (m *Manager) WaitForNoVersion(
-	ctx context.Context, id descpb.ID, retryOpts retry.Options,
+	ctx context.Context,
+	id descpb.ID,
+	cachedDatabaseRegions regionliveness.CachedDatabaseRegions,
+	retryOpts retry.Options,
 ) error {
+	versions := []IDVersion{
+		{
+			Name:    fmt.Sprintf("[%d]", id),
+			ID:      id,
+			Version: 0, // Unused any version flag used below.
+		},
+	}
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
-		// Check to see if there are any leases that still exist on the previous
-		// version of the descriptor.
 		now := m.storage.clock.Now()
-		stmt := fmt.Sprintf(`SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME '%s' WHERE ("descID" = %d AND expiration > $1)`,
-			now.AsOfSystemTime(),
-			id)
-		values, err := m.storage.db.Executor().QueryRowEx(
-			ctx, "count-leases", nil, /* txn */
-			sessiondata.RootUserSessionDataOverride,
-			stmt, now.GoTime(),
-		)
+		count, err := CountLeases(ctx, m.storage.db, cachedDatabaseRegions, m.settings, versions, now, true /*forAnyVersion*/)
 		if err != nil {
 			return err
 		}
-		if values == nil {
-			return errors.New("failed to count leases")
-		}
-		count := int(tree.MustBeDInt(values[0]))
 		if count == 0 {
 			break
 		}
@@ -149,6 +147,10 @@ func (m *Manager) WaitForNoVersion(
 		}
 	}
 	return nil
+}
+
+type RegionProvider interface {
+	Regions(context.Context, *serverpb.RegionsRequest) (*serverpb.RegionsResponse, error)
 }
 
 // WaitForOneVersion returns once there are no unexpired leases on the
@@ -163,7 +165,10 @@ func (m *Manager) WaitForNoVersion(
 // If the descriptor is not found, an error will be returned. The error
 // can be detected by using errors.Is(err, catalog.ErrDescriptorNotFound).
 func (m *Manager) WaitForOneVersion(
-	ctx context.Context, id descpb.ID, retryOpts retry.Options,
+	ctx context.Context,
+	id descpb.ID,
+	regions regionliveness.CachedDatabaseRegions,
+	retryOpts retry.Options,
 ) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -193,7 +198,7 @@ func (m *Manager) WaitForOneVersion(
 		// version of the descriptor.
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
-		count, err := CountLeases(ctx, m.storage.db, descs, now)
+		count, err := CountLeases(ctx, m.storage.db, regions, m.settings, descs, now, false /*forAnyVersion*/)
 		if err != nil {
 			return nil, err
 		}

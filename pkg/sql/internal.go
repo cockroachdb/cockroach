@@ -1749,27 +1749,35 @@ func (ief *InternalDB) txn(
 		modifiedDescriptors []lease.IDVersion,
 		deletedDescs catalog.DescriptorIDSet,
 	) error {
+		// No descriptors to wait for.
+		if len(modifiedDescriptors) == 0 && deletedDescs.Len() == 0 {
+			return nil
+		}
 		retryOpts := retry.Options{
 			InitialBackoff: time.Millisecond,
 			Multiplier:     1.5,
 			MaxBackoff:     time.Second,
 		}
 		lm := ief.server.cfg.LeaseManager
+		cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, ief.server.cfg.DB, ief.server.cfg.LeaseManager)
+		if err != nil {
+			return err
+		}
 		for _, ld := range modifiedDescriptors {
 			if deletedDescs.Contains(ld.ID) { // we'll wait below
 				continue
 			}
-			_, err := lm.WaitForOneVersion(ctx, ld.ID, retryOpts)
+			_, err := lm.WaitForOneVersion(ctx, ld.ID, cachedRegions, retryOpts)
 			// If the descriptor has been deleted, just wait for leases to drain.
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				err = lm.WaitForNoVersion(ctx, ld.ID, retryOpts)
+				err = lm.WaitForNoVersion(ctx, ld.ID, cachedRegions, retryOpts)
 			}
 			if err != nil {
 				return err
 			}
 		}
 		for _, id := range deletedDescs.Ordered() {
-			if err := lm.WaitForNoVersion(ctx, id, retryOpts); err != nil {
+			if err := lm.WaitForNoVersion(ctx, id, cachedRegions, retryOpts); err != nil {
 				return err
 			}
 		}
@@ -1824,7 +1832,6 @@ func (ief *InternalDB) txn(
 			if kvTxn.TestingShouldRetry() {
 				return kvTxn.GenerateForcedRetryableErr(ctx, "injected retriable error")
 			}
-
 			return commitTxnFn(ctx)
 		}); errIsRetriable(err) {
 			continue

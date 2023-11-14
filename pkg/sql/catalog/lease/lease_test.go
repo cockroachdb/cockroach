@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2703,7 +2704,9 @@ func TestHistoricalDescriptorAcquire(t *testing.T) {
 
 	// Acquire descriptor version valid at timestamp ts1. Waits for the most
 	// recent version with the name column before doing so.
-	_, err = s.LeaseManager().(*lease.Manager).WaitForOneVersion(ctx, tableID.Load().(descpb.ID), base.DefaultRetryOptions())
+	cachedDatabaseRegions, err := regions.NewCachedDatabaseRegions(ctx, s.DB(), s.LeaseManager().(*lease.Manager))
+	require.NoError(t, err)
+	_, err = s.LeaseManager().(*lease.Manager).WaitForOneVersion(ctx, tableID.Load().(descpb.ID), cachedDatabaseRegions, base.DefaultRetryOptions())
 	require.NoError(t, err, "Failed to wait for one version of descriptor: %s", err)
 	acquiredDescriptor, err := s.LeaseManager().(*lease.Manager).Acquire(ctx, ts1, tableID.Load().(descpb.ID))
 	assert.NoError(t, err)
