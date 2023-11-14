@@ -128,8 +128,12 @@ func TestRegionLivenessProber(t *testing.T) {
 	}
 	cf := tenants[0].CollectionFactory().(*descs.CollectionFactory)
 	statusServer := tenants[0].SQLServer().(*sql.Server).GetExecutorConfig().TenantStatusServer
-	providerFactory := func(txn *kv.Txn) regionliveness.RegionProvider {
-		return regions.NewProvider(tenants[0].Codec(), statusServer, txn, cf.NewCollection(ctx))
+	providerFactory := func(txn *kv.Txn) (regionliveness.RegionProvider, func()) {
+		cf := cf.NewCollection(ctx)
+		return regions.NewProvider(tenants[0].Codec(), statusServer, txn, cf),
+			func() {
+				cf.ReleaseAll(ctx)
+			}
 	}
 	regionProber := regionliveness.NewLivenessProber(idb, providerFactory, tenants[0].ClusterSettings())
 	// Validates the expected regions versus the region liveness set.

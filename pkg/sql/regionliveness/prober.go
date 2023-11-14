@@ -72,7 +72,7 @@ type RegionProvider interface {
 	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
 }
 
-type RegionProviderFactory func(txn *kv.Txn) RegionProvider
+type RegionProviderFactory func(txn *kv.Txn) (provider RegionProvider, cleanup func())
 
 type livenessProber struct {
 	db                    isql.DB
@@ -157,7 +157,8 @@ SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.crdb_in
 func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRegions, error) {
 	regionStatus := make(LiveRegions)
 	executor := l.db.Executor()
-	regionProvider := l.regionProviderFactory(txn)
+	regionProvider, cleanup := l.regionProviderFactory(txn)
+	defer cleanup()
 	regions, err := regionProvider.GetRegions(ctx)
 	if err != nil {
 		return nil, err
