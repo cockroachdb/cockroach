@@ -2461,3 +2461,33 @@ SELECT statistics_name, created FROM
 [SHOW STATISTICS FOR TABLE t107651]
 ----
 __auto__  2023-09-15 17:00:00 -0400 -0400
+
+# Test that a non-admin can use SHOW STATISTICS.
+
+statement ok
+CREATE TABLE tab_test_privileges (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO tab_test_privileges VALUES (1);
+
+statement ok
+CREATE STATISTICS tab_test_privileges_stat ON a FROM tab_test_privileges;
+
+user testuser
+
+query error testuser has no privileges on relation tab_test_privileges
+SELECT statistics_name, created FROM [SHOW STATISTICS FOR TABLE tab_test_privileges]
+
+user root
+
+statement ok
+GRANT SELECT ON tab_test_privileges TO testuser
+
+user testuser
+
+query T
+SELECT statistics_name FROM [SHOW STATISTICS FOR TABLE tab_test_privileges]
+----
+tab_test_privileges_stat
+
+user root

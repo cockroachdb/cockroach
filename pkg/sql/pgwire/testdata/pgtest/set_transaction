@@ -1,0 +1,39 @@
+# This test relies on a CoockroachDB-specific feature, so everything
+# is marked as crdb_only.
+
+only crdb
+----
+
+send
+Query {"String": "BEGIN"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Query": "SET TRANSACTION AS OF SYSTEM TIME $1::timestamp"}
+Bind {"Parameters": [{"text":"2019-01-01 00:00:00"}]}
+Execute
+Sync
+Query {"String": "SELECT now()"}
+Query {"String": "COMMIT"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"SET TRANSACTION"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"DataRow","Values":[{"text":"2019-01-01 00:00:00+00"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
