@@ -15,6 +15,7 @@ go_library(
         "tracing.go",
         "type_resolver.go",
         "watch_dog.go",
+        "workload_result.go",
         ":gen-optype-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/schemachange",
