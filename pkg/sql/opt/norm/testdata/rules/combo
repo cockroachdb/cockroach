@@ -1021,8 +1021,34 @@ GenerateLookupJoins (no changes)
 GenerateStreamingGroupBy (no changes)
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
-ReorderJoins (no changes)
+ReorderJoins (higher cost)
 --------------------------------------------------------------------------------
+   project
+    ├── columns: k:1!null i:2 f:3 s:4 j:5
+    ├── key: (1)
+    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+    └── inner-join (hash)
+         ├── columns: k:1!null i:2!null f:3 s:4 j:5 y:9!null
+  -      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+  +      ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+         ├── key: (1)
+         ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5), (2)==(9), (9)==(2)
+  -      ├── scan a
+  -      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+  -      │    ├── key: (1)
+  -      │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+         ├── distinct-on
+         │    ├── columns: y:9
+         │    ├── grouping columns: y:9
+         │    ├── key: (9)
+         │    └── scan xy
+         │         └── columns: y:9
+  +      ├── scan a
+  +      │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+  +      │    ├── key: (1)
+  +      │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+         └── filters
+              └── y:9 = i:2 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
 --------------------------------------------------------------------------------
 GenerateMergeJoins (no changes)
 --------------------------------------------------------------------------------
