@@ -2047,6 +2047,30 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	// CockroachDB extension.
+	`internal_executor_rows_affected_retry_limit`: {
+		Hidden:       true,
+		GetStringVal: makeIntGetStringValFn(`internal_executor_rows_affected_retry_limit`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b < 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set internal_executor_rows_affected_retry_limit to a negative value: %d", b)
+			}
+			m.SetInternalExecutorRowsAffectedRetryLimit(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(evalCtx.SessionData().InternalExecutorRowsAffectedRetryLimit, 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(ieRowsAffectedRetryLimit.Get(sv), 10)
+		},
+	},
+
 	// CockroachDB extension. Allows for testing of transaction retry logic
 	// using the cockroach_restart savepoint.
 	`inject_retry_errors_on_commit_enabled`: {

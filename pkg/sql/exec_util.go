@@ -3483,6 +3483,10 @@ func (m *sessionDataMutator) SetInjectRetryErrorsEnabled(val bool) {
 	m.data.InjectRetryErrorsEnabled = val
 }
 
+func (m *sessionDataMutator) SetInternalExecutorRowsAffectedRetryLimit(val int64) {
+	m.data.InternalExecutorRowsAffectedRetryLimit = val
+}
+
 func (m *sessionDataMutator) SetMaxRetriesForReadCommitted(val int32) {
 	m.data.MaxRetriesForReadCommitted = val
 }

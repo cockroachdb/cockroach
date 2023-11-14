@@ -47,6 +47,12 @@ type InternalExecutorOverride struct {
 	// does **not** propagate further to "nested" executors that are spawned up
 	// by the "top" executor.
 	InjectRetryErrorsEnabled bool
+	// RowsAffectedRetryLimit determines the maximum number of retries that the
+	// InternalExecutor can perform transparently when executing Exec{Ex}
+	// function calls (which it translates into "rows affected" mode). If
+	// non-zero, it overrides the InternalExecutorRowsAffectedRetryLimit from
+	// the session data.
+	RowsAffectedRetryLimit int64
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
