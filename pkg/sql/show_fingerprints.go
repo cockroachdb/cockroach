@@ -301,6 +301,8 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		case types.BytesFamily:
 			cols = append(cols, fmt.Sprintf("%s:::bytes", colNameOrExpr))
 			numBytesCols++
+		case types.StringFamily:
+			cols = append(cols, fmt.Sprintf("%s:::string", colNameOrExpr))
 		default:
 			cols = append(cols, fmt.Sprintf("%s::string", colNameOrExpr))
 		}
