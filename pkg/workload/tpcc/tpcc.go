@@ -898,12 +898,13 @@ func (w *tpcc) Ops(
 	}
 
 	// Close idle connections.
-	ql.Close = func(context context.Context) {
+	ql.Close = func(context context.Context) error {
 		for _, conn := range conns {
 			if err := conn.Close(ctx); err != nil {
 				log.Warningf(ctx, "%v", err)
 			}
 		}
+		return nil
 	}
 	return ql, nil
 }
