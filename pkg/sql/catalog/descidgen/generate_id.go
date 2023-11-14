@@ -13,7 +13,6 @@ package descidgen
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -65,15 +64,6 @@ func (g *generator) run(ctx context.Context, inc int64) (catid.DescID, error) {
 	return catid.DescID(nextID), err
 }
 
-// ErrDescIDSequenceMigrationInProgress is the error returned when the
-// descriptor ID generator is unavailable due to migrating the system tenant
-// counter from keys.LegacyDescIDGenerator to system.descriptor_id_seq.
-//
-// TODO(postamar): remove along with clusterversion.TODO_Delete_V23_1DescIDSequenceForSystemTenant
-var ErrDescIDSequenceMigrationInProgress = errors.New(
-	"descriptor ID generator unavailable, migration in progress, retry later",
-)
-
 // NewGenerator constructs a non-transactional eval.DescIDGenerator.
 //
 // In this implementation the value returned by PeekNextUniqueDescID is _not_
@@ -108,16 +98,6 @@ func key(
 	ctx context.Context, codec keys.SQLCodec, settings *cluster.Settings,
 ) (roachpb.Key, error) {
 	key := codec.SequenceKey(keys.DescIDSequenceID)
-	if cv := settings.Version; codec.ForSystemTenant() &&
-		!cv.IsActive(ctx, clusterversion.TODO_Delete_V23_1DescIDSequenceForSystemTenant) {
-		// At this point, the system tenant may still be using a legacy non-SQL key,
-		// or may be in the process of undergoing the migration away from it, in
-		// which case descriptor ID generation is made unavailable.
-		if cv.IsActive(ctx, clusterversion.TODO_Delete_V23_1DescIDSequenceForSystemTenant-1) {
-			return nil, ErrDescIDSequenceMigrationInProgress
-		}
-		key = keys.LegacyDescIDGenerator
-	}
 	return key, nil
 }
 

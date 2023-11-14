@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -428,9 +427,6 @@ func (p *planner) processSetOrResetClause(
 }
 
 func (n *alterRoleSetNode) startExec(params runParams) error {
-	databaseRoleSettingsHasRoleIDCol := params.p.ExecCfg().Settings.Version.IsActive(params.ctx,
-		clusterversion.TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn)
-
 	var opName string
 	if n.isRole {
 		sqltelemetry.IncIAMAlterCounter(sqltelemetry.Role)
@@ -454,12 +450,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
 
-	var upsertQuery = fmt.Sprintf(
-		`UPSERT INTO %s (database_id, role_name, settings) VALUES ($1, $2, $3)`,
-		sessioninit.DatabaseRoleSettingsTableName,
-	)
-	if databaseRoleSettingsHasRoleIDCol {
-		upsertQuery = fmt.Sprintf(`
+	var upsertQuery = fmt.Sprintf(`
 UPSERT INTO %s (database_id, role_name, settings, role_id)
 VALUES ($1, $2, $3, (
 	SELECT CASE $2
@@ -467,9 +458,8 @@ VALUES ($1, $2, $3, (
 		ELSE (SELECT user_id FROM system.users WHERE username = $2)
 	END
 ))`,
-			sessioninit.DatabaseRoleSettingsTableName, username.EmptyRole, username.EmptyRoleID,
-		)
-	}
+		sessioninit.DatabaseRoleSettingsTableName, username.EmptyRole, username.EmptyRoleID,
+	)
 
 	// Instead of inserting an empty settings array, this function will make
 	// sure the row is deleted instead.

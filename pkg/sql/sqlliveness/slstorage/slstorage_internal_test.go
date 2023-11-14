@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,7 +29,6 @@ func TestGetEncoder(t *testing.T) {
 	const (
 		isNil codecType = iota
 		isRbr
-		isRbt
 	)
 
 	checkCodec := func(t *testing.T, typ codecType, codec keyCodec) {
@@ -42,10 +40,6 @@ func TestGetEncoder(t *testing.T) {
 			require.NotNil(t, codec)
 			_, ok := codec.(*rbrEncoder)
 			require.True(t, ok, "expected %v to be an rbr encoder", codec)
-		case isRbt:
-			require.NotNil(t, codec)
-			_, ok := codec.(*rbtEncoder)
-			require.True(t, ok, "expected %v to be an rbt encoder", codec)
 		}
 	}
 
@@ -68,11 +62,7 @@ func TestGetEncoder(t *testing.T) {
 			storage := NewTestingStorage(
 				log.AmbientContext{}, nil, nil, nil, keys.SystemSQLCodec, nil, nil, systemschema.SqllivenessTable(), nil)
 
-			version := clusterversion.ClusterVersion{Version: clusterversion.ByKey(tc.version)}
-			guard := settingswatcher.TestMakeVersionGuard(version)
-
-			checkCodec(t, tc.readCodec, storage.getReadCodec(&guard))
-			checkCodec(t, tc.dualCodec, storage.getDualWriteCodec(&guard))
+			checkCodec(t, tc.readCodec, storage.keyCodec)
 		})
 	}
 }
