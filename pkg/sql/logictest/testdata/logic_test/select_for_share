@@ -42,19 +42,13 @@ user testuser2
 statement async writeReq count 1
 UPDATE t SET a = 2 WHERE a = 1
 
-# TODO(arul): Until https://github.com/cockroachdb/cockroach/issues/107766 is
-# addressed, we'll incorrectly report shared locks as having "Exclusive" lock
-# strength; We'll also only report a single holder (the other row in there is
-# the waiting UPDATE request, not the second shared lock holder). However,
-# having this query in here is useful to make sure there are locks and waiters
-# on our key, meaning setting the cluster setting above actually did something;
-# otherwise, had we used non-locking reads, we'd have failed here.
 query TTTTTTTBB colnames,retry,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
 ----
 database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
-test           public       t           /Table/106/1/1/0  Exclusive      Unreplicated  SERIALIZABLE     true     true
+test           public       t           /Table/106/1/1/0  Shared         Unreplicated  SERIALIZABLE     true     true
 test           public       t           /Table/106/1/1/0  Exclusive      Unreplicated  SERIALIZABLE     false    true
+test           public       t           /Table/106/1/1/0  Shared         Unreplicated  SERIALIZABLE     true     true
 
 # Commit the first transaction and rollback the second.
 
