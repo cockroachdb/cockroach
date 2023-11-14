@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
@@ -103,13 +104,11 @@ func TestRegionLivenessProber(t *testing.T) {
 		_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system ADD REGION '%s'", expectedRegions[i]))
 		require.NoError(t, err)
 	}
-	cf := tenants[0].CollectionFactory().(*descs.CollectionFactory)
-	statusServer := tenants[0].SQLServer().(*sql.Server).GetExecutorConfig().TenantStatusServer
-	providerFactory := func(txn *kv.Txn) regionliveness.RegionProvider {
-		return regions.NewProvider(tenants[0].Codec(), statusServer, txn, cf.NewCollection(ctx))
-	}
+	var cachedRegionProvider *regions.CachedDatabaseRegions
+	cachedRegionProvider, err = regions.NewCachedDatabaseRegions(ctx, tenants[0].DB(), tenants[0].LeaseManager().(*lease.Manager))
+	require.NoError(t, err)
 	idb := tenants[0].InternalDB().(isql.DB)
-	regionProber := regionliveness.NewLivenessProber(idb, providerFactory, tenants[0].ClusterSettings())
+	regionProber := regionliveness.NewLivenessProber(idb, cachedRegionProvider, tenants[0].ClusterSettings())
 	// Validates the expected regions versus the region liveness set.
 	checkExpectedRegions := func(expectedRegions []string, regions regionliveness.LiveRegions) {
 		require.Equalf(t, len(regions), len(expectedRegions),
