@@ -71,6 +71,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/lease",
         "//pkg/sql/enum",
         "//pkg/sql/execinfra",
         "//pkg/sql/isql",

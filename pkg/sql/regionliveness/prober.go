@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -75,12 +77,15 @@ type RegionProvider interface {
 	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
 }
 
-type RegionProviderFactory func(txn *kv.Txn) RegionProvider
+type CachedDatabaseRegions interface {
+	IsMultiRegion() bool
+	GetRegionEnumTypeDesc() catalog.RegionEnumTypeDescriptor
+}
 
 type livenessProber struct {
-	db                    isql.DB
-	regionProviderFactory RegionProviderFactory
-	settings              *clustersettings.Settings
+	db              isql.DB
+	cachedDBRegions CachedDatabaseRegions
+	settings        *clustersettings.Settings
 }
 
 var probeLivenessTimeout = 15 * time.Second
@@ -95,12 +100,12 @@ func TestingSetProbeLivenessTimeout(newTimeout time.Duration) func() {
 
 // NewLivenessProber creates a new region liveness prober.
 func NewLivenessProber(
-	db isql.DB, regionProviderFactory RegionProviderFactory, settings *clustersettings.Settings,
+	db isql.DB, cachedDBRegions CachedDatabaseRegions, settings *clustersettings.Settings,
 ) Prober {
 	return &livenessProber{
-		db:                    db,
-		regionProviderFactory: regionProviderFactory,
-		settings:              settings,
+		db:              db,
+		cachedDBRegions: cachedDBRegions,
+		settings:        settings,
 	}
 }
 
@@ -158,16 +163,18 @@ SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.crdb_in
 
 // QueryLiveness implements Prober.
 func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRegions, error) {
-	regionStatus := make(LiveRegions)
 	executor := l.db.Executor()
-	regionProvider := l.regionProviderFactory(txn)
-	regions, err := regionProvider.GetRegions(ctx)
-	if err != nil {
-		return nil, err
+	// Database is not multi-region so report a single region.
+	if l.cachedDBRegions == nil ||
+		!l.cachedDBRegions.IsMultiRegion() {
+		return nil, nil
 	}
-	// Add entries for regions
-	for region := range regions.Regions {
-		regionStatus[region] = struct{}{}
+	regionStatus := make(LiveRegions)
+	if err := l.cachedDBRegions.GetRegionEnumTypeDesc().ForEachPublicRegion(func(regionName catpb.RegionName) error {
+		regionStatus[string(regionName)] = struct{}{}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 	// If region liveness is disabled, return nil.
 	if !RegionLivenessEnabled.Get(&l.settings.SV) {
