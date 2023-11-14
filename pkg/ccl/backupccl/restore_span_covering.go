@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
@@ -369,7 +370,7 @@ func generateAndSendImportSpans(
 					coverSpan.EndKey = span.EndKey
 				}
 
-				newFilesByLayer, err := getNewIntersectingFilesByLayer(coverSpan, layersCoveredLater, fileIterByLayer)
+				newFilesByLayer, err := getNewIntersectingFilesByLayer(ctx, coverSpan, layersCoveredLater, fileIterByLayer)
 				if err != nil {
 					return err
 				}
@@ -396,7 +397,7 @@ func generateAndSendImportSpans(
 							sz = 16 << 20
 						}
 
-						if inclusiveOverlap(coverSpan, file.Span) {
+						if inclusiveOverlap(ctx, coverSpan, file.Span) {
 							covSize += sz
 							filesByLayer[layer] = append(filesByLayer[layer], file)
 						}
@@ -596,6 +597,7 @@ func (f *fileHeap) Pop() any {
 }
 
 func getNewIntersectingFilesByLayer(
+	ctx context.Context,
 	span roachpb.Span,
 	layersCoveredLater map[int]bool,
 	fileIters []bulk.Iterator[*backuppb.BackupManifest_File],
@@ -620,7 +622,7 @@ func getNewIntersectingFilesByLayer(
 				// inclusive. Because roachpb.Span and its associated operations
 				// are end key exclusive, we work around this by replacing the
 				// end key with its next value in order to include the end key.
-				if inclusiveOverlap(span, f.Span) {
+				if inclusiveOverlap(ctx, span, f.Span) {
 					layerFiles = append(layerFiles, f)
 				}
 
@@ -637,6 +639,12 @@ func getNewIntersectingFilesByLayer(
 
 // inclusiveOverlap returns true if sp, which is end key exclusive, overlaps
 // isp, which is end key inclusive.
-func inclusiveOverlap(sp roachpb.Span, isp roachpb.Span) bool {
-	return sp.Overlaps(isp) || sp.ContainsKey(isp.EndKey)
+func inclusiveOverlap(ctx context.Context, sp roachpb.Span, isp roachpb.Span) bool {
+	if sp.Overlaps(isp) || sp.ContainsKey(isp.EndKey) {
+		if !sp.Overlaps(isp) && sp.ContainsKey(isp.EndKey) {
+			log.Infof(ctx, "The file span %s has an inclusive overlap with the span entry %s", isp, sp)
+		}
+		return true
+	}
+	return false
 }
