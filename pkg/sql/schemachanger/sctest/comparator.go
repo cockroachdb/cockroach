@@ -74,25 +74,22 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 
 	for ss.HasNextLine() {
 		line := ss.NextLine()
+		declarativeLine := line
 		syntaxError := hasSyntaxError(line)
 
 		// Pre-execution: modify `line` so that executing it produces the same
-		// state. This step is to account for the known behavior difference between
-		// the two schema changers.
-		// Only run when not in a transaction (otherwise certain DDL combo can make
-		// sql queries issued during modification break; see commit message) and
-		// `line` is single DDL statement.
-		if !isInATransaction(ctx, t, legacyConn) && !syntaxError && singleDDLStmt(line) {
-			line = modifyBlacklistedStmt(ctx, t, line, legacyConn)
-		}
+		// descriptor state. This step is primarily for accounting for the known
+		// behavior difference between the two schema changers.
+		line, declarativeLine = preExecutionProcessing(ctx, t, line, legacyConn, declarativeConn)
 
 		// Execution: `line` must be executed in both clusters with the same error
 		// code.
 		_, errLegacy := legacyConn.ExecContext(ctx, line)
-		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported && !containsCommit(line) {
+		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported &&
+			(!containsCommit(line) || line != declarativeLine) {
 			continue
 		}
-		_, errDeclarative := declarativeConn.ExecContext(ctx, line)
+		_, errDeclarative := declarativeConn.ExecContext(ctx, declarativeLine)
 		requireNoErrOrSameErrCode(t, line, errLegacy, errDeclarative)
 		linesExecutedSoFar = append(linesExecutedSoFar, line)
 		t.Logf("Executing %q", line)
@@ -107,14 +104,6 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 			}
 		}
 	}
-}
-
-func singleDDLStmt(line string) bool {
-	parsedStmts, err := parser.Parse(line)
-	if err != nil {
-		return false
-	}
-	return len(parsedStmts) == 1 && parsedStmts[0].AST.StatementType() == tree.TypeDDL
 }
 
 func containsCommit(line string) bool {
@@ -163,32 +152,77 @@ func isInATransaction(ctx context.Context, t *testing.T, conn *gosql.Conn) bool 
 // certain info from the cluster with sql.
 type sqlLineModifier func(context.Context, *testing.T, statements.Statements, *gosql.Conn) (statements.Statements, bool)
 
-// modifyBlacklistedStmt attempts to detect whether `line` is a known statement
-// with different behavior under legacy vs under declarative schema changer.
-// Those cases are hard-coded, and if `line` is one of them, we transform it
-// into one with the same behavior under those two schema changers.
-func modifyBlacklistedStmt(
-	ctx context.Context, t *testing.T, line string, legacyConn *gosql.Conn,
-) string {
-	parsedLine, err := parser.Parse(line)
-	require.NoError(t, err)
+// preExecutionProcessing is where we potentially modify input `line` so that
+// executing the returned line, one for LSC and one for DSC, results in the same
+// descriptor state in both clusters.
+func preExecutionProcessing(
+	ctx context.Context,
+	t *testing.T,
+	line string,
+	legacyConn *gosql.Conn,
+	declarativeConn *gosql.Conn,
+) (legacyLine string, declarativeLine string) {
+	if hasSyntaxError(line) {
+		return line, line
+	}
 
+	parsedLineForLegacy, err := parser.Parse(line)
+	require.NoError(t, err)
+	parsedLineForDeclarative, _ := parser.Parse(line)
+
+	// General, framework level modifications: They are applied regardless.
 	var modify bool
 	for _, lm := range []sqlLineModifier{
-		modifyExprsReferencingSequencesWithTrue,
-		modifyAlterPKWithRowIDCol,
 		modifySetDeclarativeSchemaChangerMode,
 		modifyCreateTempTable,
-		modifyAlterPKWithSamePKColsButDifferentSharding,
 	} {
 		var m bool
-		parsedLine, m = lm(ctx, t, parsedLine, legacyConn)
+		parsedLineForLegacy, m = lm(ctx, t, parsedLineForLegacy, legacyConn)
+		parsedLineForDeclarative, _ = lm(ctx, t, parsedLineForDeclarative, legacyConn)
 		modify = modify || m
 	}
-	if modify {
-		t.Logf("Comparator testing framework modifies line %q to %q", line, parsedLine.String())
+
+	// If `line` is supported in DSC, apply necessary modifications to ensure LSC
+	// and DSC converge after execution to account for known behavioral
+	// differences between the two schema changers.
+	declarativeLine = parsedLineForDeclarative.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
+	if willLineBeExecutedInDSC(ctx, t, declarativeLine, declarativeConn) {
+		legacyLineModifiers := []sqlLineModifier{
+			modifyExprsReferencingSequencesWithTrue,
+			modifyAlterPKWithRowIDCol,
+			modifyAlterPKWithSamePKColsButDifferentSharding,
+		}
+		declarativeLineModifiers := []sqlLineModifier{
+			modifyExprsReferencingSequencesWithTrue,
+		}
+		for _, lm := range legacyLineModifiers {
+			var m bool
+			parsedLineForLegacy, m = lm(ctx, t, parsedLineForLegacy, legacyConn)
+			modify = modify || m
+		}
+		for _, lm := range declarativeLineModifiers {
+			parsedLineForDeclarative, _ = lm(ctx, t, parsedLineForDeclarative, legacyConn)
+		}
 	}
-	return parsedLine.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
+
+	if modify {
+		t.Logf("Comparator testing framework modifies line %q to %q", line, parsedLineForLegacy.String())
+	}
+
+	legacyLine = parsedLineForLegacy.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
+	declarativeLine = parsedLineForDeclarative.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
+	return legacyLine, declarativeLine
+}
+
+func willLineBeExecutedInDSC(
+	ctx context.Context, t *testing.T, line string, conn *gosql.Conn,
+) bool {
+	if isInATransaction(ctx, t, conn) {
+		return false
+	}
+	// `EXPLAIN(DDL,SHAPE) stmt` returns an error if statement is not supported in the DSC.
+	_, err := conn.ExecContext(ctx, fmt.Sprintf("EXPLAIN(DDL, SHAPE) %v", line))
+	return err == nil
 }
 
 // modifyAlterPKWithSamePKColsButDifferentSharding modifies any ALTER PK stmt in
