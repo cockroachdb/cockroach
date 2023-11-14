@@ -31,7 +31,7 @@ func registerOnlineRestore(r registry.Registry) {
 	for _, sp := range []restoreSpecs{
 		{
 			namePrefix:             "online",
-			hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
+			hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */, workloadNode: true}),
 			backup:                 makeRestoringBackupSpecs(backupSpecs{nonRevisionHistory: true, version: "v23.1.11"}),
 			timeout:                5 * time.Hour,
 			clouds:                 registry.AllClouds,
