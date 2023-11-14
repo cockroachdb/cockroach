@@ -231,9 +231,9 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 
 			var conn *grpc.ClientConn
 			retryOpts := retry.Options{
-				InitialBackoff: 0,
-				MaxRetries:     2,
-				MaxBackoff:     10 * time.Millisecond,
+				InitialBackoff: 1 * time.Millisecond,
+				MaxRetries:     20,
+				MaxBackoff:     100 * time.Millisecond,
 			}
 			// This retry was added to benefit our tests (not users) by reducing the chance of
 			// test flakes due to network issues.
@@ -242,22 +242,26 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 				conn, err = t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
 				return err
 			}); err != nil {
-				if errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) {
-					if errors.Is(err, rpc.VersionCompatError) {
-						return errors.WithHint(errors.Newf("upgrade failed due to active SQL servers with incompatible binary version(s)"),
-							"upgrade the binary versions of all SQL servers before re-attempting the tenant upgrade")
-					} else {
-						return errors.WithHint(errors.Newf("upgrade failed due to transient SQL servers"),
-							"retry upgrade when the SQL servers for the given tenant are in a stable state (i.e. not starting/stopping)")
-					}
-				}
-				return err
+				return annotateDialError(err)
 			}
 			client := serverpb.NewMigrationClient(conn)
 			return fn(ctx, client)
 		})
 	}
 	return grp.Wait()
+}
+
+func annotateDialError(err error) error {
+	if !errors.HasType(err, (*netutil.InitialHeartbeatFailedError)(nil)) {
+		return err
+	}
+	if errors.Is(err, rpc.VersionCompatError) {
+		err = errors.Wrap(err,
+			"upgrade failed due to active SQL servers with incompatible binary version(s)")
+		return errors.WithHint(err, "upgrade the binary versions of all SQL servers before re-attempting the tenant upgrade")
+	}
+	err = errors.Wrapf(err, "upgrade failed due to transient SQL servers")
+	return errors.WithHint(err, "retry upgrade when the SQL servers for the given tenant are in a stable state (i.e. not starting/stopping)")
 }
 
 // UntilClusterStable is part of the upgrade.Cluster interface.

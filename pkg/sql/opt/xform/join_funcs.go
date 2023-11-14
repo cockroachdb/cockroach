@@ -1917,9 +1917,10 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearchOfLookupJoins(
 ) {
 	var localSelectFilters, remoteSelectFilters memo.FiltersExpr
 	if len(inputFilters) > 0 {
-		// Both local and remote branches must evaluate the original filters.
-		localSelectFilters = inputFilters
-		remoteSelectFilters = inputFilters
+		// Both local and remote branches must evaluate the original filters. Make
+		// sure to limit the capacity to allow appending.
+		localSelectFilters = inputFilters[:len(inputFilters):len(inputFilters)]
+		remoteSelectFilters = inputFilters[:len(inputFilters):len(inputFilters)]
 	}
 	// We should only generate a locality-optimized search if there is a limit
 	// hint coming from an ancestor expression with a LIMIT, meaning that the
