@@ -66,3 +66,9 @@ func (c *CachedDatabaseRegions) IsMultiRegion() bool {
 func (c *CachedDatabaseRegions) GetRegionEnumTypeDesc() catalog.RegionEnumTypeDescriptor {
 	return c.dbRegionEnumDesc.AsRegionEnumTypeDescriptor()
 }
+
+func TestingModifyRegionEnum(
+	c *CachedDatabaseRegions, mutateFn func(catalog.TypeDescriptor) catalog.TypeDescriptor,
+) {
+	c.dbRegionEnumDesc = mutateFn(c.dbRegionEnumDesc)
+}

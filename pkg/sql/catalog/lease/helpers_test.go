@@ -158,7 +158,7 @@ func (m *Manager) PublishMultiple(
 		// of the descriptors.
 		expectedVersions := make(map[descpb.ID]descpb.DescriptorVersion)
 		for _, id := range ids {
-			expected, err := m.WaitForOneVersion(ctx, id, base.DefaultRetryOptions())
+			expected, err := m.WaitForOneVersion(ctx, id, nil, base.DefaultRetryOptions())
 			if err != nil {
 				return nil, err
 			}
