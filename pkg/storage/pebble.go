@@ -936,6 +936,7 @@ func (p *Pebble) Download(ctx context.Context, span roachpb.Span) error {
 		StartKey: span.Key,
 		EndKey:   span.EndKey,
 	}
+	log.Infof(ctx, "sending download to pebble for %s", span)
 	return p.db.Download(ctx, []pebble.DownloadSpan{downloadSpan})
 }
 

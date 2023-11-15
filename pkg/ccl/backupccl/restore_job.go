@@ -3485,7 +3485,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 ) error {
 	var lastProgressUpdate time.Time
 	for rt := retry.StartWithCtx(
-		ctx, retry.Options{InitialBackoff: time.Second * 10, Multiplier: 1.2, MaxBackoff: time.Minute * 5},
+		ctx, retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second * 10},
 	); ; rt.Next() {
 
 		var remaining uint64
@@ -3502,7 +3502,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		}
 
 		fractionComplete := float32(total-remaining) / float32(total)
-		log.Infof(ctx, "restore download phase, %s downloaded, %s remaining of %s total (%.1f complete)",
+		log.Infof(ctx, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
 			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
 		)
 
