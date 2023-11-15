@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -2587,4 +2588,62 @@ func (c *clusterImpl) StartGrafana(
 
 func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir string) error {
 	return roachprod.StopGrafana(ctx, l, c.name, dumpDir)
+}
+
+func (c *clusterImpl) WipeForReuse(
+	ctx context.Context, l *logger.Logger, newClusterSpec spec.ClusterSpec,
+) error {
+	l.PrintfCtx(ctx, "Using existing cluster: %s (arch=%q). Wiping", c.name, c.arch)
+	if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
+		return err
+	}
+	if err := c.RunE(ctx, c.All(), fmt.Sprintf("rm -rf %s %s", perfArtifactsDir, goCoverArtifactsDir)); err != nil {
+		return errors.Wrapf(err, "failed to remove perf/gocover artifacts dirs")
+	}
+	if c.localCertsDir != "" {
+		if err := os.RemoveAll(c.localCertsDir); err != nil {
+			return errors.Wrapf(err,
+				"failed to remove local certs in %s", c.localCertsDir)
+		}
+		c.localCertsDir = ""
+	}
+	// Overwrite the spec of the cluster with the one coming from the test. In
+	// particular, this overwrites the reuse policy to reflect what the test
+	// intends to do with it.
+	c.spec = newClusterSpec
+	return nil
+}
+
+// archForTest determines the CPU architecture to use for a test. If the test
+// doesn't specify it, one is chosen randomly depending on flags.
+func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSpec) vm.CPUArch {
+	if testSpec.Cluster.Arch != "" {
+		l.PrintfCtx(ctx, "Using specified arch=%q, %s", testSpec.Cluster.Arch, testSpec.Name)
+		return testSpec.Cluster.Arch
+	}
+
+	if testSpec.Benchmark && testSpec.Cluster.Cloud != spec.Local {
+		// TODO(srosenberg): enable after https://github.com/cockroachdb/cockroach/issues/104213
+		arch := vm.ArchAMD64
+		l.PrintfCtx(ctx, "Disabling arch randomization for benchmark; arch=%q, %s", arch, testSpec.Name)
+		return arch
+	}
+
+	// CPU architecture is unspecified, choose one according to the
+	// probability distribution.
+	var arch vm.CPUArch
+	if prng.Float64() < arm64Probability {
+		arch = vm.ArchARM64
+	} else if prng.Float64() < fipsProbability {
+		// N.B. branch is taken with probability
+		//   (1 - arm64Probability) * fipsProbability
+		// which is P(fips & amd64).
+		// N.B. FIPS is only supported on 'amd64' at this time.
+		arch = vm.ArchFIPS
+	} else {
+		arch = vm.ArchAMD64
+	}
+	l.PrintfCtx(ctx, "Using randomly chosen arch=%q, %s", arch, testSpec.Name)
+
+	return arch
 }
