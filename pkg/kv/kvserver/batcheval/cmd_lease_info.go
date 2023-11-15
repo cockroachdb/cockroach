@@ -54,5 +54,6 @@ func LeaseInfo(
 		reply.Lease = lease
 	}
 	reply.EvaluatedBy = cArgs.EvalCtx.StoreID()
+	reply.LeaseAppliedIndex = cArgs.EvalCtx.GetLeaseAppliedIndex()
 	return result.Result{}, nil
 }
