@@ -15,6 +15,7 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3/raftpb"
 	"golang.org/x/time/rate"
@@ -87,7 +89,7 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 func newTestingSideloadStorage(eng storage.Engine) *DiskSideloadStorage {
 	return NewDiskSideloadStorage(
 		cluster.MakeTestingClusterSettings(), 1,
-		filepath.Join(eng.GetAuxiliaryDir(), "fake", "testing", "dir"),
+		filepath.Join(eng.GetAuxiliaryDir()), // NB: this dir must already exist (and it does)
 		rate.NewLimiter(rate.Inf, math.MaxInt64), eng)
 }
 
@@ -570,4 +572,174 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 		t.Fatal(err)
 	}
 	return cleanup, eng
+}
+
+// TestSideloadStorageSync tests that the sideloaded storage is only guaranteed
+// to survive crashes if its Sync() method is used.
+func TestSideloadStorageSync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "sync", func(t *testing.T, sync bool) {
+		// Create a sideloaded storage with an in-memory FS. Use strict MemFS to be
+		// able to emulate crash restart by rolling it back to last synced state.
+		ctx := context.Background()
+		fs := vfs.NewStrictMem()
+		eng := storage.InMemFromFS(ctx, fs, "",
+			cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		ss := newTestingSideloadStorage(eng)
+
+		// Put an entry which should trigger the lazy creation of the sideloaded
+		// directories structure, and create a file for this entry.
+		const testEntry = "test-entry"
+		require.NoError(t, ss.Put(ctx, 100 /* index */, 6 /* term */, []byte(testEntry)))
+		if sync {
+			require.NoError(t, ss.Sync())
+		}
+		// Cut off all syncs from this point, to emulate a crash.
+		fs.SetIgnoreSyncs(true)
+		ss = nil
+		eng.Close()
+		// Reset filesystem to the last synced state.
+		fs.ResetToSyncedState()
+		fs.SetIgnoreSyncs(false)
+
+		// Emulate process restart. Load from the last synced state.
+		eng = storage.InMemFromFS(ctx, fs, "",
+			cluster.MakeTestingClusterSettings(), storage.ForTesting)
+		defer eng.Close()
+		ss = newTestingSideloadStorage(eng)
+
+		// The stored entry is still durable if we synced the sideloaded storage
+		// before the crash.
+		got, err := ss.Get(ctx, 100 /* index */, 6 /* term */)
+		if sync {
+			require.NoError(t, err)
+			require.Equal(t, testEntry, string(got))
+		} else {
+			require.ErrorIs(t, err, errSideloadedFileNotFound)
+		}
+		// A "control" check that missing entries are unconditionally missing.
+		_, err = ss.Get(ctx, 200 /* index */, 7 /* term */)
+		require.ErrorIs(t, err, errSideloadedFileNotFound)
+	})
+}
+
+func TestMkdirAllAndSyncParents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		path string   // a directory that exists
+		sync []string // prefix directories of `path` that were synced
+
+		base string   // base directory of the newly created directory chain
+		dirs []string // created directory chain relative to `base`
+
+		wantExist []string // directories we want to exist after a crash
+		wantGone  []string // un-synced directories we expect removed after a crash
+	}{{
+		path:      "/",
+		base:      "/",
+		dirs:      []string{"a", "b"},
+		wantExist: []string{"/", "/a", "/a/b"},
+	}, {
+		path:      "/a",
+		sync:      []string{"/"},
+		base:      "/a",
+		dirs:      []string{}, // edge case, just makes sure the base dir exists
+		wantExist: []string{"/", "/a"},
+	}, {
+		path:      "/a",
+		base:      "/a",
+		dirs:      []string{}, // same edge case, but we test that there is no sync
+		wantExist: []string{"/"},
+		wantGone:  []string{"/a"}, // "a" was created, but the root was not synced
+	}, {
+		path:      "/a/b",
+		sync:      []string{"/"}, // "a" is not synced, so mkdir won't persist
+		base:      "/a/b",
+		dirs:      []string{"c", "d"},
+		wantExist: []string{"/", "/a"},
+		wantGone:  []string{"/a/b", "/a/b/c", "/a/b/c/d"},
+	}, {
+		path:      "/a/b",
+		sync:      []string{"/", "/a"}, // "a" is synced, so mkdir will persist
+		base:      "/a",
+		dirs:      []string{"b", "c"},
+		wantExist: []string{"/", "/a", "/a/b", "/a/b/c"},
+	}, {
+		path:      "/a/b",
+		sync:      []string{"/", "/a"}, // "a" is synced, so mkdir will persist
+		base:      "/a/b",
+		dirs:      []string{"c", "d"},
+		wantExist: []string{"/", "/a", "/a/b", "/a/b/c", "/a/b/c/d"},
+	}, {
+		path:      "/a/b/c",
+		sync:      []string{"/", "/a"}, // "b" is not synced, and won't be because "c" exists
+		base:      "/a",
+		dirs:      []string{"b", "c", "d"},
+		wantExist: []string{"/", "/a", "/a/b"},
+		wantGone:  []string{"/a/b/c", "/a/b/c/d"},
+	}, {
+		path:      "/a/b/c",
+		sync:      []string{"/", "/a"}, // "b" is not synced, and won't be because "c" exists
+		base:      "/a/b",
+		dirs:      []string{"c", "d"},
+		wantExist: []string{"/", "/a", "/a/b"},
+		wantGone:  []string{"/a/b/c", "/a/b/c/d"},
+	}, {
+		path:      "/a/b/c",
+		sync:      []string{"/", "/a"}, // "b" is not synced, and won't be because "c" exists
+		base:      "/a/b/c",
+		dirs:      []string{"d"},
+		wantExist: []string{"/", "/a", "/a/b"},
+		wantGone:  []string{"/a/b/c", "/a/b/c/d"},
+	}} {
+		t.Run("", func(t *testing.T) {
+			fs := vfs.NewStrictMem()
+			require.NoError(t, fs.MkdirAll(tc.path, os.ModePerm))
+			for _, dir := range tc.sync {
+				handle, err := fs.OpenDir(dir)
+				require.NoError(t, err)
+				require.NoError(t, handle.Sync())
+				require.NoError(t, handle.Close())
+			}
+			require.NoError(t, mkdirAllAndSyncParents(fs, tc.base, tc.dirs, os.ModePerm))
+
+			assertExistence := func(t *testing.T, dirs []string, exist bool) {
+				t.Helper()
+				for _, dir := range dirs {
+					handle, err := fs.OpenDir(dir)
+					if exist {
+						require.NoError(t, err, dir)
+						require.NoError(t, handle.Close(), dir)
+					} else {
+						require.True(t, oserror.IsNotExist(err), dir)
+					}
+				}
+			}
+
+			// Before crash, all the relevant directories must exist.
+			assertExistence(t, tc.wantExist, true)
+			assertExistence(t, tc.wantGone, true)
+			// After crash and resetting to the synced state, wantExist directories
+			// must exist, and wantGone are lost.
+			fs.ResetToSyncedState()
+			assertExistence(t, tc.wantExist, true)
+			assertExistence(t, tc.wantGone, false)
+		})
+	}
+}
+
+func TestMkdirAllAndSyncParentsErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	fs := vfs.NewMem()
+	require.NoError(t, fs.MkdirAll("/a/b", os.ModePerm))
+	for _, dir := range []string{"/non-existing", "/a/b/non-existing"} {
+		require.ErrorContains(t, mkdirAllAndSyncParents(fs, dir, []string{"child"}, os.ModePerm),
+			"base dir does not exist", dir)
+	}
 }
