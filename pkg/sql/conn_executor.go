@@ -1560,11 +1560,6 @@ type connExecutor struct {
 		// in a transaction.
 		hasAdminRoleCache HasAdminRoleCache
 
-		// roleExistsCache is a cache of role existence checks. This is used because
-		// role existence checks are made when checking privileges. Only positive
-		// values are cached.
-		roleExistsCache map[username.SQLUsername]struct{}
-
 		// createdSequences keeps track of sequences created in the current transaction.
 		// The map key is the sequence descpb.ID.
 		createdSequences map[descpb.ID]struct{}
@@ -1976,7 +1971,6 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 	ex.extraTxnState.numDDL = 0
 	ex.extraTxnState.firstStmtExecuted = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
-	ex.extraTxnState.roleExistsCache = make(map[username.SQLUsername]struct{})
 	ex.extraTxnState.createdSequences = nil
 
 	if ex.extraTxnState.fromOuterTxn {
@@ -3619,7 +3613,6 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
 	evalCtx.DescIDGenerator = ex.getDescIDGenerator()
-	evalCtx.RoleExistsCache = ex.extraTxnState.roleExistsCache
 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.

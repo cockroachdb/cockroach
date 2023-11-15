@@ -354,7 +354,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 	}
 
 	// All safe - do the work.
-	var numRoleMembershipsDeleted, numRoleSettingsRowsDeleted int
+	var numRoleSettingsRowsDeleted int
 	for normalizedUsername := range userNames {
 		// Specifically reject special users and roles. Some (root, admin) would fail with
 		// "privileges still exist" first.
@@ -406,18 +406,16 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 
 		// Drop all role memberships involving the user/role.
-		rowsDeleted, err := params.p.InternalSQLTxn().ExecEx(
+		if _, err = params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			"drop-role-membership",
 			params.p.txn,
 			sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
 			normalizedUsername,
-		)
-		if err != nil {
+		); err != nil {
 			return err
 		}
-		numRoleMembershipsDeleted += rowsDeleted
 
 		_, err = params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
@@ -434,7 +432,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			return err
 		}
 
-		rowsDeleted, err = params.p.InternalSQLTxn().ExecEx(
+		if rowsDeleted, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
@@ -444,11 +442,11 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				sessioninit.DatabaseRoleSettingsTableName,
 			),
 			normalizedUsername,
-		)
-		if err != nil {
+		); err != nil {
 			return err
+		} else {
+			numRoleSettingsRowsDeleted += rowsDeleted
 		}
-		numRoleSettingsRowsDeleted += rowsDeleted
 
 		_, err = params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
@@ -478,10 +476,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 			}
 		}
 	}
-	if numRoleMembershipsDeleted > 0 {
-		if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
-			return err
-		}
+	if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
+		return err
 	}
 
 	normalizedNames := make([]string, len(n.roleNames))
