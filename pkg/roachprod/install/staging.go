@@ -303,7 +303,7 @@ func stageRemoteBinary(
 		`curl -sfSL -o "%s" "%s" && chmod 755 %s`, target, binURL, target,
 	)
 	return c.Run(
-		ctx, l, l.Stdout, l.Stderr, c.Nodes, fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
+		ctx, l, l.Stdout, l.Stderr, OnNodes(c.Nodes), fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
 	)
 }
 
@@ -333,7 +333,7 @@ curl -sfSL -o "%s" "%s" 2>/dev/null || echo 'optional library %s not found; cont
 		libraryName+ext,
 	)
 	return c.Run(
-		ctx, l, l.Stdout, l.Stderr, c.Nodes, fmt.Sprintf("staging library (%s)", libraryName), cmdStr,
+		ctx, l, l.Stdout, l.Stderr, OnNodes(c.Nodes), fmt.Sprintf("staging library (%s)", libraryName), cmdStr,
 	)
 }
 
@@ -372,6 +372,6 @@ if [ -d ${tmpdir}/lib ]; then mv ${tmpdir}/lib/* ${dir}/lib; fi && \
 chmod 755 ${dir}/cockroach
 `, dir, binURL)
 	return c.Run(
-		ctx, l, l.Stdout, l.Stderr, c.Nodes, "staging cockroach release binary", cmdStr,
+		ctx, l, l.Stdout, l.Stderr, OnNodes(c.Nodes), "staging cockroach release binary", cmdStr,
 	)
 }
