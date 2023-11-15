@@ -3287,10 +3287,6 @@ var retriableMinTimestampBoundUnsatisfiableError = errors.Newf(
 func errIsRetriable(err error) bool {
 	return errors.HasInterface(err, (*pgerror.ClientVisibleRetryError)(nil)) ||
 		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError) ||
-		// Note that this error is not handled internally and can make it to the
-		// client in implicit transactions. This is not great; it should
-		// be marked as a client visible retry error.
-		errors.Is(err, descidgen.ErrDescIDSequenceMigrationInProgress) ||
 		descs.IsTwoVersionInvariantViolationError(err)
 }
 
@@ -3752,13 +3748,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				return advanceInfo{}, err
 			}
 		}
-		// Similarly, if the descriptor ID generator is not available because of
-		// an ongoing migration, wait for the migration to complete first.
-		if errors.Is(payloadErr, descidgen.ErrDescIDSequenceMigrationInProgress) {
-			if err := ex.handleWaitingForDescriptorIDGeneratorMigration(ex.Ctx()); err != nil {
-				return advanceInfo{}, err
-			}
-		}
 	}
 
 	// Handle transaction events which cause updates to txnState.
@@ -3917,13 +3906,6 @@ func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 	if err := ex.planner.waitForDescriptorSchemaChanges(
 		ctx, descID, *ex.extraTxnState.schemaChangerState,
 	); err != nil {
-		return err
-	}
-	return ex.resetTransactionOnSchemaChangeRetry(ctx)
-}
-
-func (ex *connExecutor) handleWaitingForDescriptorIDGeneratorMigration(ctx context.Context) error {
-	if err := ex.planner.waitForDescriptorIDGeneratorMigration(ctx); err != nil {
 		return err
 	}
 	return ex.resetTransactionOnSchemaChangeRetry(ctx)
