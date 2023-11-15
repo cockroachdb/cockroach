@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -141,10 +142,16 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						FROM system.table_statistics
 						WHERE "tableID" = $1
 						ORDER BY "createdAt", "columnIDs", "statisticID"`, partialPredicateCol, fullStatisticIDCol)
-			rows, err := p.InternalSQLTxn().QueryBuffered(
+
+			// There is a privilege check above to make sure the user has any
+			// privilege on the table being inspected. We use the node user to execute
+			// the query against the system table so that SHOW STATISTICS does not
+			// _also_ need privileges on the system.table_statistics table.
+			rows, err := p.InternalSQLTxn().QueryBufferedEx(
 				ctx,
 				"read-table-stats",
 				p.txn,
+				sessiondata.NodeUserSessionDataOverride,
 				stmt,
 				desc.GetID(),
 			)
