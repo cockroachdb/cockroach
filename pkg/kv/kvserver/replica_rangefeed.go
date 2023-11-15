@@ -634,8 +634,10 @@ func populatePrevValsInLogicalOpLog(
 // look up the values associated with key-value writes in the log before handing
 // them to the rangefeed processor. No-op if a rangefeed is not active. Requires
 // raftMu to be locked.
+//
+// REQUIRES: reader is an indexed batch.
 func (r *Replica) handleLogicalOpLogRaftMuLocked(
-	ctx context.Context, ops *kvserverpb.LogicalOpLog, reader storage.Reader,
+	ctx context.Context, ops *kvserverpb.LogicalOpLog, reader storage.Batch,
 ) {
 	p, filter := r.getRangefeedProcessorAndFilter()
 	if p == nil {
@@ -665,11 +667,23 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		var key []byte
 		var ts hlc.Timestamp
 		var valPtr *[]byte
+		valueInBatch := true
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:
 			key, ts, valPtr = t.Key, t.Timestamp, &t.Value
+			// In case inline values are supported for rangefeeds, don't assume that
+			// the value is in the batch, since inline values can use Pebble MERGE
+			// and the resulting value may involve merging with state in the engine.
+			if ts.IsEmpty() {
+				valueInBatch = false
+			}
+			// Else 1PC transaction commit, and no intent was written, so the value
+			// must be in the batch.
 		case *enginepb.MVCCCommitIntentOp:
 			key, ts, valPtr = t.Key, t.Timestamp, &t.Value
+			// Intent was committed. The now committed provisional value may be in
+			// the engine.
+			valueInBatch = false
 		case *enginepb.MVCCWriteIntentOp,
 			*enginepb.MVCCUpdateIntentOp,
 			*enginepb.MVCCAbortIntentOp,
@@ -711,10 +725,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		// Read the value directly from the Reader. This is performed in the
 		// same raftMu critical section that the logical op's corresponding
 		// WriteBatch is applied, so the value should exist.
-		valRes, vh, err := storage.MVCCGetWithValueHeader(ctx, reader, key, ts, storage.MVCCGetOptions{Tombstones: true})
-		if valRes.Value == nil && err == nil {
-			err = errors.New("value missing in reader")
-		}
+		val, vh, err := storage.MVCCGetForKnownTimestampWithNoIntent(ctx, reader, key, ts, valueInBatch)
 		if err != nil {
 			r.disconnectRangefeedWithErr(p, kvpb.NewErrorf(
 				"error consuming %T for key %s @ ts %v: %v", op.GetValue(), roachpb.Key(key), ts, err,
@@ -725,7 +736,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		if vhf != nil {
 			vhf(key, nil, ts, vh)
 		}
-		*valPtr = valRes.Value.RawBytes
+		*valPtr = val.RawBytes
 	}
 
 	// Pass the ops to the rangefeed processor.

@@ -1371,6 +1371,55 @@ func MVCCGet(
 	return res, err
 }
 
+// MVCCGetForKnownTimestampWithNoIntent returns the value for key@timestamp,
+// which is required to exist and not have a corresponding intent. It returns
+// a tombstone if that is the value at key@timestamp. It returns an error if
+// there is no value. The caller should set valueInBatch to true if the value
+// is known to be in the batch and does not need to be read from the engine
+// (if the batch does not have it).
+//
+// REQUIRES: batch is an indexed batch.
+func MVCCGetForKnownTimestampWithNoIntent(
+	ctx context.Context, batch Batch, key roachpb.Key, timestamp hlc.Timestamp, valueInBatch bool,
+) (*roachpb.Value, enginepb.MVCCValueHeader, error) {
+	var iter MVCCIterator
+	var err error
+	if valueInBatch {
+		iter, err = batch.NewBatchOnlyMVCCIterator(ctx,
+			IterOptions{KeyTypes: IterKeyTypePointsAndRanges, Prefix: true})
+	} else {
+		// TODO(sumeer): Use Pebble's Get. The value has likely been written
+		// recently, so may be in the memtable or L0. A Pebble Get will
+		// iteratively go down the levels and find the value in a higher level,
+		// which would avoid seeking all the levels. This will need to handle
+		// rangekeys too, and we won't be able to use mvccGetWithValueHeader, that
+		// we are using below for convenience.
+		iter, err = batch.NewMVCCIterator(ctx, MVCCKeyIterKind,
+			IterOptions{KeyTypes: IterKeyTypePointsAndRanges, Prefix: true})
+	}
+	if err != nil {
+		return nil, enginepb.MVCCValueHeader{}, err
+	}
+	defer iter.Close()
+
+	// Use mvccGetWithValueHeader, even though we know the exact timestamp,
+	// since it also does the rangekey handling that we desire.
+	value, intent, vh, err := mvccGetWithValueHeader(
+		ctx, iter, key, timestamp, MVCCGetOptions{Tombstones: true})
+	val := value.ToPointer()
+	if intent != nil {
+		panic(errors.AssertionFailedf("unexpected intent %v", intent))
+	}
+	if val == nil {
+		return nil, enginepb.MVCCValueHeader{}, errors.Errorf("value missing")
+	}
+	if !val.Timestamp.EqOrdering(timestamp) {
+		return nil, enginepb.MVCCValueHeader{}, errors.Errorf(
+			"expected timestamp %v and found %v", timestamp, val.Timestamp)
+	}
+	return val, vh, err
+}
+
 // MVCCGetWithValueHeader is like MVCCGet, but in addition returns the
 // MVCCValueHeader for the value.
 func MVCCGetWithValueHeader(
