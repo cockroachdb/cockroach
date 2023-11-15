@@ -155,6 +155,12 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 		return rts.intentQ.UpdateTS(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCCommitIntentOp:
+		// NB: this assertion can be violated in mixed-version clusters, we choose
+		// to trip the assertion rather than violate checkpoint guarantees.
+		// See: https://github.com/cockroachdb/cockroach/issues/104309
+		//
+		// TODO(erikgrinaker): check that this won't end up with crash loops.
+		rts.assertOpAboveRTS(op, t.Timestamp)
 		return rts.intentQ.DecrRef(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCAbortIntentOp:
