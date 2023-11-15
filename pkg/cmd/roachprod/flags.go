@@ -40,8 +40,8 @@ var (
 	wipePreserveCerts     bool
 	grafanaConfig         string
 	grafanaArch           string
-	grafanaurlOpen        bool
 	grafanaDumpDir        string
+	jaegerConfigNodes     string
 	listDetails           bool
 	listJSON              bool
 	listMine              bool
@@ -54,9 +54,9 @@ var (
 	tag                   string
 	external              = false
 	pgurlCertsDir         string
-	adminurlOpen          = false
 	adminurlPath          = ""
 	adminurlIPs           = false
+	urlOpen               = false
 	useTreeDist           = true
 	sig                   = 9
 	waitFlag              = false
@@ -159,7 +159,6 @@ func initFlags() {
 	listCmd.Flags().StringVar(&listPattern,
 		"pattern", "", "Show only clusters matching the regex pattern. Empty string matches everything.")
 
-	adminurlCmd.Flags().BoolVar(&adminurlOpen, "open", false, "Open the url in a browser")
 	adminurlCmd.Flags().StringVar(&adminurlPath,
 		"path", "/", "Path to add to URL (e.g. to open a same page on each node)")
 	adminurlCmd.Flags().BoolVar(&adminurlIPs,
@@ -272,11 +271,11 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	grafanaStartCmd.Flags().StringVar(&grafanaArch, "arch", "",
 		"binary architecture override [amd64, arm64]")
 
-	grafanaURLCmd.Flags().BoolVar(&grafanaurlOpen,
-		"open", false, "open the grafana dashboard url on the browser")
-
 	grafanaDumpCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
 		"the absolute path to dump prometheus data to (use the contained 'prometheus-docker-run.sh' to visualize")
+
+	jaegerStartCmd.Flags().StringVar(&jaegerConfigNodes, "configure-nodes", "",
+		"the nodes on which to set the relevant CRDB cluster settings")
 
 	initCmd.Flags().IntVar(&startOpts.InitTarget,
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
@@ -320,6 +319,10 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	updateCmd.Flags().BoolVar(&revertUpdate, "revert", false, "restore roachprod to the previous version "+
 		"which would have been renamed to roachprod.bak during the update process")
 
+	for _, cmd := range []*cobra.Command{adminurlCmd, grafanaURLCmd, jaegerURLCmd} {
+		cmd.Flags().BoolVar(&urlOpen, "open", false, "Open the url in a browser")
+	}
+
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
 			"Username to run under, detect if blank")
@@ -355,11 +358,11 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 		cmd.Flags().StringVarP(&config.Binary,
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
-	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd} {
+	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd} {
 		cmd.Flags().BoolVar(&secure,
 			"secure", false, "use a secure cluster")
 	}
-	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd} {
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd, jaegerStartCmd} {
 		cmd.Flags().StringVar(&virtualClusterName,
 			"cluster", "", "specific virtual cluster to connect to")
 		cmd.Flags().IntVar(&sqlInstance,
