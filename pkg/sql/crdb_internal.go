@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -944,25 +943,6 @@ WITH
 	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
 `
 
-	// Before clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled, the system.job_info
-	// table has not been fully populated with the payload and progress of jobs in
-	// the cluster.
-	systemJobsBaseQuery = `
-		SELECT
-			id, status, created, payload, progress, created_by_type, created_by_id,
-			claim_session_id, claim_instance_id, num_runs, last_run, job_type
-		FROM system.jobs`
-
-	// TODO(jayant): remove the version gate in 24.1
-	// Before clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable, the system.jobs table did not have
-	// a fully populated job_type column, so we must project it manually
-	// with crdb_internal.job_payload_type.
-	oldSystemJobsBaseQuery = `
-		SELECT id, status, created, payload, progress, created_by_type, created_by_id,
-			claim_session_id, claim_instance_id, num_runs, last_run,
-			crdb_internal.job_payload_type(payload) as job_type
-		FROM system.jobs`
-
 	systemJobsIDPredicate     = ` WHERE id = $1`
 	systemJobsTypePredicate   = ` WHERE job_type = $1`
 	systemJobsStatusPredicate = ` WHERE status = $1`
@@ -977,30 +957,16 @@ const (
 	jobStatus
 )
 
-func getInternalSystemJobsQueryFromClusterVersion(
-	ctx context.Context, version clusterversion.Handle, predicate systemJobsPredicate,
-) string {
-	var baseQuery string
-	if version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
-		baseQuery = SystemJobsAndJobInfoBaseQuery
-		if predicate == jobID {
-			baseQuery = systemJobsAndJobInfoBaseQueryWithIDPredicate
-		}
-	} else if version.IsActive(ctx, clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable) {
-		baseQuery = systemJobsBaseQuery
-	} else {
-		baseQuery = oldSystemJobsBaseQuery
-	}
-
+func getInternalSystemJobsQuery(predicate systemJobsPredicate) string {
 	switch predicate {
 	case noPredicate:
-		return baseQuery
+		return SystemJobsAndJobInfoBaseQuery
 	case jobID:
-		return baseQuery + systemJobsIDPredicate
+		return systemJobsAndJobInfoBaseQueryWithIDPredicate + systemJobsIDPredicate
 	case jobType:
-		return baseQuery + systemJobsTypePredicate
+		return SystemJobsAndJobInfoBaseQuery + systemJobsTypePredicate
 	case jobStatus:
-		return baseQuery + systemJobsStatusPredicate
+		return SystemJobsAndJobInfoBaseQuery + systemJobsStatusPredicate
 	}
 
 	return ""
@@ -1030,28 +996,28 @@ CREATE TABLE crdb_internal.system_jobs (
 	indexes: []virtualIndex{
 		{
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version, jobID)
+				q := getInternalSystemJobsQuery(jobID)
 				targetType := tree.MustBeDInt(unwrappedConstraint)
 				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
 			},
 		},
 		{
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version, jobType)
+				q := getInternalSystemJobsQuery(jobType)
 				targetType := tree.MustBeDString(unwrappedConstraint)
 				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
 			},
 		},
 		{
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-				q := getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version, jobStatus)
+				q := getInternalSystemJobsQuery(jobStatus)
 				targetType := tree.MustBeDString(unwrappedConstraint)
 				return populateSystemJobsTableRows(ctx, p, addRow, q, targetType)
 			},
 		},
 	},
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		_, err := populateSystemJobsTableRows(ctx, p, addRow, getInternalSystemJobsQueryFromClusterVersion(ctx, p.execCfg.Settings.Version, noPredicate))
+		_, err := populateSystemJobsTableRows(ctx, p, addRow, getInternalSystemJobsQuery(noPredicate))
 		return err
 	},
 }
@@ -1132,21 +1098,13 @@ const (
 	// Note that we are querying crdb_internal.system_jobs instead of system.jobs directly.
 	// The former has access control built in and will filter out jobs that the
 	// user is not allowed to see.
-	jobsQFrom         = ` FROM crdb_internal.system_jobs`
-	jobsBackoffArgs   = `(SELECT $1::FLOAT AS initial_delay, $2::FLOAT AS max_delay) args`
-	jobsStatusFilter  = ` WHERE status = $3`
-	oldJobsTypeFilter = ` WHERE crdb_internal.job_payload_type(payload) = $3`
-	jobsTypeFilter    = ` WHERE job_type = $3`
-	jobsQuery         = jobsQSelect + `, last_run::timestamptz, COALESCE(num_runs, 0), ` + jobs.NextRunClause +
+	jobsQFrom        = ` FROM crdb_internal.system_jobs`
+	jobsBackoffArgs  = `(SELECT $1::FLOAT AS initial_delay, $2::FLOAT AS max_delay) args`
+	jobsStatusFilter = ` WHERE status = $3`
+	jobsTypeFilter   = ` WHERE job_type = $3`
+	jobsQuery        = jobsQSelect + `, last_run::timestamptz, COALESCE(num_runs, 0), ` + jobs.NextRunClause +
 		` as next_run` + jobsQFrom + ", " + jobsBackoffArgs
 )
-
-func getCRDBInternalJobsTableTypeFilter(ctx context.Context, version clusterversion.Handle) string {
-	if !version.IsActive(ctx, clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable) {
-		return oldJobsTypeFilter
-	}
-	return jobsTypeFilter
-}
 
 // TODO(tbg): prefix with kv_.
 var crdbInternalJobsTable = virtualSchemaTable{
@@ -1186,7 +1144,7 @@ CREATE TABLE crdb_internal.jobs (
 		},
 	}, {
 		populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-			q := jobsQuery + getCRDBInternalJobsTableTypeFilter(ctx, p.execCfg.Settings.Version)
+			q := jobsQuery + jobsTypeFilter
 			targetStatus := tree.MustBeDString(unwrappedConstraint)
 			return makeJobsTableRows(ctx, p, addRow, q, p.execCfg.JobRegistry.RetryInitialDelay(), p.execCfg.JobRegistry.RetryMaxDelay(), targetStatus)
 		},

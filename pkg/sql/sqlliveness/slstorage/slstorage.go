@@ -15,7 +15,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -87,8 +86,7 @@ type Storage struct {
 	metrics         Metrics
 	gcInterval      func() time.Duration
 	newTimer        func() timeutil.TimerI
-	newKeyCodec     keyCodec
-	oldKeyCodec     keyCodec
+	keyCodec        keyCodec
 
 	mu struct {
 		syncutil.Mutex
@@ -122,7 +120,6 @@ func NewTestingStorage(
 	table catalog.TableDescriptor,
 	newTimer func() timeutil.TimerI,
 ) *Storage {
-	const rbtIndexID = 1
 	s := &Storage{
 		settings:        settings,
 		settingsWatcher: settingsWatcher,
@@ -130,8 +127,7 @@ func NewTestingStorage(
 		clock:           clock,
 		db:              db,
 		codec:           codec,
-		newKeyCodec:     &rbrEncoder{codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID()))},
-		oldKeyCodec:     &rbtEncoder{codec.IndexPrefix(uint32(table.GetID()), rbtIndexID)},
+		keyCodec:        &rbrEncoder{codec.IndexPrefix(uint32(table.GetID()), uint32(table.GetPrimaryIndexID()))},
 		newTimer:        newTimer,
 		gcInterval: func() time.Duration {
 			baseInterval := GCInterval.Get(&settings.SV)
@@ -246,32 +242,6 @@ func (s *Storage) isAlive(
 	return res.Val.(bool), nil
 }
 
-func (s *Storage) getReadCodec(version *settingswatcher.VersionGuard) keyCodec {
-	if version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew) {
-		return s.newKeyCodec
-	}
-	return s.oldKeyCodec
-}
-
-func (s *Storage) getDualWriteCodec(version *settingswatcher.VersionGuard) keyCodec {
-	switch {
-	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrSingleWrite):
-		return nil
-	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrReadNew):
-		return s.oldKeyCodec
-	case version.IsActive(clusterversion.TODO_Delete_V23_1_SystemRbrDualWrite):
-		return s.newKeyCodec
-	default:
-		return nil
-	}
-}
-
-func (s *Storage) versionGuard(
-	ctx context.Context, txn *kv.Txn,
-) (settingswatcher.VersionGuard, error) {
-	return s.settingsWatcher.MakeVersionGuard(ctx, txn, clusterversion.TODO_Delete_V23_1_SystemRbrCleanup)
-}
-
 // This function will launch a singleflight goroutine for the session which
 // will populate its result into the caches underneath the mutex. The result
 // value will be a bool. The singleflight goroutine does not cancel its work
@@ -343,13 +313,7 @@ func (s *Storage) deleteOrFetchSession(
 		// Reset captured variable in case of retry.
 		deleted, expiration, prevExpiration = false, hlc.Timestamp{}, hlc.Timestamp{}
 
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-
-		readCodec := s.getReadCodec(&version)
-		k, err := readCodec.encode(sid)
+		k, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
 		}
@@ -376,13 +340,6 @@ func (s *Storage) deleteOrFetchSession(
 		deleted, expiration = true, hlc.Timestamp{}
 		ba := txn.NewBatch()
 		ba.Del(k)
-		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-			dualKey, err := dualCodec.encode(sid)
-			if err != nil {
-				return err
-			}
-			ba.Del(dualKey)
-		}
 
 		return txn.CommitInBatch(ctx, ba)
 	}); err != nil {
@@ -490,11 +447,8 @@ func (s *Storage) fetchExpiredSessionIDs(ctx context.Context) ([]sqlliveness.Ses
 
 	var result []sqlliveness.SessionID
 	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-		result, err = findRows(ctx, txn, s.getReadCodec(&version))
+		var err error
+		result, err = findRows(ctx, txn, s.keyCodec)
 		return err
 	}); err != nil {
 		return nil, err
@@ -514,26 +468,12 @@ func (s *Storage) Insert(
 	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
 
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-		readCodec := s.getReadCodec(&version)
-		k, err := readCodec.encode(sid)
+		k, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
 		}
 		v := encodeValue(expiration)
 		batch.InitPut(k, &v, true)
-
-		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-			dualKey, err := dualCodec.encode(sid)
-			if err != nil {
-				return err
-			}
-			dualValue := encodeValue(expiration)
-			batch.InitPut(dualKey, &dualValue, true)
-		}
 
 		return txn.CommitInBatch(ctx, batch)
 	}); err != nil {
@@ -552,14 +492,7 @@ func (s *Storage) Update(
 ) (sessionExists bool, err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err = s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-
-		readCodec := s.getReadCodec(&version)
-
-		k, err := readCodec.encode(sid)
+		k, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
 		}
@@ -573,14 +506,6 @@ func (s *Storage) Update(
 		v := encodeValue(expiration)
 		ba := txn.NewBatch()
 		ba.Put(k, &v)
-		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-			dualKey, err := dualCodec.encode(sid)
-			if err != nil {
-				return err
-			}
-			dualValue := encodeValue(expiration)
-			ba.Put(dualKey, &dualValue)
-		}
 		return txn.CommitInBatch(ctx, ba)
 	})
 	if err != nil || !sessionExists {
@@ -598,27 +523,14 @@ func (s *Storage) Update(
 // tasks using the session have stopped.
 func (s *Storage) Delete(ctx context.Context, session sqlliveness.SessionID) error {
 	return s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		version, err := s.versionGuard(ctx, txn)
-		if err != nil {
-			return err
-		}
-
 		batch := txn.NewBatch()
 
-		readCodec := s.getReadCodec(&version)
-		key, err := readCodec.encode(session)
+		key, err := s.keyCodec.encode(session)
 		if err != nil {
 			return err
 		}
 		batch.Del(key)
 
-		if dualCodec := s.getDualWriteCodec(&version); dualCodec != nil {
-			dualKey, err := dualCodec.encode(session)
-			if err != nil {
-				return err
-			}
-			batch.Del(dualKey)
-		}
 		return txn.CommitInBatch(ctx, batch)
 	})
 }

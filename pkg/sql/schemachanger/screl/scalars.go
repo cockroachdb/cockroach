@@ -142,9 +142,5 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 // MaxElementVersion returns the maximum cluster version at which an element
 // may be used.
 func MaxElementVersion(el scpb.Element) (version clusterversion.Key, exists bool) {
-	switch el.(type) {
-	case *scpb.SecondaryIndexPartial:
-		return clusterversion.TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates, true /* exists */
-	}
-	return version, false /* exists */
+	return 0, false /* exists */
 }

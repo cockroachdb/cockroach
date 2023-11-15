@@ -109,9 +109,9 @@ func TestVersionGuard(t *testing.T) {
 			storageVersion:  &initialVersion,
 			settingsVersion: maxVersion,
 			checkVersions: map[clusterversion.Key]bool{
-				initialVersion:                        true,
-				maxVersion:                            true,
-				clusterversion.TODO_Delete_V23_1Start: true,
+				initialVersion: true,
+				startVersion:   true,
+				maxVersion:     true,
 			},
 		},
 	}
