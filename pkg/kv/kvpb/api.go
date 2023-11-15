@@ -194,6 +194,33 @@ type Request interface {
 	flags() flag
 }
 
+// SafeFormatterRequest is an optional extension interface used to allow request to do custom formatting.
+type SafeFormatterRequest interface {
+	Request
+	redact.SafeFormatter
+}
+
+var _ SafeFormatterRequest = (*GetRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (gr GetRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("[lockStrength=%s lockingDurability=%s]", gr.KeyLockingStrength, gr.KeyLockingDurability)
+}
+
+var _ SafeFormatterRequest = (*ScanRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (sr ScanRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("[lockStrength=%s lockingDurability=%s]", sr.KeyLockingStrength, sr.KeyLockingDurability)
+}
+
+var _ SafeFormatterRequest = (*ReverseScanRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rsr ReverseScanRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("[lockStrength=%s lockingDurability=%s]", rsr.KeyLockingStrength, rsr.KeyLockingDurability)
+}
+
 // LockingReadRequest is an interface used to expose the key-level locking
 // strength of a read-only request.
 type LockingReadRequest interface {

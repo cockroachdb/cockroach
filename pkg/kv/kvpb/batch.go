@@ -795,7 +795,7 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 
 // SafeFormat implements redact.SafeFormatter.
 // It gives a brief summary of the contained requests and keys in the batch.
-func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+func (ba BatchRequest) SafeFormat(s redact.SafePrinter, verb rune) {
 	for count, arg := range ba.Requests {
 		// Limit the strings to provide just a summary. Without this limit
 		// a log message with a BatchRequest can be very long.
@@ -845,6 +845,9 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 				s.Print(req.Method())
 			}
 			s.Printf(" [%s,%s)", h.Key, h.EndKey)
+			if safeFormatterReq, ok := req.(SafeFormatterRequest); ok {
+				safeFormatterReq.SafeFormat(s, verb)
+			}
 		}
 	}
 	{
