@@ -154,15 +154,7 @@ COALESCE(last_run::timestamptz, created::timestamptz) + least(
 	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
 		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
 
-	// deprecatedResumeQueryBaseCols loads the payload and progress from
-	// system.jobs instead of the system.job_info table.
-	//
-	// TODO(adityamaru): Remove the deprecated queries once we are outside the
-	// compatability window for 22.2.
-	deprecatedResumeQueryBaseCols    = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
-	resumeQueryWhereBase             = `id = $1 AND claim_session_id = $2`
-	deprecatedResumeQueryWithBackoff = `SELECT ` + deprecatedResumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
-		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
+	resumeQueryWhereBase = `id = $1 AND claim_session_id = $2`
 )
 
 // getProcessQuery returns the query that selects the jobs that are claimed
@@ -261,18 +253,11 @@ func (r *Registry) resumeJob(
 ) (retErr error) {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 
-	readPayloadAndProgressFromJobInfo := r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled)
-	var resumeQuery string
-	if readPayloadAndProgressFromJobInfo {
-		resumeQuery = resumeQueryWithBackoff
-	} else {
-		resumeQuery = deprecatedResumeQueryWithBackoff
-	}
 	args := []interface{}{jobID, s.ID().UnsafeBytes(),
 		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
 	row, err := r.db.Executor().QueryRowEx(
 		ctx, "get-job-row", nil,
-		sessiondata.NodeUserSessionDataOverride, resumeQuery, args...,
+		sessiondata.NodeUserSessionDataOverride, resumeQueryWithBackoff, args...,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "job %d: could not query job table row", jobID)
@@ -321,41 +306,29 @@ func (r *Registry) resumeJob(
 
 	payload := &jobspb.Payload{}
 	progress := &jobspb.Progress{}
-	if readPayloadAndProgressFromJobInfo {
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			infoStorage := job.InfoStorage(txn)
-			payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job payload not found in system.job_info")
-			}
-			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-				return err
-			}
-
-			progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job progress not found in system.job_info")
-			}
-			return protoutil.Unmarshal(progressBytes, progress)
-		}); err != nil {
-			return err
-		}
-	} else {
-		payload, err = UnmarshalPayload(row[1])
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job.InfoStorage(txn)
+		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
 		if err != nil {
 			return err
 		}
+		if !exists {
+			return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job payload not found in system.job_info")
+		}
+		if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
+			return err
+		}
 
-		progress, err = UnmarshalProgress(row[2])
+		progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
 		if err != nil {
 			return err
 		}
+		if !exists {
+			return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job progress not found in system.job_info")
+		}
+		return protoutil.Unmarshal(progressBytes, progress)
+	}); err != nil {
+		return err
 	}
 
 	job.mu.payload = *payload
