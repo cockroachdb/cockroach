@@ -11,9 +11,37 @@
 package aggmetric
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
+
+var now = timeutil.Now
+
+// TestingSetNow changes the clock used by the metric system. For use by
+// testing to precisely control the clock. Also sets the time in the `tick`
+// package, and pkg/util/metric.
+//
+// TODO(obs): I know this is janky. It's temporary. An upcoming patch will
+// merge this package, pkg/util/metric, and pkg/util/aggmetric, after which
+// we can get rid of all this TestingSetNow chaining.
+func TestingSetNow(f func() time.Time) func() {
+	tickNowResetFn := tick.TestingSetNow(f)
+	metricNowResetFn := metric.TestingSetNow(f)
+	origNow := now
+	now = f
+	return func() {
+		now = origNow
+		tickNowResetFn()
+		metricNowResetFn()
+	}
+}
 
 // AggHistogram maintains a value as the sum of its children. The histogram will
 // report to crdb-internal time series only the aggregate histogram of all of its
@@ -23,6 +51,14 @@ type AggHistogram struct {
 	h      metric.IHistogram
 	create func() metric.IHistogram
 	childSet
+	ticker struct {
+		// We use a RWMutex, because we don't want child histograms to contend when
+		// recording values, unless we're rotating histograms for the parent & children.
+		// In this instance, the "writer" for the RWMutex is the ticker, and the "readers"
+		// are all the child histograms recording their values.
+		syncutil.RWMutex
+		*tick.Ticker
+	}
 }
 
 var _ metric.Iterable = (*AggHistogram)(nil)
@@ -39,6 +75,23 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 		h:      create(),
 		create: create,
 	}
+	a.ticker.Ticker = tick.NewTicker(
+		now(),
+		opts.Duration/metric.WindowedHistogramWrapNum,
+		func() {
+			// Atomically rotate the histogram window for the
+			// parent histogram, and all the child histograms.
+			a.h.Tick()
+			a.childSet.apply(func(childItem btree.Item) {
+				childHist, ok := childItem.(*Histogram)
+				if !ok {
+					panic(errors.AssertionFailedf(
+						"unable to assert type of child for histogram %q when rotating histogram windows",
+						opts.Metadata.Name))
+				}
+				childHist.h.Tick()
+			})
+		})
 	a.init(childLabels)
 	return a
 }
@@ -59,7 +112,14 @@ func (a *AggHistogram) GetUnit() metric.Unit { return a.h.GetUnit() }
 func (a *AggHistogram) GetMetadata() metric.Metadata { return a.h.GetMetadata() }
 
 // Inspect is part of the metric.Iterable interface.
-func (a *AggHistogram) Inspect(f func(interface{})) { f(a) }
+func (a *AggHistogram) Inspect(f func(interface{})) {
+	func() {
+		a.ticker.Lock()
+		defer a.ticker.Unlock()
+		tick.MaybeTick(&a.ticker)
+	}()
+	f(a)
+}
 
 // TotalWindowed is part of the metric.WindowedHistogram interface
 func (a *AggHistogram) TotalWindowed() (int64, float64) {
@@ -142,6 +202,8 @@ func (g *Histogram) Unlink() {
 // excess of the configured maximum value for that histogram results in
 // recording the maximum value instead.
 func (g *Histogram) RecordValue(v int64) {
+	g.parent.ticker.RLock()
+	defer g.parent.ticker.RUnlock()
 	g.h.RecordValue(v)
 	g.parent.h.RecordValue(v)
 }

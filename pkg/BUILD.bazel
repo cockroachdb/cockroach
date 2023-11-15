@@ -2413,6 +2413,7 @@ GO_TARGETS = [
     "//pkg/util/memzipper:memzipper",
     "//pkg/util/metric/aggmetric:aggmetric",
     "//pkg/util/metric/aggmetric:aggmetric_test",
+    "//pkg/util/metric/tick:tick",
     "//pkg/util/metric:metric",
     "//pkg/util/metric:metric_test",
     "//pkg/util/mon:mon",

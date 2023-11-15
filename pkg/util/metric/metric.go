@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
@@ -166,26 +167,18 @@ var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
 
-type periodic interface {
-	nextTick() time.Time
-	tick()
-}
-
 var now = timeutil.Now
 
 // TestingSetNow changes the clock used by the metric system. For use by
-// testing to precisely control the clock.
+// testing to precisely control the clock. Also sets the time in the `tick`
+// package, since that is used ubiquitously here.
 func TestingSetNow(f func() time.Time) func() {
+	tickNowResetFn := tick.TestingSetNow(f)
 	origNow := now
 	now = f
 	return func() {
 		now = origNow
-	}
-}
-
-func maybeTick(m periodic) {
-	for m.nextTick().Before(now()) {
-		m.tick()
+		tickNowResetFn()
 	}
 }
 
@@ -316,22 +309,20 @@ func newHistogram(
 		Metadata: meta,
 		cum:      cum,
 	}
-	h.windowed.tickHelper = &tickHelper{
-		nextT: now(),
+	h.windowed.Ticker = tick.NewTicker(
+		now(),
 		// We want to divide the total window duration by the number of windows
 		// because we need to rotate the windows at uniformly distributed
 		// intervals within a histogram's total duration.
-		tickInterval: duration / WindowedHistogramWrapNum,
-		onTick: func() {
+		duration/WindowedHistogramWrapNum,
+		func() {
 			h.windowed.prev = h.windowed.cur
 			h.windowed.cur = prometheus.NewHistogram(opts)
-		},
-	}
-	h.windowed.tickHelper.onTick()
+		})
+	h.windowed.Ticker.OnTick()
 	return h
 }
 
-var _ periodic = (*Histogram)(nil)
 var _ PrometheusExportable = (*Histogram)(nil)
 var _ WindowedHistogram = (*Histogram)(nil)
 
@@ -357,7 +348,7 @@ type Histogram struct {
 		// need an RLock to record into it. But write lock
 		// is held while rotating.
 		syncutil.RWMutex
-		*tickHelper
+		*tick.Ticker
 		prev, cur prometheus.Histogram
 	}
 }
@@ -366,6 +357,15 @@ type IHistogram interface {
 	Iterable
 	PrometheusExportable
 	WindowedHistogram
+	// Periodic exposes tick-related functions as part of the public API.
+	// TODO(obs-infra): This shouldn't be necessary, but we need to expose tick functions
+	// to metric.AggHistogram so that it has the ability to rotate the underlying histogram
+	// windows. The real solution is to merge the two packages and make this piece of the API
+	// package-private, but such a solution is not easily backported. This solution is meant
+	// to be temporary, and the merging of packages will happen on master which will provide
+	// a more holistic solution. Afterwards, interfaces involving ticking can be returned to
+	// package-private.
+	tick.Periodic
 
 	RecordValue(n int64)
 	Total() (int64, float64)
@@ -374,16 +374,25 @@ type IHistogram interface {
 
 var _ IHistogram = &Histogram{}
 
-func (h *Histogram) nextTick() time.Time {
+// NextTick returns the next tick timestamp of the underlying tick.Ticker
+// used by this Histogram.  Generally not useful - this is part of a band-aid
+// fix and should be expected to be removed.
+// TODO(obs-infra): remove this once pkg/util/aggmetric is merged with this package.
+func (h *Histogram) NextTick() time.Time {
 	h.windowed.RLock()
 	defer h.windowed.RUnlock()
-	return h.windowed.nextTick()
+	return h.windowed.NextTick()
 }
 
-func (h *Histogram) tick() {
+// Tick triggers a tick of this Histogram, regardless of whether we've passed
+// the next tick interval. Generally, this should not be used by any caller other
+// than aggmetric.AggHistogram. Future work will remove the need to expose this function
+// as part of the public API.
+// TODO(obs-infra): remove this once pkg/util/aggmetric is merged with this package.
+func (h *Histogram) Tick() {
 	h.windowed.Lock()
 	defer h.windowed.Unlock()
-	h.windowed.tick()
+	h.windowed.Tick()
 }
 
 // Windowed returns a copy of the current windowed histogram.
@@ -444,9 +453,11 @@ func (h *Histogram) GetMetadata() Metadata {
 
 // Inspect calls the closure.
 func (h *Histogram) Inspect(f func(interface{})) {
-	h.windowed.Lock()
-	maybeTick(&h.windowed)
-	h.windowed.Unlock()
+	func() {
+		h.windowed.Lock()
+		defer h.windowed.Unlock()
+		tick.MaybeTick(&h.windowed)
+	}()
 	f(h)
 }
 
