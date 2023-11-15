@@ -321,9 +321,9 @@ func (tc *Catalog) FullyQualifiedName(
 	return ds.(dataSource).fqName(), nil
 }
 
-// RoleExists is part of the cat.Catalog interface.
-func (tc *Catalog) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	return true, nil
+// CheckRoleExists is part of the cat.Catalog interface.
+func (tc *Catalog) CheckRoleExists(ctx context.Context, role username.SQLUsername) error {
+	return nil
 }
 
 // Optimizer is part of the cat.Catalog interface.

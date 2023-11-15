@@ -189,6 +189,11 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			return err
 		}
 	}
+	// Bump role membership table version to force a refresh of role membership
+	// cache.
+	if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
+		return err
+	}
 
 	return params.p.logEvent(params.ctx,
 		0, /* no target */
