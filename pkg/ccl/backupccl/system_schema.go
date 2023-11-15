@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -243,10 +242,6 @@ func roleMembersRestoreFunc(
 	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !deps.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1RoleMembersTableHasIDColumns) {
-		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
-	}
-
 	// It's enough to just check if role_id exists since member_id was added at
 	// the same time.
 	hasIDColumns, err := tableHasNotNullColumn(ctx, txn, tempTableName, "role_id")
@@ -370,10 +365,6 @@ func systemPrivilegesRestoreFunc(
 	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !deps.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn) {
-		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
-	}
-
 	hasUserIDColumn, err := tableHasNotNullColumn(ctx, txn, tempTableName, "user_id")
 	if err != nil {
 		return err
@@ -425,10 +416,6 @@ func systemDatabaseRoleSettingsRestoreFunc(
 	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !deps.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn) {
-		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
-	}
-
 	hasRoleIDColumn, err := tableHasNotNullColumn(ctx, txn, tempTableName, "role_id")
 	if err != nil {
 		return err
@@ -480,10 +467,6 @@ func systemExternalConnectionsRestoreFunc(
 	txn isql.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !deps.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn) {
-		return defaultSystemTableRestoreFunc(ctx, deps, txn, systemTableName, tempTableName)
-	}
-
 	hasOwnerIDColumn, err := tableHasNotNullColumn(ctx, txn, tempTableName, "owner_id")
 	if err != nil {
 		return err
