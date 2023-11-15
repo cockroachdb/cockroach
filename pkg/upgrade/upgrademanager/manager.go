@@ -785,19 +785,6 @@ func (m *Manager) getOrCreateMigrationJob(
 }
 
 const (
-	preJobInfoTableQuery = `
-SELECT id, status
-FROM (
-     SELECT id, status,
-     crdb_internal.pb_to_json(
-	'cockroach.sql.jobs.jobspb.Payload',
-	payload,
-	false -- emit_defaults
-     ) AS pl
-     FROM system.jobs
-     WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
-)
-WHERE ((pl->'migration')->'clusterVersion') = $1::JSONB`
 	// PostJobInfoQuery avoids the crdb_internal.system_jobs table
 	// to avoid expensive full scans.
 	// Exported for testing.
@@ -829,12 +816,7 @@ func (m *Manager) getRunningMigrationJob(
 	// Wrap the version into a ClusterVersion so that the JSON looks like what the
 	// Payload proto has inside.
 	cv := clusterversion.ClusterVersion{Version: version}
-	var query string
-	if m.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
-		query = PostJobInfoTableQuery
-	} else {
-		query = preJobInfoTableQuery
-	}
+	query := PostJobInfoTableQuery
 	jsonMsg, err := protoreflect.MessageToJSON(&cv, protoreflect.FmtFlags{EmitDefaults: false})
 	if err != nil {
 		return false, 0, errors.Wrap(err, "failed to marshal version to JSON")
