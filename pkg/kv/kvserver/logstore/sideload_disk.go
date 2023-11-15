@@ -35,11 +35,10 @@ var _ SideloadStorage = &DiskSideloadStorage{}
 //
 // TODO(pavelkalinnikov): remove the interface, this type is the only impl.
 type DiskSideloadStorage struct {
-	st         *cluster.Settings
-	limiter    *rate.Limiter
-	dir        string
-	dirCreated bool
-	eng        storage.Engine
+	st      *cluster.Settings
+	limiter *rate.Limiter
+	dir     string
+	eng     storage.Engine
 }
 
 func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
@@ -75,9 +74,7 @@ func NewDiskSideloadStorage(
 }
 
 func (ss *DiskSideloadStorage) createDir() error {
-	err := ss.eng.MkdirAll(ss.dir)
-	ss.dirCreated = ss.dirCreated || err == nil
-	return err
+	return ss.eng.MkdirAll(ss.dir)
 }
 
 // Dir implements SideloadStorage.
@@ -158,9 +155,7 @@ func (ss *DiskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 
 // Clear implements SideloadStorage.
 func (ss *DiskSideloadStorage) Clear(_ context.Context) error {
-	err := ss.eng.RemoveAll(ss.dir)
-	ss.dirCreated = ss.dirCreated && err != nil
-	return err
+	return ss.eng.RemoveAll(ss.dir)
 }
 
 // TruncateTo implements SideloadStorage.
