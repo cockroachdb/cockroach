@@ -24,6 +24,7 @@ go_library(
         "//pkg/storage/enginepb",
         "//pkg/util/admission",
         "//pkg/util/bufalloc",
+        "//pkg/util/contextutil",
         "//pkg/util/envutil",
         "//pkg/util/future",
         "//pkg/util/hlc",
