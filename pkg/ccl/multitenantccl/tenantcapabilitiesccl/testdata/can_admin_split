@@ -34,13 +34,13 @@ ok
 exec-privileged-op-tenant
 ALTER TABLE t SPLIT AT VALUES (0)
 ----
-pq: ba: AdminSplit [/Tenant/10/Table/104/1/0,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
+pq: ba: AdminSplit [/Tenant/10/Table/104/1/0] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
 
 # Check the index as well.
 exec-privileged-op-tenant
 ALTER INDEX t@idx SPLIT AT VALUES (1)
 ----
-pq: ba: AdminSplit [/Tenant/10/Table/104/2/1,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
+pq: ba: AdminSplit [/Tenant/10/Table/104/2/1] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
 
 # Grant the capability without providing an explicit value.
 update-capabilities
@@ -64,7 +64,7 @@ ok
 exec-privileged-op-tenant
 ALTER TABLE t SPLIT AT VALUES (0)
 ----
-pq: ba: AdminSplit [/Tenant/10/Table/104/1/0,/Min) RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
+pq: ba: AdminSplit [/Tenant/10/Table/104/1/0] RPC error: rpc error: code = Unauthenticated desc = client tenant does not have capability "can_admin_split" (*kvpb.AdminSplitRequest)
 
 # Lastly, use the explicitly set to true syntax.
 update-capabilities

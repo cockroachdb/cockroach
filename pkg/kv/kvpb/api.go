@@ -194,6 +194,86 @@ type Request interface {
 	flags() flag
 }
 
+// SafeFormatterRequest is an optional extension interface used to allow request to do custom formatting.
+type SafeFormatterRequest interface {
+	Request
+	redact.SafeFormatter
+}
+
+var _ SafeFormatterRequest = (*GetRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (gr *GetRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Print(gr.Method())
+	if gr.KeyLockingStrength == lock.None {
+		return
+	}
+	s.Printf("(%s,%s)", gr.KeyLockingStrength, gr.KeyLockingDurability)
+}
+
+var _ SafeFormatterRequest = (*ScanRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (sr *ScanRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Print(sr.Method())
+	if sr.KeyLockingStrength == lock.None {
+		return
+	}
+	s.Printf("(%s,%s)", sr.KeyLockingStrength, sr.KeyLockingDurability)
+}
+
+var _ SafeFormatterRequest = (*ReverseScanRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rsr *ReverseScanRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Print(rsr.Method())
+	if rsr.KeyLockingStrength == lock.None {
+		return
+	}
+	s.Printf("(%s,%s)", rsr.KeyLockingStrength, rsr.KeyLockingDurability)
+}
+
+var _ SafeFormatterRequest = (*EndTxnRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (etr *EndTxnRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("%s(", etr.Method())
+	if etr.Commit {
+		if etr.IsParallelCommit() {
+			s.Printf("parallel commit")
+		} else {
+			s.Printf("commit")
+		}
+	} else {
+		s.Printf("abort")
+	}
+	if etr.InternalCommitTrigger != nil {
+		s.Printf(" %s", etr.InternalCommitTrigger.Kind())
+	}
+	s.Printf(")")
+}
+
+var _ SafeFormatterRequest = (*RecoverTxnRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rtr *RecoverTxnRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("%s(%s, ", rtr.Method(), rtr.Txn.Short())
+	if rtr.ImplicitlyCommitted {
+		s.Printf("commit")
+	} else {
+		s.Printf("abort")
+	}
+	s.Printf(")")
+}
+
+var _ SafeFormatterRequest = (*PushTxnRequest)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (ptr *PushTxnRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.Printf("PushTxn(%s,%s->%s)",
+		ptr.PushType, ptr.PusherTxn.Short(), ptr.PusheeTxn.Short())
+}
+
 // LockingReadRequest is an interface used to expose the key-level locking
 // strength of a read-only request.
 type LockingReadRequest interface {
