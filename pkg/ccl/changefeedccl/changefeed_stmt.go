@@ -512,16 +512,6 @@ func createChangefeedJobRecord(
 			return nil, err
 		}
 		if withDiff {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady) {
-				return nil,
-					pgerror.Newf(
-						pgcode.FeatureNotSupported,
-						"cannot create new changefeed with CDC expression <%s>, "+
-							"which requires access to cdc_prev until cluster upgrade to %s finalized.",
-						tree.AsString(normalized),
-						clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady.String,
-					)
-			}
 			opts.ForceDiff()
 		} else if opts.IsSet(changefeedbase.OptDiff) {
 			// Expression didn't reference cdc_prev, but the diff option was specified.
@@ -1619,9 +1609,8 @@ func failureTypeForStartupError(err error) changefeedbase.FailureType {
 }
 
 // maybeUpgradePreProductionReadyExpression updates job record for the
-// changefeed using CDC transformation, created prior to
-// clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady. The update happens
-// once cluster version finalized.
+// changefeed using CDC transformation, created prior to 23.1. The update
+// happens once cluster version finalized.
 // Returns nil when nothing needs to be done.
 // Returns fatal error message, causing changefeed to fail, if automatic upgrade
 // cannot for some reason. Returns a transient error to cause job retry/reload
@@ -1642,18 +1631,9 @@ func maybeUpgradePreProductionReadyExpression(
 		return nil
 	}
 
-	if !jobExec.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady,
-	) {
-		// Can't upgrade job record yet -- wait until upgrade finalized.
-		return nil
-	}
-
-	// Expressions prior to
-	// clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady were rewritten to
-	// fully qualify all columns/types.  Furthermore, those expressions couldn't
-	// use any functions that depend on session data.  Thus, it is safe to use
-	// minimal session data.
+	// Expressions prior to 23.1 were rewritten to fully qualify all
+	// columns/types. Furthermore, those expressions couldn't use any functions
+	// that depend on session data. Thus, it is safe to use minimal session data.
 	sd := sessiondatapb.SessionData{
 		Database:   "",
 		UserProto:  jobExec.User().EncodeProto(),

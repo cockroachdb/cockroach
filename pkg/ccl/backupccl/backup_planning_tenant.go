@@ -11,7 +11,6 @@ package backupccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -38,23 +37,6 @@ FROM
   LEFT JOIN system.tenant_usage ON
 	  tenants.id = tenant_usage.tenant_id AND tenant_usage.instance_id = 0
 `
-	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
-		q = `
-SELECT
-  tenants.id,                        /* 0 */
-  tenants.info,                      /* 1 */
-  NULL,                              /* 2 */
-  NULL,                              /* 3 */
-  NULL,                              /* 4 */
-  tenant_usage.ru_burst_limit,       /* 5 */
-  tenant_usage.ru_refill_rate,       /* 6 */
-  tenant_usage.ru_current,           /* 7 */
-  tenant_usage.total_consumption     /* 8 */
-FROM
-  system.tenants
-  LEFT JOIN system.tenant_usage ON
-	  tenants.id = tenant_usage.tenant_id AND tenant_usage.instance_id = 0`
-	}
 	return q
 }
 
