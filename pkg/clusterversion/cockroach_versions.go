@@ -191,39 +191,6 @@ const (
 	// This is a permanent migration which should exist forever.
 	Permanent_V22_2SQLSchemaTelemetryScheduledJobs
 
-	// TODO_Delete_V23_1TenantNamesStateAndServiceMode adds columns to
-	// system.tenants.
-	TODO_Delete_V23_1TenantNamesStateAndServiceMode
-
-	// TODO_Delete_V23_1DescIDSequenceForSystemTenant migrates the descriptor ID
-	// generator counter from a meta key to the system.descriptor_id_seq sequence
-	// for the system tenant.
-	TODO_Delete_V23_1DescIDSequenceForSystemTenant
-
-	// TODO_Delete_V23_1CreateSystemJobInfoTable creates the system.job_info table.
-	TODO_Delete_V23_1CreateSystemJobInfoTable
-
-	// TODO_Delete_V23_1RoleMembersTableHasIDColumns is the version where the
-	// role_members system table has columns for ids.
-	TODO_Delete_V23_1RoleMembersTableHasIDColumns
-
-	// TODO_Delete_V23_1ScheduledChangefeeds is the version where scheduled changefeeds are
-	// supported through `CREATE SCHEDULE FOR CHANGEFEED` statement.
-	TODO_Delete_V23_1ScheduledChangefeeds
-
-	// TODO_Delete_V23_1AddTypeColumnToJobsTable adds the nullable job_type
-	// column to the system.jobs table.
-	TODO_Delete_V23_1AddTypeColumnToJobsTable
-
-	// TODO_Delete_V23_1BackfillTypeColumnInJobsTable backfills the job_type
-	// column in the system.jobs table.
-	TODO_Delete_V23_1BackfillTypeColumnInJobsTable
-
-	// TODO_Delete_V23_1_ChangefeedExpressionProductionReady marks changefeed
-	// expressions (transformation) as production ready. This gate functions as a
-	// signal to attempt to upgrade chagnefeeds created prior to this version.
-	TODO_Delete_V23_1_ChangefeedExpressionProductionReady
-
 	// Permanent_V23_1KeyVisualizerTablesAndJobs adds the system tables that
 	// support the key visualizer.
 	Permanent_V23_1KeyVisualizerTablesAndJobs
@@ -232,63 +199,9 @@ const (
 	// responsible for polling the jobs table for metrics.
 	Permanent_V23_1_CreateJobsMetricsPollingJob
 
-	// TODO_Delete_V23_1AllocatorCPUBalancing adds balancing CPU usage among
-	// stores using the allocator and store rebalancer. It assumes that at this
-	// version, stores now include their CPU in the StoreCapacity proto when
-	// gossiping.
-	TODO_Delete_V23_1AllocatorCPUBalancing
-
-	// TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn is the version where the
-	// user_id column has been added to the system.privileges table.
-	TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn
-
-	// TODO_Delete_V23_1WebSessionsTableHasUserIDColumn is the version where the
-	// user_id column has been added to the system.web_sessions table.
-	TODO_Delete_V23_1WebSessionsTableHasUserIDColumn
-
-	// TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn is the version where
-	// the role_id column has been added to the system.database_role_settings
-	// table.
-	TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn
-
-	// TODO_Delete_V23_1TenantCapabilities is the version where tenant
-	// capabilities can be set.
-	TODO_Delete_V23_1TenantCapabilities
-
-	// TODO_Delete_V23_1DeprecateClusterVersionKey is the version where we no
-	// longer write cluster version keys to engines.
-	TODO_Delete_V23_1DeprecateClusterVersionKey
-
-	// TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn is the version
-	// where the owner_id column has been added to the system.external_connections
-	// table.
-	TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn
-
-	// TODO_Delete_V23_1JobInfoTableIsBackfilled is a version gate after which the
-	// system.job_info table has been backfilled with rows for the payload and
-	// progress of each job in the system.jobs table.
-	TODO_Delete_V23_1JobInfoTableIsBackfilled
-
 	// Permanent_V23_1_CreateAutoConfigRunnerJob is the version where the auto
 	// config runner persistent job has been created.
 	Permanent_V23_1_CreateAutoConfigRunnerJob
-
-	// TODO_Delete_V23_1AddSQLStatsComputedIndexes is the version at which
-	// Cockroach adds new computed columns and indexes to the statement_statistics
-	// and transaction_statistics system tables. These columns optimize persisted
-	// SQL statistics queries for observability.
-	TODO_Delete_V23_1AddSQLStatsComputedIndexes
-
-	// TODO_Delete_V23_1AddSystemActivityTables is the version at which Cockroach
-	// adds system tables statement_activity and transaction_activity. These
-	// tables will contain a subset of data from statement_statistics and
-	// transaction_statistics that are optimized for the console.
-	TODO_Delete_V23_1AddSystemActivityTables
-
-	// TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs is the version
-	// where the payload and progress columns are no longer written to
-	// system.jobs.
-	TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs
 
 	// Permanent_V23_1ChangeSQLStatsTTL is the version where the gc TTL was
 	// updated to all SQL Stats tables.
@@ -420,32 +333,11 @@ var versionTable = [numKeys]roachpb.Version{
 
 	// Permanent upgrades from previous versions.
 	Permanent_V22_2SQLSchemaTelemetryScheduledJobs: {Major: 22, Minor: 1, Internal: 42},
-
-	// v23.1 versions. Internal versions must be even.
-	TODO_Delete_V23_1TenantNamesStateAndServiceMode:            {Major: 22, Minor: 2, Internal: 4},
-	TODO_Delete_V23_1DescIDSequenceForSystemTenant:             {Major: 22, Minor: 2, Internal: 6},
-	TODO_Delete_V23_1CreateSystemJobInfoTable:                  {Major: 22, Minor: 2, Internal: 10},
-	TODO_Delete_V23_1RoleMembersTableHasIDColumns:              {Major: 22, Minor: 2, Internal: 12},
-	TODO_Delete_V23_1ScheduledChangefeeds:                      {Major: 22, Minor: 2, Internal: 16},
-	TODO_Delete_V23_1AddTypeColumnToJobsTable:                  {Major: 22, Minor: 2, Internal: 18},
-	TODO_Delete_V23_1BackfillTypeColumnInJobsTable:             {Major: 22, Minor: 2, Internal: 20},
-	TODO_Delete_V23_1_ChangefeedExpressionProductionReady:      {Major: 22, Minor: 2, Internal: 30},
-	Permanent_V23_1KeyVisualizerTablesAndJobs:                  {Major: 22, Minor: 2, Internal: 32},
-	Permanent_V23_1_CreateJobsMetricsPollingJob:                {Major: 22, Minor: 2, Internal: 38},
-	TODO_Delete_V23_1AllocatorCPUBalancing:                     {Major: 22, Minor: 2, Internal: 40},
-	TODO_Delete_V23_1SystemPrivilegesTableHasUserIDColumn:      {Major: 22, Minor: 2, Internal: 42},
-	TODO_Delete_V23_1WebSessionsTableHasUserIDColumn:           {Major: 22, Minor: 2, Internal: 46},
-	TODO_Delete_V23_1DatabaseRoleSettingsHasRoleIDColumn:       {Major: 22, Minor: 2, Internal: 54},
-	TODO_Delete_V23_1TenantCapabilities:                        {Major: 22, Minor: 2, Internal: 60},
-	TODO_Delete_V23_1DeprecateClusterVersionKey:                {Major: 22, Minor: 2, Internal: 62},
-	TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn:  {Major: 22, Minor: 2, Internal: 74},
-	TODO_Delete_V23_1JobInfoTableIsBackfilled:                  {Major: 22, Minor: 2, Internal: 80},
-	Permanent_V23_1_CreateAutoConfigRunnerJob:                  {Major: 22, Minor: 2, Internal: 90},
-	TODO_Delete_V23_1AddSQLStatsComputedIndexes:                {Major: 22, Minor: 2, Internal: 92},
-	TODO_Delete_V23_1AddSystemActivityTables:                   {Major: 22, Minor: 2, Internal: 94},
-	TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs: {Major: 22, Minor: 2, Internal: 96},
-	Permanent_V23_1ChangeSQLStatsTTL:                           {Major: 22, Minor: 2, Internal: 98},
-	Permanent_V23_1CreateSystemActivityUpdateJob:               {Major: 22, Minor: 2, Internal: 102},
+	Permanent_V23_1KeyVisualizerTablesAndJobs:      {Major: 22, Minor: 2, Internal: 32},
+	Permanent_V23_1_CreateJobsMetricsPollingJob:    {Major: 22, Minor: 2, Internal: 38},
+	Permanent_V23_1_CreateAutoConfigRunnerJob:      {Major: 22, Minor: 2, Internal: 90},
+	Permanent_V23_1ChangeSQLStatsTTL:               {Major: 22, Minor: 2, Internal: 98},
+	Permanent_V23_1CreateSystemActivityUpdateJob:   {Major: 22, Minor: 2, Internal: 102},
 
 	V23_1: {Major: 23, Minor: 1, Internal: 0},
 
