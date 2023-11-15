@@ -1377,6 +1377,68 @@ func MVCCGet(
 	return res, err
 }
 
+// MVCCGetForKnownTimestampWithNoIntent returns the value for key@timestamp,
+// which is required to exist as a point (not a rangekey) and not have a
+// corresponding intent. It returns a tombstone if that is the value at
+// key@timestamp. It returns an error if there is no value. The caller should
+// set valueInBatch to true if the value is known to be in the batch and does
+// not need to be read from the engine (if the batch does not have it).
+//
+// REQUIRES: batch is an indexed batch.
+//
+// TODO(sumeer): microbenchmark for valueInBatch={false,true}. There are some
+// macro-benchmark numbers using kv0 and changefeeds in
+// https://github.com/cockroachdb/cockroach/issues/113090#issuecomment-1782902045.
+func MVCCGetForKnownTimestampWithNoIntent(
+	ctx context.Context, batch Batch, key roachpb.Key, timestamp hlc.Timestamp, valueInBatch bool,
+) (*roachpb.Value, enginepb.MVCCValueHeader, error) {
+	var iter MVCCIterator
+	var err error
+	if valueInBatch {
+		iter, err = batch.NewBatchOnlyMVCCIterator(ctx,
+			IterOptions{KeyTypes: IterKeyTypePointsAndRanges, Prefix: true})
+	} else {
+		// TODO(sumeer): Use Pebble's Get. The value has likely been written
+		// recently, so may be in the memtable or L0. A Pebble Get will
+		// iteratively go down the levels and find the value in a higher level,
+		// which would avoid seeking all the levels. This will not need to handle
+		// rangekeys. We won't be able to use mvccGetWithValueHeader, that we are
+		// using below for convenience.
+		iter, err = batch.NewMVCCIterator(ctx, MVCCKeyIterKind,
+			IterOptions{
+				KeyTypes: IterKeyTypePointsAndRanges, Prefix: true, ReadCategory: RangefeedReadCategory})
+	}
+	if err != nil {
+		return nil, enginepb.MVCCValueHeader{}, err
+	}
+	defer iter.Close()
+
+	// Use mvccGetWithValueHeader, even though we know the exact timestamp,
+	// since it convenient.
+	//
+	// mvccGetWithValueHeader will expose a rangekey tombstone for key@timesamp,
+	// as a point, even though we know key@timestamp must be a point-key. We
+	// should stop using mvccGetWithValueHeader, which would allow us to assert
+	// on this expected behavior.
+	value, intent, vh, err := mvccGetWithValueHeader(
+		ctx, iter, key, timestamp, MVCCGetOptions{Tombstones: true})
+	val := value.ToPointer()
+	if intent != nil {
+		// This is an assertion failure since we constructed the iterators above
+		// with MVCCKeyIterKind, so they should not see intents.
+		return nil, enginepb.MVCCValueHeader{}, errors.AssertionFailedf(
+			"unexpected intent %v for key %v", intent, key)
+	}
+	if val == nil {
+		return nil, enginepb.MVCCValueHeader{}, errors.Errorf("value missing for key %v", key)
+	}
+	if !val.Timestamp.EqOrdering(timestamp) {
+		return nil, enginepb.MVCCValueHeader{}, errors.Errorf(
+			"expected timestamp %v and found %v for key %v", timestamp, val.Timestamp, key)
+	}
+	return val, vh, err
+}
+
 // MVCCGetWithValueHeader is like MVCCGet, but in addition returns the
 // MVCCValueHeader for the value.
 func MVCCGetWithValueHeader(
