@@ -95,20 +95,17 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	ctx := context.Background()
 	ss := newTestingSideloadStorage(eng)
 
-	assertCreated := func(isCreated bool) {
+	assertExists := func(exists bool) {
 		t.Helper()
-		if is := ss.dirCreated; is != isCreated {
-			t.Fatalf("assertion failed: expected dirCreated=%t, got %t", isCreated, is)
-		}
 		_, err := ss.eng.Stat(ss.dir)
-		if !ss.dirCreated {
-			require.True(t, oserror.IsNotExist(err), "%v", err)
+		if !exists {
+			require.True(t, oserror.IsNotExist(err), err)
 		} else {
 			require.NoError(t, err)
 		}
 	}
 
-	assertCreated(false)
+	assertExists(false)
 
 	const (
 		lowTerm = 1
@@ -123,7 +120,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		t.Fatal(err)
 	}
 
-	assertCreated(true)
+	assertExists(true)
 
 	if c, err := ss.Get(ctx, 1, highTerm); err != nil {
 		t.Fatal(err)
@@ -147,7 +144,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		t.Fatal(err)
 	}
 
-	assertCreated(false)
+	assertExists(false)
 
 	for n, test := range []struct {
 		fun func() error
@@ -188,7 +185,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		if err := ss.Clear(ctx); err != nil {
 			t.Fatalf("%d: %+v", n, err)
 		}
-		assertCreated(false)
+		assertExists(false)
 	}
 
 	// Write some payloads at various indexes. Note that this tests Put
@@ -201,7 +198,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		}
 	}
 
-	assertCreated(true)
+	assertExists(true)
 
 	// Write some more payloads, overlapping, at the past term.
 	pastPayloads := append([]kvpb.RaftIndex{81}, payloads...)
@@ -220,7 +217,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 			t.Fatalf("got %q, wanted %q", c, exp)
 		}
 	}
-	assertCreated(true)
+	assertExists(true)
 
 	for n := range payloads {
 		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, payloads[n])
@@ -292,7 +289,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 			i := payloads[n]
 			require.NoError(t, ss.Put(ctx, i, highTerm, file(i, highTerm)))
 		}
-		assertCreated(true)
+		assertExists(true)
 		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, math.MaxUint64)
 		require.NoError(t, err)
 		require.Zero(t, retained)
@@ -307,7 +304,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	require.NoError(t, ss.Clear(ctx))
 
-	assertCreated(false)
+	assertExists(false)
 
 	// Sanity check that we can call BytesIfTruncatedFromTo and TruncateTo
 	// without the directory existing.
@@ -320,7 +317,7 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	require.Zero(t, freed)
 	require.Zero(t, retained)
 
-	assertCreated(false)
+	assertExists(false)
 
 	// Repopulate with a few entries at indexes=1,2,4 and term 10 to test `maybePurgeSideloaded`
 	// with.
