@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
@@ -56,12 +55,8 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	// is a member of old roles and new roles and has CREATE privilege.
 	// Postgres first checks if the role exists before checking privileges.
 	for _, oldRole := range normalizedOldRoles {
-		roleExists, err := p.RoleExists(ctx, oldRole)
-		if err != nil {
+		if err := p.CheckRoleExists(ctx, oldRole); err != nil {
 			return nil, err
-		}
-		if !roleExists {
-			return nil, sqlerrors.NewUndefinedUserError(oldRole)
 		}
 	}
 	newRole, err := decodeusername.FromRoleSpec(
@@ -70,11 +65,7 @@ func (p *planner) ReassignOwnedBy(ctx context.Context, n *tree.ReassignOwnedBy) 
 	if err != nil {
 		return nil, err
 	}
-	roleExists, err := p.RoleExists(ctx, newRole)
-	if !roleExists {
-		return nil, sqlerrors.NewUndefinedUserError(newRole)
-	}
-	if err != nil {
+	if err := p.CheckRoleExists(ctx, newRole); err != nil {
 		return nil, err
 	}
 
