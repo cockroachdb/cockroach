@@ -96,7 +96,6 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/stats",
         "//pkg/sql/types",
-        "//pkg/storage",
         "//pkg/util",
         "//pkg/util/bitarray",
         "//pkg/util/bufalloc",
