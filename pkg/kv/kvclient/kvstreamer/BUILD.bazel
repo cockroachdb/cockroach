@@ -52,6 +52,7 @@ go_test(
         "streamer_test.go",
     ],
     embed = [":kvstreamer"],
+    exec_properties = {"Pool": "large"},
     deps = [
         "//pkg/base",
         "//pkg/keys",
