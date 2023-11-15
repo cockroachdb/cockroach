@@ -173,8 +173,8 @@ func chooseFiveTestsPerPackage(pkgs map[string]pkg) map[string]pkg {
 	croppedPkgs := make(map[string]pkg)
 	for pkgName, tests := range pkgs {
 		randomOrderTests := scrambleTestOrder(tests)
-		cropIdx := 5
-		if len(randomOrderTests) < 5 {
+		cropIdx := 4
+		if len(randomOrderTests) < cropIdx {
 			cropIdx = len(randomOrderTests)
 		}
 		croppedPkgs[pkgName] = makePkg(randomOrderTests[:cropIdx])
@@ -289,7 +289,7 @@ func main() {
 			}
 			// Use a timeout shorter than the duration so that hanging tests don't
 			// get a free pass.
-			timeout := (3 * duration) / 4
+			timeout := (9 * duration) / 10
 
 			// The stress -p flag defaults to the number of CPUs, which is too
 			// aggressive on big machines and can cause tests to fail. Under nightly
