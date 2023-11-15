@@ -188,10 +188,8 @@ func (p *planner) HasPrivilege(
 			// lookup in common cases (e.g., internal executor usages).
 			return true, nil
 		}
-		if exists, err := p.RoleExists(ctx, user); err != nil {
-			return false, err
-		} else if !exists {
-			return false, pgerror.Newf(pgcode.UndefinedObject, "role %s was concurrently dropped", user)
+		if err := p.CheckRoleExists(ctx, user); err != nil {
+			return false, pgerror.Wrapf(err, pgcode.UndefinedObject, "role %s was concurrently dropped", user)
 		}
 		return true, nil
 	}
@@ -482,6 +480,9 @@ func (p *planner) UserHasAdminRole(ctx context.Context, user username.SQLUsernam
 	if user.IsAdminRole() || user.IsRootUser() || user.IsNodeUser() {
 		return true, nil
 	}
+	if user.IsPublicRole() {
+		return false, nil
+	}
 
 	// Expand role memberships.
 	memberOf, err := p.MemberOfWithAdminOption(ctx, user)
@@ -666,6 +667,12 @@ var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
 func resolveMemberOfWithAdminOption(
 	ctx context.Context, member username.SQLUsername, txn isql.Txn, singleQuery bool,
 ) (map[username.SQLUsername]bool, error) {
+	roleExists, err := RoleExists(ctx, txn, member)
+	if err != nil {
+		return nil, err
+	} else if !roleExists {
+		return nil, sqlerrors.NewUndefinedUserError(member)
+	}
 	ret := map[username.SQLUsername]bool{}
 	if singleQuery {
 		type membership struct {
@@ -908,12 +915,8 @@ func (p *planner) checkCanAlterToNewOwner(
 	ctx context.Context, desc catalog.MutableDescriptor, newOwner username.SQLUsername,
 ) error {
 	// Make sure the newOwner exists.
-	roleExists, err := p.RoleExists(ctx, newOwner)
-	if err != nil {
+	if err := p.CheckRoleExists(ctx, newOwner); err != nil {
 		return err
-	}
-	if !roleExists {
-		return sqlerrors.NewUndefinedUserError(newOwner)
 	}
 
 	// If the user is a superuser, skip privilege checks.

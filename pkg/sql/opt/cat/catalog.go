@@ -199,8 +199,8 @@ type Catalog interface {
 	//    object itself changing (e.g. when a database is renamed).
 	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
 
-	// RoleExists returns true if the role exists.
-	RoleExists(ctx context.Context, role username.SQLUsername) (bool, error)
+	// CheckRoleExists returns an error if the role does not exist.
+	CheckRoleExists(ctx context.Context, role username.SQLUsername) error
 
 	// Optimizer returns the query Optimizer used to optimize SQL statements
 	// referencing objects in this catalog, if any.
