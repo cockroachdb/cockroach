@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -21,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -188,4 +191,42 @@ func sendAddRemoteSSTWorker(
 		}
 		return flush(nil)
 	}
+}
+
+// checkManifestsForOnlineCompat returns an error if the set of
+// manifests appear to be from a backup that we cannot currently
+// support for online restore.
+func checkManifestsForOnlineCompat(ctx context.Context, manifests []backuppb.BackupManifest) error {
+	if len(manifests) < 1 {
+		return errors.AssertionFailedf("expected at least 1 backup manifest")
+	}
+	// TODO(online-restore): Remove once we support layer ordering.
+	if len(manifests) > 1 {
+		return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: restoring from an incremental backup not supported")
+	}
+
+	// TODO(online-restore): Remove once we support layer ordering and have tested some reasonable number of layers.
+	const layerLimit = 16
+	if len(manifests) > layerLimit {
+		return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: too many incremental layers %d (from backup) > %d (limit)", len(manifests), layerLimit)
+	}
+
+	for _, manifest := range manifests {
+		if !manifest.RevisionStartTime.IsEmpty() || !manifest.StartTime.IsEmpty() || manifest.MVCCFilter == backuppb.MVCCFilter_All {
+			return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: restoring from a revision history backup not supported")
+		}
+	}
+	return nil
+}
+
+// checkRewritesAreNoops returns an error if any of the rewrites in
+// the rewrite map actually require key rewriting. We currently don't
+// rewrite keys, so this would be a problem.
+func checkRewritesAreNoops(rewrites jobspb.DescRewriteMap) error {
+	for oldID, rw := range rewrites {
+		if rw.ID != oldID {
+			return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: descriptor rewrites not supported but required (%d -> %d)", oldID, rw.ID)
+		}
+	}
+	return nil
 }
