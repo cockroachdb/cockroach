@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/time/rate"
 )
 
@@ -40,6 +41,7 @@ type DiskSideloadStorage struct {
 	st      *cluster.Settings
 	limiter *rate.Limiter
 	dir     string
+	path    []string
 	eng     storage.Engine
 }
 
@@ -97,7 +99,7 @@ func (ss *DiskSideloadStorage) Put(
 		}
 		// Ensure that ss.dir exists. The filename() is placed directly in ss.dir,
 		// so the next loop iteration should succeed.
-		if err := ss.eng.MkdirAll(ss.dir, os.ModePerm); err != nil {
+		if err := mkdirAllAndSyncParents(ss.eng, ss.dir, os.ModePerm); err != nil {
 			return err
 		}
 		continue
@@ -278,4 +280,54 @@ func (ss *DiskSideloadStorage) String() string {
 	}
 	fmt.Fprintf(&buf, "(%d files)\n", count)
 	return buf.String()
+}
+
+// mkdirAllAndSyncParents creates the given chain of directories, if any
+// subdirectory is missing, and syncs parents of all the created directories.
+// The base directory must already exist. The directories are created using the
+// provided permissions mask, with the same semantics as in os.MkdirAll.
+//
+// For example, if dirs is [x, y, z], then this func creates all the missing
+// subdirectories in base/x/y/z. If base is the lowest previously existing
+// directory then base, x, and y are synced. If x existed too, then only x and y
+// are synced. If z existed before then there are no syncs.
+//
+// NB: path syntax in the examples above may differ, because components of the
+// path are combined using the provided filesystem interface.
+func mkdirAllAndSyncParents(fs vfs.FS, path string, perm os.FileMode) error {
+	// Find the lowest existing directory in the hierarchy.
+	var exists string
+	for dir, parent := path, ""; ; dir = parent {
+		if _, err := fs.Stat(dir); err == nil {
+			exists = dir
+			break
+		} else if !oserror.IsNotExist(err) {
+			return errors.Wrapf(err, "could not get dir info: %s", dir)
+		}
+		parent = fs.PathDir(dir)
+		// NB: not checking against the separator, to be platform-agnostic.
+		if dir == "." || parent == dir { // reached the topmost dir or the root
+			return errors.Newf("topmost dir does not exist: %s", dir)
+		}
+	}
+
+	// Create the destination directory and any of its missing parents.
+	if err := fs.MkdirAll(path, perm); err != nil {
+		return errors.Wrapf(err, "could not create all directories: %s", path)
+	}
+
+	// Sync parent directories up to the lowest existing ancestor, included.
+	for dir, parent := path, ""; dir != exists; dir = parent {
+		parent = fs.PathDir(dir)
+		if handle, err := fs.OpenDir(parent); err != nil {
+			return errors.Wrapf(err, "could not open parent dir: %s", parent)
+		} else if err := handle.Sync(); err != nil {
+			_ = handle.Close()
+			return errors.Wrapf(err, "could not sync parent dir: %s", parent)
+		} else if err := handle.Close(); err != nil {
+			return errors.Wrapf(err, "could not close parent dir: %s", parent)
+		}
+	}
+
+	return nil
 }
