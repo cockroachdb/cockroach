@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -124,8 +126,9 @@ func (s *lockedRangefeedStream) Send(e *kvpb.RangeFeedEvent) error {
 // rangefeedTxnPusher is a shim around intentResolver that implements the
 // rangefeed.TxnPusher interface.
 type rangefeedTxnPusher struct {
-	ir *intentresolver.IntentResolver
-	r  *Replica
+	ir   *intentresolver.IntentResolver
+	r    *Replica
+	span roachpb.RSpan
 }
 
 // PushTxns is part of the rangefeed.TxnPusher interface. It performs a
@@ -133,7 +136,7 @@ type rangefeedTxnPusher struct {
 // transactions.
 func (tp *rangefeedTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
-) ([]*roachpb.Transaction, error) {
+) ([]*roachpb.Transaction, bool, error) {
 	pushTxnMap := make(map[uuid.UUID]*enginepb.TxnMeta, len(txns))
 	for i := range txns {
 		txn := &txns[i]
@@ -149,18 +152,18 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		},
 	}
 
-	pushedTxnMap, _, pErr := tp.ir.MaybePushTransactions(
+	pushedTxnMap, anyAmbiguousAbort, pErr := tp.ir.MaybePushTransactions(
 		ctx, pushTxnMap, h, kvpb.PUSH_TIMESTAMP, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
-		return nil, pErr.GoError()
+		return nil, false, pErr.GoError()
 	}
 
 	pushedTxns := make([]*roachpb.Transaction, 0, len(pushedTxnMap))
 	for _, txn := range pushedTxnMap {
 		pushedTxns = append(pushedTxns, txn)
 	}
-	return pushedTxns, nil
+	return pushedTxns, anyAmbiguousAbort, nil
 }
 
 // ResolveIntents is part of the rangefeed.TxnPusher interface.
@@ -180,6 +183,55 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 			NoMemoryReservedAtSource: true,
 		}},
 	).GoError()
+}
+
+// Barrier is part of the rangefeed.TxnPusher interface.
+func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
+	// Check for v24.1 before issuing the request, in case the server binary is
+	// somehow upgraded from 23.2 to 24.1 while the response is in flight. This
+	// seems very unlikely, but it doesn't really cost us anything.
+	isV24_1 := tp.r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1Start)
+
+	// Execute a Barrier on the leaseholder, and obtain its LAI. Error out on any
+	// range changes (e.g. splits/merges) that we haven't applied yet.
+	lai, desc, err := tp.r.store.db.BarrierWithLAI(ctx, tp.span.Key, tp.span.EndKey)
+	if err != nil {
+		if errors.HasType(err, &kvpb.RangeKeyMismatchError{}) {
+			return errors.Wrap(err, "range barrier failed, range split")
+		}
+		return errors.Wrap(err, "range barrier failed")
+	}
+	if lai == 0 {
+		if isV24_1 {
+			return errors.AssertionFailedf("barrier response without LeaseAppliedIndex")
+		}
+		// We may be talking to a <24.1 binary which doesn't support
+		// BarrierRequest.WithLeaseAppliedIndex. We don't expect to see this,
+		// because those nodes won't support PushTxnResponse.AmbiguousAbort either,
+		// but if we do just return success and degrade to the old behavior.
+		return nil
+	}
+	if desc.RangeID != tp.r.RangeID {
+		return errors.Errorf("range barrier failed, range ID changed: %d -> %s", tp.r.RangeID, desc)
+	}
+	if !desc.RSpan().Equal(tp.span) {
+		return errors.Errorf("range barrier failed, range span changed: %s -> %s", tp.span, desc)
+	}
+
+	// Wait for the local replica to apply it. In the common case where we are the
+	// leaseholder, the Barrier call will already have waited for application, so
+	// this succeeds on the first attempt.
+	retryOpts := retry.Options{
+		InitialBackoff: 10 * time.Millisecond,
+		Multiplier:     2,
+		MaxBackoff:     time.Second,
+	}
+	for r := retry.StartWithCtx(ctx, retryOpts); tp.r.GetLeaseAppliedIndex() < lai; r.Next() {
+	}
+	if err := ctx.Err(); err != nil {
+		return errors.Wrap(err, "range barrier failed")
+	}
+	return nil
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
@@ -422,7 +474,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(isSystemSpan)
 
 	desc := r.Desc()
-	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
+	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r, span: desc.RSpan()}
 	cfg := rangefeed.Config{
 		AmbientContext:   r.AmbientContext,
 		Clock:            r.Clock(),
