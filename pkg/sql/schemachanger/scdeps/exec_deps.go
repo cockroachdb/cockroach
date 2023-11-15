@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 )
 
@@ -280,7 +279,7 @@ func (d *txnDeps) CheckPausepoint(name string) error {
 }
 
 func (d *txnDeps) UseLegacyGCJob(ctx context.Context) bool {
-	return !storage.CanUseMVCCRangeTombstones(ctx, d.settings)
+	return false
 }
 
 func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {

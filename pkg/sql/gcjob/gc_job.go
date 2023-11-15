@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -507,10 +506,7 @@ func shouldUseDelRange(
 	knobs *sql.GCJobTestingKnobs,
 ) bool {
 	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
-	return details.Tenant == nil &&
-		(storage.CanUseMVCCRangeTombstones(ctx, s) ||
-			// Allow this testing knob to override the storage setting, for convenience.
-			knobs.SkipWaitingForMVCCGC)
+	return details.Tenant == nil
 }
 
 // waitForWork waits until there is work to do given the gossipUpDateC, the
