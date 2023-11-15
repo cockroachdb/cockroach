@@ -467,6 +467,9 @@ message LocalOnlySessionData {
   // being emitted for changes to data made in a session.
   // TODO(yang): Plumb this session variable down to KV.
   bool disable_changefeed_replication = 116;
+  // CopyTxnQualityOfService indicates the default QoSLevel/WorkPriority of the
+  // transactions used to evaluate COPY commands.
+  int32 copy_txn_quality_of_service = 117 [(gogoproto.casttype)="QoSLevel"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

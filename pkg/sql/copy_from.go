@@ -1036,7 +1036,7 @@ func (p *planner) preparePlannerForCopy(
 
 			// Start the implicit txn for the next batch.
 			nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID()
-			txnOpt.txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, p.SessionData().DefaultTxnQualityOfService)
+			txnOpt.txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, p.SessionData().CopyTxnQualityOfService)
 			txnOpt.txnTimestamp = p.execCfg.Clock.PhysicalTime()
 			txnOpt.stmtTimestamp = txnOpt.txnTimestamp
 		}
