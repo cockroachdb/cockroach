@@ -485,9 +485,10 @@ func (r *Replica) handleTruncatedStateResult(
 	// to and including the most recently truncated index.
 	r.store.raftEntryCache.Clear(r.RangeID, t.Index+1)
 
-	// Truncate the sideloaded storage. Note that this is safe only if the new truncated state
-	// is durably on disk (i.e.) synced. This is true at the time of writing but unfortunately
-	// could rot.
+	// Truncate the sideloaded storage. This is safe only if the new truncated
+	// state is durably stored on disk, i.e. synced.
+	// TODO(#38566, #113135): this is unfortumantely not true, need to fix this.
+	//
 	// TODO(sumeer): once we remove the legacy caller of
 	// handleTruncatedStateResult, stop calculating the size of the removed
 	// files and the remaining files.
@@ -498,6 +499,12 @@ func (r *Replica) handleTruncatedStateResult(
 		// loud error, but keep humming along.
 		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
 	}
+	// NB: we don't sync the sideloaded entry files removal here for performance
+	// reasons. If a crash occurs, and leftover files remain, we should clean them
+	// up after the server restart.
+	//
+	// TODO(pavelkalinnikov): add a test hook here allowing to sync the sideloaded
+	// storage directory.
 	return -size, expectedFirstIndexWasAccurate
 }
 
