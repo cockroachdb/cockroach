@@ -1975,6 +1975,123 @@ func isWorkloadCollectorVolume(v vm.Volume) bool {
 	return false
 }
 
+const (
+	otelCollectorPort   = 4317
+	jaegerUIPort        = 16686
+	jaegerContainerName = "jaeger"
+	jaegerImageName     = "jaegertracing/all-in-one:latest"
+)
+
+// StartJaeger starts a jaeger instance on the last node in the given
+// cluster and configures the cluster to use it.
+func StartJaeger(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	virtualClusterName string,
+	secure bool,
+	configureNodes string,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName, install.SecureOption(secure))
+	if err != nil {
+		return err
+	}
+
+	// TODO(ssd): Currently this just uses the all-in-one docker
+	// container with in memory storage. Might be nicer to just
+	// install from source or get linux binaries and start them
+	// with systemd. For now this just matches what we've been
+	// copy and pasting.
+	jaegerNode := c.TargetNodes()[len(c.TargetNodes())-1:]
+	err = install.InstallTool(ctx, l, c, jaegerNode, "docker", l.Stdout, l.Stderr)
+	if err != nil {
+		return err
+	}
+	startCmd := fmt.Sprintf("docker run -d --name %s -p %[2]d:%[2]d -p %[3]d:%[3]d %s",
+		jaegerContainerName,
+		otelCollectorPort,
+		jaegerUIPort,
+		jaegerImageName)
+	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(jaegerNode), "start jaegertracing/all-in-one using docker", startCmd)
+	if err != nil {
+		return err
+	}
+
+	otelCollectionHost, err := c.GetInternalIP(jaegerNode[0])
+	if err != nil {
+		return err
+	}
+	otelCollectionHostPort := net.JoinHostPort(otelCollectionHost, strconv.Itoa(otelCollectorPort))
+	setupStmt := fmt.Sprintf("SET CLUSTER SETTING trace.opentelemetry.collector='%s'", otelCollectionHostPort)
+
+	if configureNodes != "" {
+		nodes, err := install.ListNodes(configureNodes, len(c.VMs))
+		if err != nil {
+			return err
+		}
+		_, err = c.ExecSQL(ctx, l, nodes, virtualClusterName, 0, []string{"-e", setupStmt})
+		if err != nil {
+			return err
+		}
+	}
+
+	url, err := JaegerURL(ctx, l, clusterName, false)
+	if err != nil {
+		return err
+	}
+
+	l.Printf("To use with CRDB: %s", setupStmt)
+	l.Printf("Jaeger UI: %s", url)
+	return nil
+}
+
+// StopJaeger stops and removes the jaeger container.
+func StopJaeger(ctx context.Context, l *logger.Logger, clusterName string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+	jaegerNode := c.TargetNodes()[len(c.TargetNodes())-1:]
+	stopCmd := fmt.Sprintf("docker stop %s", jaegerContainerName)
+	err = c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(jaegerNode), stopCmd, stopCmd)
+	if err != nil {
+		return err
+	}
+	rmCmd := fmt.Sprintf("docker rm %s", jaegerContainerName)
+	return c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(jaegerNode), rmCmd, rmCmd)
+}
+
+// JaegerURL returns a url to the jaeger UI, assuming it was installed
+// on the lat node in the given cluster.
+func JaegerURL(
+	ctx context.Context, l *logger.Logger, clusterName string, openInBrowser bool,
+) (string, error) {
+	if err := LoadClusters(); err != nil {
+		return "", err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return "", err
+	}
+	jaegerNode := c.TargetNodes()[len(c.TargetNodes())-1:]
+	urls, err := urlGenerator(ctx, c, l, jaegerNode, urlConfig{
+		usePublicIP:   true,
+		openInBrowser: openInBrowser,
+		secure:        false,
+		port:          jaegerUIPort,
+	})
+	if err != nil {
+		return "", err
+	}
+	return urls[0], nil
+}
+
 // StorageCollectionPerformAction either starts or stops workload collection on
 // a target cluster.
 //

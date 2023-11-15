@@ -1014,7 +1014,7 @@ var adminurlCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		urls, err := roachprod.AdminURL(
-			context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance, adminurlPath, adminurlIPs, adminurlOpen, secure,
+			context.Background(), config.Logger, args[0], virtualClusterName, sqlInstance, adminurlPath, adminurlIPs, urlOpen, secure,
 		)
 		if err != nil {
 			return err
@@ -1131,7 +1131,41 @@ var grafanaURLCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
 		url, err := roachprod.GrafanaURL(context.Background(), config.Logger, args[0],
-			grafanaurlOpen)
+			urlOpen)
+		if err != nil {
+			return err
+		}
+		fmt.Println(url)
+		return nil
+	}),
+}
+
+var jaegerStartCmd = &cobra.Command{
+	Use:   `jaeger-start <cluster>`,
+	Short: `starts a jaeger container on the last node in the cluster`,
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.StartJaeger(context.Background(), config.Logger, args[0],
+			virtualClusterName, secure, jaegerConfigNodes)
+	}),
+}
+
+var jaegerStopCmd = &cobra.Command{
+	Use:   `jaeger-stop <cluster>`,
+	Short: `stops a running jaeger container on the last node in the cluster`,
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.StopJaeger(context.Background(), config.Logger, args[0])
+	}),
+}
+
+var jaegerURLCmd = &cobra.Command{
+	Use:   `jaegerurl <cluster>`,
+	Short: `returns the URL of the cluster's jaeger UI`,
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		url, err := roachprod.JaegerURL(context.Background(), config.Logger, args[0],
+			urlOpen)
 		if err != nil {
 			return err
 		}
@@ -1443,6 +1477,9 @@ func main() {
 		rootStorageCmd,
 		snapshotCmd,
 		updateCmd,
+		jaegerStartCmd,
+		jaegerStopCmd,
+		jaegerURLCmd,
 	)
 	setBashCompletionFunction()
 
