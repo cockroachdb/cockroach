@@ -36,10 +36,6 @@ func RunningJobExists(
 	cv clusterversion.Handle,
 	jobTypes ...jobspb.Type,
 ) (exists bool, retErr error) {
-	if !cv.IsActive(ctx, clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable) {
-		return legacyRunningJobExists(ctx, ignoreJobID, txn, jobTypes...)
-	}
-
 	var typeStrs string
 	switch len(jobTypes) {
 	case 0:
@@ -96,58 +92,6 @@ LIMIT 1`
 	// the ignored ID and are also supposed to be ignored, meaning we only return
 	// true when the there are non-zero results and the first does not match.
 	return ok && jobspb.JobID(*it.Cur()[0].(*tree.DInt)) != ignoreJobID, nil
-}
-
-func legacyRunningJobExists(
-	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, jobTypes ...jobspb.Type,
-) (exists bool, retErr error) {
-	const stmt = `
-SELECT
-  id, payload
-FROM
-  crdb_internal.system_jobs
-WHERE
-  status IN ` + NonTerminalStatusTupleString + `
-ORDER BY created`
-
-	it, err := txn.QueryIterator(
-		ctx,
-		"get-jobs",
-		txn.KV(),
-		stmt,
-	)
-	if err != nil {
-		return false /* exists */, err
-	}
-	// We have to make sure to close the iterator since we might return from the
-	// for loop early (before Next() returns false).
-	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
-
-	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		row := it.Cur()
-		payload, err := UnmarshalPayload(row[1])
-		if err != nil {
-			return false /* exists */, err
-		}
-
-		isTyp := false
-		for _, typ := range jobTypes {
-			if payload.Type() == typ {
-				isTyp = true
-				break
-			}
-		}
-		if isTyp {
-			id := jobspb.JobID(*row[0].(*tree.DInt))
-			if id == jobID {
-				break
-			}
-
-			return true /* exists */, nil /* retErr */
-		}
-	}
-	return false /* exists */, err
 }
 
 // JobExists returns true if there is a row corresponding to jobID in the
