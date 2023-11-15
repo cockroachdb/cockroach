@@ -1123,6 +1123,12 @@ type Batch interface {
 	// mutations were done.
 	Reader
 	WriteBatch
+	// NewBatchOnlyMVCCIterator returns a new instance of MVCCIterator that only
+	// sees the mutations in the batch (not the engine). It does not interleave
+	// intents, i.e., it is of kind MVCCKeyIterKind.
+	//
+	// REQUIRES: the batch is indexed.
+	NewBatchOnlyMVCCIterator(ctx context.Context, opts IterOptions) (MVCCIterator, error)
 }
 
 // WriteBatch is the interface for write batch specific operations.
