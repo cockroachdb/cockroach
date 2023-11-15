@@ -11,18 +11,15 @@ package backupccl
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
-func tenantMetadataQuery(ctx context.Context, settings *cluster.Settings) string {
-	q := `
+const tenantMetadataQuery = `
 SELECT
   tenants.id,                        /* 0 */
   tenants.info,                      /* 1 */
@@ -38,25 +35,6 @@ FROM
   LEFT JOIN system.tenant_usage ON
 	  tenants.id = tenant_usage.tenant_id AND tenant_usage.instance_id = 0
 `
-	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
-		q = `
-SELECT
-  tenants.id,                        /* 0 */
-  tenants.info,                      /* 1 */
-  NULL,                              /* 2 */
-  NULL,                              /* 3 */
-  NULL,                              /* 4 */
-  tenant_usage.ru_burst_limit,       /* 5 */
-  tenant_usage.ru_refill_rate,       /* 6 */
-  tenant_usage.ru_current,           /* 7 */
-  tenant_usage.total_consumption     /* 8 */
-FROM
-  system.tenants
-  LEFT JOIN system.tenant_usage ON
-	  tenants.id = tenant_usage.tenant_id AND tenant_usage.instance_id = 0`
-	}
-	return q
-}
 
 func tenantMetadataFromRow(row tree.Datums) (mtinfopb.TenantInfoWithUsage, error) {
 	if len(row) != 9 {
@@ -129,11 +107,11 @@ func tenantMetadataFromRow(row tree.Datums) (mtinfopb.TenantInfoWithUsage, error
 }
 
 func retrieveSingleTenantMetadata(
-	ctx context.Context, txn isql.Txn, tenantID roachpb.TenantID, settings *cluster.Settings,
+	ctx context.Context, txn isql.Txn, tenantID roachpb.TenantID,
 ) (mtinfopb.TenantInfoWithUsage, error) {
 	row, err := txn.QueryRow(
 		ctx, "backupccl.retrieveSingleTenantMetadata", txn.KV(),
-		tenantMetadataQuery(ctx, settings)+` WHERE id = $1`, tenantID.ToUint64(),
+		tenantMetadataQuery+` WHERE id = $1`, tenantID.ToUint64(),
 	)
 	if err != nil {
 		return mtinfopb.TenantInfoWithUsage{}, err
@@ -152,11 +130,11 @@ func retrieveSingleTenantMetadata(
 }
 
 func retrieveAllTenantsMetadata(
-	ctx context.Context, txn isql.Txn, settings *cluster.Settings,
+	ctx context.Context, txn isql.Txn,
 ) ([]mtinfopb.TenantInfoWithUsage, error) {
 	rows, err := txn.QueryBuffered(
 		ctx, "backupccl.retrieveAllTenantsMetadata", txn.KV(),
-		tenantMetadataQuery(ctx, settings)+` WHERE id != $1`,
+		tenantMetadataQuery+` WHERE id != $1`,
 		roachpb.SystemTenantID.ToUint64(),
 	)
 	if err != nil {
