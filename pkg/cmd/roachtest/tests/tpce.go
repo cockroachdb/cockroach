@@ -269,6 +269,7 @@ func registerTPCE(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             fmt.Sprintf("tpce/c=%d/nodes=%d", largeWeekly.customers, largeWeekly.nodes),
 		Owner:            registry.OwnerTestEng,
+		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
 		Tags:             registry.Tags("weekly"),
