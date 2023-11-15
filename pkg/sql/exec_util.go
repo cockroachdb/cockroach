@@ -3700,6 +3700,10 @@ func (m *sessionDataMutator) SetOptimizerUseProvidedOrderingFix(val bool) {
 	m.data.OptimizerUseProvidedOrderingFix = val
 }
 
+func (m *sessionDataMutator) SetDistSQLPlanGatewayBias(val int64) {
+	m.data.DistsqlPlanGatewayBias = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
