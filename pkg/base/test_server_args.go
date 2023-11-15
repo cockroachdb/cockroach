@@ -293,6 +293,16 @@ var (
 	// TODO(#76378): Review existing tests and use the proper value instead.
 	TODOTestTenantDisabled = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
 
+	// TestRequiresExplicitSQLConnection is used when the test is unable to pass
+	// the cluster as an option in the connection URL. The test could still
+	// probabilistically use an external process test virtual cluster, but
+	// disables the selection of a shared process test virtual cluster.
+	TestRequiresExplicitSQLConnection = DefaultTestTenantOptions{
+		testBehavior:             ttExternalProcess,
+		allowAdditionalTenants:   true,
+		noWarnImplicitInterfaces: true,
+	}
+
 	// TestControlsTenantsExplicitly is used when the test wants to
 	// manage its own secondary tenants and tenant servers.
 	TestControlsTenantsExplicitly = DefaultTestTenantOptions{
