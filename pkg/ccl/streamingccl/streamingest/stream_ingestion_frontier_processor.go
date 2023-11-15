@@ -535,26 +535,26 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 }
 
 func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
-	defer func() {
-		sf.lastNodeLagCheck = timeutil.Now()
-	}()
+	ctx := sf.Ctx()
 	checkFreq := streamingccl.ReplanFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV)
 	maxLag := streamingccl.InterNodeLag.Get(&sf.FlowCtx.Cfg.Settings.SV)
 	if checkFreq == 0 || maxLag == 0 || timeutil.Since(sf.lastNodeLagCheck) < checkFreq {
+		log.VEventf(ctx, 2, "skipping lag replanning check: maxLag %d; checkFreq %.2f; last node check %s; time since last check %.2f",
+			maxLag, checkFreq.Minutes(), sf.lastNodeLagCheck, timeutil.Since(sf.lastNodeLagCheck).Minutes())
 		return nil
 	}
-
-	ctx := sf.Ctx()
-
 	// Don't check for lagging nodes if the hwm has yet to advance.
 	if sf.replicatedTimeAtStart.Equal(sf.persistedReplicatedTime) {
-		log.VEventf(ctx, 2, "skipping lagging nodes check as hwm has yet to advance past %s", sf.replicatedTimeAtStart)
+		log.VEventf(ctx, 2, "skipping lag replanning check: hwm has yet to advance past %s", sf.replicatedTimeAtStart)
 		return nil
 	}
-
+	defer func() {
+		sf.lastNodeLagCheck = timeutil.Now()
+	}()
 	executionDetails := constructSpanFrontierExecutionDetailsWithFrontier(sf.spec.PartitionSpecs, sf.frontier)
-
+	log.VEvent(ctx, 2, "checking for lagging nodes")
 	return checkLaggingNodes(
+		ctx,
 		executionDetails,
 		maxLag,
 	)
