@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -95,6 +96,7 @@ sudo add-apt-repository \
 
 sudo apt-get update;
 sudo apt-get install  -y docker-ce;
+sudo usermod -aG docker ubuntu;
 `,
 
 	"gcc": `
@@ -159,26 +161,29 @@ func SortedCmds() []string {
 
 // Install TODO(peter): document
 func Install(ctx context.Context, l *logger.Logger, c *SyncedCluster, args []string) error {
-	do := func(title, cmd string) error {
-		var buf bytes.Buffer
-		err := c.Run(ctx, l, &buf, &buf, OnNodes(c.Nodes), "installing "+title, cmd)
-		if err != nil {
-			l.Printf(buf.String())
-		}
-		return err
-	}
-
 	for _, arg := range args {
-		cmd, ok := installCmds[arg]
-		if !ok {
-			return fmt.Errorf("unknown tool %q", arg)
-		}
-
-		// Ensure that we early exit if any of the shell statements fail.
-		cmd = "set -exuo pipefail;" + cmd
-		if err := do(arg, cmd); err != nil {
+		var buf bytes.Buffer
+		if err := InstallTool(ctx, l, c, c.Nodes, arg, &buf, &buf); err != nil {
+			l.Printf(buf.String())
 			return err
 		}
 	}
 	return nil
+}
+
+func InstallTool(
+	ctx context.Context,
+	l *logger.Logger,
+	c *SyncedCluster,
+	nodes Nodes,
+	softwareName string,
+	stdout, stderr io.Writer,
+) error {
+	cmd, ok := installCmds[softwareName]
+	if !ok {
+		return fmt.Errorf("unknown tool %q", softwareName)
+	}
+	// Ensure that we early exit if any of the shell statements fail.
+	cmd = "set -exuo pipefail;" + cmd
+	return c.Run(ctx, l, stdout, stderr, OnNodes(nodes), "installing "+softwareName, cmd)
 }
