@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
@@ -85,6 +86,12 @@ var BackupCheckpointInterval = settings.RegisterDurationSetting(
 	"bulkio.backup.checkpoint_interval",
 	"the minimum time between writing progress checkpoints during a backup",
 	time.Minute)
+
+var backupUseFollowerReads = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.backup.plan_on_followers.enable",
+	"assume utilization of follower reads when planning backup worker placement",
+	true)
 
 var forceReadBackupManifest = util.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
 
@@ -199,37 +206,59 @@ func backup(
 	evalCtx := execCtx.ExtendedEvalContext()
 	dsp := execCtx.DistSQLPlanner()
 
-	// We don't return the compatible nodes here since PartitionSpans will
-	// filter out incompatible nodes.
-	planCtx, _, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, evalCtx, execCtx.ExecCfg(), physicalplan.DefaultReplicaChooser, execLocality,
-	)
-	if err != nil {
-		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")
-	}
-
 	job := resumer.job
-	backupSpecs, err := distBackupPlanSpecs(
-		ctx,
-		planCtx,
-		execCtx,
-		dsp,
-		int64(job.ID()),
-		spans,
-		introducedSpans,
-		pkIDs,
-		defaultURI,
-		urisByLocalityKV,
-		encryption,
-		&kmsEnv,
-		kvpb.MVCCFilter(backupManifest.MVCCFilter),
-		backupManifest.StartTime,
-		backupManifest.EndTime,
-	)
-	if err != nil {
+	var backupSpecs map[base.SQLInstanceID]*execinfrapb.BackupDataSpec
+
+	// Note that planCtx is going to close over txn in db.Txn closure below, so it
+	// will still contain a pointer to that txn even after it commits when we pass
+	// planCtx to dsp.Run below. However dsp.Run does not use the txn in planCtx,
+	// since it is passed its own txn (which will be nil), so the fact it is an
+	// already-committed txn is not a problem.
+	var planCtx *sql.PlanningCtx
+
+	// We need to make a txn to setup planning since the txn is what will carry
+	// the read-as-of timestamp to the replica choice function, which needs it to
+	// determine if follower reads are possible. This txn is not intended to be
+	// used for anything -- no reads, no writes -- other than carrying its fixed
+	// timestamp from here to the replica choice oracle.
+	if err := execCtx.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var planningTxn *kv.Txn
+		if backupUseFollowerReads.Get(execCtx.ExecCfg().SV()) {
+			if err := txn.SetFixedTimestamp(ctx, backupManifest.EndTime); err != nil {
+				return err
+			}
+			planningTxn = txn
+		}
+		// We don't return the compatible nodes here since PartitionSpans will
+		// filter out incompatible nodes.
+		planCtx, _, err = dsp.SetupAllNodesPlanningWithOracleAndFollowers(
+			ctx, evalCtx, execCtx.ExecCfg(), physicalplan.DefaultReplicaChooser, execLocality, planningTxn,
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to determine nodes on which to run")
+		}
+
+		backupSpecs, err = distBackupPlanSpecs(
+			ctx,
+			planCtx,
+			execCtx,
+			dsp,
+			int64(job.ID()),
+			spans,
+			introducedSpans,
+			pkIDs,
+			defaultURI,
+			urisByLocalityKV,
+			encryption,
+			&kmsEnv,
+			kvpb.MVCCFilter(backupManifest.MVCCFilter),
+			backupManifest.StartTime,
+			backupManifest.EndTime,
+		)
+		return err
+	}); err != nil {
 		return roachpb.RowCount{}, 0, err
 	}
-
 	numBackupInstances = len(backupSpecs)
 	numTotalSpans := 0
 	for _, spec := range backupSpecs {
