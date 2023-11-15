@@ -70,6 +70,7 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 
 	tDB.Exec(t, "CREATE ROLE somebody")
 	tDB.Exec(t, "GRANT SYSTEM REPLICATION TO somebody")
+	tDB.Exec(t, "CREATE ROLE anybody")
 
 	for _, tc := range []struct {
 		user         string
@@ -79,12 +80,14 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		{user: "admin", expErr: "", isEnterprise: true},
 		{user: "root", expErr: "", isEnterprise: true},
 		{user: "somebody", expErr: "", isEnterprise: true},
-		{user: "nobody", expErr: "user nobody does not have REPLICATION system privilege", isEnterprise: true},
+		{user: "anybody", expErr: "user anybody does not have REPLICATION system privilege", isEnterprise: true},
+		{user: "nobody", expErr: `role/user "nobody" does not exist`, isEnterprise: true},
 
 		{user: "admin", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
 		{user: "root", expErr: " use of REPLICATION requires an enterprise license", isEnterprise: false},
 		{user: "somebody", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
-		{user: "nobody", expErr: "user nobody does not have REPLICATION system privilege", isEnterprise: false},
+		{user: "anybody", expErr: "user anybody does not have REPLICATION system privilege", isEnterprise: false},
+		{user: "nobody", expErr: `role/user "nobody" does not exist`, isEnterprise: false},
 	} {
 		t.Run(fmt.Sprintf("%s/ent=%t", tc.user, tc.isEnterprise), func(t *testing.T) {
 			if tc.isEnterprise {

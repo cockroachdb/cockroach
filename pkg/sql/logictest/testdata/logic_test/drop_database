@@ -43,10 +43,9 @@ query TT
   SELECT job_type, status
     FROM [SHOW JOBS]
    WHERE user_name = 'root' AND job_type != 'MIGRATION'
+   AND description NOT LIKE 'updating version%'
 ORDER BY job_type DESC
 ----
-SCHEMA CHANGE      succeeded
-SCHEMA CHANGE      succeeded
 NEW SCHEMA CHANGE  succeeded
 
 statement ok

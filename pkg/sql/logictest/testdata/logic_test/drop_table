@@ -28,8 +28,8 @@ DROP TABLE a
 
 # The "updating privileges" clause in the SELECT statement is for excluding jobs
 # run by an unrelated startup migration.
-# TODO (lucy): Update this if/when we decide to change how these jobs queued by
-# the startup migration are handled.
+# The "updating version" clause is for excluding schema change jobs that
+# are caused by role creation/modification.
 query TT
 SELECT replace(job_type, 'NEW SCHEMA CHANGE', 'SCHEMA CHANGE'), status
   FROM [SHOW JOBS]
@@ -40,11 +40,10 @@ SELECT replace(job_type, 'NEW SCHEMA CHANGE', 'SCHEMA CHANGE'), status
 			OR (
 					job_type = 'SCHEMA CHANGE'
 					AND description != 'updating privileges'
+					AND description NOT LIKE 'updating version%'
 				)
 		) ORDER BY 1, 2;
 ----
-SCHEMA CHANGE     succeeded
-SCHEMA CHANGE     succeeded
 SCHEMA CHANGE     succeeded
 SCHEMA CHANGE GC  running
 

@@ -125,6 +125,9 @@ func GetUserSessionInitInfo(
 		if err != nil {
 			return err
 		}
+		if !authInfo.UserExists {
+			return nil
+		}
 
 		// Find whether the user is an admin and has the NOSQLLOGIN or REPLICATION
 		// global privilege. These calls have their own caches, so it's OK to make
@@ -187,8 +190,7 @@ func GetUserSessionInitInfo(
 			}
 
 			return nil
-		},
-		)
+		})
 	}); err != nil {
 		log.Warningf(ctx, "user membership lookup for %q failed: %v", user, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account memberships")
@@ -473,24 +475,21 @@ func (p *planner) GetAllRoles(ctx context.Context) (map[username.SQLUsername]boo
 	return users, nil
 }
 
-// RoleExists returns true if the role exists. If a role is found to exist,
-// the existence will be cached for the duration of the transaction.
-func (p *planner) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	cache := p.EvalContext().RoleExistsCache
-	if cache != nil {
-		if _, exists := cache[role]; exists {
-			return true, nil
-		}
+// CheckRoleExists returns an error if the role does not exist. It uses the
+// role membership cache to avoid performing system table lookups in a hot path.
+func (p *planner) CheckRoleExists(ctx context.Context, role username.SQLUsername) error {
+	if _, err := p.MemberOfWithAdminOption(ctx, role); err != nil {
+		return err
 	}
-	exists, err := RoleExists(ctx, p.InternalSQLTxn(), role)
-	if cache != nil && exists {
-		cache[role] = struct{}{}
-	}
-	return exists, err
+	return nil
 }
 
-// RoleExists returns true if the role exists.
+// RoleExists returns true if the role exists. This function does not use
+// any cache.
 func RoleExists(ctx context.Context, txn isql.Txn, role username.SQLUsername) (bool, error) {
+	if role.IsNodeUser() || role.IsRootUser() || role.IsAdminRole() || role.IsPublicRole() {
+		return true, nil
+	}
 	query := `SELECT username FROM system.users WHERE username = $1`
 	row, err := txn.QueryRowEx(
 		ctx, "read-users", txn.KV(),
@@ -578,12 +577,8 @@ func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsernam
 	if !s.IsNoneRole() && s != sessionUser {
 		becomeUser = s
 
-		exists, err := p.RoleExists(ctx, becomeUser)
-		if err != nil {
+		if err := p.CheckRoleExists(ctx, becomeUser); err != nil {
 			return err
-		}
-		if !exists {
-			return sqlerrors.NewUndefinedUserError(becomeUser)
 		}
 	}
 
@@ -643,6 +638,10 @@ func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser username.SQ
 	// Switching to None can always succeed.
 	if becomeUser.IsNoneRole() {
 		return nil
+	}
+	// No one, not even root, can become the public or node role.
+	if becomeUser.IsPublicRole() || becomeUser.IsNodeUser() {
+		return sqlerrors.NewUndefinedUserError(becomeUser)
 	}
 	// Root users are able to become anyone.
 	if sessionUser.IsRootUser() {
