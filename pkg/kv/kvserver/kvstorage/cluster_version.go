@@ -16,33 +16,16 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
-// WriteClusterVersion writes the given cluster version to the min version file
-// and to the store-local cluster version key.
+// WriteClusterVersion writes the given cluster version to the min version file.
 func WriteClusterVersion(
 	ctx context.Context, eng storage.Engine, cv clusterversion.ClusterVersion,
 ) error {
-	if cv.Less(clusterversion.ByKey(clusterversion.TODO_Delete_V23_1DeprecateClusterVersionKey)) {
-		// We no longer read this key, but older versions still do. Continue writing
-		// the key for interoperability.
-		if err := storage.MVCCPutProto(
-			ctx,
-			eng,
-			keys.DeprecatedStoreClusterVersionKey(),
-			hlc.Timestamp{},
-			&cv,
-			storage.MVCCWriteOptions{},
-		); err != nil {
-			return err
-		}
-	}
 	return eng.SetMinVersion(cv.Version)
 }
 

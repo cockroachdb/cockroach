@@ -1558,26 +1558,20 @@ func checkForNewTables(
 }
 
 func getTenantInfo(
-	ctx context.Context,
-	settings *cluster.Settings,
-	codec keys.SQLCodec,
-	txn isql.Txn,
-	jobDetails jobspb.BackupDetails,
+	ctx context.Context, codec keys.SQLCodec, txn isql.Txn, jobDetails jobspb.BackupDetails,
 ) ([]roachpb.Span, []mtinfopb.TenantInfoWithUsage, error) {
 	var spans []roachpb.Span
 	var tenants []mtinfopb.TenantInfoWithUsage
 	var err error
 	if jobDetails.FullCluster && codec.ForSystemTenant() && jobDetails.IncludeAllSecondaryTenants {
 		// Include all tenants.
-		tenants, err = retrieveAllTenantsMetadata(
-			ctx, txn, settings,
-		)
+		tenants, err = retrieveAllTenantsMetadata(ctx, txn)
 		if err != nil {
 			return nil, nil, err
 		}
 	} else if len(jobDetails.SpecificTenantIds) > 0 {
 		for _, id := range jobDetails.SpecificTenantIds {
-			tenantInfo, err := retrieveSingleTenantMetadata(ctx, txn, id, settings)
+			tenantInfo, err := retrieveSingleTenantMetadata(ctx, txn, id)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1684,9 +1678,7 @@ func createBackupManifest(
 
 	var spans []roachpb.Span
 	var tenants []mtinfopb.TenantInfoWithUsage
-	tenantSpans, tenantInfos, err := getTenantInfo(
-		ctx, execCfg.Settings, execCfg.Codec, txn, jobDetails,
-	)
+	tenantSpans, tenantInfos, err := getTenantInfo(ctx, execCfg.Codec, txn, jobDetails)
 	if err != nil {
 		return backuppb.BackupManifest{}, err
 	}

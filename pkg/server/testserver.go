@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -766,8 +765,7 @@ func (ts *testServer) grantDefaultTenantCapabilities(
 	// configured an ExternalIODir since nodelocal storage only works with that
 	// configured.
 	shouldGrantNodelocalCap := ts.params.ExternalIODir != ""
-	canGrantNodelocalCap := ts.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantCapabilities)
-	if canGrantNodelocalCap && shouldGrantNodelocalCap {
+	if shouldGrantNodelocalCap {
 		_, err := ie.Exec(ctx, "testserver-alter-tenant-cap", nil,
 			"ALTER TENANT [$1] GRANT CAPABILITY can_use_nodelocal_storage", tenantID.ToUint64())
 		if err != nil {

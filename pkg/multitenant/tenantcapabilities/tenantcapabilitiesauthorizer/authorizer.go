@@ -13,7 +13,6 @@ package tenantcapabilitiesauthorizer
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
@@ -355,14 +354,6 @@ func (a *Authorizer) getMode(
 ) (cp *tenantcapabilitiespb.TenantCapabilities, selectedMode authorizerModeType) {
 	// We prioritize what the cluster setting tells us.
 	selectedMode = authorizerModeType(authorizerMode.Get(&a.settings.SV))
-	if selectedMode == authorizerModeOn {
-		if !a.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantCapabilities) {
-			// If the cluster hasn't been upgraded to v23.1 with
-			// capabilities yet, the capabilities won't be ready for use. In
-			// that case, fall back to the previous behavior.
-			selectedMode = authorizerModeV222
-		}
-	}
 
 	// If the mode is "on", we need to check the capabilities. Are they
 	// available?

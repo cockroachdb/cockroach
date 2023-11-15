@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -275,8 +274,7 @@ func newEvaluator(
 
 	sd := sql.NewInternalSessionData(ctx, cfg.Settings, "changefeed-evaluator")
 	if spec.Feed.SessionData == nil {
-		// This changefeed was created prior to
-		// clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady; thus we must
+		// This changefeed was created prior to 23.1; thus we must
 		// rewrite expression to comply with current cluster version.
 		newExpr, err := cdceval.RewritePreviewExpression(sc)
 		if err != nil {
@@ -286,9 +284,8 @@ func newEvaluator(
 		}
 		if newExpr != sc {
 			log.Warningf(ctx,
-				"changefeed expression %s (job %d) created prior to %s rewritten as %s",
+				"changefeed expression %s (job %d) created prior to 22.2-30 rewritten as %s",
 				tree.AsString(sc), spec.JobID,
-				clusterversion.TODO_Delete_V23_1_ChangefeedExpressionProductionReady.String(),
 				tree.AsString(newExpr))
 			sc = newExpr
 		}
