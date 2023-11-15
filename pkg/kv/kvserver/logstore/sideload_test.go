@@ -15,6 +15,7 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -88,7 +89,7 @@ func TestSideloadingSideloadedStorage(t *testing.T) {
 func newTestingSideloadStorage(eng storage.Engine) *DiskSideloadStorage {
 	return NewDiskSideloadStorage(
 		cluster.MakeTestingClusterSettings(), 1,
-		filepath.Join(eng.GetAuxiliaryDir(), "fake", "testing", "dir"),
+		filepath.Join(eng.GetAuxiliaryDir()), // NB: this dir must already exist (and it does)
 		rate.NewLimiter(rate.Inf, math.MaxInt64), eng)
 }
 
@@ -605,17 +606,135 @@ func TestSideloadStorageSync(t *testing.T) {
 	defer eng.Close()
 	ss = newTestingSideloadStorage(eng)
 
-	// The sideloaded got lost because all its parents were not synced.
-	// TODO(pavelkalinnikov): make sure the directory structure is persisted.
+	// The sideloaded directory must exist because all its parents are synced.
 	_, err := eng.Stat(ss.Dir())
-	require.True(t, oserror.IsNotExist(err), err)
+	require.NoError(t, err)
 
-	// The stored entry is lost too because the sideloaded storage did not sync
-	// the directory structure.
+	// However, the stored entry is lost because the sideloaded storage did not
+	// sync ss.Dir().
 	// TODO(pavelkalinnikov): make the entries durable.
 	_, err = ss.Get(ctx, 100 /* index */, 6 /* term */)
 	require.ErrorIs(t, err, errSideloadedFileNotFound)
 	// A "control" check that missing entries are unconditionally missing.
 	_, err = ss.Get(ctx, 200 /* index */, 7 /* term */)
 	require.ErrorIs(t, err, errSideloadedFileNotFound)
+}
+
+func TestMkdirAllAndSyncParents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		path string   // a directory that exists
+		sync []string // prefix directories of `path` that were synced
+
+		base string   // base directory of the newly created directory chain
+		dirs []string // created directory chain relative to `base`
+
+		wantExist []string // directories we want to exist after a crash
+		wantGone  []string // un-synced directories we expect removed after a crash
+	}{{
+		path:      "/",
+		base:      "/",
+		dirs:      []string{"a", "b"},
+		wantExist: []string{"/", "/a", "/a/b"},
+	}, {
+		path:      "/a",
+		sync:      []string{"/"},
+		base:      "/a",
+		dirs:      []string{}, // edge case, just makes sure the base dir exists
+		wantExist: []string{"/", "/a"},
+	}, {
+		path:      "/a",
+		base:      "/a",
+		dirs:      []string{}, // same edge case, but we test that there is no sync
+		wantExist: []string{"/"},
+		wantGone:  []string{"/a"}, // "a" was created, but the root was not synced
+	}, {
+		path:      "/a/b",
+		sync:      []string{"/"}, // "a" is not synced, so mkdir won't persist
+		base:      "/a/b",
+		dirs:      []string{"c", "d"},
+		wantExist: []string{"/", "/a"},
+		wantGone:  []string{"/a/b", "/a/b/c", "/a/b/c/d"},
+	}, {
+		path:      "/a/b",
+		sync:      []string{"/", "/a"}, // "a" is synced, so mkdir will persist
+		base:      "/a",
+		dirs:      []string{"b", "c"},
+		wantExist: []string{"/", "/a", "/a/b", "/a/b/c"},
+	}, {
+		path:      "/a/b",
+		sync:      []string{"/", "/a"}, // "a" is synced, so mkdir will persist
+		base:      "/a/b",
+		dirs:      []string{"c", "d"},
+		wantExist: []string{"/", "/a", "/a/b", "/a/b/c", "/a/b/c/d"},
+	}, {
+		path:      "/a/b/c",
+		sync:      []string{"/", "/a"}, // "b" is not synced, and won't be because "c" exists
+		base:      "/a",
+		dirs:      []string{"b", "c", "d"},
+		wantExist: []string{"/", "/a", "/a/b"},
+		wantGone:  []string{"/a/b/c", "/a/b/c/d"},
+	}, {
+		path:      "/a/b/c",
+		sync:      []string{"/", "/a"}, // "b" is not synced, and won't be because "c" exists
+		base:      "/a/b",
+		dirs:      []string{"c", "d"},
+		wantExist: []string{"/", "/a", "/a/b"},
+		wantGone:  []string{"/a/b/c", "/a/b/c/d"},
+	}, {
+		path:      "/a/b/c",
+		sync:      []string{"/", "/a"}, // "b" is not synced, and won't be because "c" exists
+		base:      "/a/b/c",
+		dirs:      []string{"d"},
+		wantExist: []string{"/", "/a", "/a/b"},
+		wantGone:  []string{"/a/b/c", "/a/b/c/d"},
+	}} {
+		t.Run("", func(t *testing.T) {
+			fs := vfs.NewStrictMem()
+			require.NoError(t, fs.MkdirAll(tc.path, os.ModePerm))
+			for _, dir := range tc.sync {
+				handle, err := fs.OpenDir(dir)
+				require.NoError(t, err)
+				require.NoError(t, handle.Sync())
+				require.NoError(t, handle.Close())
+			}
+			require.NoError(t, mkdirAllAndSyncParents(fs, tc.base, tc.dirs, os.ModePerm))
+
+			assertExistence := func(t *testing.T, dirs []string, exist bool) {
+				t.Helper()
+				for _, dir := range dirs {
+					handle, err := fs.OpenDir(dir)
+					if exist {
+						require.NoError(t, err, dir)
+						require.NoError(t, handle.Close(), dir)
+					} else {
+						require.True(t, oserror.IsNotExist(err), dir)
+					}
+				}
+			}
+
+			// Before crash, all the relevant directories must exist.
+			assertExistence(t, tc.wantExist, true)
+			assertExistence(t, tc.wantGone, true)
+			// After crash and resetting to the synced state, wantExist directories
+			// must exist, and wantGone are lost.
+			fs.ResetToSyncedState()
+			assertExistence(t, tc.wantExist, true)
+			assertExistence(t, tc.wantGone, false)
+		})
+	}
+}
+
+func TestMkdirAllAndSyncParentsErrors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	fs := vfs.NewMem()
+	require.NoError(t, fs.MkdirAll("/a/b", os.ModePerm))
+	for _, dir := range []string{"/non-existing", "/a/b/non-existing"} {
+		require.ErrorContains(t, mkdirAllAndSyncParents(fs, dir, []string{"child"}, os.ModePerm),
+			"base dir does not exist", dir)
+	}
 }

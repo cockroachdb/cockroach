@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/time/rate"
 )
 
@@ -40,22 +41,23 @@ type DiskSideloadStorage struct {
 	st      *cluster.Settings
 	limiter *rate.Limiter
 	dir     string
+	path    []string
 	eng     storage.Engine
 }
 
-func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
+func sideloadedPath(baseDir string, rangeID roachpb.RangeID) []string {
 	// Use one level of sharding to avoid too many items per directory. For
 	// example, ext3 and older ext4 support only 32k and 64k subdirectories
 	// per directory, respectively. Newer FS typically have no such limitation,
 	// but still.
 	//
 	// For example, r1828 will end up in baseDir/r1XXX/r1828.
-	return filepath.Join(
+	return []string{
 		baseDir,
 		"sideloading",
 		fmt.Sprintf("r%dXXXX", rangeID/10000), // sharding
 		fmt.Sprintf("r%d", rangeID),
-	)
+	}
 }
 
 // NewDiskSideloadStorage creates a SideloadStorage for a given replica, stored
@@ -67,8 +69,10 @@ func NewDiskSideloadStorage(
 	limiter *rate.Limiter,
 	eng storage.Engine,
 ) *DiskSideloadStorage {
+	path := sideloadedPath(baseDir, rangeID)
 	return &DiskSideloadStorage{
-		dir:     sideloadedPath(baseDir, rangeID),
+		dir:     filepath.Join(path...),
+		path:    path,
 		eng:     eng,
 		st:      st,
 		limiter: limiter,
@@ -97,7 +101,7 @@ func (ss *DiskSideloadStorage) Put(
 		}
 		// Ensure that ss.dir exists. The filename() is placed directly in ss.dir,
 		// so the next loop iteration should succeed.
-		if err := ss.eng.MkdirAll(ss.dir, os.ModePerm); err != nil {
+		if err := mkdirAllAndSyncParents(ss.eng, ss.path[0], ss.path[1:], os.ModePerm); err != nil {
 			return err
 		}
 		continue
@@ -278,4 +282,58 @@ func (ss *DiskSideloadStorage) String() string {
 	}
 	fmt.Fprintf(&buf, "(%d files)\n", count)
 	return buf.String()
+}
+
+// mkdirAllAndSyncParents creates the given chain of directories, if any
+// subdirectory is missing, and syncs parents of all the created directories.
+// The base directory must already exist. The directories are created using the
+// provided permissions mask, with the same semantics as in os.MkdirAll.
+//
+// For example, if dirs is [x, y, z], then this func creates all the missing
+// subdirectories in base/x/y/z. If base is the lowest previously existing
+// directory then base, x, and y are synced. If x existed too, then only x and y
+// are synced. If z existed before then there are no syncs.
+//
+// NB: path syntax in the examples above may differ, because components of the
+// path are combined using the provided filesystem interface.
+func mkdirAllAndSyncParents(fs vfs.FS, base string, dirs []string, perm os.FileMode) error {
+	paths := append(make([]string, 0, len(dirs)+1), base)
+	for i, part := range dirs {
+		paths = append(paths, fs.PathJoin(paths[i], part))
+	}
+
+	// Find the lowest existing directory in the hierarchy.
+	existing := -1
+	for i := len(paths) - 1; i >= 0; i-- {
+		if _, err := fs.Stat(paths[i]); err == nil {
+			existing = i
+			break
+		} else if !oserror.IsNotExist(err) {
+			return errors.Wrapf(err, "could not get dir info: %s", paths[i])
+		}
+	}
+	if existing == -1 {
+		return errors.Newf("base dir does not exist: %s", base)
+	}
+
+	// Create the destination directory and any of its missing parents.
+	path := paths[len(paths)-1]
+	if err := fs.MkdirAll(path, perm); err != nil {
+		return errors.Wrapf(err, "could not create all directories: %s", path)
+	}
+
+	// Sync parent directories up to the lowest existing ancestor, included.
+	for i := len(paths) - 1; i > existing; i-- {
+		parent := paths[i-1]
+		if handle, err := fs.OpenDir(parent); err != nil {
+			return errors.Wrapf(err, "could not open parent dir: %s", parent)
+		} else if err := handle.Sync(); err != nil {
+			_ = handle.Close()
+			return errors.Wrapf(err, "could not sync parent dir: %s", parent)
+		} else if err := handle.Close(); err != nil {
+			return errors.Wrapf(err, "could not close parent dir: %s", parent)
+		}
+	}
+
+	return nil
 }
