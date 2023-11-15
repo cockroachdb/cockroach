@@ -21,6 +21,7 @@ go_library(
         "restoration_data.go",
         "restore_data_processor.go",
         "restore_job.go",
+        "restore_online.go",
         "restore_planning.go",
         "restore_processor_planning.go",
         "restore_progress.go",
@@ -181,7 +182,6 @@ go_test(
         "generative_split_and_scatter_processor_test.go",
         "key_rewriter_test.go",
         "main_test.go",
-        "online_restore_test.go",
         "partitioned_backup_test.go",
         "restore_data_processor_test.go",
         "restore_entry_cover_generated_test.go",  # keep
@@ -191,6 +191,7 @@ go_test(
         "restore_multiregion_rbr_test.go",
         "restore_old_sequences_test.go",
         "restore_old_versions_test.go",
+        "restore_online_test.go",
         "restore_planning_test.go",
         "restore_progress_test.go",
         "restore_span_covering_test.go",
