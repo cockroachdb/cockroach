@@ -995,7 +995,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 
 	// Create a TxnPusher that performs assertions during the first 3 uses.
 	var tp testTxnPusher
-	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
+	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, bool, error) {
 		// The txns are not in a sorted order. Enforce one.
 		sort.Slice(txns, func(i, j int) bool {
 			return bytes.Compare(txns[i].Key, txns[j].Key) < 0
@@ -1009,34 +1009,34 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 			assert.Equal(t, txn2Meta, txns[1])
 			assert.Equal(t, txn3Meta, txns[2])
 			if t.Failed() {
-				return nil, errors.New("test failed")
+				return nil, false, errors.New("test failed")
 			}
 
 			// Push does not succeed. Protos not at larger ts.
-			return []*roachpb.Transaction{txn1Proto, txn2Proto, txn3Proto}, nil
+			return []*roachpb.Transaction{txn1Proto, txn2Proto, txn3Proto}, false, nil
 		case 2:
 			assert.Equal(t, 3, len(txns))
 			assert.Equal(t, txn1MetaT2Pre, txns[0])
 			assert.Equal(t, txn2Meta, txns[1])
 			assert.Equal(t, txn3Meta, txns[2])
 			if t.Failed() {
-				return nil, errors.New("test failed")
+				return nil, false, errors.New("test failed")
 			}
 
 			// Push succeeds. Return new protos.
-			return []*roachpb.Transaction{txn1ProtoT2, txn2ProtoT2, txn3ProtoT2}, nil
+			return []*roachpb.Transaction{txn1ProtoT2, txn2ProtoT2, txn3ProtoT2}, false, nil
 		case 3:
 			assert.Equal(t, 2, len(txns))
 			assert.Equal(t, txn2MetaT2Post, txns[0])
 			assert.Equal(t, txn3MetaT2Post, txns[1])
 			if t.Failed() {
-				return nil, errors.New("test failed")
+				return nil, false, errors.New("test failed")
 			}
 
 			// Push succeeds. Return new protos.
-			return []*roachpb.Transaction{txn2ProtoT3, txn3ProtoT3}, nil
+			return []*roachpb.Transaction{txn2ProtoT3, txn3ProtoT3}, false, nil
 		default:
-			return nil, nil
+			return nil, false, nil
 		}
 	})
 	tp.mockResolveIntentsFn(func(ctx context.Context, intents []roachpb.LockUpdate) error {

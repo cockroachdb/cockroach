@@ -360,13 +360,13 @@ func TestInitResolvedTSScan(t *testing.T) {
 }
 
 type testTxnPusher struct {
-	pushTxnsFn       func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
+	pushTxnsFn       func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, bool, error)
 	resolveIntentsFn func(ctx context.Context, intents []roachpb.LockUpdate) error
 }
 
 func (tp *testTxnPusher) PushTxns(
 	ctx context.Context, txns []enginepb.TxnMeta, ts hlc.Timestamp,
-) ([]*roachpb.Transaction, error) {
+) ([]*roachpb.Transaction, bool, error) {
 	return tp.pushTxnsFn(txns, ts)
 }
 
@@ -374,8 +374,12 @@ func (tp *testTxnPusher) ResolveIntents(ctx context.Context, intents []roachpb.L
 	return tp.resolveIntentsFn(ctx, intents)
 }
 
+func (tp *testTxnPusher) Barrier(ctx context.Context) error {
+	return nil
+}
+
 func (tp *testTxnPusher) mockPushTxns(
-	fn func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error),
+	fn func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, bool, error),
 ) {
 	tp.pushTxnsFn = fn
 }
@@ -432,7 +436,7 @@ func TestTxnPushAttempt(t *testing.T) {
 
 	// Run a txnPushAttempt.
 	var tp testTxnPusher
-	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, error) {
+	tp.mockPushTxns(func(txns []enginepb.TxnMeta, ts hlc.Timestamp) ([]*roachpb.Transaction, bool, error) {
 		require.Equal(t, 4, len(txns))
 		require.Equal(t, txn1Meta, txns[0])
 		require.Equal(t, txn2Meta, txns[1])
@@ -443,7 +447,7 @@ func TestTxnPushAttempt(t *testing.T) {
 		// Return all four protos. The PENDING txn is pushed.
 		txn1ProtoPushed := txn1Proto.Clone()
 		txn1ProtoPushed.WriteTimestamp = ts
-		return []*roachpb.Transaction{txn1ProtoPushed, txn2Proto, txn3Proto, txn4Proto}, nil
+		return []*roachpb.Transaction{txn1ProtoPushed, txn2Proto, txn3Proto, txn4Proto}, false, nil
 	})
 	tp.mockResolveIntentsFn(func(ctx context.Context, intents []roachpb.LockUpdate) error {
 		require.Len(t, intents, 7)
