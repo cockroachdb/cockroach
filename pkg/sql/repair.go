@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -750,18 +749,12 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 		Key: tableSpan.Key, EndKey: tableSpan.EndKey,
 	}
 	b := p.Txn().NewBatch()
-	if storage.CanUseMVCCRangeTombstones(ctx, p.execCfg.Settings) {
-		b.AddRawRequest(&kvpb.DeleteRangeRequest{
-			RequestHeader:           requestHeader,
-			UseRangeTombstone:       true,
-			IdempotentTombstone:     true,
-			UpdateRangeDeleteGCHint: true,
-		})
-	} else {
-		b.AddRawRequest(&kvpb.ClearRangeRequest{
-			RequestHeader: requestHeader,
-		})
-	}
+	b.AddRawRequest(&kvpb.DeleteRangeRequest{
+		RequestHeader:           requestHeader,
+		UseRangeTombstone:       true,
+		IdempotentTombstone:     true,
+		UpdateRangeDeleteGCHint: true,
+	})
 	if err := p.txn.DB().Run(ctx, b); err != nil {
 		return err
 	}

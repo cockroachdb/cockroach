@@ -76,14 +76,6 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDurationWithMaximum(1*time.Second),
 )
 
-// CanUseMVCCRangeTombstones returns true if the caller can begin writing MVCC
-// range tombstones, by setting DeleteRangeRequest.UseRangeTombstone.
-func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
-	// All compatible Cockroach cluster versions support MVCC range tombstones
-	// now.
-	return true
-}
-
 // MaxConflictsPerLockConflictError sets maximum number of locks returned in
 // LockConflictError in operations that return multiple locks per error.
 var MaxConflictsPerLockConflictError = settings.RegisterIntSetting(

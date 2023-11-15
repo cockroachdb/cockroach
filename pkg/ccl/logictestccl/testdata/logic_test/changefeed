@@ -6,12 +6,11 @@ CREATE TABLE t ()
 statement ok
 SET CLUSTER SETTING kv.rangefeed.enabled = true
 
+subtest control_changefeed_role_option
+
 user root
 
 # Test granting CONTROLCHANGEFEED.
-statement ok
-GRANT CONNECT ON DATABASE test TO testuser
-
 query T noticetrace
 ALTER USER testuser CONTROLCHANGEFEED
 ----
@@ -32,15 +31,15 @@ GRANT SELECT ON TABLE t TO testuser
 
 user testuser
 
-# Test the deprecation notice for CONTROLCHANGEFEED
+# Test the deprecation notice for CONTROLCHANGEFEED.
 query T noticetrace
 CREATE CHANGEFEED FOR t INTO 'null://sink' with initial_scan='only'
 ----
 NOTICE: You are creating a changefeed as a user with the CONTROLCHANGEFEED role option. The role option CONTROLCHANGEFEED will be removed in a future release, please switch to using the CHANGEFEED privilege for target tables instead: https://www.cockroachlabs.com/docs/stable/create-changefeed.html#required-privileges
 
-# Test revoking CONTROLCHANGEFEED.
 user root
 
+# Test revoking CONTROLCHANGEFEED.
 statement ok
 ALTER USER testuser NOCONTROLCHANGEFEED;
 GRANT SELECT ON TABLE t TO testuser
@@ -50,6 +49,19 @@ user testuser
 statement error user testuser requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed
 CREATE CHANGEFEED FOR t INTO 'null://sink' with initial_scan='only'
 
+user root
+
+# Test revoking SELECT.
+statement ok
+REVOKE SELECT ON TABLE t FROM testuser
+
+subtest end
+
+# Note: This subtest implicitly depends on the previous subtest running first
+# since it looks for the job_id of the changefeed created in that one.
+# Creating more changefeeds before this subtest will cause this one to fail
+# since it relies on the fact that testuser only has a single changefeed.
+subtest show_changefeed_jobs
 
 user root
 
@@ -65,6 +77,27 @@ query TT
 SELECT user_name, description FROM [SHOW CHANGEFEED JOBS]
 ----
 testuser  CREATE CHANGEFEED FOR TABLE t INTO 'null://sink' WITH OPTIONS (initial_scan = 'only')
+
+subtest end
+
+subtest changefeed_priv
+
+user root
+
+statement ok
+GRANT CHANGEFEED ON t TO testuser
+
+user testuser
+
+statement ok
+CREATE CHANGEFEED FOR t INTO 'null://sink' with initial_scan='only'
+
+user root
+
+statement ok
+REVOKE CHANGEFEED ON t FROM testuser
+
+subtest end
 
 subtest disable_changefeed_replication
 

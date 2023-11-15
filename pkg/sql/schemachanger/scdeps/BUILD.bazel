@@ -40,7 +40,6 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
-        "//pkg/storage",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
