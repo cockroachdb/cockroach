@@ -180,6 +180,10 @@ type TxnPusher interface {
 	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
 	// ResolveIntents resolves the specified intents.
 	ResolveIntents(ctx context.Context, intents []roachpb.LockUpdate) error
+	// GetLeaseholderLAI fetches the leaseholder's current lease applied index.
+	GetLeaseholderLAI(ctx context.Context) (kvpb.LeaseAppliedIndex, error)
+	// GetReplicaLAI fetches the local replica's current lease applied index.
+	GetReplicaLAI(ctx context.Context) kvpb.LeaseAppliedIndex
 }
 
 // txnPushAttempt pushes all old transactions that have unresolved intents on
@@ -252,6 +256,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	// Inform the Processor of the results of the push for each transaction.
 	ops := make([]enginepb.MVCCLogicalOp, len(pushedTxns))
 	var intentsToCleanup []roachpb.LockUpdate
+	var sawAborted bool
 	for i, txn := range pushedTxns {
 		switch txn.Status {
 		case roachpb.PENDING, roachpb.STAGING:
@@ -294,6 +299,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			ops[i].SetValue(&enginepb.MVCCAbortTxnOp{
 				TxnID: txn.ID,
 			})
+			sawAborted = true
 
 			// We just informed the Processor about this txn being aborted, so from
 			// its perspective, there's nothing more to do — the txn's intents are no
@@ -308,6 +314,30 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// collection, then LockSpans will be populated.
 			txnIntents := intentsInBound(txn, a.span.AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
+		}
+	}
+
+	// It's possible that the ABORTED state is a false negative, where the
+	// transaction was in fact committed but the txn record has been removed after
+	// resolving all intents (see batcheval.SynthesizeTxnFromMeta and
+	// Replica.CanCreateTxnRecord). If we are not the leaseholder, then we must
+	// make sure all resolved intents have been applied on the local replica and
+	// emitted across the rangefeed before we emit the MVCCAbortTxnOp, otherwise
+	// we can prematurely advance the resolved ts before the committed intents.
+	// See: https://github.com/cockroachdb/cockroach/issues/104309
+	if sawAborted {
+		leaseholderLAI, err := a.pusher.GetLeaseholderLAI(ctx)
+		if err != nil {
+			return err
+		}
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for a.pusher.GetReplicaLAI(ctx) < leaseholderLAI {
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 	}
 
