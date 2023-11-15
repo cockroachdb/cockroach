@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/roachprod",
+        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/vm",

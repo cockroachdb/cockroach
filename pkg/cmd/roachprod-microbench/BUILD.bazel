@@ -20,6 +20,7 @@ go_library(
         "//pkg/cmd/roachprod-microbench/model",
         "//pkg/roachprod",
         "//pkg/roachprod/config",
+        "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/ssh",
         "//pkg/roachprod/vm",
