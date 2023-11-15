@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -188,12 +187,6 @@ func (c *serverController) createServerEntryLocked(
 func (c *serverController) getExpectedRunningTenants(
 	ctx context.Context, ie isql.Executor,
 ) (tenantNames []roachpb.TenantName, resErr error) {
-	if !c.st.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
-		// Cluster not yet upgraded - we know there is no secondary tenant
-		// with a name yet.
-		return []roachpb.TenantName{catconstants.SystemTenantName}, nil
-	}
-
 	rowIter, err := ie.QueryIterator(ctx, "list-tenants", nil, /* txn */
 		`SELECT name FROM system.tenants
 WHERE service_mode = $1
