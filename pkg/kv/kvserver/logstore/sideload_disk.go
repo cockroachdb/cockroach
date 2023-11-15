@@ -47,7 +47,7 @@ func sideloadedPath(baseDir string, rangeID roachpb.RangeID) string {
 	// per directory, respectively. Newer FS typically have no such limitation,
 	// but still.
 	//
-	// For example, r1828 will end up in baseDir/r1XXX/r1828.
+	// For example, r1828 will end up in baseDir/sideloading/r1XXX/r1828.
 	return filepath.Join(
 		baseDir,
 		"sideloading",
@@ -93,7 +93,7 @@ func (ss *DiskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 		}
 		// Ensure that ss.dir exists. The filename() is placed directly in ss.dir,
 		// so the next loop iteration should succeed.
-		if err := ss.eng.MkdirAll(ss.dir); err != nil {
+		if err := mkdirAllAndSyncParents(ss.eng, ss.dir); err != nil {
 			return err
 		}
 		continue
@@ -266,4 +266,56 @@ func (ss *DiskSideloadStorage) String() string {
 	}
 	fmt.Fprintf(&buf, "(%d files)\n", count)
 	return buf.String()
+}
+
+// mkdirAllAndSyncParents creates the given directory and all its missing
+// parents if any. For every newly created directly, it syncs the corresponding
+// parent directory.
+//
+// For example, if path is "/x/y/z", and "/x" previously existed, then this func
+// creates "/x/y" and "/x/y/z", and syncs directories "/x" and "/x/y".
+//
+// TODO(pavelkalinnikov): this does not work well with paths containing . and ..
+// elements inside the data-dir directory. We don't construct the path this way
+// though, right now any non-canonical part of the path would be only in the
+// <data-dir> path.
+//
+// TODO(pavelkalinnikov): have a type-safe canonical path type which can be
+// iterated without thinking about . and .. placeholders.
+func mkdirAllAndSyncParents(fs fs.FS, path string) error {
+	// Find the lowest existing directory in the hierarchy.
+	var exists string
+	for dir, parent := path, ""; ; dir = parent {
+		if _, err := fs.Stat(dir); err == nil {
+			exists = dir
+			break
+		} else if !oserror.IsNotExist(err) {
+			return errors.Wrapf(err, "could not get dir info: %s", dir)
+		}
+		parent = filepath.Dir(dir)
+		// NB: not checking against the separator, to be platform-agnostic.
+		if dir == "." || parent == dir { // reached the topmost dir or the root
+			return errors.Newf("topmost dir does not exist: %s", dir)
+		}
+	}
+
+	// Create the destination directory and any of its missing parents.
+	if err := fs.MkdirAll(path); err != nil {
+		return errors.Wrapf(err, "could not create all directories: %s", path)
+	}
+
+	// Sync parent directories up to the lowest existing ancestor, included.
+	for dir, parent := path, ""; dir != exists; dir = parent {
+		parent = filepath.Dir(dir)
+		if handle, err := fs.OpenDir(parent); err != nil {
+			return errors.Wrapf(err, "could not open parent dir: %s", parent)
+		} else if err := handle.Sync(); err != nil {
+			_ = handle.Close()
+			return errors.Wrapf(err, "could not sync parent dir: %s", parent)
+		} else if err := handle.Close(); err != nil {
+			return errors.Wrapf(err, "could not close parent dir: %s", parent)
+		}
+	}
+
+	return nil
 }
