@@ -374,6 +374,10 @@ func (tp *testTxnPusher) ResolveIntents(ctx context.Context, intents []roachpb.L
 	return tp.resolveIntentsFn(ctx, intents)
 }
 
+func (tp *testTxnPusher) Barrier(ctx context.Context) error {
+	return nil
+}
+
 func (tp *testTxnPusher) mockPushTxns(
 	fn func([]enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error),
 ) {

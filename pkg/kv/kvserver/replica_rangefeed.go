@@ -182,6 +182,42 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 	).GoError()
 }
 
+// Barrier is part of the rangefeed.TxnPusher interface.
+func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
+	// Execute a Barrier on the leaseholder.
+	//
+	// TODO(erikgrinaker): handle Barrier requests split across ranges. This can
+	// happen e.g. if we haven't applied a split yet. The dumb solution is to set
+	// isUnsplittable on BarrierRequest, but we can maybe do something better
+	// (e.g. return per-range LAIs).
+	desc := tp.r.Desc()
+	_, lai, err := tp.r.store.db.Barrier(ctx, desc.StartKey, desc.EndKey)
+	if err != nil {
+		return err
+	}
+	if lai == 0 {
+		// TODO(erikgrinaker): consider erroring on 24.1.
+		return nil
+	}
+
+	// Wait for the local replica to apply it. If we are the leaseholder, the
+	// Barrier call will already have waited for application, so this succeeds on
+	// the first attempt.
+	var ticker *time.Ticker
+	for tp.r.GetLeaseAppliedIndex() < lai {
+		if ticker == nil {
+			ticker = time.NewTicker(100 * time.Millisecond)
+			defer ticker.Stop()
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns with a future error when the rangefeed is
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit

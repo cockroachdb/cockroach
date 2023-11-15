@@ -189,6 +189,9 @@ type TxnPusher interface {
 	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
 	// ResolveIntents resolves the specified intents.
 	ResolveIntents(ctx context.Context, intents []roachpb.LockUpdate) error
+	// Barrier waits for all past and ongoing write commands in the range to
+	// have applied on the local replica.
+	Barrier(ctx context.Context) error
 }
 
 // txnPushAttempt pushes all old transactions that have unresolved intents on
@@ -261,6 +264,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	// Inform the Processor of the results of the push for each transaction.
 	ops := make([]enginepb.MVCCLogicalOp, len(pushedTxns))
 	var intentsToCleanup []roachpb.LockUpdate
+	var sawAborted bool
 	for i, txn := range pushedTxns {
 		switch txn.Status {
 		case roachpb.PENDING, roachpb.STAGING:
@@ -317,6 +321,42 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// collection, then LockSpans will be populated.
 			txnIntents := intentsInBound(txn, a.span.AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
+
+			sawAborted = true
+		}
+	}
+
+	// It's possible that the ABORTED state is a false negative, where the
+	// transaction was in fact committed but the txn record has been removed after
+	// resolving all intents (see batcheval.SynthesizeTxnFromMeta and
+	// Replica.CanCreateTxnRecord). If this replica has not applied the intent
+	// resolution yet, we may prematurely emit an MVCCAbortTxnOp and advance
+	// the resolved ts before emitting the committed intents. This violates the
+	// checkpoint guarantee, and will at the time of writing cause the changefeed
+	// to drop these writes entirely. See:
+	// https://github.com/cockroachdb/cockroach/issues/104309
+	//
+	// To guarantee that we've applied all resolved intents, submit a Barrier
+	// command to the leaseholder and wait for its LAI to apply locally.
+	//
+	// MVCC logical ops are processed before advancing the LAI, so by the time the
+	// local replica reaches the barrier LAI it will have enqueued the resolved
+	// intents in the rangefeed processor's queue. These updates may not yet have
+	// been applied to the resolved timestamp intent queue, but that's ok -- our
+	// MVCCAbortTxnOp will be enqueued and processed after them.
+	//
+	// NB: We can't try to reduce the span of the barrier, because LockSpans may
+	// not have the full set of intents.
+	//
+	// TODO(erikgrinaker): check how often we hit this, and consider coming up
+	// with a way to avoid it in the common case, since it incurs a write.
+	//
+	// TODO(erikgrinaker): consider a timeout here, or track the barrier LAI until
+	// the next retry. This isn't currently needed, since the txn pusher runs on
+	// its own goroutine, but would be needed if we moved it into the scheduler.
+	if sawAborted {
+		if err := a.pusher.Barrier(ctx); err != nil {
+			return err
 		}
 	}
 
