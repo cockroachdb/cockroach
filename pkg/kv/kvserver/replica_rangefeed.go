@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -180,6 +181,56 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 			NoMemoryReservedAtSource: true,
 		}},
 	).GoError()
+}
+
+// GetLeaseholderLAI is part of the rangefeed.TxnPusher interface.
+func (tp *rangefeedTxnPusher) GetLeaseholderLAI(
+	ctx context.Context,
+) (kvpb.LeaseAppliedIndex, error) {
+	// Fast path for local leaseholder.
+	if lai := tp.getLocalLeaseLAI(ctx); lai > 0 {
+		return lai, nil
+	}
+
+	var ba kvpb.BatchRequest
+	ba.Add(&kvpb.LeaseInfoRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key: tp.r.Desc().StartKey.AsRawKey(),
+		},
+	})
+
+	sender := tp.r.store.db.NonTransactionalSender()
+	br, pErr := sender.Send(ctx, &ba)
+	if pErr != nil {
+		return 0, pErr.GoError()
+	}
+	resp := br.Responses[0].GetLeaseInfo()
+	if resp == nil {
+		return 0, errors.AssertionFailedf("invalid LeaseInfo response: %s", br)
+	}
+	if resp.LeaseAppliedIndex == 0 {
+		// LeaseInfoResponse.LeaseAppliedIndex was added in a 23.2 backport, so
+		// older nodes may not set it. Return a 0 LAI in that case.
+		if tp.r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1) {
+			return 0, errors.AssertionFailedf("leaseholder did not return a lease applied index")
+		}
+	}
+	return resp.LeaseAppliedIndex, nil
+}
+
+func (tp *rangefeedTxnPusher) getLocalLeaseLAI(ctx context.Context) kvpb.LeaseAppliedIndex {
+	now := tp.r.Clock().NowAsClockTimestamp()
+	tp.r.mu.RLock()
+	defer tp.r.mu.RUnlock()
+	if tp.r.ownsValidLeaseRLocked(ctx, now) {
+		return tp.r.mu.state.LeaseAppliedIndex
+	}
+	return 0
+}
+
+// GetReplicaLAI is part of the rangefeed.TxnPusher interface.
+func (tp *rangefeedTxnPusher) GetReplicaLAI(ctx context.Context) kvpb.LeaseAppliedIndex {
+	return tp.r.GetLeaseAppliedIndex()
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to

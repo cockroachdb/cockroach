@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -372,6 +373,14 @@ func (tp *testTxnPusher) PushTxns(
 
 func (tp *testTxnPusher) ResolveIntents(ctx context.Context, intents []roachpb.LockUpdate) error {
 	return tp.resolveIntentsFn(ctx, intents)
+}
+
+func (tp *testTxnPusher) GetLeaseholderLAI(ctx context.Context) (kvpb.LeaseAppliedIndex, error) {
+	return 0, nil
+}
+
+func (tp *testTxnPusher) GetReplicaLAI(ctx context.Context) kvpb.LeaseAppliedIndex {
+	return 0
 }
 
 func (tp *testTxnPusher) mockPushTxns(
