@@ -12,12 +12,14 @@ package rangefeed
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -223,10 +225,17 @@ func (l *LegacyIntentScanner) Close() { l.iter.Close() }
 // cleaning up the intents of transactions that are found to be committed.
 type TxnPusher interface {
 	// PushTxns attempts to push the specified transactions to a new
-	// timestamp. It returns the resulting transaction protos.
-	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, error)
+	// timestamp. It returns the resulting transaction protos, and a
+	// bool indicating whether any txn aborts were ambiguous (see
+	// PushTxnResponse.AmbiguousAbort).
+	//
+	// NB: anyAmbiguousAbort may be false with nodes <24.1.
+	PushTxns(context.Context, []enginepb.TxnMeta, hlc.Timestamp) ([]*roachpb.Transaction, bool, error)
 	// ResolveIntents resolves the specified intents.
 	ResolveIntents(ctx context.Context, intents []roachpb.LockUpdate) error
+	// Barrier waits for all past and ongoing write commands in the range to have
+	// applied on the leaseholder and the local replica.
+	Barrier(ctx context.Context) error
 }
 
 // txnPushAttempt pushes all old transactions that have unresolved intents on
@@ -276,7 +285,7 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	// This may cause transaction restarts, but span refreshing should
 	// prevent a restart for any transaction that has not been written
 	// over at a larger timestamp.
-	pushedTxns, err := a.p.TxnPusher.PushTxns(ctx, a.txns, a.ts)
+	pushedTxns, anyAmbiguousAbort, err := a.p.TxnPusher.PushTxns(ctx, a.txns, a.ts)
 	if err != nil {
 		return err
 	}
@@ -346,6 +355,49 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// collection, then LockSpans will be populated.
 			txnIntents := intentsInBound(txn, a.p.Span.AsRawSpanWithNoLocals())
 			intentsToCleanup = append(intentsToCleanup, txnIntents...)
+		}
+	}
+
+	// It's possible that the ABORTED state is a false negative, where the
+	// transaction was in fact committed but the txn record has been removed after
+	// resolving all intents (see batcheval.SynthesizeTxnFromMeta and
+	// Replica.CanCreateTxnRecord). If this replica has not applied the intent
+	// resolution yet, we may prematurely emit an MVCCAbortTxnOp and advance
+	// the resolved ts before emitting the committed intents. This violates the
+	// rangefeed checkpoint guarantee, and will at the time of writing cause the
+	// changefeed to drop these events entirely. See:
+	// https://github.com/cockroachdb/cockroach/issues/104309
+	//
+	// PushTxns will let us know if it found such an ambiguous abort. To guarantee
+	// that we've applied all resolved intents in this case, submit a Barrier
+	// command to the leaseholder and wait for it to apply on the local replica.
+	//
+	// By the time the local replica applies the barrier it will have enqueued the
+	// resolved intents in the rangefeed processor's queue. These updates may not
+	// yet have been applied to the resolved timestamp intent tracker, but that's
+	// ok -- our MVCCAbortTxnOp will be enqueued and processed after them.
+	//
+	// This incurs an additional Raft write, but so would PushTxns() if we hadn't
+	// hit the ambiguous abort case. This will also block until ongoing writes
+	// have completed and applied, but that's fine since we currently run on our
+	// own goroutine (as opposed to on a rangefeed scheduler goroutine).
+	//
+	// NB: We can't try to reduce the span of the barrier, because LockSpans may
+	// not have the full set of intents.
+	//
+	// NB: PushTxnResponse.AmbiguousAbort and BarrierResponse.LeaseAppliedIndex
+	// are not guaranteed to be populated prior to 24.1. In that case, we degrade
+	// to the old (buggy) behavior.
+	if anyAmbiguousAbort && PushTxnsBarrierEnabled.Get(&a.p.Settings.SV) {
+		// The barrier will error out if our context is cancelled (which happens on
+		// processor shutdown) or if the replica is destroyed. Regardless, use a 1
+		// minute backstop to prevent getting wedged.
+		//
+		// TODO(erikgrinaker): consider removing this once we have some confidence
+		// that it won't get wedged.
+		err := contextutil.RunWithTimeout(ctx, "pushtxns barrier", time.Minute, a.p.TxnPusher.Barrier)
+		if err != nil {
+			return err
 		}
 	}
 
