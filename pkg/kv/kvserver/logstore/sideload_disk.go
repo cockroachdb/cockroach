@@ -75,10 +75,6 @@ func NewDiskSideloadStorage(
 	}
 }
 
-func (ss *DiskSideloadStorage) createDir() error {
-	return ss.eng.MkdirAll(ss.dir, os.ModePerm)
-}
-
 // Dir implements SideloadStorage.
 func (ss *DiskSideloadStorage) Dir() string {
 	return ss.dir
@@ -99,9 +95,9 @@ func (ss *DiskSideloadStorage) Put(
 		} else if !oserror.IsNotExist(err) {
 			return err
 		}
-		// createDir() ensures ss.dir exists but will not create any subdirectories
-		// within ss.dir because filename() does not make subdirectories in ss.dir.
-		if err := ss.createDir(); err != nil {
+		// Ensure that ss.dir exists. The filename() is placed directly in ss.dir,
+		// so the next loop iteration should succeed.
+		if err := ss.eng.MkdirAll(ss.dir, os.ModePerm); err != nil {
 			return err
 		}
 		continue
