@@ -9,10 +9,12 @@
 package streamingest
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -22,12 +24,13 @@ var ErrNodeLagging = errors.New("node frontier too far behind other nodes")
 // more than maxAllowable lag behind any other destination node. This function
 // assumes that all nodes have finished their initial scan (i.e. have a nonzero hwm).
 func checkLaggingNodes(
-	executionDetails []frontierExecutionDetails, maxAllowableLag time.Duration,
+	ctx context.Context, executionDetails []frontierExecutionDetails, maxAllowableLag time.Duration,
 ) error {
 	if maxAllowableLag == 0 {
 		return nil
 	}
 	laggingNode, minLagDifference := computeMinLagDifference(executionDetails)
+	log.VEventf(ctx, 2, "computed min lag diff: %d lagging node, difference %.2f", laggingNode, minLagDifference.Minutes())
 	if maxAllowableLag < minLagDifference {
 		return errors.Wrapf(ErrNodeLagging, "node %d is %.2f minutes behind the next node. Try replanning", laggingNode, minLagDifference.Minutes())
 	}
