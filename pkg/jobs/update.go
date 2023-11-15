@@ -220,16 +220,6 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 		}
 	}
 
-	if !u.j.registry.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1StopWritingPayloadAndProgressToSystemJobs) {
-		if payloadBytes != nil {
-			addSetter("payload", payloadBytes)
-		}
-
-		if progressBytes != nil {
-			addSetter("progress", progressBytes)
-		}
-	}
-
 	if ju.md.RunStats != nil {
 		runStats = ju.md.RunStats
 		addSetter("last_run", ju.md.RunStats.LastRun)
@@ -260,18 +250,16 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 	// associated cluster version is active.
 	//
 	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
-	// table once we are outside the compatability window for 22.2.
-	if u.j.registry.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1CreateSystemJobInfoTable) {
-		infoStorage := j.InfoStorage(u.txn)
-		if payloadBytes != nil {
-			if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
-				return err
-			}
+	// table, now that we are outside the compatibility window for 22.2.
+	infoStorage := j.InfoStorage(u.txn)
+	if payloadBytes != nil {
+		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
+			return err
 		}
-		if progressBytes != nil {
-			if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
-				return err
-			}
+	}
+	if progressBytes != nil {
+		if err := infoStorage.WriteLegacyProgress(ctx, progressBytes); err != nil {
+			return err
 		}
 	}
 
@@ -411,28 +399,15 @@ WITH
 		backoffColumns                 = ", COALESCE(last_run, created), COALESCE(num_runs, 0)"
 	)
 
-	var stmt string
-	if version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
-		stmt = selectWithoutSession
-		if hasSession {
-			stmt = selectWithSession
-		}
-		stmt = stmt + backoffColumns
-		if useReadLock {
-			return stmt + fromForUpdate
-		}
-		stmt = stmt + from
-	} else {
-		stmt = deprecatedSelectWithoutSession
-		if hasSession {
-			stmt = deprecatedSelectWithSession
-		}
-		stmt = stmt + backoffColumns
-		if useReadLock {
-			return stmt + deprecatedFromForUpdate
-		}
-		stmt = stmt + deprecatedFrom
+	stmt := selectWithoutSession
+	if hasSession {
+		stmt = selectWithSession
 	}
+	stmt = stmt + backoffColumns
+	if useReadLock {
+		return stmt + fromForUpdate
+	}
+	stmt = stmt + from
 
 	return stmt
 }

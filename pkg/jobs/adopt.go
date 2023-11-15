@@ -261,13 +261,7 @@ func (r *Registry) resumeJob(
 ) (retErr error) {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 
-	readPayloadAndProgressFromJobInfo := r.settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled)
-	var resumeQuery string
-	if readPayloadAndProgressFromJobInfo {
-		resumeQuery = resumeQueryWithBackoff
-	} else {
-		resumeQuery = deprecatedResumeQueryWithBackoff
-	}
+	resumeQuery := resumeQueryWithBackoff
 	args := []interface{}{jobID, s.ID().UnsafeBytes(),
 		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
 	row, err := r.db.Executor().QueryRowEx(
@@ -321,41 +315,29 @@ func (r *Registry) resumeJob(
 
 	payload := &jobspb.Payload{}
 	progress := &jobspb.Progress{}
-	if readPayloadAndProgressFromJobInfo {
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			infoStorage := job.InfoStorage(txn)
-			payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job payload not found in system.job_info")
-			}
-			if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-				return err
-			}
-
-			progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job progress not found in system.job_info")
-			}
-			return protoutil.Unmarshal(progressBytes, progress)
-		}); err != nil {
-			return err
-		}
-	} else {
-		payload, err = UnmarshalPayload(row[1])
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		infoStorage := job.InfoStorage(txn)
+		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
 		if err != nil {
 			return err
 		}
+		if !exists {
+			return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job payload not found in system.job_info")
+		}
+		if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
+			return err
+		}
 
-		progress, err = UnmarshalProgress(row[2])
+		progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
 		if err != nil {
 			return err
 		}
+		if !exists {
+			return errors.Wrap(&JobNotFoundError{jobID: jobID}, "job progress not found in system.job_info")
+		}
+		return protoutil.Unmarshal(progressBytes, progress)
+	}); err != nil {
+		return err
 	}
 
 	job.mu.payload = *payload

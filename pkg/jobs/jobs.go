@@ -741,64 +741,28 @@ func (j *Job) loadJobPayloadAndProgress(
 
 	payload := &jobspb.Payload{}
 	progress := &jobspb.Progress{}
-	if st.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1JobInfoTableIsBackfilled) {
-		infoStorage := j.InfoStorage(txn)
+	infoStorage := j.InfoStorage(txn)
 
-		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
-		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to get payload for job %d", j.ID())
-		}
-		if !exists {
-			return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job payload not found in system.job_info")
-		}
-		if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-			return nil, nil, err
-		}
-
-		progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
-		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to get progress for job %d", j.ID())
-		}
-		if !exists {
-			return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job progress not found in system.job_info")
-		}
-		if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
-			return nil, nil, &JobNotFoundError{jobID: j.ID()}
-		}
-
-		return payload, progress, nil
-	}
-
-	// If TODO_Delete_V23_1JobInfoTableIsBackfilled is not active we should read the payload
-	// and progress from the system.jobs table.
-	const (
-		queryNoSessionID   = "SELECT payload, progress FROM system.jobs WHERE id = $1"
-		queryWithSessionID = queryNoSessionID + " AND claim_session_id = $2"
-	)
-	sess := sessiondata.RootUserSessionDataOverride
-
-	var err error
-	var row tree.Datums
-	if j.session == nil {
-		row, err = txn.QueryRowEx(ctx, "load-job-payload-progress-query", txn.KV(), sess,
-			queryNoSessionID, j.ID())
-	} else {
-		row, err = txn.QueryRowEx(ctx, "load-job-payload-progress-query", txn.KV(), sess,
-			queryWithSessionID, j.ID(), j.session.ID().UnsafeBytes())
-	}
+	payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
 	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to get payload for job %d", j.ID())
+	}
+	if !exists {
+		return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job payload not found in system.job_info")
+	}
+	if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
 		return nil, nil, err
 	}
-	if row == nil {
+
+	progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to get progress for job %d", j.ID())
+	}
+	if !exists {
+		return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job progress not found in system.job_info")
+	}
+	if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
 		return nil, nil, &JobNotFoundError{jobID: j.ID()}
-	}
-	payload, err = UnmarshalPayload(row[0])
-	if err != nil {
-		return nil, nil, err
-	}
-	progress, err = UnmarshalProgress(row[1])
-	if err != nil {
-		return nil, nil, err
 	}
 
 	return payload, progress, nil
