@@ -56,12 +56,8 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 
 	getAvailableInstanceID := func(storage *Storage, region []byte) (id base.SQLInstanceID, err error) {
 		err = storage.db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
-			version, err := storage.versionGuard(ctx, txn)
-			if err != nil {
-				return err
-			}
-
-			id, err = storage.getAvailableInstanceIDForRegion(ctx, region, txn, &version)
+			var err error
+			id, err = storage.getAvailableInstanceIDForRegion(ctx, region, txn)
 			return err
 		})
 		return

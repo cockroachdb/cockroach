@@ -13,14 +13,12 @@ package stats
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 )
 
 // InsertNewStats inserts a slice of statistics at the current time into the
@@ -86,34 +84,6 @@ func InsertNewStat(
 		if err := columnIDsVal.Append(tree.NewDInt(tree.DInt(int(c)))); err != nil {
 			return err
 		}
-	}
-
-	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddPartialStatisticsColumns) {
-		if partialPredicate != "" {
-			return errors.New("unable to insert new partial statistic as cluster version is from before V23.1.")
-		}
-		_, err := txn.Exec(
-			ctx, "insert-statistic", txn.KV(),
-			`INSERT INTO system.table_statistics (
-					"tableID",
-					"name",
-					"columnIDs",
-					"rowCount",
-					"distinctCount",
-					"nullCount",
-					"avgSize",
-					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			tableID,
-			nameVal,
-			columnIDsVal,
-			rowCount,
-			distinctCount,
-			nullCount,
-			avgSize,
-			histogramVal,
-		)
-		return err
 	}
 
 	// Need to assign to a nil interface{} to be able

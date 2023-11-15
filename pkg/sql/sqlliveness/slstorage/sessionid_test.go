@@ -88,12 +88,6 @@ func TestSessionIDEncoding(t *testing.T) {
 			err:     "session id is too short",
 		},
 		{
-			name:    "legacy_session",
-			session: sqlliveness.SessionID(id1.GetBytes()),
-			region:  enum.One,
-			id:      id1,
-		},
-		{
 			name:    "session_v1",
 			session: must(slstorage.MakeSessionID(enum.One, id1)),
 			region:  enum.One,

@@ -1341,47 +1341,13 @@ func insertJSONStatistic(
 	histogram interface{},
 ) error {
 	var (
-		ctx      = params.ctx
-		txn      = params.p.InternalSQLTxn()
-		settings = params.ExecCfg().Settings
+		ctx = params.ctx
+		txn = params.p.InternalSQLTxn()
 	)
 
 	var name interface{}
 	if s.Name != "" {
 		name = s.Name
-	}
-
-	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1AddPartialStatisticsColumns) {
-
-		if s.PartialPredicate != "" {
-			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "statistic for columns %v with collection time %s to insert is partial but cluster version is below 23.1", s.Columns, s.CreatedAt)
-		}
-
-		_ /* rows */, err := txn.Exec(
-			ctx,
-			"insert-stats",
-			txn.KV(),
-			`INSERT INTO system.table_statistics (
-					"tableID",
-					"name",
-					"columnIDs",
-					"createdAt",
-					"rowCount",
-					"distinctCount",
-					"nullCount",
-					"avgSize",
-					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			tableID,
-			name,
-			columnIDs,
-			s.CreatedAt,
-			s.RowCount,
-			s.DistinctCount,
-			s.NullCount,
-			s.AvgSize,
-			histogram)
-		return err
 	}
 
 	var predicateValue interface{}

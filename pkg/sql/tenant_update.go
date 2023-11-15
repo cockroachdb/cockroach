@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -76,11 +75,6 @@ func UpdateTenantRecord(
 SET active = $2, info = $3, name = $4, data_state = $5, service_mode = $6
 WHERE id = $1`
 	args := []interface{}{info.ID, active, infoBytes, name, info.DataState, info.ServiceMode}
-	if !settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
-		// Ensure the update can succeed if the upgrade is not finalized yet.
-		query = `UPDATE system.tenants SET active = $2, info = $3 WHERE id = $1`
-		args = args[:3]
-	}
 
 	if num, err := txn.ExecEx(
 		ctx, "update-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
@@ -106,13 +100,9 @@ func validateTenantInfo(
 		return errors.Newf("tenant in data state %v with dropped name %q", info.DataState, info.DroppedName)
 	}
 
-	if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
-		// We can only check the service mode after upgrading to a version
-		// that supports the service mode column.
-		if info.ServiceMode != mtinfopb.ServiceModeNone && info.DataState != mtinfopb.DataStateReady {
-			return errors.Newf("cannot use tenant service mode %v with data state %v",
-				info.ServiceMode, info.DataState)
-		}
+	if info.ServiceMode != mtinfopb.ServiceModeNone && info.DataState != mtinfopb.DataStateReady {
+		return errors.Newf("cannot use tenant service mode %v with data state %v",
+			info.ServiceMode, info.DataState)
 	}
 
 	// Sanity check. Note that this interlock is not a guarantee that
@@ -260,10 +250,6 @@ func (p *planner) renameTenant(
 	if newName != "" {
 		if err := newName.IsValid(); err != nil {
 			return pgerror.WithCandidateCode(err, pgcode.Syntax)
-		}
-
-		if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
-			return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 	}
 
