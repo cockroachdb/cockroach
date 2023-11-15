@@ -801,12 +801,41 @@ const (
 	NodeDistSQLVersionIncompatible
 )
 
+// SpanPartitionState captures information about the current state of the
+// partitioning that has occurred during the planning process.
+type SpanPartitionState struct {
+	// partitionSpanDecisions is a mapping from a SpanPartitionReason to the number of
+	// times we have picked an instance for that reason.
+	partitionSpanDecisions map[SpanPartitionReason]int
+
+	// partitionSpans is a mapping from a SQLInstanceID to the number of
+	// partition spans that have been assigned to that node.
+	partitionSpans map[base.SQLInstanceID]int
+
+	// totalPartitionSpans is the total number of partitions that have been processed
+	// so far.
+	totalPartitionSpans int
+
+	testingOverrideRandomSelection func() base.SQLInstanceID
+}
+
+// Update updates the SpanPartitionState with the information about the new span partition.
+func (p *SpanPartitionState) Update(partitionNode base.SQLInstanceID, partitionReason SpanPartitionReason) {
+	p.totalPartitionSpans++
+	p.partitionSpanDecisions[partitionReason]++
+	p.partitionSpans[partitionNode]++
+}
+
 // PlanningCtx contains data used and updated throughout the planning process of
 // a single query.
 type PlanningCtx struct {
 	ExtendedEvalCtx *extendedEvalContext
 
 	localityFilter roachpb.Locality
+
+	// spanPartitionState captures information about the current state of the
+	// partitioning that has occurred during the planning process.
+	spanPartitionState *SpanPartitionState
 
 	spanIter physicalplan.SpanResolverIterator
 	// nodeStatuses contains info for all SQLInstanceIDs that are referenced by
@@ -1103,6 +1132,11 @@ const (
 	// match to the provided locality filter and the gateway is not eligible. In
 	// this case we pick a random available instance.
 	SpanPartitionReason_LOCALITY_AWARE_RANDOM SpanPartitionReason = 7
+	// SpanPartitionReason_LOCALITY_AWARE_RANDOM_GATEWAY_OVERLOADED is reported
+	// when there is no match to the provided locality filter and the gateway is
+	// eligible but overloaded with other partitions. In this case we pick a
+	// random instance apart from the gateway.
+	SpanPartitionReason_LOCALITY_AWARE_RANDOM_GATEWAY_OVERLOADED SpanPartitionReason = 11
 	// SpanPartitionReason_ROUND_ROBIN is reported when there is no locality info
 	// on any of the instances and so we default to a naive round-robin strategy.
 	SpanPartitionReason_ROUND_ROBIN SpanPartitionReason = 8
@@ -1140,6 +1174,8 @@ func (r SpanPartitionReason) String() string {
 		return "gossip-gateway-target-unhealthy"
 	case SpanPartitionReason_GOSSIP_TARGET_HEALTHY:
 		return "gossip-target-healthy"
+	case SpanPartitionReason_LOCALITY_AWARE_RANDOM_GATEWAY_OVERLOADED:
+		return "locality-aware-random-gateway-overloaded"
 	default:
 		return "unknown"
 	}
@@ -1349,7 +1385,8 @@ func (dsp *DistSQLPlanner) partitionSpan(
 			)
 		}
 
-		sqlInstanceID, reason := getSQLInstanceIDForKVNodeID(replDesc.NodeID)
+		sqlInstanceID, reason := getSQLInstanceIDForKVNodeID(planCtx, replDesc.NodeID)
+		planCtx.spanPartitionState.Update(sqlInstanceID, reason)
 		partitionIdx, inNodeMap := nodeMap[sqlInstanceID]
 		if !inNodeMap {
 			partitionIdx = len(partitions)
@@ -1534,6 +1571,28 @@ var noInstancesMatchingLocalityFilterErr = errors.New(
 	"no healthy sql instances available matching locality requirement",
 )
 
+// shouldPickGateway determines whether the gateway node should be picked for a
+// particular partition.
+func (dsp *DistSQLPlanner) shouldPickGateway(_ context.Context, planCtx *PlanningCtx, instances []sqlinstance.InstanceInfo) bool {
+	numEligibleInstancesExcludingGateway := len(instances) - 1
+	if numEligibleInstancesExcludingGateway <= 0 {
+		return true
+	}
+
+	partitionsOnGateway := planCtx.spanPartitionState.partitionSpans[dsp.gatewaySQLInstanceID]
+	averageDistributionOnNonGatewayInstances :=
+		(planCtx.spanPartitionState.totalPartitionSpans - partitionsOnGateway) / numEligibleInstancesExcludingGateway
+
+	// If the gateway has no span partitions, we should use the gateway.
+	if partitionsOnGateway == 0 {
+		return true
+	}
+
+	// If the gateway has span partitions >= twice the average span partitions
+	// across other nodes we should distribute the partition to another node.
+	return partitionsOnGateway < 2*averageDistributionOnNonGatewayInstances
+}
+
 // makeInstanceResolver returns a function that can choose the SQL instance ID
 // for a provided KV node ID.
 func (dsp *DistSQLPlanner) makeInstanceResolver(
@@ -1635,10 +1694,24 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 			// No instances had any locality tiers in common with the node locality so
 			// just return the gateway if it is eligible. If it isn't, just pick a
 			// random instance from the eligible instances.
-			if gatewayIsEligible {
-				return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH
+			if !gatewayIsEligible {
+				return instances[rng.Intn(len(instances))].InstanceID, SpanPartitionReason_LOCALITY_AWARE_RANDOM
 			}
-			return instances[rng.Intn(len(instances))].InstanceID, SpanPartitionReason_LOCALITY_AWARE_RANDOM
+			if dsp.shouldPickGateway(ctx, planCtx, instances) {
+				return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH
+			} else {
+				// If the gateway has a disproportionate number of partitions pick a
+				// random instance that is not the gateway.
+				if planCtx.spanPartitionState.testingOverrideRandomSelection != nil {
+					return planCtx.spanPartitionState.testingOverrideRandomSelection(),
+						SpanPartitionReason_LOCALITY_AWARE_RANDOM_GATEWAY_OVERLOADED
+				}
+				for {
+					if id := instances[rng.Intn(len(instances))].InstanceID; id != dsp.gatewaySQLInstanceID {
+						return id, SpanPartitionReason_LOCALITY_AWARE_RANDOM_GATEWAY_OVERLOADED
+					}
+				}
+			}
 		}
 		return resolver, nil
 	}
@@ -1743,11 +1816,12 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	if err != nil {
 		return 0, err
 	}
-	sqlInstanceID, _ := resolver(planCtx, replDesc.NodeID)
+	sqlInstanceID, reason := resolver(planCtx, replDesc.NodeID)
+	planCtx.spanPartitionState.Update(sqlInstanceID, reason)
 	return sqlInstanceID, nil
 }
 
-func (dsp *DistSQLPlanner) useGossipPlanning(ctx context.Context, planCtx *PlanningCtx) bool {
+func (dsp *DistSQLPlanner) useGossipPlanning(_ context.Context, planCtx *PlanningCtx) bool {
 	// TODO(dt): enable this by default, e.g. // && !dsp.distSQLSrv.Settings.Version.IsActive(ctx, clusterversion.V23_1)
 	return dsp.codec.ForSystemTenant() && planCtx.localityFilter.Empty()
 }
@@ -4788,6 +4862,10 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn, oracle)
 	planCtx.nodeStatuses = make(map[base.SQLInstanceID]NodeStatus)
 	planCtx.nodeStatuses[dsp.gatewaySQLInstanceID] = NodeOK
+	planCtx.spanPartitionState = &SpanPartitionState{
+		partitionSpanDecisions: make(map[SpanPartitionReason]int),
+		partitionSpans:         make(map[base.SQLInstanceID]int),
+	}
 	return planCtx
 }
 

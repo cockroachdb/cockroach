@@ -673,6 +673,7 @@ func TestPartitionSpans(t *testing.T) {
 		// expected result: a map of node to list of spans.
 		partitions      map[int][][2]string
 		partitionStates []string
+		partitionState  SpanPartitionState
 	}{
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
@@ -691,6 +692,18 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
 				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
 				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 1,
+					3: 1,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 4,
+				},
+				totalPartitionSpans: 4,
 			},
 		},
 
@@ -713,6 +726,18 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
 				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
 			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 1,
+					3: 1,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 4,
+				},
+				totalPartitionSpans: 4,
+			},
 		},
 
 		{
@@ -732,6 +757,18 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: {B-C}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
 				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
 				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 3,
+					3: 1,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           3,
+					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 1,
+				},
+				totalPartitionSpans: 4,
 			},
 		},
 
@@ -753,6 +790,18 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
 				"partition span: {D1-X}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
 			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 3,
+					2: 1,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           3,
+					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 1,
+				},
+				totalPartitionSpans: 4,
+			},
 		},
 
 		{
@@ -772,6 +821,18 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
 				"partition span: C{-1}, instance ID: 2, reason: gossip-gateway-target-unhealthy",
 				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					2: 3,
+					3: 1,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           2,
+					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 2,
+				},
+				totalPartitionSpans: 4,
 			},
 		},
 
@@ -793,6 +854,18 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: C{-1}, instance ID: 3, reason: gossip-gateway-target-unhealthy",
 				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
 			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					2: 1,
+					3: 3,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           2,
+					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 2,
+				},
+				totalPartitionSpans: 4,
+			},
 		},
 
 		// Test point lookups in isolation.
@@ -811,6 +884,17 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: A2, instance ID: 1, reason: gossip-target-healthy",
 				"partition span: A1, instance ID: 1, reason: gossip-target-healthy",
 				"partition span: B1, instance ID: 2, reason: gossip-target-healthy",
+			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 1,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 3,
+				},
+				totalPartitionSpans: 3,
 			},
 		},
 
@@ -838,6 +922,17 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: B{-3}, instance ID: 1, reason: gossip-target-healthy",
 				"partition span: B2, instance ID: 1, reason: gossip-target-healthy",
 			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 9,
+					2: 1,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 10,
+				},
+				totalPartitionSpans: 10,
+			},
 		},
 
 		// A single span touching multiple ranges but on the same node results
@@ -856,6 +951,16 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: A{-1}, instance ID: 1, reason: gossip-target-healthy",
 				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
 			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 2,
+				},
+				totalPartitionSpans: 2,
+			},
 		},
 		// Test some locality-filtered planning too.
 		//
@@ -870,15 +975,27 @@ func TestPartitionSpans(t *testing.T) {
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
 			locFilter: "x=1",
 			partitions: map[int][][2]string{
-				1: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
-				2: {{"B", "C"}},
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}, {"D1", "X"}},
 			},
 
 			partitionStates: []string{
 				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
 				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
 				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
-				"partition span: {D1-X}, instance ID: 1, reason: gateway-no-locality-match",
+				"partition span: {D1-X}, instance ID: 2, reason: locality-aware-random-gateway-overloaded",
+			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 2,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_TARGET_HEALTHY:                           3,
+					SpanPartitionReason_LOCALITY_AWARE_RANDOM_GATEWAY_OVERLOADED: 1,
+				},
+				totalPartitionSpans: 4,
 			},
 		},
 		{
@@ -898,6 +1015,18 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: C{-1}, instance ID: 2, reason: closest-locality-match",
 				"partition span: {D1-X}, instance ID: 4, reason: closest-locality-match",
 			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					2: 3,
+					4: 1,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_TARGET_HEALTHY:         1,
+					SpanPartitionReason_CLOSEST_LOCALITY_MATCH: 3,
+				},
+				totalPartitionSpans: 4,
+			},
 		},
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
@@ -906,14 +1035,30 @@ func TestPartitionSpans(t *testing.T) {
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
 			locFilter: "x=3",
 			partitions: map[int][][2]string{
-				7: {{"A1", "C1"}, {"D1", "X"}},
+				6: {{"B", "C1"}},
+				7: {{"A1", "B"}, {"D1", "X"}},
 			},
 
 			partitionStates: []string{
 				"partition span: {A1-B}, instance ID: 7, reason: gateway-no-locality-match",
-				"partition span: {B-C}, instance ID: 7, reason: gateway-no-locality-match",
-				"partition span: C{-1}, instance ID: 7, reason: gateway-no-locality-match",
+				"partition span: {B-C}, instance ID: 6, reason: locality-aware-random-gateway-overloaded",
+				"partition span: C{-1}, instance ID: 6, reason: locality-aware-random-gateway-overloaded",
 				"partition span: {D1-X}, instance ID: 7, reason: gateway-no-locality-match",
+			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					6: 2,
+					7: 2,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH:                2,
+					SpanPartitionReason_LOCALITY_AWARE_RANDOM_GATEWAY_OVERLOADED: 2,
+				},
+				totalPartitionSpans: 4,
+				testingOverrideRandomSelection: func() base.SQLInstanceID {
+					return 6
+				},
 			},
 		},
 		{
@@ -931,6 +1076,16 @@ func TestPartitionSpans(t *testing.T) {
 				"partition span: {B-C}, instance ID: 7, reason: locality-aware-random",
 				"partition span: C{-1}, instance ID: 7, reason: locality-aware-random",
 				"partition span: {D1-X}, instance ID: 7, reason: locality-aware-random",
+			},
+
+			partitionState: SpanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					7: 4,
+				},
+				partitionSpanDecisions: map[SpanPartitionReason]int{
+					SpanPartitionReason_LOCALITY_AWARE_RANDOM: 4,
+				},
+				totalPartitionSpans: 4,
 			},
 		},
 	}
@@ -1021,6 +1176,7 @@ func TestPartitionSpans(t *testing.T) {
 			planCtx := dsp.NewPlanningCtxWithOracle(ctx, &extendedEvalContext{
 				Context: eval.Context{Codec: keys.SystemSQLCodec},
 			}, nil, nil, DistributionTypeSystemTenantOnly, physicalplan.DefaultReplicaChooser, locFilter)
+			planCtx.spanPartitionState.testingOverrideRandomSelection = tc.partitionState.testingOverrideRandomSelection
 			var spans []roachpb.Span
 			for _, s := range tc.spans {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
@@ -1029,6 +1185,14 @@ func TestPartitionSpans(t *testing.T) {
 			partitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
 			if err != nil {
 				t.Fatal(err)
+			}
+
+			// Assert that the PartitionState is what we expect it to be.
+			tc.partitionState.testingOverrideRandomSelection = nil
+			planCtx.spanPartitionState.testingOverrideRandomSelection = nil
+			if !reflect.DeepEqual(*planCtx.spanPartitionState, tc.partitionState) {
+				t.Errorf("expected partition state:\n  %v\ngot:\n  %v",
+					tc.partitionState, *planCtx.spanPartitionState)
 			}
 
 			resMap := make(map[int][][2]string)
@@ -1052,6 +1216,189 @@ func TestPartitionSpans(t *testing.T) {
 			if !reflect.DeepEqual(resMap, tc.partitions) {
 				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
 			}
+		})
+	}
+}
+
+// TestShouldPickGatewayNode is a unit test of the shouldPickGateway method.
+func TestShouldPickGatewayNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name            string
+		gatewayInstance base.SQLInstanceID
+		instances       []sqlinstance.InstanceInfo
+		partitionState  *SpanPartitionState
+		shouldPick      bool
+	}{
+		{
+			name:            "no_instances",
+			gatewayInstance: 1,
+			instances:       []sqlinstance.InstanceInfo{},
+			partitionState: &SpanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 5,
+			}},
+			shouldPick: true,
+		},
+		{
+			name:            "only_gateway",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+			},
+			partitionState: &SpanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 5,
+			}},
+			shouldPick: true,
+		},
+		{
+			name:            "gateway_0",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+			},
+			partitionState: &SpanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 0,
+				2: 0,
+				3: 0,
+			}},
+			shouldPick: true,
+		},
+		{
+			name:            "gateway_0_others_non_zero",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+			},
+			partitionState: &SpanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 0,
+				2: 1,
+				3: 1,
+			}},
+			shouldPick: true,
+		},
+		{
+			name:            "below_threshold_1",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+			},
+			partitionState: &SpanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 1,
+				2: 1,
+				3: 0,
+			}},
+			shouldPick: false,
+		},
+		{
+			name:            "below_threshold_2",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+			},
+			partitionState: &SpanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 1,
+				2: 1,
+				3: 1,
+			}},
+			shouldPick: true,
+		},
+		{
+			name:            "above_threshold_1",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+			},
+			partitionState: &SpanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 2,
+				2: 1,
+				3: 1,
+			}},
+			shouldPick: false,
+		},
+		{
+			name:            "above_threshold_2",
+			gatewayInstance: 1,
+			instances: []sqlinstance.InstanceInfo{
+				{
+					InstanceID: base.SQLInstanceID(1),
+				},
+				{
+					InstanceID: base.SQLInstanceID(2),
+				},
+				{
+					InstanceID: base.SQLInstanceID(3),
+				},
+				{
+					InstanceID: base.SQLInstanceID(4),
+				},
+			},
+			partitionState: &SpanPartitionState{partitionSpans: map[base.SQLInstanceID]int{
+				1: 4,
+				2: 1,
+				3: 0,
+				4: 5,
+			}},
+			shouldPick: false,
+		},
+	}
+
+	ctx := context.Background()
+	for _, tc := range testCases {
+		mockDsp := &DistSQLPlanner{
+			gatewaySQLInstanceID: tc.gatewayInstance,
+		}
+		mockPlanCtx := &PlanningCtx{}
+		t.Run(tc.name, func(t *testing.T) {
+			mockPlanCtx.spanPartitionState = tc.partitionState
+			for _, partitionCount := range tc.partitionState.partitionSpans {
+				mockPlanCtx.spanPartitionState.totalPartitionSpans += partitionCount
+			}
+			shouldPick := mockDsp.shouldPickGateway(ctx, mockPlanCtx, tc.instances)
+			require.Equal(t, tc.shouldPick, shouldPick)
 		})
 	}
 }
