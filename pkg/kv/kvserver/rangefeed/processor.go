@@ -47,6 +47,19 @@ var (
 		"periodically push txn write timestamps to advance rangefeed resolved timestamps",
 		true,
 	)
+
+	// PushTxnsBarrierEnabled is an escape hatch to disable the txn push barrier
+	// command in case it causes unexpected problems. This can result in
+	// violations of the rangefeed checkpoint guarantee, emitting premature
+	// checkpoints before all writes below it have been emitted in rare cases.
+	// See: https://github.com/cockroachdb/cockroach/issues/104309
+	PushTxnsBarrierEnabled = settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"kv.rangefeed.push_txns.barrier.enabled",
+		"flush and apply prior writes when a txn push returns an ambiguous abort "+
+			"(disabling may emit premature checkpoints before writes in rare cases)",
+		true,
+	)
 )
 
 // newErrBufferCapacityExceeded creates an error that is returned to subscribers
