@@ -496,9 +496,9 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 		nil
 }
 
-// RoleExists is part of the cat.Catalog interface.
-func (oc *optCatalog) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	return oc.planner.RoleExists(ctx, role)
+// CheckRoleExists is part of the cat.Catalog interface.
+func (oc *optCatalog) CheckRoleExists(ctx context.Context, role username.SQLUsername) error {
+	return oc.planner.CheckRoleExists(ctx, role)
 }
 
 // Optimizer is part of the cat.Catalog interface.

@@ -1117,7 +1117,7 @@ func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
-	sqlConn.Exec(t, "CREATE USER nonAdminUser")
+	sqlConn.Exec(t, "CREATE USER non_admin_user")
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 
@@ -1126,7 +1126,7 @@ func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
 		"test-reset-index-usage-stats-as-non-admin-user",
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: username.MakeSQLUsernameFromPreNormalizedString("nonAdminUser"),
+			User: username.MakeSQLUsernameFromPreNormalizedString("non_admin_user"),
 		},
 		"SELECT crdb_internal.reset_index_usage_stats()",
 	)

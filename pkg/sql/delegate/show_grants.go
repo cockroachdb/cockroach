@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -410,13 +409,9 @@ ORDER BY
 		// are used with `public`.
 		userExists := user.IsPublicRole()
 		if !userExists {
-			userExists, err = d.catalog.RoleExists(d.ctx, user)
-			if err != nil {
+			if err := d.catalog.CheckRoleExists(d.ctx, user); err != nil {
 				return nil, err
 			}
-		}
-		if !userExists {
-			return nil, sqlerrors.NewUndefinedUserError(user)
 		}
 	}
 
