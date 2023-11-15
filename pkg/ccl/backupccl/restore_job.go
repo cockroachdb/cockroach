@@ -1602,6 +1602,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	if len(details.DownloadSpans) > 0 {
+		if err := p.ExecCfg().JobRegistry.CheckPausepoint("restore.before_do_download_files"); err != nil {
+			return err
+		}
 		return r.doDownloadFiles(ctx, p)
 	}
 
