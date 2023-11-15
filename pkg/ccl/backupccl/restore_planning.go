@@ -1361,6 +1361,12 @@ func restorePlanHook(
 		}
 	}
 
+	if restoreStmt.Options.ExperimentalOnline && !restoreStmt.Targets.TenantID.IsSet() {
+		// TODO(ssd): Disable this once it is less annoying to
+		// disable it in tests.
+		log.Warningf(ctx, "running non-tenant online RESTORE; this is dangerous and will only work if you know exactly what you are doing")
+	}
+
 	var newTenantID *roachpb.TenantID
 	var newTenantName *roachpb.TenantName
 	if restoreStmt.Options.AsTenant != nil || restoreStmt.Options.ForceTenantID != nil {
@@ -1856,8 +1862,13 @@ func doRestorePlan(
 	err = checkBackupManifestVersionCompatability(ctx, p.ExecCfg().Settings.Version,
 		mainBackupManifests, restoreStmt.Options.UnsafeRestoreIncompatibleVersion)
 	if err != nil {
-
 		return err
+	}
+
+	if restoreStmt.Options.ExperimentalOnline {
+		if err := checkManifestsForOnlineCompat(ctx, mainBackupManifests); err != nil {
+			return err
+		}
 	}
 
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
@@ -2122,6 +2133,13 @@ func doRestorePlan(
 	} else {
 		fromDescription = from
 	}
+
+	if restoreStmt.Options.ExperimentalOnline {
+		if err := checkRewritesAreNoops(descriptorRewrites); err != nil {
+			return err
+		}
+	}
+
 	description, err := restoreJobDescription(
 		ctx,
 		p,
