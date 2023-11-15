@@ -3545,11 +3545,15 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 		grp.GoCtx(r.sendDownloadWorker(execCtx, downloadSpansCh))
 	}
 
+	grp.GoCtx(func(ctx context.Context) error {
+		return r.waitForDownloadToComplete(ctx, execCtx, details, total)
+	})
+
 	if err := grp.Wait(); err != nil {
 		return errors.Wrap(err, "failed to generate and send download spans")
 	}
 
-	return r.waitForDownloadToComplete(ctx, execCtx, details, total)
+	return nil
 }
 
 type sz int64
