@@ -1024,15 +1024,6 @@ func (og *operationGenerator) createSequence(ctx context.Context, tx pgx.Tx) (*o
 		{code: pgcode.UndefinedSchema, condition: !schemaExists},
 		{code: pgcode.DuplicateRelation, condition: sequenceExists && !ifNotExists},
 	})
-	// Descriptor ID generator may be temporarily unavailable, so
-	// allow this to be detected.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	stmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	})
 
 	var seqOptions tree.SequenceOptions
 	// Decide if the sequence should be owned by a column. If so, it can
@@ -1263,15 +1254,6 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedIdxQueries},
 		{code: pgcode.InvalidTableDefinition, condition: hasUnsupportedIdxQueries},
 	})
-	// Descriptor ID generator may be temporarily unavailable, so
-	// allow uncategorized errors temporarily.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
 }
@@ -1289,15 +1271,6 @@ func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (*opStm
 	opStmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.DuplicateObject, condition: typeExists},
 		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
-	})
-	// Descriptor ID generator may be temporarily unavailable, so
-	// allow uncategorized errors temporarily.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
 	})
 	stmt := randgen.RandCreateType(og.params.rng, typName.Object(), "asdf")
 	stmt.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
@@ -1420,15 +1393,6 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
 		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
-	})
-	// Descriptor ID generator may be temporarily unavailable, so
-	// allow uncategorized errors temporarily.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
 	})
 	// Confirm the select itself doesn't run into any column generation errors,
 	// by executing it independently first until we add validation when adding
@@ -1561,13 +1525,6 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	})
 	opStmt.sql = fmt.Sprintf(`CREATE VIEW %s AS %s`,
 		destViewName, selectStatement.String())
 	return opStmt, nil
@@ -3512,15 +3469,6 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (*opS
 	// TODO(jayshrivastava): Support authorization
 	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, tree.MakeRoleSpecWithRoleName(username.RootUserName().Normalized()))
 	opStmt.sql = tree.Serialize(stmt)
-	// Descriptor ID generator may be temporarily unavailable, so
-	// allow uncategorized errors temporarily.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	})
 	return opStmt, nil
 }
 
@@ -3783,11 +3731,4 @@ func isClusterVersionLessThan(
 		return false, err
 	}
 	return clusterVersion.LessEq(targetVersion), nil
-}
-
-func maybeExpectPotentialDescIDGenerationError(ctx context.Context, tx pgx.Tx) (bool, error) {
-	descIDGenerationVersion := clusterversion.ByKey(clusterversion.TODO_Delete_V23_1DescIDSequenceForSystemTenant)
-	descIDGenerationErrorPossible, err := isClusterVersionLessThan(ctx,
-		tx, descIDGenerationVersion)
-	return descIDGenerationErrorPossible, err
 }
