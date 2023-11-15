@@ -13,8 +13,6 @@ package delegate
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
@@ -29,9 +27,6 @@ func (d *delegator) delegateShowChangefeedJobs(n *tree.ShowChangefeedJobs) (tree
 		queryTarget23_1 = `
 			crdb_internal.system_jobs
   			WHERE job_type = 'CHANGEFEED'
-		`
-		queryTargetPre23_1 = `
-			system.jobs
 		`
 		baseSelectClause = `
 WITH payload AS (
@@ -78,14 +73,7 @@ FROM
   INNER JOIN payload ON id = job_id`
 	)
 
-	use23_1 := d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.TODO_Delete_V23_1BackfillTypeColumnInJobsTable)
-
-	var selectClause string
-	if use23_1 {
-		selectClause = fmt.Sprintf(baseSelectClause, queryTarget23_1)
-	} else {
-		selectClause = fmt.Sprintf(baseSelectClause, queryTargetPre23_1)
-	}
+	selectClause := fmt.Sprintf(baseSelectClause, queryTarget23_1)
 
 	var whereClause, orderbyClause string
 	if n.Jobs == nil {
@@ -96,17 +84,9 @@ FROM
 		// The "ORDER BY" clause below exploits the fact that all
 		// running jobs have finished = NULL.
 		orderbyClause = `ORDER BY COALESCE(finished, now()) DESC, started DESC`
-		if !use23_1 {
-			whereClause = fmt.Sprintf("WHERE job_type = '%s'", jobspb.TypeChangefeed)
-		}
 	} else {
 		// Limit the jobs displayed to the select statement in n.Jobs.
-		if use23_1 {
-			whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
-		} else {
-			whereClause = fmt.Sprintf("WHERE job_type = '%s' AND job_id in (%s)",
-				jobspb.TypeChangefeed, n.Jobs.String())
-		}
+		whereClause = fmt.Sprintf(`WHERE job_id in (%s)`, n.Jobs.String())
 	}
 
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)

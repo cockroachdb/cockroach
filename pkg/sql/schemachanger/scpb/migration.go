@@ -20,11 +20,7 @@ import (
 // HasDeprecatedElements returns if the target contains any element marked
 // for deprecation.
 func HasDeprecatedElements(version clusterversion.ClusterVersion, target Target) bool {
-	if version.IsActive(clusterversion.TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates) &&
-		target.GetSecondaryIndexPartial() != nil {
-		return true
-	}
-	return false
+	return target.GetSecondaryIndexPartial() != nil
 }
 
 // migrateTargetElement migrates an individual target at a given index.

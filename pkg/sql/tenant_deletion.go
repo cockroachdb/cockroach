@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
@@ -86,21 +85,19 @@ func dropTenantInternal(
 		return err
 	}
 
-	if settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V23_1TenantNamesStateAndServiceMode) {
-		if ignoreServiceMode {
-			// Compatibility with CC serverless use of
-			// crdb_internal.destroy_tenant(): we want to disable the check
-			// immediately below, as well as the additional check performed
-			// inside UpdateTenantRecord() (via validateTenantInfo).
-			info.ServiceMode = mtinfopb.ServiceModeNone
-		}
-		// We can only check the service mode after upgrading to a version
-		// that supports the service mode column.
-		if info.ServiceMode != mtinfopb.ServiceModeNone {
-			return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"cannot drop tenant %q (%d) in service mode %v", info.Name, tenID, info.ServiceMode),
-				"Use ALTER VIRTUAL CLUSTER STOP SERVICE before DROP VIRTUAL CLUSTER.")
-		}
+	if ignoreServiceMode {
+		// Compatibility with CC serverless use of
+		// crdb_internal.destroy_tenant(): we want to disable the check
+		// immediately below, as well as the additional check performed
+		// inside UpdateTenantRecord() (via validateTenantInfo).
+		info.ServiceMode = mtinfopb.ServiceModeNone
+	}
+	// We can only check the service mode after upgrading to a version
+	// that supports the service mode column.
+	if info.ServiceMode != mtinfopb.ServiceModeNone {
+		return errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot drop tenant %q (%d) in service mode %v", info.Name, tenID, info.ServiceMode),
+			"Use ALTER VIRTUAL CLUSTER STOP SERVICE before DROP VIRTUAL CLUSTER.")
 	}
 
 	if info.DataState == mtinfopb.DataStateDrop {

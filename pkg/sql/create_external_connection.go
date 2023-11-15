@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -130,18 +129,17 @@ func (p *planner) createExternalConnection(
 	ex.SetConnectionDetails(*exConn.ConnectionProto())
 	ex.SetConnectionType(exConn.ConnectionType())
 	ex.SetOwner(p.User())
-	if p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODO_Delete_V23_1ExternalConnectionsTableHasOwnerIDColumn) {
-		row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			`SELECT user_id FROM system.users WHERE username = $1`,
-			p.User(),
-		)
-		if err != nil {
-			return errors.Wrap(err, "failed to get owner ID for External Connection")
-		}
-		ownerID := tree.MustBeDOid(row[0]).Oid
-		ex.SetOwnerID(ownerID)
+
+	row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT user_id FROM system.users WHERE username = $1`,
+		p.User(),
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to get owner ID for External Connection")
 	}
+	ownerID := tree.MustBeDOid(row[0]).Oid
+	ex.SetOwnerID(ownerID)
 
 	// Create the External Connection and persist it in the
 	// `system.external_connections` table.

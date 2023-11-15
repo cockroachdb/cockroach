@@ -641,15 +641,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			if idx.IsPartial() {
 				pp, err := w.newExpression(idx.GetPredicate())
 				onErrPanic(err)
-				if w.clusterVersion.IsActive(clusterversion.TODO_Delete_V23_1_SchemaChangerDeprecatedIndexPredicates) {
-					sec.EmbeddedExpr = pp
-				} else {
-					w.ev(scpb.Status_PUBLIC, &scpb.SecondaryIndexPartial{
-						TableID:    index.TableID,
-						IndexID:    index.IndexID,
-						Expression: *pp,
-					})
-				}
+				sec.EmbeddedExpr = pp
 			}
 			w.ev(idxStatus, sec)
 		}

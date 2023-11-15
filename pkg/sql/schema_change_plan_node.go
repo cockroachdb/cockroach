@@ -17,10 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -115,64 +113,6 @@ func (p *planner) newSchemaChangeBuilderDependencies(statements []string) scbuil
 		NewReferenceProviderFactory(p),
 		p.EvalContext().DescIDGenerator,
 	)
-}
-
-// waitForDescriptorIDGeneratorMigration polls the system.descriptor table (in
-// separate transactions) until the descriptor_id_seq record is present, which
-// indicates that the system tenant's descriptor ID generator has successfully
-// been migrated.
-func (p *planner) waitForDescriptorIDGeneratorMigration(ctx context.Context) error {
-	// Drop all leases and locks due to the current transaction, and, in the
-	// process, abort the transaction.
-	p.Descriptors().ReleaseAll(ctx)
-	if err := p.txn.Rollback(ctx); err != nil {
-		return err
-	}
-
-	// Wait for the system.descriptor_id_gen descriptor to appear.
-	start := timeutil.Now()
-	logEvery := log.Every(30 * time.Second)
-	blocked := true
-	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); blocked && r.Next(); {
-		if knobs := p.ExecCfg().TenantTestingKnobs; knobs != nil {
-			if fn := knobs.BeforeCheckingForDescriptorIDSequence; fn != nil {
-				fn(ctx)
-			}
-		}
-		now := p.ExecCfg().Clock.Now()
-		if logEvery.ShouldLog() {
-			log.Infof(
-				ctx,
-				"waiting for system tenant descriptor ID generator migration, waited %v so far",
-				timeutil.Since(start),
-			)
-		}
-		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
-			ctx context.Context, txn descs.Txn,
-		) error {
-			kvTxn := txn.KV()
-			if err := kvTxn.SetFixedTimestamp(ctx, now); err != nil {
-				return err
-			}
-			k := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, keys.DescIDSequenceID)
-			result, err := txn.KV().Get(ctx, k)
-			if err != nil {
-				return err
-			}
-			if result.Exists() {
-				blocked = false
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
-	log.Infof(
-		ctx,
-		"done waiting for system tenant descriptor ID generator migration after %v",
-		timeutil.Since(start),
-	)
-	return nil
 }
 
 // waitForDescriptorSchemaChanges polls the specified descriptor (in separate

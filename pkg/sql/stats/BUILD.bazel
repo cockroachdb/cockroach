@@ -22,7 +22,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/stats",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
