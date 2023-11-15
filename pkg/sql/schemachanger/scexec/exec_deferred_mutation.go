@@ -171,7 +171,7 @@ func (s *deferredState) exec(
 	q StatsRefreshQueue,
 	iss IndexSpanSplitter,
 ) error {
-	dbZoneConfigsToDelete, gcJobRecords := s.gcJobs.makeRecords(tjr.MakeJobID, !tjr.UseLegacyGCJob(ctx))
+	dbZoneConfigsToDelete, gcJobRecords := s.gcJobs.makeRecords(tjr.MakeJobID)
 	// Any databases being GCed should have an entry even if none of its tables
 	// are being dropped. This entry will be used to generate the GC jobs below.
 	for _, id := range dbZoneConfigsToDelete.Ordered() {
