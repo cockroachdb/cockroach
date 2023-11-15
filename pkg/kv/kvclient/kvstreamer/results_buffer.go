@@ -98,7 +98,7 @@ type resultsBuffer interface {
 	//
 	// It is assumed that the budget's mutex is already being held.
 	//
-	// doneAddingLocked returns the naumber of results that have been added but
+	// doneAddingLocked returns the number of results that have been added but
 	// not yet returned to the client, and whether the client goroutine was woken.
 	doneAddingLocked(context.Context) (int, bool)
 

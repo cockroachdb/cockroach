@@ -372,6 +372,7 @@ var queries = [...]benchQuery{
 			WHERE no_w_id = $1 AND no_d_id = $2
 			ORDER BY no_o_id ASC
 			LIMIT 1
+			FOR UPDATE
 		`,
 		args: []interface{}{10, 100},
 	},

@@ -780,9 +780,11 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 // returned once all enqueued requests have been responded to.
 //
 // Calling GetResults() invalidates the results returned on the previous call.
-func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
+func (s *Streamer) GetResults(ctx context.Context) (retResults []Result, retErr error) {
 	log.VEvent(ctx, 2, "GetResults")
-	defer log.VEvent(ctx, 2, "exiting GetResults")
+	defer func() {
+		log.VEventf(ctx, 2, "exiting GetResults (%d results, err=%v)", len(retResults), retErr)
+	}()
 	for {
 		results, allComplete, err := s.results.get(ctx)
 		if len(results) > 0 || allComplete || err != nil {
@@ -1690,7 +1692,6 @@ func processSingleRangeResults(
 			get := response
 			if get.ResumeSpan != nil {
 				// This Get wasn't completed.
-				log.VEvent(ctx, 2, "incomplete Get")
 				continue
 			}
 			// This Get was completed.
@@ -1723,7 +1724,6 @@ func processSingleRangeResults(
 				// multiple ranges and the last range has no data in it - we
 				// want to be able to set scanComplete field on such an empty
 				// Result).
-				log.VEvent(ctx, 2, "incomplete Scan")
 				continue
 			}
 			result := Result{
