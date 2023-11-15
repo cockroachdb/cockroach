@@ -8,15 +8,16 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Filters, getTimeValueInSeconds } from "../queryFilter";
-import { AggregateStatistics } from "../statementsTable";
 import {
   CollectedStatementStatistics,
   flattenStatementStats,
 } from "src/util/appStats/appStats";
-import { containAny, unset } from "../util";
+import { containAny } from "../util";
 import { filterBySearchQuery } from "../statementsPage";
 import { FixFingerprintHexValue } from "src/util/format";
+import { INTERNAL_APP_NAME_PREFIX, unset } from "src/util/constants";
+import { Filters, getTimeValueInSeconds } from "src/queryFilter";
+import { AggregateStatistics } from "src/statementsTable";
 
 export function filteredStatementsData(
   filters: Filters,
@@ -51,6 +52,8 @@ export function filteredStatementsData(
     .map(app => app.trim())
     .filter(appName => !!appName);
 
+  const includeInternalApps = !!appNames?.includes(INTERNAL_APP_NAME_PREFIX);
+
   // Return statements filtered by the values selected on the filter and
   // the search text. A statement must match all selected filters to be
   // displayed on the table.
@@ -69,13 +72,18 @@ export function filteredStatementsData(
         return databases.length === 0 || databases.includes(statement.database);
       }
     })
-    .filter(
-      statement =>
-        !appNames?.length ||
-        appNames.includes(
+    .filter(statement => {
+      const isInternal = statement.applicationName?.startsWith(
+        INTERNAL_APP_NAME_PREFIX,
+      );
+      return (
+        (!appNames?.length && !isInternal) ||
+        (includeInternalApps && isInternal) ||
+        appNames?.includes(
           statement.applicationName ? statement.applicationName : unset,
-        ),
-    )
+        )
+      );
+    })
     .filter(statement => (filters.fullScan ? statement.fullScan : true))
     .filter(
       statement =>
