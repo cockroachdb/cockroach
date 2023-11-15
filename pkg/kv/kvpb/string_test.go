@@ -62,7 +62,7 @@ func TestBatchRequestString(t *testing.T) {
 	ba.Requests = append(ba.Requests, ru)
 
 	{
-		exp := `Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min),... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTxn(abort) [/Min], [txn: 6ba7b810], [wait-policy: Error], [protect-ambiguous-replay], [can-forward-ts], [bounded-staleness, min_ts_bound: 0.000000001,0, min_ts_bound_strict, max_ts_bound: 0.000000002,0]`
+		exp := `Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min], Get [/Min],... 76 skipped ..., Get [/Min], Get [/Min], Get [/Min], Get [/Min], EndTxn(abort) [/Min], [txn: 6ba7b810], [wait-policy: Error], [protect-ambiguous-replay], [can-forward-ts], [bounded-staleness, min_ts_bound: 0.000000001,0, min_ts_bound_strict, max_ts_bound: 0.000000002,0]`
 		act := ba.String()
 		require.Equal(t, exp, act)
 	}
@@ -96,4 +96,77 @@ func TestAmbiguousResultError(t *testing.T) {
 
 	s := fmt.Sprintf("%s\n%s", err, redact.Sprint(err))
 	echotest.Require(t, s, filepath.Join("testdata", "ambiguous_result_error.txt"))
+}
+
+// Unit test the requests that implemented SafeFormatterRequest interface.
+func TestRequestSafeFormat(t *testing.T) {
+	gr := &kvpb.GetRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key: roachpb.Key("a"),
+		},
+		KeyLockingStrength:   lock.Shared,
+		KeyLockingDurability: lock.Unreplicated,
+	}
+	require.EqualValues(t, "Get(Shared,Unreplicated)", redact.Sprint(gr))
+	require.EqualValues(t, "Get(Shared,Unreplicated)", redact.Sprint(gr).Redact())
+
+	sr := &kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    roachpb.Key("b"),
+			EndKey: roachpb.Key("d"),
+		},
+		KeyLockingStrength:   lock.Shared,
+		KeyLockingDurability: lock.Unreplicated,
+	}
+	require.EqualValues(t, "Scan(Shared,Unreplicated)", redact.Sprint(sr))
+	require.EqualValues(t, "Scan(Shared,Unreplicated)", redact.Sprint(sr).Redact())
+
+	rsr := &kvpb.ReverseScanRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:    roachpb.Key("c"),
+			EndKey: roachpb.Key("d"),
+		},
+		KeyLockingStrength:   lock.Shared,
+		KeyLockingDurability: lock.Unreplicated,
+	}
+	require.EqualValues(t, "ReverseScan(Shared,Unreplicated)", redact.Sprint(rsr))
+	require.EqualValues(t, "ReverseScan(Shared,Unreplicated)", redact.Sprint(rsr).Redact())
+
+	etr := &kvpb.EndTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key: roachpb.Key("ab"),
+		},
+		Commit: true,
+	}
+	require.EqualValues(t, "EndTxn(commit)", redact.Sprint(etr))
+	require.EqualValues(t, "EndTxn(commit)", redact.Sprint(etr).Redact())
+
+	txn := roachpb.MakeTransaction("txn1", []byte("abc"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 6, 0)
+	fixed_uuid, _ := uuid.FromString("00fbff57-c1ee-48ce-966c-da568d50e425")
+	txn.ID = fixed_uuid
+	rtr := &kvpb.RecoverTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key: roachpb.Key("abc"),
+		},
+		Txn:                 txn.TxnMeta,
+		ImplicitlyCommitted: false,
+	}
+	require.EqualValues(t, "RecoverTxn(00fbff57, abort)", redact.Sprint(rtr))
+	require.EqualValues(t, "RecoverTxn(00fbff57, abort)", redact.Sprint(rtr).Redact())
+
+	pusherTxn := roachpb.MakeTransaction("txn2", []byte("123"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 1, 0)
+	fixed_uuid2, _ := uuid.FromString("00fbff58-c1ee-48ce-966c-da568d50e425")
+	pusherTxn.ID = fixed_uuid2
+	pusheeTxn := roachpb.MakeTransaction("txn3", []byte("1234"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 1, 0)
+	fixed_uuid3, _ := uuid.FromString("00fbff59-c1ee-48ce-966c-da568d50e425")
+	pusheeTxn.ID = fixed_uuid3
+	ptr := &kvpb.PushTxnRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key: roachpb.Key("123"),
+		},
+		PusherTxn: pusherTxn,
+		PusheeTxn: pusheeTxn.TxnMeta,
+	}
+	require.EqualValues(t, "PushTxn(‹PUSH_TIMESTAMP›,00fbff58->00fbff59)", redact.Sprint(ptr))
+	require.EqualValues(t, "PushTxn(‹×›,00fbff58->00fbff59)", redact.Sprint(ptr).Redact())
 }
