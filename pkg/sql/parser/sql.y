@@ -2930,7 +2930,7 @@ alter_column_default:
   }
 
 alter_column_on_update:
-  SET ON UPDATE b_expr
+  SET ON UPDATE a_expr
   {
     $$.val = $4.expr()
   }
