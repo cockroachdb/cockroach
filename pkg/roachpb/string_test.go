@@ -11,6 +11,7 @@
 package roachpb_test
 
 import (
+	"fmt"
 	"testing"
 
 	// Hook up the pretty printer.
@@ -98,5 +99,56 @@ func TestSpansString(t *testing.T) {
 		},
 	} {
 		require.Equal(t, tc.expected, tc.spans.String())
+	}
+}
+
+func TestSpansBoundedString(t *testing.T) {
+	getSpans := func(numSpans int) roachpb.Spans {
+		var spans roachpb.Spans
+		for i := 1; i <= numSpans; i++ {
+			spans = append(spans, roachpb.Span{
+				Key: roachpb.Key(fmt.Sprintf("a%d", i)),
+			})
+		}
+		return spans
+	}
+	for _, tc := range []struct {
+		spans     roachpb.Spans
+		bytesHint int
+		expected  string
+	}{
+		{
+			spans:     getSpans(6),
+			bytesHint: 0,
+			// At most 6 spans are always included.
+			expected: "a1, a2, a3, a4, a5, a6",
+		},
+		{
+			spans:     getSpans(7),
+			bytesHint: 0,
+			// 3 at the head and 3 at the tail are always included.
+			expected: "a1, a2, a3 ... a5, a6, a7",
+		},
+		{
+			spans:     getSpans(7),
+			bytesHint: 10,
+			// First 3 spans use up the bytes hint.
+			expected: "a1, a2, a3 ... a5, a6, a7",
+		},
+		{
+			spans:     getSpans(7),
+			bytesHint: 11,
+			// Bytes hint is exceeded after printing 4 spans, at which point
+			// only the guaranteed 3 tail spans are left, which are always
+			// included.
+			expected: "a1, a2, a3, a4, a5, a6, a7",
+		},
+		{
+			spans:     getSpans(15),
+			bytesHint: 20,
+			expected:  "a1, a2, a3, a4, a5, a6 ... a13, a14, a15",
+		},
+	} {
+		require.Equal(t, tc.expected, tc.spans.BoundedString(tc.bytesHint))
 	}
 }
