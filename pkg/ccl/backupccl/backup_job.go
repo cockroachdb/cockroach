@@ -86,6 +86,12 @@ var BackupCheckpointInterval = settings.RegisterDurationSetting(
 	"the minimum time between writing progress checkpoints during a backup",
 	time.Minute)
 
+var backupUseFollowerReads = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.backup.plan_on_followers.enabled",
+	"assume utilization of follower reads when planning backup worker placement",
+	true)
+
 var forceReadBackupManifest = util.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
 
 func countRows(raw kvpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
@@ -199,10 +205,18 @@ func backup(
 	evalCtx := execCtx.ExtendedEvalContext()
 	dsp := execCtx.DistSQLPlanner()
 
+	var planningTS *kv.Txn
+	if backupUseFollowerReads.Get(evalCtx.ExecCfg.SV()) {
+		planningTS = kv.NewTxn(ctx, execCtx.ExecCfg().DB, roachpb.NodeID(dsp.GatewayID()))
+		if planningTS.SetFixedTimestamp(ctx, backupManifest.EndTime); err != nil {
+			return roachpb.RowCount{}, 0, err
+		}
+	}
+
 	// We don't return the compatible nodes here since PartitionSpans will
 	// filter out incompatible nodes.
-	planCtx, _, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, evalCtx, execCtx.ExecCfg(), physicalplan.DefaultReplicaChooser, execLocality,
+	planCtx, _, err := dsp.SetupAllNodesPlanningWithOracleAndFollowers(
+		ctx, evalCtx, execCtx.ExecCfg(), physicalplan.DefaultReplicaChooser, execLocality, planningTS,
 	)
 	if err != nil {
 		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")
