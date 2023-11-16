@@ -87,7 +87,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 	}
 	f.reset(ctx)
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "Scan %s", spans)
+		log.VEventf(ctx, 2, "Scan %s", spans.BoundedString(1024 /* bytesHint */))
 	}
 	// Make sure to nil out the requests past the length that will be used in
 	// spansToRequests so that we lose references to the underlying Get and Scan
