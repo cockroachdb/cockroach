@@ -106,7 +106,8 @@ func registerKV(r registry.Registry) {
 		if opts.ssds > 1 && !opts.raid0 {
 			startOpts.RoachprodOpts.StoreCount = opts.ssds
 		}
-		settings := install.MakeClusterSettings()
+		// Use a secure cluster so we can test with a non-root user.
+		settings := install.MakeClusterSettings(install.SecureOption(true))
 		if opts.globalMVCCRangeTombstone {
 			settings.Env = append(settings.Env, "COCKROACH_GLOBAL_MVCC_RANGE_TOMBSTONE=true")
 		}
@@ -131,6 +132,15 @@ func registerKV(r registry.Registry) {
 		}
 		if opts.sharedProcessMT {
 			createInMemoryTenant(ctx, t, c, appTenantName, c.Range(1, nodes), false /* secure */)
+		}
+
+		// Create a user and grant them admin privileges so they can freely
+		// interact with the cluster.
+		if _, err := db.ExecContext(ctx, `CREATE USER testuser WITH PASSWORD 'password'`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(ctx, `GRANT admin TO testuser`); err != nil {
+			t.Fatal(err)
 		}
 
 		t.Status("running workload")
@@ -180,7 +190,7 @@ func registerKV(r registry.Registry) {
 			if opts.sharedProcessMT {
 				url = fmt.Sprintf(" {pgurl:1-%d:%s}", nodes, appTenantName)
 			}
-			cmd := "./workload run kv --tolerate-errors --init" +
+			cmd := "./workload run kv --tolerate-errors --init --user=testuser --password=password" +
 				histograms + concurrency + splits + duration + readPercent +
 				batchSize + blockSize + sequential + envFlags + url
 			c.Run(ctx, c.Node(nodes+1), cmd)

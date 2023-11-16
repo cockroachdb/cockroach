@@ -13,7 +13,6 @@ import (
 	"hash"
 	"hash/crc32"
 	"runtime"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -35,10 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
-
-// pacerLogEvery is used for logging errors instead of returning terminal
-// errors when pacer.Pace returns an error.
-var pacerLogEvery log.EveryN = log.Every(100 * time.Millisecond)
 
 // eventContext holds metadata pertaining to event.
 type eventContext struct {
@@ -325,9 +320,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	// unavailable. If there is unused CPU time left from the last call to
 	// Pace, then use that time instead of blocking.
 	if err := c.pacer.Pace(ctx); err != nil {
-		if pacerLogEvery.ShouldLog() {
-			log.Errorf(ctx, "automatic pacing: %v", err)
-		}
+		return err
 	}
 
 	schemaTimestamp := ev.KV().Value.Timestamp
