@@ -74,12 +74,12 @@ const (
 	// DefaultReplicaIOOverloadThreshold is used to avoid allocating to stores with an
 	// IO overload score greater than what's set. This is typically used in
 	// conjunction with IOOverloadMeanThreshold below.
-	DefaultReplicaIOOverloadThreshold = 0.8
+	DefaultReplicaIOOverloadThreshold = 0.4
 
-	// DefaultLeaseIOOverloadThreshold is used to shed leases from stores with an
-	// IO overload score greater than this threshold. This is typically used in
-	// conjunction with IOOverloadMeanThreshold below.
-	DefaultLeaseIOOverloadThreshold = 0.5
+	// DefaultLeaseIOOverloadThreshold is used to block lease transfers to stores
+	// with an IO overload score greater than this threshold. This is typically
+	// used in conjunction with IOOverloadMeanThreshold below.
+	DefaultLeaseIOOverloadThreshold = 0.3
 
 	// DefaultLeaseIOOverloadShedThreshold is used to shed leases from stores
 	// with an IO overload score greater than the this threshold. This is
