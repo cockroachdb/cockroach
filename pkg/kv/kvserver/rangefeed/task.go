@@ -111,7 +111,8 @@ func NewSeparatedIntentScanner(
 		LowerBound: lowerBound,
 		UpperBound: upperBound,
 		// Ignore Shared and Exclusive locks. We only care about intents.
-		MatchMinStr: lock.Intent,
+		MatchMinStr:  lock.Intent,
+		ReadCategory: storage.RangefeedReadCategory,
 	})
 	if err != nil {
 		return nil, err

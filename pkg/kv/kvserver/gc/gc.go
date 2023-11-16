@@ -469,6 +469,7 @@ func processReplicatedKeyRange(
 			CombineRangesAndPoints: true,
 			Reverse:                true,
 			ExcludeUserKeySpan:     excludeUserKeySpan,
+			ReadCategory:           storage.MVCCGCReadCategory,
 		}, func(iterator storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
 			// Iterate all versions of all keys from oldest to newest. If a version is an
 			// intent it will have the highest timestamp of any versions and will be
@@ -551,9 +552,10 @@ func processReplicatedLocks(
 
 	process := func(ltStartKey, ltEndKey roachpb.Key) error {
 		opts := storage.LockTableIteratorOptions{
-			LowerBound:  ltStartKey,
-			UpperBound:  ltEndKey,
-			MatchMinStr: lock.Shared, // any strength
+			LowerBound:   ltStartKey,
+			UpperBound:   ltEndKey,
+			MatchMinStr:  lock.Shared, // any strength
+			ReadCategory: storage.MVCCGCReadCategory,
 		}
 		iter, err := storage.NewLockTableIterator(ctx, reader, opts)
 		if err != nil {
@@ -1270,7 +1272,8 @@ func processLocalKeyRange(
 	startKey := keys.MakeRangeKeyPrefix(desc.StartKey)
 	endKey := keys.MakeRangeKeyPrefix(desc.EndKey)
 
-	_, err := storage.MVCCIterate(ctx, snap, startKey, endKey, hlc.Timestamp{}, storage.MVCCScanOptions{},
+	_, err := storage.MVCCIterate(ctx, snap, startKey, endKey, hlc.Timestamp{},
+		storage.MVCCScanOptions{ReadCategory: storage.MVCCGCReadCategory},
 		func(kv roachpb.KeyValue) error {
 			return handleOne(kv)
 		})
@@ -1394,6 +1397,7 @@ func processReplicatedRangeTombstones(
 		IterKind:           storage.MVCCKeyIterKind,
 		KeyTypes:           storage.IterKeyTypeRangesOnly,
 		ExcludeUserKeySpan: excludeUserKeySpan,
+		ReadCategory:       storage.MVCCGCReadCategory,
 	})
 	defer iter.Close()
 

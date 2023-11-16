@@ -46,6 +46,7 @@ func Get(
 		MaxKeys:               cArgs.Header.MaxSpanRequestKeys,
 		TargetBytes:           cArgs.Header.TargetBytes,
 		AllowEmpty:            cArgs.Header.AllowEmpty,
+		ReadCategory:          storage.BatchEvalReadCategory,
 	})
 	if err != nil {
 		return result.Result{}, err

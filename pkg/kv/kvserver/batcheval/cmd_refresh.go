@@ -61,6 +61,7 @@ func Refresh(
 	res, err := storage.MVCCGet(ctx, reader, args.Key, refreshTo, storage.MVCCGetOptions{
 		Inconsistent: true,
 		Tombstones:   true,
+		ReadCategory: storage.BatchEvalReadCategory,
 	})
 
 	if err != nil {

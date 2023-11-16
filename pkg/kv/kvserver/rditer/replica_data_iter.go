@@ -32,6 +32,8 @@ type ReplicaDataIteratorOptions struct {
 	KeyTypes storage.IterKeyType
 	// ExcludeUserKeySpan removes UserKeySpace span portion.
 	ExcludeUserKeySpan bool
+	// ReadCategory is used for stats etc.
+	ReadCategory storage.ReadCategory
 }
 
 // ReplicaMVCCDataIterator provides a complete iteration over MVCC or unversioned
@@ -466,6 +468,7 @@ type IterateOptions struct {
 	CombineRangesAndPoints bool
 	Reverse                bool
 	ExcludeUserKeySpan     bool
+	ReadCategory           storage.ReadCategory
 }
 
 // IterateMVCCReplicaKeySpans iterates over replica's key spans in the similar
@@ -500,9 +503,10 @@ func IterateMVCCReplicaKeySpans(
 			err := func() error {
 				iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyAndIntentsIterKind,
 					storage.IterOptions{
-						LowerBound: span.Key,
-						UpperBound: span.EndKey,
-						KeyTypes:   keyType,
+						LowerBound:   span.Key,
+						UpperBound:   span.EndKey,
+						KeyTypes:     keyType,
+						ReadCategory: options.ReadCategory,
 					})
 				if err != nil {
 					return err

@@ -170,6 +170,10 @@ type MVCCIncrementalIterOptions struct {
 	RangeKeyMaskingBelow hlc.Timestamp
 
 	IntentPolicy MVCCIncrementalIterIntentPolicy
+
+	// ReadCategory is used to map to a user-understandable category string, for
+	// stats aggregation and metrics, and a Pebble-understandable QoS.
+	ReadCategory ReadCategory
 }
 
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
@@ -202,6 +206,7 @@ func NewMVCCIncrementalIterator(
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
 			RangeKeyMaskingBelow: opts.RangeKeyMaskingBelow,
+			ReadCategory:         opts.ReadCategory,
 		})
 		if err != nil {
 			return nil, err
@@ -224,6 +229,7 @@ func NewMVCCIncrementalIterator(
 			MinTimestamp:         opts.StartTime.Next(),
 			MaxTimestamp:         opts.EndTime,
 			RangeKeyMaskingBelow: tbiRangeKeyMasking,
+			ReadCategory:         opts.ReadCategory,
 		})
 		if err != nil {
 			iter.Close()
@@ -235,6 +241,7 @@ func NewMVCCIncrementalIterator(
 			LowerBound:           opts.StartKey,
 			UpperBound:           opts.EndKey,
 			RangeKeyMaskingBelow: opts.RangeKeyMaskingBelow,
+			ReadCategory:         opts.ReadCategory,
 		})
 		if err != nil {
 			return nil, err

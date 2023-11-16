@@ -256,6 +256,7 @@ func DeleteRange(
 		Stats:                          cArgs.Stats,
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
 		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		Category:                       storage.BatchEvalReadCategory,
 	}
 
 	// NB: Even if args.ReturnKeys is false, we want to know which intents were

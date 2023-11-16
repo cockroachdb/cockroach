@@ -1314,17 +1314,19 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		meta := &enginepb.MVCCMetadata{}
 		// The range is specified using only global keys, since the implementation
 		// may use an intentInterleavingIter.
-		return tc.store.TODOEngine().MVCCIterate(context.Background(), keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			if !kv.Key.IsValue() {
-				if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
-					return err
+		return tc.store.TODOEngine().MVCCIterate(context.Background(), keys.LocalMax, roachpb.KeyMax,
+			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+			storage.UnknownReadCategory, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+				if !kv.Key.IsValue() {
+					if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
+						return err
+					}
+					if meta.Txn != nil {
+						return errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
+					}
 				}
-				if meta.Txn != nil {
-					return errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
-				}
-			}
-			return nil
-		})
+				return nil
+			})
 	})
 }
 

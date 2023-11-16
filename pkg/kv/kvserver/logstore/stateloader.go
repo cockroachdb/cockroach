@@ -58,7 +58,8 @@ func (sl StateLoader) LoadLastIndex(
 	prefix := sl.RaftLogPrefix()
 	// NB: raft log has no intents.
 	iter, err := reader.NewMVCCIterator(
-		ctx, storage.MVCCKeyIterKind, storage.IterOptions{LowerBound: prefix})
+		ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+			LowerBound: prefix, ReadCategory: storage.ReplicationReadCategory})
 	if err != nil {
 		return 0, err
 	}
@@ -97,7 +98,8 @@ func (sl StateLoader) LoadRaftTruncatedState(
 ) (kvserverpb.RaftTruncatedState, error) {
 	var truncState kvserverpb.RaftTruncatedState
 	if _, err := storage.MVCCGetProto(
-		ctx, reader, sl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState, storage.MVCCGetOptions{},
+		ctx, reader, sl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState,
+		storage.MVCCGetOptions{ReadCategory: storage.ReplicationReadCategory},
 	); err != nil {
 		return kvserverpb.RaftTruncatedState{}, err
 	}
@@ -128,7 +130,7 @@ func (sl StateLoader) LoadHardState(
 ) (raftpb.HardState, error) {
 	var hs raftpb.HardState
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftHardStateKey(),
-		hlc.Timestamp{}, &hs, storage.MVCCGetOptions{})
+		hlc.Timestamp{}, &hs, storage.MVCCGetOptions{ReadCategory: storage.ReplicationReadCategory})
 
 	if !found || err != nil {
 		return raftpb.HardState{}, err
@@ -208,7 +210,7 @@ func (sl StateLoader) LoadRaftReplicaID(
 ) (*kvserverpb.RaftReplicaID, error) {
 	var replicaID kvserverpb.RaftReplicaID
 	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftReplicaIDKey(),
-		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{})
+		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{ReadCategory: storage.ReplicationReadCategory})
 	if err != nil {
 		return nil, err
 	}
