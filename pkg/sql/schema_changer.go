@@ -1556,30 +1556,40 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 			}
 
-			// If a primary index swap or any indexes are being dropped clean up any
-			// comments related to it.
+			// If `m` is a primary index swap, which results in creations of a primary
+			// index and possibly new, rewritten, secondary indexes, carry over the
+			// comments associated with the old indexes to the new ones.
 			if pkSwap := m.AsPrimaryKeySwap(); pkSwap != nil {
-				id := pkSwap.PrimaryKeySwapDesc().OldPrimaryIndexId
-				commentsToDelete = append(commentsToDelete,
-					commentToDelete{
-						id:          int64(scTable.GetID()),
-						subID:       int64(id),
-						commentType: catalogkeys.IndexCommentType,
-					})
-				for i := range pkSwap.PrimaryKeySwapDesc().OldIndexes {
-					// Skip the primary index.
-					if pkSwap.PrimaryKeySwapDesc().OldIndexes[i] == id {
-						continue
+				pkSwapDesc := pkSwap.PrimaryKeySwapDesc()
+				oldIndexIDs := append([]descpb.IndexID{pkSwapDesc.OldPrimaryIndexId}, pkSwapDesc.OldIndexes...)
+				newIndexIDs := append([]descpb.IndexID{pkSwapDesc.NewPrimaryIndexId}, pkSwapDesc.NewIndexes...)
+				for i := range oldIndexIDs {
+					oldIndexDesc, err := catalog.MustFindIndexByID(scTable, oldIndexIDs[i])
+					if err != nil {
+						return err
 					}
-					// Set up a swap operation for any re-created indexes.
+					newIndexDesc, err := catalog.MustFindIndexByID(scTable, newIndexIDs[i])
+					if err != nil {
+						return err
+					}
 					commentsToSwap = append(commentsToSwap,
 						commentToSwap{
 							id:          int64(scTable.GetID()),
-							oldSubID:    int64(pkSwap.PrimaryKeySwapDesc().OldIndexes[i]),
-							newSubID:    int64(pkSwap.PrimaryKeySwapDesc().NewIndexes[i]),
+							oldSubID:    int64(oldIndexDesc.GetID()),
+							newSubID:    int64(newIndexDesc.GetID()),
 							commentType: catalogkeys.IndexCommentType,
-						},
-					)
+						})
+					// If index backs a PRIMARY KEY or UNIQUE constraint, carry over the comments associated
+					// with the constraint as well.
+					if oldIndexDesc.IsUnique() {
+						commentsToSwap = append(commentsToSwap,
+							commentToSwap{
+								id:          int64(scTable.GetID()),
+								oldSubID:    int64(oldIndexDesc.GetConstraintID()),
+								newSubID:    int64(newIndexDesc.GetConstraintID()),
+								commentType: catalogkeys.ConstraintCommentType,
+							})
+					}
 				}
 			}
 
