@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "overrides.go",
         "row_decoder.go",
+        "setting_encoder.go",
         "settings_watcher.go",
         "version_guard.go",
     ],
@@ -22,6 +23,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
@@ -34,6 +36,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -43,6 +46,7 @@ go_test(
     srcs = [
         "main_test.go",
         "row_decoder_external_test.go",
+        "setting_encoder_test.go",
         "settings_watcher_external_test.go",
         "version_guard_test.go",
     ],
@@ -74,6 +78,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
