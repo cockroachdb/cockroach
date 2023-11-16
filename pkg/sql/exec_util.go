@@ -3705,6 +3705,10 @@ func (m *sessionDataMutator) SetDisableChangefeedReplication(val bool) {
 	m.data.DisableChangefeedReplication = val
 }
 
+func (m *sessionDataMutator) SetDistSQLPlanGatewayBias(val int64) {
+	m.data.DistsqlPlanGatewayBias = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the
