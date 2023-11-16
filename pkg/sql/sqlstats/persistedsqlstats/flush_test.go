@@ -645,7 +645,9 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.SharedTestTenantAlwaysEnabled,
+	})
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
 
