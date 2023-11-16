@@ -532,7 +532,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// Note that spansToRequests below might modify spans, so we need to log the
 	// spans before that.
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "Scan %s", f.spans)
+		log.VEventf(ctx, 2, "Scan %s", f.spans.BoundedString(1024 /* bytesHint */))
 	}
 
 	ba := &kvpb.BatchRequest{}
