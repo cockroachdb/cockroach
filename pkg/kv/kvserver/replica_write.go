@@ -449,7 +449,8 @@ func (r *Replica) evaluateWriteBatch(
 
 	ms := newMVCCStats()
 	defer releaseMVCCStats(ms)
-	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
+	rec := NewReplicaEvalContext(
+		ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot(), ba.AdmissionHeader)
 	defer rec.Release()
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
 		ctx, idKey, rec, ms, ba, g, st, ui, hlc.Timestamp{} /* deadline */)
@@ -522,7 +523,8 @@ func (r *Replica) evaluate1PC(
 	// Is this relying on the batch being write-only?
 	ui := uncertainty.Interval{}
 
-	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
+	rec := NewReplicaEvalContext(
+		ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot(), ba.AdmissionHeader)
 	defer rec.Release()
 	var br *kvpb.BatchResponse
 	var res result.Result

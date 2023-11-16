@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 )
 
 func init() {
@@ -39,6 +40,7 @@ func Scan(
 	var scanRes storage.MVCCScanResult
 	var err error
 
+	readCategory := ScanReadCategory(cArgs.EvalCtx.AdmissionHeader())
 	opts := storage.MVCCScanOptions{
 		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
@@ -55,6 +57,7 @@ func Scan(
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
 		LockTable:             cArgs.Concurrency,
 		DontInterleaveIntents: cArgs.DontInterleaveIntents,
+		ReadCategory:          readCategory,
 	}
 
 	switch args.ScanFormat {
@@ -121,4 +124,12 @@ func Scan(
 
 	res.Local.EncounteredIntents = scanRes.Intents
 	return res, nil
+}
+
+func ScanReadCategory(ah kvpb.AdmissionHeader) storage.ReadCategory {
+	readCategory := storage.ScanRegularBatchEvalReadCategory
+	if admissionpb.WorkPriority(ah.Priority) < admissionpb.NormalPri {
+		readCategory = storage.ScanBackgroundBatchEvalReadCategory
+	}
+	return readCategory
 }

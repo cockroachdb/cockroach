@@ -244,7 +244,9 @@ func EndTxn(
 	// Fetch existing transaction.
 	var existingTxn roachpb.Transaction
 	recordAlreadyExisted, err := storage.MVCCGetProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &existingTxn, storage.MVCCGetOptions{},
+		ctx, readWriter, key, hlc.Timestamp{}, &existingTxn, storage.MVCCGetOptions{
+			ReadCategory: storage.BatchEvalReadCategory,
+		},
 	)
 	if err != nil {
 		return result.Result{}, err
@@ -706,7 +708,9 @@ func updateStagingTxn(
 	txn.LockSpans = args.LockSpans
 	txn.InFlightWrites = args.InFlightWrites
 	txnRecord := txn.AsRecord()
-	return storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{Stats: ms})
+	return storage.MVCCPutProto(
+		ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
+		storage.MVCCWriteOptions{Stats: ms, Category: storage.BatchEvalReadCategory})
 }
 
 // updateFinalizedTxn persists the COMMITTED or ABORTED transaction record with
@@ -724,7 +728,7 @@ func updateFinalizedTxn(
 	recordAlreadyExisted bool,
 	externalLocks []roachpb.Span,
 ) error {
-	opts := storage.MVCCWriteOptions{Stats: ms}
+	opts := storage.MVCCWriteOptions{Stats: ms, Category: storage.BatchEvalReadCategory}
 	if !evalCtx.EvalKnobs().DisableTxnAutoGC && len(externalLocks) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d locks)", txn.Short(), len(args.LockSpans))
@@ -1114,7 +1118,9 @@ func splitTriggerHelper(
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
 	}
-	if err := storage.MVCCPutProto(ctx, batch, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{}, &replicaGCTS, storage.MVCCWriteOptions{}); err != nil {
+	if err := storage.MVCCPutProto(
+		ctx, batch, keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
+		&replicaGCTS, storage.MVCCWriteOptions{Category: storage.BatchEvalReadCategory}); err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
 	}
 
@@ -1430,9 +1436,10 @@ func computeSplitRangeKeyStatsDelta(
 		lhs.StartKey.AsRawKey(), rhs.EndKey.AsRawKey())
 
 	iter, err := r.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypeRangesOnly,
-		LowerBound: leftPeekBound,
-		UpperBound: rightPeekBound,
+		KeyTypes:     storage.IterKeyTypeRangesOnly,
+		LowerBound:   leftPeekBound,
+		UpperBound:   rightPeekBound,
+		ReadCategory: storage.BatchEvalReadCategory,
 	})
 	if err != nil {
 		return ms, err

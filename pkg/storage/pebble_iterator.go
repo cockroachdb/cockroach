@@ -241,6 +241,7 @@ func (p *pebbleIterator) setOptions(
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 		KeyTypes:                  opts.KeyTypes,
 		UseL6Filters:              opts.useL6Filters,
+		CategoryAndQoS:            getCategoryAndQoS(opts.ReadCategory),
 	}
 	p.prefix = opts.Prefix
 

@@ -298,7 +298,8 @@ func newIntentInterleavingIterator(
 	intentKeyBuf := iiIter.intentKeyBuf
 	intentLimitKeyBuf := iiIter.intentLimitKeyBuf
 
-	ltOpts := LockTableIteratorOptions{Prefix: opts.Prefix, MatchMinStr: lock.Intent}
+	ltOpts := LockTableIteratorOptions{
+		Prefix: opts.Prefix, MatchMinStr: lock.Intent, ReadCategory: opts.ReadCategory}
 	if opts.LowerBound != nil {
 		ltOpts.LowerBound, intentKeyBuf = keys.LockTableSingleKey(opts.LowerBound, intentKeyBuf)
 	} else if !opts.Prefix {

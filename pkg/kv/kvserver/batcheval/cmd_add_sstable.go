@@ -277,7 +277,9 @@ func EvalAddSSTable(
 		// caller is expected to make sure there are no writers across the span,
 		// and thus no or few locks, so this is cheap in the common case.
 		log.VEventf(ctx, 2, "checking conflicting locks for SSTable [%s,%s)", start.Key, end.Key)
-		locks, err := storage.ScanLocks(ctx, readWriter, start.Key, end.Key, maxLockConflicts, 0)
+		locks, err := storage.ScanLocks(
+			ctx, readWriter, start.Key, end.Key, maxLockConflicts, 0,
+			storage.BatchEvalReadCategory)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "scanning locks")
 		} else if len(locks) > 0 {
@@ -416,8 +418,9 @@ func EvalAddSSTable(
 			ctx,
 			storage.MVCCKeyIterKind, // don't care if it is committed or not, just that it isn't empty.
 			storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				UpperBound: reply.RangeSpan.EndKey,
+				KeyTypes:     storage.IterKeyTypePointsAndRanges,
+				UpperBound:   reply.RangeSpan.EndKey,
+				ReadCategory: storage.BatchEvalReadCategory,
 			})
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "error when creating iterator for non-empty span")

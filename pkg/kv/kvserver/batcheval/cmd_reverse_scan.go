@@ -39,6 +39,7 @@ func ReverseScan(
 	var scanRes storage.MVCCScanResult
 	var err error
 
+	readCategory := ScanReadCategory(cArgs.EvalCtx.AdmissionHeader())
 	opts := storage.MVCCScanOptions{
 		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
@@ -55,6 +56,7 @@ func ReverseScan(
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
 		LockTable:             cArgs.Concurrency,
 		DontInterleaveIntents: cArgs.DontInterleaveIntents,
+		ReadCategory:          readCategory,
 	}
 
 	switch args.ScanFormat {

@@ -104,7 +104,8 @@ func optimizePuts(
 		KeyTypes: storage.IterKeyTypePointsAndRanges,
 		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
 		// need to set it to the key after maxKey.
-		UpperBound: maxKey.Next(),
+		UpperBound:   maxKey.Next(),
+		ReadCategory: storage.BatchEvalReadCategory,
 	})
 	if err != nil {
 		return nil, err
