@@ -78,7 +78,7 @@ func registerNpgsql(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo snap install dotnet-sdk --classic && \
+			`sudo snap install dotnet-sdk --channel=7.0/stable --classic && \
 sudo snap alias dotnet-sdk.dotnet dotnet && \
 sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
 		); err != nil {
