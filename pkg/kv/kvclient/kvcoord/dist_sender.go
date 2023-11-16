@@ -268,7 +268,7 @@ var FollowerReadsUnhealthy = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.dist_sender.follower_reads_unhealthy.enabled",
 	"send follower reads to unhealthy nodes",
-	true,
+	false,
 )
 
 // sortByLocalityFirst controls whether we sort by locality before sorting by
@@ -552,11 +552,6 @@ type DistSender struct {
 	// the descriptor, instead of trying to reorder them by latency. The knob
 	// only applies to requests sent with the LEASEHOLDER routing policy.
 	dontReorderReplicas bool
-	// dontConsiderConnHealth, if set, makes the GRPCTransport not take into
-	// consideration the connection health when deciding the ordering for
-	// replicas. When not set, replicas on nodes with unhealthy connections are
-	// deprioritized.
-	dontConsiderConnHealth bool
 
 	// Currently executing range feeds.
 	activeRangeFeeds sync.Map // // map[*rangeFeedRegistry]nil
@@ -673,7 +668,6 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.transportFactory = tf(ds.transportFactory)
 	}
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
-	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
 	ds.rpcRetryOptions = base.DefaultRetryOptions()
 	// TODO(arul): The rpcRetryOptions passed in here from server/tenant don't
 	// set a max retries limit. Should they?
@@ -2301,9 +2295,8 @@ func (ds *DistSender) sendToReplicas(
 		return nil, err
 	}
 	opts := SendOptions{
-		class:                  rpc.ConnectionClassForKey(desc.RSpan().Key, rpc.DefaultClass),
-		metrics:                &ds.metrics,
-		dontConsiderConnHealth: ds.dontConsiderConnHealth,
+		class:   rpc.ConnectionClassForKey(desc.RSpan().Key, rpc.DefaultClass),
+		metrics: &ds.metrics,
 	}
 	transport, err := ds.transportFactory(opts, replicas)
 	if err != nil {

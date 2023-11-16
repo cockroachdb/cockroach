@@ -12,8 +12,6 @@ package kvcoord
 
 import (
 	"context"
-	"fmt"
-	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -21,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -35,11 +32,6 @@ import (
 type SendOptions struct {
 	class   rpc.ConnectionClass
 	metrics *DistSenderMetrics
-	// dontConsiderConnHealth, if set, makes the transport not take into
-	// consideration the connection health when deciding the ordering for
-	// replicas. When not set, replicas on nodes with unhealthy connections are
-	// deprioritized.
-	dontConsiderConnHealth bool
 }
 
 // TransportFactory encapsulates all interaction with the RPC
@@ -82,12 +74,6 @@ type Transport interface {
 	Release()
 }
 
-// These constants are used for the replica health map below.
-const (
-	healthUnhealthy = iota
-	healthHealthy
-)
-
 // grpcTransportFactoryImpl is the default TransportFactory, using GRPC.
 // Do not use this directly - use grpcTransportFactory instead.
 //
@@ -97,35 +83,12 @@ func grpcTransportFactoryImpl(
 	opts SendOptions, nodeDialer *nodedialer.Dialer, rs roachpb.ReplicaSet,
 ) (Transport, error) {
 	transport := grpcTransportPool.Get().(*grpcTransport)
-	// Grab the saved slice memory from grpcTransport.
-	descriptors := rs.Descriptors()
-	// TODO(baptist): Remove this copy once transport no longer modifies replicas.
-	replicas := make([]roachpb.ReplicaDescriptor, len(descriptors))
-	copy(replicas, descriptors)
 
-	// We'll map the index of the replica descriptor in its slice to its health.
-	var health util.FastIntMap
-	for i, desc := range descriptors {
-		replicas[i] = desc
-		healthy := nodeDialer.ConnHealth(desc.NodeID, opts.class) == nil
-		if healthy {
-			health.Set(i, healthHealthy)
-		} else {
-			health.Set(i, healthUnhealthy)
-		}
-	}
 	*transport = grpcTransport{
-		opts:          opts,
-		nodeDialer:    nodeDialer,
-		class:         opts.class,
-		replicas:      replicas,
-		replicaHealth: health,
-	}
-
-	if !opts.dontConsiderConnHealth {
-		// Put known-healthy replica first, while otherwise respecting the existing
-		// ordering of the replicas.
-		transport.splitHealthy()
+		opts:       opts,
+		nodeDialer: nodeDialer,
+		class:      opts.class,
+		replicas:   rs.Descriptors(),
 	}
 
 	return transport, nil
@@ -137,9 +100,6 @@ type grpcTransport struct {
 	class      rpc.ConnectionClass
 
 	replicas []roachpb.ReplicaDescriptor
-	// replicaHealth maps replica index within the replicas slice to healthHealthy
-	// if healthy, and healthUnhealthy if unhealthy. Used by splitHealthy.
-	replicaHealth util.FastIntMap
 	// nextReplicaIdx represents the index into replicas of the next replica to be
 	// tried.
 	nextReplicaIdx int
@@ -253,36 +213,6 @@ func (gt *grpcTransport) SkipReplica() {
 		return
 	}
 	gt.nextReplicaIdx++
-}
-
-// splitHealthy splits the grpcTransport's replica slice into healthy replica
-// and unhealthy replica, based on their connection state. Healthy replicas will
-// be rearranged first in the replicas slice, and unhealthy replicas will be
-// rearranged last. Within these two groups, the rearrangement will be stable.
-func (gt *grpcTransport) splitHealthy() {
-	sort.Stable((*byHealth)(gt))
-}
-
-// byHealth sorts a slice of replicas by their health with healthy first.
-type byHealth grpcTransport
-
-func (h *byHealth) Len() int { return len(h.replicas) }
-func (h *byHealth) Swap(i, j int) {
-	h.replicas[i], h.replicas[j] = h.replicas[j], h.replicas[i]
-	oldI := h.replicaHealth.GetDefault(i)
-	h.replicaHealth.Set(i, h.replicaHealth.GetDefault(j))
-	h.replicaHealth.Set(j, oldI)
-}
-func (h *byHealth) Less(i, j int) bool {
-	ih, ok := h.replicaHealth.Get(i)
-	if !ok {
-		panic(fmt.Sprintf("missing health info for %s", h.replicas[i]))
-	}
-	jh, ok := h.replicaHealth.Get(j)
-	if !ok {
-		panic(fmt.Sprintf("missing health info for %s", h.replicas[j]))
-	}
-	return ih == healthHealthy && jh != healthHealthy
 }
 
 // SenderTransportFactory wraps a client.Sender for use as a KV

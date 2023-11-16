@@ -13,7 +13,6 @@ package kvcoord
 import (
 	"context"
 	"net"
-	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -259,72 +258,6 @@ func TestComplexScenarios(t *testing.T) {
 				t.Errorf("%d: unexpected success", i)
 			}
 		}
-	}
-}
-
-// TestSplitHealthy tests that the splitHealthy method sorts healthy nodes
-// before unhealthy nodes.
-func TestSplitHealthy(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	type batchClient struct {
-		replica roachpb.ReplicaDescriptor
-		healthy bool
-	}
-
-	testData := []struct {
-		in  []batchClient
-		out []roachpb.ReplicaDescriptor
-	}{
-		{nil, []roachpb.ReplicaDescriptor{}},
-		{
-			[]batchClient{
-				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: false},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
-			},
-			[]roachpb.ReplicaDescriptor{{NodeID: 3}, {NodeID: 1}, {NodeID: 2}},
-		},
-		{
-			[]batchClient{
-				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: false},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
-			},
-			[]roachpb.ReplicaDescriptor{{NodeID: 1}, {NodeID: 3}, {NodeID: 2}},
-		},
-		{
-			[]batchClient{
-				{replica: roachpb.ReplicaDescriptor{NodeID: 1}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 2}, healthy: true},
-				{replica: roachpb.ReplicaDescriptor{NodeID: 3}, healthy: true},
-			},
-			[]roachpb.ReplicaDescriptor{{NodeID: 1}, {NodeID: 2}, {NodeID: 3}},
-		},
-	}
-
-	for _, td := range testData {
-		t.Run("", func(t *testing.T) {
-			replicas := make([]roachpb.ReplicaDescriptor, len(td.in))
-			var health util.FastIntMap
-			for i, r := range td.in {
-				replicas[i] = r.replica
-				if r.healthy {
-					health.Set(i, healthHealthy)
-				} else {
-					health.Set(i, healthUnhealthy)
-				}
-			}
-			gt := grpcTransport{
-				replicas:      replicas,
-				replicaHealth: health,
-			}
-			gt.splitHealthy()
-			if !reflect.DeepEqual(gt.replicas, td.out) {
-				t.Errorf("splitHealthy(...) = %+v not %+v", replicas, td.out)
-			}
-		})
 	}
 }
 
