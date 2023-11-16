@@ -154,6 +154,31 @@ func (m *ColStatsMap) Lookup(cols opt.ColSet) (colStat *ColumnStatistic, ok bool
 	}
 }
 
+// LookupSingleton is similar to Lookup. It returns a column statistic for a
+// single column, allowing callers to avoid building a column set, thus reducing
+// allocations.
+func (m *ColStatsMap) LookupSingleton(col opt.ColumnID) (colStat *ColumnStatistic, ok bool) {
+	// Scan the inlined statistics if there are only a few statistics in the map.
+	if m.count <= initialColStatsCap {
+		for i := 0; i < m.count; i++ {
+			colStat = &m.initial[i]
+			if colStat.Cols.SingletonOf(col) {
+				return colStat, true
+			}
+		}
+		return nil, false
+	}
+
+	// Use the prefix tree index to look up the column statistic.
+	// Fetch index entry for next prefix+col combo.
+	key := colStatKey{prefix: 0, id: col}
+	if val, ok := m.index[key]; ok {
+		// A stat exists, so return it.
+		return m.Get(int(val.pos)), true
+	}
+	return nil, false
+}
+
 // Add ensures that a ColumnStatistic over the given columns is in the map. If
 // it does not yet exist in the map, then Add adds a new blank ColumnStatistic
 // and returns it, along with added=true. Otherwise, Add returns the existing

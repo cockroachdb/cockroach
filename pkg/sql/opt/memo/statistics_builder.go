@@ -3511,8 +3511,7 @@ func (sb *statisticsBuilder) updateNullCountsFromNotNullCols(
 	notNullCols opt.ColSet, s *props.Statistics,
 ) {
 	notNullCols.ForEach(func(col opt.ColumnID) {
-		colSet := opt.MakeColSet(col)
-		colStat, ok := s.ColStats.Lookup(colSet)
+		colStat, ok := s.ColStats.LookupSingleton(col)
 		if ok {
 			colStat.NullCount = 0
 		}

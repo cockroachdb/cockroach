@@ -112,6 +112,13 @@ func (s ColSet) Equals(rhs ColSet) bool { return s.set.Equals(rhs.set) }
 // SubsetOf returns true if rhs contains all the elements in s.
 func (s ColSet) SubsetOf(rhs ColSet) bool { return s.set.SubsetOf(rhs.set) }
 
+// SingletonOf returns true if the set is a singleton that contains col.
+func (s ColSet) SingletonOf(col ColumnID) bool {
+	// TODO(mgartner): A s.HasLen(l int) function that short-circuits could
+	// speed this up for large sets.
+	return s.Len() == 1 && s.Contains(col)
+}
+
 // String returns a list representation of elements. Sequential runs of positive
 // numbers are shown as ranges. For example, for the set {1, 2, 3  5, 6, 10},
 // the output is "(1-3,5,6,10)".
