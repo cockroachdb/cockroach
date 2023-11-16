@@ -2823,6 +2823,7 @@ disable_partially_distributed_plans                        off                 N
 disable_plan_gists                                         off                 NULL      NULL        NULL        string
 disallow_full_table_scans                                  off                 NULL      NULL        NULL        string
 distsql                                                    off                 NULL      NULL        NULL        string
+distsql_plan_gateway_bias                                  2                   NULL      NULL        NULL        string
 enable_auto_rehoming                                       off                 NULL      NULL        NULL        string
 enable_create_stats_using_extremes                         off                 NULL      NULL        NULL        string
 enable_durable_locking_for_serializable                    off                 NULL      NULL        NULL        string
@@ -2993,6 +2994,7 @@ disable_partially_distributed_plans                        off                 N
 disable_plan_gists                                         off                 NULL  user     NULL      off                 off
 disallow_full_table_scans                                  off                 NULL  user     NULL      off                 off
 distsql                                                    off                 NULL  user     NULL      off                 off
+distsql_plan_gateway_bias                                  2                   NULL  user     NULL      2                   2
 enable_auto_rehoming                                       off                 NULL  user     NULL      off                 off
 enable_create_stats_using_extremes                         off                 NULL  user     NULL      off                 off
 enable_durable_locking_for_serializable                    off                 NULL  user     NULL      off                 off
@@ -3159,6 +3161,7 @@ disable_partially_distributed_plans                        NULL    NULL     NULL
 disable_plan_gists                                         NULL    NULL     NULL     NULL        NULL
 disallow_full_table_scans                                  NULL    NULL     NULL     NULL        NULL
 distsql                                                    NULL    NULL     NULL     NULL        NULL
+distsql_plan_gateway_bias                                  NULL    NULL     NULL     NULL        NULL
 distsql_workmem                                            NULL    NULL     NULL     NULL        NULL
 enable_auto_rehoming                                       NULL    NULL     NULL     NULL        NULL
 enable_create_stats_using_extremes                         NULL    NULL     NULL     NULL        NULL
