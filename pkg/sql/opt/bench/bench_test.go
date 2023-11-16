@@ -1454,10 +1454,15 @@ func BenchmarkSlowQueries(b *testing.B) {
 		b.Fatalf("%v", err)
 	}
 	for _, query := range slowQueries {
-		h := newHarness(b, query, []string{string(slowSchemas)})
 		b.Run(query.name, func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				h.runSimple(b, query, Explore)
+			for _, reorderJoinLimit := range []int64{0, 8} {
+				b.Run(fmt.Sprintf("reorder-join-%d", reorderJoinLimit), func(b *testing.B) {
+					h := newHarness(b, query, []string{string(slowSchemas)})
+					h.evalCtx.SessionData().ReorderJoinsLimit = reorderJoinLimit
+					for i := 0; i < b.N; i++ {
+						h.runSimple(b, query, Explore)
+					}
+				})
 			}
 		})
 	}
