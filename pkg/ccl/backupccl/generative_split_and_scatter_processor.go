@@ -476,6 +476,12 @@ func runGenerativeSplitAndScatter(
 			return errors.Wrap(err, "failed to make span covering filter")
 		}
 		defer filter.close()
+
+		var fsc fileSpanComparator = &inclusiveEndKeyComparator{}
+		if spec.ExclusiveFileSpanComparison {
+			fsc = &exclusiveEndKeyComparator{}
+		}
+
 		return errors.Wrap(generateAndSendImportSpans(
 			ctx,
 			spec.Spans,
@@ -483,6 +489,7 @@ func runGenerativeSplitAndScatter(
 			layerToFileIterFactory,
 			backupLocalityMap,
 			filter,
+			fsc,
 			restoreSpanEntriesCh,
 		), "generating and sending import spans")
 	})
