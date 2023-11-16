@@ -76,7 +76,7 @@ var gcsChunkRetryTimeout = settings.RegisterDurationSetting(
 	settings.WithName("cloudstorage.gs.chunking.per_chunk_retry.timeout"),
 )
 
-func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
+func parseGSURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	gsURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_gs
@@ -131,7 +131,7 @@ func (g *gcsStorage) Settings() *cluster.Settings {
 }
 
 func makeGCSStorage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
+	ctx context.Context, args cloud.EarlyBootExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.google_cloud")
 	conf := dest.GoogleCloudConfig
@@ -405,5 +405,10 @@ func shouldRetry(err error) bool {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_gs,
-		parseGSURL, makeGCSStorage, cloud.RedactedParams(CredentialsParam, BearerTokenParam), gcsScheme)
+		cloud.RegisteredProvider{
+			EarlyBootParseFn:     parseGSURL,
+			EarlyBootConstructFn: makeGCSStorage,
+			RedactedParams:       cloud.RedactedParams(CredentialsParam, BearerTokenParam),
+			Schemes:              []string{gcsScheme},
+		})
 }

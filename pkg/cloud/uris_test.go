@@ -19,10 +19,10 @@ import (
 
 func TestSanitizeExternalStorageURI(t *testing.T) {
 	// Register a scheme to test scheme-specific redaction.
-	cloud.RegisterExternalStorageProvider(0, nil, nil,
-		cloud.RedactedParams("TEST_PARAM"),
-		"test-scheme",
-	)
+	cloud.RegisterExternalStorageProvider(0, cloud.RegisteredProvider{
+		RedactedParams: cloud.RedactedParams("TEST_PARAM"),
+		Schemes:        []string{"test-scheme"},
+	})
 	testCases := []struct {
 		name             string
 		inputURI         string

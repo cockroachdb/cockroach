@@ -296,5 +296,10 @@ func (f *fileTableStorage) Size(ctx context.Context, basename string) (int64, er
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_userfile,
-		parseUserfileURL, makeFileTableStorage, cloud.RedactedParams(), scheme)
+		cloud.RegisteredProvider{
+			ConstructFn:    makeFileTableStorage,
+			ParseFn:        parseUserfileURL,
+			RedactedParams: cloud.RedactedParams(),
+			Schemes:        []string{scheme},
+		})
 }

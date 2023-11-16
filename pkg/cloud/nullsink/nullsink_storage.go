@@ -100,5 +100,10 @@ var _ cloud.ExternalStorage = &nullSinkStorage{}
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_null,
-		parseNullURL, makeNullSinkStorage, cloud.RedactedParams(), "null")
+		cloud.RegisteredProvider{
+			ConstructFn:    makeNullSinkStorage,
+			ParseFn:        parseNullURL,
+			RedactedParams: cloud.RedactedParams(),
+			Schemes:        []string{"null"},
+		})
 }

@@ -44,7 +44,7 @@ type externalStorageBuilder struct {
 }
 
 func (e *externalStorageBuilder) init(
-	ctx context.Context,
+	esAccessor *cloud.EarlyBootExternalStorageAccessor,
 	conf base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	nodeIDContainer *base.SQLIDContainer,
@@ -67,12 +67,12 @@ func (e *externalStorageBuilder) init(
 	e.blobClientFactory = blobClientFactory
 	e.initCalled = true
 	e.db = db
-	e.limiters = cloud.MakeLimiters(ctx, &settings.SV)
+	e.limiters = esAccessor.Limiters()
 	e.recorder = recorder
 
 	// Register the metrics that track interactions with external storage
 	// providers.
-	e.metrics = cloud.MakeMetrics()
+	e.metrics = esAccessor.Metrics()
 	registry.AddMetricStruct(e.metrics)
 }
 
