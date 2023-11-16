@@ -524,6 +524,14 @@ ALTER TABLE a ALTER COLUMN b SET ON UPDATE current_timestamp() -- literals remov
 ALTER TABLE _ ALTER COLUMN _ SET ON UPDATE current_timestamp() -- identifiers removed
 
 parse
+ALTER TABLE a ALTER b SET ON UPDATE c IS NOT DISTINCT FROM FALSE
+----
+ALTER TABLE a ALTER COLUMN b SET ON UPDATE c IS false -- normalized!
+ALTER TABLE a ALTER COLUMN b SET ON UPDATE ((c) IS (false)) -- fully parenthesized
+ALTER TABLE a ALTER COLUMN b SET ON UPDATE c IS NOT DISTINCT FROM _ -- literals removed
+ALTER TABLE _ ALTER COLUMN _ SET ON UPDATE _ IS false -- identifiers removed
+
+parse
 ALTER TABLE a ALTER COLUMN b DROP ON UPDATE
 ----
 ALTER TABLE a ALTER COLUMN b DROP ON UPDATE

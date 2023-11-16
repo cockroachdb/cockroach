@@ -2539,7 +2539,9 @@ func (c *clusterImpl) Conn(
 // ConnE returns a SQL connection to the specified node.
 func (c *clusterImpl) ConnE(
 	ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption),
-) (*gosql.DB, error) {
+) (_ *gosql.DB, retErr error) {
+	// NB: errors.Wrap returns nil if err is nil.
+	defer func() { retErr = errors.Wrapf(retErr, "connecting to node %d", node) }()
 
 	connOptions := &option.ConnOption{}
 	for _, opt := range opts {
@@ -2569,6 +2571,9 @@ func (c *clusterImpl) ConnE(
 		for k, v := range connOptions.Options {
 			vals.Add(k, v)
 		}
+		// connect_timeout is a libpq-specific parameter for the maximum wait for
+		// connection, in seconds.
+		vals.Add("connect_timeout", "60")
 		dataSourceName = dataSourceName + "&" + vals.Encode()
 	}
 	db, err := gosql.Open("postgres", dataSourceName)
