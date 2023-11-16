@@ -1651,6 +1651,7 @@ func TestBackupRestoreResume(t *testing.T) {
 					Files: []backuppb.BackupManifest_File{
 						{Path: "garbage-checkpoint", Span: backupCompletedSpan},
 					},
+					EndTime: srv.Clock().Now(),
 				})
 				if err != nil {
 					t.Fatal(err)
