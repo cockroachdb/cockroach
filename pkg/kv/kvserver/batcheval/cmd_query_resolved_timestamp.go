@@ -109,7 +109,8 @@ func computeMinIntentTimestamp(
 		LowerBound: ltStart,
 		UpperBound: ltEnd,
 		// Ignore Exclusive and Shared locks. We only care about intents.
-		MatchMinStr: lock.Intent,
+		MatchMinStr:  lock.Intent,
+		ReadCategory: storage.BatchEvalReadCategory,
 	}
 	iter, err := storage.NewLockTableIterator(ctx, reader, opts)
 	if err != nil {

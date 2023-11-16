@@ -183,7 +183,9 @@ func TestReadOnlyBasics(t *testing.T) {
 	a := mvccKey("a")
 	successTestCases := []func(){
 		func() {
-			_ = ro.MVCCIterate(context.Background(), a.Key, a.Key, MVCCKeyIterKind, IterKeyTypePointsOnly, func(MVCCKeyValue, MVCCRangeKeyStack) error { return iterutil.StopIteration() })
+			_ = ro.MVCCIterate(context.Background(), a.Key, a.Key, MVCCKeyIterKind, IterKeyTypePointsOnly,
+				UnknownReadCategory,
+				func(MVCCKeyValue, MVCCRangeKeyStack) error { return iterutil.StopIteration() })
 		},
 		func() {
 			iter, _ := ro.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
@@ -738,7 +740,8 @@ func TestWriteBatchPanicsAsReader(t *testing.T) {
 	b := mvccKey("b")
 	testCases := []func(){
 		func() {
-			_ = r.MVCCIterate(context.Background(), a.Key, b.Key, MVCCKeyIterKind, IterKeyTypePointsOnly, nil)
+			_ = r.MVCCIterate(context.Background(), a.Key, b.Key, MVCCKeyIterKind, IterKeyTypePointsOnly,
+				UnknownReadCategory, nil)
 		},
 		func() {
 			_, _ = r.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})

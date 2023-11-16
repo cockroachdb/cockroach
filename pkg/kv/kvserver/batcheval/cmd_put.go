@@ -61,6 +61,7 @@ func Put(
 		Stats:                          cArgs.Stats,
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
 		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		Category:                       storage.BatchEvalReadCategory,
 	}
 
 	var err error

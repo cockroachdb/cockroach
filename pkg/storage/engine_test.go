@@ -984,14 +984,16 @@ func TestSnapshotMethods(t *testing.T) {
 
 	// Verify MVCCIterate.
 	index := 0
-	if err := snap.MVCCIterate(context.Background(), localMax, roachpb.KeyMax, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly, func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
-		if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
-			t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
-				index, keys[index], vals[index], kv.Key, kv.Value)
-		}
-		index++
-		return nil
-	}); err != nil {
+	if err := snap.MVCCIterate(context.Background(), localMax, roachpb.KeyMax,
+		MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
+		UnknownReadCategory, func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
+			if !kv.Key.Equal(keys[index]) || !bytes.Equal(kv.Value, vals[index]) {
+				t.Errorf("%d: key/value not equal between expected and snapshot: %s/%s, %s/%s",
+					index, keys[index], vals[index], kv.Key, kv.Value)
+			}
+			index++
+			return nil
+		}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1566,7 +1568,7 @@ func TestGetIntent(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(string(test.key), func(t *testing.T) {
-			intent, err := GetIntent(ctx, eng, test.key)
+			intent, err := GetIntent(ctx, eng, test.key, UnknownReadCategory)
 			if test.expErr {
 				require.Error(t, err)
 			} else {
@@ -1642,7 +1644,7 @@ func TestScanLocks(t *testing.T) {
 	for name, tc := range testcases {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
-			scannedLocks, err := ScanLocks(ctx, eng, tc.from, tc.to, tc.max, tc.targetBytes)
+			scannedLocks, err := ScanLocks(ctx, eng, tc.from, tc.to, tc.max, tc.targetBytes, UnknownReadCategory)
 			require.NoError(t, err)
 			require.Len(t, scannedLocks, len(tc.expectLocks), "unexpected number of locks")
 			for i, l := range scannedLocks {
@@ -1993,9 +1995,9 @@ func TestEngineIteratorVisibility(t *testing.T) {
 				// Pin the pinned reader, if it supports it. This should ensure later
 				// iterators see the current state.
 				if rPinned.ConsistentIterators() {
-					require.NoError(t, rPinned.PinEngineStateForIterators())
+					require.NoError(t, rPinned.PinEngineStateForIterators(UnknownReadCategory))
 				} else {
-					require.Error(t, rPinned.PinEngineStateForIterators())
+					require.Error(t, rPinned.PinEngineStateForIterators(UnknownReadCategory))
 				}
 
 				// Write a new key to the engine, and set up the expected results.
@@ -2739,7 +2741,7 @@ func scanLockKeys(t *testing.T, r Reader) []roachpb.Key {
 	t.Helper()
 
 	var lockKeys []roachpb.Key
-	locks, err := ScanLocks(context.Background(), r, keys.LocalMax, keys.MaxKey, 0, 0)
+	locks, err := ScanLocks(context.Background(), r, keys.LocalMax, keys.MaxKey, 0, 0, UnknownReadCategory)
 	require.NoError(t, err)
 	for _, l := range locks {
 		lockKeys = append(lockKeys, l.Key)

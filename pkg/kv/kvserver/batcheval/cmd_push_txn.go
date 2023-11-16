@@ -147,7 +147,8 @@ func PushTxn(
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
 	var existTxn roachpb.Transaction
-	ok, err := storage.MVCCGetProto(ctx, readWriter, key, hlc.Timestamp{}, &existTxn, storage.MVCCGetOptions{})
+	ok, err := storage.MVCCGetProto(ctx, readWriter, key, hlc.Timestamp{}, &existTxn,
+		storage.MVCCGetOptions{ReadCategory: storage.BatchEvalReadCategory})
 	if err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -321,7 +322,8 @@ func PushTxn(
 		// in the timestamp cache.
 		if ok {
 			txnRecord := reply.PusheeTxn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{Stats: cArgs.Stats}); err != nil {
+			if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
+				storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: storage.BatchEvalReadCategory}); err != nil {
 				return result.Result{}, err
 			}
 		}
@@ -342,7 +344,8 @@ func PushTxn(
 		// TODO(nvanbenschoten): remove this logic in v23.2.
 		if ok && !cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1) {
 			txnRecord := reply.PusheeTxn.AsRecord()
-			if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{Stats: cArgs.Stats}); err != nil {
+			if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
+				storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: storage.BatchEvalReadCategory}); err != nil {
 				return result.Result{}, err
 			}
 		}

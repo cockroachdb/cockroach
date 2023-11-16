@@ -89,6 +89,9 @@ type LockTableIteratorOptions struct {
 	// If set, return locks held by any transaction with this strength or
 	// stronger.
 	MatchMinStr lock.Strength
+	// ReadCategory is used to map to a user-understandable category string, for
+	// stats aggregation and metrics, and a Pebble-understandable QoS.
+	ReadCategory ReadCategory
 }
 
 // validate validates the LockTableIteratorOptions.

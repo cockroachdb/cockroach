@@ -116,9 +116,11 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 
 	t.Run("reads inside range", func(t *testing.T) {
 		require.Equal(t, []byte("value"), storageutils.MVCCGetRaw(t, batch, insideKey))
-		require.NoError(t, batch.MVCCIterate(context.Background(), insideKey.Key, insideKey2.Key, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(v storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			return nil
-		}))
+		require.NoError(t, batch.MVCCIterate(context.Background(), insideKey.Key, insideKey2.Key,
+			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+			storage.UnknownReadCategory, func(v storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+				return nil
+			}))
 	})
 
 	// Reads outside the range fail.
@@ -130,9 +132,11 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if _, err := storageutils.MVCCGetRawWithError(t, batch, outsideKey); !isReadSpanErr(err) {
 			t.Errorf("MVCCGet: unexpected error %v", err)
 		}
-		if err := batch.MVCCIterate(context.Background(), outsideKey.Key, insideKey2.Key, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(v storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			return errors.Errorf("unexpected callback: %v", v)
-		}); !isReadSpanErr(err) {
+		if err := batch.MVCCIterate(context.Background(), outsideKey.Key, insideKey2.Key,
+			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+			storage.UnknownReadCategory, func(v storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+				return errors.Errorf("unexpected callback: %v", v)
+			}); !isReadSpanErr(err) {
 			t.Errorf("MVCCIterate: unexpected error %v", err)
 		}
 	})
@@ -141,9 +145,11 @@ func TestSpanSetBatchBoundaries(t *testing.T) {
 		if _, err := storageutils.MVCCGetRawWithError(t, batch, outsideKey3); !isReadSpanErr(err) {
 			t.Errorf("MVCCGet: unexpected error %v", err)
 		}
-		if err := batch.MVCCIterate(context.Background(), insideKey2.Key, outsideKey4.Key, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(v storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			return errors.Errorf("unexpected callback: %v", v)
-		}); !isReadSpanErr(err) {
+		if err := batch.MVCCIterate(context.Background(), insideKey2.Key, outsideKey4.Key,
+			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+			storage.UnknownReadCategory, func(v storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+				return errors.Errorf("unexpected callback: %v", v)
+			}); !isReadSpanErr(err) {
 			t.Errorf("MVCCIterate: unexpected error %v", err)
 		}
 	})
@@ -337,9 +343,11 @@ func TestSpanSetBatchTimestamps(t *testing.T) {
 			t.Errorf("Get: unexpected error %v", err)
 		}
 
-		if err := batch.MVCCIterate(context.Background(), rkey.Key, rkey.Key, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(v storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-			return errors.Errorf("unexpected callback: %v", v)
-		}); !isReadSpanErr(err) {
+		if err := batch.MVCCIterate(context.Background(), rkey.Key, rkey.Key,
+			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+			storage.UnknownReadCategory, func(v storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+				return errors.Errorf("unexpected callback: %v", v)
+			}); !isReadSpanErr(err) {
 			t.Errorf("MVCCIterate: unexpected error %v", err)
 		}
 	}

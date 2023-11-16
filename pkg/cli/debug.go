@@ -366,12 +366,13 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	}
 	if err := db.MVCCIterate(
 		cmd.Context(), debugCtx.startKey.Key, endKey, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
+		storage.IterKeyTypePointsAndRanges, storage.UnknownReadCategory, iterFunc); err != nil {
 		return err
 	}
 	if splitScan {
 		if err := db.MVCCIterate(cmd.Context(), keys.LocalMax, debugCtx.endKey.Key,
-			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsAndRanges, iterFunc); err != nil {
+			storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsAndRanges,
+			storage.UnknownReadCategory, iterFunc); err != nil {
 			return err
 		}
 	}
@@ -566,7 +567,8 @@ func loadRangeDescriptor(
 
 	// NB: Range descriptor keys can have intents.
 	if err := db.MVCCIterate(
-		ctx, start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, handleKV); err != nil {
+		ctx, start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+		storage.UnknownReadCategory, handleKV); err != nil {
 		return roachpb.RangeDescriptor{}, err
 	}
 	if desc.RangeID == rangeID {
@@ -589,7 +591,8 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 
 	// NB: Range descriptor keys can have intents.
 	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+		storage.IterKeyTypePointsOnly, storage.UnknownReadCategory,
+		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			if kvserver.IsRangeDescriptorKey(kv.Key) != nil {
 				return nil
 			}
@@ -766,7 +769,8 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 
 	// NB: raft log does not have intents.
 	return db.MVCCIterate(cmd.Context(), start, end, storage.MVCCKeyIterKind,
-		storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+		storage.IterKeyTypePointsOnly, storage.UnknownReadCategory,
+		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			kvserver.PrintMVCCKeyValue(kv)
 			return nil
 		})

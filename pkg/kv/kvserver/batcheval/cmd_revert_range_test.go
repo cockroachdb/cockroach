@@ -35,11 +35,13 @@ import (
 func hashRange(t *testing.T, reader storage.Reader, start, end roachpb.Key) []byte {
 	t.Helper()
 	h := sha256.New()
-	require.NoError(t, reader.MVCCIterate(context.Background(), start, end, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-		h.Write(kv.Key.Key)
-		h.Write(kv.Value)
-		return nil
-	}))
+	require.NoError(t, reader.MVCCIterate(context.Background(), start, end,
+		storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+		storage.UnknownReadCategory, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+			h.Write(kv.Key.Key)
+			h.Write(kv.Value)
+			return nil
+		}))
 	return h.Sum(nil)
 }
 

@@ -96,6 +96,7 @@ func NewCatchUpIterator(
 			// over the provisional values during
 			// iteration.
 			IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
+			ReadCategory: storage.RangefeedReadCategory,
 		})
 	if err != nil {
 		return nil, err

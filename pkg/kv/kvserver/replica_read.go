@@ -68,7 +68,8 @@ func (r *Replica) executeReadOnlyBatch(
 	ui := uncertainty.ComputeInterval(&ba.Header, st, r.Clock().MaxOffset())
 
 	// Evaluate read-only batch command.
-	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
+	rec := NewReplicaEvalContext(
+		ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot(), ba.AdmissionHeader)
 	defer rec.Release()
 
 	// TODO(irfansharif): It's unfortunate that in this read-only code path,
@@ -83,7 +84,16 @@ func (r *Replica) executeReadOnlyBatch(
 	// Pin engine state eagerly so that all iterators created over this Reader are
 	// based off the state of the engine as of this point and are mutually
 	// consistent.
-	if err := rw.PinEngineStateForIterators(); err != nil {
+	readCategory := storage.BatchEvalReadCategory
+	for _, union := range ba.Requests {
+		inner := union.GetInner()
+		switch inner.(type) {
+		case *kvpb.ScanRequest, *kvpb.ReverseScanRequest:
+			readCategory = batcheval.ScanReadCategory(ba.AdmissionHeader)
+		}
+		break
+	}
+	if err := rw.PinEngineStateForIterators(readCategory); err != nil {
 		return nil, g, nil, kvpb.NewError(err)
 	}
 	if util.RaceEnabled {

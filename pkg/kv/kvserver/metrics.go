@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/sstable"
 	"go.etcd.io/raft/v3/raftpb"
 )
 
@@ -2447,6 +2449,7 @@ type StoreMetrics struct {
 	BatchCommitL0StallDuration        *metric.Gauge
 	BatchCommitWALRotWaitDuration     *metric.Gauge
 	BatchCommitCommitWaitDuration     *metric.Gauge
+	categoryIterMetrics               pebbleCategoryIterMetricsContainer
 
 	RdbCheckpoints *metric.Gauge
 
@@ -3122,8 +3125,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BatchCommitL0StallDuration:        metric.NewGauge(metaBatchCommitL0StallDuration),
 		BatchCommitWALRotWaitDuration:     metric.NewGauge(metaBatchCommitWALRotDuration),
 		BatchCommitCommitWaitDuration:     metric.NewGauge(metaBatchCommitCommitWaitDuration),
-		WALBytesWritten:                   metric.NewGauge(metaWALBytesWritten),
-		WALBytesIn:                        metric.NewGauge(metaWALBytesIn),
+		categoryIterMetrics: pebbleCategoryIterMetricsContainer{
+			registry: storeRegistry,
+		},
+		WALBytesWritten: metric.NewGauge(metaWALBytesWritten),
+		WALBytesIn:      metric.NewGauge(metaWALBytesIn),
 
 		// Ingestion metrics
 		IngestCount: metric.NewGauge(metaIngestCount),
@@ -3525,6 +3531,7 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.BatchCommitL0StallDuration.Update(int64(m.BatchCommitStats.L0ReadAmpWriteStallDuration))
 	sm.BatchCommitWALRotWaitDuration.Update(int64(m.BatchCommitStats.WALRotationDuration))
 	sm.BatchCommitCommitWaitDuration.Update(int64(m.BatchCommitStats.CommitWaitDuration))
+	sm.categoryIterMetrics.update(m.CategoryStats)
 
 	// Update the maximum number of L0 sub-levels seen.
 	sm.l0SublevelsTracker.Lock()
@@ -3689,5 +3696,57 @@ func (sm *StoreMetrics) getCounterForRangeLogEventType(
 		return sm.RangeRemoves
 	default:
 		return nil
+	}
+}
+
+type pebbleCategoryIterMetrics struct {
+	IterBlockBytes        *metric.Gauge
+	IterBlockBytesInCache *metric.Gauge
+}
+
+func makePebbleCategorizedIterMetrics(category sstable.Category) *pebbleCategoryIterMetrics {
+	metaBlockBytes := metric.Metadata{
+		Name:        fmt.Sprintf("storage.iterator.category-%s.block-load.bytes", category),
+		Help:        "Bytes loaded by storage sstable iterators (possibly cached).",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaBlockBytesInCache := metric.Metadata{
+		Name:        fmt.Sprintf("storage.iterator.category-%s.block-load.cached-bytes", category),
+		Help:        "Bytes loaded by storage sstable iterators from the block cache",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	return &pebbleCategoryIterMetrics{
+		IterBlockBytes:        metric.NewGauge(metaBlockBytes),
+		IterBlockBytesInCache: metric.NewGauge(metaBlockBytesInCache),
+	}
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (m *pebbleCategoryIterMetrics) MetricStruct() {}
+
+func (m *pebbleCategoryIterMetrics) update(stats sstable.CategoryStats) {
+	m.IterBlockBytes.Update(int64(stats.BlockBytes))
+	m.IterBlockBytesInCache.Update(int64(stats.BlockBytesInCache))
+}
+
+type pebbleCategoryIterMetricsContainer struct {
+	registry *metric.Registry
+	// sstable.Category => *pebbleCategoryIterMetrics
+	metricsMap sync.Map
+}
+
+func (m *pebbleCategoryIterMetricsContainer) update(stats []sstable.CategoryStatsAggregate) {
+	for _, s := range stats {
+		val, ok := m.metricsMap.Load(s.Category)
+		if !ok {
+			val, ok = m.metricsMap.LoadOrStore(s.Category, makePebbleCategorizedIterMetrics(s.Category))
+			if !ok {
+				m.registry.AddMetricStruct(val)
+			}
+		}
+		cm := val.(*pebbleCategoryIterMetrics)
+		cm.update(s.CategoryStats)
 	}
 }

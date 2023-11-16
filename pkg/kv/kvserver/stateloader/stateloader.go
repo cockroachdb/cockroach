@@ -254,7 +254,7 @@ func (rsl StateLoader) SetRangeAppliedState(
 	// in ComputeStats.
 	ms := (*enginepb.MVCCStats)(nil)
 	return storage.MVCCPutProto(ctx, readWriter, rsl.RangeAppliedStateKey(),
-		hlc.Timestamp{}, as, storage.MVCCWriteOptions{Stats: ms})
+		hlc.Timestamp{}, as, storage.MVCCWriteOptions{Stats: ms, Category: storage.ReplicationReadCategory})
 }
 
 // SetMVCCStats overwrites the MVCC stats. This needs to perform a read on the
@@ -293,7 +293,7 @@ func (rsl StateLoader) LoadGCThreshold(
 ) (*hlc.Timestamp, error) {
 	var t hlc.Timestamp
 	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeGCThresholdKey(),
-		hlc.Timestamp{}, &t, storage.MVCCGetOptions{})
+		hlc.Timestamp{}, &t, storage.MVCCGetOptions{ReadCategory: storage.MVCCGCReadCategory})
 	return &t, err
 }
 
@@ -317,7 +317,7 @@ func (rsl StateLoader) LoadGCHint(
 ) (*roachpb.GCHint, error) {
 	var h roachpb.GCHint
 	_, err := storage.MVCCGetProto(ctx, reader, rsl.RangeGCHintKey(),
-		hlc.Timestamp{}, &h, storage.MVCCGetOptions{})
+		hlc.Timestamp{}, &h, storage.MVCCGetOptions{ReadCategory: storage.MVCCGCReadCategory})
 	if err != nil {
 		return nil, err
 	}

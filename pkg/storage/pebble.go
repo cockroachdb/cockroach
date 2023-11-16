@@ -1516,16 +1516,17 @@ func (p *Pebble) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
+	readCategory ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, readCategory, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, readCategory, f)
 }
 
 // NewMVCCIterator implements the Engine interface.
@@ -1577,7 +1578,7 @@ func (p *Pebble) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the Engine interface.
-func (p *Pebble) PinEngineStateForIterators() error {
+func (p *Pebble) PinEngineStateForIterators(ReadCategory) error {
 	return errors.AssertionFailedf(
 		"PinEngineStateForIterators must not be called when ConsistentIterators returns false")
 }
@@ -2591,6 +2592,7 @@ func (p *pebbleReadOnly) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
+	readCategory ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if p.closed {
@@ -2599,11 +2601,11 @@ func (p *pebbleReadOnly) MVCCIterate(
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, readCategory, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, readCategory, f)
 }
 
 // NewMVCCIterator implements the Engine interface.
@@ -2700,11 +2702,11 @@ func (p *pebbleReadOnly) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the Engine interface.
-func (p *pebbleReadOnly) PinEngineStateForIterators() error {
+func (p *pebbleReadOnly) PinEngineStateForIterators(readCategory ReadCategory) error {
 	if p.iter == nil {
-		o := (*pebble.IterOptions)(nil)
+		o := &pebble.IterOptions{CategoryAndQoS: getCategoryAndQoS(readCategory)}
 		if p.durability == GuaranteedDurability {
-			o = &pebble.IterOptions{OnlyReadGuaranteedDurable: true}
+			o.OnlyReadGuaranteedDurable = true
 		}
 		iter, err := p.parent.db.NewIter(o)
 		if err != nil {
@@ -2854,16 +2856,17 @@ func (p *pebbleSnapshot) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
+	readCategory ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, readCategory, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, readCategory, f)
 }
 
 // NewMVCCIterator implements the Reader interface.
@@ -2901,7 +2904,7 @@ func (p pebbleSnapshot) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the Reader interface.
-func (p *pebbleSnapshot) PinEngineStateForIterators() error {
+func (p *pebbleSnapshot) PinEngineStateForIterators(ReadCategory) error {
 	// Snapshot already pins state, so nothing to do.
 	return nil
 }
@@ -2950,16 +2953,17 @@ func (p *pebbleEFOS) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
+	readCategory ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, readCategory, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, readCategory, f)
 }
 
 // WaitForFileOnly implements the EventuallyFileOnlyReader interface.
@@ -3021,7 +3025,7 @@ func (p *pebbleEFOS) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the Reader interface.
-func (p *pebbleEFOS) PinEngineStateForIterators() error {
+func (p *pebbleEFOS) PinEngineStateForIterators(ReadCategory) error {
 	// Snapshot already pins state, so nothing to do.
 	return nil
 }

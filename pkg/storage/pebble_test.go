@@ -332,8 +332,8 @@ func TestPebbleIterConsistency(t *testing.T) {
 	require.NoError(t, err)
 	engIter.Close()
 	// Pin the state for iterators.
-	require.Nil(t, roEngine2.PinEngineStateForIterators())
-	require.Nil(t, batch2.PinEngineStateForIterators())
+	require.Nil(t, roEngine2.PinEngineStateForIterators(UnknownReadCategory))
+	require.Nil(t, batch2.PinEngineStateForIterators(UnknownReadCategory))
 
 	// Write a newer version of "a"
 	k2 := MVCCKey{Key: []byte("a"), Timestamp: ts2}
@@ -1082,7 +1082,7 @@ func TestPebbleFlushCallbackAndDurabilityRequirement(t *testing.T) {
 	defer roGuaranteed.Close()
 	roGuaranteedPinned := eng.NewReadOnly(GuaranteedDurability)
 	defer roGuaranteedPinned.Close()
-	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators())
+	require.NoError(t, roGuaranteedPinned.PinEngineStateForIterators(UnknownReadCategory))
 	// Returns the value found or nil.
 	checkGetAndIter := func(reader Reader) []byte {
 		v := mvccGetRaw(t, reader, k)
@@ -1152,19 +1152,19 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 
 	readOnly := eng.NewReadOnly(StandardDurability)
 	defer readOnly.Close()
-	require.NoError(t, readOnly.PinEngineStateForIterators())
+	require.NoError(t, readOnly.PinEngineStateForIterators(UnknownReadCategory))
 
 	snapshot := eng.NewSnapshot()
 	defer snapshot.Close()
-	require.NoError(t, snapshot.PinEngineStateForIterators())
+	require.NoError(t, snapshot.PinEngineStateForIterators(UnknownReadCategory))
 
 	efos := eng.NewEventuallyFileOnlySnapshot([]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}})
 	defer efos.Close()
-	require.NoError(t, efos.PinEngineStateForIterators())
+	require.NoError(t, efos.PinEngineStateForIterators(UnknownReadCategory))
 
 	batch := eng.NewBatch()
 	defer batch.Close()
-	require.NoError(t, batch.PinEngineStateForIterators())
+	require.NoError(t, batch.PinEngineStateForIterators(UnknownReadCategory))
 
 	// These writes should not be visible to any of the pinned iterators.
 	require.NoError(t, eng.PutMVCC(a1, vx))

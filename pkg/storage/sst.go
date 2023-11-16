@@ -153,8 +153,9 @@ func CheckSSTConflicts(
 		// and end keys. We use a non-prefix iterator for this search, and reopen a
 		// prefix one if there are engine keys in the span.
 		nonPrefixIter, err := reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
-			KeyTypes:   IterKeyTypePointsAndRanges,
-			UpperBound: end.Key,
+			KeyTypes:     IterKeyTypePointsAndRanges,
+			UpperBound:   end.Key,
+			ReadCategory: BatchEvalReadCategory,
 		})
 		if err != nil {
 			return statsDiff, err
@@ -168,7 +169,8 @@ func CheckSSTConflicts(
 	}
 
 	// Check for any overlapping locks, and return them to be resolved.
-	if locks, err := ScanLocks(ctx, reader, start.Key, end.Key, maxLockConflicts, 0); err != nil {
+	if locks, err := ScanLocks(
+		ctx, reader, start.Key, end.Key, maxLockConflicts, 0, BatchEvalReadCategory); err != nil {
 		return enginepb.MVCCStats{}, err
 	} else if len(locks) > 0 {
 		return enginepb.MVCCStats{}, &kvpb.LockConflictError{Locks: locks}
@@ -200,8 +202,9 @@ func CheckSSTConflicts(
 	rkIter.Close()
 
 	rkIter, err = reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
-		UpperBound: rightPeekBound,
-		KeyTypes:   IterKeyTypeRangesOnly,
+		UpperBound:   rightPeekBound,
+		KeyTypes:     IterKeyTypeRangesOnly,
+		ReadCategory: BatchEvalReadCategory,
 	})
 	if err != nil {
 		return enginepb.MVCCStats{}, err
@@ -246,6 +249,7 @@ func CheckSSTConflicts(
 		RangeKeyMaskingBelow: sstTimestamp,
 		Prefix:               usePrefixSeek,
 		useL6Filters:         true,
+		ReadCategory:         BatchEvalReadCategory,
 	})
 	if err != nil {
 		return enginepb.MVCCStats{}, err

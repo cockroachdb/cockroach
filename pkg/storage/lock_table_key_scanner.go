@@ -126,6 +126,7 @@ func newLockTableKeyScanner(
 	txn *roachpb.Transaction,
 	str lock.Strength,
 	maxConflicts int64,
+	readCategory ReadCategory,
 ) (*lockTableKeyScanner, error) {
 	var txnID uuid.UUID
 	if txn != nil {
@@ -136,9 +137,10 @@ func newLockTableKeyScanner(
 		return nil, err
 	}
 	iter, err := NewLockTableIterator(ctx, reader, LockTableIteratorOptions{
-		Prefix:      true,
-		MatchTxnID:  txnID,
-		MatchMinStr: minConflictStr,
+		Prefix:       true,
+		MatchTxnID:   txnID,
+		MatchMinStr:  minConflictStr,
+		ReadCategory: readCategory,
 	})
 	if err != nil {
 		return nil, err
