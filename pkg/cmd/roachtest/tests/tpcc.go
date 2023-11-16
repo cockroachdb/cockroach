@@ -414,9 +414,9 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// If migrations are running we want to ramp up the workload faster in order
 		// to expose them to more concurrent load. In a similar goal, we also let the
 		// TPCC workload run longer.
-		if h.Context().Finalizing && !c.IsLocal() {
+		if h.Context.Finalizing && !c.IsLocal() {
 			rampDur = 1 * time.Minute
-			if h.Context().ToVersion.IsCurrent() {
+			if h.Context.ToVersion.IsCurrent() {
 				workloadDur = 100 * time.Minute
 			}
 		}
