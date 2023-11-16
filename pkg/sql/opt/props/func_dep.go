@@ -1887,13 +1887,15 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 	}
 }
 
+// addEquivalency adds a new equivalency into the set.
+// NOTE: The given equiv column set may be mutated.
 func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 	var addConst bool
 	var found opt.ColSet
 
 	// Start by finding complete set of all columns that are equivalent to the
 	// given set.
-	equiv = f.ComputeEquivClosure(equiv)
+	equiv = f.ComputeEquivClosureNoCopy(equiv)
 
 	n := 0
 	for i := 0; i < len(f.deps); i++ {
