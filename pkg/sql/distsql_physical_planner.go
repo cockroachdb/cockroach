@@ -4732,11 +4732,11 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	planner *planner,
-	txn *kv.Txn,
+	spanResolutionTS *kv.Txn,
 	distributionType DistributionType,
 ) *PlanningCtx {
 	return dsp.NewPlanningCtxWithOracle(
-		ctx, evalCtx, planner, txn, distributionType, physicalplan.DefaultReplicaChooser, roachpb.Locality{},
+		ctx, evalCtx, planner, spanResolutionTS, distributionType, physicalplan.DefaultReplicaChooser, roachpb.Locality{},
 	)
 }
 
@@ -4746,7 +4746,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
 	planner *planner,
-	txn *kv.Txn,
+	spanResolutionTS *kv.Txn,
 	distributionType DistributionType,
 	oracle replicaoracle.Oracle,
 	localityFiler roachpb.Locality,
@@ -4785,7 +4785,7 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 		// we still need to instantiate a full planning context.
 		planCtx.parallelizeScansIfLocal = true
 	}
-	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn, oracle)
+	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(spanResolutionTS, oracle)
 	planCtx.nodeStatuses = make(map[base.SQLInstanceID]NodeStatus)
 	planCtx.nodeStatuses[dsp.gatewaySQLInstanceID] = NodeOK
 	return planCtx
