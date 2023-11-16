@@ -101,9 +101,6 @@ func importBankDataSplit(
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
 	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
-	// See #113816 for why this is needed for now (probably until #94850 is
-	// resolved).
-	c.Run(ctx, c.Node(1), "./cockroach sql --insecure -e 'SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = false;'")
 	runImportBankDataSplit(ctx, rows, ranges, t, c)
 	return dest
 }
@@ -267,6 +264,13 @@ func registerBackupNodeShutdown(r registry.Registry) {
 
 // fingerprint returns a fingerprint of `db.table`.
 func fingerprint(ctx context.Context, conn *gosql.DB, db, table string) (string, error) {
+	// See #113816 for why this is needed for now (probably until #94850 is
+	// resolved).
+	_, err := conn.Exec("SET direct_columnar_scans_enabled = false;")
+	if err != nil {
+		return "", err
+	}
+
 	var b strings.Builder
 
 	query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, table)
@@ -721,10 +725,6 @@ func runBackupMVCCRangeTombstones(
 	_, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`)
 	require.NoError(t, err)
 	_, err = conn.Exec(`SET CLUSTER SETTING server.debug.default_vmodule = 'txn=2,sst_batcher=4,revert=2'`)
-	require.NoError(t, err)
-	// See #113816 for why this is needed for now (probably until #94850 is
-	// resolved).
-	_, err = conn.Exec(`SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = false;`)
 	require.NoError(t, err)
 	// Wait for ranges to upreplicate.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
