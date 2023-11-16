@@ -16,6 +16,7 @@ go_test(
         "fk_test.go",
         "uniq_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":bench"],
     deps = [
         "//pkg/base",
@@ -38,6 +39,7 @@ go_test(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/volatility",
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/util/log",
