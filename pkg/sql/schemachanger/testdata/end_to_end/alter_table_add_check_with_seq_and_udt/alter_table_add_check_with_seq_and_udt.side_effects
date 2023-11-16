@@ -43,7 +43,7 @@ upsert descriptor #104
 upsert descriptor #105
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  version: "1"
   +  referencingDescriptorIds:
   +  - 107
@@ -51,7 +51,7 @@ upsert descriptor #105
 upsert descriptor #106
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  version: "1"
   +  referencingDescriptorIds:
   +  - 107
@@ -141,7 +141,7 @@ upsert descriptor #105
      - logicalRepresentation: a
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  version: "1"
   +  referencingDescriptorIds:
   +  - 107
@@ -162,7 +162,7 @@ upsert descriptor #106
      kind: ALIAS
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  version: "1"
   +  referencingDescriptorIds:
   +  - 107

@@ -160,7 +160,7 @@ SELECT descriptor FROM redacted_descriptors WHERE id = 'foo'::REGCLASS;
                     "withGrantOption": "2"
                 }
             ],
-            "version": 2
+            "version": 3
         },
         "replacementOf": {
             "time": {}

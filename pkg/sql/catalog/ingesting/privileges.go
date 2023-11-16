@@ -90,8 +90,12 @@ func GetIngestingDescriptorPrivileges(
 			updatedPrivileges = catpb.NewBaseDatabasePrivilegeDescriptor(user)
 		}
 	case catalog.FunctionDescriptor:
+		// If the ingestion is not a cluster restore we cannot know that the
+		// users on the ingesting cluster match the ones that were on the
+		// cluster that was backed up. So we wipe the privileges on the
+		// function.
 		if descCoverage == tree.RequestedDescriptors {
-			updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
+			updatedPrivileges = catpb.NewBaseFunctionPrivilegeDescriptor(user)
 		}
 	}
 	return updatedPrivileges, nil

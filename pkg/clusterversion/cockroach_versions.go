@@ -259,8 +259,7 @@ const (
 	// options lagging_ranges_threshold and lagging_ranges_polling_interval.
 	V23_2_ChangefeedLaggingRangesOpts
 
-	// V23_2_GrantExecuteToPublic grants the EXECUTE privilege to the public
-	// role for all existing functions.
+	// V23_2_GrantExecuteToPublic is no longer used. See #114203.
 	V23_2_GrantExecuteToPublic
 
 	// V23_2_EnablePebbleFormatVirtualSSTables enables the Pebble

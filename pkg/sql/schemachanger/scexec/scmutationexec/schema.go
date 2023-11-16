@@ -27,7 +27,7 @@ func (i *immediateVisitor) CreateSchemaDescriptor(
 		ParentID:   catid.InvalidDescID, // Set by `SchemaParent` element
 		Name:       "",                  // Set by `Namespace` element
 		ID:         op.SchemaID,
-		Privileges: &catpb.PrivilegeDescriptor{Version: catpb.Version21_2}, // Populated by `UserPrivileges` elements and `Owner` element
+		Privileges: &catpb.PrivilegeDescriptor{Version: catpb.Version23_2}, // Populated by `UserPrivileges` elements and `Owner` element
 		Version:    1,
 	}).BuildCreatedMutableSchema()
 	mut.State = descpb.DescriptorState_ADD
