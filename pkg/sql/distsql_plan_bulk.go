@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
@@ -45,10 +46,26 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracle(
 	oracle replicaoracle.Oracle,
 	localityFilter roachpb.Locality,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
+	return dsp.SetupAllNodesPlanningWithOracleAndFollowers(ctx, evalCtx, execCfg, oracle, localityFilter, nil /*spanResolutionTS*/)
+}
+
+// SetupAllNodesPlanningWithOracleAndFollowers is like
+// SetupAllNodesPlanningWithOracle but with the added spanResolutionTS param
+// which can be used to pass a txn which, if non-nil, is used to convey the
+// timestamp at which the processors in the flow will read for the purposes of
+// determining if
+func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracleAndFollowers(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	execCfg *ExecutorConfig,
+	oracle replicaoracle.Oracle,
+	localityFilter roachpb.Locality,
+	spanResolutionTS *kv.Txn,
+) (*PlanningCtx, []base.SQLInstanceID, error) {
 	if dsp.codec.ForSystemTenant() {
-		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle, localityFilter)
+		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle, localityFilter, spanResolutionTS)
 	}
-	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle, localityFilter)
+	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle, localityFilter, spanResolutionTS)
 }
 
 // setupAllNodesPlanningSystem creates a planCtx and returns all nodes available
@@ -60,8 +77,9 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
 	localityFilter roachpb.Locality,
+	spanResolutionTS *kv.Txn,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
+	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, spanResolutionTS,
 		DistributionTypeAlways, oracle, localityFilter)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer()
@@ -98,8 +116,9 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
 	localityFilter roachpb.Locality,
+	spanResolutionTS *kv.Txn,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, nil, /* txn */
+	planCtx := dsp.NewPlanningCtxWithOracle(ctx, evalCtx, nil /* planner */, spanResolutionTS,
 		DistributionTypeAlways, oracle, localityFilter)
 	pods, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
