@@ -11,6 +11,7 @@
 package mixedversion
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
@@ -19,10 +20,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -36,19 +37,6 @@ import (
 )
 
 type (
-	// Helper is the struct passed to user-functions providing helper
-	// functions that mixed-version tests can use.
-	Helper struct {
-		ctx         context.Context
-		testContext *Context
-		// bgCount keeps track of the number of background tasks started
-		// with `helper.Background()`. The counter is used to generate
-		// unique log file names.
-		bgCount    int64
-		runner     *testRunner
-		stepLogger *logger.Logger
-	}
-
 	// backgroundEvent is the struct sent by background steps when they
 	// finish (successfully or not).
 	backgroundEvent struct {
@@ -69,6 +57,7 @@ type (
 		summarized     bool
 		description    string
 		seed           int64
+		testContext    *Context
 		binaryVersions []roachpb.Version
 		// Cluster versions before and after the failure occurred. Before
 		// each step is executed, the test runner will cache each node's
@@ -176,7 +165,7 @@ func (tr *testRunner) run() (retErr error) {
 			return fmt.Errorf("background step `%s` returned error: %w", event.Name, event.Err)
 
 		case err := <-tr.monitor.Err():
-			return tr.testFailure(err.Error(), tr.logger)
+			return tr.testFailure(err.Error(), tr.logger, nil)
 		}
 	}
 }
@@ -185,7 +174,7 @@ func (tr *testRunner) run() (retErr error) {
 // recursively in the case of sequentialRunStep and concurrentRunStep.
 func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 	if ss, ok := step.(singleStep); ok {
-		if ss.ID() > tr.plan.startClusterID {
+		if ss.impl.ID() > tr.plan.startClusterID {
 			// update the runner's view of the cluster's binary and cluster
 			// versions before every non-initialization `singleStep` is
 			// executed
@@ -232,7 +221,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 			return err
 		}
 
-		if stopChan := ss.Background(); stopChan != nil {
+		if stopChan := ss.impl.Background(); stopChan != nil {
 			tr.startBackgroundStep(ss, stepLogger, stopChan)
 			return nil
 		}
@@ -248,7 +237,7 @@ func (tr *testRunner) runStep(ctx context.Context, step testStep) error {
 // background or not.
 func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logger.Logger) error {
 	tr.logStep("STARTING", ss, l)
-	tr.logVersions(l)
+	tr.logVersions(l, ss.context)
 	start := timeutil.Now()
 	defer func() {
 		prefix := fmt.Sprintf("FINISHED [%s]", timeutil.Since(start))
@@ -256,7 +245,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 	}()
 
 	if err := panicAsError(l, func() error {
-		return ss.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l))
+		return ss.impl.Run(ctx, l, tr.cluster, tr.newHelper(ctx, l, ss.context))
 	}); err != nil {
 		if isContextCanceled(ctx) {
 			l.Printf("step terminated (context canceled)")
@@ -276,7 +265,7 @@ func (tr *testRunner) runSingleStep(ctx context.Context, ss singleStep, l *logge
 }
 
 func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopChan shouldStop) {
-	stop := tr.background.Start(ss.Description(), func(ctx context.Context) error {
+	stop := tr.background.Start(ss.impl.Description(), func(ctx context.Context) error {
 		return tr.runSingleStep(ctx, ss, l)
 	})
 
@@ -302,17 +291,17 @@ func (tr *testRunner) startBackgroundStep(ss singleStep, l *logger.Logger, stopC
 // happened *while* the cluster version was updating).
 func (tr *testRunner) stepError(err error, step singleStep, l *logger.Logger) error {
 	desc := fmt.Sprintf("mixed-version test failure while running step %d (%s): %s",
-		step.ID(), step.Description(), err,
+		step.impl.ID(), step.impl.Description(), err,
 	)
 
-	return tr.testFailure(desc, l)
+	return tr.testFailure(desc, l, &step.context)
 }
 
 // testFailure generates a `testFailure` with the given
 // description. It logs the error to the logger passed, and renames
 // the underlying file to include the "FAILED" prefix to help in
 // debugging.
-func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
+func (tr *testRunner) testFailure(desc string, l *logger.Logger, testContext *Context) error {
 	clusterVersionsBefore := tr.clusterVersions
 	var clusterVersionsAfter atomic.Value
 	if tr.connCacheInitialized() {
@@ -326,6 +315,7 @@ func (tr *testRunner) testFailure(desc string, l *logger.Logger) error {
 	tf := &testFailure{
 		description:           desc,
 		seed:                  tr.seed,
+		testContext:           testContext,
 		binaryVersions:        loadAtomicVersions(tr.binaryVersions),
 		clusterVersionsBefore: loadAtomicVersions(clusterVersionsBefore),
 		clusterVersionsAfter:  loadAtomicVersions(clusterVersionsAfter),
@@ -379,22 +369,30 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 
 func (tr *testRunner) logStep(prefix string, step singleStep, l *logger.Logger) {
 	dashes := strings.Repeat("-", 10)
-	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.ID(), step.Description())
+	l.Printf("%[1]s %s (%d): %s %[1]s", dashes, prefix, step.impl.ID(), step.impl.Description())
 }
 
 // logVersions writes the current cached versions of the binary and
 // cluster versions on each node. The cached versions should exist for
 // all steps but the first one (when we start the cluster itself).
-func (tr *testRunner) logVersions(l *logger.Logger) {
+func (tr *testRunner) logVersions(l *logger.Logger, testContext Context) {
 	binaryVersions := loadAtomicVersions(tr.binaryVersions)
 	clusterVersions := loadAtomicVersions(tr.clusterVersions)
+	releasedVersions := make([]*clusterupgrade.Version, 0, len(testContext.CockroachNodes))
+	for _, node := range testContext.CockroachNodes {
+		releasedVersions = append(releasedVersions, testContext.NodeVersion(node))
+	}
 
 	if binaryVersions == nil || clusterVersions == nil {
 		return
 	}
 
-	l.Printf("binary versions: %s", formatVersions(binaryVersions))
-	l.Printf("cluster versions: %s", formatVersions(clusterVersions))
+	tw := newTableWriter(len(releasedVersions))
+	tw.AddRow("released versions", toString(releasedVersions)...)
+	tw.AddRow("logical binary versions", toString(binaryVersions)...)
+	tw.AddRow("cluster versions", toString(clusterVersions)...)
+
+	l.Printf("current cluster configuration:\n%s", tw.String())
 }
 
 // loggerFor creates a logger instance to be used by a test step. Logs
@@ -402,8 +400,8 @@ func (tr *testRunner) logVersions(l *logger.Logger) {
 // easy to go from the IDs displayed in the test plan to the
 // corresponding output of that step.
 func (tr *testRunner) loggerFor(step singleStep) (*logger.Logger, error) {
-	name := invalidChars.ReplaceAllString(strings.ToLower(step.Description()), "")
-	name = fmt.Sprintf("%d_%s", step.ID(), name)
+	name := invalidChars.ReplaceAllString(strings.ToLower(step.impl.Description()), "")
+	name = fmt.Sprintf("%d_%s", step.impl.ID(), name)
 
 	prefix := path.Join(logPrefix, name)
 	return prefixedLogger(tr.logger, prefix)
@@ -477,8 +475,11 @@ func (tr *testRunner) connCacheInitialized() bool {
 	return tr.connCache.cache != nil
 }
 
-func (tr *testRunner) newHelper(ctx context.Context, l *logger.Logger) *Helper {
+func (tr *testRunner) newHelper(
+	ctx context.Context, l *logger.Logger, testContext Context,
+) *Helper {
 	return &Helper{
+		Context:    &testContext,
 		ctx:        ctx,
 		runner:     tr,
 		stepLogger: l,
@@ -615,27 +616,75 @@ func (tf *testFailure) Error() string {
 	if tf.summarized {
 		return tf.description
 	}
-
 	tf.summarized = true
-	debugInfo := func(label, value string) string {
-		return fmt.Sprintf("%-40s%s", label+":", value)
-	}
-	seedInfo := debugInfo("test random seed", strconv.FormatInt(tf.seed, 10))
-	binaryVersions := debugInfo("binary versions", formatVersions(tf.binaryVersions))
-	clusterVersionsBefore := debugInfo(
-		"cluster versions before failure",
-		formatVersions(tf.clusterVersionsBefore),
-	)
-	var clusterVersionsAfter string
-	if cv := tf.clusterVersionsAfter; cv != nil {
-		clusterVersionsBefore += "\n"
-		clusterVersionsAfter = debugInfo("cluster versions after failure", formatVersions(cv))
+
+	lines := []string{
+		tf.description,
+		fmt.Sprintf("test random seed: %d\n", tf.seed),
 	}
 
-	return fmt.Sprintf(
-		"%s\n%s\n%s\n%s%s",
-		tf.description, seedInfo, binaryVersions, clusterVersionsBefore, clusterVersionsAfter,
+	tw := newTableWriter(len(tf.binaryVersions))
+	if tf.testContext != nil {
+		releasedVersions := make([]*clusterupgrade.Version, 0, len(tf.testContext.CockroachNodes))
+		for _, node := range tf.testContext.CockroachNodes {
+			releasedVersions = append(releasedVersions, tf.testContext.NodeVersion(node))
+		}
+		tw.AddRow("released versions", toString(releasedVersions)...)
+	}
+
+	tw.AddRow("logical binary versions", toString(tf.binaryVersions)...)
+	tw.AddRow("cluster versions before failure", toString(tf.clusterVersionsBefore)...)
+
+	if cv := tf.clusterVersionsAfter; cv != nil {
+		tw.AddRow("cluster versions after failure", toString(cv)...)
+	}
+
+	lines = append(lines, tw.String())
+	return strings.Join(lines, "\n")
+}
+
+// tableWriter is a thin wrapper around the `tabwriter` package used
+// by the test runner to display logical and released binary versions
+// in a tabular format.
+type tableWriter struct {
+	buffer *bytes.Buffer
+	w      *tabwriter.Writer
+}
+
+// newTableWriter creates a tableWriter to display tabular data for
+// the given number of nodes.
+func newTableWriter(numNodes int) *tableWriter {
+	var buffer bytes.Buffer
+	const (
+		minWidth = 3
+		tabWidth = 4
+		padding  = 5
+		padchar  = ' '
+		flags    = 0
 	)
+
+	tw := tabwriter.NewWriter(&buffer, minWidth, tabWidth, padding, padchar, flags)
+	writer := &tableWriter{buffer: &buffer, w: tw}
+
+	var nodeValues []string
+	for j := 1; j <= numNodes; j++ {
+		nodeValues = append(nodeValues, fmt.Sprintf("n%d", j))
+	}
+
+	writer.AddRow("", nodeValues...)
+	return writer
+}
+
+// AddRow adds a row to the table with the given title and values.
+func (tw *tableWriter) AddRow(title string, values ...string) {
+	cells := append([]string{title}, values...)
+	fmt.Fprintf(tw.w, "%s", strings.Join(cells, "\t"))
+	fmt.Fprintf(tw.w, "\n")
+}
+
+func (tw *tableWriter) String() string {
+	_ = tw.w.Flush()
+	return tw.buffer.String()
 }
 
 func renameFailedLogger(l *logger.Logger) error {
@@ -688,13 +737,13 @@ func waitForChannel(ch chan error, desc string, l *logger.Logger) {
 	}
 }
 
-func formatVersions(versions []roachpb.Version) string {
-	var pairs []string
-	for idx, version := range versions {
-		pairs = append(pairs, fmt.Sprintf("%d: %s", idx+1, version))
+func toString[T fmt.Stringer](xs []T) []string {
+	var result []string
+	for _, x := range xs {
+		result = append(result, x.String())
 	}
 
-	return fmt.Sprintf("[%s]", strings.Join(pairs, ", "))
+	return result
 }
 
 // isContextCanceled returns a boolean indicating whether the context

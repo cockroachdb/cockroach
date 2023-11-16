@@ -37,6 +37,7 @@ type (
 		stepCount      int
 		startClusterID int
 		versions       []*clusterupgrade.Version
+		currentContext *Context
 		crdbNodes      option.NodeListOption
 		rt             test.Test
 		options        testOptions
@@ -82,6 +83,8 @@ func (p *testPlanner) Plan() *TestPlan {
 		fromVersion := p.versions[prevVersionIdx]
 		toVersion := p.versions[prevVersionIdx+1]
 
+		p.currentContext.startUpgrade(toVersion)
+
 		upgradeStep := sequentialRunStep{
 			label: fmt.Sprintf("upgrade cluster from %q to %q", fromVersion.String(), toVersion.String()),
 		}
@@ -106,7 +109,6 @@ func (p *testPlanner) Plan() *TestPlan {
 
 		// wait for upgrade to finalize
 		addUpgradeSteps(p.finalUpgradeSteps(fromVersion, toVersion))
-
 		steps = append(steps, upgradeStep)
 	}
 
@@ -117,28 +119,10 @@ func (p *testPlanner) Plan() *TestPlan {
 	}
 }
 
-func (p *testPlanner) finalContext(
-	fromVersion, toVersion *clusterupgrade.Version, finalizing bool,
-) Context {
-	return Context{
-		FromVersion:    fromVersion,
-		ToVersion:      toVersion,
-		ToVersionNodes: p.crdbNodes,
-		Finalizing:     finalizing,
-	}
-}
-
-// longRunningContext is the test context passed to long running tasks
-// (background functions and the like). In these scenarios,
-// `FromVersion` and `ToVersion` correspond to, respectively, the
-// initial version the cluster is started at, and the final version
-// once the test finishes.
-func (p *testPlanner) longRunningContext() Context {
-	return Context{
-		FromVersion: p.versions[0],
-		ToVersion:   p.versions[len(p.versions)-1],
-		Finalizing:  false,
-	}
+func (p *testPlanner) longRunningContext() *Context {
+	return newLongRunningContext(
+		p.versions[0], p.versions[len(p.versions)-1], p.crdbNodes,
+	)
 }
 
 func (p *testPlanner) testSetupSteps() []testStep {
@@ -146,19 +130,25 @@ func (p *testPlanner) testSetupSteps() []testStep {
 
 	var steps []testStep
 	if p.prng.Float64() < p.options.useFixturesProbability {
-		steps = []testStep{installFixturesStep{id: p.nextID(), version: initialVersion, crdbNodes: p.crdbNodes}}
+		steps = []testStep{
+			p.newSingleStep(
+				installFixturesStep{id: p.nextID(), version: initialVersion, crdbNodes: p.crdbNodes},
+			),
+		}
 	}
 
 	p.startClusterID = p.nextID()
 	steps = append(steps,
-		startStep{
+		p.newSingleStep(startStep{
 			id:        p.startClusterID,
 			version:   initialVersion,
 			rt:        p.rt,
 			crdbNodes: p.crdbNodes,
 			settings:  p.clusterSettings(),
-		},
-		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
+		}),
+		p.newSingleStep(waitForStableClusterVersionStep{
+			id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout,
+		}),
 	)
 
 	return append(
@@ -172,7 +162,9 @@ func (p *testPlanner) testSetupSteps() []testStep {
 // of upgrading/downgrading.
 func (p *testPlanner) initUpgradeSteps() []testStep {
 	return []testStep{
-		preserveDowngradeOptionStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
+		p.newSingleStep(
+			preserveDowngradeOptionStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
+		),
 	}
 }
 
@@ -181,9 +173,17 @@ func (p *testPlanner) initUpgradeSteps() []testStep {
 // nodes to be the same and then run any after-finalization hooks the
 // user may have provided.
 func (p *testPlanner) finalUpgradeSteps(fromVersion, toVersion *clusterupgrade.Version) []testStep {
-	return append([]testStep{
-		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
-	}, p.hooks.AfterUpgradeFinalizedSteps(p.nextID, p.finalContext(fromVersion, toVersion, false /* finalizing */))...)
+	waitForUpgrade := []testStep{
+		p.newSingleStep(
+			waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
+		),
+	}
+
+	p.currentContext.Finalizing = false
+	return append(
+		waitForUpgrade,
+		p.hooks.AfterUpgradeFinalizedSteps(p.nextID, p.currentContext)...,
+	)
 }
 
 func (p *testPlanner) upgradeSteps(from, to *clusterupgrade.Version) []testStep {
@@ -204,29 +204,20 @@ func (p *testPlanner) changeVersionSteps(
 	from, to *clusterupgrade.Version, label string,
 ) []testStep {
 	// copy `crdbNodes` here so that shuffling won't mutate that array
-	oldVersionNodes := append(option.NodeListOption{}, p.crdbNodes...)
-	newVersionNodes := option.NodeListOption{}
+	previousVersionNodes := append(option.NodeListOption{}, p.crdbNodes...)
 
 	// change the binary version on the nodes in random order
-	p.prng.Shuffle(len(oldVersionNodes), func(i, j int) {
-		oldVersionNodes[i], oldVersionNodes[j] = oldVersionNodes[j], oldVersionNodes[i]
+	p.prng.Shuffle(len(previousVersionNodes), func(i, j int) {
+		previousVersionNodes[i], previousVersionNodes[j] = previousVersionNodes[j], previousVersionNodes[i]
 	})
 
 	var steps []testStep
-	nodeOrder := append(option.NodeListOption{}, oldVersionNodes...)
-	for _, node := range nodeOrder {
-		steps = append(steps, restartWithNewBinaryStep{
-			id: p.nextID(), version: to, node: node, rt: p.rt, settings: p.clusterSettings()})
-		oldVersionNodes = oldVersionNodes[1:]
-		newVersionNodes = append(newVersionNodes, node)
-
-		testContext := Context{
-			FromVersion:      from,
-			FromVersionNodes: oldVersionNodes,
-			ToVersion:        to,
-			ToVersionNodes:   newVersionNodes,
-		}
-		steps = append(steps, p.hooks.MixedVersionSteps(testContext, p.nextID)...)
+	for _, node := range previousVersionNodes {
+		steps = append(steps, p.newSingleStep(
+			restartWithNewBinaryStep{id: p.nextID(), version: to, node: node, rt: p.rt, settings: p.clusterSettings()},
+		))
+		p.currentContext.changeVersion(node, to)
+		steps = append(steps, p.hooks.MixedVersionSteps(p.currentContext, p.nextID)...)
 	}
 
 	return []testStep{sequentialRunStep{label: label, steps: steps}}
@@ -238,9 +229,12 @@ func (p *testPlanner) changeVersionSteps(
 func (p *testPlanner) finalizeUpgradeSteps(
 	fromVersion, toVersion *clusterupgrade.Version,
 ) []testStep {
+	p.currentContext.Finalizing = true
 	return append([]testStep{
-		finalizeUpgradeStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
-	}, p.hooks.MixedVersionSteps(p.finalContext(fromVersion, toVersion, true /* finalizing */), p.nextID)...)
+		p.newSingleStep(
+			finalizeUpgradeStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
+		),
+	}, p.hooks.MixedVersionSteps(p.currentContext, p.nextID)...)
 }
 
 // shouldRollback returns whether the test will attempt a rollback. If
@@ -255,6 +249,10 @@ func (p *testPlanner) shouldRollback(toVersion *clusterupgrade.Version) bool {
 	}
 
 	return p.prng.Float64() < rollbackIntermediateUpgradesProbability
+}
+
+func (p *testPlanner) newSingleStep(impl singleStepProtocol) singleStep {
+	return newSingleStep(p.currentContext, impl)
 }
 
 func (p *testPlanner) nextID() int {
@@ -311,13 +309,13 @@ func (plan *TestPlan) prettyPrintStep(out *strings.Builder, step testStep, prefi
 	// there's a delay associated with the step (in the case of
 	// concurrent execution), and what database node the step is
 	// connecting to.
-	writeSingle := func(rs singleStep, extraContext ...string) {
+	writeSingle := func(ss singleStep, extraContext ...string) {
 		var extras string
 		if contextStr := strings.Join(extraContext, ", "); contextStr != "" {
 			extras = ", " + contextStr
 		}
 		out.WriteString(fmt.Sprintf(
-			"%s %s%s (%d)\n", prefix, rs.Description(), extras, rs.ID(),
+			"%s %s%s (%d)\n", prefix, ss.impl.Description(), extras, ss.impl.ID(),
 		))
 	}
 

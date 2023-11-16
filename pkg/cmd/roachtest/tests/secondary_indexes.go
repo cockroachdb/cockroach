@@ -64,16 +64,20 @@ INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8), (9, 10, 11, 12);
 	mvt.InMixedVersion(
 		"modify and verify index data while in a mixed version state",
 		func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-			node, db := h.RandomDB(r, h.Context().ToVersionNodes)
-			l.Printf("connecting to n%d", node)
+			// Run the following statements in a node running the next
+			// version, if any; otherwise, pick a random node.
+			nodes := c.All()
+			if h.Context.MixedBinary() {
+				nodes = h.Context.NodesInNextVersion()
+			}
 
-			if _, err := db.Exec(`DELETE FROM t WHERE x = 13 OR x = 20`); err != nil {
+			if err := h.ExecWithGateway(r, nodes, `DELETE FROM t WHERE x = 13 OR x = 20`); err != nil {
 				return err
 			}
-			if _, err := db.Exec(`INSERT INTO t VALUES (13, 14, 15, 16)`); err != nil {
+			if err := h.ExecWithGateway(r, nodes, `INSERT INTO t VALUES (13, 14, 15, 16)`); err != nil {
 				return err
 			}
-			if _, err := db.Exec(`UPDATE t SET w = 17 WHERE y = 14`); err != nil {
+			if err := h.ExecWithGateway(r, nodes, `UPDATE t SET w = 17 WHERE y = 14`); err != nil {
 				return err
 			}
 			if err := verifyTableData(ctx, c, l, 1, firstExpected); err != nil {

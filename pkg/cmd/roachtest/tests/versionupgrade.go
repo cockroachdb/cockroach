@@ -144,7 +144,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			tc := h.Context()
 			// We currently only stage the `workload` binary built off the
 			// SHA being tested; therefore, we skip testing the schemachange
 			// workload if this is not an upgrade or downgrade involving the
@@ -152,7 +151,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// TODO(renato): stage different workload binaries for the
 			// releases being used in the test and use the appropriate
 			// binary in this step.
-			if !tc.FromVersion.IsCurrent() && !tc.ToVersion.IsCurrent() {
+			if !h.Context.ToVersion.IsCurrent() {
 				l.Printf("skipping this step -- only supported when current version is involved")
 				return nil
 			}

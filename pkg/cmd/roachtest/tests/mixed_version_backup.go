@@ -1537,7 +1537,7 @@ func (mvb *mixedVersionBackup) maybeTakePreviousVersionBackup(
 		return nil
 	}
 
-	previousVersion := h.Context().FromVersion
+	previousVersion := h.Context.FromVersion
 	label := fmt.Sprintf("before upgrade in %s", sanitizeVersionForBackup(previousVersion))
 	allPrevVersionNodes := labeledNodes{Nodes: mvb.roachNodes, Version: previousVersion.String()}
 	executeOnAllNodesSpec := backupSpec{PauseProbability: neverPause, Plan: allPrevVersionNodes, Execute: allPrevVersionNodes}
@@ -1564,14 +1564,13 @@ func (d *BackupRestoreTestDriver) nextRestoreID() int64 {
 // depending on the state of the test we are in. The given label is also used to
 // provide more context. Example: '22.2.4-to-current_final'
 func (mvb *mixedVersionBackup) backupNamePrefix(h *mixedversion.Helper, label string) string {
-	testContext := h.Context()
 	var finalizing string
-	if testContext.Finalizing {
+	if h.Context.Finalizing {
 		finalizing = finalizingLabel
 	}
 
-	fromVersion := sanitizeVersionForBackup(testContext.FromVersion)
-	toVersion := sanitizeVersionForBackup(testContext.ToVersion)
+	fromVersion := sanitizeVersionForBackup(h.Context.FromVersion)
+	toVersion := sanitizeVersionForBackup(h.Context.ToVersion)
 	sanitizedLabel := strings.ReplaceAll(label, " ", "-")
 
 	return fmt.Sprintf(
@@ -2079,14 +2078,11 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 		return nil
 	}
 
-	tc := h.Context() // test context
-	l.Printf("current context: %#v", tc)
-
 	onPrevious := labeledNodes{
-		Nodes: tc.FromVersionNodes, Version: sanitizeVersionForBackup(tc.FromVersion),
+		Nodes: h.Context.NodesInPreviousVersion(), Version: sanitizeVersionForBackup(h.Context.FromVersion),
 	}
 	onNext := labeledNodes{
-		Nodes: tc.ToVersionNodes, Version: sanitizeVersionForBackup(tc.ToVersion),
+		Nodes: h.Context.NodesInNextVersion(), Version: sanitizeVersionForBackup(h.Context.ToVersion),
 	}
 	onRandom := labeledNodes{Nodes: mvb.roachNodes, Version: "random node"}
 	defaultPauseProbability := 0.2
@@ -2124,7 +2120,7 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 		},
 	}
 
-	if len(tc.FromVersionNodes) > 0 {
+	if h.Context.MixedBinary() {
 		const numCollections = 2
 		rng.Shuffle(len(collectionSpecs), func(i, j int) {
 			collectionSpecs[i], collectionSpecs[j] = collectionSpecs[j], collectionSpecs[i]
@@ -2419,8 +2415,8 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 		}
 	}
 
-	verify(h.Context().FromVersion)
-	verify(h.Context().ToVersion)
+	verify(h.Context.FromVersion)
+	verify(h.Context.ToVersion)
 
 	// If the context was canceled (most likely due to a test timeout),
 	// return early. In these cases, it's likely that `restoreErrors`
