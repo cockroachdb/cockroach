@@ -482,6 +482,7 @@ func runGenerativeSplitAndScatter(
 			layerToFileIterFactory,
 			backupLocalityMap,
 			filter,
+			&inclusiveEndKeyComparator{},
 			restoreSpanEntriesCh,
 		)
 	})

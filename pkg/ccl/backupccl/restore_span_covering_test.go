@@ -306,6 +306,7 @@ func makeImportSpans(
 		layerToIterFactory,
 		nil,
 		filter,
+		&inclusiveEndKeyComparator{},
 		spanCh)
 	close(spanCh)
 

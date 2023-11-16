@@ -339,6 +339,7 @@ func restore(
 			layerToIterFactory,
 			backupLocalityMap,
 			filter,
+			&inclusiveEndKeyComparator{},
 			spanCh,
 		)
 	}

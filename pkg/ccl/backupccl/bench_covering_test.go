@@ -112,6 +112,7 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 													layerToBackupManifestFileIterFactory,
 													nil,
 													filter,
+													&inclusiveEndKeyComparator{},
 													spanCh)
 											})
 
