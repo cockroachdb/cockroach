@@ -318,7 +318,8 @@ func startDistChangefeed(
 var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"changefeed.balance_range_distribution.enable",
-	"if enabled, the ranges are balanced equally among all nodes",
+	"if enabled, the ranges are balanced equally among all nodes. "+
+		"Note that this is supported only in export mode with initial_scan=only.",
 	util.ConstantWithMetamorphicTestBool(
 		"changefeed.balance_range_distribution.enabled", false),
 	settings.WithName("changefeed.balance_range_distribution.enabled"),
