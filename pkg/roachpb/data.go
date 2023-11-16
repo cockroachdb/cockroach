@@ -2371,6 +2371,43 @@ func (a Spans) String() string {
 	return buf.String()
 }
 
+// BoundedString returns a stringified representation of Spans while adhering to
+// the provided hint on the length (although not religiously). The following
+// heuristics are used:
+// - if there are no more than 6 spans, then all are printed,
+// - otherwise, at least 3 "head" and at least 3 "tail" spans are always printed
+//   - the bytes "budget" is consumed from the "head".
+func (a Spans) BoundedString(bytesHint int) string {
+	if len(a) <= 6 {
+		return a.String()
+	}
+	var buf bytes.Buffer
+	var i int
+	headEndIdx, tailStartIdx := 2, len(a)-3
+	for i = range a {
+		if i != 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(a[i].String())
+		if buf.Len() >= bytesHint && i >= headEndIdx && i+1 < tailStartIdx {
+			// If the bytes budget has been consumed, and we've included at
+			// least 3 spans from the "head", and we have more than 3 spans left
+			// total, we stop iteration from the front.
+			break
+		}
+	}
+	if i+1 < len(a) {
+		buf.WriteString(" ... ")
+		for i = tailStartIdx; i < len(a); i++ {
+			if i != tailStartIdx {
+				buf.WriteString(", ")
+			}
+			buf.WriteString(a[i].String())
+		}
+	}
+	return buf.String()
+}
+
 // RSpan is a key range with an inclusive start RKey and an exclusive end RKey.
 type RSpan struct {
 	Key, EndKey RKey
