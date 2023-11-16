@@ -728,8 +728,9 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 
 	ctx := context.Background()
 	params, _ := createTestServerParams()
-	s, db, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, db, kvDB := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	if _, err := db.Exec("CREATE DATABASE test; CREATE TABLE test.t (c) AS SELECT 1"); err != nil {
 		t.Fatal(err)
@@ -792,6 +793,25 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 		_, err := ie.ExecEx(ctx, "read rows", txn, ieo, rowsStmt)
 		if !testutils.IsError(err, "inject_retry_errors_enabled") {
 			t.Fatalf("expected to see injected retry error, got %v", err)
+		}
+	})
+
+	// This test case verifies that ExecEx stops retrying once the limit on the
+	// number of retries is reached.
+	t.Run("ExecEx retry limit reached in implicit txn", func(t *testing.T) {
+		// This number must be less than the number of errors injected (which is
+		// determined by sql.numTxnRetryErrors = 3).
+		if _, err := db.Exec("SET CLUSTER SETTING sql.internal_executor.rows_affected_retry_limit = 1;"); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			if _, err := db.Exec("RESET CLUSTER SETTING sql.internal_executor.rows_affected_retry_limit;"); err != nil {
+				t.Fatal(err)
+			}
+		}()
+		_, err := ie.ExecEx(ctx, "read rows", nil /* txn */, ieo, rowsStmt)
+		if err == nil {
+			t.Fatal("expected to get an injected retriable error")
 		}
 	})
 
