@@ -907,6 +907,7 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 	equiv.Add(a)
 	equiv.Add(b)
 	f.addEquivalency(equiv)
+	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
 // AddConstants adds a strict FD to the set that declares each given column as
@@ -1164,6 +1165,7 @@ func (f *FuncDepSet) AddEquivFrom(fdset *FuncDepSet) {
 			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
 		}
 	}
+	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
 // MakeProduct modifies the FD set to reflect the impact of a cartesian product
@@ -1940,8 +1942,6 @@ func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 		}
 		f.deps = deps
 	}
-
-	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
 // setKey updates the key that the set is currently maintaining.

@@ -3143,13 +3143,13 @@ SELECT * FROM xy JOIN uv ON x+y=u AND x=u+v AND x*y+1=u*v+2
 project
  ├── columns: x:1!null y:2 u:5!null v:6
  ├── immutable
- ├── key: (1)
+ ├── key: (5)
  ├── fd: (1)-->(2,5,6), (5)-->(1,2,6)
  └── inner-join (hash)
       ├── columns: x:1!null y:2 u:5!null v:6 column9:9!null column10:10!null column11:11!null column12:12!null
       ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
       ├── immutable
-      ├── key: (1)
+      ├── key: (5)
       ├── fd: (1)-->(2,9,11), (5)-->(6,10,12), (5)==(9), (9)==(5), (1)==(10), (10)==(1), (11)==(12), (12)==(11)
       ├── project
       │    ├── columns: column11:11 column9:9 x:1!null y:2
