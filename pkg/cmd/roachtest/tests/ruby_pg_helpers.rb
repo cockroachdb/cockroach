@@ -216,8 +216,8 @@ module PG::TestingHelpers
     ENV['PGPORT'] ||= "26257"
 		@port = ENV['PGPORT'].to_i
 		ENV['PGHOST'] = 'localhost'
-    ENV['PGUSER'] = 'root'
-		@conninfo = "user=root host=localhost port=#{@port} dbname=test"
+    ENV['PGUSER'] = 'test_admin'
+		@conninfo = "user=test_admin host=localhost port=#{@port} dbname=test"
 		@unix_socket = TEST_DIRECTORY.to_s
 	end
 

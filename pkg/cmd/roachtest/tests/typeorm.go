@@ -296,7 +296,7 @@ const typeORMConfigJSON = `
     "type": "cockroachdb",
     "host": "localhost",
     "port": 26257,
-    "username": "root",
+    "username": "test_admin",
     "password": "",
     "database": "defaultdb"
   },

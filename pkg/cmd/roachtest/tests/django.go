@@ -242,7 +242,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django_cockroachdb',
         'NAME': 'django_tests',
-        'USER': 'root',
+        'USER': 'test_admin',
         'PASSWORD': '',
         'HOST': 'localhost',
         'PORT': 26257,

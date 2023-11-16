@@ -126,7 +126,7 @@ func registerLibPQ(r registry.Registry) {
 		_ = c.RunE(
 			ctx,
 			node,
-			fmt.Sprintf("cd %s && PGPORT=26257 PGUSER=root PGSSLMODE=disable PGDATABASE=postgres go test -run %s -v 2>&1 | %s/bin/go-junit-report > %s",
+			fmt.Sprintf("cd %s && PGPORT=26257 PGUSER=test_admin PGSSLMODE=disable PGDATABASE=postgres go test -run %s -v 2>&1 | %s/bin/go-junit-report > %s",
 				libPQPath, allowedTestsRegExp, goPath, resultsPath),
 		)
 
