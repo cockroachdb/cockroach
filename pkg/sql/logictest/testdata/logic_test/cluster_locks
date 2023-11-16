@@ -347,3 +347,75 @@ query I retry
 SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name IN ('t','t2')
 ----
 0
+
+# Test with different isolation levels.
+
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
+
+statement ok
+SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM t WHERE k = 'a' FOR UPDATE;
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement async iso1
+SELECT * FROM t WHERE k = 'a' FOR UPDATE;
+
+user root
+
+query TTTTTTTBB colnames,rowsort,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, regexp_replace(isolation_level, 'READ COMMITTED', 'READ_COMMITTED') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_name = 't'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability  isolation_level  granted  contended
+test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  READ_COMMITTED   true     true
+test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  SERIALIZABLE     false    true
+
+statement ok
+COMMIT
+
+user testuser
+
+awaitstatement iso1
+
+statement ok
+COMMIT
+
+user root
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SELECT * FROM t WHERE k = 'a' FOR UPDATE;
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+statement async iso2
+SELECT * FROM t WHERE k = 'a' FOR UPDATE;
+
+user root
+
+query TTTTTTTBB colnames,rowsort,retry
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, regexp_replace(isolation_level, 'READ COMMITTED', 'READ_COMMITTED') AS isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE table_name = 't'
+----
+database_name  schema_name  table_name  lock_key_pretty     lock_strength  durability  isolation_level  granted  contended
+test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  SNAPSHOT           true     true
+test           public       t           /Table/106/1/"a"/0  Exclusive      Replicated  READ_COMMITTED     false    true
+
+statement ok
+COMMIT
+
+user testuser
+
+awaitstatement iso2
+
+statement ok
+COMMIT
