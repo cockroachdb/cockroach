@@ -41,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1187,8 +1189,16 @@ func TestPartitionSpans(t *testing.T) {
 			if tc.locFilter != "" {
 				require.NoError(t, locFilter.Set(tc.locFilter))
 			}
+			evalCtx := &eval.Context{
+				Codec: keys.SystemSQLCodec,
+				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+					SessionData: sessiondatapb.SessionData{
+						DistsqlPlanGatewayBias: 2,
+					},
+				}),
+			}
 			planCtx := dsp.NewPlanningCtxWithOracle(ctx, &extendedEvalContext{
-				Context: eval.Context{Codec: keys.SystemSQLCodec},
+				Context: *evalCtx,
 			}, nil, nil, DistributionTypeSystemTenantOnly, physicalplan.DefaultReplicaChooser, locFilter)
 			planCtx.spanPartitionState.testingOverrideRandomSelection = tc.partitionState.testingOverrideRandomSelection
 			var spans []roachpb.Span
@@ -1409,7 +1419,18 @@ func TestShouldPickGatewayNode(t *testing.T) {
 				},
 			},
 		}
-		mockPlanCtx := &PlanningCtx{}
+		evalCtx := &eval.Context{
+			SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+				SessionData: sessiondatapb.SessionData{
+					DistsqlPlanGatewayBias: 2,
+				},
+			}),
+		}
+		mockPlanCtx := &PlanningCtx{
+			ExtendedEvalCtx: &extendedEvalContext{
+				Context: *evalCtx,
+			},
+		}
 		t.Run(tc.name, func(t *testing.T) {
 			mockPlanCtx.spanPartitionState = tc.partitionState
 			for _, partitionCount := range tc.partitionState.partitionSpans {
