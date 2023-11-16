@@ -1437,8 +1437,8 @@ func (sb *statisticsBuilder) buildJoin(
 				sb.adjustNullCountsForOuterJoins(
 					colStat,
 					h.joinType,
-					leftSideCols,
-					rightSideCols,
+					leftSideCols.Empty(),
+					rightSideCols.Empty(),
 					leftNullCount,
 					leftStats.RowCount,
 					rightNullCount,
@@ -1501,10 +1501,6 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		return colStat
 
 	default:
-		// Column stats come from both sides of join.
-		leftCols := leftProps.OutputCols.Intersection(colSet)
-		rightCols := rightProps.OutputCols.Intersection(colSet)
-
 		// Join selectivity affects the distinct counts for different columns
 		// in different ways depending on the type of join.
 		//
@@ -1522,14 +1518,16 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 		inputRowCount := leftProps.Statistics().RowCount * rightProps.Statistics().RowCount
 		leftNullCount := leftProps.Statistics().RowCount
 		rightNullCount := rightProps.Statistics().RowCount
-		if rightCols.Empty() {
+		leftColsAreEmpty := !leftProps.OutputCols.Intersects(colSet)
+		rightColsAreEmpty := !rightProps.OutputCols.Intersects(colSet)
+		if rightColsAreEmpty {
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, join))
 			leftNullCount = colStat.NullCount
 			switch joinType {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp:
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
-		} else if leftCols.Empty() {
+		} else if leftColsAreEmpty {
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinRight(colSet, join))
 			rightNullCount = colStat.NullCount
 			switch joinType {
@@ -1537,6 +1535,9 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 		} else {
+			// Column stats come from both sides of join.
+			leftCols := leftProps.OutputCols.Intersection(colSet)
+			rightCols := rightProps.OutputCols.Intersection(colSet)
 			// Make a copy of the input column stats so we don't modify the originals.
 			leftColStat := *sb.colStatFromJoinLeft(leftCols, join)
 			rightColStat := *sb.colStatFromJoinRight(rightCols, join)
@@ -1573,8 +1574,8 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, join RelExpr) *props
 			sb.adjustNullCountsForOuterJoins(
 				colStat,
 				joinType,
-				leftCols,
-				rightCols,
+				leftColsAreEmpty,
+				rightColsAreEmpty,
 				leftNullCount,
 				leftProps.Statistics().RowCount,
 				rightNullCount,
@@ -1641,25 +1642,25 @@ func innerJoinNullCount(
 // It adds an expected number of nulls created by column extension on
 // non-matching rows (such as on right cols for left joins and both for full).
 //
-// The caller should ensure that if leftCols are empty then leftNullCount
-// equals leftRowCount, and if rightCols are empty then rightNullCount equals
-// rightRowCount.
+// The caller should ensure that if leftColsAreEmpty is true then leftNullCount
+// equals leftRowCount, and if rightColsAreEmpty is true then rightNullCount
+// equals rightRowCount.
 func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
 	colStat *props.ColumnStatistic,
 	joinType opt.Operator,
-	leftCols, rightCols opt.ColSet,
+	leftColsAreEmpty, rightColsAreEmpty bool,
 	leftNullCount, leftRowCount, rightNullCount, rightRowCount, rowCount, innerJoinRowCount float64,
 ) {
 	// Adjust null counts for non-inner joins, adding nulls created due to column
 	// extension - such as right columns for non-matching rows in left joins.
 	switch joinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		if !rightCols.Empty() {
+		if !rightColsAreEmpty {
 			colStat.NullCount += (rowCount - innerJoinRowCount) * leftNullCount / leftRowCount
 		}
 
 	case opt.RightJoinOp:
-		if !leftCols.Empty() {
+		if !leftColsAreEmpty {
 			colStat.NullCount += (rowCount - innerJoinRowCount) * rightNullCount / rightRowCount
 		}
 
@@ -1667,10 +1668,10 @@ func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
 		leftJoinRowCount := max(innerJoinRowCount, leftRowCount)
 		rightJoinRowCount := max(innerJoinRowCount, rightRowCount)
 
-		if !leftCols.Empty() {
+		if !leftColsAreEmpty {
 			colStat.NullCount += (rightJoinRowCount - innerJoinRowCount) * rightNullCount / rightRowCount
 		}
-		if !rightCols.Empty() {
+		if !rightColsAreEmpty {
 			colStat.NullCount += (leftJoinRowCount - innerJoinRowCount) * leftNullCount / leftRowCount
 		}
 	}
