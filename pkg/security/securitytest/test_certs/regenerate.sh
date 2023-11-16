@@ -10,6 +10,7 @@ rm -f "${dir_n}"/*.{crt,key}
 ./cockroach cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca.key" create-client root
 ./cockroach cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca.key" create-client testuser
 ./cockroach cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca.key" create-client testuser2
+./cockroach cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca.key" create-client testuser3
 
 # Tenant certs
 ./cockroach mt cert --certs-dir="${dir_n}" --ca-key="${dir_n}/ca-client-tenant.key" create-tenant-client-ca
