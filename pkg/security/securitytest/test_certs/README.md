@@ -12,6 +12,8 @@ Contains the following files:
 * client.testuser.key: testing user private key
 * client.testuser2.crt: testing user 2 certificate
 * client.testuser2.key: testing user 2 private key
+* client.testuser3.crt: testing user 3 certificate
+* client.testuser3.key: testing user 3 private key
 * ca-client-tenant.crt: tenant CA certificate
 * ca-client-tenant.key: tenant CA private key
 * client-tenant.<ID>.crt: tenant client certificate
