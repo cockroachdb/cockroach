@@ -920,6 +920,13 @@ func (f *FuncDepSet) AddEquivalency(a, b opt.ColumnID) {
 // Since it is a constant, any set of determinant columns (including the empty
 // set) trivially determines the value of "a".
 func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
+	f.addConstantsNoKeyReduction(cols)
+	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
+}
+
+// addConstantsNoKeyReduction adds constant FDs to the set. It does not attempt
+// to reduce the key. See AddConstants.
+func (f *FuncDepSet) addConstantsNoKeyReduction(cols opt.ColSet) {
 	if cols.Empty() {
 		return
 	}
@@ -969,8 +976,6 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 		n++
 	}
 	f.deps = f.deps[:n]
-
-	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }
 
 // AddSynthesizedCol adds an FD to the set that is derived from a synthesized
@@ -1824,7 +1829,7 @@ func (f *FuncDepSet) addDependency(from, to opt.ColSet, strict, equiv bool) {
 		if !strict {
 			panic(errors.AssertionFailedf("expected constant FD to be strict: %s", redact.Safe(f)))
 		}
-		f.AddConstants(to)
+		f.addConstantsNoKeyReduction(to)
 		return
 	}
 
@@ -1925,7 +1930,7 @@ func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 
 	if addConst {
 		// Ensure that all equivalent columns are marked as constant.
-		f.AddConstants(equiv)
+		f.addConstantsNoKeyReduction(equiv)
 	}
 
 	if !equiv.SubsetOf(found) {
