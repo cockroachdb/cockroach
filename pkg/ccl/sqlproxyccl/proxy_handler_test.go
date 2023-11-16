@@ -136,9 +136,7 @@ func TestProxyProtocol(t *testing.T) {
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilistic, 112867,
-		),
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
 	})
 
 	ts := sql.ApplicationLayer()
@@ -249,9 +247,7 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilistic, 112867,
-		),
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
 	})
 	defer sql.Stopper().Stop(ctx)
 
@@ -421,9 +417,7 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilistic, 112867,
-		),
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
 	})
 	defer sql.Stopper().Stop(ctx)
 
@@ -689,9 +683,7 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilisticOnly, 112867,
-		),
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
 	})
 	defer sql.Stopper().Stop(ctx)
 
@@ -890,9 +882,7 @@ func TestProxyTLSClose(t *testing.T) {
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilistic, 112867,
-		),
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
 	})
 	defer sql.Stopper().Stop(ctx)
 
@@ -945,9 +935,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	defer te.Close()
 
 	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilistic, 112867,
-		),
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
 	})
 	defer sql.Stopper().Stop(ctx)
 
@@ -1007,9 +995,7 @@ func TestInsecureProxy(t *testing.T) {
 	defer te.Close()
 
 	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilistic, 112867,
-		),
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
 	})
 	defer sql.Stopper().Stop(ctx)
 
@@ -1194,9 +1180,7 @@ func TestDenylistUpdate(t *testing.T) {
 	require.NoError(t, err)
 
 	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-			base.TestTenantProbabilistic, 112867,
-		),
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
 	})
 	defer sql.Stopper().Stop(ctx)
 
