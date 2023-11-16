@@ -4289,7 +4289,7 @@ alter_column_default ::=
 	| 'DROP' 'DEFAULT'
 
 alter_column_on_update ::=
-	'SET' 'ON' 'UPDATE' b_expr
+	'SET' 'ON' 'UPDATE' a_expr
 	| 'DROP' 'ON' 'UPDATE'
 
 alter_column_visible ::=
