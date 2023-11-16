@@ -1590,7 +1590,8 @@ func (dsp *DistSQLPlanner) shouldPickGateway(_ context.Context, planCtx *Plannin
 
 	// If the gateway has span partitions >= twice the average span partitions
 	// across other nodes we should distribute the partition to another node.
-	return partitionsOnGateway < 2*averageDistributionOnNonGatewayInstances
+	bias := int(planCtx.ExtendedEvalCtx.SessionData().DistsqlPlanGatewayBias)
+	return partitionsOnGateway < bias*averageDistributionOnNonGatewayInstances
 }
 
 // makeInstanceResolver returns a function that can choose the SQL instance ID
