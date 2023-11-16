@@ -151,7 +151,9 @@ func (t *testImpl) Cockroach() string {
 		return t.StandardCockroach()
 	}
 	t.randomCockroachOnce.Do(func() {
-		assertionsEnabledProbability := 0.5
+		//TODO(SR): assertions are temporarily disabled for _all_ tests except those using t.RuntimeAssertionsCockroach()
+		// directly, until after the stability period for 23.2. See https://github.com/cockroachdb/cockroach/issues/114615
+		assertionsEnabledProbability := 0.0
 		// If the user specified a custom seed to be used with runtime
 		// assertions, assume they want to run the test with assertions
 		// enabled, making it easier to reproduce issues.
