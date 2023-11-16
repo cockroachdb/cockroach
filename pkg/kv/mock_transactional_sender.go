@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -322,4 +324,28 @@ func (f MockTxnSenderFactory) LeafTransactionalSender(tis *roachpb.LeafTxnInputS
 // NonTransactionalSender is part of TxnSenderFactory.
 func (f MockTxnSenderFactory) NonTransactionalSender() Sender {
 	return f.nonTxnSenderFunc
+}
+
+// MakeMockNoSenderTxnWithTimestamp returns a txn backed by a mock sender which
+// will fail all sender operations, meaning this mock txn is container usable
+// for reading its timestamp and little else.
+func MakeMockNoSenderTxnWithTimestamp(
+	ctx context.Context,
+	actx log.AmbientContext,
+	clock *hlc.Clock,
+	gatewayNodeID roachpb.NodeID,
+	dbctx DBContext,
+	ts hlc.Timestamp,
+) (*Txn, error) {
+	db := NewDBWithContext(actx, MakeMockTxnSenderFactory(func(
+		_ context.Context, _ *roachpb.Transaction, _ *kvpb.BatchRequest,
+	) (*kvpb.BatchResponse, *kvpb.Error) {
+		return nil, kvpb.NewError(errors.AssertionFailedf("unsupported on timestamp-only txn"))
+	}), clock, dbctx)
+	txn := NewTxn(ctx, db, gatewayNodeID)
+
+	if err := txn.SetFixedTimestamp(ctx, ts); err != nil {
+		return nil, err
+	}
+	return txn, nil
 }
