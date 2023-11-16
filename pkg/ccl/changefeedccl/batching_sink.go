@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -399,11 +398,12 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 	for {
 		select {
 		case req := <-s.eventCh:
-			if err := s.pacer.Pace(ctx); err != nil {
-				if pacerLogEvery.ShouldLog() {
-					log.Errorf(ctx, "automatic sink batcher pacing: %v", err)
-				}
-			}
+			// Swallow pacer error -- it happens only if context is canceled,
+			// and that's handled below.
+			// TODO(yevgeniy): rework this function: this function should simply
+			// return an error, and not rely on "handleError".
+			// It's hard to reason about this functions correctness otherwise.
+			_ = s.pacer.Pace(ctx)
 
 			switch r := req.(type) {
 			case *rowEvent:
