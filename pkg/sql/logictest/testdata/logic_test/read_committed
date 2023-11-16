@@ -424,3 +424,21 @@ subtest end
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+subtest cursor
+
+# Verify that SQL cursors run under READ COMMITTED correctly.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+DECLARE curs CURSOR FOR SELECT  * FROM (VALUES (1), (2), (3)) AS t;
+MOVE FORWARD 2 IN curs;
+
+query I
+FETCH 1 curs
+----
+3
+
+statement ok
+COMMIT
+
+subtest end
