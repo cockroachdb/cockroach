@@ -406,7 +406,8 @@ func (r *Refresher) SetDraining() {
 func (r *Refresher) Start(
 	ctx context.Context, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
-	bgCtx := r.AnnotateCtx(context.Background())
+	stoppingCtx, _ := stopper.WithCancelOnQuiesce(context.Background())
+	bgCtx := r.AnnotateCtx(stoppingCtx)
 	r.startedTasksWG.Add(1)
 	if err := stopper.RunAsyncTask(bgCtx, "refresher", func(ctx context.Context) {
 		defer r.startedTasksWG.Done()
@@ -472,8 +473,6 @@ func (r *Refresher) Start(
 							break
 						case <-r.drainAutoStats:
 							return
-						case <-stopper.ShouldQuiesce():
-							return
 						}
 
 						for tableID, rowsAffected := range mutationCounts {
@@ -517,10 +516,6 @@ func (r *Refresher) Start(
 							r.maybeRefreshStats(ctx, stopper, tableID, explicitSettings, rowsAffected, r.asOfTime)
 
 							select {
-							case <-stopper.ShouldQuiesce():
-								// Don't bother trying to refresh the remaining tables if we
-								// are shutting down.
-								return
 							case <-r.drainAutoStats:
 								// Ditto.
 								return
@@ -553,9 +548,6 @@ func (r *Refresher) Start(
 
 			case <-r.drainAutoStats:
 				log.Infof(ctx, "draining auto stats refresher")
-				return
-			case <-stopper.ShouldQuiesce():
-				log.Info(ctx, "quiescing auto stats refresher")
 				return
 			}
 		}
