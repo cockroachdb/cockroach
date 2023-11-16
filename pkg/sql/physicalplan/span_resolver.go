@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -63,7 +62,7 @@ import (
 type SpanResolver interface {
 	// NewSpanResolverIterator creates a new SpanResolverIterator.
 	// Txn is used for testing and for determining if follower reads are possible.
-	NewSpanResolverIterator(txn *kv.Txn, optionalOracle replicaoracle.Oracle) SpanResolverIterator
+	NewSpanResolverIterator(resolutionTS func() hlc.Timestamp, optionalOracle replicaoracle.Oracle) SpanResolverIterator
 }
 
 // DefaultReplicaChooser is a nil replicaoracle.Oracle which can be passed in
@@ -163,7 +162,7 @@ func NewSpanResolver(
 // spanResolverIterator implements the SpanResolverIterator interface.
 type spanResolverIterator struct {
 	// txn is the transaction using the iterator.
-	txn *kv.Txn
+	ts func() hlc.Timestamp
 	// it is a wrapped RangeIterator.
 	it kvcoord.RangeIterator
 	// oracle is used to choose a lease holders for ranges when one isn't present
@@ -183,14 +182,14 @@ var _ SpanResolverIterator = &spanResolverIterator{}
 
 // NewSpanResolverIterator creates a new SpanResolverIterator.
 func (sr *spanResolver) NewSpanResolverIterator(
-	txn *kv.Txn, optionalOracle replicaoracle.Oracle,
+	ts func() hlc.Timestamp, optionalOracle replicaoracle.Oracle,
 ) SpanResolverIterator {
 	oracle := optionalOracle
 	if optionalOracle == nil {
 		oracle = sr.oracle
 	}
 	return &spanResolverIterator{
-		txn:        txn,
+		ts:         ts,
 		it:         kvcoord.MakeRangeIterator(sr.distSender),
 		oracle:     oracle,
 		queryState: replicaoracle.MakeQueryState(),
@@ -291,7 +290,7 @@ func (it *spanResolverIterator) ReplicaInfo(
 	}
 
 	repl, ignoreMisplannedRanges, err := it.oracle.ChoosePreferredReplica(
-		ctx, it.txn, it.it.Desc(), it.it.Leaseholder(), it.it.ClosedTimestampPolicy(), it.queryState)
+		ctx, it.ts, it.it.Desc(), it.it.Leaseholder(), it.it.ClosedTimestampPolicy(), it.queryState)
 	if err != nil {
 		return roachpb.ReplicaDescriptor{}, false, err
 	}

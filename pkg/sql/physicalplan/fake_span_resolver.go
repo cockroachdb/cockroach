@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -32,12 +33,13 @@ const avgRangesPerNode = 5
 // expected avgRangesPerNode ranges for each node.
 type fakeSpanResolver struct {
 	nodes []*roachpb.NodeDescriptor
+	db    *kv.DB
 }
 
 var _ SpanResolver = &fakeSpanResolver{}
 
 // NewFakeSpanResolver creates a fake span resolver.
-func NewFakeSpanResolver(nodes []*roachpb.NodeDescriptor) SpanResolver {
+func NewFakeSpanResolver(nodes []*roachpb.NodeDescriptor, db *kv.DB) SpanResolver {
 	return &fakeSpanResolver{
 		nodes: nodes,
 	}
@@ -68,10 +70,10 @@ type fakeSpanResolverIterator struct {
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
 func (fsr *fakeSpanResolver) NewSpanResolverIterator(
-	txn *kv.Txn, optionalOracle replicaoracle.Oracle,
+	ts func() hlc.Timestamp, optionalOracle replicaoracle.Oracle,
 ) SpanResolverIterator {
 	rng, _ := randutil.NewTestRand()
-	return &fakeSpanResolverIterator{fsr: fsr, db: txn.DB(), rng: rng}
+	return &fakeSpanResolverIterator{fsr: fsr, db: fsr.db, rng: rng}
 }
 
 // Seek is part of the SpanResolverIterator interface. Each Seek call generates

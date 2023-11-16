@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -162,23 +161,23 @@ func newFollowerReadOracle(cfg replicaoracle.Config) replicaoracle.Oracle {
 
 func (o *followerReadOracle) ChoosePreferredReplica(
 	ctx context.Context,
-	txn *kv.Txn,
+	ts func() hlc.Timestamp,
 	desc *roachpb.RangeDescriptor,
 	leaseholder *roachpb.ReplicaDescriptor,
 	ctPolicy roachpb.RangeClosedTimestampPolicy,
 	queryState replicaoracle.QueryState,
 ) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error) {
 	var oracle replicaoracle.Oracle
-	if o.useClosestOracle(txn, ctPolicy) {
+	if o.useClosestOracle(ts, ctPolicy) {
 		oracle = o.closest
 	} else {
 		oracle = o.binPacking
 	}
-	return oracle.ChoosePreferredReplica(ctx, txn, desc, leaseholder, ctPolicy, queryState)
+	return oracle.ChoosePreferredReplica(ctx, ts, desc, leaseholder, ctPolicy, queryState)
 }
 
 func (o *followerReadOracle) useClosestOracle(
-	txn *kv.Txn, ctPolicy roachpb.RangeClosedTimestampPolicy,
+	ts func() hlc.Timestamp, ctPolicy roachpb.RangeClosedTimestampPolicy,
 ) bool {
 	// NOTE: this logic is almost identical to canSendToFollower, except that it
 	// operates on a *kv.Txn instead of a kvpb.BatchRequest. As a result, the
@@ -193,8 +192,8 @@ func (o *followerReadOracle) useClosestOracle(
 	// sent to the correct replicas once canSendToFollower is checked for each
 	// BatchRequests in the DistSender. This would hurt performance, but would
 	// not violate correctness.
-	return txn != nil &&
-		closedTimestampLikelySufficient(o.st, o.clock, ctPolicy, txn.RequiredFrontier()) &&
+	return ts != nil &&
+		closedTimestampLikelySufficient(o.st, o.clock, ctPolicy, ts()) &&
 		// NOTE: this call can be expensive, so perform it last. See #62447.
 		checkFollowerReadsEnabled(o.logicalClusterID.Get(), o.st)
 }

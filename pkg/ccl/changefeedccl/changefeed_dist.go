@@ -334,7 +334,7 @@ func makePlan(
 	drainingNodes []roachpb.NodeID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-		var blankTxn *kv.Txn
+		var blankTxn func() hlc.Timestamp
 
 		distMode := sql.DistributionTypeAlways
 		if details.SinkURI == `` {

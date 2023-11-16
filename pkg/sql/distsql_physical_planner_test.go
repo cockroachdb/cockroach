@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -579,7 +578,7 @@ type testSpanResolver struct {
 
 // NewSpanResolverIterator is part of the SpanResolver interface.
 func (tsr *testSpanResolver) NewSpanResolverIterator(
-	txn *kv.Txn, optionalOracle replicaoracle.Oracle,
+	_ func() hlc.Timestamp, _ replicaoracle.Oracle,
 ) physicalplan.SpanResolverIterator {
 	return &testSpanResolverIterator{tsr: tsr}
 }

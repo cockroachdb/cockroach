@@ -18,7 +18,6 @@ import (
 	"math/rand"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -83,7 +82,7 @@ type Oracle interface {
 	// about any of the nodes that might be tried.
 	ChoosePreferredReplica(
 		ctx context.Context,
-		txn *kv.Txn,
+		ts func() hlc.Timestamp,
 		rng *roachpb.RangeDescriptor,
 		leaseholder *roachpb.ReplicaDescriptor,
 		ctPolicy roachpb.RangeClosedTimestampPolicy,
@@ -150,7 +149,7 @@ func newRandomOracle(cfg Config) Oracle {
 
 func (o *randomOracle) ChoosePreferredReplica(
 	ctx context.Context,
-	_ *kv.Txn,
+	_ func() hlc.Timestamp,
 	desc *roachpb.RangeDescriptor,
 	_ *roachpb.ReplicaDescriptor,
 	_ roachpb.RangeClosedTimestampPolicy,
@@ -195,7 +194,7 @@ func newClosestOracle(cfg Config) Oracle {
 
 func (o *closestOracle) ChoosePreferredReplica(
 	ctx context.Context,
-	_ *kv.Txn,
+	_ func() hlc.Timestamp,
 	desc *roachpb.RangeDescriptor,
 	leaseholder *roachpb.ReplicaDescriptor,
 	_ roachpb.RangeClosedTimestampPolicy,
@@ -260,7 +259,7 @@ func newBinPackingOracle(cfg Config) Oracle {
 
 func (o *binPackingOracle) ChoosePreferredReplica(
 	ctx context.Context,
-	_ *kv.Txn,
+	_ func() hlc.Timestamp,
 	desc *roachpb.RangeDescriptor,
 	leaseholder *roachpb.ReplicaDescriptor,
 	_ roachpb.RangeClosedTimestampPolicy,
@@ -332,7 +331,7 @@ func newPreferFollowerOracle(cfg Config) Oracle {
 
 func (o preferFollowerOracle) ChoosePreferredReplica(
 	ctx context.Context,
-	_ *kv.Txn,
+	_ func() hlc.Timestamp,
 	desc *roachpb.RangeDescriptor,
 	leaseholder *roachpb.ReplicaDescriptor,
 	_ roachpb.RangeClosedTimestampPolicy,
