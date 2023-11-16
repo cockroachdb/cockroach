@@ -52,36 +52,6 @@ func registerPgjdbc(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		t.Status("create admin user for tests")
-		db, err := c.ConnE(ctx, t.L(), node[0])
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
-		stmts := []string{
-			"CREATE USER test_admin WITH PASSWORD 'testpw'",
-			"GRANT admin TO test_admin",
-			"ALTER ROLE ALL SET serial_normalization = 'sql_sequence_cached'",
-			"ALTER ROLE ALL SET statement_timeout = '60s'",
-		}
-		for _, stmt := range stmts {
-			_, err = db.ExecContext(ctx, stmt)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-
-		if UsingRuntimeAssertions(t) {
-			// This test assumes that multiple_active_portals_enabled is false, but through
-			// metamorphic constants, it is possible for them to be enabled.
-			if _, err = db.ExecContext(ctx, "SET multiple_active_portals_enabled=false"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err = db.ExecContext(ctx, "ALTER DATABASE defaultdb SET multiple_active_portals_enabled=false"); err != nil {
-				t.Fatal(err)
-			}
-		}
-
 		t.Status("cloning pgjdbc and installing prerequisites")
 		// Report the latest tag, but do not use it. The newest versions produces output that breaks our xml parser,
 		// and we want to pin to the working version for now.
