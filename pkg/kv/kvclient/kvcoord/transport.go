@@ -12,8 +12,6 @@ package kvcoord
 
 import (
 	"context"
-	"fmt"
-	"sort"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -35,11 +33,6 @@ import (
 type SendOptions struct {
 	class   rpc.ConnectionClass
 	metrics *DistSenderMetrics
-	// dontConsiderConnHealth, if set, makes the transport not take into
-	// consideration the connection health when deciding the ordering for
-	// replicas. When not set, replicas on nodes with unhealthy connections are
-	// deprioritized.
-	dontConsiderConnHealth bool
 }
 
 // TransportFactory encapsulates all interaction with the RPC
@@ -129,17 +122,10 @@ func grpcTransportFactoryImpl(
 	}
 
 	*transport = grpcTransport{
-		opts:          opts,
-		nodeDialer:    nodeDialer,
-		class:         opts.class,
-		replicas:      replicas,
-		replicaHealth: health,
-	}
-
-	if !opts.dontConsiderConnHealth {
-		// Put known-healthy replica first, while otherwise respecting the existing
-		// ordering of the replicas.
-		transport.splitHealthy()
+		opts:       opts,
+		nodeDialer: nodeDialer,
+		class:      opts.class,
+		replicas:   replicas,
 	}
 
 	return transport, nil
@@ -151,9 +137,6 @@ type grpcTransport struct {
 	class      rpc.ConnectionClass
 
 	replicas []roachpb.ReplicaDescriptor
-	// replicaHealth maps replica index within the replicas slice to healthHealthy
-	// if healthy, and healthUnhealthy if unhealthy. Used by splitHealthy.
-	replicaHealth util.FastIntMap
 	// nextReplicaIdx represents the index into replicas of the next replica to be
 	// tried.
 	nextReplicaIdx int
@@ -283,36 +266,6 @@ func (gt *grpcTransport) MoveToFront(replica roachpb.ReplicaDescriptor) bool {
 		}
 	}
 	return false
-}
-
-// splitHealthy splits the grpcTransport's replica slice into healthy replica
-// and unhealthy replica, based on their connection state. Healthy replicas will
-// be rearranged first in the replicas slice, and unhealthy replicas will be
-// rearranged last. Within these two groups, the rearrangement will be stable.
-func (gt *grpcTransport) splitHealthy() {
-	sort.Stable((*byHealth)(gt))
-}
-
-// byHealth sorts a slice of replicas by their health with healthy first.
-type byHealth grpcTransport
-
-func (h *byHealth) Len() int { return len(h.replicas) }
-func (h *byHealth) Swap(i, j int) {
-	h.replicas[i], h.replicas[j] = h.replicas[j], h.replicas[i]
-	oldI := h.replicaHealth.GetDefault(i)
-	h.replicaHealth.Set(i, h.replicaHealth.GetDefault(j))
-	h.replicaHealth.Set(j, oldI)
-}
-func (h *byHealth) Less(i, j int) bool {
-	ih, ok := h.replicaHealth.Get(i)
-	if !ok {
-		panic(fmt.Sprintf("missing health info for %s", h.replicas[i]))
-	}
-	jh, ok := h.replicaHealth.Get(j)
-	if !ok {
-		panic(fmt.Sprintf("missing health info for %s", h.replicas[j]))
-	}
-	return ih == healthHealthy && jh != healthHealthy
 }
 
 // SenderTransportFactory wraps a client.Sender for use as a KV
