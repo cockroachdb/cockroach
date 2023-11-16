@@ -645,4 +645,14 @@ go_download_sdk(
     },
     urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231019-214851/{}"],
     version = "1.21.3fips",
+    # In the golang-fips toolchain, FIPS-ready crypto packages are used by default, regardless of build tags.
+    # The boringcrypto experiment does almost nothing in this toolchain, but it does enable the use of the
+    # crypto/boring.Enabled() method which is the only application-visible way to inspect whether FIPS mode
+    # is working correctly.
+    #
+    # The golang-fips toolchain also supports an experiment `strictfipsruntime` which causes a panic at startup
+    # if the kernel is in FIPS mode but OpenSSL cannot be loaded. We do not currently use this experiment
+    # because A) we also want to detect the case when the kernel is not in FIPS mode and B) we want to be
+    # able to provide additional diagnostic information such as the expected version of OpenSSL.
+    experiments = ["boringcrypto"],
 )
