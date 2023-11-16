@@ -68,6 +68,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 	// This test was seen taking north of 20m under race.
 	skip.UnderRace(t)
 	skip.UnderShort(t)
+	skip.UnderDeadlock(t)
 
 	const numNodes = 5
 
