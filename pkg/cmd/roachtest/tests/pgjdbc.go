@@ -131,7 +131,7 @@ func registerPgjdbc(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		const blocklistName = "pgjdbcBlocklist"
+		const blocklistName = "pgjdbcBlockList"
 		const ignorelistName = "pgjdbcIgnorelist"
 		expectedFailures := pgjdbcBlockList
 		ignorelist := pgjdbcIgnoreList
