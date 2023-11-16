@@ -580,6 +580,9 @@ func acquireNodeLease(
 				return nil, err
 			}
 			t := m.findDescriptorState(id, false /* create */)
+			if t == nil {
+				return nil, errors.AssertionFailedf("could not find descriptor state for id %d", id)
+			}
 			t.mu.Lock()
 			t.mu.takenOffline = false
 			defer t.mu.Unlock()
