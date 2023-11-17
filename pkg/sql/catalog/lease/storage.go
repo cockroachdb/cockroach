@@ -80,7 +80,7 @@ type writer interface {
 }
 
 type sessionBasedLeasingModeReader interface {
-	isSessionBasedLeasingModeActive(minimumMode SessionBasedLeasingMode) bool
+	sessionBasedLeasingModeAtLeast(minimumMode SessionBasedLeasingMode) bool
 	getSessionBasedLeasingMode() SessionBasedLeasingMode
 }
 

@@ -108,7 +108,7 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 
 // sessionBasedLeasingModeActive determines if the current mode at least meets
 // the required minimum.
-func (m *Manager) isSessionBasedLeasingModeActive(minimumMode SessionBasedLeasingMode) bool {
+func (m *Manager) sessionBasedLeasingModeAtLeast(minimumMode SessionBasedLeasingMode) bool {
 	return m.getSessionBasedLeasingMode() >= minimumMode
 }
 
