@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -2396,6 +2398,130 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE %s`,
 		setSessionVariableString, tableName, columnForTypeChange.name, newTypeName.SQLString())
 	return stmt, nil
+}
+
+func (og *operationGenerator) alterTableAlterPrimaryKey(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	type Column struct {
+		Name     tree.Name
+		Nullable bool
+		Unique   bool
+	}
+
+	rowToTableName := func(row pgx.CollectableRow) (*tree.UnresolvedName, error) {
+		var schema string
+		var name string
+		if err := row.Scan(&schema, &name); err != nil {
+			return nil, err
+		}
+		return tree.NewUnresolvedName(schema, name), nil
+	}
+
+	columnsFrom := func(table tree.NodeFormatter) ([]Column, error) {
+		query := With([]CTE{
+			{"stats", fmt.Sprintf(`SELECT * FROM [SHOW STATISTICS FOR TABLE %v]`, table)},
+			{"unique_columns", `SELECT column_names[1] AS name FROM stats WHERE row_count = distinct_count AND array_length(column_names, 1) = 1`},
+		}, fmt.Sprintf(`SELECT column_name, is_nullable, EXISTS(SELECT * FROM unique_columns WHERE name = column_name) FROM [SHOW COLUMNS FROM %v] WHERE NOT is_hidden`, table))
+
+		return Collect(ctx, og, tx, pgx.RowToStructByPos[Column], query)
+	}
+
+	ctes := []CTE{
+		{"tables", `SELECT * FROM [SHOW TABLES] WHERE type = 'table'`},
+		{"descriptors", descJSONQuery},
+		{"tables_undergoing_schema_changes", `SELECT id FROM descriptors WHERE descriptor ? 'table' AND json_array_length(descriptor->'table'->'mutations') > 0`},
+	}
+
+	tablesUndergoingSchemaChangesQuery := With(ctes, `SELECT schema_name, table_name FROM tables WHERE NOT EXISTS(SELECT * FROM tables_undergoing_schema_changes WHERE id = (schema_name || '.' || table_name)::regclass::oid)`)
+	tablesNotUndergoingSchemaChangesQuery := With(ctes, `SELECT schema_name, table_name FROM tables WHERE EXISTS(SELECT * FROM tables_undergoing_schema_changes WHERE id = (schema_name || '.' || table_name)::regclass::oid)`)
+
+	var table *tree.UnresolvedName
+	stmt, code, err := Generate[*tree.AlterTable](og.params.rng, og.produceError(), []GenerationCase{
+		// IF EXISTS should noop if the table doesn't exist.
+		{pgcode.SuccessfulCompletion, `ALTER TABLE IF EXISTS "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
+		// Targeting a table that doesn't exist should error out.
+		{pgcode.UndefinedTable, `ALTER TABLE "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
+		// Targeting a column that doesn't exist should error out.
+		{pgcode.InvalidSchemaDefinition, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ("NonExistentColumn")`},
+		// NonUniqueColumns can't be used as PKs.
+		{pgcode.UniqueViolation, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({NonUniqueColumns})`},
+		// NullableColumns can't be used as PKs.
+		{pgcode.InvalidSchemaDefinition, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({NullableColumns})`},
+		// Tables undergoing a schema change may not have their PK changed.
+		// TODO(chrisseto): This case doesn't cause errors as expected.
+		// {pgcode.Code{}, `ALTER TABLE {TableUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({UniqueNotNullableColumns})`},
+		// Successful cases.
+		{pgcode.SuccessfulCompletion, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({UniqueNotNullableColumns})`},
+		{pgcode.SuccessfulCompletion, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({UniqueNotNullableColumns}) USING HASH`},
+		// TODO(chrisseto): Add support for hash parameters and storage parameters.
+	}, template.FuncMap{
+		"TableNotUnderGoingSchemaChange": func() (*tree.UnresolvedName, error) {
+			tables, err := Collect(ctx, og, tx, rowToTableName, tablesNotUndergoingSchemaChangesQuery)
+			if err != nil {
+				return nil, err
+			}
+			table, err = PickOne(og.params.rng, tables)
+			return table, err
+		},
+		"TableUnderGoingSchemaChange": func() (*tree.UnresolvedName, error) {
+			tables, err := Collect(ctx, og, tx, rowToTableName, tablesUndergoingSchemaChangesQuery)
+			if err != nil {
+				return nil, err
+			}
+			table, err = PickOne(og.params.rng, tables)
+			return table, err
+		},
+		"NullableColumns": func() (Values, error) {
+			columns, err := columnsFrom(table)
+			if err != nil {
+				return nil, err
+			}
+
+			names := util.Map(util.Filter(columns, func(c Column) bool {
+				return c.Nullable
+			}), func(c Column) *tree.Name {
+				return &c.Name
+			})
+
+			return AsValues(PickAtLeast(og.params.rng, 1, names))
+		},
+		"NonUniqueColumns": func() (Values, error) {
+			columns, err := columnsFrom(table)
+			if err != nil {
+				return nil, err
+			}
+
+			names := util.Map(util.Filter(columns, func(c Column) bool {
+				return !c.Nullable && !c.Unique
+			}), func(c Column) *tree.Name {
+				return &c.Name
+			})
+
+			return AsValues(PickAtLeast(og.params.rng, 1, names))
+		},
+		"UniqueNotNullableColumns": func() (Values, error) {
+			columns, err := columnsFrom(table)
+			if err != nil {
+				return nil, err
+			}
+
+			names := util.Map(util.Filter(columns, func(c Column) bool {
+				return !c.Nullable && c.Unique
+			}), func(c Column) *tree.Name {
+				return &c.Name
+			})
+
+			return AsValues(PickAtLeast(og.params.rng, 1, names))
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return newOpStmt(stmt, codesWithConditions{
+		{code, true},
+	}), nil
 }
 
 func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
