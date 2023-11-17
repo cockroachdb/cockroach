@@ -103,7 +103,7 @@ I231113 22:25:02.716505 1 main/main.go:112  [-] 1  Listening for OTLP connection
 
 You can use environment variables to control things like the OTLP listen address.
 ```shell
-$ docker run -e OTLP_ADDR=localhost:7171 -e HTTP_ADDR=localhost:8082 --platform=linux/amd64 obsservice:latest
+$ docker run -e OTLP_ADDR=0.0.0.0:7171 -e HTTP_ADDR=0.0.0.0:8082 --platform=linux/amd64 obsservice:latest
 I231113 22:25:02.716505 1 main/main.go:112  [-] 1  Listening for OTLP connections on localhost:7171.
 Listening for HTTP requests on http://localhost:8082.
 ```
