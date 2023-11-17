@@ -228,6 +228,11 @@ var cockroachCmd = &cobra.Command{
 	},
 }
 
+// CockroachCmd returns the root cockroach Command object.
+func CockroachCmd() *cobra.Command {
+	return cockroachCmd
+}
+
 var workloadCmd = workloadcli.WorkloadCmd(true /* userFacing */)
 
 func init() {
