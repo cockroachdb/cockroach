@@ -87,7 +87,7 @@ func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
 type latch struct {
 	*signals
 	id         uint64
-	span       roachpb.Span
+	span       *roachpb.Span
 	ts         hlc.Timestamp
 	next, prev *latch // readSet linked-list.
 }
@@ -198,7 +198,7 @@ func newGuard(spans *spanset.SpanSet, pp poison.Policy) *Guard {
 			ssLatches := latches[:n]
 			for i := range ssLatches {
 				latch := &latches[i]
-				latch.span = ss[i].Span
+				latch.span = &ss[i].Span
 				latch.signals = &guard.signals
 				latch.ts = ss[i].Timestamp
 				// latch.setID() in Manager.insert, under lock.
@@ -288,7 +288,7 @@ func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) 
 		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
 			ss := spans.GetSpans(a, s)
 			for _, sp := range ss {
-				search.span = sp.Span
+				search.span = &sp.Span
 				search.ts = sp.Timestamp
 				switch a {
 				case spanset.SpanReadOnly:
@@ -561,7 +561,7 @@ func (m *Manager) waitForSignal(
 			// ourselves anyway, so we don't need to self-poison.
 			switch pp {
 			case poison.Policy_Error:
-				return poison.NewPoisonedError(held.span, held.ts)
+				return poison.NewPoisonedError(*held.span, held.ts)
 			case poison.Policy_Wait:
 				log.Eventf(ctx, "encountered poisoned latch; continuing to wait")
 				wait.poison.signal()

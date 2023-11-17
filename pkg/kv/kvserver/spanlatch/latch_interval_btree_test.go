@@ -28,8 +28,11 @@ import (
 
 func newItem(s roachpb.Span) *latch {
 	i := nilT.New()
-	i.SetKey(s.Key)
-	i.SetEndKey(s.EndKey)
+	span := roachpb.Span {
+		Key: s.Key,
+		EndKey: s.EndKey,
+	}
+	i.span = &span
 	return i
 }
 
