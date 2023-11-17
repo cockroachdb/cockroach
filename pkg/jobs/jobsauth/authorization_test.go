@@ -96,6 +96,16 @@ func (a *testAuthAccessor) HasPrivilege(
 	return false, nil
 }
 
+func (a *testAuthAccessor) UserHasRoleOption(
+	_ context.Context, user username.SQLUsername, roleOption roleoption.Option,
+) (bool, error) {
+	if user != a.user {
+		panic(fmt.Sprintf("testAuthAccessor does not implement UserHasRoleOption for user %s", user))
+	}
+	_, ok := a.roleOptions[roleOption]
+	return ok, nil
+}
+
 func (a *testAuthAccessor) HasRoleOption(
 	_ context.Context, roleOption roleoption.Option,
 ) (bool, error) {

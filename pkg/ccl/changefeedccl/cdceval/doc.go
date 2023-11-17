@@ -134,7 +134,6 @@ functions along with the number of arguments and the return type of the overload
   crdb_internal.get_namespace_id                               |        2 | int8
   crdb_internal.get_namespace_id                               |        3 | int8
   crdb_internal.get_zone_config                                |        1 | bytea
-  crdb_internal.has_role_option                                |        1 | bool
   crdb_internal.is_admin                                       |        0 | bool
   crdb_internal.locality_value                                 |        1 | text
   crdb_internal.node_id                                        |        0 | int8

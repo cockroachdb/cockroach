@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -353,16 +352,14 @@ const (
 	SuperUserRole
 )
 
-// roleAuthorizationMux enforces a role (eg. type of user, role option)
-// for an arbitrary inner mux. Meant to be used under authenticationV2Mux. If
-// the logged-in user is not at least of `role` type, and doesn't have
-// the `option` roleoption, an HTTP 403 forbidden error is returned. Otherwise,
-// the request is passed onto the inner http.Handler.
+// roleAuthorizationMux enforces a role (eg. type of user) for an arbitrary
+// inner mux. Meant to be used under authenticationV2Mux. If the logged-in user
+// is not at least of `role` type, an HTTP 403 forbidden error is returned.
+// Otherwise, the request is passed onto the inner http.Handler.
 type roleAuthorizationMux struct {
-	ie     isql.Executor
-	role   APIRole
-	option roleoption.Option
-	inner  http.Handler
+	ie    isql.Executor
+	role  APIRole
+	inner http.Handler
 }
 
 func (r *roleAuthorizationMux) getRoleForUser(
@@ -395,33 +392,6 @@ func (r *roleAuthorizationMux) getRoleForUser(
 	return RegularRole, nil
 }
 
-func (r *roleAuthorizationMux) hasRoleOption(
-	ctx context.Context, user username.SQLUsername, roleOption roleoption.Option,
-) (bool, error) {
-	if user.IsRootUser() {
-		// Shortcut.
-		return true, nil
-	}
-	row, err := r.ie.QueryRowEx(
-		ctx, "check-role-option", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: user},
-		"SELECT crdb_internal.has_role_option($1)", roleOption.String())
-	if err != nil {
-		return false, err
-	}
-	if row == nil {
-		return false, errors.AssertionFailedf("hasRoleOption: expected 1 row, got 0")
-	}
-	if len(row) != 1 {
-		return false, errors.AssertionFailedf("hasRoleOption: expected 1 column, got %d", len(row))
-	}
-	dbDatum, ok := tree.AsDBool(row[0])
-	if !ok {
-		return false, errors.AssertionFailedf("hasRoleOption: expected bool, got %T", row[0])
-	}
-	return bool(dbDatum), nil
-}
-
 func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// The username is set in authenticationV2Mux, and must correspond with a
 	// logged-in user.
@@ -433,16 +403,6 @@ func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Reques
 			http.Error(w, "user not allowed to access this endpoint", http.StatusForbidden)
 		}
 		return
-	}
-	if r.option > 0 {
-		ok, err := r.hasRoleOption(req.Context(), username, r.option)
-		if err != nil {
-			srverrors.APIV2InternalError(req.Context(), err, w)
-			return
-		} else if !ok {
-			http.Error(w, "user not allowed to access this endpoint", http.StatusForbidden)
-			return
-		}
 	}
 	r.inner.ServeHTTP(w, req)
 }

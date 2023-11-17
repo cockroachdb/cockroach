@@ -6310,38 +6310,6 @@ SELECT
 		},
 	),
 
-	// Returns true iff the current user has the specified role option.
-	// Note: it would be a privacy leak to extend this to check arbitrary usernames.
-	"crdb_internal.has_role_option": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "option", Typ: types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if evalCtx.SessionAccessor == nil {
-					return nil, errors.AssertionFailedf("session accessor not set")
-				}
-				optionStr := string(tree.MustBeDString(args[0]))
-				option, ok := roleoption.ByName[optionStr]
-				if !ok {
-					return nil, errors.Newf("unrecognized role option %s", optionStr)
-				}
-				ok, err := evalCtx.SessionAccessor.HasRoleOption(ctx, option)
-				if err != nil {
-					return nil, err
-				}
-				return tree.MakeDBool(tree.DBool(ok)), nil
-			},
-			Info:       "Returns whether the current user has the specified role option",
-			Volatility: volatility.Stable,
-		},
-	),
-
 	"crdb_internal.assignment_cast": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,
