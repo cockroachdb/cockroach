@@ -139,13 +139,13 @@ inner-join (lookup g [as=g2])
  │    ├── flags: force inverted join (into right side)
  │    ├── inverted-expr
  │    │    └── st_contains(g1.geom:2, g2.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=999.957, null(1)=0, distinct(11)=999.957, null(11)=0]
+ │    ├── stats: [rows=10000, distinct(11)=999.957, null(11)=0]
  │    ├── cost: 41472.44
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2)
  │    ├── scan g [as=g1]
  │    │    ├── columns: g1.k:1!null g1.geom:2
- │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
+ │    │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1068.42
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
@@ -365,14 +365,14 @@ limit
  │    │    ├── columns: t.id:1!null sender_id:2!null receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13 s.id:16!null s.name:17!null s.gender:18 s.email:19 s.first_name:20 s.last_name:21 s.creation_date:22!null s.situation:23 s.balance:24!null s.is_blocked:25
  │    │    ├── key columns: [2] = [16]
  │    │    ├── lookup columns are key
- │    │    ├── stats: [rows=990, distinct(1)=628.605, null(1)=0, distinct(2)=99, null(2)=0, distinct(3)=99.995, null(3)=9.9, distinct(4)=99.995, null(4)=0, distinct(5)=99.995, null(5)=0, distinct(16)=99, null(16)=0, distinct(17)=99.995, null(17)=0, distinct(22)=99.995, null(22)=0, distinct(24)=99.995, null(24)=0]
+ │    │    ├── stats: [rows=990, distinct(2)=99, null(2)=0, distinct(3)=99.995, null(3)=9.9, distinct(16)=99, null(16)=0]
  │    │    ├── cost: 1511.62
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-13), (16)-->(17-25), (2)==(16), (16)==(2)
  │    │    ├── limit hint: 100.00
  │    │    ├── scan transaction [as=t]
  │    │    │    ├── columns: t.id:1!null sender_id:2 receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13
- │    │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=0, distinct(5)=100, null(5)=0]
+ │    │    │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10]
  │    │    │    ├── cost: 270.02
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(2-13)
@@ -504,7 +504,7 @@ project
       ├── fd: ()-->(1,2,8,9), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null
-      │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=10, null(4)=0]
+      │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0]
       │    ├── cost: 138.96
       │    ├── fd: ()-->(1,2)
       │    ├── scan wxyz
@@ -614,7 +614,7 @@ project
       ├── fd: ()-->(1,2,5-10,14,15), (1)==(14), (14)==(1), (2)==(15), (15)==(2), (3)==(16), (16)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null
-      │    ├── stats: [rows=0.9000001, distinct(1)=0.9, null(1)=0, distinct(2)=0.9, null(2)=0, distinct(3)=0.884032, null(3)=0, distinct(4)=0.899636, null(4)=0, distinct(5)=0.9, null(5)=0, distinct(6)=0.9, null(6)=0, distinct(7)=0.9, null(7)=0, distinct(8)=0.9, null(8)=0, distinct(9)=0.9, null(9)=0, distinct(10)=0.9, null(10)=0, distinct(5-10)=0.9, null(5-10)=0]
+      │    ├── stats: [rows=0.9000001, distinct(1)=0.9, null(1)=0, distinct(2)=0.9, null(2)=0, distinct(3)=0.884032, null(3)=0, distinct(5)=0.9, null(5)=0, distinct(6)=0.9, null(6)=0, distinct(7)=0.9, null(7)=0, distinct(8)=0.9, null(8)=0, distinct(9)=0.9, null(9)=0, distinct(10)=0.9, null(10)=0, distinct(5-10)=0.9, null(5-10)=0]
       │    ├── cost: 12230.22
       │    ├── fd: ()-->(1,2,5-10)
       │    ├── scan wxyzijklmn
@@ -753,7 +753,7 @@ project
       │    ├── scan abcde@idx_abd
       │    │    ├── columns: a:7!null b:8!null c:9!null d:10!null
       │    │    ├── constraint: /7/8/10: [/'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2']
-      │    │    ├── stats: [rows=125000, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=24975.6, null(9)=0, distinct(10)=93750, null(10)=0]
+      │    │    ├── stats: [rows=125000, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=24975.6, null(9)=0]
       │    │    ├── cost: 126.02
       │    │    ├── key: (9)
       │    │    ├── fd: ()-->(7,8), (9)-->(10), (10)-->(9)
