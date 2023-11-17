@@ -296,6 +296,17 @@ var exportRequestsLimit = settings.RegisterIntSetting(
 // replicas. Varying it makes sure we handle this state.
 var raftStepDownOnRemoval = util.ConstantWithMetamorphicTestBool("raft-step-down-on-removal", true)
 
+// raftResumeReplicateBelowPendingSnapshot allows leaders to resume replication
+// to a follower that applies a snapshot below the leader's `PendingSnapshot`,
+// as long as the snapshot connects the follower to the leader's log. Otherwise,
+// if we delegate snapshot sending to a replica that's lagging behind the
+// leader, it may send a snapshot below the leader's `PendingSnapshot`, and this
+// would then be rejected even though it's a perfectly fine snapshot.
+//
+// See: https://github.com/cockroachdb/cockroach/issues/106813
+var raftResumeReplicateBelowPendingSnapshot = envutil.EnvOrDefaultBool(
+	"COCKROACH_RAFT_RESUME_REPLICATE_BELOW_PENDING_SNAPSHOT", true)
+
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	return testStoreConfig(clock, clusterversion.Latest.Version())
@@ -351,19 +362,20 @@ func newRaftConfig(
 	logger raft.Logger,
 ) *raft.Config {
 	return &raft.Config{
-		ID:                          id,
-		Applied:                     uint64(appliedIndex),
-		AsyncStorageWrites:          true,
-		ElectionTick:                storeCfg.RaftElectionTimeoutTicks,
-		HeartbeatTick:               storeCfg.RaftHeartbeatIntervalTicks,
-		MaxUncommittedEntriesSize:   storeCfg.RaftMaxUncommittedEntriesSize,
-		MaxCommittedSizePerReady:    storeCfg.RaftMaxCommittedSizePerReady,
-		DisableConfChangeValidation: true, // see https://github.com/cockroachdb/cockroach/issues/105797
-		MaxSizePerMsg:               storeCfg.RaftMaxSizePerMsg,
-		MaxInflightMsgs:             storeCfg.RaftMaxInflightMsgs,
-		MaxInflightBytes:            storeCfg.RaftMaxInflightBytes,
-		Storage:                     strg,
-		Logger:                      logger,
+		ID:                                  id,
+		Applied:                             uint64(appliedIndex),
+		AsyncStorageWrites:                  true,
+		ElectionTick:                        storeCfg.RaftElectionTimeoutTicks,
+		HeartbeatTick:                       storeCfg.RaftHeartbeatIntervalTicks,
+		MaxUncommittedEntriesSize:           storeCfg.RaftMaxUncommittedEntriesSize,
+		MaxCommittedSizePerReady:            storeCfg.RaftMaxCommittedSizePerReady,
+		DisableConfChangeValidation:         true, // see https://github.com/cockroachdb/cockroach/issues/105797
+		ResumeReplicateBelowPendingSnapshot: raftResumeReplicateBelowPendingSnapshot,
+		MaxSizePerMsg:                       storeCfg.RaftMaxSizePerMsg,
+		MaxInflightMsgs:                     storeCfg.RaftMaxInflightMsgs,
+		MaxInflightBytes:                    storeCfg.RaftMaxInflightBytes,
+		Storage:                             strg,
+		Logger:                              logger,
 
 		// StepDownOnRemoval requires 23.2. Otherwise, in a mixed-version cluster, a
 		// 23.2 leader may step down when it demotes itself to learner, but a
