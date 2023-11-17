@@ -6285,31 +6285,6 @@ SELECT
 		},
 	),
 
-	// Returns true iff the current user has admin role.
-	// Note: it would be a privacy leak to extend this to check arbitrary usernames.
-	"crdb_internal.is_admin": makeBuiltin(
-		tree.FunctionProperties{
-			Category:         builtinconstants.CategorySystemInfo,
-			DistsqlBlocklist: true,
-		},
-		tree.Overload{
-			Types:      tree.ParamTypes{},
-			ReturnType: tree.FixedReturnType(types.Bool),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, _ tree.Datums) (tree.Datum, error) {
-				if evalCtx.SessionAccessor == nil {
-					return nil, errors.AssertionFailedf("session accessor not set")
-				}
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
-					return nil, err
-				}
-				return tree.MakeDBool(tree.DBool(isAdmin)), nil
-			},
-			Info:       "Retrieves the current user's admin status.",
-			Volatility: volatility.Stable,
-		},
-	),
-
 	"crdb_internal.assignment_cast": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,
