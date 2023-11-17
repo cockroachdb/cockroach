@@ -256,14 +256,16 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
 
-		var target string
-		if strings.Contains(pkg, ":") || strings.HasSuffix(pkg, "/...") {
-			// For parity with bazel, we allow specifying named build targets.
-			target = pkg
-		} else {
-			target = fmt.Sprintf("%s:all", pkg)
+		if !strings.Contains(pkg, ":") && !strings.HasSuffix(pkg, "/...") {
+			pkg = fmt.Sprintf("%s:all", pkg)
 		}
-		testTargets = append(testTargets, target)
+		// Filter out only test targets.
+		queryArgs := []string{"query", fmt.Sprintf("kind(.*_test, %s)", pkg)}
+		labels, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+		if err != nil {
+			return fmt.Errorf("could not query for tests within %s: got error %w", pkg, err)
+		}
+		testTargets = append(testTargets, strings.Split(strings.TrimSpace(string(labels)), "\n")...)
 	}
 
 	for _, target := range testTargets {
@@ -278,6 +280,11 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 				return fmt.Errorf("%s:%s will fail since it is an integration test. To run this test, run `%s`", testTarget[0], integrationTest.testName, integrationTest.commandToRun)
 			}
 		}
+	}
+
+	if len(testTargets) == 0 {
+		log.Printf("WARNING: no matching test targets were found")
+		return nil
 	}
 
 	args = append(args, testTargets...)
