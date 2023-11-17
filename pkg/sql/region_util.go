@@ -877,6 +877,7 @@ func generateAndValidateZoneConfigForMultiRegionDatabase(
 	regionProvider descs.RegionProvider,
 	execConfig *ExecutorConfig,
 	regionConfig multiregion.RegionConfig,
+	currentZoneConfig *zonepb.ZoneConfig,
 	validateLocalities bool,
 ) (zonepb.ZoneConfig, error) {
 	// Build a zone config based on the RegionConfig information.
@@ -897,7 +898,7 @@ func generateAndValidateZoneConfigForMultiRegionDatabase(
 		return zonepb.ZoneConfig{}, err
 	}
 
-	if err := validateZoneAttrsAndLocalities(ctx, regionProvider, execConfig, &dbZoneConfig); err != nil {
+	if err := validateZoneAttrsAndLocalities(ctx, regionProvider, execConfig, currentZoneConfig, &dbZoneConfig); err != nil {
 		// If we are validating localities this is fatal, otherwise let's log any
 		// errors as warnings.
 		if validateLocalities {
@@ -921,8 +922,17 @@ func ApplyZoneConfigFromDatabaseRegionConfig(
 	validateLocalities bool,
 	kvTrace bool,
 ) error {
+	currentZone := zonepb.NewZoneConfig()
+	if currentZoneConfigWithRaw, err := txn.Descriptors().GetZoneConfig(
+		ctx, txn.KV(), dbID,
+	); err != nil {
+		return err
+	} else if currentZoneConfigWithRaw != nil {
+		currentZone = currentZoneConfigWithRaw.ZoneConfigProto()
+	}
+
 	// Build a zone config based on the RegionConfig information.
-	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(ctx, txn.Regions(), execConfig, regionConfig, validateLocalities)
+	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(ctx, txn.Regions(), execConfig, regionConfig, currentZone, validateLocalities)
 	if err != nil {
 		return err
 	}
@@ -2623,10 +2633,21 @@ func (zv *zoneConfigValidator) ValidateDbZoneConfig(
 	if err != nil {
 		return err
 	}
+
+	currentZone := zonepb.NewZoneConfig()
+	if currentZoneConfigWithRaw, err := zv.descs.GetZoneConfig(
+		ctx, zv.txn, db.GetID(),
+	); err != nil {
+		return err
+	} else if currentZoneConfigWithRaw != nil {
+		currentZone = currentZoneConfigWithRaw.ZoneConfigProto()
+	}
+
 	_, err = generateAndValidateZoneConfigForMultiRegionDatabase(ctx,
 		zv.regionProvider,
 		zv.execCfg,
 		regionConfig,
+		currentZone,
 		true, /*validateLocalities*/
 	)
 	if err != nil {

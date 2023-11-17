@@ -83,6 +83,12 @@ func registerAcceptance(r registry.Registry) {
 				fn:            runValidateSystemSchemaAfterVersionUpgrade,
 				timeout:       30 * time.Minute,
 				defaultLeases: true,
+				numNodes:      1,
+			},
+			{
+				name:     "mismatched-locality",
+				fn:       runMismatchedLocalityTest,
+				numNodes: 3,
 			},
 		},
 	}
