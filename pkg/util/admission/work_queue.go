@@ -814,11 +814,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.metrics.incErrored(info.Priority)
 		q.metrics.recordFinishWait(info.Priority, waitDur)
 		deadline, _ := ctx.Deadline()
-		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, true)
-		log.Eventf(ctx, "deadline expired, waited in %s queue for %v", q.queueKind, waitDur)
+		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, info.Priority, true)
+		log.Eventf(ctx, "deadline expired, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
 		return true,
-			errors.Newf("deadline expired while waiting in queue: %s, deadline: %v, start: %v, dur: %v",
-				q.queueKind, deadline, startTime, waitDur)
+			errors.Newf("deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
+				q.queueKind, admissionpb.WorkPriorityDict[info.Priority], deadline, startTime, waitDur)
 	case chainID, ok := <-work.ch:
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
@@ -829,14 +829,18 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if work.heapIndex != -1 {
 			panic(errors.AssertionFailedf("grantee should be removed from heap"))
 		}
-		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, false)
+		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, info.Priority, false)
 		q.granter.continueGrantChain(chainID)
 		return true, nil
 	}
 }
 
 func recordAdmissionWorkQueueStats(
-	span *tracing.Span, waitDur time.Duration, queueKind QueueKind, deadlineExceeded bool,
+	span *tracing.Span,
+	waitDur time.Duration,
+	queueKind QueueKind,
+	workPriority admissionpb.WorkPriority,
+	deadlineExceeded bool,
 ) {
 	if span == nil {
 		return
@@ -845,6 +849,7 @@ func recordAdmissionWorkQueueStats(
 		WaitDurationNanos: waitDur,
 		QueueKind:         string(queueKind),
 		DeadlineExceeded:  deadlineExceeded,
+		WorkPriority:      admissionpb.WorkPriorityDict[workPriority],
 	})
 }
 
