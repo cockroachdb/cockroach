@@ -547,6 +547,31 @@ func (wk WorkKind) String() string {
 	}
 }
 
+type QueueKind int8
+
+const (
+	KVAdmissionQueue QueueKind = iota
+	ElasticCPUQueue
+	StoreQueue
+)
+
+// SafeValue implements the redact.SafeValue interface.
+func (QueueKind) SafeValue() {}
+
+// String implements the fmt.Stringer interface.
+func (qk QueueKind) String() string {
+	switch qk {
+	case KVAdmissionQueue:
+		return "kv-admission-queue"
+	case ElasticCPUQueue:
+		return "elastic-cpu-queue"
+	case StoreQueue:
+		return "store-queue"
+	default:
+		panic(errors.AssertionFailedf("unknown QueueKind"))
+	}
+}
+
 // storeAdmissionStats are stats maintained by a storeRequester. The non-test
 // implementation of storeRequester is StoreWorkQueue. StoreWorkQueue updates
 // all of these when StoreWorkQueue.AdmittedWorkDone is called, so that these

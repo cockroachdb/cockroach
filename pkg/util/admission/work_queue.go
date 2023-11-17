@@ -276,6 +276,7 @@ func (r LogPosition) Less(o LogPosition) bool {
 type WorkQueue struct {
 	ambientCtx     context.Context
 	workKind       WorkKind
+	queueKind      QueueKind
 	granter        granter
 	usesTokens     bool
 	tiedToRange    bool
@@ -364,7 +365,7 @@ func makeWorkQueue(
 	opts workQueueOptions,
 ) requester {
 	q := &WorkQueue{}
-	initWorkQueue(q, ambientCtx, workKind, granter, settings, metrics, opts, nil)
+	initWorkQueue(q, ambientCtx, workKind, KVAdmissionQueue, granter, settings, metrics, opts, nil)
 	return q
 }
 
@@ -372,6 +373,7 @@ func initWorkQueue(
 	q *WorkQueue,
 	ambientCtx log.AmbientContext,
 	workKind WorkKind,
+	queueKind QueueKind,
 	granter granter,
 	settings *cluster.Settings,
 	metrics *WorkQueueMetrics,
@@ -390,6 +392,7 @@ func initWorkQueue(
 
 	q.ambientCtx = ambientCtx.AnnotateCtx(context.Background())
 	q.workKind = workKind
+	q.queueKind = queueKind
 	q.granter = granter
 	q.usesTokens = opts.usesTokens
 	q.tiedToRange = opts.tiedToRange
@@ -803,12 +806,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.metrics.incErrored(info.Priority)
 		q.metrics.recordFinishWait(info.Priority, waitDur)
 		deadline, _ := ctx.Deadline()
-		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, true)
+		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, q.queueKind, true)
 		log.Eventf(ctx, "deadline expired, waited in %s queue for %v",
 			q.workKind, waitDur)
 		return true,
-			errors.Newf("work %s deadline expired while waiting: deadline: %v, start: %v, dur: %v",
-				q.workKind, deadline, startTime, waitDur)
+			errors.Newf("work %s deadline expired while waiting in queue: %s, deadline: %v, start: %v, dur: %v",
+				q.workKind, q.queueKind, deadline, startTime, waitDur)
 	case chainID, ok := <-work.ch:
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
@@ -819,15 +822,18 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if work.heapIndex != -1 {
 			panic(errors.AssertionFailedf("grantee should be removed from heap"))
 		}
-		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, false)
-		log.Eventf(ctx, "admitted, waited in %s queue for %v", q.workKind, waitDur)
+		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, q.queueKind, false)
 		q.granter.continueGrantChain(chainID)
 		return true, nil
 	}
 }
 
 func recordAdmissionWorkQueueStats(
-	span *tracing.Span, waitDur time.Duration, workKind WorkKind, deadlineExceeded bool,
+	span *tracing.Span,
+	waitDur time.Duration,
+	workKind WorkKind,
+	queueKind QueueKind,
+	deadlineExceeded bool,
 ) {
 	if span == nil {
 		return
@@ -836,6 +842,7 @@ func recordAdmissionWorkQueueStats(
 		WaitDurationNanos: waitDur,
 		WorkKind:          workKind.String(),
 		DeadlineExceeded:  deadlineExceeded,
+		QueueKind:         queueKind.String(),
 	})
 }
 
@@ -2205,7 +2212,7 @@ func makeStoreWorkQueue(
 
 	opts.usesAsyncAdmit = true
 	for i := range q.q {
-		initWorkQueue(&q.q[i], ambientCtx, KVWork, granters[i], settings, metrics, opts, knobs)
+		initWorkQueue(&q.q[i], ambientCtx, KVWork, StoreQueue, granters[i], settings, metrics, opts, knobs)
 		q.q[i].onAdmittedReplicatedWork = q
 	}
 	// Arbitrary initial value. This will be replaced before any meaningful
