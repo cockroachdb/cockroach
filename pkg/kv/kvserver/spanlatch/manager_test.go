@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
@@ -731,6 +732,24 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestSizeOfLatch tests to ensure we can reduce memory footprint
+// of the latch struct by 40 bytes with span pointer.
+func TestSizeOfLatch(t *testing.T) {
+	var spanPointerLatch latch
+	splSize := int(unsafe.Sizeof(spanPointerLatch))
+	require.Equal(t, 56, splSize)
+	type latchWithSpanInstance struct {
+		*signals
+		id         uint64
+		span       roachpb.Span
+		ts         hlc.Timestamp
+		next, prev *latch // readSet linked-list.
+	}
+	var spanStructLatch latchWithSpanInstance
+	sslSize := int(unsafe.Sizeof(spanStructLatch))
+	require.Equal(t, 40, sslSize-splSize)
 }
 
 func randBytes(n int) []byte {
