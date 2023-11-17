@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -28,14 +27,13 @@ import (
 func registerPruneDanglingSnapshotsAndDisks(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
 		1, /* nodeCount */
-		spec.Cloud(spec.GCE),
 	)
 
 	r.Add(registry.TestSpec{
 		Name:             "prune-dangling",
 		Owner:            registry.OwnerTestEng,
 		Cluster:          clusterSpec,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
