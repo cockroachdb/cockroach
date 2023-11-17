@@ -25,6 +25,8 @@ type (
 		// CockroachNodes is the set of cockroach nodes in the cluster
 		// that are being part of the upgrade being performed.
 		CockroachNodes option.NodeListOption
+		// Stage is the UpgradeStage when the step is scheduled to run.
+		Stage UpgradeStage
 		// FromVersion is the version the nodes are migrating from.
 		FromVersion *clusterupgrade.Version
 		// ToVersion is the version the nodes are migrating to.
@@ -62,10 +64,11 @@ func newInitialContext(
 // context functions since the context is not dynamically updated as
 // the test makes progress during the background function's execution.
 func newLongRunningContext(
-	from, to *clusterupgrade.Version, crdbNodes option.NodeListOption,
+	from, to *clusterupgrade.Version, crdbNodes option.NodeListOption, stage UpgradeStage,
 ) *Context {
 	return &Context{
 		CockroachNodes: crdbNodes,
+		Stage:          stage,
 		FromVersion:    from,
 		ToVersion:      to,
 		nodesByVersion: map[clusterupgrade.Version]*intsets.Fast{
@@ -87,6 +90,7 @@ func (c *Context) clone() Context {
 
 	return Context{
 		CockroachNodes: append(option.NodeListOption{}, c.CockroachNodes...),
+		Stage:          c.Stage,
 		FromVersion:    &clusterupgrade.Version{Version: fromVersion},
 		ToVersion:      &clusterupgrade.Version{Version: toVersion},
 		Finalizing:     c.Finalizing,
