@@ -39,7 +39,9 @@ func registerTPCE(r registry.Registry) {
 		racks := opts.nodes
 
 		t.Status("installing cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
+		// Never run with runtime assertions as this makes this test take
+		// too long to complete.
+		c.Put(ctx, t.StandardCockroach(), "./cockroach", roachNodes)
 
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.StoreCount = opts.ssds

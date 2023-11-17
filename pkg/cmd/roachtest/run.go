@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -41,6 +43,7 @@ var (
 
 	parallelism int
 	cpuQuota    int
+	globalSeed  int64
 
 	// Path to a local dir where the test logs and artifacts collected from
 	// cluster will be placed.
@@ -150,6 +153,9 @@ func addRunBenchCommonFlags(cmd *cobra.Command) {
 			"is present in the list, the respective binary will be used when a "+
 			"mixed-version test asks for the respective binary, instead of "+
 			"`roachprod stage <ver>`. Example: 20.1.4=cockroach-20.1,20.2.0=cockroach-20.2.")
+	cmd.Flags().Int64Var(
+		&globalSeed, "global-seed", randutil.NewPseudoSeed(),
+		"The global random seed used for all tests.")
 }
 
 func addRunFlags(runCmd *cobra.Command) {
@@ -177,6 +183,7 @@ func addBenchFlags(benchCmd *cobra.Command) {
 // Assumes initRunFlagsBinariesAndLibraries was called.
 func runTests(register func(registry.Registry), args []string, benchOnly bool) error {
 	r := makeTestRegistry(cloud, instanceType, zonesF, localSSDArg, benchOnly)
+	rand.Seed(globalSeed)
 
 	// actual registering of tests
 	// TODO: don't register if we can't run on the specified registry cloud
@@ -252,6 +259,7 @@ func runTests(register func(registry.Registry), args []string, benchOnly bool) e
 		literalArtifactsDir: literalArtifactsDir,
 		runnerLogPath:       runnerLogPath,
 	}
+	l.Printf("global random seed: %d", globalSeed)
 	go func() {
 		if err := http.ListenAndServe(
 			fmt.Sprintf(":%d", promPort),

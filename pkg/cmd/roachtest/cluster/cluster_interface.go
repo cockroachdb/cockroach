@@ -49,6 +49,10 @@ type Cluster interface {
 		ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option,
 	) error
 
+	// SetRandomSeed allows tests to set their own random seed to be
+	// used by builds with runtime assertions enabled.
+	SetRandomSeed(seed int64)
+
 	// Starting and stopping CockroachDB.
 
 	StartE(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
