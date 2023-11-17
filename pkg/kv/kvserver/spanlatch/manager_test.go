@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
@@ -679,6 +680,13 @@ func TestLatchManagerWaitFor(t *testing.T) {
 	lg3, err = m.WaitUntilAcquired(context.Background(), lg3)
 	require.NoError(t, err)
 	m.Release(lg3)
+}
+
+// TestSizeOfLatch tests the size of the latch struct.
+func TestSizeOfLatch(t *testing.T) {
+	var la latch
+	size := int(unsafe.Sizeof(la))
+	require.Equal(t, 56, size)
 }
 
 func BenchmarkLatchManagerReadOnlyMix(b *testing.B) {
