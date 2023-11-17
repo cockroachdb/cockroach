@@ -64,14 +64,11 @@ func (n *dnsProvider) CreateRecords(_ context.Context, records ...vm.DNSRecord) 
 }
 
 // LookupSRVRecords is part of the vm.DNSProvider interface.
-func (n *dnsProvider) LookupSRVRecords(
-	_ context.Context, service, proto, subdomain string,
-) ([]vm.DNSRecord, error) {
+func (n *dnsProvider) LookupSRVRecords(_ context.Context, name string) ([]vm.DNSRecord, error) {
 	records, err := n.loadRecords()
 	if err != nil {
 		return nil, err
 	}
-	name := fmt.Sprintf("_%s._%s.%s.%s", service, proto, subdomain, n.Domain())
 	var matchingRecords []vm.DNSRecord
 	for _, record := range records {
 		if record.Name == name && record.Type == vm.SRV {
