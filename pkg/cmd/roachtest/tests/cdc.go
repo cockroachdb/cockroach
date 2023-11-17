@@ -1476,6 +1476,76 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-topics",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			// Run minimal level of tpcc workload and changefeed.
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
+
+			kafka, cleanup := setupKafka(ctx, t, c, c.Node(c.Spec().NodeCount))
+			defer cleanup()
+
+			db := c.Conn(ctx, t.L(), 1)
+			defer stopFeeds(db)
+
+			// Create lots of topics and make sure that sarama client is not fetching
+			// metadata for all.
+			t.Status("creating kafka topics")
+			for i := 0; i < 10; i++ {
+				if err := kafka.createTopic(ctx, "topicname"+fmt.Sprintf("%d", i)); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'only'"},
+			})
+			feed.waitForCompletion()
+
+			// Check logs on cockroach nodes (skip the last node running workload and
+			// kafka). This test verifies that sarama does mot fetch metadata for all
+			// topics but fetch metadata only for a minimal set of necessary topics.
+			// client/metadata fetching metadata for all topics from broker
+			results, err := ct.cluster.RunWithDetails(ct.ctx, t.L(),
+				ct.cluster.Range(1, c.Spec().NodeCount-1),
+				"grep \"client/metadata fetching metadata for\" logs/cockroach.log")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(results) != 3 {
+				t.Fatal("expected three nodes")
+			}
+			for _, res := range results {
+				for _, target := range allTpccTargets {
+					trimmedTargetName := strings.TrimPrefix(target, `tpcc.`)
+					if !strings.Contains(res.Stdout, trimmedTargetName) {
+						t.Fatalf("expected fetching metadata for %s but did not", trimmedTargetName)
+					}
+				}
+				for i := 0; i < 10; i++ {
+					topicName := "topicname" + fmt.Sprintf("%v", i)
+					if strings.Contains(res.Stdout, topicName) {
+						t.Fatalf("did not expect to fetch metadata for %s", topicName)
+					}
+				}
+				if strings.Contains(res.Stdout, "all topics") {
+					t.Fatal("expected not to fetch metadata for all topics")
+				}
+			}
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:             "cdc/bank",
 		Owner:            `cdc`,
 		Cluster:          r.MakeClusterSpec(4),
