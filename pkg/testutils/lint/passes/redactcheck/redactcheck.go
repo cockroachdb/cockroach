@@ -192,7 +192,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"TxnSeq":         {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/util/admission": {
-						"WorkKind": {},
+						"WorkKind":  {},
+						"QueueKind": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/util/hlc": {
 						"ClockTimestamp":  {},
