@@ -87,7 +87,7 @@ func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
 type latch struct {
 	*signals
 	id         uint64
-	span       roachpb.Span
+	span       *roachpb.Span
 	ts         hlc.Timestamp
 	next, prev *latch // readSet linked-list.
 }
@@ -109,13 +109,36 @@ func (la *latch) SafeFormat(w redact.SafePrinter, _ rune) {
 //go:generate ../../../util/interval/generic/gen.sh *latch spanlatch
 
 // Methods required by util/interval/generic type contract.
-func (la *latch) ID() uint64         { return la.id }
-func (la *latch) Key() []byte        { return la.span.Key }
-func (la *latch) EndKey() []byte     { return la.span.EndKey }
-func (la *latch) New() *latch        { return new(latch) }
-func (la *latch) SetID(v uint64)     { la.id = v }
-func (la *latch) SetKey(v []byte)    { la.span.Key = v }
-func (la *latch) SetEndKey(v []byte) { la.span.EndKey = v }
+func (la *latch) New() *latch    { return new(latch) }
+func (la *latch) ID() uint64     { return la.id }
+func (la *latch) SetID(v uint64) { la.id = v }
+func (la *latch) Key() []byte {
+	if la.span == nil {
+		return nil
+	}
+	return la.span.Key
+}
+func (la *latch) EndKey() []byte {
+	if la.span == nil {
+		return nil
+	}
+	return la.span.EndKey
+}
+func (la *latch) SetKey(v []byte) {
+	la.initSpan()
+	la.span.Key = v
+}
+func (la *latch) SetEndKey(v []byte) {
+	la.initSpan()
+	la.span.EndKey = v
+}
+
+// initSpan lazily initializes the latch's span field. Only used in tests.
+func (la *latch) initSpan() {
+	if la.span == nil {
+		la.span = new(roachpb.Span)
+	}
+}
 
 type signals struct {
 	done   signal
@@ -198,7 +221,7 @@ func newGuard(spans *spanset.SpanSet, pp poison.Policy) *Guard {
 			ssLatches := latches[:n]
 			for i := range ssLatches {
 				latch := &latches[i]
-				latch.span = ss[i].Span
+				latch.span = &ss[i].Span
 				latch.signals = &guard.signals
 				latch.ts = ss[i].Timestamp
 				// latch.setID() in Manager.insert, under lock.
@@ -287,9 +310,9 @@ func (m *Manager) CheckOptimisticNoConflicts(lg *Guard, spans *spanset.SpanSet) 
 		tr := &snap.trees[s]
 		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
 			ss := spans.GetSpans(a, s)
-			for _, sp := range ss {
-				search.span = sp.Span
-				search.ts = sp.Timestamp
+			for i := range ss {
+				search.span = &ss[i].Span
+				search.ts = ss[i].Timestamp
 				switch a {
 				case spanset.SpanReadOnly:
 					// Search for writes at equal or lower timestamps.
@@ -561,7 +584,7 @@ func (m *Manager) waitForSignal(
 			// ourselves anyway, so we don't need to self-poison.
 			switch pp {
 			case poison.Policy_Error:
-				return poison.NewPoisonedError(held.span, held.ts)
+				return poison.NewPoisonedError(*held.span, held.ts)
 			case poison.Policy_Wait:
 				log.Eventf(ctx, "encountered poisoned latch; continuing to wait")
 				wait.poison.signal()
