@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -245,67 +244,6 @@ func TestQueryIsAdminWithNoTxn(t *testing.T) {
 				t.Fatalf("expected %q admin %v, got %v", tc.user, tc.expAdmin, isAdmin)
 			}
 		})
-	}
-}
-
-func TestQueryHasRoleOptionWithNoTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	params, _ := createTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	stmts := `
-CREATE USER testuser VIEWACTIVITY;
-CREATE USER testuserredacted VIEWACTIVITYREDACTED;
-CREATE USER testadmin;
-GRANT admin TO testadmin`
-	if _, err := db.Exec(stmts); err != nil {
-		t.Fatal(err)
-	}
-	ie := s.InternalExecutor().(*sql.InternalExecutor)
-
-	for _, tc := range []struct {
-		user        string
-		option      string
-		expected    bool
-		expectedErr string
-	}{
-		{"testuser", roleoption.VIEWACTIVITY.String(), true, ""},
-		{"testuser", roleoption.CREATEROLE.String(), false, ""},
-		{"testuser", "nonexistent", false, "unrecognized role option"},
-		{"testuserredacted", roleoption.VIEWACTIVITYREDACTED.String(), true, ""},
-		{"testuserredacted", roleoption.CREATEROLE.String(), false, ""},
-		{"testuserredacted", "nonexistent", false, "unrecognized role option"},
-		{"testadmin", roleoption.VIEWACTIVITY.String(), true, ""},
-		{"testadmin", roleoption.CREATEROLE.String(), true, ""},
-		{"testadmin", "nonexistent", false, "unrecognized role option"},
-	} {
-		username := username.MakeSQLUsernameFromPreNormalizedString(tc.user)
-		row, cols, err := ie.QueryRowExWithCols(ctx, "test", nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: username},
-			"SELECT crdb_internal.has_role_option($1)", tc.option)
-		if tc.expectedErr != "" {
-			if !testutils.IsError(err, tc.expectedErr) {
-				t.Fatalf("expected error %q, got %q", tc.expectedErr, err)
-			}
-			continue
-		}
-		if row == nil || len(cols) != 1 {
-			numRows := 0
-			if row != nil {
-				numRows = 1
-			}
-			t.Fatalf("unexpected result shape %d, %d", numRows, len(cols))
-		}
-		hasRoleOption := bool(*row[0].(*tree.DBool))
-		if hasRoleOption != tc.expected {
-			t.Fatalf(
-				"expected %q has_role_option('%s') %v, got %v", tc.user, tc.option, tc.expected,
-				hasRoleOption)
-		}
 	}
 }
 

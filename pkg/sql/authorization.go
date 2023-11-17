@@ -111,13 +111,15 @@ type AuthorizationAccessor interface {
 	// of and returns a map of role -> isAdmin.
 	MemberOfWithAdminOption(ctx context.Context, member username.SQLUsername) (map[username.SQLUsername]bool, error)
 
-	// HasRoleOption converts the roleoption to its SQL column name and checks if
-	// the user belongs to a role where the option has value true. Requires a
-	// valid transaction to be open.
+	// UserHasRoleOption converts the roleoption to its SQL column name and checks
+	// if the user has that option. Requires a valid transaction to be open.
 	//
 	// This check should be done on the version of the privilege that is stored in
 	// the role options table. Example: CREATEROLE instead of NOCREATEROLE.
 	// NOLOGIN instead of LOGIN.
+	UserHasRoleOption(ctx context.Context, user username.SQLUsername, roleOption roleoption.Option) (bool, error)
+
+	// HasRoleOption calls UserHasRoleOption with the current user.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 
 	// HasGlobalPrivilegeOrRoleOption returns a bool representing whether the current user
@@ -749,8 +751,10 @@ func resolveMemberOfWithAdminOption(
 	return ret, nil
 }
 
-// HasRoleOption implements the AuthorizationAccessor interface.
-func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error) {
+// UserHasRoleOption implements the AuthorizationAccessor interface.
+func (p *planner) UserHasRoleOption(
+	ctx context.Context, user username.SQLUsername, roleOption roleoption.Option,
+) (bool, error) {
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
 	// with an invalid API usage.
@@ -758,12 +762,11 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return false, errors.AssertionFailedf("cannot use HasRoleOption without a txn")
 	}
 
-	user := p.SessionData().User()
 	if user.IsRootUser() || user.IsNodeUser() {
 		return true, nil
 	}
 
-	hasAdmin, err := p.HasAdminRole(ctx)
+	hasAdmin, err := p.UserHasAdminRole(ctx, user)
 	if err != nil {
 		return false, err
 	}
@@ -774,7 +777,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 
 	hasRolePrivilege, err := p.InternalSQLTxn().QueryRowEx(
 		ctx, "has-role-option", p.Txn(),
-		sessiondata.RootUserSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		fmt.Sprintf(
 			`SELECT 1 from %s WHERE option = '%s' AND username = $1 LIMIT 1`,
 			sessioninit.RoleOptionsTableName, roleOption.String()), user.Normalized())
@@ -787,6 +790,11 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 	}
 
 	return false, nil
+}
+
+// HasRoleOption implements the AuthorizationAccessor interface.
+func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error) {
+	return p.UserHasRoleOption(ctx, p.User(), roleOption)
 }
 
 // CheckRoleOption checks if the current user has roleOption and returns an

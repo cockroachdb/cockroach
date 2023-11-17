@@ -61,6 +61,9 @@ type AuthorizationAccessor interface {
 	// HasPrivilege mirrors sql.AuthorizationAccessor.
 	HasPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind, user username.SQLUsername) (bool, error)
 
+	// UserHasRoleOption mirrors sql.AuthorizationAccessor.
+	UserHasRoleOption(ctx context.Context, user username.SQLUsername, roleOption roleoption.Option) (bool, error)
+
 	// HasRoleOption mirrors sql.AuthorizationAccessor.
 	HasRoleOption(ctx context.Context, roleOption roleoption.Option) (bool, error)
 
