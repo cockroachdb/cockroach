@@ -458,6 +458,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		FirstRangeProvider: g,
 		Locality:           cfg.Locality,
 		TestingKnobs:       clientTestingKnobs,
+		HealthFunc: func(id roachpb.NodeID) bool {
+			return livenessCache.GetNodeVitality(id).IsLive(livenesspb.DistSender)
+		},
 	}
 	distSender := kvcoord.NewDistSender(distSenderCfg)
 	appRegistry.AddMetricStruct(distSender.Metrics())
@@ -539,16 +542,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	})
 
 	nodeRegistry.AddMetricStruct(nodeLiveness.Metrics())
-
-	// TODO(baptist): Refactor this to change the dependency between liveness and
-	// the dist sender. Today the persistence of liveness requires the distsender
-	// to read and write the liveness records, but the cache only needs the gossip
-	// struct. We could construct the liveness cache separately from the rest of
-	// liveness and use that to compute this rather than the entire liveness
-	// struct.
-	distSender.SetHealthFunc(func(id roachpb.NodeID) bool {
-		return nodeLiveness.GetNodeVitalityFromCache(id).IsLive(livenesspb.DistSender)
-	})
 
 	nodeLivenessFn := storepool.MakeStorePoolNodeLivenessFunc(nodeLiveness)
 	if nodeLivenessKnobs, ok := cfg.TestingKnobs.NodeLiveness.(kvserver.NodeLivenessTestingKnobs); ok {
