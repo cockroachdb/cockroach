@@ -392,6 +392,10 @@ type activeRangeFeed struct {
 	// active rangefeed completes.
 	release func()
 
+	// localConnection indicates if this rangefeed connected
+	// to a local node.
+	localConnection bool
+
 	// catchupRes is the catchup scan quota acquired upon the
 	// start of rangefeed.
 	// It is released when this stream receives first checkpoint
@@ -422,6 +426,23 @@ func (a *activeRangeFeed) onRangeEvent(
 
 	a.NodeID = nodeID
 	a.RangeID = rangeID
+}
+
+// onConnect is a callback invoked when attempt to connect to the specified
+// destination is made.
+func (a *activeRangeFeed) onConnect(
+	dest rpc.RestrictedInternalClient, metrics *DistSenderRangeFeedMetrics,
+) {
+	if rpc.IsLocal(dest) {
+		if !a.localConnection {
+			metrics.RangefeedLocalRanges.Inc(1)
+		}
+		a.localConnection = true
+	} else if a.localConnection {
+		// We used to connect to local node, but no more.
+		a.localConnection = false
+		metrics.RangefeedLocalRanges.Dec(1)
+	}
 }
 
 func (a *activeRangeFeed) setLastError(err error) {
@@ -523,6 +544,9 @@ func newActiveRangeFeed(
 		active.releaseCatchupScan()
 		rr.ranges.Delete(active)
 		metrics.RangefeedRanges.Dec(1)
+		if active.localConnection {
+			metrics.RangefeedLocalRanges.Dec(1)
+		}
 	}
 
 	rr.ranges.Store(active, nil)
@@ -857,6 +881,7 @@ func (ds *DistSender) singleRangeFeed(
 		ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 		streamCleanup = restore
 
+		active.onConnect(client, metrics)
 		stream, err := client.RangeFeed(ctx, &args)
 		if err != nil {
 			restore()
