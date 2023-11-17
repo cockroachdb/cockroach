@@ -463,6 +463,9 @@ message LocalOnlySessionData {
   // internal errors due to incomplete functional dependencies, and also
   // fixes a bug that incorrectly truncated the provided ordering (see #113072).
   bool optimizer_use_provided_ordering_fix = 115;
+  // CopyTxnQualityOfService indicates the default QoSLevel/WorkPriority of the
+  // transactions used to evaluate COPY commands.
+  int32 copy_txn_quality_of_service = 117 [(gogoproto.casttype)="QoSLevel"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
