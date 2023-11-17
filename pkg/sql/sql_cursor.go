@@ -59,7 +59,17 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				sd = sd.Clone()
 				sd.StmtTimeout = 0
 			}
-			ie := p.ExecCfg().InternalDB.NewInternalExecutor(sd)
+			// We avoid using the internal executor provided by p.InternalSQLTxn()
+			// since we want to customize the session data used by the cursor.
+			ief := p.ExecCfg().InternalDB
+			ie := MakeInternalExecutor(ief.server, ief.memMetrics, ief.monitor)
+			ie.SetSessionData(sd)
+			ie.extraTxnState = &extraTxnState{
+				txn:                p.Txn(),
+				descCollection:     p.Descriptors(),
+				jobs:               p.extendedEvalCtx.jobs,
+				schemaChangerState: p.extendedEvalCtx.SchemaChangerState,
+			}
 			if err := p.checkIfCursorExists(s.Name); err != nil {
 				return nil, err
 			}
