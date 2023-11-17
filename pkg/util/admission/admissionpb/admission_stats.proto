@@ -23,5 +23,6 @@ message AdmissionWorkQueueStats {
   string queue_kind = 2;
   // Set to true if deadline was exceeded.
   bool deadline_exceeded = 3;
-
+  // String representation of work priority.
+  string work_priority = 4;
 }
