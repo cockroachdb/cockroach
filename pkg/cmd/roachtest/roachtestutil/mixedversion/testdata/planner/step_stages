@@ -1,0 +1,137 @@
+# Test that steps have the expected upgrade stage associated to their
+# context.
+
+mixed-version-test predecessors=(21.2.11, 22.1.8, 22.2.3, 23.1.4, 23.2.0) num_upgrades=5
+----
+ok
+
+in-mixed-version name=(mixed-version 1)
+----
+ok
+
+in-mixed-version name=(mixed-version 2)
+----
+ok
+
+workload name=bank
+----
+ok
+
+background-command name=(csv server)
+----
+ok
+
+plan debug=true
+----
+mixed-version test plan for upgrading from "v21.2.11" to "v22.1.8" to "v22.2.3" to "v23.1.4" to "v23.2.0" to "<current>":
+├── start cluster at version "v21.2.11" (1) [stage=cluster-setup]
+├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (2) [stage=cluster-setup]
+├── run "initialize bank workload" (3) [stage=on-startup]
+├── start background hooks concurrently
+│   ├── run "bank workload", after 100ms delay (4) [stage=background]
+│   └── run "csv server", after 50ms delay (5) [stage=background]
+├── upgrade cluster from "v21.2.11" to "v22.1.8"
+│   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (6) [stage=init]
+│   ├── upgrade nodes :1-4 from "v21.2.11" to "v22.1.8"
+│   │   ├── restart node 4 with binary version v22.1.8 (7) [stage=final-upgrade]
+│   │   ├── run mixed-version hooks concurrently
+│   │   │   ├── run "mixed-version 1", after 100ms delay (8) [stage=final-upgrade]
+│   │   │   └── run "mixed-version 2", after 100ms delay (9) [stage=final-upgrade]
+│   │   ├── restart node 3 with binary version v22.1.8 (10) [stage=final-upgrade]
+│   │   ├── restart node 2 with binary version v22.1.8 (11) [stage=final-upgrade]
+│   │   └── restart node 1 with binary version v22.1.8 (12) [stage=final-upgrade]
+│   ├── finalize upgrade by resetting `preserve_downgrade_option` (13) [stage=running-upgrade-migrations]
+│   ├── run "mixed-version 2" (14) [stage=running-upgrade-migrations]
+│   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (15) [stage=running-upgrade-migrations]
+├── upgrade cluster from "v22.1.8" to "v22.2.3"
+│   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (16) [stage=init]
+│   ├── upgrade nodes :1-4 from "v22.1.8" to "v22.2.3"
+│   │   ├── restart node 4 with binary version v22.2.3 (17) [stage=final-upgrade]
+│   │   ├── run mixed-version hooks concurrently
+│   │   │   ├── run "mixed-version 1", after 100ms delay (18) [stage=final-upgrade]
+│   │   │   └── run "mixed-version 2", after 100ms delay (19) [stage=final-upgrade]
+│   │   ├── restart node 1 with binary version v22.2.3 (20) [stage=final-upgrade]
+│   │   ├── restart node 2 with binary version v22.2.3 (21) [stage=final-upgrade]
+│   │   └── restart node 3 with binary version v22.2.3 (22) [stage=final-upgrade]
+│   ├── finalize upgrade by resetting `preserve_downgrade_option` (23) [stage=running-upgrade-migrations]
+│   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (24) [stage=running-upgrade-migrations]
+├── upgrade cluster from "v22.2.3" to "v23.1.4"
+│   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (25) [stage=init]
+│   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.4"
+│   │   ├── restart node 1 with binary version v23.1.4 (26) [stage=initial-upgrade]
+│   │   ├── run "mixed-version 1" (27) [stage=initial-upgrade]
+│   │   ├── restart node 3 with binary version v23.1.4 (28) [stage=initial-upgrade]
+│   │   ├── restart node 4 with binary version v23.1.4 (29) [stage=initial-upgrade]
+│   │   ├── run "mixed-version 2" (30) [stage=initial-upgrade]
+│   │   └── restart node 2 with binary version v23.1.4 (31) [stage=initial-upgrade]
+│   ├── downgrade nodes :1-4 from "v23.1.4" to "v22.2.3"
+│   │   ├── restart node 2 with binary version v22.2.3 (32) [stage=rollback-upgrade]
+│   │   ├── restart node 4 with binary version v22.2.3 (33) [stage=rollback-upgrade]
+│   │   ├── run "mixed-version 2" (34) [stage=rollback-upgrade]
+│   │   ├── restart node 1 with binary version v22.2.3 (35) [stage=rollback-upgrade]
+│   │   └── restart node 3 with binary version v22.2.3 (36) [stage=rollback-upgrade]
+│   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.4"
+│   │   ├── restart node 1 with binary version v23.1.4 (37) [stage=final-upgrade]
+│   │   ├── restart node 3 with binary version v23.1.4 (38) [stage=final-upgrade]
+│   │   ├── run "mixed-version 2" (39) [stage=final-upgrade]
+│   │   ├── restart node 2 with binary version v23.1.4 (40) [stage=final-upgrade]
+│   │   ├── restart node 4 with binary version v23.1.4 (41) [stage=final-upgrade]
+│   │   └── run "mixed-version 1" (42) [stage=final-upgrade]
+│   ├── finalize upgrade by resetting `preserve_downgrade_option` (43) [stage=running-upgrade-migrations]
+│   ├── run "mixed-version 1" (44) [stage=running-upgrade-migrations]
+│   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (45) [stage=running-upgrade-migrations]
+├── upgrade cluster from "v23.1.4" to "v23.2.0"
+│   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (46) [stage=init]
+│   ├── upgrade nodes :1-4 from "v23.1.4" to "v23.2.0"
+│   │   ├── restart node 1 with binary version v23.2.0 (47) [stage=initial-upgrade]
+│   │   ├── run "mixed-version 1" (48) [stage=initial-upgrade]
+│   │   ├── restart node 2 with binary version v23.2.0 (49) [stage=initial-upgrade]
+│   │   ├── restart node 3 with binary version v23.2.0 (50) [stage=initial-upgrade]
+│   │   ├── restart node 4 with binary version v23.2.0 (51) [stage=initial-upgrade]
+│   │   └── run "mixed-version 2" (52) [stage=initial-upgrade]
+│   ├── downgrade nodes :1-4 from "v23.2.0" to "v23.1.4"
+│   │   ├── restart node 2 with binary version v23.1.4 (53) [stage=rollback-upgrade]
+│   │   ├── restart node 3 with binary version v23.1.4 (54) [stage=rollback-upgrade]
+│   │   ├── run mixed-version hooks concurrently
+│   │   │   ├── run "mixed-version 1", after 50ms delay (55) [stage=rollback-upgrade]
+│   │   │   └── run "mixed-version 2", after 200ms delay (56) [stage=rollback-upgrade]
+│   │   ├── restart node 1 with binary version v23.1.4 (57) [stage=rollback-upgrade]
+│   │   └── restart node 4 with binary version v23.1.4 (58) [stage=rollback-upgrade]
+│   ├── upgrade nodes :1-4 from "v23.1.4" to "v23.2.0"
+│   │   ├── restart node 3 with binary version v23.2.0 (59) [stage=final-upgrade]
+│   │   ├── restart node 4 with binary version v23.2.0 (60) [stage=final-upgrade]
+│   │   ├── run "mixed-version 1" (61) [stage=final-upgrade]
+│   │   ├── restart node 2 with binary version v23.2.0 (62) [stage=final-upgrade]
+│   │   ├── restart node 1 with binary version v23.2.0 (63) [stage=final-upgrade]
+│   │   └── run "mixed-version 2" (64) [stage=final-upgrade]
+│   ├── finalize upgrade by resetting `preserve_downgrade_option` (65) [stage=running-upgrade-migrations]
+│   ├── run mixed-version hooks concurrently
+│   │   ├── run "mixed-version 1", after 200ms delay (66) [stage=running-upgrade-migrations]
+│   │   └── run "mixed-version 2", after 100ms delay (67) [stage=running-upgrade-migrations]
+│   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (68) [stage=running-upgrade-migrations]
+└── upgrade cluster from "v23.2.0" to "<current>"
+   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (69) [stage=init]
+   ├── upgrade nodes :1-4 from "v23.2.0" to "<current>"
+   │   ├── restart node 4 with binary version <current> (70) [stage=initial-upgrade]
+   │   ├── restart node 1 with binary version <current> (71) [stage=initial-upgrade]
+   │   ├── run "mixed-version 1" (72) [stage=initial-upgrade]
+   │   ├── restart node 3 with binary version <current> (73) [stage=initial-upgrade]
+   │   ├── restart node 2 with binary version <current> (74) [stage=initial-upgrade]
+   │   └── run "mixed-version 2" (75) [stage=initial-upgrade]
+   ├── downgrade nodes :1-4 from "<current>" to "v23.2.0"
+   │   ├── restart node 4 with binary version v23.2.0 (76) [stage=rollback-upgrade]
+   │   ├── restart node 2 with binary version v23.2.0 (77) [stage=rollback-upgrade]
+   │   ├── restart node 3 with binary version v23.2.0 (78) [stage=rollback-upgrade]
+   │   ├── run "mixed-version 1" (79) [stage=rollback-upgrade]
+   │   └── restart node 1 with binary version v23.2.0 (80) [stage=rollback-upgrade]
+   ├── upgrade nodes :1-4 from "v23.2.0" to "<current>"
+   │   ├── restart node 4 with binary version <current> (81) [stage=final-upgrade]
+   │   ├── restart node 1 with binary version <current> (82) [stage=final-upgrade]
+   │   ├── run mixed-version hooks concurrently
+   │   │   ├── run "mixed-version 1", after 0s delay (83) [stage=final-upgrade]
+   │   │   └── run "mixed-version 2", after 50ms delay (84) [stage=final-upgrade]
+   │   ├── restart node 3 with binary version <current> (85) [stage=final-upgrade]
+   │   └── restart node 2 with binary version <current> (86) [stage=final-upgrade]
+   ├── finalize upgrade by resetting `preserve_downgrade_option` (87) [stage=running-upgrade-migrations]
+   ├── run "mixed-version 2" (88) [stage=running-upgrade-migrations]
+   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (89) [stage=running-upgrade-migrations]
