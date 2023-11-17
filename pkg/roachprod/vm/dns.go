@@ -54,7 +54,7 @@ type DNSProvider interface {
 	// subdomain. The protocol is usually "tcp" and the subdomain is usually the
 	// cluster name. The service is a combination of the virtual cluster name and
 	// type of service.
-	LookupSRVRecords(ctx context.Context, service, proto, subdomain string) ([]DNSRecord, error)
+	LookupSRVRecords(ctx context.Context, name string) ([]DNSRecord, error)
 	// ListRecords lists all DNS records managed for the zone.
 	ListRecords(ctx context.Context) ([]DNSRecord, error)
 	// DeleteRecordsBySubdomain deletes all DNS records with the given subdomain.

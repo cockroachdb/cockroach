@@ -146,8 +146,7 @@ func (c *SyncedCluster) DiscoverServices(
 	mu := syncutil.Mutex{}
 	records := make([]vm.DNSRecord, 0)
 	err := vm.FanOutDNS(c.VMs, func(dnsProvider vm.DNSProvider, _ vm.List) error {
-		service := fmt.Sprintf("%s-%s", virtualClusterName, string(serviceType))
-		r, lookupErr := dnsProvider.LookupSRVRecords(ctx, service, "tcp", c.Name)
+		r, lookupErr := dnsProvider.LookupSRVRecords(ctx, serviceDNSName(dnsProvider, virtualClusterName, serviceType, c.Name))
 		if lookupErr != nil {
 			return lookupErr
 		}

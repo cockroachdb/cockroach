@@ -67,7 +67,7 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 		// No need to break the name down into components as the lookup command
 		// accepts a fully qualified name as the last parameter if the service and
 		// proto parameters are empty strings.
-		existingRecords, err := n.lookupSRVRecords(ctx, "", "", name)
+		existingRecords, err := n.lookupSRVRecords(ctx, name)
 		if err != nil {
 			return err
 		}
@@ -107,11 +107,8 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 }
 
 // LookupSRVRecords implements the vm.DNSProvider interface.
-func (n *dnsProvider) LookupSRVRecords(
-	ctx context.Context, service, proto, subdomain string,
-) ([]vm.DNSRecord, error) {
-	name := fmt.Sprintf(`%s.%s`, subdomain, n.Domain())
-	return n.lookupSRVRecords(ctx, service, proto, name)
+func (n *dnsProvider) LookupSRVRecords(ctx context.Context, name string) ([]vm.DNSRecord, error) {
+	return n.lookupSRVRecords(ctx, name)
 }
 
 // ListRecords implements the vm.DNSProvider interface.
@@ -177,19 +174,13 @@ func (n *dnsProvider) Domain() string {
 // network problems. For lookups, we prefer this to using the gcloud command as
 // it is faster, and preferable when service information is being queried
 // regularly.
-func (n *dnsProvider) lookupSRVRecords(
-	ctx context.Context, service, proto, name string,
-) ([]vm.DNSRecord, error) {
-	target := name
-	if service != "" || proto != "" {
-		target = "_" + service + "._" + proto + "." + name
-	}
+func (n *dnsProvider) lookupSRVRecords(ctx context.Context, name string) ([]vm.DNSRecord, error) {
 	// Check the cache first.
-	if cachedRecords, ok := n.getCache(target); ok {
+	if cachedRecords, ok := n.getCache(name); ok {
 		return cachedRecords, nil
 	}
 	// Lookup the records, if no records are found in the cache.
-	records, err := n.listSRVRecords(ctx, target, dnsMaxResults)
+	records, err := n.listSRVRecords(ctx, name, dnsMaxResults)
 	filteredRecords := make([]vm.DNSRecord, 0, len(records))
 	if err != nil {
 		return nil, err
@@ -197,12 +188,12 @@ func (n *dnsProvider) lookupSRVRecords(
 	for _, record := range records {
 		// Filter out records that do not match the full normalised target name.
 		// This is necessary because the gcloud command does partial matching.
-		if n.normaliseName(record.Name) != n.normaliseName(target) {
+		if n.normaliseName(record.Name) != n.normaliseName(name) {
 			continue
 		}
 		filteredRecords = append(filteredRecords, record)
 	}
-	n.updateCache(target, filteredRecords)
+	n.updateCache(name, filteredRecords)
 	return filteredRecords, nil
 }
 
