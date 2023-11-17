@@ -19,8 +19,9 @@ import "gogoproto/gogo.proto";
 message AdmissionWorkQueueStats {
   // Duration spent waiting.
   int64 wait_duration_nanos = 1 [(gogoproto.casttype) = "time.Duration"];
-  // String representation of admission work kind.
-  string work_kind = 2;
+  // String representation of admission queue kind.
+  string queue_kind = 2;
   // Set to true if deadline was exceeded.
   bool deadline_exceeded = 3;
+
 }
