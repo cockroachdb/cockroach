@@ -252,8 +252,10 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 	}
 
 	// Set up and run test.
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), mixedversion.ClusterSettingOption(
-		install.EnvOption{"COCKROACH_SCAN_MAX_IDLE_TIME=10ms"})) // speed up queues
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
+		mixedversion.ClusterSettingOption(install.EnvOption{"COCKROACH_SCAN_MAX_IDLE_TIME=10ms"}), // speed up queues
+		mixedversion.MaxUpgrades(2), // crdb_internal.kv_set_queue_active is only available on v22.1+
+	)
 
 	mvt.OnStartup("create test table", createTable)
 	mvt.InMixedVersion("move replicas", moveReplicas)

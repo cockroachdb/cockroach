@@ -145,7 +145,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			tc := h.Context()
 			// We currently only stage the `workload` binary built off the
 			// SHA being tested; therefore, we skip testing the schemachange
 			// workload if this is not an upgrade or downgrade involving the
@@ -153,7 +152,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// TODO(renato): stage different workload binaries for the
 			// releases being used in the test and use the appropriate
 			// binary in this step.
-			if !tc.FromVersion.IsCurrent() && !tc.ToVersion.IsCurrent() {
+			if !h.Context.ToVersion.IsCurrent() {
 				l.Printf("skipping this step -- only supported when current version is involved")
 				return nil
 			}
@@ -454,55 +453,6 @@ for i in 1 2 3 4; do
 done
 `)
 		}).run(ctx, t)
-}
-
-// importTPCCStep runs a TPCC import import on the first crdbNode (monitoring them all for
-// crashes during the import). If oldV is nil, this runs the import using the specified
-// version (for example "19.2.1", as provided by LatestPredecessor()) using the location
-// used by c.Stage(). An empty oldV uses the main cockroach binary.
-func importTPCCStep(
-	oldV *clusterupgrade.Version, headroomWarehouses int, crdbNodes option.NodeListOption,
-) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		// We need to use the predecessor binary to load into the
-		// predecessor cluster to avoid random breakage. For example, you
-		// can't use 21.1 to import into 20.2 due to some flag changes.
-		//
-		// TODO(tbg): also import a large dataset (for example 2TB bank)
-		// that will provide cold data that may need to be migrated.
-		var cmd string
-		if oldV.IsCurrent() {
-			cmd = tpccImportCmd(headroomWarehouses)
-		} else {
-			cmd = tpccImportCmdWithCockroachBinary(clusterupgrade.BinaryPathForVersion(t, oldV), headroomWarehouses, "--checks=false")
-		}
-		// Use a monitor so that we fail cleanly if the cluster crashes
-		// during import.
-		m := u.c.NewMonitor(ctx, crdbNodes)
-		m.Go(func(ctx context.Context) error {
-			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), cmd)
-		})
-		m.Wait()
-	}
-}
-
-func importLargeBankStep(
-	oldV *clusterupgrade.Version, rows int, crdbNodes option.NodeListOption,
-) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		// Use the predecessor binary to load into the predecessor
-		// cluster to avoid random breakage due to flag changes, etc.
-		binary := clusterupgrade.BinaryPathForVersion(t, oldV)
-
-		// Use a monitor so that we fail cleanly if the cluster crashes
-		// during import.
-		m := u.c.NewMonitor(ctx, crdbNodes)
-		m.Go(func(ctx context.Context) error {
-			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), binary, "workload", "fixtures", "import", "bank",
-				"--payload-bytes=10240", "--rows="+fmt.Sprint(rows), "--seed=4", "--db=bigbank")
-		})
-		m.Wait()
-	}
 }
 
 func sleepStep(d time.Duration) versionStep {
