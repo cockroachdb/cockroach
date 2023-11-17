@@ -447,7 +447,7 @@ inner-join (lookup t.public.xy@y2)
  ├── scan t.public.abc@bc2
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
  │    ├── constraint: /2/3: [/1 - /1]
- │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0]
+ │    ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  │    ├── cost: 24.6200001
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
@@ -487,7 +487,7 @@ inner-join (lookup t.public.xy@y1)
  ├── scan t.public.abc@bc2
  │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
  │    ├── constraint: /2/3: [/1 - /1]
- │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=0]
+ │    ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  │    ├── cost: 24.6200001
  │    ├── key: (1)
  │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
@@ -861,7 +861,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         ├── a2.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
  │    │         └── a1.a:2 = a2.b:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=0.9009, distinct(1)=0.897389, null(1)=0, distinct(2)=0.9009, null(2)=0, distinct(3)=0.9009, null(3)=0, distinct(4)=0.9009, null(4)=0]
+ │    ├── stats: [rows=0.9009, distinct(2)=0.9009, null(2)=0]
  │    ├── cost: 13.0632823
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
@@ -871,7 +871,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    ├── left columns: a1.r:13 a1.a:14 a1.b:15 a1.c:16
  │    │    ├── right columns: a1.r:19 a1.a:20 a1.b:21 a1.c:22
  │    │    ├── cardinality: [0 - 1]
- │    │    ├── stats: [rows=0.91, distinct(1)=0.906283, null(1)=0, distinct(2)=0.91, null(2)=0, distinct(3)=0.91, null(3)=0, distinct(4)=0.91, null(4)=0, distinct(3,4)=0.91, null(3,4)=0]
+ │    │    ├── stats: [rows=0.91, distinct(2)=0.91, null(2)=0, distinct(3)=0.91, null(3)=0, distinct(4)=0.91, null(4)=0, distinct(3,4)=0.91, null(3,4)=0]
  │    │    ├── cost: 5.6885176
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)

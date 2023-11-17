@@ -1573,7 +1573,7 @@ root
            │    │    ├── scan t.public.child_diff_type
            │    │    │    ├── columns: t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2)
            │    │    │    ├── flags: disabled not visible index feature
-           │    │    │    ├── stats: [rows=1000, distinct(12)=1000, null(12)=0, distinct(13)=100, null(13)=10]
+           │    │    │    ├── stats: [rows=1000, distinct(13)=100, null(13)=10]
            │    │    │    ├── key: (12)
            │    │    │    ├── fd: (12)-->(13)
            │    │    │    ├── prune: (12,13)

@@ -110,12 +110,12 @@ project
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11), (1)==(7), (7)==(1)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(4)=500, null(4)=0]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -137,7 +137,7 @@ project
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
@@ -168,7 +168,7 @@ project
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -354,7 +354,7 @@ semi-join (hash)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -374,7 +374,7 @@ anti-join (hash)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -394,7 +394,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(7), (7)==(1), (2)==(8), (8)==(2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(4)=500, null(4)=0]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -416,7 +416,7 @@ inner-join (hash)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(7), (7)==(1)
  ├── select
  │    ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=3737.5, distinct(1)=3737.5, null(1)=0, distinct(2)=299, null(2)=0, distinct(4)=499.999, null(4)=0]
+ │    ├── stats: [rows=3737.5, distinct(1)=3737.5, null(1)=0, distinct(2)=299, null(2)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── scan xysd
@@ -428,7 +428,7 @@ inner-join (hash)
  │         └── (y:2 > 0) AND (y:2 < 300) [type=bool, outer=(2), constraints=(/2: [/1 - /299]; tight)]
  ├── scan uv
  │    ├── columns: u:7(int) v:8(int!null)
- │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
+ │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
  └── filters
       ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
@@ -463,7 +463,7 @@ project
       │    │    └── fd: (1)-->(2)
       │    ├── scan uv
       │    │    ├── columns: u:7(int) v:8(int!null)
-      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
       │    └── filters
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
@@ -500,7 +500,7 @@ project
       │    │    └── fd: (1)-->(2)
       │    ├── scan uv
       │    │    ├── columns: u:7(int) v:8(int!null)
-      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
       │    └── filters
       │         ├── x:1 = u:7 [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
       │         └── (y:2 + v:8) = 5 [type=bool, outer=(2,8), immutable]
@@ -569,7 +569,7 @@ project
       │    ├── fd: (1)-->(2)
       │    ├── scan uv
       │    │    ├── columns: u:7(int) v:8(int!null)
-      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0, distinct(8)=100, null(8)=0]
+      │    │    └── stats: [rows=10000, distinct(7)=500, null(7)=0]
       │    ├── scan xysd
       │    │    ├── columns: x:1(int!null) y:2(int)
       │    │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
@@ -745,12 +745,12 @@ project
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11), (1)==(7), (7)==(1)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -772,7 +772,7 @@ project
       ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6), (9)-->(7,8,10,11)
       ├── scan xysd
       │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) xysd.crdb_internal_mvcc_timestamp:5(decimal) xysd.tableoid:6(oid)
-      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+      │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
@@ -803,7 +803,7 @@ project
       │    └── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
       ├── scan uv
       │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null) uv.crdb_internal_mvcc_timestamp:10(decimal) uv.tableoid:11(oid)
-      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
+      │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(9)=10000, null(9)=0]
       │    ├── key: (9)
       │    └── fd: (9)-->(7,8,10,11)
       └── filters
@@ -933,7 +933,7 @@ semi-join (hash)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(4)=500, null(4)=0]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan uv
@@ -950,7 +950,7 @@ semi-join (hash)
  ├── stats: [rows=10000, distinct(1)=500, null(1)=0]
  ├── scan uv
  │    ├── columns: u:1(int) v:2(int!null)
- │    └── stats: [rows=10000, distinct(1)=500, null(1)=5000, distinct(2)=100, null(2)=0]
+ │    └── stats: [rows=10000, distinct(1)=500, null(1)=5000]
  ├── scan xysd
  │    ├── columns: x:6(int!null)
  │    ├── stats: [rows=5000, distinct(6)=5000, null(6)=0]
@@ -982,19 +982,19 @@ inner-join (merge)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8), (1)==(7), (7)==(1)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── ordering: +1
  ├── sort
  │    ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
- │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
+ │    ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0]
  │    ├── key: (9)
  │    ├── fd: (9)-->(7,8)
  │    ├── ordering: +7
  │    └── scan uv
  │         ├── columns: u:7(int) v:8(int!null) rowid:9(int!null)
- │         ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0, distinct(9)=10000, null(9)=0]
+ │         ├── stats: [rows=10000, distinct(7)=500, null(7)=5000, distinct(8)=100, null(8)=0]
  │         ├── key: (9)
  │         └── fd: (9)-->(7,8)
  └── filters (true)
@@ -1023,7 +1023,7 @@ left-join (merge)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (9)-->(7,8)
  ├── scan xysd
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(4)=500, null(4)=0, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
+ │    ├── stats: [rows=5000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=2500, distinct(3)=500, null(3)=50, distinct(1,2)=5000, null(1,2)=0, distinct(2,3)=5000, null(2,3)=25]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── ordering: +1
@@ -1760,7 +1760,7 @@ inner-join (cross)
  │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10]
+ │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1780,7 +1780,7 @@ inner-join (cross)
  │    └── stats: [rows=1000, distinct(1)=100, null(1)=10]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10, distinct(9)=100, null(9)=10]
+ │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10, distinct(8)=100, null(8)=10, distinct(9)=100, null(9)=10]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1949,7 +1949,7 @@ inner-join (cross)
  │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0]
+ │    ├── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1968,7 +1968,7 @@ inner-join (cross)
  │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=500, null(7)=0, distinct(9)=10, null(9)=0]
+ │    ├── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(9)=10, null(9)=0]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
@@ -1988,7 +1988,7 @@ inner-join (cross)
  │    └── stats: [rows=5000, distinct(1)=5000, null(1)=0]
  ├── scan classrequest
  │    ├── columns: studentid:6(int!null) firstchoiceclassid:7(int) secondchoiceclassid:8(int) thirdchoiceclassid:9(int)
- │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0, distinct(9)=10, null(9)=0]
+ │    ├── stats: [rows=1000, distinct(7)=500, null(7)=0, distinct(8)=50, null(8)=0, distinct(9)=10, null(9)=0]
  │    ├── key: (6)
  │    └── fd: (6)-->(7-9)
  └── filters
