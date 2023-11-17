@@ -140,10 +140,10 @@ SELECT 'crdb_internal_functions_tbl'::regclass::oid
 
 user testuser
 
-statement error insufficient privilege
+statement error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT crdb_internal.repair_ttl_table_scheduled_job($crdb_internal_functions_tbl_oid)
 
-statement error insufficient privilege
+statement error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT crdb_internal.validate_ttl_scheduled_jobs()
 
 user root

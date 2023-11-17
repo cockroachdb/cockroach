@@ -753,16 +753,16 @@ true
 # Check that privileged builtins are only allowed for 'root'
 user testuser
 
-query error insufficient privilege
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 select crdb_internal.force_panic('foo')
 
-query error insufficient privilege
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 select crdb_internal.force_log_fatal('foo')
 
-query error insufficient privilege
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 select crdb_internal.set_vmodule('')
 
-query error insufficient privilege
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 select crdb_internal.get_vmodule()
 
 query error user testuser does not have VIEWCLUSTERMETADATA system privilege
@@ -1011,7 +1011,7 @@ query error is not less than end
 SELECT crdb_internal.compact_engine_span(1, 1, decode('c0898a', 'hex'), decode('c08989', 'hex'))
 
 user testuser
-query error crdb_internal.compact_engine_span\(\): insufficient privilege
+query error crdb_internal.compact_engine_span\(\): user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT crdb_internal.compact_engine_span(1, 1, decode('c08989', 'hex'), decode('c0898a', 'hex'))
 
 user root

@@ -3060,7 +3060,7 @@ subtest crdb_internal.trace_id
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error insufficient privilege
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.trace_id()
 
 user root
@@ -3075,7 +3075,7 @@ subtest crdb_internal.payloads_for_span
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error user testuser does not have VIEWCLUSTERMETADATA system privilege
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.payloads_for_span(0)
 
 user root
@@ -3091,7 +3091,7 @@ subtest crdb_internal.payloads_for_trace
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error user testuser does not have VIEWCLUSTERMETADATA system privilege
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.payloads_for_span(0)
 
 user root
@@ -3105,7 +3105,7 @@ span_id payload_type  payload_jsonb
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error insufficient privilege
+query error user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.set_trace_verbose(0, false)
 
 user root

@@ -123,7 +123,7 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 		},
 		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
 	)
-	require.Contains(t, err.Error(), "requesting statement bundle requires VIEWACTIVITY or ADMIN role option")
+	require.Contains(t, err.Error(), "requesting statement bundle requires VIEWACTIVITY privilege")
 
 	// Grant VIEWACTIVITY and all test should work.
 	db.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWACTIVITY TO %s", apiconstants.TestingUserNameNoAdmin().Normalized()))
@@ -181,7 +181,7 @@ func TestCreateStatementDiagnosticsReportWithViewActivityOptions(t *testing.T) {
 		},
 		"SELECT crdb_internal.request_statement_bundle('SELECT _', 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
 	)
-	require.Contains(t, err.Error(), "VIEWACTIVITYREDACTED role option cannot request statement bundle")
+	require.Contains(t, err.Error(), "VIEWACTIVITYREDACTED privilege cannot request statement bundle")
 }
 
 func TestStatementDiagnosticsCompleted(t *testing.T) {

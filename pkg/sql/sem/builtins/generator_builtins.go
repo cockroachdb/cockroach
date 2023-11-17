@@ -149,12 +149,10 @@ var generators = map[string]builtinDefinition{
 			},
 			spanKeyIteratorType,
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.scan() requires admin privilege")
 				}
 				startKey := []byte(tree.MustBeDBytes(args[0]))
 				endKey := []byte(tree.MustBeDBytes(args[1]))
@@ -172,12 +170,10 @@ var generators = map[string]builtinDefinition{
 			},
 			spanKeyIteratorType,
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-				isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-				if err != nil {
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+				); err != nil {
 					return nil, err
-				}
-				if !isAdmin {
-					return nil, errors.New("crdb_internal.scan() requires admin privilege")
 				}
 				arr := tree.MustBeDArray(args[0])
 				if arr.Len() != 2 {
@@ -2426,13 +2422,10 @@ var _ eval.ValueGenerator = &spanKeyIterator{}
 func makeRangeKeyIterator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "user needs the admin role to view range data")
 	}
 	planner := evalCtx.Planner
 	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
@@ -2497,7 +2490,7 @@ func makePayloadsForSpanGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(
-		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
 	); err != nil {
 		return nil, err
 	}
@@ -2594,7 +2587,7 @@ func makePayloadsForTraceGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	if err := evalCtx.SessionAccessor.CheckPrivilege(
-		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
 	); err != nil {
 		return nil, err
 	}
@@ -3300,12 +3293,10 @@ func (tmi *tableMetricsIterator) ResolvedType() *types.T {
 func makeTableMetricsGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, errInsufficientPriv
 	}
 	nodeID := int32(tree.MustBeDInt(args[0]))
 	storeID := int32(tree.MustBeDInt(args[1]))
@@ -3407,12 +3398,10 @@ func (tmi *storageInternalKeysIterator) ResolvedType() *types.T {
 func makeStorageInternalKeysGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, errInsufficientPriv
 	}
 	nodeID := int32(tree.MustBeDInt(args[0]))
 	storeID := int32(tree.MustBeDInt(args[1]))
@@ -3565,12 +3554,10 @@ func makeInternallyExecutedQueryGeneratorOverload(
 		inputTypes,
 		internallyExecutedQueryGeneratorType,
 		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-			isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-			if err != nil {
+			if err := evalCtx.SessionAccessor.CheckPrivilege(
+				ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+			); err != nil {
 				return nil, err
-			}
-			if !isAdmin {
-				return nil, errors.New("crdb_internal.execute_internally() requires admin privilege")
 			}
 			numExpectedArgs, queryIdx, sessionBoundIdx, overridesIdx, txnIdx := 1, 0, 1, 2, 3
 			if withSessionBound {

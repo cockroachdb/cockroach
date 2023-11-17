@@ -76,17 +76,10 @@ func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 func newReplicationStreamManagerWithPrivilegesCheck(
 	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID,
 ) (eval.ReplicationStreamManager, error) {
-	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
+		syntheticprivilege.GlobalPrivilegeObject,
+		privilege.REPLICATION); err != nil {
 		return nil, err
-	}
-
-	if !hasAdminRole {
-		if err := evalCtx.SessionAccessor.CheckPrivilege(ctx,
-			syntheticprivilege.GlobalPrivilegeObject,
-			privilege.REPLICATION); err != nil {
-			return nil, err
-		}
 	}
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
