@@ -383,6 +383,10 @@ type activeRangeFeed struct {
 	// active rangefeed completes.
 	release func()
 
+	// onDisconnect is an optional function that should be
+	// invoked to indicate that the active rangefeed disconnected.
+	onDisconnect func()
+
 	// catchupRes is the catchup scan quota acquired upon the
 	// start of rangefeed.
 	// It is released when this stream receives first checkpoint
@@ -413,6 +417,22 @@ func (a *activeRangeFeed) onRangeEvent(
 
 	a.NodeID = nodeID
 	a.RangeID = rangeID
+}
+
+// onConnect is a callback invoked when attempt to connect to the specified
+// destination is made.
+func (a *activeRangeFeed) onConnect(
+	dest rpc.RestrictedInternalClient, metrics *DistSenderRangeFeedMetrics,
+) {
+	if a.onDisconnect != nil {
+		a.onDisconnect()
+	}
+	if rpc.IsLocal(dest) {
+		metrics.RangefeedLocalRanges.Inc(1)
+		a.onDisconnect = func() {
+			metrics.RangefeedLocalRanges.Dec(1)
+		}
+	}
 }
 
 func (a *activeRangeFeed) setLastError(err error) {
@@ -514,6 +534,10 @@ func newActiveRangeFeed(
 		active.releaseCatchupScan()
 		rr.ranges.Delete(active)
 		metrics.RangefeedRanges.Dec(1)
+		if active.onDisconnect != nil {
+			active.onDisconnect()
+			active.onDisconnect = nil
+		}
 	}
 
 	rr.ranges.Store(active, nil)
@@ -846,6 +870,7 @@ func (ds *DistSender) singleRangeFeed(
 		ctx, restore := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
 		streamCleanup = restore
 
+		active.onConnect(client, metrics)
 		stream, err := client.RangeFeed(ctx, &args)
 		if err != nil {
 			restore()
