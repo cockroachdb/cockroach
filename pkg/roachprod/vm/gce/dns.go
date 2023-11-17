@@ -40,7 +40,7 @@ var _ vm.DNSProvider = &dnsProvider{}
 // dnsProvider implements the vm.DNSProvider interface.
 type dnsProvider struct {
 	recordsCache struct {
-		mu      syncutil.RWMutex
+		mu      syncutil.Mutex
 		records map[string][]vm.DNSRecord
 	}
 }
@@ -48,7 +48,7 @@ type dnsProvider struct {
 func NewDNSProvider() vm.DNSProvider {
 	return &dnsProvider{
 		recordsCache: struct {
-			mu      syncutil.RWMutex
+			mu      syncutil.Mutex
 			records map[string][]vm.DNSRecord
 		}{records: make(map[string][]vm.DNSRecord)},
 	}
@@ -252,8 +252,8 @@ func (n *dnsProvider) updateCache(name string, records []vm.DNSRecord) {
 }
 
 func (n *dnsProvider) getCache(name string) ([]vm.DNSRecord, bool) {
-	n.recordsCache.mu.RLock()
-	defer n.recordsCache.mu.RUnlock()
+	n.recordsCache.mu.Lock()
+	defer n.recordsCache.mu.Unlock()
 	records, ok := n.recordsCache.records[n.normaliseName(name)]
 	return records, ok
 }
