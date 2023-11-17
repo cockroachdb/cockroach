@@ -257,6 +257,12 @@ func (s *kafkaSink) Dial() error {
 		return err
 	}
 
+	if err := client.RefreshMetadata(); err != nil {
+		// Now that we do not fetch metadata for all topics by default, we try
+		// RefreshMetadata manually to check for any connection error.
+		return errors.CombineErrors(err, client.Close())
+	}
+
 	producer, err := s.newAsyncProducer(client)
 	if err != nil {
 		return err
@@ -1072,6 +1078,8 @@ func buildKafkaConfig(
 	config.ClientID = `CockroachDB`
 	config.Producer.Return.Successes = true
 	config.Producer.Partitioner = newChangefeedPartitioner
+	// Do not fetch metadata for all topics but just for the necessary ones.
+	config.Metadata.Full = false
 
 	if dialConfig.tlsEnabled {
 		config.Net.TLS.Enable = true
