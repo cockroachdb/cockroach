@@ -437,3 +437,5 @@ replace github.com/docker/docker => github.com/moby/moby v24.0.6+incompatible
 replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.20230525123634-71747adb5d5c
 
 replace google.golang.org/protobuf => google.golang.org/protobuf v1.29.1
+
+replace go.etcd.io/raft/v3 => github.com/erikgrinaker/raft/v3 v3.0.0-20240105111133-226ef1c2a640
