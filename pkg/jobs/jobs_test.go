@@ -245,6 +245,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.resumeCheckCh = make(chan struct{})
 	rts.failOrCancelCheckCh = make(chan struct{})
 	rts.onPauseRequest = noopPauseRequestFunc
+	rts.sqlDB.Exec(t, "CREATE USER testuser")
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobstest.FakeResumer{
@@ -2161,6 +2162,8 @@ func TestShowJobWhenComplete(t *testing.T) {
 		Details:  jobspb.ImportDetails{},
 		Progress: jobspb.ImportProgress{},
 	}
+	_, err := db.Exec("CREATE USER testuser")
+	require.NoError(t, err)
 	done := make(chan struct{})
 	defer close(done)
 	jobs.RegisterConstructor(
@@ -3455,6 +3458,7 @@ func TestJobTypeMetrics(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, "CREATE USER testuser")
 	reg := s.JobRegistry().(*jobs.Registry)
 
 	waitForPausedCount := func(typ jobspb.Type, numPaused int64) {

@@ -132,6 +132,13 @@ func Authorize(
 		return err
 	}
 	if jobOwnerIsAdmin {
+		callerIsAdmin, err := a.UserHasAdminRole(ctx, a.User())
+		if err != nil {
+			return err
+		}
+		if callerIsAdmin {
+			return nil
+		}
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only admins can control jobs owned by other admins")
 	}
