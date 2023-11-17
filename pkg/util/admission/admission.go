@@ -543,6 +543,16 @@ func workKindString(workKind WorkKind) string {
 	}
 }
 
+// QueueKind is used to track the specific WorkQueue an item of KVWork is in.
+// The options are one of: "kv-regular-cpu-queue", "kv-elastic-cpu-queue",
+// "kv-regular-store-queue", "kv-elastic-store-queue".
+//
+// It is left empty for SQL types of WorkKind.
+type QueueKind string
+
+// SafeValue implements the redact.SafeValue interface.
+func (QueueKind) SafeValue() {}
+
 // storeAdmissionStats are stats maintained by a storeRequester. The non-test
 // implementation of storeRequester is StoreWorkQueue. StoreWorkQueue updates
 // all of these when StoreWorkQueue.AdmittedWorkDone is called, so that these
