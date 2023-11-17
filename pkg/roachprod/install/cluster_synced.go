@@ -1401,7 +1401,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 				}
 				return res, nil
 			}
-			res.Err = errors.New("timed out after 5m")
+			res.Err = errors.Wrapf(res.Err, "timed out after 5m")
 			l.Printf("  %2d: %v", node, res.Err)
 			return res, nil
 		})
