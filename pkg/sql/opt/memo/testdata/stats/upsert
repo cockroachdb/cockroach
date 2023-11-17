@@ -362,17 +362,17 @@ upsert mno
       │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int)
       │    │    │    ├── grouping columns: n:7(int) o:8(int)
       │    │    │    ├── error: "UPSERT or INSERT...ON CONFLICT command cannot affect row a second time"
-      │    │    │    ├── stats: [rows=2000, distinct(6)=1981, null(6)=0, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100]
+      │    │    │    ├── stats: [rows=2000, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100]
       │    │    │    ├── key: (6)
       │    │    │    ├── fd: (6)-->(7,8), (7,8)~~>(6)
       │    │    │    ├── project
       │    │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int)
-      │    │    │    │    ├── stats: [rows=2000, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100, distinct(7,8)=1981, null(7,8)=20]
+      │    │    │    │    ├── stats: [rows=2000, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100]
       │    │    │    │    ├── key: (6)
       │    │    │    │    ├── fd: (6)-->(7,8), (7,8)~~>(6)
       │    │    │    │    └── scan mno
       │    │    │    │         ├── columns: m:6(int!null) n:7(int) o:8(int) crdb_internal_mvcc_timestamp:9(decimal) tableoid:10(oid)
-      │    │    │    │         ├── stats: [rows=2000, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100, distinct(7,8)=1981, null(7,8)=20]
+      │    │    │    │         ├── stats: [rows=2000, distinct(7)=100, null(7)=10, distinct(8)=1900, null(8)=100]
       │    │    │    │         ├── key: (6)
       │    │    │    │         └── fd: (6)-->(7-10), (7,8)~~>(6,9,10)
       │    │    │    └── aggregations

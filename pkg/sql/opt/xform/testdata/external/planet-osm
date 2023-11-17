@@ -1755,13 +1755,13 @@ sort
       │         │    ├── key columns: [218] = [143]
       │         │    ├── lookup columns are key
       │         │    ├── immutable
-      │         │    ├── stats: [rows=3926737, distinct(29)=1, null(29)=0, distinct(69)=2632.06, null(69)=0, distinct(100)=31, null(100)=1.52957e+06, distinct(142)=146376, null(142)=0]
+      │         │    ├── stats: [rows=3926737, distinct(69)=2632.06, null(69)=0, distinct(100)=31, null(100)=1.52957e+06]
       │         │    ├── fd: ()-->(29)
       │         │    ├── inner-join (inverted planet_osm_line@planet_osm_line_way_idx [as=l])
       │         │    │    ├── columns: p.highway:29!null p.way:69 l.rowid:218!null
       │         │    │    ├── inverted-expr
       │         │    │    │    └── st_dwithin(p.way:69, l.way:217, 100.0)
-      │         │    │    ├── stats: [rows=3926737, distinct(29)=1, null(29)=0, distinct(218)=148586, null(218)=0]
+      │         │    │    ├── stats: [rows=3926737, distinct(218)=148586, null(218)=0]
       │         │    │    ├── fd: ()-->(29)
       │         │    │    ├── select
       │         │    │    │    ├── columns: p.highway:29!null p.way:69
@@ -1778,7 +1778,7 @@ sort
       │         ├── values
       │         │    ├── columns: column1:147!null column2:148!null
       │         │    ├── cardinality: [5 - 5]
-      │         │    ├── stats: [rows=5, distinct(147)=5, null(147)=0, distinct(148)=5, null(148)=0]
+      │         │    ├── stats: [rows=5, distinct(147)=5, null(147)=0]
       │         │    ├── ('tertiary', 1)
       │         │    ├── ('unclassified', 2)
       │         │    ├── ('residential', 3)
