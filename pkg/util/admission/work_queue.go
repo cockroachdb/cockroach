@@ -806,12 +806,16 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.metrics.incErrored(info.Priority)
 		q.metrics.recordFinishWait(info.Priority, waitDur)
 		deadline, _ := ctx.Deadline()
-		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, q.queueKind, true)
-		log.Eventf(ctx, "deadline expired, waited in %s queue for %v",
-			q.workKind, waitDur)
+		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, info.Priority, q.queueKind, true)
 		return true,
-			errors.Newf("work %s deadline expired while waiting in queue: %s, deadline: %v, start: %v, dur: %v",
-				q.workKind, q.queueKind, deadline, startTime, waitDur)
+			errors.Newf("work %s deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
+				q.workKind,
+				q.queueKind,
+				admissionpb.WorkPriorityDict[info.Priority],
+				deadline,
+				startTime,
+				waitDur,
+			)
 	case chainID, ok := <-work.ch:
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
@@ -822,7 +826,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if work.heapIndex != -1 {
 			panic(errors.AssertionFailedf("grantee should be removed from heap"))
 		}
-		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, q.queueKind, false)
+		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, info.Priority, q.queueKind, false)
 		q.granter.continueGrantChain(chainID)
 		return true, nil
 	}
@@ -832,6 +836,7 @@ func recordAdmissionWorkQueueStats(
 	span *tracing.Span,
 	waitDur time.Duration,
 	workKind WorkKind,
+	workPriority admissionpb.WorkPriority,
 	queueKind QueueKind,
 	deadlineExceeded bool,
 ) {
@@ -843,6 +848,7 @@ func recordAdmissionWorkQueueStats(
 		WorkKind:          workKind.String(),
 		DeadlineExceeded:  deadlineExceeded,
 		QueueKind:         queueKind.String(),
+		WorkPriority:      admissionpb.WorkPriorityDict[workPriority],
 	})
 }
 
