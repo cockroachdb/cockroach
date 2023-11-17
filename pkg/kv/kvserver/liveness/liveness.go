@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -100,6 +99,10 @@ var (
 	// when encountering this error.
 	errChangeMembershipStatusFailed = errors.New("failed to change the membership status")
 
+	// ErrRetryLivenessSentinel is a reference error used to mark retryable
+	// errors that occur when storing liveness via KV, such as ambiguous errors.
+	ErrRetryLivenessSentinel = errors.New("retryable liveness error")
+
 	// ErrEpochIncremented is returned when a heartbeat request fails because
 	// the underlying liveness record has had its epoch incremented.
 	ErrEpochIncremented = errors.New("heartbeat failed on epoch increment")
@@ -126,36 +129,6 @@ func (e *ErrEpochCondFailed) Format(s fmt.State, verb rune) { errors.FormatError
 
 func (e *ErrEpochCondFailed) Error() string {
 	return fmt.Sprint(e)
-}
-
-type errRetryLiveness struct {
-	error
-}
-
-func (e *errRetryLiveness) Cause() error {
-	return e.error
-}
-
-func (e *errRetryLiveness) Error() string {
-	return fmt.Sprintf("%T: %s", *e, e.error)
-}
-
-func isErrRetryLiveness(ctx context.Context, err error) bool {
-	if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
-		// We generally want to retry ambiguous errors immediately, except if the
-		// ctx is canceled - in which case the ambiguous error is probably caused
-		// by the cancellation (and in any case it's pointless to retry with a
-		// canceled ctx).
-		return ctx.Err() == nil
-	} else if errors.HasType(err, (*kvpb.TransactionStatusError)(nil)) {
-		// 21.2 nodes can return a TransactionStatusError when they should have
-		// returned an AmbiguousResultError.
-		// TODO(andrei): Remove this in 22.2.
-		return true
-	} else if errors.Is(err, kv.OnePCNotAllowedError{}) {
-		return true
-	}
-	return false
 }
 
 // Node liveness metrics counter names.
@@ -472,6 +445,10 @@ func (nl *NodeLiveness) SetMembershipStatus(
 			// Expected when epoch incremented, it's safe to retry.
 			continue
 		}
+		if err != nil {
+			log.Errorf(ctx, "failed to update liveness of n%d to target status %s, error: %v",
+				nodeID, targetStatus, err)
+		}
 		return statusChanged, err
 	}
 }
@@ -505,8 +482,8 @@ func (nl *NodeLiveness) setDrainingInternal(
 	newLiveness.Draining = drain
 
 	update := LivenessUpdate{
-		oldLiveness: oldLivenessRec.Liveness,
-		newLiveness: newLiveness,
+		OldLiveness: oldLivenessRec.Liveness,
+		NewLiveness: newLiveness,
 		oldRaw:      oldLivenessRec.raw,
 	}
 	// TODO(baptist): retry on failure.
@@ -514,7 +491,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 		// Handle a stale cache by updating with the value we just read.
 		nl.cache.maybeUpdate(ctx, actual)
 
-		if actual.Draining == update.newLiveness.Draining {
+		if actual.Draining == update.NewLiveness.Draining {
 			return errNodeDrainingSet
 		}
 		return errors.New("failed to update liveness record because record has changed")
@@ -579,13 +556,13 @@ func (nl *NodeLiveness) setMembershipStatusInternal(
 	newLiveness.Membership = targetStatus
 
 	update := LivenessUpdate{
-		newLiveness: newLiveness,
-		oldLiveness: oldLivenessRec.Liveness,
+		NewLiveness: newLiveness,
+		OldLiveness: oldLivenessRec.Liveness,
 		oldRaw:      oldLivenessRec.raw,
 	}
 	statusChanged = true
 	if _, err := nl.updateLiveness(ctx, update, func(actual Record) error {
-		if actual.Membership != update.newLiveness.Membership {
+		if actual.Membership != update.NewLiveness.Membership {
 			// We're racing with another attempt at updating the liveness
 			// record, we error out in order to retry.
 			return errChangeMembershipStatusFailed
@@ -828,8 +805,8 @@ func (nl *NodeLiveness) heartbeatInternal(
 	}
 
 	update := LivenessUpdate{
-		oldLiveness: oldLiveness,
-		newLiveness: newLiveness,
+		OldLiveness: oldLiveness,
+		NewLiveness: newLiveness,
 	}
 	written, err := nl.updateLiveness(ctx, update, func(actual Record) error {
 		// Update liveness to actual value on mismatch.
@@ -1045,10 +1022,10 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness livenesspb.
 	}
 
 	update := LivenessUpdate{
-		newLiveness: liveness,
-		oldLiveness: liveness,
+		NewLiveness: liveness,
+		OldLiveness: liveness,
 	}
-	update.newLiveness.Epoch++
+	update.NewLiveness.Epoch++
 
 	written, err := nl.updateLiveness(ctx, update, func(actual Record) error {
 		nl.cache.maybeUpdate(ctx, actual)
@@ -1115,13 +1092,26 @@ func (nl *NodeLiveness) updateLiveness(
 	}
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = nl.stopper.ShouldQuiesce()
+
+	// If there is an ambiguous error in writing the liveness update, store it;
+	// this error should be propagated if the retry also fails.
+	var ambiguousError error
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
-			if errors.HasType(err, (*errRetryLiveness)(nil)) {
-				log.Infof(ctx, "retrying liveness update after %s", err)
+			if ambiguousError == nil && errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
+				ambiguousError = err
+			}
+			if errors.Is(err, ErrRetryLivenessSentinel) {
+				log.Infof(ctx, "retrying liveness update after: %s", err)
 				continue
 			}
+
+			if ambiguousError != nil {
+				// nolint:errwrap
+				return Record{}, errors.Newf("ambiguous error while updating liveness: %w (retry error: %v)", ambiguousError, err)
+			}
+
 			return Record{}, err
 		}
 		return written, nil
@@ -1170,7 +1160,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 	// If the caller is not manually providing the previous value in
 	// update.oldRaw. we need to read it from our cache.
 	if update.oldRaw == nil {
-		l, ok := nl.cache.GetLiveness(update.newLiveness.NodeID)
+		l, ok := nl.cache.GetLiveness(update.NewLiveness.NodeID)
 		if !ok {
 			// TODO(baptist): We only expect callers to supply us with node IDs
 			// they learnt through existing liveness records, which implies we
@@ -1178,7 +1168,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			// ErrMissingRecord instead.
 			return Record{}, ErrRecordCacheMiss
 		}
-		if l.Liveness != update.oldLiveness {
+		if l.Liveness != update.OldLiveness {
 			return Record{}, handleCondFailed(l)
 		}
 		update.oldRaw = l.raw
