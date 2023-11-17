@@ -290,6 +290,8 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 				s.Span, s.startAfter, s.token.Desc().RangeID, args.Replica, r.CurrentAttempt())
 
 			conn, err := m.establishMuxConnection(ctx, rpcClient, args.Replica.NodeID)
+			s.onConnect(rpcClient, m.metrics)
+
 			if err == nil {
 				err = conn.startRangeFeed(streamID, s, &args, m.cfg.knobs.beforeSendRequest)
 			}
