@@ -146,7 +146,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(100000, 100000)))
-	nl := NewNodeLiveness(NodeLivenessOptions{Clock: clock, Settings: cluster.MakeTestingClusterSettings()})
+	cache := NewCache(&mockGossip{}, clock, cluster.MakeTestingClusterSettings(), nil)
 	now := clock.Now()
 	threshold := TimeUntilNodeDead.Default()
 	suspectThreshold := TimeAfterNodeSuspect.Default()
@@ -383,10 +383,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			// mechanisms should return the same result.
 			// Use the set node descriptor.
 			if (tc.descriptor != UpdateInfo{}) {
-				nl.cache.mu.lastNodeUpdate[1] = tc.descriptor
+				cache.mu.lastNodeUpdate[1] = tc.descriptor
 			}
 
-			nv := nl.convertToNodeVitality(tc.liveness)
+			nv := cache.convertToNodeVitality(tc.liveness)
 			require.Equal(t, tc.expectedAlive, nv.IsLive(livenesspb.Rebalance))
 			require.Equal(t, tc.expectedStatus, nv.LivenessStatus())
 		})
@@ -446,12 +446,12 @@ func TestNodeLivenessIsLiveCallback(t *testing.T) {
 	mc := timeutil.NewManualTime(timeutil.Unix(1, 0))
 	g := &mockGossip{}
 	s := &mockStorage{}
+	clock := hlc.NewClockForTesting(mc)
 	nl := NewNodeLiveness(NodeLivenessOptions{
 		AmbientCtx:              log.MakeTestingAmbientCtxWithNewTracer(),
 		Stopper:                 stopper,
-		Settings:                st,
-		Gossip:                  g,
-		Clock:                   hlc.NewClockForTesting(mc),
+		Cache:                   NewCache(g, clock, st, nil),
+		Clock:                   clock,
 		Storage:                 s,
 		LivenessThreshold:       24 * time.Hour,
 		RenewalDuration:         23 * time.Hour,

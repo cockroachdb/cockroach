@@ -123,10 +123,16 @@ func TestReplicaLeaseStatus(t *testing.T) {
 			wantErr: "node liveness info for n1 is stale"},
 	} {
 		t.Run("", func(t *testing.T) {
+			cache :=
+				liveness.NewCache(
+					gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry()),
+					clock,
+					cluster.MakeTestingClusterSettings(),
+					nil,
+				)
 			l := liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
-				Clock:    clock,
-				Gossip:   gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry()),
-				Settings: cluster.MakeTestingClusterSettings(),
+				Clock: clock,
+				Cache: cache,
 			})
 			r := Replica{store: &Store{
 				Ident: &roachpb.StoreIdent{StoreID: 1, NodeID: 1},
