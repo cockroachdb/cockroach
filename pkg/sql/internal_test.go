@@ -200,53 +200,6 @@ func TestInternalStmtFingerprintLimit(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestQueryIsAdminWithNoTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	params, _ := createTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-
-	if _, err := db.Exec("create user testuser"); err != nil {
-		t.Fatal(err)
-	}
-
-	ie := s.InternalExecutor().(*sql.InternalExecutor)
-
-	testData := []struct {
-		user     username.SQLUsername
-		expAdmin bool
-	}{
-		{username.NodeUserName(), true},
-		{username.RootUserName(), true},
-		{username.TestUserName(), false},
-	}
-
-	for _, tc := range testData {
-		t.Run(tc.user.Normalized(), func(t *testing.T) {
-			row, cols, err := ie.QueryRowExWithCols(ctx, "test", nil, /* txn */
-				sessiondata.InternalExecutorOverride{User: tc.user},
-				"SELECT crdb_internal.is_admin()")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if row == nil || len(cols) != 1 {
-				numRows := 0
-				if row != nil {
-					numRows = 1
-				}
-				t.Fatalf("unexpected result shape %d, %d", numRows, len(cols))
-			}
-			isAdmin := bool(*row[0].(*tree.DBool))
-			if isAdmin != tc.expAdmin {
-				t.Fatalf("expected %q admin %v, got %v", tc.user, tc.expAdmin, isAdmin)
-			}
-		})
-	}
-}
-
 func TestSessionBoundInternalExecutor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

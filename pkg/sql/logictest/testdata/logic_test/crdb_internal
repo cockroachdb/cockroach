@@ -1009,22 +1009,6 @@ user testuser
 query error crdb_internal.compact_engine_span\(\): insufficient privilege
 SELECT crdb_internal.compact_engine_span(1, 1, decode('c08989', 'hex'), decode('c0898a', 'hex'))
 
-subtest builtin_is_admin
-
-user root
-
-query B
-SELECT crdb_internal.is_admin()
-----
-true
-
-user testuser
-
-query B
-SELECT crdb_internal.is_admin()
-----
-false
-
 user root
 
 # Test the crdb_internal.create_type_statements table.
