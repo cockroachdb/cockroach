@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -146,6 +147,63 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 		{"c", "23"},
 	})
 	require.True(t, sawWriteTooOldError.Load())
+}
+
+// TestReadCommittedReadTimestampNotSteppedOnCommit verifies that the read
+// timestamp of a read committed transaction is stepped between SQL statements,
+// but not before commit.
+func TestReadCommittedReadTimestampNotSteppedOnCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Keep track of the read timestamps of the read committed transaction during
+	// each KV operation.
+	var txnReadTimestamps []hlc.Timestamp
+	filterFunc := func(ctx context.Context, ba *kvpb.BatchRequest, _ *kvpb.BatchResponse) *kvpb.Error {
+		if ba.Txn == nil || ba.Txn.IsoLevel != isolation.ReadCommitted {
+			return nil
+		}
+		req := ba.Requests[0]
+		method := req.GetInner().Method()
+		if method == kvpb.ConditionalPut || (method == kvpb.EndTxn && req.GetEndTxn().IsParallelCommit()) {
+			txnReadTimestamps = append(txnReadTimestamps, ba.Txn.ReadTimestamp)
+		}
+		return nil
+	}
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	params.Knobs.Store = &kvserver.StoreTestingKnobs{
+		// NOTE: we use a TestingResponseFilter and not a TestingRequestFilter to
+		// avoid potential flakiness from requests which are redirected or retried.
+		TestingResponseFilter: filterFunc,
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
+	require.NoError(t, err)
+
+	// Create a read committed transaction that writes to three rows in three
+	// different statements and then commits.
+	tx, err := sqlDB.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+	require.NoError(t, err)
+	_, err = tx.Exec(`INSERT INTO kv VALUES ('a', 1);`)
+	require.NoError(t, err)
+	_, err = tx.Exec(`INSERT INTO kv VALUES ('b', 2);`)
+	require.NoError(t, err)
+	_, err = tx.Exec(`INSERT INTO kv VALUES ('c', 3);`)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+
+	// Verify that the transaction's read timestamp was not stepped on commit but
+	// was stepped between every other statement.
+	require.Len(t, txnReadTimestamps, 4)
+	require.True(t, txnReadTimestamps[0].Less(txnReadTimestamps[1]))
+	require.True(t, txnReadTimestamps[1].Less(txnReadTimestamps[2]))
+	require.True(t, txnReadTimestamps[2].Equal(txnReadTimestamps[3]))
 }
 
 // TestReadCommittedVolatileUDF verifies that volatile UDFs running under
