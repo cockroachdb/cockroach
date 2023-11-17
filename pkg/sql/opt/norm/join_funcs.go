@@ -455,6 +455,15 @@ func (c *CustomFuncs) GetEquivFD(
 	return equivFD
 }
 
+// GetEquivFDFromFilters returns a FuncDepSet with all equivalence dependencies
+// from filters.
+func (c *CustomFuncs) GetEquivFDFromFilters(filters memo.FiltersExpr) (equivFD props.FuncDepSet) {
+	for i := range filters {
+		equivFD.AddEquivFrom(&filters[i].ScalarProps().FuncDeps)
+	}
+	return equivFD
+}
+
 // JoinFiltersMatchAllLeftRows returns true when each row in the given join's
 // left input matches at least one row from the right input, according to the
 // join filters.

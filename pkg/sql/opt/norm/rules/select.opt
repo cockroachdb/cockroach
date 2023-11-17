@@ -200,7 +200,7 @@ $input
             (CanMapJoinOpFilter
                 $item
                 $rightCols:(OutputCols $right)
-                $equivFD:(GetEquivFD $on $left $right)
+                $equivFD:(GetEquivFDFromFilters $on)
             )
         ...
     ]
