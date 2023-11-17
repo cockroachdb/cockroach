@@ -27,10 +27,12 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl/cliccl",
         "//pkg/cli",
+        "//pkg/cli/clierror",
         "//pkg/cli/clierrorplus",
         "//pkg/cli/cliflagcfg",
         "//pkg/cli/cliflags",
         "//pkg/cli/democluster",
+        "//pkg/cli/exit",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/log",
@@ -44,6 +46,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_olekukonko_tablewriter//:tablewriter",
         "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_pflag//:pflag",
     ],
 )
 
