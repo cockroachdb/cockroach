@@ -10,8 +10,10 @@
 
 package util
 
+import "github.com/cockroachdb/redact"
+
 // Pluralize returns a single character 's' unless n == 1.
-func Pluralize(n int64) string {
+func Pluralize(n int64) redact.SafeString {
 	if n == 1 {
 		return ""
 	}

@@ -753,7 +753,7 @@ func (n *Node) start(
 	allEngines = append(allEngines, state.uninitializedEngines...)
 	for _, e := range allEngines {
 		t := e.Type()
-		log.Infof(ctx, "started with engine type %v", t)
+		log.Infof(ctx, "started with engine type %v", &t)
 	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
 	return nil

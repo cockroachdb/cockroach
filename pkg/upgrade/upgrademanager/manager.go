@@ -738,14 +738,14 @@ func (m *Manager) runMigration(
 			return err
 		}
 		if alreadyExisting {
-			log.Infof(ctx, "waiting for %s", mig.Name())
+			log.Infof(ctx, "waiting for %s", redact.Safe(mig.Name()))
 			return startup.RunIdempotentWithRetry(ctx,
 				m.deps.Stopper.ShouldQuiesce(),
 				"upgrade wait jobs", func(ctx context.Context) error {
 					return m.jr.WaitForJobs(ctx, []jobspb.JobID{id})
 				})
 		} else {
-			log.Infof(ctx, "running %s", mig.Name())
+			log.Infof(ctx, "running %s", redact.Safe(mig.Name()))
 			return startup.RunIdempotentWithRetry(ctx,
 				m.deps.Stopper.ShouldQuiesce(),
 				"upgrade run jobs", func(ctx context.Context) error {
