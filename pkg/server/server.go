@@ -408,6 +408,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	kvNodeDialer := nodedialer.NewWithOpt(rpcContext, gossip.AddressResolver(g),
 		nodedialer.DialerOpt{TestingKnobs: dialerKnobs})
 
+	livenessCache := liveness.NewCache(g, clock, cfg.Settings, kvNodeDialer)
+
 	runtimeSampler := status.NewRuntimeStatSampler(ctx, clock.WallClock())
 	sysRegistry.AddMetricStruct(runtimeSampler)
 	// Save a reference to this sampler for use by additional servers
@@ -505,10 +507,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		Stopper:                 stopper,
 		Clock:                   clock,
 		Storage:                 liveness.NewKVStorage(db),
-		Gossip:                  g,
 		LivenessThreshold:       nlActive,
 		RenewalDuration:         nlRenewal,
-		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 		// When we learn that a node is decommissioning, we want to proactively
 		// enqueue the ranges we have that also have a replica on the
@@ -535,7 +535,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				log.Ops.Warningf(ctx, "writing last up timestamp: %v", err)
 			}
 		},
-		NodeDialer: kvNodeDialer,
+		Cache: livenessCache,
 	})
 
 	nodeRegistry.AddMetricStruct(nodeLiveness.Metrics())
