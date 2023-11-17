@@ -141,7 +141,7 @@ func (tr *testRunner) run() (retErr error) {
 
 	go func() {
 		defer close(stepsErr)
-		for _, step := range tr.plan.steps {
+		for _, step := range tr.plan.Steps() {
 			if err := tr.runStep(tr.ctx, step); err != nil {
 				stepsErr <- err
 				return
