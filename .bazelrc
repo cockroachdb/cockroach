@@ -127,6 +127,7 @@ build:engflowbase --extra_execution_platforms=//build/toolchains:cross_linux
 build:engflowbase --remote_upload_local_results=false
 build:engflowbase --remote_download_toplevel
 test:engflowbase --test_env=REMOTE_EXEC=1
+test:engflowbase --test_env=GOTRACEBACK=all
 build:engflow --config=engflowbase
 build:engflow --remote_cache=grpcs://tanzanite.cluster.engflow.com
 build:engflow --remote_executor=grpcs://tanzanite.cluster.engflow.com
