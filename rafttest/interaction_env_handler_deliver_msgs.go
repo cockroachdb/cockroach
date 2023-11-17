@@ -26,6 +26,7 @@ import (
 )
 
 func (env *InteractionEnv) handleDeliverMsgs(t *testing.T, d datadriven.TestData) error {
+	var typ raftpb.MessageType = -1
 	var rs []Recipient
 	for _, arg := range d.CmdArgs {
 		if len(arg.Vals) == 0 {
@@ -50,11 +51,19 @@ func (env *InteractionEnv) handleDeliverMsgs(t *testing.T, d datadriven.TestData
 					t.Fatalf("can't both deliver and drop msgs to %d", id)
 				}
 				rs = append(rs, Recipient{ID: id, Drop: true})
+			case "type":
+				var s string
+				arg.Scan(t, i, &s)
+				v, ok := raftpb.MessageType_value[s]
+				if !ok {
+					t.Fatalf("unknown message type %s", s)
+				}
+				typ = raftpb.MessageType(v)
 			}
 		}
 	}
 
-	if n := env.DeliverMsgs(rs...); n == 0 {
+	if n := env.DeliverMsgs(typ, rs...); n == 0 {
 		env.Output.WriteString("no messages\n")
 	}
 	return nil
@@ -66,14 +75,14 @@ type Recipient struct {
 }
 
 // DeliverMsgs goes through env.Messages and, depending on the Drop flag,
-// delivers or drops messages to the specified Recipients. Returns the
-// number of messages handled (i.e. delivered or dropped). A handled message
-// is removed from env.Messages.
-func (env *InteractionEnv) DeliverMsgs(rs ...Recipient) int {
+// delivers or drops messages to the specified Recipients. Only messages of type
+// typ are delivered (-1 for all types). Returns the number of messages handled
+// (i.e. delivered or dropped). A handled message is removed from env.Messages.
+func (env *InteractionEnv) DeliverMsgs(typ raftpb.MessageType, rs ...Recipient) int {
 	var n int
 	for _, r := range rs {
 		var msgs []raftpb.Message
-		msgs, env.Messages = splitMsgs(env.Messages, r.ID, r.Drop)
+		msgs, env.Messages = splitMsgs(env.Messages, r.ID, typ, r.Drop)
 		n += len(msgs)
 		for _, msg := range msgs {
 			if r.Drop {
