@@ -12,20 +12,18 @@ package tests
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/release"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/stretchr/testify/require"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/errors"
 )
 
 func registerChangeReplicasMixedVersion(r registry.Registry) {
@@ -36,7 +34,7 @@ func registerChangeReplicasMixedVersion(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Run:              runChangeReplicasMixedVersion,
-		Timeout:          20 * time.Minute,
+		Timeout:          60 * time.Minute,
 	})
 }
 
@@ -44,313 +42,221 @@ func registerChangeReplicasMixedVersion(r registry.Registry) {
 // https://github.com/cockroachdb/cockroach/issues/94834. It runs replica config
 // changes (moves replicas around) in mixed-version clusters, both explicitly
 // with ALTER RANGE RELOCATE and implicitly via zone configs and the replicate
-// queue. It does so in several sequential scenarios:
-//
-// 1. Mixed pre/main nodes.
-// 2. All main nodes, unfinalized.
-// 3. All pre nodes, downgraded from main.
-// 4. All main nodes, finalized.
+// queue.
 func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster) {
-	nodeCount := c.Spec().NodeCount
-	require.Equal(t, 4, nodeCount)
 
-	rng, _ := randutil.NewTestRand()
-	randomNodeID := func() int {
-		return rng.Intn(nodeCount) + 1
-	}
+	// createTable creates a test table, and splits and scatters it.
+	createTable := func(
+		ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
+	) error {
 
-	preVersionStr, err := release.LatestPredecessor(t.BuildVersion())
-	require.NoError(t, err)
-	preVersion := clusterupgrade.MustParseVersion(preVersionStr)
-
-	// scanTableStep runs a count(*) scan across a table, asserting the row count.
-	scanTableStep := func(table string, expectRows int) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			gateway := randomNodeID()
-			t.L().Printf("scanning table %s via gateway n%d", table, gateway)
-			conn := u.c.Conn(ctx, t.L(), gateway)
-			defer conn.Close()
-			var count int
-			row := conn.QueryRowContext(ctx, `SELECT count(*) FROM `+table)
-			require.NoError(t, row.Scan(&count))
-			require.Equal(t, expectRows, count)
+		l.Printf("creating table")
+		if err := h.Exec(r, `CREATE TABLE test (id INT PRIMARY KEY)`); err != nil {
+			return err
 		}
-	}
-
-	// scatterTableStep scatters the replicas and leases for a table.
-	scatterTableStep := func(table string) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			gateway := randomNodeID()
-			t.L().Printf("scattering table %s via n%d", table, gateway)
-			conn := u.c.Conn(ctx, t.L(), gateway)
-			defer conn.Close()
-			_, err = conn.ExecContext(ctx, `ALTER TABLE test SCATTER`)
-			require.NoError(t, err)
+		_, db := h.RandomDB(r, c.All())
+		if err := WaitFor3XReplication(ctx, t, db); err != nil {
+			return err
 		}
+
+		l.Printf("splitting table")
+		const ranges = 100
+		err := h.Exec(r, `ALTER TABLE test SPLIT AT SELECT i FROM generate_series(1, $1) AS g(i)`,
+			ranges-1)
+		if err != nil {
+			return err
+		}
+
+		l.Printf("scattering table")
+		if err := h.Exec(r, `ALTER TABLE test SCATTER`); err != nil {
+			return err
+		}
+		return nil
 	}
 
-	// changeReplicasRelocateFromNodeStep moves all table replicas from the given
-	// node onto any other node that doesn't already have a replica, using ALTER
-	// TABLE RELOCATE via a random gateway node.
-	changeReplicasRelocateFromNodeStep := func(table string, nodeID int) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			enqueueRangeInReplicateQueue := func(rangeID int) {
-				for n := 1; n <= nodeCount; n++ {
-					conn := u.c.Conn(ctx, t.L(), n)
-					defer conn.Close()
-					// Enqueue on every node, only the leaseholder node will process the
-					// range.
-					_, err = conn.ExecContext(ctx, fmt.Sprintf(
-						`SELECT crdb_internal.kv_enqueue_replica(%d, 'replicate', true)`,
-						rangeID))
-					if err != nil {
-						t.L().Printf("kv_enqueue_replica failed: %s", err)
-					}
+	// evacuateNodeUsingZoneConfig moves replicas off of a node using a zone
+	// config.
+	evacuateNodeUsingZoneConfig := func(
+		ctx context.Context,
+		l *logger.Logger,
+		r *rand.Rand,
+		h *mixedversion.Helper,
+		node int,
+	) error {
+		l.Printf("moving replicas off of n%d using zone config", node)
+
+		err := h.Exec(r, fmt.Sprintf(
+			`ALTER TABLE test CONFIGURE ZONE USING constraints = '[-node%d]'`, node))
+		if err != nil {
+			return err
+		}
+
+		var rangeCount int
+		for i := 0; i < 30; i++ {
+			err := h.QueryRow(r, `SELECT count(*) FROM `+
+				`[SHOW RANGES FROM TABLE test] WHERE $1::int = ANY(replicas)`, node).Scan(&rangeCount)
+			if err != nil {
+				return err
+			}
+			l.Printf("%d replicas on n%d", rangeCount, node)
+			if rangeCount == 0 {
+				break
+			}
+			time.Sleep(3 * time.Second)
+		}
+		if rangeCount > 0 {
+			return errors.Errorf("n%d still has %d replicas", node, rangeCount)
+		}
+
+		if err = h.Exec(r, `ALTER TABLE test CONFIGURE ZONE USING constraints = '[]'`); err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	// evacuateNodeUsingRelocate moves replicas off of a node using ALTER TABLE
+	// RELOCATE.
+	evacuateNodeUsingRelocate := func(
+		ctx context.Context,
+		l *logger.Logger,
+		r *rand.Rand,
+		h *mixedversion.Helper,
+		node int,
+	) error {
+		setReplicateQueueEnabled := func(enabled bool) error {
+			for _, node := range c.All() {
+				_, err := h.Connect(node).ExecContext(ctx,
+					`SELECT crdb_internal.kv_set_queue_active('replicate', $1)`, enabled)
+				if err != nil {
+					return err
 				}
 			}
+			return nil
+		}
 
-			// Disable the replicate queue, but re-enable it when we're done.
-			setReplicateQueueEnabled := func(enabled bool) {
-				for n := 1; n <= nodeCount; n++ {
-					conn := u.c.Conn(ctx, t.L(), n)
-					defer conn.Close()
-					_, err := conn.ExecContext(ctx,
-						`SELECT crdb_internal.kv_set_queue_active('replicate', $1)`, enabled)
-					require.NoError(t, err)
-				}
+		// Relocate replicas to other nodes which don't already have one.
+		for _, target := range c.All() {
+			if target == node {
+				continue
 			}
-			setReplicateQueueEnabled(false)
-			defer setReplicateQueueEnabled(true)
 
-			// Relocate replicas to other nodes which don't have one, in random order.
-			targets := []int{}
-			for n := 1; n <= nodeCount; n++ {
-				if n != nodeID {
-					targets = append(targets, n)
+			var rangeErrors map[int]string
+			for i := 0; i < 30; i++ {
+				l.Printf("moving replicas from n%d to n%d using ALTER TABLE RELOCATE", node, target)
+
+				// Disable the replicate queue, to avoid interference.
+				if err := setReplicateQueueEnabled(false); err != nil {
+					return err
 				}
-			}
-			rand.Shuffle(len(targets), func(i, j int) {
-				targets[i], targets[j] = targets[j], targets[i]
-			})
 
-			for _, target := range targets {
-				gateway := randomNodeID()
-				conn := u.c.Conn(ctx, t.L(), gateway)
-				defer conn.Close()
-
-				retryOpts := retry.Options{
-					InitialBackoff: 100 * time.Millisecond,
-					MaxBackoff:     5 * time.Second,
-					Multiplier:     2,
-					MaxRetries:     12,
+				// Relocate ranges.
+				rows, err := h.Query(r, `ALTER RANGE RELOCATE FROM $1::int TO $2::int FOR `+
+					`SELECT range_id FROM [SHOW RANGES FROM TABLE test] `+
+					`WHERE $1::int = ANY(replicas) AND $2::int != ALL(replicas)`, node, target)
+				if err != nil {
+					return err
 				}
-				var rangeErrors map[int]string
-				for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-					setReplicateQueueEnabled(false)
-					if errCount := len(rangeErrors); errCount > 0 {
-						t.L().Printf("%d ranges failed, retrying", errCount)
-					}
-					t.L().Printf("moving replicas from n%d to n%d via gateway n%d using ALTER TABLE RELOCATE",
-						nodeID, target, gateway)
 
+				var relocated int
+				rangeErrors = map[int]string{}
+				for rows.Next() {
 					var rangeID int
 					var pretty, result string
-					rows, err := conn.QueryContext(ctx, `ALTER RANGE RELOCATE FROM $1::int TO $2::int FOR `+
-						`SELECT range_id FROM [SHOW RANGES FROM TABLE test] `+
-						`WHERE $1::int = ANY(replicas) AND $2::int != ALL(replicas)`, nodeID, target)
-					require.NoError(t, err)
-
-					rangeErrors = map[int]string{}
-					for rows.Next() {
-						require.NoError(t, rows.Scan(&rangeID, &pretty, &result))
-						if result != "ok" {
-							rangeErrors[rangeID] = result
-						}
-					}
-					require.NoError(t, rows.Err())
-					if len(rangeErrors) == 0 {
-						break
-					}
-					// The failure may be caused by conflicts with ongoing configuration
-					// changes by the replicate queue, so we re-enable it and let it run
-					// for a bit before the next retry.
-					setReplicateQueueEnabled(true)
-					// Additionally, any ranges which had errors are manually enqueued
-					// into the replicate queue. This will speed up resolving conflicts
-					// and intermediate states such as left over learners or joint
-					// configurations.
-					for rangeID := range rangeErrors {
-						enqueueRangeInReplicateQueue(rangeID)
-					}
-				}
-
-				if len(rangeErrors) > 0 {
-					for rangeID, result := range rangeErrors {
-						t.L().Printf("failed to move r%d from n%d to n%d via n%d: %s",
-							rangeID, nodeID, target, gateway, result)
-					}
-					t.Fatalf("failed to move %d replicas from n%d to n%d using gateway n%d",
-						len(rangeErrors), nodeID, target, gateway)
-				}
-			}
-		}
-	}
-
-	// changeReplicasZoneConfigFromNodeStep moves all table replicas from the
-	// given node onto any other node that doesn't already have a replica, using a
-	// zone config exclusion and manual enqueueing.
-	changeReplicasZoneConfigFromNodeStep := func(table string, nodeID int) versionStep {
-		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			conns := map[int]*gosql.DB{}
-			for n := 1; n <= nodeCount; n++ {
-				conns[n] = u.c.Conn(ctx, t.L(), n)
-				defer conns[n].Close()
-			}
-			gateway := randomNodeID()
-			conn := conns[gateway]
-
-			t.L().Printf("moving replicas off n%d using zone config via gateway n%d", nodeID, gateway)
-
-			// Set zone constraint to exclude the node.
-			_, err := conn.ExecContext(ctx, fmt.Sprintf(
-				`ALTER TABLE %s CONFIGURE ZONE USING constraints = '[-node%d]'`, table, nodeID))
-			require.NoError(t, err)
-
-			require.Eventually(t, func() bool {
-				// Manually enqueue ranges across all nodes, since queues are slow.
-				for n, c := range conns {
-					if u.binaryVersion(ctx, t, n).LessEq(roachpb.MustParseVersion("22.2")) {
-						_, err = c.ExecContext(ctx, fmt.Sprintf(
-							`SELECT crdb_internal.kv_enqueue_replica(range_id, 'replicate', true) `+
-								`FROM [SHOW RANGES FROM TABLE %s] WHERE lease_holder = %d`, table, n))
+					if err := rows.Scan(&rangeID, &pretty, &result); err != nil {
+						return err
+					} else if result != "ok" {
+						rangeErrors[rangeID] = result
 					} else {
-						_, err = c.ExecContext(ctx, fmt.Sprintf(
-							`SELECT crdb_internal.kv_enqueue_replica(range_id, 'replicate', true) `+
-								`FROM [SHOW RANGES FROM TABLE %s WITH DETAILS] WHERE lease_holder = %d`, table, n))
-					}
-					if err != nil {
-						t.L().Printf("kv_enqueue_replica failed: %s", err)
+						relocated++
 					}
 				}
+				if err := rows.Err(); err != nil {
+					return err
+				}
 
-				// Check if ranges have moved yet.
-				var rangeCount int
-				row := conn.QueryRowContext(ctx, `SELECT count(*) FROM `+
-					`[SHOW RANGES FROM TABLE test] WHERE $1::int = ANY(replicas)`, nodeID)
-				require.NoError(t, row.Scan(&rangeCount))
-				t.L().Printf("table %s has %d replicas on n%d", table, rangeCount, nodeID)
-				return rangeCount == 0
-			}, 2*time.Minute, time.Second)
+				l.Printf("%d replicas relocated, %d errors", relocated, len(rangeErrors))
 
-			// Reset zone constraint.
-			_, err = conn.ExecContext(ctx, fmt.Sprintf(
-				`ALTER TABLE %s CONFIGURE ZONE USING constraints = '[]'`, table))
-			require.NoError(t, err)
+				// Re-enable the replicate queue. This is needed not only to reset the
+				// state for the test, but also to fix any conflicts with ongoing
+				// configuration changes made by the replicate queue before the next
+				// retry.
+				if err := setReplicateQueueEnabled(true); err != nil {
+					return err
+				}
+
+				// If all ranges were relocated, move onto the next target.
+				if len(rangeErrors) == 0 {
+					break
+				}
+
+				time.Sleep(3 * time.Second)
+			}
+
+			// If ranges still failed after exhausting retries, give up.
+			if len(rangeErrors) > 0 {
+				for rangeID, result := range rangeErrors {
+					t.L().Printf("failed to move r%d from n%d to n%d: %s",
+						rangeID, node, target, result)
+				}
+				return errors.Errorf("failed to move %d replicas from n%d to n%d",
+					len(rangeErrors), node, target)
+			}
 		}
+
+		return nil
 	}
 
-	u := newVersionUpgradeTest(c,
-		// Start the cluster with preVersion and wait for it to bootstrap, then
-		// disable auto-upgrades to MainVersion. The checkpoint fixture is not
-		// necessary in this test, but we pull it in to get better test coverage of
-		// historical cluster state.
-		uploadAndStartFromCheckpointFixture(c.All(), preVersion),
-		waitForUpgradeStep(c.All()),
-		preventAutoUpgradeStep(1),
+	// moveReplicas moves replicas around between nodes randomly.
+	moveReplicas := func(
+		ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
+	) error {
 
-		// Create a test table and wait for upreplication.
-		func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			conn := u.c.Conn(ctx, t.L(), 1)
-			defer conn.Close()
-			_, err = conn.ExecContext(ctx, `CREATE TABLE test (id INT PRIMARY KEY)`)
-			require.NoError(t, err)
-			require.NoError(t, WaitFor3XReplication(ctx, t, conn))
-		},
+		// First, scatter the range.
+		l.Printf("scattering table")
+		if err := h.Exec(r, `ALTER TABLE test SCATTER`); err != nil {
+			return err
+		}
 
-		// Upgrade n1,n2 to MainVersion, leave n3,n4 at preVersion.
-		binaryUpgradeStep(c.Nodes(1, 2), clusterupgrade.CurrentVersion()),
+		// Evacuate each node, in random order, using a random mechanism.
+		nodes := append(option.NodeListOption{}, c.All()...)
+		r.Shuffle(len(nodes), func(i, j int) {
+			nodes[i], nodes[j] = nodes[j], nodes[i]
+		})
 
-		// Scatter the table's single range, to randomize replica/lease
-		// placement -- in particular, who's responsible for splits.
-		scatterTableStep("test"),
+		for _, node := range nodes {
+			if r.Float64() < 0.5 {
+				if err := evacuateNodeUsingZoneConfig(ctx, l, r, h, node); err != nil {
+					return err
+				}
+			} else {
+				if err := evacuateNodeUsingRelocate(ctx, l, r, h, node); err != nil {
+					return err
+				}
+			}
+		}
 
-		// Create 100 splits of the test table.
-		func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-			const ranges = 100
-			gateway := randomNodeID()
-			t.L().Printf("splitting table test into %d ranges via gateway n%d", ranges, gateway)
+		// Finally, scan the table to ensure all ranges are functional. We don't
+		// expect any rows, since the table is empty, but this still requires a scan
+		// across each range.
+		l.Printf("scanning table")
+		var count int
+		row := h.QueryRow(r, `SELECT count(*) FROM test`)
+		if err := row.Scan(&count); err != nil {
+			return err
+		} else if count != 0 {
+			return errors.Errorf("unexpected row count %d", count)
+		}
 
-			conn := u.c.Conn(ctx, t.L(), gateway)
-			defer conn.Close()
-			_, err = conn.ExecContext(ctx,
-				`ALTER TABLE test SPLIT AT SELECT i FROM generate_series(1, $1) AS g(i)`, ranges-1)
-			require.NoError(t, err)
+		return nil
+	}
 
-			var rangeCount int
-			row := conn.QueryRowContext(ctx, `SELECT count(*) FROM [SHOW RANGES FROM TABLE test]`)
-			require.NoError(t, row.Scan(&rangeCount))
-			require.Equal(t, ranges, rangeCount)
-		},
+	// Set up and run test.
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), mixedversion.ClusterSettingOption(
+		install.EnvOption{"COCKROACH_SCAN_MAX_IDLE_TIME=10ms"})) // speed up queues
 
-		// Scatter the table after the splits, and run a table scan.
-		scatterTableStep("test"),
-		scanTableStep("test", 0),
-
-		// Move all replicas off of each node using ALTER RANGE RELOCATE.
-		changeReplicasRelocateFromNodeStep("test", 1),
-		changeReplicasRelocateFromNodeStep("test", 2),
-		changeReplicasRelocateFromNodeStep("test", 3),
-		changeReplicasRelocateFromNodeStep("test", 4),
-
-		// Scatter the table again, and run a table scan.
-		scatterTableStep("test"),
-		scanTableStep("test", 0),
-
-		// Move all replicas off of each node using a zone config.
-		changeReplicasZoneConfigFromNodeStep("test", 1),
-		changeReplicasZoneConfigFromNodeStep("test", 2),
-		changeReplicasZoneConfigFromNodeStep("test", 3),
-		changeReplicasZoneConfigFromNodeStep("test", 4),
-
-		// Scatter the table again, and run a table scan.
-		scatterTableStep("test"),
-		scanTableStep("test", 0),
-
-		// Upgrade n3,n4 (the remaining nodes) to MainVersion, verify that we can
-		// run a table scan, move ranges around, scatter, and scan again.
-		binaryUpgradeStep(c.Nodes(3, 4), clusterupgrade.CurrentVersion()),
-		scanTableStep("test", 0),
-		changeReplicasRelocateFromNodeStep("test", 1),
-		changeReplicasZoneConfigFromNodeStep("test", 2),
-		changeReplicasRelocateFromNodeStep("test", 3),
-		changeReplicasZoneConfigFromNodeStep("test", 3),
-		scatterTableStep("test"),
-		scanTableStep("test", 0),
-
-		// Downgrade all to preVersion, verify that we can run a table scan, shuffle
-		// the ranges, scatter them, and scan again.
-		binaryUpgradeStep(c.All(), preVersion),
-		scanTableStep("test", 0),
-		changeReplicasRelocateFromNodeStep("test", 1),
-		changeReplicasZoneConfigFromNodeStep("test", 2),
-		changeReplicasRelocateFromNodeStep("test", 3),
-		changeReplicasZoneConfigFromNodeStep("test", 3),
-		scatterTableStep("test"),
-		scanTableStep("test", 0),
-
-		// Upgrade all to MainVersion and finalize the upgrade. Verify that we can
-		// run a table scan, shuffle the ranges, scatter them, and scan again.
-		allowAutoUpgradeStep(1),
-		binaryUpgradeStep(c.All(), clusterupgrade.CurrentVersion()),
-		waitForUpgradeStep(c.All()),
-		scanTableStep("test", 0),
-		changeReplicasRelocateFromNodeStep("test", 1),
-		changeReplicasZoneConfigFromNodeStep("test", 2),
-		changeReplicasRelocateFromNodeStep("test", 3),
-		changeReplicasZoneConfigFromNodeStep("test", 3),
-		scatterTableStep("test"),
-		scanTableStep("test", 0),
-	)
-
-	u.run(ctx, t)
+	mvt.OnStartup("create test table", createTable)
+	mvt.InMixedVersion("move replicas", moveReplicas)
+	mvt.AfterUpgradeFinalized("move replicas", moveReplicas)
+	mvt.Run()
 }
