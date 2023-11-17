@@ -1478,10 +1478,13 @@ func stepLeader(r *raft, m pb.Message) error {
 				switch {
 				case pr.State == tracker.StateProbe:
 					pr.BecomeReplicate()
-				case pr.State == tracker.StateSnapshot && pr.Match >= pr.PendingSnapshot:
-					// TODO(tbg): we should also enter this branch if a snapshot is
-					// received that is below pr.PendingSnapshot but which makes it
-					// possible to use the log again.
+				case pr.State == tracker.StateSnapshot && pr.Match+1 >= r.raftLog.firstIndex():
+					// Note that we don't take into account PendingSnapshot to
+					// enter this branch. No matter at which index a snapshot
+					// was actually applied, as long as this allows catching up
+					// the follower from the log, we will accept it. This gives
+					// systems more flexibility in how they implement snapshots;
+					// see the comments on PendingSnapshot.
 					r.logger.Debugf("%x recovered from needing snapshot, resumed sending replication messages to %x [%s]", r.id, m.From, pr)
 					// Transition back to replicating state via probing state
 					// (which takes the snapshot into account). If we didn't
@@ -1560,10 +1563,6 @@ func stepLeader(r *raft, m pb.Message) error {
 		if pr.State != tracker.StateSnapshot {
 			return nil
 		}
-		// TODO(tbg): this code is very similar to the snapshot handling in
-		// MsgAppResp above. In fact, the code there is more correct than the
-		// code here and should likely be updated to match (or even better, the
-		// logic pulled into a newly created Progress state machine handler).
 		if !m.Reject {
 			pr.BecomeProbe()
 			r.logger.Debugf("%x snapshot succeeded, resumed sending replication messages to %x [%s]", r.id, m.From, pr)
