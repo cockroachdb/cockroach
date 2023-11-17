@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -732,9 +734,15 @@ func newHarness(tb testing.TB, query benchQuery, schemas []string) *harness {
 	// Set up the test catalog.
 	h.testCat = testcat.New()
 	for _, schema := range schemas {
-		_, err := h.testCat.ExecuteDDL(schema)
+		stmts, err := parser.Parse(schema)
 		if err != nil {
 			tb.Fatalf("%v", err)
+		}
+		for _, stmt := range stmts {
+			_, err := h.testCat.ExecuteDDLStmt(stmt)
+			if err != nil {
+				tb.Fatalf("%v", err)
+			}
 		}
 	}
 
@@ -1072,993 +1080,6 @@ func BenchmarkEndToEnd(b *testing.B) {
 	}
 }
 
-var slowSchemas = []string{
-	`
-    CREATE TABLE tab1 (
-        col1 INT8 NOT NULL,
-        col2 INT8 NOT NULL,
-        col3 INT8 NOT NULL,
-        col4 INT8 NULL,
-        col5 INT8 NULL,
-        col6 INT8 NOT NULL,
-        col7 INT8 NOT NULL,
-        col8 INT8 NOT NULL,
-        col9 INT8 NOT NULL,
-        col10 INT8 NOT NULL,
-        col11 INT8 NULL,
-        col12 INT8 NULL,
-        col13 INT8 NULL,
-        col14 INT8 NULL,
-        col15 INT8 NULL,
-        col16 INT8 NOT NULL,
-        col17 INT8 NOT NULL,
-        col18 INT8 NULL,
-        col19 INT8 NOT NULL,
-        col20 INT8 NOT NULL,
-        col21 INT8 NOT NULL,
-        col22 INT8 NULL,
-        col23 INT8 NULL,
-        col24 INT8 NOT NULL,
-        col25 INT8 NOT NULL,
-        col26 INT8 NULL,
-        col27 INT8 NULL,
-        col28 INT8 NOT NULL,
-        col29 INT8 NULL,
-        col30 INT8 NOT NULL,
-        col31 INT8 NOT NULL,
-        col32 INT8 NULL,
-        col33 INT8 NULL,
-        col34 INT8 NULL,
-        col35 INT8 NULL,
-        col36 INT8 NULL,
-        col37 INT8 NOT NULL,
-        col38 INT8 NULL,
-        col39 INT8 NULL,
-        col40 INT8 NOT NULL,
-        col41 INT8 NULL,
-        col42 INT8 NULL,
-        col43 INT8 NULL,
-        col44 INT8 NULL,
-        col45 INT8 NULL,
-        col46 INT8 NULL,
-        col47 INT8 NULL,
-        col48 INT8 NULL,
-        col49 INT8 NULL,
-        col50 INT8 NULL,
-        col51 INT8 NULL,
-        col52 INT8 NULL,
-        col53 INT8 NULL,
-        col54 INT8 NULL,
-        col55 INT8 NULL,
-        col56 INT8 NULL,
-        col57 INT8 NULL,
-        col58 INT8 NULL,
-        col59 INT8 NOT NULL,
-        col60 INT8 NOT NULL,
-        col61 INT8 NULL,
-        col62 INT8 NOT NULL,
-        col63 INT8 NULL,
-        col64 INT8 NULL,
-        col65 INT8 NULL,
-        col66 INT8 NULL,
-        col67 INT8 NOT NULL,
-        col68 INT8 NULL,
-        col69 INT8 NULL,
-        col70 INT8 NULL,
-        col71 INT8 NULL,
-        col72 INT8 NULL,
-        col73 INT8 NULL,
-        col74 INT8 NULL,
-        col75 INT8 NULL,
-        col76 INT8 NULL,
-        col77 INT8 NULL,
-        col78 INT8 NULL,
-        col79 INT8 NULL,
-        col80 INT8 NULL,
-        col81 INT8 NULL,
-        col82 INT8 NULL,
-        col83 INT8 NULL,
-        col84 INT8 NULL,
-        col85 INT8 NOT NULL,
-        col86 INT8 NULL,
-        col87 INT8 NULL,
-        col88 INT8 NULL,
-        col89 INT8 NULL,
-        col90 INT8 NULL,
-        col91 INT8 NULL,
-        col92 INT8 NULL,
-        col93 INT8 NULL,
-        col94 INT8 NULL,
-        col95 INT8 NULL,
-        col96 INT8 NULL,
-        col97 INT8 NULL,
-        col98 INT8 NULL,
-        col99 INT8 NULL,
-        col100 INT8 NULL,
-        col101 INT8 NULL,
-        col102 INT8 NULL,
-        col103 INT8 NULL,
-        col104 INT8 NULL,
-        col105 INT8 NULL,
-        col106 INT8 NULL,
-        col107 INT8 NULL,
-        col108 INT8 NULL,
-        col109 INT8 NULL,
-        col110 INT8 NULL,
-        col111 INT8 NULL,
-        col112 INT8 NOT NULL,
-        col113 INT8 NOT NULL,
-        col114 INT8 NULL,
-        col115 INT8 NULL,
-        col116 INT8 NULL,
-        col117 INT8 NULL,
-        col118 INT8 NULL,
-        col119 INT8 NOT NULL,
-        col120 INT8 NOT NULL,
-        col121 INT8 NULL,
-        col122 INT8 NULL,
-        col123 INT8 NULL,
-        col124 INT8 NULL,
-        col125 INT8 NULL,
-        col126 INT8 NULL,
-        col127 INT8 NULL,
-        col128 INT8 NULL,
-        col129 INT8 NULL,
-        col130 INT8 NULL,
-        col131 INT8 NULL,
-        col132 INT8 NULL,
-        col133 INT8 NULL,
-        col134 INT8 NULL,
-        col135 INT8 NULL,
-        col136 INT8 NOT NULL,
-        col137 INT8 NOT NULL,
-        col138 INT8 NULL,
-        col139 INT8 NULL,
-        col140 INT8 NULL,
-        col141 INT8 NULL,
-        col142 INT8 NULL,
-        col143 INT8 NULL,
-        col144 INT8 NULL,
-        col145 INT8 NULL,
-        col146 INT8 NULL,
-        col147 INT8 NULL,
-        col148 INT8 NULL,
-        col149 INT8 NULL,
-        col150 INT8 NULL,
-        CONSTRAINT "primary" PRIMARY KEY (col2 ASC, col1 ASC),
-        INDEX index1 (col2 ASC, col20 ASC, col40 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index2 (col2 ASC, col18 ASC, col6 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index3 (col2 ASC, col87 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index4 (col2 ASC, col8 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index5 (col2 ASC, col4 ASC, col7 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index6 (col2 ASC, col20 ASC, col40 ASC, col30 ASC, col8 DESC) STORING (col18) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index7 (col2 ASC, col30 ASC, col8 ASC, col1 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index8 (col2 ASC, col56 ASC, col1 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index9 (col2 ASC, col8 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index10 (col2 ASC, col20 ASC, col40 ASC, col1 ASC, col8 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        CONSTRAINT check1 CHECK (col2 IN (1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8, 16:::INT8, 17:::INT8, 18:::INT8, 19:::INT8, 20:::INT8, 21:::INT8, 22:::INT8, 23:::INT8, 24:::INT8))
-    ) PARTITION BY LIST (col2) (
-        PARTITION p1 VALUES IN ((1)),
-        PARTITION p2 VALUES IN ((2)),
-        PARTITION p3 VALUES IN ((3)),
-        PARTITION p4 VALUES IN ((4)),
-        PARTITION p5 VALUES IN ((5)),
-        PARTITION p6 VALUES IN ((6)),
-        PARTITION p7 VALUES IN ((7)),
-        PARTITION p8 VALUES IN ((8)),
-        PARTITION p9 VALUES IN ((9)),
-        PARTITION p10 VALUES IN ((10)),
-        PARTITION p11 VALUES IN ((11)),
-        PARTITION p12 VALUES IN ((12)),
-        PARTITION p13 VALUES IN ((13)),
-        PARTITION p14 VALUES IN ((14)),
-        PARTITION p15 VALUES IN ((15)),
-        PARTITION p16 VALUES IN ((16)),
-        PARTITION p17 VALUES IN ((17)),
-        PARTITION p18 VALUES IN ((18)),
-        PARTITION p19 VALUES IN ((19)),
-        PARTITION p20 VALUES IN ((20)),
-        PARTITION p21 VALUES IN ((21)),
-        PARTITION p22 VALUES IN ((22)),
-        PARTITION p23 VALUES IN ((23)),
-        PARTITION p24 VALUES IN ((24))
-    )
-  `,
-	`
-    CREATE TABLE tab2 (
-        col1 INT8 NOT NULL,
-        col2 INT8 NOT NULL,
-        col3 INT8 NOT NULL,
-        col4 INT8 NOT NULL,
-        col5 INT8 NOT NULL,
-        col6 INT8 NULL,
-        col7 INT8 NULL,
-        col8 INT8 NOT NULL,
-        col9 INT8 NULL,
-        col10 INT8 NULL,
-        col11 INT8 NOT NULL,
-        col12 INT8 NOT NULL,
-        col13 INT8 NULL,
-        col14 INT8 NOT NULL,
-        col15 INT8 NOT NULL,
-        col16 INT8 NULL,
-        col17 INT8 NULL,
-        col18 INT8 NULL,
-        col19 INT8 NULL,
-        col20 INT8 NULL,
-        col21 INT8 NULL,
-        col22 INT8 NULL,
-        col23 INT8 NULL,
-        col24 INT8 NULL,
-        col25 INT8 NULL,
-        col26 INT8 NULL,
-        col27 INT8 NULL,
-        col28 INT8 NULL,
-        col29 INT8 NOT NULL,
-        col30 INT8 NULL,
-        col31 INT8 NOT NULL,
-        col32 INT8 NULL,
-        col33 INT8 NOT NULL,
-        col34 INT8 NULL,
-        col35 INT8 NULL,
-        col36 INT8 NULL,
-        col37 INT8 NOT NULL,
-        col38 INT8 NULL,
-        col39 INT8 NULL,
-        col40 INT8 NULL,
-        col41 INT8 NULL,
-        col42 INT8 NULL,
-        col43 INT8 NULL,
-        col44 INT8 NULL,
-        col45 INT8 NULL,
-        col46 INT8 NULL,
-        col47 INT8 NULL,
-        col48 INT8 NULL,
-        col49 INT8 NULL,
-        col50 INT8 NULL,
-        col51 INT8 NULL,
-        col52 INT8 NULL,
-        col53 INT8 NULL,
-        col54 INT8 NULL,
-        col55 INT8 NULL,
-        col56 INT8 NULL,
-        col57 INT8 NULL,
-        col58 INT8 NULL,
-        col59 INT8 NULL,
-        col60 INT8 NULL,
-        col61 INT8 NULL,
-        col62 INT8 NULL,
-        col63 INT8 NULL,
-        col64 INT8 NULL,
-        col65 INT8 NULL,
-        col66 INT8 NULL,
-        col67 INT8 NULL,
-        col68 INT8 NULL,
-        col69 INT8 NULL,
-        col70 INT8 NULL,
-        col71 INT8 NULL,
-        col72 INT8 NULL,
-        col73 INT8 NULL,
-        col74 INT8 NULL,
-        col75 INT8 NULL,
-        col76 INT8 NULL,
-        col77 INT8 NULL,
-        col78 INT8 NOT NULL,
-        col79 INT8 NULL,
-        col80 INT8 NULL,
-        col81 INT8 NULL,
-        col82 INT8 NULL,
-        col83 INT8 NULL,
-        col84 INT8 NULL,
-        col85 INT8 NULL,
-        col86 INT8 NULL,
-        col87 INT8 NULL,
-        col88 INT8 NULL,
-        col89 INT8 NOT NULL,
-        col90 INT8 NOT NULL,
-        col91 INT8 NOT NULL,
-        col92 INT8 NOT NULL,
-        col93 INT8 NOT NULL,
-        col94 INT8 NOT NULL,
-        col95 INT8 NOT NULL,
-        col96 INT8 NOT NULL,
-        col97 INT8 NOT NULL,
-        col98 INT8 NOT NULL,
-        col99 INT8 NOT NULL,
-        col100 INT8 NOT NULL,
-        CONSTRAINT "primary" PRIMARY KEY (col2 ASC, col1 ASC, col1 ASC),
-        CONSTRAINT fk1 FOREIGN KEY (col2, col1) REFERENCES tab1(col2, col1),
-        UNIQUE INDEX index1 (col2 ASC, col1 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index2 (col2 ASC, col1 ASC, col38 ASC, col33 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index3 (col2 ASC, col11 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index4 (col2 ASC, col17 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index5 (col2 ASC, col18 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index6 (col2 ASC, col1 ASC) STORING (col38, col9, col10, col42, col40) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index7 (col2 ASC, col11 ASC, col17 ASC, col38 ASC, col8 ASC) STORING (col3, col35) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index8 (col2 ASC, col51 ASC, col17 ASC, col33 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index9 (col2 ASC, col1 ASC, col33 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        INDEX index10 (col2 ASC, col18 ASC, col1 ASC, col33 ASC) PARTITION BY LIST (col2) (
-            PARTITION p1 VALUES IN ((1)),
-            PARTITION p2 VALUES IN ((2)),
-            PARTITION p3 VALUES IN ((3)),
-            PARTITION p4 VALUES IN ((4)),
-            PARTITION p5 VALUES IN ((5)),
-            PARTITION p6 VALUES IN ((6)),
-            PARTITION p7 VALUES IN ((7)),
-            PARTITION p8 VALUES IN ((8)),
-            PARTITION p9 VALUES IN ((9)),
-            PARTITION p10 VALUES IN ((10)),
-            PARTITION p11 VALUES IN ((11)),
-            PARTITION p12 VALUES IN ((12)),
-            PARTITION p13 VALUES IN ((13)),
-            PARTITION p14 VALUES IN ((14)),
-            PARTITION p15 VALUES IN ((15)),
-            PARTITION p16 VALUES IN ((16)),
-            PARTITION p17 VALUES IN ((17)),
-            PARTITION p18 VALUES IN ((18)),
-            PARTITION p19 VALUES IN ((19)),
-            PARTITION p20 VALUES IN ((20)),
-            PARTITION p21 VALUES IN ((21)),
-            PARTITION p22 VALUES IN ((22)),
-            PARTITION p23 VALUES IN ((23)),
-            PARTITION p24 VALUES IN ((24))
-        ),
-        CONSTRAINT check1 CHECK (col2 IN (1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8, 8:::INT8, 9:::INT8, 10:::INT8, 11:::INT8, 12:::INT8, 13:::INT8, 14:::INT8, 15:::INT8, 16:::INT8, 17:::INT8, 18:::INT8, 19:::INT8, 20:::INT8, 21:::INT8, 22:::INT8, 23:::INT8, 24:::INT8))
-    ) PARTITION BY LIST (col2) (
-        PARTITION p1 VALUES IN ((1)),
-        PARTITION p2 VALUES IN ((2)),
-        PARTITION p3 VALUES IN ((3)),
-        PARTITION p4 VALUES IN ((4)),
-        PARTITION p5 VALUES IN ((5)),
-        PARTITION p6 VALUES IN ((6)),
-        PARTITION p7 VALUES IN ((7)),
-        PARTITION p8 VALUES IN ((8)),
-        PARTITION p9 VALUES IN ((9)),
-        PARTITION p10 VALUES IN ((10)),
-        PARTITION p11 VALUES IN ((11)),
-        PARTITION p12 VALUES IN ((12)),
-        PARTITION p13 VALUES IN ((13)),
-        PARTITION p14 VALUES IN ((14)),
-        PARTITION p15 VALUES IN ((15)),
-        PARTITION p16 VALUES IN ((16)),
-        PARTITION p17 VALUES IN ((17)),
-        PARTITION p18 VALUES IN ((18)),
-        PARTITION p19 VALUES IN ((19)),
-        PARTITION p20 VALUES IN ((20)),
-        PARTITION p21 VALUES IN ((21)),
-        PARTITION p22 VALUES IN ((22)),
-        PARTITION p23 VALUES IN ((23)),
-        PARTITION p24 VALUES IN ((24))
-    )
-  `,
-	`
-		CREATE TABLE table64793_1 (
-			col1_0 CHAR NOT NULL, col1_1 BOOL NOT NULL, col1_2 REGPROC NOT NULL,
-			col1_3 REGPROCEDURE NOT NULL, col1_4 TIMETZ NOT NULL, col1_5 FLOAT8 NULL,
-			col1_6 INT2 NOT NULL, col1_7 BOOL, col1_8 BOX2D NOT NULL,
-			col1_9 REGNAMESPACE NOT NULL,
-			PRIMARY KEY (
-				col1_8 DESC, col1_9 DESC, col1_4 DESC, col1_1, col1_2 ASC, col1_3 DESC,
-				col1_0 DESC, col1_6
-			),
-			col1_10 INT2 NOT NULL AS (col1_6 + 22798:::INT8) VIRTUAL,
-			FAMILY (col1_4), FAMILY (col1_0, col1_5), FAMILY (col1_1),
-			FAMILY (col1_8, col1_3, col1_9, col1_7), FAMILY (col1_2), FAMILY (col1_6))
-	`,
-	`
-		CREATE TYPE greeting64793 AS ENUM ('hello', 'howdy', 'hi', 'good day', 'morning');
-	`,
-	`
-		CREATE TABLE seed64793 (
-			_int2 INT2,
-			_int4 INT4,
-			_int8 INT8,
-			_float4 FLOAT4,
-			_float8 FLOAT8,
-			_date DATE,
-			_timestamp TIMESTAMP,
-			_timestamptz TIMESTAMPTZ,
-			_interval INTERVAL,
-			_bool BOOL,
-			_decimal DECIMAL,
-			_string STRING,
-			_bytes BYTES,
-			_uuid UUID,
-			_inet INET,
-			_jsonb JSONB,
-			_enum greeting64793
-		);
-	`,
-	`
-		CREATE INDEX on seed64793 (_int8, _float8, _date);
-	`,
-	`
-		CREATE INVERTED INDEX on seed64793 (_jsonb);
-	`,
-	`
-		CREATE TABLE table64793_2 (
-			col1_0 "char" NOT NULL, col1_1 OID NOT NULL, col1_2 BIT(38) NOT NULL,
-			col1_3 BIT(18) NOT NULL, col1_4 BYTES NOT NULL, col1_5 INT8 NOT NULL,
-			col1_6 INTERVAL NOT NULL, col1_7 BIT(33) NOT NULL, col1_8 INTERVAL NULL,
-			col1_9 GEOMETRY NOT NULL, col1_10 BOOL NOT NULL, col1_11 INT2,
-			PRIMARY KEY (
-				col1_4 ASC, col1_7 DESC, col1_1 ASC, col1_2 ASC, col1_10 ASC, col1_5,
-				col1_0 ASC, col1_3, col1_6
-			),
-			UNIQUE (
-				col1_8 DESC, col1_11, col1_3 DESC, col1_7, col1_6 DESC, col1_4 ASC,
-				col1_1 DESC
-			)
-		);
-	`,
-	`
-		CREATE TABLE table64793_3 (
-			col2_0 NAME NOT NULL, col2_1 TIMETZ NOT NULL,
-			PRIMARY KEY (col2_0 ASC, col2_1),
-			col2_2 STRING NOT NULL AS (lower(col2_0)) VIRTUAL,
-			UNIQUE (col2_0 DESC, col2_2 DESC, col2_1)
-			WHERE (table64793_3.col2_2 > e'\U00002603':::STRING)
-			OR (table64793_3.col2_0 != '"':::STRING),
-			UNIQUE (col2_1 ASC, col2_2, col2_0),
-			UNIQUE (col2_0 DESC,col2_1, col2_2),
-			INDEX (col2_1 DESC),
-			UNIQUE (col2_2 DESC, col2_0 ASC)
-			WHERE table64793_3.col2_2 = '"':::STRING
-		);
-	`,
-	`
-		CREATE TABLE table64793_4 (
-			col2_0 NAME NOT NULL, col2_1 TIMETZ NOT NULL, col3_2 REGPROC NOT NULL,
-			col3_3 "char", col3_4 BOX2D, col3_5 INT8 NULL, col3_6 TIMESTAMP NOT NULL,
-			col3_7 FLOAT8, col3_8 INT4 NULL, col3_9 INET NULL, col3_10 UUID NOT NULL,
-			col3_11 UUID NULL, col3_12 INT2 NOT NULL, col3_13 BIT(34),
-			col3_14 REGPROCEDURE NULL, col3_15 FLOAT8 NULL,
-			PRIMARY KEY (
-				col2_0 ASC, col2_1, col3_11 DESC, col3_13, col3_6, col3_3 DESC,
-				col3_15 ASC, col3_2 ASC, col3_4 ASC, col3_9 DESC, col3_12 ASC,
-				col3_8 ASC, col3_5, col3_14 ASC
-			),
-			UNIQUE (col3_2, col3_8 ASC)
-			WHERE ((((table64793_4.col3_5 < 0:::INT8)
-			AND (table64793_4.col3_3 != '':::STRING))
-			AND (table64793_4.col2_1 < '00:00:00+15:59:00':::TIMETZ))
-			AND (table64793_4.col3_12 > 0:::INT8))
-			AND (table64793_4.col3_15 <= 1.7976931348623157e+308:::FLOAT8),
-			UNIQUE (col3_10 DESC, col3_3 ASC, col2_1 DESC, col3_9 ASC)
-		);
-	`,
-	`
-		CREATE TABLE multi_col_pk (
-			region STRING NOT NULL,
-			id INT NOT NULL,
-			c1 INT NOT NULL, c2 INT NOT NULL, c3 INT NOT NULL, c4 INT NOT NULL, c5 INT NOT NULL,
-			c6 INT NOT NULL, c7 INT NOT NULL, c8 INT NOT NULL, c9 INT NOT NULL, c10 INT NOT NULL,
-			c11 INT NOT NULL, c12 INT NOT NULL, c13 INT NOT NULL, c14 INT NOT NULL, c15 INT NOT NULL,
-			c16 INT NOT NULL, c17 INT NOT NULL, c18 INT NOT NULL, c19 INT NOT NULL, c20 INT NOT NULL,
-			c21 INT NOT NULL, c22 INT NOT NULL, c23 INT NOT NULL, c24 INT NOT NULL, c25 INT NOT NULL,
-			c26 INT NOT NULL, c27 INT NOT NULL, c28 INT NOT NULL, c29 INT NOT NULL, c30 INT NOT NULL,
-			c31 INT NOT NULL, c32 INT NOT NULL, c33 INT NOT NULL, c34 INT NOT NULL, c35 INT NOT NULL,
-			c36 INT NOT NULL, c37 INT NOT NULL, c38 INT NOT NULL, c39 INT NOT NULL, c40 INT NOT NULL,
-			c41 INT NOT NULL, c42 INT NOT NULL, c43 INT NOT NULL, c44 INT NOT NULL, c45 INT NOT NULL,
-			c46 INT NOT NULL, c47 INT NOT NULL, c48 INT NOT NULL, c49 INT NOT NULL, c50 INT NOT NULL,
-			CHECK (c41 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
-			CHECK (c42 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
-			CHECK (c43 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
-			CHECK (c44 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
-			CHECK (c45 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
-			CHECK (c46 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
-			CHECK (c47 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
-			CHECK (c48 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
-			CHECK (c49 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
-			CHECK (c50 IN (100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200)),
-			CHECK (region IN ('east', 'west', 'north', 'south')),
-			INDEX (c41, c31),
-			INDEX (c42, c32),
-			INDEX (c43, c33),
-			INDEX (c44, c34),
-			INDEX (c45, c35),
-			INDEX (c46, c36),
-			INDEX (c47, c37),
-			INDEX (c48, c38),
-			INDEX (c49, c39),
-			INDEX (c50, c40),
-			PRIMARY KEY (region, id)
-		);
-	`,
-	`
-		CREATE TABLE multi_col_pk_no_indexes (
-			region STRING NOT NULL,
-			id INT NOT NULL,
-			c1 INT NOT NULL, c2 INT NOT NULL, c3 INT NOT NULL, c4 INT NOT NULL, c5 INT NOT NULL,
-			c6 INT NOT NULL, c7 INT NOT NULL, c8 INT NOT NULL, c9 INT NOT NULL, c10 INT NOT NULL,
-			c11 INT NOT NULL, c12 INT NOT NULL, c13 INT NOT NULL, c14 INT NOT NULL, c15 INT NOT NULL,
-			c16 INT NOT NULL, c17 INT NOT NULL, c18 INT NOT NULL, c19 INT NOT NULL, c20 INT NOT NULL,
-			c21 INT NOT NULL, c22 INT NOT NULL, c23 INT NOT NULL, c24 INT NOT NULL, c25 INT NOT NULL,
-			c26 INT NOT NULL, c27 INT NOT NULL, c28 INT NOT NULL, c29 INT NOT NULL, c30 INT NOT NULL,
-			c31 INT NOT NULL, c32 INT NOT NULL, c33 INT NOT NULL, c34 INT NOT NULL, c35 INT NOT NULL,
-			c36 INT NOT NULL, c37 INT NOT NULL, c38 INT NOT NULL, c39 INT NOT NULL, c40 INT NOT NULL,
-			c41 INT NOT NULL, c42 INT NOT NULL, c43 INT NOT NULL, c44 INT NOT NULL, c45 INT NOT NULL,
-			c46 INT NOT NULL, c47 INT NOT NULL, c48 INT NOT NULL, c49 INT NOT NULL, c50 INT NOT NULL,
-			PRIMARY KEY (region, id)
-		);
-	`,
-}
-
 var slowQueries = [...]benchQuery{
 	// 1. The first long-running query taken from #64793.
 	// 2. The most recent long-running query from #64793 (as of July 2022).
@@ -2314,14 +1335,134 @@ var slowQueries = [...]benchQuery{
     `,
 		args: []interface{}{10001, 5, "'east'"},
 	},
+	{
+		name: "slow-query-6",
+		query: `
+			SELECT t1.*, t2.*, t4.*, t17.*, t8.*, t9.*, t3.*, t11.*
+			FROM sq6a AS t1
+			JOIN sq6b AS t2 ON
+				t2.c1 = t1.c1
+				AND t2.c2 = t1.c2
+				AND t2.c3 = t1.c3
+				AND t2.c4 = t1.c4
+				AND t2.c44 = t1.c100
+			JOIN sq6c AS t3 ON
+				t3.c1 = t2.c1
+				AND t3.c2 = t2.c6
+				AND t3.c34 = t2.c44
+			JOIN sq6d AS t4 ON
+				t4.c1 = t2.c1
+				AND t4.c2 = t2.c41
+				AND t4.c3 = $1
+				AND t4.c28 = t2.c44
+			JOIN sq6e AS t5 ON
+				t5.c1 = t1.c81
+				AND t5.c23 = t1.c100
+			JOIN sq6f AS t6 ON
+				t6.c12 = t1.c100
+				AND t6.c1 = t1.c1
+				AND t6.c4 = t1.c2
+				AND t6.c5 = t1.c3
+				AND t6.c6 = t1.c4
+				AND t6.c2 IN ($1, $2)
+			JOIN sq6g AS t7 ON
+				t7.c24 = t6.c12
+				AND t7.c1 = t6.c1
+				AND t7.c3 = t6.c3
+				AND t7.c2 = t6.c2
+			LEFT JOIN sq6h AS t8 ON
+				t8.c2 = t2.c37
+				AND t8.c1 = t2.c1
+				AND t8.c3 = $3
+				AND t8.c13 = t2.c44
+			LEFT JOIN sq6h AS t9 ON
+				t9.c2 = t2.c37
+				AND t9.c1 = t2.c1
+				AND t9.c3 = $4
+				AND t9.c13 = t2.c44
+			LEFT JOIN sq6i AS t10 ON
+				t10.c1 = t1.c1
+				AND t10.c2 = t1.c2
+				AND t10.c3 = t1.c3
+				AND t10.c4 = t1.c4
+				AND t10.c6 = 1
+				AND t10.c7 = t1.c100
+			LEFT JOIN sq6j AS t11 ON
+				t11.c1 = t1.c1
+				AND t11.c2 = t1.c2
+				AND t11.c3 = t1.c3
+				AND t11.c4 = t1.c4
+				AND t11.c36 = t1.c100
+			LEFT JOIN sq6k AS t12 ON
+				t12.c1 = t1.c1
+				AND t12.c2 = t1.c2
+				AND t12.c3 = t1.c3
+				AND t12.c4 = t1.c4
+				AND t12.c6 = $5
+				AND t12.c5 = t1.c100
+			LEFT JOIN sq6k AS t13 ON
+				t13.c1 = t1.c1
+				AND t13.c2 = t1.c2
+				AND t13.c3 = t1.c3
+				AND t13.c4 = t1.c4
+				AND t13.c6 = $6
+				AND t13.c5 = t1.c100
+			LEFT JOIN sq6k AS t15 ON
+				t15.c1 = t1.c1
+				AND t15.c2 = t1.c2
+				AND t15.c3 = t1.c3
+				AND t15.c4 = t1.c4
+				AND t15.c6 = $7
+				AND t15.c5 = t1.c100
+			LEFT JOIN sq6k AS t16 ON
+				t16.c1 = t1.c1
+				AND t16.c2 = t1.c2
+				AND t16.c3 = t1.c3
+				AND t16.c4 = t1.c4
+				AND t16.c6 = $8
+				AND t16.c5 = t1.c100
+			LEFT JOIN sq6l AS t17 ON
+				t17.c1 = t1.c1
+				AND t17.c2 = t1.c2
+				AND t17.c3 = t1.c3
+				AND t17.c4 = t1.c4
+				AND t17.c5 = $9
+				AND t17.c28 = t1.c100
+			LEFT JOIN sq6m AS t18 ON
+				t18.c4 = t1.c2
+				AND t18.c1 = t1.c3
+				AND t18.c2 = t1.c4
+				AND t18.c36 = t1.c100
+			WHERE
+				t1.c1 IN ($10, $11, $12)
+				AND t1.c2 = $13
+				AND t1.c3 = $14
+				AND t1.c4 = $15
+				AND t1.c100 = $16
+    `,
+		args: []interface{}{
+			"'WX'", "'ZG'", "'TTT'", "'FFF'", "'JQYJSUWE'", "'RDDQXFRN'", "'HCLDUJOA'", "'GESIUACE'",
+			"'EJ'", "'LQIZHIJX'", "'NNSMWHCO'", "'UDJG'", "'82894'", "'AAYUMINX'", "'JGJYKJZR'", 0,
+		},
+	},
 }
 
 func BenchmarkSlowQueries(b *testing.B) {
+	p := datapathutils.TestDataPath(b, "slow-schemas.sql")
+	slowSchemas, err := os.ReadFile(p)
+	if err != nil {
+		b.Fatalf("%v", err)
+	}
 	for _, query := range slowQueries {
-		h := newHarness(b, query, slowSchemas)
 		b.Run(query.name, func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				h.runSimple(b, query, Explore)
+			for _, reorderJoinLimit := range []int64{0, 8} {
+				b.Run(fmt.Sprintf("reorder-join-%d", reorderJoinLimit), func(b *testing.B) {
+					h := newHarness(b, query, []string{string(slowSchemas)})
+					h.evalCtx.SessionData().ReorderJoinsLimit = reorderJoinLimit
+					for i := 0; i < b.N; i++ {
+						h.runSimple(b, query, Explore)
+					}
+				})
 			}
 		})
 	}
