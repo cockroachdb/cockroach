@@ -1340,7 +1340,17 @@ func (sb *statisticsBuilder) buildJoin(
 	corr := sb.correlationFromMultiColDistinctCountsForJoin(constrainedCols, leftCols, rightCols, join, s)
 	s.ApplySelectivity(sb.selectivityFromConstrainedCols(constrainedCols, histCols, join, s, corr))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps.NotNullCols, constrainedCols))
+
+	// Ignore columns that are already null in the input when calculating
+	// selectivity from null-removing filters - the selectivity would always be
+	// 1.
+	ignoreCols := constrainedCols
+	if relProps.NotNullCols.Intersects(h.leftProps.NotNullCols) ||
+		relProps.NotNullCols.Intersects(h.rightProps.NotNullCols) {
+		ignoreCols = ignoreCols.Union(h.leftProps.NotNullCols)
+		ignoreCols.UnionWith(h.rightProps.NotNullCols)
+	}
+	s.ApplySelectivity(sb.selectivityFromNullsRemoved(join, relProps.NotNullCols, ignoreCols))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromMultiColDistinctCounts and selectivityFromEquivalencies.
