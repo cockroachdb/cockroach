@@ -684,8 +684,10 @@ func DefaultStartOpts() install.StartOpts {
 		InitTarget:         1,
 		// TODO(renato): change the defaults below to `0` (i.e., pick a
 		// random available port) once #111052 is addressed.
-		SQLPort:     config.DefaultSQLPort,
-		AdminUIPort: config.DefaultAdminUIPort,
+		//SQLPort:     config.DefaultSQLPort,
+		//AdminUIPort: config.DefaultAdminUIPort,
+		SQLPort:     0,
+		AdminUIPort: 0,
 	}
 }
 
