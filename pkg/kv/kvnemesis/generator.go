@@ -452,10 +452,6 @@ func NewDefaultConfig() GeneratorConfig {
 	// #46081 has long been fixed. Then file an issue about generating
 	// non-self-overlapping operations for batches.
 	config.Ops.Batch = BatchOperationConfig{}
-	// TODO(tbg): should be able to remove the two lines below, since
-	// #45586 has already been addressed.
-	config.Ops.ClosureTxn.CommitBatchOps.GetExisting = 0
-	config.Ops.ClosureTxn.CommitBatchOps.GetMissing = 0
 	// SkipLocked is a batch-level attribute, not an operation-level attribute. To
 	// avoid mixing skip locked and non-skip locked requests, we disable these ops
 	// in the batchOpConfig.
