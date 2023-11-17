@@ -1389,7 +1389,7 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 			var err error
 			cmd := "test -e /mnt/data1/.roachprod-initialized"
 			opts := defaultCmdOpts("wait-init")
-			for j := 0; j < 600; j++ {
+			for j := 0; j < 5; j++ { // TODO(herko): revert this to original timeout
 				res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 				if err != nil {
 					return nil, err
@@ -1401,8 +1401,8 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 				}
 				return res, nil
 			}
-			res.Err = errors.New("timed out after 5m")
-			l.Printf("  %2d: %v", node, res.Err)
+			res.Err = errors.Wrapf(res.Err, "timed out after 5m")
+			l.Printf("  %2d: %+v", node, res.Err)
 			return res, nil
 		})
 
