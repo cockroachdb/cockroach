@@ -28,8 +28,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
+
+func TestLivenessRedaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	liveness := livenesspb.Liveness{
+		NodeID:     roachpb.NodeID(13),
+		Epoch:      3,
+		Expiration: hlc.Timestamp{WallTime: 12345}.ToLegacyTimestamp(),
+		Draining:   true,
+		Membership: livenesspb.MembershipStatus_ACTIVE,
+	}
+
+	require.EqualValues(t,
+		"liveness(nid:13 epo:3 exp:0.000012345,0 drain:true membership:active)",
+		redact.Sprintf("%+v", liveness).Redact())
+}
 
 func TestShouldReplaceLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()

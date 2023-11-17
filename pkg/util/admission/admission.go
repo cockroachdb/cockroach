@@ -526,8 +526,12 @@ const (
 	numWorkKinds
 )
 
-func workKindString(workKind WorkKind) string {
-	switch workKind {
+// SafeValue implements the redact.SafeValue interface.
+func (WorkKind) SafeValue() {}
+
+// String implements the fmt.Stringer interface.
+func (wk WorkKind) String() string {
+	switch wk {
 	case KVWork:
 		return "kv"
 	case SQLKVResponseWork:

@@ -539,7 +539,7 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 			// specifically all the store WorkQueues share the same metric. We
 			// should eliminate that sharing and make those per store metrics.
 			log.Infof(q.ambientCtx, "%s: FIFO threshold for tenant %d %s %d",
-				workKindString(q.workKind), tenant.id, logVerb, tenant.fifoPriorityThreshold)
+				q.workKind, tenant.id, logVerb, tenant.fifoPriorityThreshold)
 		}
 		// Note that we are ignoring the new priority threshold and only
 		// dequeueing the ones that are in the closed epoch. It is possible to
@@ -718,7 +718,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		deadline, _ := ctx.Deadline()
 		return true,
 			errors.Newf("work %s deadline already expired: deadline: %v, now: %v",
-				workKindString(q.workKind), deadline, startTime)
+				q.workKind, deadline, startTime)
 	}
 	// Push onto heap(s).
 	ordering := fifoWorkOrdering
@@ -804,9 +804,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.metrics.recordFinishWait(info.Priority, waitDur)
 		deadline, _ := ctx.Deadline()
 		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, true)
+		log.Eventf(ctx, "deadline expired, waited in %s queue for %v",
+			q.workKind, waitDur)
 		return true,
 			errors.Newf("work %s deadline expired while waiting: deadline: %v, start: %v, dur: %v",
-				workKindString(q.workKind), deadline, startTime, waitDur)
+				q.workKind, deadline, startTime, waitDur)
 	case chainID, ok := <-work.ch:
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
@@ -818,6 +820,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 			panic(errors.AssertionFailedf("grantee should be removed from heap"))
 		}
 		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, false)
+		log.Eventf(ctx, "admitted, waited in %s queue for %v", q.workKind, waitDur)
 		q.granter.continueGrantChain(chainID)
 		return true, nil
 	}
@@ -831,7 +834,7 @@ func recordAdmissionWorkQueueStats(
 	}
 	span.RecordStructured(&admissionpb.AdmissionWorkQueueStats{
 		WaitDurationNanos: waitDur,
-		WorkKind:          workKindString(workKind),
+		WorkKind:          workKind.String(),
 		DeadlineExceeded:  deadlineExceeded,
 	})
 }
