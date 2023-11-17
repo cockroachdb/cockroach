@@ -42,7 +42,7 @@ func TestManagerWithEmbedded(t *testing.T) {
 		t.Error("expected non-nil NodeCert")
 	}
 	clientCerts := cm.ClientCerts()
-	if a, e := len(clientCerts), 3; a != e {
+	if a, e := len(clientCerts), 4; a != e {
 		t.Errorf("expected %d client certs, found %d", e, a)
 	}
 
