@@ -276,7 +276,8 @@ func makeTestKafkaSink(
 				return p, nil
 			},
 			OverrideClientInit: func(config *sarama.Config) (kafkaClient, error) {
-				return nil, nil
+				client := &fakeKafkaClient{config}
+				return client, nil
 			},
 		},
 	}
