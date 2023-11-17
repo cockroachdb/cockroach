@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
@@ -731,6 +732,13 @@ func BenchmarkLatchManagerReadWriteMix(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestSizeOfLatch tests the size of the latch struct.
+func TestLatchSizeReduction(t *testing.T) {
+	var la latch
+	splSize := int(unsafe.Sizeof(la))
+	require.Equal(t, 56, splSize)
 }
 
 func randBytes(n int) []byte {
