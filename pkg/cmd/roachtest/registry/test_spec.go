@@ -115,6 +115,13 @@ type TestSpec struct {
 
 	// Run is the test function.
 	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
+
+	// CockroachBinary is the cockroach binary that will be uploaded
+	// to every node in the cluster at the start of the test. We upload to
+	// every node so that we can fetch logs in the case of a failure.
+	// If one is not specified, the default behavior is to upload
+	// a binary with the crdb_test flag randomly enabled or disabled.
+	CockroachBinary ClusterCockroachBinary
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.
@@ -444,3 +451,13 @@ func Tags(values ...string) map[string]struct{} {
 	}
 	return set
 }
+
+// ClusterCockroachBinary specifies the type of cockroach binaries that
+// can be uploaded to the cluster.
+type ClusterCockroachBinary int
+
+const (
+	RandomizedCockroach ClusterCockroachBinary = iota
+	StandardCockroach
+	RuntimeAssertionsCockroach
+)

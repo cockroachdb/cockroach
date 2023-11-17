@@ -55,7 +55,6 @@ func registerRoachtest(r registry.Registry) {
 		Owner:            registry.OwnerTestEng,
 		Run: func(_ context.Context, t test.Test, c cluster.Cluster) {
 			ctx := context.Background() // intentional
-			c.Put(ctx, t.Cockroach(), "cockroach", c.All())
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 			time.Sleep(time.Hour)
 		},

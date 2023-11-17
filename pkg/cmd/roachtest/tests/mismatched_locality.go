@@ -24,7 +24,6 @@ import (
 // database.
 func runMismatchedLocalityTest(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Start 3 nodes with a different localities.
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = []string{"--locality=region=east"}
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Nodes(1))

@@ -29,8 +29,6 @@ func runResetQuorum(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// n1-n5 will be in locality A, n6-n8 in B. We'll pin a single table to B and
 	// let the the nodes in B fail permanently.
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-
 	settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}))
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--attrs=A")

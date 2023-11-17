@@ -39,9 +39,6 @@ func registerTPCE(r registry.Registry) {
 		racks := opts.nodes
 
 		t.Status("installing cockroach")
-		// Never run with runtime assertions as this makes this test take
-		// too long to complete.
-		c.Put(ctx, t.StandardCockroach(), "./cockroach", roachNodes)
 
 		startOpts := option.DefaultStartOpts()
 		startOpts.RoachprodOpts.StoreCount = opts.ssds
@@ -118,6 +115,9 @@ func registerTPCE(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.SSD(smallNightly.ssds)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
+		// Never run with runtime assertions as this makes this test take
+		// too long to complete.
+		CockroachBinary: registry.StandardCockroach,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCE(ctx, t, c, smallNightly)
 		},

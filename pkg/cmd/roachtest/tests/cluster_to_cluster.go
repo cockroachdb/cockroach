@@ -370,7 +370,6 @@ func makeReplicationDriver(t test.Test, c cluster.Cluster, rs replicationSpec) *
 }
 
 func (rd *replicationDriver) setupC2C(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	srcCluster := c.Range(1, rd.rs.srcNodes)
 	dstCluster := c.Range(rd.rs.srcNodes+1, rd.rs.srcNodes+rd.rs.dstNodes)
 	workloadNode := c.Node(rd.rs.srcNodes + rd.rs.dstNodes + 1)

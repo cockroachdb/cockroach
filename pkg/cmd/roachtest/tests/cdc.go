@@ -540,8 +540,6 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	}
 	tester.logger = changefeedLogger
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, envVars...)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, tester.crdbNodes)
@@ -605,7 +603,6 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.All(), `mkdir -p logs`)
 
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
@@ -774,7 +771,6 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 // compatibility within a topic).
 func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
@@ -890,7 +886,6 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	kafka := kafkaManager{

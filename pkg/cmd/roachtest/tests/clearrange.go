@@ -76,8 +76,6 @@ func runClearRange(
 	aggressiveChecks bool,
 	useRangeTombstones bool,
 ) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-
 	t.Status("restoring fixture")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 

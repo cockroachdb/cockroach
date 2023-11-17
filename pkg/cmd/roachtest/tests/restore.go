@@ -747,8 +747,6 @@ func (rd *restoreDriver) prepareCluster(ctx context.Context) {
 		// For now, only run the test on the cloud provider that also stores the backup.
 		rd.t.Skipf("test configured to run on %s", rd.sp.backup.cloud)
 	}
-
-	rd.c.Put(ctx, rd.t.Cockroach(), "./cockroach")
 	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 
 	var aost string

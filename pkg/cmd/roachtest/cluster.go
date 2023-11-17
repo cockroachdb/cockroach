@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -1774,16 +1775,25 @@ func (c *clusterImpl) PutE(
 	return errors.Wrap(roachprod.Put(ctx, l, c.MakeNodes(nodes...), src, dest, true /* useTreeDist */), "cluster.PutE")
 }
 
-// PutDefaultCockroach uploads the cockroach binary passed in the
-// command line to `test.DefaultCockroachPath` in every node in the
-// cluster. This binary is used by the test runner to collect failure
-// artifacts since tests are free to upload the cockroach binary they
-// use to any location they desire.
-func (c *clusterImpl) PutDefaultCockroach(
-	ctx context.Context, l *logger.Logger, cockroachPath string,
-) error {
-	c.status("uploading default cockroach binary to nodes")
-	return c.PutE(ctx, l, cockroachPath, test.DefaultCockroachPath, c.All())
+// PutCockroach checks if a test specifies a cockroach binary to upload to all
+// nodes in the cluster. By default, we randomly upload a binary with or without
+// runtime assertions enabled. Note that we upload to all nodes even if they
+// don't use the binary, so that the test runner can always fetch logs.
+func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t *testImpl) error {
+	switch t.spec.CockroachBinary {
+	case registry.RandomizedCockroach:
+		if tests.UsingRuntimeAssertions(t) {
+			t.l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
+		}
+		return c.PutE(ctx, l, t.Cockroach(), test.DefaultCockroachPath, c.All())
+	case registry.StandardCockroach:
+		return c.PutE(ctx, l, t.StandardCockroach(), test.DefaultCockroachPath, c.All())
+	case registry.RuntimeAssertionsCockroach:
+		t.l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
+		return c.PutE(ctx, l, t.RuntimeAssertionsCockroach(), test.DefaultCockroachPath, c.All())
+	default:
+		return errors.Errorf("Specified cockroach binary does not exist.")
+	}
 }
 
 // PutLibraries inserts the specified libraries, by name, into all nodes on the cluster

@@ -95,8 +95,6 @@ func importBankDataSplit(
 ) string {
 	dest := destinationName(c)
 
-	cockroach := t.Cockroach()
-	c.Put(ctx, cockroach, "./cockroach")
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 
 	// NB: starting the cluster creates the logs dir as a side effect,
@@ -694,7 +692,6 @@ func registerBackup(r registry.Registry) {
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 			conn := c.Conn(ctx, t.L(), 1)
@@ -940,7 +937,6 @@ func runBackupMVCCRangeTombstones(
 	ctx context.Context, t test.Test, c cluster.Cluster, config mvccRangeTombstoneConfig,
 ) {
 	if !config.skipClusterSetup {
-		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
 		c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 50), install.MakeClusterSettings())
 	}
