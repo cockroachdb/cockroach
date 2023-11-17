@@ -1072,6 +1072,7 @@ func buildKafkaConfig(
 	config.ClientID = `CockroachDB`
 	config.Producer.Return.Successes = true
 	config.Producer.Partitioner = newChangefeedPartitioner
+	config.Metadata.Full = false
 
 	if dialConfig.tlsEnabled {
 		config.Net.TLS.Enable = true
