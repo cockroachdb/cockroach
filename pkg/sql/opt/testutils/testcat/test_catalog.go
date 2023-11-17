@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -480,6 +481,21 @@ func (tc *Catalog) ExecuteDDLWithIndexVersion(
 	if err != nil {
 		return "", err
 	}
+	return tc.executeDDLStmtWithIndexVersion(stmt, indexVersion)
+}
+
+// ExecuteDDLStmtWithIndexVersion statement and creates objects in the test
+// catalog from the given statement. This is used to test without spinning up a
+// cluster.
+func (tc *Catalog) ExecuteDDLStmt(stmt statements.Statement[tree.Statement]) (string, error) {
+	return tc.executeDDLStmtWithIndexVersion(stmt, descpb.LatestIndexDescriptorVersion)
+}
+
+// executeDDLStmtWithIndexVersion statement and creates objects in the test
+// catalog from the given statement.
+func (tc *Catalog) executeDDLStmtWithIndexVersion(
+	stmt statements.Statement[tree.Statement], indexVersion descpb.IndexDescriptorVersion,
+) (string, error) {
 
 	switch stmt := stmt.AST.(type) {
 	case *tree.CreateTable:
