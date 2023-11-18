@@ -1438,12 +1438,21 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 
 	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 
-	// We need to step the transaction before committing if it has stepping
-	// enabled. If it doesn't have stepping enabled, then we just set the
-	// stepping mode back to what it was.
+	// We need to step the transaction's internal read sequence before committing
+	// if it has stepping enabled. If it doesn't have stepping enabled, then we
+	// just set the stepping mode back to what it was.
+	//
+	// Even if we do step the transaction's internal read sequence, we do not
+	// advance its external read timestamp (applicable only to read committed
+	// transactions). This is because doing so is not needed before committing,
+	// and it would cause the transaction to commit at a higher timestamp than
+	// necessary. On heavily contended workloads like the one from #109628, this
+	// can cause unnecessary write-write contention between transactions by
+	// inflating the contention footprint of each transaction (i.e. the duration
+	// measured in MVCC time that the transaction holds locks).
 	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 	if prevSteppingMode == kv.SteppingEnabled {
-		if err := ex.state.mu.txn.Step(ctx, true /* allowReadTimestampStep */); err != nil {
+		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
 			return err
 		}
 	} else {
