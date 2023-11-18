@@ -1411,6 +1411,10 @@ type connExecutor struct {
 		// transaction has been executed.
 		firstStmtExecuted bool
 
+		// upgradedToSerializable indicates that the transaction has been implicitly
+		// upgraded to the SERIALIZABLE isolation level.
+		upgradedToSerializable bool
+
 		// numDDL keeps track of how many DDL statements have been
 		// executed so far.
 		numDDL int
@@ -1970,6 +1974,7 @@ func (ns *prepStmtNamespace) resetTo(
 func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, payloadErr error) {
 	ex.extraTxnState.numDDL = 0
 	ex.extraTxnState.firstStmtExecuted = false
+	ex.extraTxnState.upgradedToSerializable = false
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 	ex.extraTxnState.createdSequences = nil
 
@@ -3766,7 +3771,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		}
 	case txnStart:
-		ex.extraTxnState.firstStmtExecuted = false
 		ex.recordTransactionStart(advInfo.txnEvent.txnID)
 		// Start of the transaction, so no statements were executed earlier.
 		// Bump the txn counter for logging.
