@@ -13,6 +13,9 @@ package pretty
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/errors"
 )
 
 // See the referenced paper in the package documentation for explanations
@@ -45,7 +48,25 @@ const (
 // if not nil. keywordTransform must not change the visible length of its
 // argument. It can, for example, add invisible characters like control codes
 // (colors, etc.).
-func Pretty(d Doc, n int, useTabs bool, tabWidth int, keywordTransform func(string) string) string {
+func Pretty(
+	d Doc, n int, useTabs bool, tabWidth int, keywordTransform func(string) string,
+) (_ string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate internal errors without having
+			// to add error checks everywhere throughout the code. This is only
+			// possible because the code does not update shared state and does
+			// not manipulate locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as panics.
+				panic(r)
+			}
+		}
+	}()
+
 	var sb strings.Builder
 	b := beExec{
 		w:                int16(n),
@@ -56,7 +77,7 @@ func Pretty(d Doc, n int, useTabs bool, tabWidth int, keywordTransform func(stri
 	}
 	ldoc := b.best(d)
 	b.layout(&sb, useTabs, ldoc)
-	return sb.String()
+	return sb.String(), nil
 }
 
 // w is the max line width.
@@ -103,9 +124,27 @@ type beExec struct {
 
 	// keywordTransform filters keywords if not nil.
 	keywordTransform func(string) string
+
+	// beDepth is the depth of recursive calls of be. It is used to detect deep
+	// call stacks before a stack overflow occurs.
+	beDepth int
 }
 
+// maxBeDepth is the maximum allowed recursive call depth of be. If the depth
+// exceeds this value, be will panic.
+const maxBeDepth = 50_000
+
+// ErrPrettyMaxRecursionDepthExceeded is returned from Pretty when the maximum
+// recursion depth of function invoked by Pretty is exceeded.
+var ErrPrettyMaxRecursionDepthExceeded = errors.AssertionFailedf("max recursion depth exceeded")
+
 func (b *beExec) be(k docPos, xlist *iDoc) *docBest {
+	b.beDepth++
+	defer func() { b.beDepth-- }()
+	if b.beDepth > maxBeDepth {
+		panic(ErrPrettyMaxRecursionDepthExceeded)
+	}
+
 	// Shortcut: be k [] = Nil
 	if xlist == nil {
 		return nil

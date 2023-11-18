@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprofiler/profilerconstants",
@@ -24,7 +25,6 @@ go_test(
         "main_test.go",
         "profiler_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":jobsprofiler",
         "//pkg/base",
@@ -32,6 +32,7 @@ go_test(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprofiler/profilerconstants",
+        "//pkg/kv/kvserver",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

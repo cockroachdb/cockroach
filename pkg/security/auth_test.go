@@ -326,7 +326,6 @@ func TestAuthenticationHook(t *testing.T) {
 				makeFakeTLSState(t, tc.tlsSpec),
 				tc.tenantID,
 				nil, /* certManager */
-				nil, /* cache */
 			)
 			if (err == nil) != tc.buildHookSuccess {
 				t.Fatalf("expected success=%t, got err=%v", tc.buildHookSuccess, err)

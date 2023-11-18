@@ -174,7 +174,7 @@ func isFailed(s *Statement) bool {
 	return s.Status == Statement_Failed
 }
 
-var prefixesToIgnore = []string{"SET "}
+var prefixesToIgnore = []string{"SET ", "EXPLAIN "}
 
 // shouldIgnoreStatement returns true if we don't want to analyze the statement.
 func shouldIgnoreStatement(s *Statement) bool {

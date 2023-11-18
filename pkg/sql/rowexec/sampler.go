@@ -514,6 +514,9 @@ func (s *sketchInfo) addRow(
 	var useFastPath bool
 	if len(s.spec.Columns) == 1 {
 		col = s.spec.Columns[0]
+		if row[col].IsUnset() {
+			return errors.AssertionFailedf("unset datum: col=%d row=%s", col, row.String(typs))
+		}
 		isNull := row[col].IsNull()
 		useFastPath = typs[col].Family() == types.IntFamily && !isNull
 	}
@@ -557,7 +560,12 @@ func (s *sketchInfo) addRow(
 		if err != nil {
 			return err
 		}
-		isNull = isNull && row[col].IsNull()
+		if isNull {
+			if row[col].IsUnset() {
+				return errors.AssertionFailedf("unset datum: col=%d row=%s", col, row.String(typs))
+			}
+			isNull = row[col].IsNull()
+		}
 		s.size += int64(row[col].DiskSize())
 	}
 	if isNull {

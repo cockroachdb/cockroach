@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"regexp"
 	"sync"
@@ -27,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -63,7 +63,7 @@ const (
 	defaultSequenceOwnedByPct              = 25
 	defaultFkParentInvalidPct              = 5
 	defaultFkChildInvalidPct               = 5
-	defaultDeclarativeSchemaChangerPct     = 25
+	defaultDeclarativeSchemaChangerPct     = 75
 	defaultDeclarativeSchemaMaxStmtsPerTxn = 1
 )
 
@@ -118,7 +118,7 @@ var schemaChangeMeta = workload.Meta{
 			`Percentage of times to choose an invalid child column in a fk constraint.`)
 		s.flags.IntVar(&s.declarativeSchemaChangerPct, `declarative-schema-changer-pct`,
 			defaultDeclarativeSchemaChangerPct,
-			`Percentage of the declarative schema changer is used.`)
+			`Percentage (between 0 and 100) of schema change statements handled by declarative schema changer, if supported.`)
 		s.flags.IntVar(&s.declarativeSchemaMaxStmtsPerTxn, `declarative-schema-changer-stmt-per-txn`,
 			defaultDeclarativeSchemaMaxStmtsPerTxn,
 			`Number of statements per-txn used by the declarative schema changer.`)
@@ -145,15 +145,6 @@ func (s *schemaChange) Flags() workload.Flags {
 // Tables implements the workload.Generator interface.
 func (s *schemaChange) Tables() []workload.Table {
 	return nil
-}
-
-// Hooks implements the workload.Hookser interface.
-func (s *schemaChange) Hooks() workload.Hooks {
-	return workload.Hooks{
-		PostRun: func(_ time.Duration) error {
-			return s.closeJSONLogFile()
-		},
-	}
 }
 
 // Ops implements the workload.Opser interface.
@@ -184,21 +175,29 @@ func (s *schemaChange) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	ops := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), opWeights...)
+	stdoutLog := makeAtomicLog(os.Stdout)
+	rng, seed := randutil.NewTestRand()
+	stdoutLog.printLn(fmt.Sprintf("using random seed: %d", seed))
+	ops := newDeck(rng, opWeights...)
 	// A separate deck is constructed of only schema changes supported
 	// by the declarative schema changer. This deck has equal weights,
 	// only for supported schema changes.
 	declarativeOpWeights := make([]int, len(opWeights))
 	for idx, weight := range opWeights {
-		if opDeclarative[idx] {
+		if _, ok := opDeclarativeVersion[opType(idx)]; ok {
 			declarativeOpWeights[idx] = weight
 		}
 	}
-	declarativeOps := newDeck(rand.New(rand.NewSource(timeutil.Now().UnixNano())), declarativeOpWeights...)
+	declarativeOps := newDeck(rng, declarativeOpWeights...)
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{
+		SQLDatabase: sqlDatabase,
+		Close: func(ctx context.Context) error {
+			pool.Close()
+			return s.closeJSONLogFile()
+		},
+	}
 
-	stdoutLog := makeAtomicLog(os.Stdout)
 	var artifactsLog *atomicLog
 	if s.logFilePath != "" {
 		err := s.initJSONLogFile(s.logFilePath)
@@ -215,7 +214,7 @@ func (s *schemaChange) Ops(
 			seqNum:             seqNum,
 			errorRate:          s.errorRate,
 			enumPct:            s.enumPct,
-			rng:                rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+			rng:                rng,
 			ops:                ops,
 			declarativeOps:     declarativeOps,
 			maxSourceTables:    s.maxSourceTables,
@@ -249,9 +248,6 @@ func (s *schemaChange) Ops(
 		s.workers = append(s.workers, w)
 
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
-		ql.Close = func(ctx2 context.Context) {
-			pool.Close()
-		}
 	}
 	return ql, nil
 }
@@ -429,7 +425,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection")
 	}
-	useDeclarativeSchemaChanger := w.opGen.randIntn(100) > w.workload.declarativeSchemaChangerPct
+	useDeclarativeSchemaChanger := w.opGen.randIntn(100) < w.workload.declarativeSchemaChangerPct
 	if useDeclarativeSchemaChanger {
 		if _, err := conn.Exec(ctx, "SET use_declarative_schema_changer='unsafe_always';"); err != nil {
 			return err
@@ -673,7 +669,7 @@ func (l *logger) flushLogWithError(tx pgx.Tx, err error) {
 	}()
 
 	l.flushLogAndLock(tx, err.Error(), true)
-	l.currentLogEntry.mu.Unlock()
+	defer l.currentLogEntry.mu.Unlock()
 }
 
 // flushLog outputs the currentLogEntry of the schemaChangeWorker.
@@ -683,7 +679,7 @@ func (l *logger) flushLog(tx pgx.Tx, message string) {
 		return
 	}
 	l.flushLogAndLock(tx, message, true)
-	l.currentLogEntry.mu.Unlock()
+	defer l.currentLogEntry.mu.Unlock()
 }
 
 // flushLogAndLock prints the currentLogEntry of the schemaChangeWorker and does not release

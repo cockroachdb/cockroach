@@ -146,12 +146,14 @@ SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
 FROM stock
 WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
 ORDER BY s_i_id
+FOR UPDATE
 ----
 ----
 project
  ├── save-table-name: new_order_04_project_1
  ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar) s_dist_05:8(char)  [hidden: s_i_id:1(int!null)]
  ├── cardinality: [0 - 5]
+ ├── volatile
  ├── stats: [rows=4.548552, distinct(1)=4.54855, null(1)=0, distinct(3)=4.43676, null(3)=0, distinct(8)=4.38572, null(8)=0, distinct(14)=0.989418, null(14)=0, distinct(15)=0.989418, null(15)=0, distinct(16)=0.989418, null(16)=0, distinct(17)=4.54833, null(17)=0]
  ├── key: (1)
  ├── fd: (1)-->(3,8,14-17)
@@ -165,7 +167,9 @@ project
       │    ├── [/4/1100 - /4/1100]
       │    ├── [/4/1400 - /4/1400]
       │    └── [/4/1500 - /4/1500]
+      ├── locking: for-update
       ├── cardinality: [0 - 5]
+      ├── volatile
       ├── stats: [rows=4.548552, distinct(1)=4.54855, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.43676, null(3)=0, distinct(8)=4.38572, null(8)=0, distinct(14)=0.989418, null(14)=0, distinct(15)=0.989418, null(15)=0, distinct(16)=0.989418, null(16)=0, distinct(17)=4.54833, null(17)=0, distinct(1,2)=4.54855, null(1,2)=0]
       │   histogram(1)=  0 0.966 0 0.966  0 0.966  0 0.82528 0 0.82528
       │                <--- 900 --- 1000 --- 1100 --- 1400 ---- 1500 -
@@ -489,12 +493,14 @@ FROM new_order
 WHERE no_w_id = 7 AND no_d_id = 6
 ORDER BY no_o_id ASC
 LIMIT 1
+FOR UPDATE
 ----
 ----
 project
  ├── save-table-name: delivery_01_project_1
  ├── columns: no_o_id:1(int!null)
  ├── cardinality: [0 - 1]
+ ├── volatile
  ├── stats: [rows=1, distinct(1)=0.999675, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1)
@@ -503,6 +509,8 @@ project
       ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
       ├── constraint: /3/2/1: [/7/6 - /7/6]
       ├── limit: 1
+      ├── locking: for-update
+      ├── volatile
       ├── stats: [rows=1, distinct(1)=0.999675, null(1)=0, distinct(2)=0.632308, null(2)=0, distinct(3)=0.632308, null(3)=0]
       ├── key: ()
       └── fd: ()-->(1-3)

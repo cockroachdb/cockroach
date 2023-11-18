@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -51,7 +52,7 @@ type Cluster interface {
 	// ValidateAfterUpdateSystemVersion performs any required validation after
 	// the system version is updated. This is used to perform additional
 	// validation during the tenant upgrade interlock.
-	ValidateAfterUpdateSystemVersion(ctx context.Context) error
+	ValidateAfterUpdateSystemVersion(ctx context.Context, txn *kv.Txn) error
 
 	// UntilClusterStable invokes the given closure until the cluster membership
 	// is stable, i.e once the set of nodes in the cluster before and after the
@@ -136,11 +137,14 @@ type SystemUpgrade struct {
 type SystemUpgradeFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps) error
 
 // NewSystemUpgrade constructs a SystemUpgrade.
-func NewSystemUpgrade(description string, v roachpb.Version, fn SystemUpgradeFunc) *SystemUpgrade {
+func NewSystemUpgrade(
+	description string, v roachpb.Version, fn SystemUpgradeFunc, restore RestoreBehavior,
+) *SystemUpgrade {
 	return &SystemUpgrade{
 		upgrade: upgrade{
 			description: description,
 			v:           v,
+			restore:     restore,
 		},
 		fn: fn,
 	}
@@ -150,7 +154,11 @@ func NewSystemUpgrade(description string, v roachpb.Version, fn SystemUpgradeFun
 // "permanent": an upgrade that will run regardless of the cluster's bootstrap
 // version. Note however that the upgrade will still run at most once.
 func NewPermanentSystemUpgrade(
-	description string, v roachpb.Version, fn SystemUpgradeFunc, v22_2StartupMigrationName string,
+	description string,
+	v roachpb.Version,
+	fn SystemUpgradeFunc,
+	v22_2StartupMigrationName string,
+	restore RestoreBehavior,
 ) *SystemUpgrade {
 	return &SystemUpgrade{
 		upgrade: upgrade{
@@ -158,6 +166,7 @@ func NewPermanentSystemUpgrade(
 			v:                         v,
 			permanent:                 true,
 			v22_2StartupMigrationName: v22_2StartupMigrationName,
+			restore:                   restore,
 		},
 		fn: fn,
 	}

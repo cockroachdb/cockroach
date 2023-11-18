@@ -30,6 +30,7 @@ cockroachdb/sql-foundations:
   label: T-sql-foundations
 cockroachdb/sql-queries:
   aliases:
+    cockroachdb/sql-queries-prs: other
     cockroachdb/sql-optimizer: other
     cockroachdb/sql-opt-prs: other
   # SQL Queries team uses GH projects v2, which doesn't have a REST API, so
@@ -63,6 +64,9 @@ cockroachdb/storage:
   triage_column_id: 6668367
   label: T-storage
 cockroachdb/test-eng:
+  triage_column_id: 14041337
+  label: T-testeng
+cockroachdb/test-eng-prs:
   triage_column_id: 14041337
   label: T-testeng
 cockroachdb/security:

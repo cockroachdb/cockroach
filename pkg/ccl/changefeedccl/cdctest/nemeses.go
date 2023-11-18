@@ -30,7 +30,12 @@ import (
 // real output of a changefeed. The output rows and resolved timestamps of the
 // tested feed are fed into them to check for anomalies.
 func RunNemesis(
-	f TestFeedFactory, db *gosql.DB, isSinkless bool, withLegacySchemaChanger bool, rng *rand.Rand,
+	f TestFeedFactory,
+	db *gosql.DB,
+	isSinkless bool,
+	isCloudstorage bool,
+	withLegacySchemaChanger bool,
+	rng *rand.Rand,
 ) (Validator, error) {
 	// possible additional nemeses:
 	// - schema changes
@@ -125,7 +130,7 @@ func RunNemesis(
 	if _, err := db.Exec(`CREATE TABLE foo (id INT PRIMARY KEY, ts STRING DEFAULT '0')`); err != nil {
 		return nil, err
 	}
-	if _, err := db.Exec(`SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
+	if _, err := db.Exec(`SET CLUSTER SETTING kv.range_merge.queue.enabled = false`); err != nil {
 		return nil, err
 	}
 	if _, err := db.Exec(`ALTER TABLE foo SPLIT AT VALUES ($1)`, ns.rowCount/2); err != nil {
@@ -156,7 +161,7 @@ func RunNemesis(
 	}
 
 	withFormatParquet := ""
-	if rand.Intn(2) < 2 {
+	if isCloudstorage && rand.Intn(2) < 1 {
 		withFormatParquet = ", format=parquet"
 	}
 	foo, err := f.Feed(fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH updated, resolved, diff %s`, withFormatParquet))

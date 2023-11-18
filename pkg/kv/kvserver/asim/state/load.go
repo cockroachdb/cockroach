@@ -11,6 +11,8 @@
 package state
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
@@ -137,12 +139,32 @@ func NewCapacityOverride() CapacityOverride {
 		CPUPerSecond:     capacityOverrideSentinel,
 		L0Sublevels:      capacityOverrideSentinel,
 		IOThreshold: admissionpb.IOThreshold{
-			L0NumSubLevels:          capacityOverrideSentinel,
-			L0NumSubLevelsThreshold: capacityOverrideSentinel,
-			L0NumFiles:              capacityOverrideSentinel,
-			L0NumFilesThreshold:     capacityOverrideSentinel,
+			L0NumSubLevels:           capacityOverrideSentinel,
+			L0NumSubLevelsThreshold:  capacityOverrideSentinel,
+			L0NumFiles:               capacityOverrideSentinel,
+			L0NumFilesThreshold:      capacityOverrideSentinel,
+			L0Size:                   capacityOverrideSentinel,
+			L0MinimumSizePerSubLevel: capacityOverrideSentinel,
 		},
 	}
+}
+
+func (co CapacityOverride) String() string {
+	return fmt.Sprintf(
+		"capacity=%d, available=%d, used=%d, logical_bytes=%d, range_count=%d, lease_count=%d, "+
+			"queries_per_sec=%.2f, writes_per_sec=%.2f, cpu_per_sec=%.2f, l0_sublevels=%d, io_threhold=%v",
+		co.Capacity,
+		co.Available,
+		co.Used,
+		co.LogicalBytes,
+		co.RangeCount,
+		co.LeaseCount,
+		co.QueriesPerSecond,
+		co.WritesPerSecond,
+		co.CPUPerSecond,
+		co.L0Sublevels,
+		co.IOThreshold,
+	)
 }
 
 func mergeOverride(
@@ -190,6 +212,12 @@ func mergeOverride(
 	}
 	if override.IOThreshold.L0NumSubLevelsThreshold != capacityOverrideSentinel {
 		ret.IOThreshold.L0NumSubLevelsThreshold = override.IOThreshold.L0NumSubLevelsThreshold
+	}
+	if override.IOThreshold.L0Size != capacityOverrideSentinel {
+		ret.IOThreshold.L0Size = override.IOThreshold.L0Size
+	}
+	if override.IOThreshold.L0MinimumSizePerSubLevel != capacityOverrideSentinel {
+		ret.IOThreshold.L0MinimumSizePerSubLevel = override.IOThreshold.L0MinimumSizePerSubLevel
 	}
 	return ret
 }

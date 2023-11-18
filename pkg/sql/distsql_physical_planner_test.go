@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -54,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -66,10 +66,10 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 
 	const n = 100
 
-	// NB: this test uses StartNewTestCluster because it depends on some
+	// NB: this test uses StartCluster because it depends on some
 	// cluster setting initializations that only testcluster does.
 	const numNodes = 1
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{UseDatabase: "test"},
 	})
 	defer tc.Stopper().Stop(context.Background())
@@ -77,7 +77,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 	s := tc.Server(0)
 	ts := s.ApplicationLayer()
 	cdb := ts.DB()
-	db := ts.SQLConn(t, "test")
+	db := ts.SQLConn(t, serverutils.DBName("test"))
 
 	sqlutils.CreateTable(
 		t, db, "t", "x INT PRIMARY KEY, xsquared INT",
@@ -144,7 +144,7 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 			defer wg.Done()
 
 			// Create a gosql.DB for this worker.
-			goDB := ts.SQLConn(t, "test")
+			goDB := ts.SQLConn(t, serverutils.DBName("test"))
 
 			// Limit to 1 connection because we set a session variable.
 			goDB.SetMaxOpenConns(1)
@@ -271,7 +271,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	// We're going to setup a cluster with 4 nodes. The last one will not be a
 	// target of any replication so that its caches stay virgin.
 
-	tc := serverutils.StartNewTestCluster(t, 4, /* numNodes */
+	tc := serverutils.StartCluster(t, 4, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -392,7 +392,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	const n = 100
 	const numNodes = 5
 
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
 	})
@@ -486,7 +486,7 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numNodes = 2
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t,
 		numNodes,
 		base.TestClusterArgs{
@@ -671,7 +671,8 @@ func TestPartitionSpans(t *testing.T) {
 		locFilter string
 
 		// expected result: a map of node to list of spans.
-		partitions map[int][][2]string
+		partitions      map[int][][2]string
+		partitionStates []string
 	}{
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
@@ -683,6 +684,13 @@ func TestPartitionSpans(t *testing.T) {
 				1: {{"A1", "B"}, {"C", "C1"}},
 				2: {{"B", "C"}},
 				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
 			},
 		},
 
@@ -698,6 +706,13 @@ func TestPartitionSpans(t *testing.T) {
 				2: {{"B", "C"}},
 				3: {{"D1", "X"}},
 			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
 		},
 
 		{
@@ -710,6 +725,13 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				1: {{"A1", "C1"}},
 				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
 			},
 		},
 
@@ -724,6 +746,13 @@ func TestPartitionSpans(t *testing.T) {
 				1: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
 				2: {{"B", "C"}},
 			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {D1-X}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
+			},
 		},
 
 		{
@@ -736,6 +765,13 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				2: {{"A1", "C1"}},
 				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 2, reason: gossip-gateway-target-unhealthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 2, reason: gossip-gateway-target-unhealthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
 			},
 		},
 
@@ -750,6 +786,13 @@ func TestPartitionSpans(t *testing.T) {
 				2: {{"B", "C"}},
 				3: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
 			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 3, reason: gossip-gateway-target-unhealthy",
+				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: C{-1}, instance ID: 3, reason: gossip-gateway-target-unhealthy",
+				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+			},
 		},
 
 		// Test point lookups in isolation.
@@ -762,6 +805,12 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				1: {{"A2", ""}, {"A1", ""}},
 				2: {{"B1", ""}},
+			},
+
+			partitionStates: []string{
+				"partition span: A2, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A1, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: B1, instance ID: 2, reason: gossip-target-healthy",
 			},
 		},
 
@@ -776,6 +825,19 @@ func TestPartitionSpans(t *testing.T) {
 				1: {{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
 				2: {{"C", "C2"}},
 			},
+
+			partitionStates: []string{
+				"partition span: A1, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A{1-2}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A2, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {A2-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {B-C}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: C{-2}, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: B1, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {A3-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: B{-3}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: B2, instance ID: 1, reason: gossip-target-healthy",
+			},
 		},
 
 		// A single span touching multiple ranges but on the same node results
@@ -789,8 +851,18 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				1: {{"A", "B"}},
 			},
+
+			partitionStates: []string{
+				"partition span: A{-1}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+			},
 		},
 		// Test some locality-filtered planning too.
+		//
+		// Since this test is run on a system tenant but there is a locality filter,
+		// the spans are resolved in a mixed process mode. As a result, the
+		// partition states include a mix of locality and target reasons, which is
+		// expected.
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			gatewayNode: 1,
@@ -800,6 +872,13 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				1: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
 				2: {{"B", "C"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 1, reason: gateway-no-locality-match",
 			},
 		},
 		{
@@ -812,6 +891,13 @@ func TestPartitionSpans(t *testing.T) {
 				2: {{"A1", "C1"}},
 				4: {{"D1", "X"}},
 			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 2, reason: closest-locality-match",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 2, reason: closest-locality-match",
+				"partition span: {D1-X}, instance ID: 4, reason: closest-locality-match",
+			},
 		},
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
@@ -821,6 +907,13 @@ func TestPartitionSpans(t *testing.T) {
 			locFilter: "x=3",
 			partitions: map[int][][2]string{
 				7: {{"A1", "C1"}, {"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 7, reason: gateway-no-locality-match",
+				"partition span: {B-C}, instance ID: 7, reason: gateway-no-locality-match",
+				"partition span: C{-1}, instance ID: 7, reason: gateway-no-locality-match",
+				"partition span: {D1-X}, instance ID: 7, reason: gateway-no-locality-match",
 			},
 		},
 		{
@@ -832,14 +925,22 @@ func TestPartitionSpans(t *testing.T) {
 			partitions: map[int][][2]string{
 				7: {{"A1", "C1"}, {"D1", "X"}},
 			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 7, reason: locality-aware-random",
+				"partition span: {B-C}, instance ID: 7, reason: locality-aware-random",
+				"partition span: C{-1}, instance ID: 7, reason: locality-aware-random",
+				"partition span: {D1-X}, instance ID: 7, reason: locality-aware-random",
+			},
 		},
 	}
 
 	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
 	// DistSQLPlanner will not plan flows on them.
-	testStopper := stop.NewStopper()
-	defer testStopper.Stop(context.Background())
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), s.Stopper(), metric.NewRegistry())
 	var nodeDescs []*roachpb.NodeDescriptor
 	mockInstances := make(mockAddressResolver)
 	for i := 1; i <= 10; i++ {
@@ -871,6 +972,9 @@ func TestPartitionSpans(t *testing.T) {
 
 	for testIdx, tc := range testCases {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
+			ctx := context.Background()
+			ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, s.Tracer(), "PartitionSpans")
+
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.Background())
 
@@ -910,7 +1014,6 @@ func TestPartitionSpans(t *testing.T) {
 				nodeDescs:          mockGossip,
 			}
 
-			ctx := context.Background()
 			var locFilter roachpb.Locality
 			if tc.locFilter != "" {
 				require.NoError(t, locFilter.Set(tc.locFilter))
@@ -938,6 +1041,12 @@ func TestPartitionSpans(t *testing.T) {
 					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 				}
 				resMap[int(p.SQLInstanceID)] = spans
+			}
+
+			recording := getRecAndFinish()
+			t.Logf("recording is %s", recording)
+			for _, expectedMsg := range tc.partitionStates {
+				require.NotEqual(t, -1, tracing.FindMsgInRecording(recording, expectedMsg))
 			}
 
 			if !reflect.DeepEqual(resMap, tc.partitions) {
@@ -1049,7 +1158,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			// reflect tc.nodesNotAdvertisingDistSQLVersion.
 			testStopper := stop.NewStopper()
 			defer testStopper.Stop(context.Background())
-			mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+			mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry())
 			var nodeDescs []*roachpb.NodeDescriptor
 			for i := 1; i <= 2; i++ {
 				sqlInstanceID := base.SQLInstanceID(i)
@@ -1143,7 +1252,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry())
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 2; i++ {
 		sqlInstanceID := base.SQLInstanceID(i)
@@ -1238,8 +1347,7 @@ func TestCheckNodeHealth(t *testing.T) {
 
 	const sqlInstanceID = base.SQLInstanceID(5)
 
-	mockGossip := gossip.NewTest(roachpb.NodeID(sqlInstanceID),
-		stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	mockGossip := gossip.NewTest(roachpb.NodeID(sqlInstanceID), stopper, metric.NewRegistry())
 
 	desc := &roachpb.NodeDescriptor{
 		NodeID:  roachpb.NodeID(sqlInstanceID),

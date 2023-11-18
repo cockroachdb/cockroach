@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -784,9 +785,217 @@ func TestPlanDiagramJoin(t *testing.T) {
 	compareDiagrams(t, s, expected)
 }
 
+func TestPlanDiagramReplicationStream(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ingestionData := StreamIngestionDataSpec{
+		PartitionSpecs: map[string]StreamIngestionPartitionSpec{
+			"1": {
+				Spans: []roachpb.Span{{
+					Key:    roachpb.Key("a"),
+					EndKey: roachpb.Key("b"),
+				}},
+			},
+			"2": {
+				Spans: []roachpb.Span{{
+					Key:    roachpb.Key("d"),
+					EndKey: roachpb.Key("e"),
+				}},
+			},
+			"3": {
+				Spans: []roachpb.Span{
+					{
+						Key:    roachpb.Key("f1"),
+						EndKey: roachpb.Key("g1"),
+					},
+					{
+						Key:    roachpb.Key("f2"),
+						EndKey: roachpb.Key("g2"),
+					},
+					{
+						Key:    roachpb.Key("f3"),
+						EndKey: roachpb.Key("g3"),
+					},
+					{
+						Key:    roachpb.Key("f4"),
+						EndKey: roachpb.Key("g4"),
+					},
+				},
+			},
+			"4": {
+				Spans: []roachpb.Span{{
+					Key:    roachpb.Key("g"),
+					EndKey: roachpb.Key("h"),
+				}},
+			},
+		},
+	}
+	ingestionFrontier := StreamIngestionFrontierSpec{
+		StreamID: 42,
+	}
+
+	flows := map[base.SQLInstanceID]*FlowSpec{
+		1: {
+			Processors: []ProcessorSpec{
+				{
+					Core: ProcessorCoreUnion{StreamIngestionData: &ingestionData},
+					Output: []OutputRouterSpec{{
+						Type: OutputRouterSpec_PASS_THROUGH,
+						Streams: []StreamEndpointSpec{
+							{StreamID: 11},
+						},
+					}},
+					ProcessorID: 1,
+				},
+				{
+					Input: []InputSyncSpec{
+						{
+							Type: InputSyncSpec_PARALLEL_UNORDERED,
+							Streams: []StreamEndpointSpec{
+								{StreamID: 11},
+							},
+						},
+					},
+					Core:        ProcessorCoreUnion{StreamIngestionFrontier: &ingestionFrontier},
+					ProcessorID: 2,
+				},
+			},
+		}}
+
+	flags := DiagramFlags{
+		ShowInputTypes: true,
+	}
+	diagram, err := GeneratePlanDiagram("SOME SQL HERE", flows, flags)
+	require.NoError(t, err)
+
+	s, diagramURL, err := diagram.ToURL()
+	t.Logf("diag URL: %s", diagramURL.String())
+	require.NoError(t, err)
+	expected := `
+{
+  "sql": "SOME SQL HERE",
+  "nodeNames": [
+    "1"
+  ],
+  "processors": [
+    {
+      "nodeIdx": 0,
+      "inputs": [],
+      "core": {
+        "title": "StreamIngestionData/1",
+        "details": [
+          "Partitions:",
+          "Source node 1, spans:",
+          "{a-b}",
+          "Source node 2, spans:",
+          "{d-e}",
+          "Source node 3, spans:",
+          "{f1-g1}",
+          "{f2-g2}",
+          "{f3-g3}",
+          "and 1 more spans",
+          "and 1 more partitions"
+        ]
+      },
+      "outputs": [],
+      "stage": 0,
+      "processorID": 1
+    },
+    {
+      "nodeIdx": 0,
+      "inputs": [],
+      "core": {
+        "title": "StreamIngestionFrontier/2",
+        "details": [
+          "streamID: 42"
+        ]
+      },
+      "outputs": [],
+      "stage": 0,
+      "processorID": 2
+    }
+  ],
+  "edges": [
+    {
+      "sourceProc": 0,
+      "sourceOutput": 0,
+      "destProc": 1,
+      "destInput": 0,
+      "streamID": 11
+    }
+  ],
+  "flow_id": "00000000-0000-0000-0000-000000000000",
+  "flags": {
+    "ShowInputTypes": true,
+    "MakeDeterministic": false
+  }
+}`
+	compareDiagrams(t, s, expected)
+}
+
 func TestProcessorsImplementDiagramCellType(t *testing.T) {
 	pcu := reflect.ValueOf(ProcessorCoreUnion{})
 	for i := 0; i < pcu.NumField(); i++ {
 		require.Implements(t, (*diagramCellType)(nil), pcu.Field(i).Interface())
+	}
+}
+
+func TestChangeAggregatorSpec(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		name            string
+		aggregatorSpec  ChangeAggregatorSpec
+		expectedWatches []string
+	}{
+		{
+			name:            "no watches",
+			aggregatorSpec:  ChangeAggregatorSpec{},
+			expectedWatches: []string{""},
+		},
+		{
+			name: "limit",
+			aggregatorSpec: ChangeAggregatorSpec{
+				Watches: []ChangeAggregatorSpec_Watch{
+					{
+						Span: roachpb.Span{Key: roachpb.Key("a")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("b")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("c")},
+					},
+				},
+			},
+			expectedWatches: []string{"Watches [3]: a, b, c"},
+		},
+		{
+			name: "overlimit",
+			aggregatorSpec: ChangeAggregatorSpec{
+				Watches: []ChangeAggregatorSpec_Watch{
+					{
+						Span: roachpb.Span{Key: roachpb.Key("a")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("b")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("c")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("d")},
+					},
+				},
+			},
+			expectedWatches: []string{"Watches [4]: a, b, c..."},
+		},
+	}
+
+	for _, td := range testData {
+		t.Run(td.name, func(t *testing.T) {
+			_, details := td.aggregatorSpec.summary()
+			require.Equal(t, td.expectedWatches, details)
+		})
 	}
 }

@@ -21,6 +21,16 @@ func BuiltWithBazel() bool {
 	return false
 }
 
+// InBazelTest returns true iff called from a test run by Bazel.
+func InBazelTest() bool {
+	return false
+}
+
+// InTestWrapper returns true iff called from Bazel's generated test wrapper.
+func InTestWrapper() bool {
+	return false
+}
+
 // FindBinary is not implemented.
 func FindBinary(pkg, name string) (string, bool) {
 	panic("not build with Bazel")

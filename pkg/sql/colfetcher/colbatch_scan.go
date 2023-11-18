@@ -183,7 +183,7 @@ func newColBatchScanBase(
 		// (because the cFetcher requires that its allocator is not shared with
 		// any other component), but we can use the memory account of the KV
 		// fetcher.
-		if err = kvFetcherMemAcc.Grow(ctx, s.Spans.MemUsage()); err != nil {
+		if err = kvFetcherMemAcc.Grow(ctx, s.Spans.MemUsageUpToLen()); err != nil {
 			return nil, nil, nil, err
 		}
 		s.MakeSpansCopy()
@@ -350,6 +350,7 @@ func NewColBatchScan(
 		spec.Reverse,
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
+		spec.LockingDurability,
 		flowCtx.EvalCtx.SessionData().LockTimeout,
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,

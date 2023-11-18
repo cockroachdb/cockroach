@@ -12,15 +12,15 @@ package errorutil
 
 import "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 
-// UnsupportedWithMultiTenancyMessage is the message used by UnsupportedWithMultiTenancy error.
-const UnsupportedWithMultiTenancyMessage = "operation is unsupported in multi-tenancy mode"
+// UnsupportedUnderClusterVirtualizationMessage is the message used by UnsupportedUnderClusterVirtualization error.
+const UnsupportedUnderClusterVirtualizationMessage = "operation is unsupported within a virtual cluster"
 
-// UnsupportedWithMultiTenancy returns an error suitable for returning when an
-// operation could not be carried out due to the SQL server running in
-// multi-tenancy mode. In that mode, Gossip and other components of the KV layer
-// are not available.
-func UnsupportedWithMultiTenancy(issue int) error {
-	return unimplemented.NewWithIssue(issue, UnsupportedWithMultiTenancyMessage)
+// UnsupportedUnderClusterVirtualization returns an error suitable for
+// returning when an operation could not be carried out due to the SQL
+// server running inside a virtual cluster. In that mode, Gossip and
+// other components of the KV layer are not available.
+func UnsupportedUnderClusterVirtualization(issue int) error {
+	return unimplemented.NewWithIssue(issue, UnsupportedUnderClusterVirtualizationMessage)
 }
 
 // FeatureNotAvailableToNonSystemTenantsIssue is to be used with the

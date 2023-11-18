@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -207,7 +208,7 @@ func noopPauseRequestFunc(
 	return nil
 }
 
-var _ jobs.TraceableJob = (*jobs.FakeResumer)(nil)
+var _ jobs.TraceableJob = (*jobstest.FakeResumer)(nil)
 
 func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.ctx = context.Background()
@@ -235,6 +236,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			SkipJobMetricsPollingJobBootstrap: true,
 			SkipAutoConfigRunnerJobBootstrap:  true,
 			SkipUpdateSQLActivityJobBootstrap: true,
+			SkipMVCCStatisticsJobBootstrap:    true,
 		}
 		args.Knobs.KeyVisualizer = &keyvisualizer.TestingKnobs{SkipJobBootstrap: true}
 
@@ -260,7 +262,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 	rts.onPauseRequest = noopPauseRequestFunc
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			TraceRealSpan: rts.traceRealSpan,
 			OnResume: func(ctx context.Context) error {
 				t.Log("Starting resume")
@@ -1150,7 +1152,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		resumerJob := make(chan *jobs.Job, 1)
 		jobs.RegisterConstructor(
 			jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-				return jobs.FakeResumer{
+				return jobstest.FakeResumer{
 					OnResume: func(ctx context.Context) error {
 						resumerJob <- j
 						return nil
@@ -1191,22 +1193,27 @@ func checkTraceFiles(
 
 	recordings := make([][]byte, 0)
 	execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
-	edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID)
+	edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobID, execCfg.Settings.Version)
 	require.NoError(t, err)
 	require.Len(t, edFiles, expectedNumFiles)
 
-	for _, f := range edFiles {
-		data, err := jobs.ReadExecutionDetailFile(ctx, f, execCfg.InternalDB, jobID)
-		require.NoError(t, err)
-		// Trace files are dumped in `binpb` and `binpb.txt` format. The former
-		// should be unmarshal-able.
-		if strings.HasSuffix(f, "binpb") {
-			td := jobspb.TraceData{}
-			require.NoError(t, protoutil.Unmarshal(data, &td))
-			require.NotEmpty(t, td.CollectedSpans)
+	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		for _, f := range edFiles {
+			data, err := jobs.ReadExecutionDetailFile(ctx, f, txn, jobID, execCfg.Settings.Version)
+			if err != nil {
+				return err
+			}
+			// Trace files are dumped in `binpb` and `binpb.txt` format. The former
+			// should be unmarshal-able.
+			if strings.HasSuffix(f, "binpb") {
+				td := jobspb.TraceData{}
+				require.NoError(t, protoutil.Unmarshal(data, &td))
+				require.NotEmpty(t, td.CollectedSpans)
+			}
+			recordings = append(recordings, data)
 		}
-		recordings = append(recordings, data)
-	}
+		return nil
+	}))
 	if len(recordings) != expectedNumFiles {
 		t.Fatalf("expected %d entries but found %d", expectedNumFiles, len(recordings))
 	}
@@ -1618,7 +1625,7 @@ func TestJobLifecycle(t *testing.T) {
 			}, registry.MakeJobID(), txn)
 			return errors.New("boom")
 		}))
-		if err := job.Started(ctx); !testutils.IsError(err, "job payload not found in system.jobs") {
+		if err := job.Started(ctx); !testutils.IsError(err, "not found in system.jobs table") {
 			t.Fatalf("unexpected error %v", err)
 		}
 	})
@@ -2242,7 +2249,7 @@ func TestShowJobWhenComplete(t *testing.T) {
 	defer close(done)
 	jobs.RegisterConstructor(
 		jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-			return jobs.FakeResumer{
+			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
 					select {
 					case <-ctx.Done():
@@ -2406,7 +2413,7 @@ func TestJobInTxn(t *testing.T) {
 		},
 	)
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				t.Logf("Resuming job: %+v", job.Payload())
 				atomic.AddInt32(&hasRun, 1)
@@ -2446,7 +2453,7 @@ func TestJobInTxn(t *testing.T) {
 		},
 	)
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(_ context.Context) error {
 				return errors.New("RESTORE failed")
 			},
@@ -2525,15 +2532,15 @@ func TestStartableJobMixedVersion(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettingsWithVersions(
-		clusterversion.TestingBinaryVersion,
-		clusterversion.TestingBinaryMinSupportedVersion,
+		clusterversion.Latest.Version(),
+		clusterversion.MinSupported.Version(),
 		false, /* initializeVersion */
 	)
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Settings: st,
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
-				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				BinaryVersionOverride:          clusterversion.MinSupported.Version(),
 				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 		},
@@ -2544,7 +2551,7 @@ func TestStartableJobMixedVersion(t *testing.T) {
 	require.NoError(t, err)
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{}
+		return jobstest.FakeResumer{}
 	}, jobs.UsesTenantCostControl)
 	var j *jobs.StartableJob
 	jobID := jr.MakeJobID()
@@ -2585,7 +2592,7 @@ func TestStartableJob(t *testing.T) {
 		return func() { resumeFunc.Store(prev) }
 	}
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				return resumeFunc.Load().(func(ctx context.Context) error)(ctx)
 			},
@@ -2771,7 +2778,7 @@ func TestStartableJobTxnRetry(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	jr := s.JobRegistry().(*jobs.Registry)
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{}
+		return jobstest.FakeResumer{}
 	}, jobs.UsesTenantCostControl)
 	rec := jobs.Record{
 		Details:  jobspb.RestoreDetails{},
@@ -2813,7 +2820,7 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 	defer jobs.ResetConstructors()()
 	resuming := make(chan struct{})
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				resuming <- struct{}{}
 				return nil
@@ -2899,7 +2906,7 @@ func TestMetrics(t *testing.T) {
 	fakeBackupMetrics := makeFakeMetrics()
 	jobs.RegisterConstructor(jobspb.TypeBackup,
 		func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-			return jobs.FakeResumer{
+			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
 					defer fakeBackupMetrics.N.Inc(1)
 					return waitForErr(ctx)
@@ -2913,7 +2920,7 @@ func TestMetrics(t *testing.T) {
 	)
 
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				return waitForErr(ctx)
 			},
@@ -3133,7 +3140,7 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 	defer jobs.ResetConstructors()()
 	resumed := make(chan error, 1)
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				defer close(resumed)
 				_, err := s.InternalExecutor().(isql.Executor).Exec(
@@ -3203,7 +3210,7 @@ func TestPauseReason(t *testing.T) {
 	defer close(done)
 	resumeSignaler := newResumeStartedSignaler()
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				resumeSignaler.SignalResumeStarted()
 				select {
@@ -3458,7 +3465,7 @@ func TestPausepoints(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	idb := s.InternalDB().(isql.DB)
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{
+		return jobstest.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				if err := registry.CheckPausepoint("test_pause_foo"); err != nil {
 					return err
@@ -3598,7 +3605,7 @@ func TestJobTypeMetrics(t *testing.T) {
 
 	for typ := range typeToRecord {
 		jobs.RegisterConstructor(typ, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-			return jobs.FakeResumer{
+			return jobstest.FakeResumer{
 				OnResume: func(ctx context.Context) error {
 					<-ctx.Done()
 					return ctx.Err()
@@ -3684,7 +3691,7 @@ func TestLoadJobProgress(t *testing.T) {
 	_, err := r.CreateJobWithTxn(ctx, rec, 7, nil)
 	require.NoError(t, err)
 
-	p, err := jobs.LoadJobProgress(ctx, s.InternalDB().(isql.DB), 7)
+	p, err := jobs.LoadJobProgress(ctx, s.InternalDB().(isql.DB), 7, s.ClusterSettings().Version)
 	require.NoError(t, err)
 	require.Equal(t, []float32{7.1}, p.GetDetails().(*jobspb.Progress_Import).Import.ReadProgress)
 }

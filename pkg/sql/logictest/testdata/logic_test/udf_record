@@ -346,7 +346,7 @@ $$
   SELECT a, b;
 $$ LANGUAGE SQL;
 
-# TODO(harding): In postgres, calls to f_amb_setof should succeed and return 0 rows.
+# TODO(#100928): In postgres, calls to f_amb_setof should succeed and return 0 rows.
 statement error pgcode 42725 pq: ambiguous call: f_amb_setof\(int, unknown\), candidates are
 SELECT f_amb_setof(1, NULL);
 
@@ -365,11 +365,11 @@ $$
   SELECT a, b;
 $$ LANGUAGE SQL;
 
-# TODO(harding): In postgres, calls to f_amb should succeed and return NULL.
+# TODO(#100928): In postgres, calls to f_amb should succeed and return NULL.
 statement error pgcode 42725 pq: ambiguous call: f_amb\(int, unknown\), candidates are
 SELECT f_amb(1, NULL);
 
-# TODO(harding): In postgres, calls to f_amb as a data source should succeed
+# TODO(#100928): In postgres, calls to f_amb as a data source should succeed
 # and return NULL NULL.
 statement error pgcode 42725 pq: ambiguous call: f_amb\(int, unknown\), candidates are
 SELECT * FROM f_amb(1, NULL) as foo(a int, b int);

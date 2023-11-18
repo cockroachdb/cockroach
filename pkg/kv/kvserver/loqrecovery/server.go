@@ -637,6 +637,19 @@ func checkRangeHealth(
 	return loqrecoverypb.RangeHealth_LOSS_OF_QUORUM
 }
 
+// makeVisitAvailableNodes creates a function to visit available remote nodes.
+//
+// Returned function would dial all cluster nodes from gossip and executes
+// visitor function with admin client after connection is established. Function
+// will perform retries on dial operation as well on visitor execution.
+//
+// For former, grpcutil.IsConnectionUnavailable check on returned error will
+// abort retry loop because that indicates that node is not available. The
+// expectation here is that we don't know if nodes in gossip are available or
+// not and we don't want to block on dead nodes indefinitely.
+//
+// For latter, errors marked with errMarkRetry marker are retried. It is up
+// to the visitor to mark appropriate errors are retryable.
 func makeVisitAvailableNodes(
 	g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context,
 ) visitNodeAdminFn {
@@ -650,11 +663,16 @@ func makeVisitAvailableNodes(
 				log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 				addr := node.AddressForLocality(loc)
 				var conn *grpc.ClientConn
-				conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).Connect(ctx)
+				// Note that we use ConnectNoBreaker here to avoid any race with probe
+				// running on current node and target node restarting. Errors from circuit
+				// breaker probes could confuse us and present node as unavailable.
+				conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).ConnectNoBreaker(ctx)
 				// Nodes would contain dead nodes that we don't need to visit. We can skip
 				// them and let caller handle incomplete info.
 				if err != nil {
 					if grpcutil.IsConnectionUnavailable(err) {
+						log.Infof(ctx, "rejecting node n%d because of suspected un-retryable error: %s",
+							node.NodeID, err)
 						return nil
 					}
 					// This was an initial heartbeat type error, we must retry as node seems
@@ -706,6 +724,18 @@ func makeVisitAvailableNodes(
 	}
 }
 
+// makeVisitNode creates a function to visit a remote node.
+//
+// Returned function would dial a node and executes visitor function with
+// status client after connection is established. Function will perform
+// retries on dial operation as well on visitor execution.
+//
+// For former, closed connection errors will abort retry loop because that
+// indicates that node is not available. The expectation here is that we are
+// trying to talk to available nodes and all other errors are transient.
+//
+// For latter, errors marked with errMarkRetry marker are retried. It is up
+// to the visitor to mark appropriate errors are retryable.
 func makeVisitNode(g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context) visitNodeStatusFn {
 	return func(ctx context.Context, nodeID roachpb.NodeID, retryOpts retry.Options,
 		visitor func(client serverpb.StatusClient) error,
@@ -718,9 +748,14 @@ func makeVisitNode(g *gossip.Gossip, loc roachpb.Locality, rpcCtx *rpc.Context) 
 			log.Infof(ctx, "visiting node n%d, attempt %d", node.NodeID, r.CurrentAttempt())
 			addr := node.AddressForLocality(loc)
 			var conn *grpc.ClientConn
-			conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).Connect(ctx)
+			// Note that we use ConnectNoBreaker here to avoid any race with probe
+			// running on current node and target node restarting. Errors from circuit
+			// breaker probes could confuse us and present node as unavailable.
+			conn, err = rpcCtx.GRPCDialNode(addr.String(), node.NodeID, rpc.DefaultClass).ConnectNoBreaker(ctx)
 			if err != nil {
 				if grpcutil.IsClosedConnection(err) {
+					log.Infof(ctx, "can't dial node n%d because connection is permanently closed: %s",
+						node.NodeID, err)
 					return err
 				}
 				// Retry any other transient connection flakes.

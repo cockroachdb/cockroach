@@ -1,0 +1,125 @@
+new-txn name=txnNormalPri ts=10,1 epoch=0 priority=normal
+----
+
+new-txn name=txnHighPri ts=11,1 epoch=0 priority=high
+----
+
+new-txn name=txnNormalPri2 ts=12,1 epoch=0 priority=normal
+----
+
+new-request name=reqNormalPri txn=txnNormalPri ts=10,1
+  put key=k  value=v
+----
+
+sequence req=reqNormalPri
+----
+[1] sequence reqNormalPri: sequencing request
+[1] sequence reqNormalPri: acquiring latches
+[1] sequence reqNormalPri: scanning lock table for conflicting locks
+[1] sequence reqNormalPri: sequencing complete, returned guard
+
+on-lock-acquired req=reqNormalPri key=k
+----
+[-] acquire lock: txn 00000001 @ ‹k›
+
+finish req=reqNormalPri
+----
+[-] finish reqNormalPri: finishing request
+
+# -----------------------------------------------------------------------
+# Normal-priority refresh request discovers the lock of a normal-priority
+# transaction. The refresh has WaitPolicy_Error so does not block on
+# the conflicting transaction and returns an error instead.
+# -----------------------------------------------------------------------
+
+new-request name=reqNormalPriNoWait txn=txnNormalPri2 ts=11,1 wait-policy=error
+  refresh key=k
+----
+
+sequence req=reqNormalPriNoWait
+----
+[2] sequence reqNormalPriNoWait: sequencing request
+[2] sequence reqNormalPriNoWait: acquiring latches
+[2] sequence reqNormalPriNoWait: scanning lock table for conflicting locks
+[2] sequence reqNormalPriNoWait: waiting in lock wait-queues
+[2] sequence reqNormalPriNoWait: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[2] sequence reqNormalPriNoWait: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = true
+[2] sequence reqNormalPriNoWait: pushing timestamp of txn 00000001 above 12.000000000,1
+[2] sequence reqNormalPriNoWait: pushee not abandoned
+[2] sequence reqNormalPriNoWait: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[2] sequence reqNormalPriNoWait: sequencing complete, returned error: conflicting locks on ‹"k"› [reason=wait_policy]
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
+
+
+# -----------------------------------------------------------------------------
+# High-priority refresh request discovers the lock of a normal-priority
+# transaction. The refresh pushes the timestamp of the conflicting transaction.
+# -----------------------------------------------------------------------------
+
+new-request name=reqHighPriNoWait txn=txnHighPri ts=11,1 wait-policy=error
+  refresh key=k
+----
+
+sequence req=reqHighPriNoWait
+----
+[3] sequence reqHighPriNoWait: sequencing request
+[3] sequence reqHighPriNoWait: acquiring latches
+[3] sequence reqHighPriNoWait: scanning lock table for conflicting locks
+[3] sequence reqHighPriNoWait: waiting in lock wait-queues
+[3] sequence reqHighPriNoWait: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence reqHighPriNoWait: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = true
+[3] sequence reqHighPriNoWait: pushing timestamp of txn 00000001 above 11.000000000,1
+[3] sequence reqHighPriNoWait: pusher pushed pushee to 11.000000000,2
+[3] sequence reqHighPriNoWait: resolving intent ‹"k"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,3}
+[3] sequence reqHighPriNoWait: lock wait-queue event: done waiting
+[3] sequence reqHighPriNoWait: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[3] sequence reqHighPriNoWait: acquiring latches
+[3] sequence reqHighPriNoWait: scanning lock table for conflicting locks
+[3] sequence reqHighPriNoWait: sequencing complete, returned guard
+
+finish req=reqHighPriNoWait
+----
+[-] finish reqHighPriNoWait: finishing request
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
+
+# -------------------------------------------------------------------------
+# High-priority refresh request discovers the lock of a normal-priority
+# transaction. The refresh has WaitPolicy_Block to simulate the
+# behavior before V23_2_RemoveLockTableWaiterTouchPush, which is:
+# do not acquire any locks and proceed with evaluation.
+# TODO(mira): Remove after V23_2_RemoveLockTableWaiterTouchPush is deleted.
+# -------------------------------------------------------------------------
+
+new-request name=reqHighPri txn=txnHighPri ts=11,1
+  refresh key=k
+----
+
+sequence req=reqHighPri
+----
+[4] sequence reqHighPri: sequencing request
+[4] sequence reqHighPri: acquiring latches
+[4] sequence reqHighPri: sequencing complete, returned guard
+
+finish req=reqHighPri
+----
+[-] finish reqHighPri: finishing request
+
+debug-lock-table
+----
+num=1
+ lock: "k"
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 11.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
+
+
+reset
+----

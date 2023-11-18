@@ -1,0 +1,32 @@
+parse
+ALTER PROCEDURE p(int) RENAME TO g
+----
+ALTER PROCEDURE p(IN INT8) RENAME TO g -- normalized!
+ALTER PROCEDURE p(IN INT8) RENAME TO g -- fully parenthesized
+ALTER PROCEDURE p(IN INT8) RENAME TO g -- literals removed
+ALTER PROCEDURE _(IN INT8) RENAME TO _ -- identifiers removed
+
+parse
+ALTER PROCEDURE p(int) OWNER TO CURRENT_USER
+----
+ALTER PROCEDURE p(IN INT8) OWNER TO CURRENT_USER -- normalized!
+ALTER PROCEDURE p(IN INT8) OWNER TO CURRENT_USER -- fully parenthesized
+ALTER PROCEDURE p(IN INT8) OWNER TO CURRENT_USER -- literals removed
+ALTER PROCEDURE _(IN INT8) OWNER TO _ -- identifiers removed
+
+parse
+ALTER PROCEDURE p(int) SET SCHEMA test_sc
+----
+ALTER PROCEDURE p(IN INT8) SET SCHEMA test_sc -- normalized!
+ALTER PROCEDURE p(IN INT8) SET SCHEMA test_sc -- fully parenthesized
+ALTER PROCEDURE p(IN INT8) SET SCHEMA test_sc -- literals removed
+ALTER PROCEDURE _(IN INT8) SET SCHEMA _ -- identifiers removed
+
+error
+ALTER PROCEDURE p()
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+ALTER PROCEDURE p()
+                   ^
+HINT: try \h ALTER PROCEDURE

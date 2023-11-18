@@ -33,6 +33,13 @@ message MVCCMetadata {
   // value that may have multiple versions. For values which may have
   // only one version, the data is stored inline (via raw_bytes), and
   // timestamp is set to zero.
+  //
+  // For lock table keys, this is the write timestamp of the lock holder, at
+  // the time that the lock was acquired. The lock holder cannot commit at a
+  // timestamp earlier than this timestamp.
+  //
+  // INVARIANT: if txn == nil, timestamp is zero
+  // INVARIANT: if txn != nil, timestamp == txn.WriteTimestamp
   optional util.hlc.LegacyTimestamp timestamp = 2 [(gogoproto.nullable) = false];
   // Is the most recent value a deletion tombstone?
   optional bool deleted = 3 [(gogoproto.nullable) = false];
@@ -117,7 +124,7 @@ message MVCCMetadataSubsetForMergeSerialization {
 // running update) is added to the age.
 //
 // To give an example, if an intent is around from `t=2.5s` to `t=4.1s` (the
-// current time), then it contributes an intent age of two seconds (one second
+// current time), then it contributes a lock age of two seconds (one second
 // picked up when crossing `t=3s`, another one at `t=4s`). Similarly, if a
 // GC'able kv pair is around for this amount of time, it contributes two seconds
 // times its size in bytes.
@@ -160,9 +167,9 @@ message MVCCStats {
   // last_update_nanos is a timestamp at which the ages were last
   // updated. See the comment on MVCCStats.
   optional sfixed64 last_update_nanos = 1 [(gogoproto.nullable) = false];
-  // intent_age is the cumulative age of the tracked intents.
-  // See the comment on MVCCStats.
-  optional sfixed64 intent_age = 2 [(gogoproto.nullable) = false];
+  // lock_age is the cumulative age of the tracked locks (shared, exclusive,
+  // or intent strength). See the comment on MVCCStats.
+  optional sfixed64 lock_age = 2 [(gogoproto.nullable) = false];
   // gc_bytes_age is the cumulative age of the non-live data (i.e. data included
   // in key_bytes, val_bytes, and range_key_bytes, and range_val_bytes, but not
   // live_bytes). See the comment on MVCCStats.
@@ -195,12 +202,22 @@ message MVCCStats {
   // It is equal to the number of meta keys in the system with
   // a non-empty Transaction proto.
   optional sfixed64 intent_count = 11 [(gogoproto.nullable) = false];
-  // separated_intent_count is the number of intents that are in the separated
-  // lock table. It is <= intent_count. Separated intents will not be enabled
-  // in a cluster until all nodes in that cluster know how to read/write such
-  // intents, so mixed-version clusters with nodes preceding this knowledge
-  // will always have a 0 value for this field.
-  optional sfixed64 separated_intent_count = 16 [(gogoproto.nullable) = false];
+  // lock_bytes is the encoded size of replicated locks with shared or
+  // exclusive strengths, which are stored in the lock table keyspace.
+  // The field includes the size of the locks' keys and their values.
+  //
+  // For historical reasons, the field excludes the size of intent
+  // metadata key-values, even though they are also stored in the lock
+  // table keyspace. Intent metadata keys are tracked under key_bytes
+  // and their values are tracked under val_bytes. This is not to be
+  // confused with the provisional versioned values protected by the
+  // intents, which are tracked by the intent_bytes field (and also by
+  // key_bytes and val_bytes). Hence the vague "without their meta keys"
+  // comment above.
+  optional sfixed64 lock_bytes = 21 [(gogoproto.nullable) = false];
+  // lock_count is the number of replicated locks (shared, exclusive, or
+  // intent strength) that are in the lock table. It is >= intent_count.
+  optional sfixed64 lock_count = 16 [(gogoproto.nullable) = false];
   // range_key_count is the number of range keys tracked under range_key_bytes.
   // Overlapping range keys may fragment into version stacks with the same
   // start/end bounds, thus writing a single range key may cause range_key_count

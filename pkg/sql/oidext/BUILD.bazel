@@ -12,7 +12,6 @@ go_test(
     name = "oidext_test",
     size = "small",
     srcs = ["oidext_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":oidext"],
     deps = [
         "@com_github_lib_pq//oid",

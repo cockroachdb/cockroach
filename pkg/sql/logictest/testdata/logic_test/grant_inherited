@@ -130,7 +130,7 @@ GRANT EXECUTE ON FUNCTION fn TO meeter WITH GRANT OPTION
 query TTTTTTB colnames
 SHOW GRANTS ON FUNCTION fn FOR alice
 ----
-database_name  schema_name  function_id  function_signature  grantee  privilege_type  is_grantable
+database_name  schema_name  routine_id   routine_signature   grantee  privilege_type  is_grantable
 test           public       100111       fn(int8)            meeter   EXECUTE         true
 
 statement ok

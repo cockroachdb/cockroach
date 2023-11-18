@@ -16,7 +16,9 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -99,7 +101,7 @@ const (
 	// written. We allow the transaction to continue after such errors; we also
 	// allow RollbackToSavepoint() to be called after such errors. In particular,
 	// this is useful for SQL which wants to allow rolling back to a savepoint
-	// after ConditionFailedErrors (uniqueness violations) and WriteIntentError
+	// after ConditionFailedErrors (uniqueness violations) and LockConflictError
 	// (lock not available errors). With continuing after errors it's important
 	// for the coordinator to track the timestamp at which intents might have been
 	// written.
@@ -258,8 +260,7 @@ type ErrorDetailInterface interface {
 type ErrorDetailType int
 
 // This lists all ErrorDetail types. The numeric values in this list are used to
-// identify corresponding timeseries. The values correspond to the proto oneof
-// values.
+// identify corresponding timeseries.
 //
 //go:generate stringer -type=ErrorDetailType
 const (
@@ -296,6 +297,7 @@ const (
 	MinTimestampBoundUnsatisfiableErrType   ErrorDetailType = 42
 	RefreshFailedErrType                    ErrorDetailType = 43
 	MVCCHistoryMutationErrType              ErrorDetailType = 44
+	LockConflictErrType                     ErrorDetailType = 45
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -305,7 +307,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 45
+	NumErrors int = 46
 )
 
 // Register the migration of all errors that used to be in the roachpb package
@@ -714,23 +716,59 @@ func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error)
 	return nil
 }
 
-// NewTransactionRetryWithProtoRefreshError initializes a new TransactionRetryWithProtoRefreshError.
+type retryErrOptions struct {
+	conflictingTxn *enginepb.TxnMeta
+}
+
+// RetryErrOption is used to annotate optional fields in retry related errors.
+type RetryErrOption interface {
+	apply(*retryErrOptions)
+}
+
+type retryErrOptionFunc func(*retryErrOptions)
+
+func (f retryErrOptionFunc) apply(o *retryErrOptions) {
+	f(o)
+}
+
+// WithConflictingTxn is used to annotate a retry error with the conflicting
+// transaction metadata (optional). This is only used for cases where a refresh
+// fails with `REASON_INTENT`.
+func WithConflictingTxn(txn *enginepb.TxnMeta) RetryErrOption {
+	return retryErrOptionFunc(func(o *retryErrOptions) {
+		o.conflictingTxn = txn
+	})
+}
+
+// NewTransactionRetryWithProtoRefreshError initializes a new
+// TransactionRetryWithProtoRefreshError.
 //
-// txnID is the ID of the transaction being restarted.
-// txn is the transaction that the client should use for the next attempts.
+// prevTxnID is the ID of the transaction being retried.
+// prevTxnEpoch is the epoch of the transaction being retried.
+// nextTxn is the transaction that the client should use for the next attempts.
 //
 // TODO(tbg): the message passed here is usually pErr.String(), which is a bad
 // pattern (loses structure, thus redaction). We can leverage error chaining
 // to improve this: wrap `pErr.GoError()` with a barrier and then with the
 // TransactionRetryWithProtoRefreshError.
 func NewTransactionRetryWithProtoRefreshError(
-	msg redact.RedactableString, txnID uuid.UUID, txn roachpb.Transaction,
+	msg redact.RedactableString,
+	prevTxnID uuid.UUID,
+	prevTxnEpoch enginepb.TxnEpoch,
+	nextTxn roachpb.Transaction,
+	opts ...RetryErrOption,
 ) *TransactionRetryWithProtoRefreshError {
+	options := retryErrOptions{}
+	for _, o := range opts {
+		o.apply(&options)
+	}
 	return &TransactionRetryWithProtoRefreshError{
-		Msg:           msg.StripMarkers(),
-		MsgRedactable: msg,
-		TxnID:         txnID,
-		Transaction:   txn,
+		Msg:             msg.StripMarkers(),
+		MsgRedactable:   msg,
+		PrevTxnID:       prevTxnID,
+		PrevTxnEpoch:    prevTxnEpoch,
+		NextTransaction: nextTxn,
+		ConflictingTxn:  options.conflictingTxn,
 	}
 }
 
@@ -748,7 +786,28 @@ func (e *TransactionRetryWithProtoRefreshError) SafeFormatError(p errors.Printer
 // transaction, as opposed to continuing with the existing one at a bumped
 // epoch.
 func (e *TransactionRetryWithProtoRefreshError) PrevTxnAborted() bool {
-	return !e.TxnID.Equal(e.Transaction.ID)
+	return !e.PrevTxnID.Equal(e.NextTransaction.ID)
+}
+
+// PrevTxnEpochBumped returns true if the previous transaction was not aborted
+// but its epoch was bumped. In this case, the client can continue with the
+// existing transaction, but must restart from the beginning because its writes
+// were discarded.
+//
+// NOTE: the method panics if the previous transaction was aborted and the next
+// transaction has a different identity. Callers must first check PrevTxnAborted.
+func (e *TransactionRetryWithProtoRefreshError) PrevTxnEpochBumped() bool {
+	if e.PrevTxnAborted() {
+		panic("PrevTxnEpochBumped called on aborted txn")
+	}
+	return e.PrevTxnEpoch != e.NextTransaction.Epoch
+}
+
+// TxnMustRestartFromBeginning returns true if the previous transaction's writes
+// were discarded due to the retry error, meaning that it must restart from the
+// beginning.
+func (e *TransactionRetryWithProtoRefreshError) TxnMustRestartFromBeginning() bool {
+	return e.PrevTxnAborted() || e.PrevTxnEpochBumped()
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
@@ -781,12 +840,17 @@ var _ transactionRestartError = &TransactionPushError{}
 
 // NewTransactionRetryError initializes a new TransactionRetryError.
 func NewTransactionRetryError(
-	reason TransactionRetryReason, extraMsg redact.RedactableString,
+	reason TransactionRetryReason, extraMsg redact.RedactableString, opts ...RetryErrOption,
 ) *TransactionRetryError {
+	options := retryErrOptions{}
+	for _, o := range opts {
+		o.apply(&options)
+	}
 	return &TransactionRetryError{
 		Reason:             reason,
 		ExtraMsg:           extraMsg.StripMarkers(),
 		ExtraMsgRedactable: extraMsg,
+		ConflictingTxn:     options.conflictingTxn,
 	}
 }
 
@@ -800,6 +864,9 @@ func (e *TransactionRetryError) SafeFormatError(p errors.Printer) (next error) {
 		msg = redact.Sprintf(" - %s", e.ExtraMsgRedactable)
 	} else if e.ExtraMsg != "" {
 		msg = redact.Sprintf(" - %s", e.ExtraMsg)
+	}
+	if e.ConflictingTxn != nil {
+		msg = redact.Sprintf(" %s - conflicting txn: meta={%s}", msg, e.ConflictingTxn.String())
 	}
 	p.Printf("TransactionRetryError: retry txn (%s%s)", redact.SafeString(TransactionRetryReason_name[int32(e.Reason)]), msg)
 	return nil
@@ -849,6 +916,26 @@ func (e *TransactionStatusError) SafeFormatError(p errors.Printer) (next error) 
 
 var _ ErrorDetailInterface = &TransactionStatusError{}
 
+func (e *LockConflictError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *LockConflictError) SafeFormatError(p errors.Printer) (next error) {
+	e.printError(p)
+	return nil
+}
+
+func (e *LockConflictError) printError(buf Printer) {
+	printConflictingLocks(buf, e.Locks)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *LockConflictError) Type() ErrorDetailType {
+	return LockConflictErrType
+}
+
+var _ ErrorDetailInterface = &LockConflictError{}
+
 func (e *WriteIntentError) Error() string {
 	return redact.Sprint(e).StripMarkers()
 }
@@ -859,34 +946,7 @@ func (e *WriteIntentError) SafeFormatError(p errors.Printer) (next error) {
 }
 
 func (e *WriteIntentError) printError(buf Printer) {
-	buf.Printf("conflicting intents on ")
-
-	// If we have a lot of intents, we only want to show the first and the last.
-	const maxBegin = 5
-	const maxEnd = 5
-	var begin, end []roachpb.Intent
-	if len(e.Intents) <= maxBegin+maxEnd {
-		begin = e.Intents
-	} else {
-		begin = e.Intents[0:maxBegin]
-		end = e.Intents[len(e.Intents)-maxEnd : len(e.Intents)]
-	}
-
-	for i := range begin {
-		if i > 0 {
-			buf.Printf(", ")
-		}
-		buf.Print(begin[i].Key)
-	}
-	if end != nil {
-		buf.Printf(" ... ")
-		for i := range end {
-			if i > 0 {
-				buf.Printf(", ")
-			}
-			buf.Print(end[i].Key)
-		}
-	}
+	printConflictingLocks(buf, e.Locks)
 
 	switch e.Reason {
 	case WriteIntentError_REASON_UNSPECIFIED:
@@ -908,6 +968,37 @@ func (e *WriteIntentError) Type() ErrorDetailType {
 }
 
 var _ ErrorDetailInterface = &WriteIntentError{}
+
+func printConflictingLocks(buf Printer, locks []roachpb.Lock) {
+	buf.Printf("conflicting locks on ")
+
+	// If we have a lot of locks, we only want to show the first and the last.
+	const maxBegin = 5
+	const maxEnd = 5
+	var begin, end []roachpb.Lock
+	if len(locks) <= maxBegin+maxEnd {
+		begin = locks
+	} else {
+		begin = locks[0:maxBegin]
+		end = locks[len(locks)-maxEnd:]
+	}
+
+	for i := range begin {
+		if i > 0 {
+			buf.Printf(", ")
+		}
+		buf.Print(begin[i].Key)
+	}
+	if end != nil {
+		buf.Printf(" ... ")
+		for i := range end {
+			if i > 0 {
+				buf.Printf(", ")
+			}
+			buf.Print(end[i].Key)
+		}
+	}
+}
 
 // NewWriteTooOldError creates a new write too old error. The function accepts
 // the timestamp of the operation that hit the error, along with the timestamp
@@ -1281,7 +1372,7 @@ var _ ErrorDetailInterface = &MVCCHistoryMutationError{}
 func NewIntentMissingError(key roachpb.Key, wrongIntent *roachpb.Intent) *IntentMissingError {
 	return &IntentMissingError{
 		Key:         key,
-		WrongIntent: wrongIntent,
+		WrongIntent: wrongIntent.AsLockPtr(),
 	}
 }
 
@@ -1440,12 +1531,27 @@ var _ ErrorDetailInterface = &MinTimestampBoundUnsatisfiableError{}
 // or 'intent' which caused the failed refresh, key is the key that we failed
 // refreshing, and ts is the timestamp of the committed value or intent that was written.
 func NewRefreshFailedError(
-	reason RefreshFailedError_Reason, key roachpb.Key, ts hlc.Timestamp,
+	ctx context.Context,
+	reason RefreshFailedError_Reason,
+	key roachpb.Key,
+	ts hlc.Timestamp,
+	opts ...RetryErrOption,
 ) *RefreshFailedError {
+	options := retryErrOptions{}
+	for _, o := range opts {
+		o.apply(&options)
+	}
+	if reason == RefreshFailedError_REASON_INTENT && options.conflictingTxn == nil {
+		log.Fatal(ctx, "conflictingTxn should be set if refresh failed with REASON_INTENT")
+	}
+	if reason != RefreshFailedError_REASON_INTENT && options.conflictingTxn != nil {
+		log.Fatal(ctx, "conflictingTxn should not be set if refresh failed without REASON_INTENT")
+	}
 	return &RefreshFailedError{
-		Reason:    reason,
-		Key:       key,
-		Timestamp: ts,
+		Reason:         reason,
+		Key:            key,
+		Timestamp:      ts,
+		ConflictingTxn: options.conflictingTxn,
 	}
 }
 
@@ -1549,10 +1655,49 @@ func (e *MissingRecordError) SafeFormatError(p errors.Printer) (next error) {
 	return nil
 }
 
+// DescNotFoundError is reported when a descriptor is missing.
+type DescNotFoundError struct {
+	id      int32
+	isStore bool
+}
+
+// NewStoreDescNotFoundError initializes a new DescNotFoundError for a missing
+// store descriptor.
+func NewStoreDescNotFoundError(storeID roachpb.StoreID) *DescNotFoundError {
+	return &DescNotFoundError{
+		id:      int32(storeID),
+		isStore: true,
+	}
+}
+
+// NewNodeDescNotFoundError initializes a new DescNotFoundError for a missing
+// node descriptor.
+func NewNodeDescNotFoundError(nodeID roachpb.NodeID) *DescNotFoundError {
+	return &DescNotFoundError{
+		id:      int32(nodeID),
+		isStore: false,
+	}
+}
+
+func (e *DescNotFoundError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *DescNotFoundError) SafeFormatError(p errors.Printer) (next error) {
+	s := redact.SafeString("node")
+	if e.isStore {
+		s = "store"
+	}
+	p.Printf("%s descriptor with %s ID %d was not found", s, s, e.id)
+	return nil
+}
+
 func init() {
 	errors.RegisterLeafDecoder(errors.GetTypeKey((*MissingRecordError)(nil)), func(_ context.Context, _ string, _ []string, _ proto.Message) error {
 		return &MissingRecordError{}
 	})
+	errorutilpath := reflect.TypeOf(errorutil.TempSentinel{}).PkgPath()
+	errors.RegisterTypeMigration(errorutilpath, "*errorutil.descriptorNotFound", &DescNotFoundError{})
 }
 
 var _ errors.SafeFormatter = &MissingRecordError{}
@@ -1564,7 +1709,7 @@ var _ errors.SafeFormatter = &TransactionAbortedError{}
 var _ errors.SafeFormatter = &TransactionPushError{}
 var _ errors.SafeFormatter = &TransactionRetryError{}
 var _ errors.SafeFormatter = &TransactionStatusError{}
-var _ errors.SafeFormatter = &WriteIntentError{}
+var _ errors.SafeFormatter = &LockConflictError{}
 var _ errors.SafeFormatter = &WriteTooOldError{}
 var _ errors.SafeFormatter = &OpRequiresTxnError{}
 var _ errors.SafeFormatter = &ConditionFailedError{}

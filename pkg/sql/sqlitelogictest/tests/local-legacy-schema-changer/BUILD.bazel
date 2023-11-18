@@ -4,16 +4,17 @@ go_test(
     name = "local-legacy-schema-changer_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = ["-test.timeout=7195s"],
     data = [
         "//c-deps:libgeos",  # keep
         "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep
     ],
+    exec_properties = {"Pool": "large"},
     shard_count = 48,
     tags = [
         "cpu:1",
     ],
     deps = [
+        "//pkg/base",
         "//pkg/build/bazel",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

@@ -63,11 +63,11 @@ import (
 
 // featureChangefeedEnabled is used to enable and disable the CHANGEFEED feature.
 var featureChangefeedEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"feature.changefeed.enabled",
 	"set to true to enable changefeeds, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 func init() {
 	sql.AddPlanHook("changefeed", changefeedPlanHook, changefeedTypeCheck)
@@ -512,16 +512,6 @@ func createChangefeedJobRecord(
 			return nil, err
 		}
 		if withDiff {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_1_ChangefeedExpressionProductionReady) {
-				return nil,
-					pgerror.Newf(
-						pgcode.FeatureNotSupported,
-						"cannot create new changefeed with CDC expression <%s>, "+
-							"which requires access to cdc_prev until cluster upgrade to %s finalized.",
-						tree.AsString(normalized),
-						clusterversion.V23_1_ChangefeedExpressionProductionReady.String,
-					)
-			}
 			opts.ForceDiff()
 		} else if opts.IsSet(changefeedbase.OptDiff) {
 			// Expression didn't reference cdc_prev, but the diff option was specified.
@@ -634,7 +624,7 @@ func createChangefeedJobRecord(
 		if !status.ChildMetricsEnabled.Get(&p.ExecCfg().Settings.SV) {
 			p.BufferClientNotice(ctx, pgnotice.Newf(
 				"%s is set to false, metrics will only be published to the '%s' label when it is set to true",
-				status.ChildMetricsEnabled.Key(),
+				status.ChildMetricsEnabled.Name(),
 				scope,
 			))
 		}
@@ -1363,6 +1353,12 @@ func reconcileJobStateWithLocalState(
 			`job should be retried later`, jobID, reloadErr)
 		return reloadErr
 	}
+	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+	if knobs != nil && knobs.LoadJobErr != nil {
+		if err := knobs.LoadJobErr(); err != nil {
+			return err
+		}
+	}
 
 	localState.progress = reloadedJob.Progress()
 
@@ -1447,6 +1443,11 @@ func (b *changefeedResumer) OnFailOrCancel(
 		exec.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics).Failures.Inc(1)
 		logChangefeedFailedTelemetry(ctx, b.job, changefeedbase.UnknownError)
 	}
+	return nil
+}
+
+// CollectProfile is part of the jobs.Resumer interface.
+func (b *changefeedResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
 }
 
@@ -1608,9 +1609,8 @@ func failureTypeForStartupError(err error) changefeedbase.FailureType {
 }
 
 // maybeUpgradePreProductionReadyExpression updates job record for the
-// changefeed using CDC transformation, created prior to
-// clusterversion.V23_1_ChangefeedExpressionProductionReady. The update happens
-// once cluster version finalized.
+// changefeed using CDC transformation, created prior to 23.1. The update
+// happens once cluster version finalized.
 // Returns nil when nothing needs to be done.
 // Returns fatal error message, causing changefeed to fail, if automatic upgrade
 // cannot for some reason. Returns a transient error to cause job retry/reload
@@ -1631,18 +1631,9 @@ func maybeUpgradePreProductionReadyExpression(
 		return nil
 	}
 
-	if !jobExec.ExecCfg().Settings.Version.IsActive(
-		ctx, clusterversion.V23_1_ChangefeedExpressionProductionReady,
-	) {
-		// Can't upgrade job record yet -- wait until upgrade finalized.
-		return nil
-	}
-
-	// Expressions prior to
-	// clusterversion.V23_1_ChangefeedExpressionProductionReady were rewritten to
-	// fully qualify all columns/types.  Furthermore, those expressions couldn't
-	// use any functions that depend on session data.  Thus, it is safe to use
-	// minimal session data.
+	// Expressions prior to 23.1 were rewritten to fully qualify all
+	// columns/types. Furthermore, those expressions couldn't use any functions
+	// that depend on session data. Thus, it is safe to use minimal session data.
 	sd := sessiondatapb.SessionData{
 		Database:   "",
 		UserProto:  jobExec.User().EncodeProto(),

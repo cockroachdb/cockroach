@@ -42,15 +42,17 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 
 	defer testCluster.Stopper().Stop(ctx)
 
-	server1Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
-	server2Conn := sqlutils.MakeSQLRunner(testCluster.ServerConn(1))
+	s0 := testCluster.Server(0).ApplicationLayer()
+	s1 := testCluster.Server(1).ApplicationLayer()
+	s2 := testCluster.Server(2).ApplicationLayer()
+	server1Conn := sqlutils.MakeSQLRunner(s0.SQLConn(t))
+	server2Conn := sqlutils.MakeSQLRunner(s1.SQLConn(t))
 
-	contentionCountBefore := testCluster.Server(1).ApplicationLayer().SQLServer().(*sql.Server).
-		Metrics.EngineMetrics.SQLContendedTxns.Count()
+	contentionCountBefore := s1.SQLServer().(*sql.Server).Metrics.EngineMetrics.SQLContendedTxns.Count()
 
 	sqlutils.CreateTable(
 		t,
@@ -93,7 +95,7 @@ SET TRACING=off;
 	var resp serverpb.ListContentionEventsResponse
 	require.NoError(t,
 		srvtestutils.GetStatusJSONProtoWithAdminOption(
-			testCluster.Server(2),
+			s2,
 			"contention_events",
 			&resp,
 			true /* isAdmin */),
@@ -129,8 +131,7 @@ SET TRACING=off;
     AND app_name = 'contentionTest'
 `, [][]string{{"1"}})
 
-	contentionCountNow := testCluster.Server(1).ApplicationLayer().SQLServer().(*sql.Server).
-		Metrics.EngineMetrics.SQLContendedTxns.Count()
+	contentionCountNow := s1.SQLServer().(*sql.Server).Metrics.EngineMetrics.SQLContendedTxns.Count()
 
 	require.Greaterf(t, contentionCountNow, contentionCountBefore,
 		"expected txn contention count to be more than %d, but it is %d",
@@ -143,8 +144,9 @@ func TestTransactionContentionEvents(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, conn1, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, conn1, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	sqlutils.CreateTable(
 		t,
@@ -155,7 +157,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn),
 	)
 
-	conn2 := s.ApplicationLayer().SQLConn(t, "")
+	conn2 := s.SQLConn(t)
 	defer func() {
 		require.NoError(t, conn2.Close())
 	}()
@@ -211,7 +213,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 	sqlConn1.CheckQueryResults(t, "SELECT * FROM test",
 		[][]string{{"1000"}})
 
-	txnIDCache := s.ApplicationLayer().SQLServer().(*sql.Server).GetTxnIDCache()
+	txnIDCache := s.SQLServer().(*sql.Server).GetTxnIDCache()
 
 	// Since contention event store's resolver only retries once in the case of
 	// missing txn fingerprint ID for a given txnID, we ensure that the txnIDCache
@@ -240,7 +242,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 	})
 
 	testutils.SucceedsWithin(t, func() error {
-		err := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.FlushEventsForTest(ctx)
+		err := s.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.FlushEventsForTest(ctx)
 		require.NoError(t, err)
 
 		notEmpty := sqlConn1.QueryStr(t, `
@@ -353,7 +355,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 				// Check we have proper permission control in SQL CLI. We use internal
 				// executor here since we can easily override the username without opening
 				// new SQL sessions.
-				row, err := s.ApplicationLayer().InternalExecutor().(*sql.InternalExecutor).QueryRowEx(
+				row, err := s.InternalExecutor().(*sql.InternalExecutor).QueryRowEx(
 					ctx,
 					"test-contending-key-redaction",
 					nil, /* txn */

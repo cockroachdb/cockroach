@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -180,17 +179,18 @@ func jwtRunTest(t *testing.T, insecure bool) {
 		}
 		defer cleanup()
 
-		s, conn, _ := serverutils.StartServer(t,
+		srv, conn, _ := serverutils.StartServer(t,
 			base.TestServerArgs{
+				DefaultTestTenant: base.TestDoesNotWorkWithSharedProcessModeButWeDontKnowWhyYet(
+					base.TestTenantProbabilistic, 112949,
+				),
 				Insecure:   insecure,
 				SocketFile: maybeSocketFile,
 			})
-		defer s.Stopper().Stop(context.Background())
+		defer srv.Stopper().Stop(context.Background())
+		s := srv.ApplicationLayer()
 
 		sv := &s.ClusterSettings().SV
-		if len(s.TestTenants()) > 0 {
-			sv = &s.TestTenants()[0].ClusterSettings().SV
-		}
 
 		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 			t.Fatal(err)
@@ -286,14 +286,15 @@ func jwtRunTest(t *testing.T, insecure bool) {
 
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
-					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
-						t, s.ApplicationLayer().AdvSQLAddr(), t.Name(), url.User(user),
-						forceCerts || user == username.RootUser || user == username.TestUser /* withClientCerts */)
+					sqlURL, cleanupFn := s.PGUrl(
+						t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(user),
+						serverutils.ClientCerts(forceCerts || user == username.RootUser || user == username.TestUser),
+					)
 					defer cleanupFn()
 
 					var host, port string
 					if td.Cmd == "connect" {
-						host, port, err = net.SplitHostPort(s.ApplicationLayer().AdvSQLAddr())
+						host, port, err = net.SplitHostPort(s.AdvSQLAddr())
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -419,8 +420,8 @@ func TestClientAddrOverride(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ts := s.ApplicationLayer()
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, ts.AdvSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
+	pgURL, cleanupFunc := ts.PGUrl(
+		t, serverutils.CertsDirPrefix("testClientAddrOverride"), serverutils.User(username.TestUser),
 	)
 	defer cleanupFunc()
 
@@ -526,7 +527,7 @@ func TestClientAddrOverride(t *testing.T) {
 			t.Run("check-server-log-uses-override", func(t *testing.T) {
 				// Wait for the disconnection event in logs.
 				testutils.SucceedsSoon(t, func() error {
-					log.Flush()
+					log.FlushFiles()
 					entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, sessionTerminatedRe,
 						log.WithMarkedSensitiveData)
 					if err != nil {
@@ -539,7 +540,7 @@ func TestClientAddrOverride(t *testing.T) {
 				})
 
 				// Now we want to check that the logging tags are also updated.
-				log.Flush()
+				log.FlushFiles()
 				entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, authLogFileRe,
 					log.WithMarkedSensitiveData)
 				if err != nil {

@@ -1,4 +1,4 @@
-# LogicTest: default-configs !local-mixed-22.2-23.1
+# LogicTest: default-configs !local-mixed-23.1
 
 statement ok
 CREATE TABLE t (
@@ -261,7 +261,6 @@ SELECT * FROM (
 {"computeExpr": "a + 10:::INT8", "id": 9, "inaccessible": true, "name": "crdb_internal_idx_expr_2", "nullable": true, "type": {"family": "IntFamily", "oid": 20, "width": 64}, "virtual": true}
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query T
 SELECT * FROM (
   SELECT json_array_elements(
@@ -278,7 +277,6 @@ DROP INDEX t_lower_c_a_plus_b_idx
 # because other indexes contain them.
 # exists in the descriptor.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query T
 SELECT cols.desc FROM (
   SELECT id, json_array_elements(

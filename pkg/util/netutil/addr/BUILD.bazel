@@ -14,9 +14,9 @@ go_library(
 go_test(
     name = "addr_test",
     srcs = ["addr_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":addr",
         "//pkg/testutils",
+        "@com_github_stretchr_testify//require",
     ],
 )

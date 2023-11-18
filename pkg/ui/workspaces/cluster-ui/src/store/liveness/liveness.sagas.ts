@@ -13,7 +13,8 @@ import { getLiveness } from "src/api/livenessApi";
 import { actions } from "./liveness.reducer";
 
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "src/store/utils";
-import { rootActions } from "../reducers";
+
+import { rootActions } from "../rootActions";
 
 export function* refreshLivenessSaga() {
   yield put(actions.request());

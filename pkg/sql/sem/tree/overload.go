@@ -112,6 +112,36 @@ const (
 	SQLClass
 )
 
+// String returns the string representation of the function class.
+func (c FunctionClass) String() string {
+	switch c {
+	case NormalClass:
+		return "normal"
+	case AggregateClass:
+		return "aggregate"
+	case WindowClass:
+		return "window"
+	case GeneratorClass:
+		return "generator"
+	case SQLClass:
+		return "SQL"
+	default:
+		panic(errors.AssertionFailedf("unexpected class %d", c))
+	}
+}
+
+// RoutineType specifies the type of routine represented by an overload.
+type RoutineType uint8
+
+const (
+	// BuiltinRoutine is a builtin function.
+	BuiltinRoutine RoutineType = 1 << iota
+	// UDFRoutine is a user-defined function.
+	UDFRoutine
+	// ProcedureRoutine is a user-defined procedure.
+	ProcedureRoutine
+)
+
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {
@@ -208,11 +238,11 @@ type Overload struct {
 	// FunctionProperties are the properties of this overload.
 	FunctionProperties
 
-	// IsUDF is set to true when this is a user-defined function overload built
-	// using CREATE FUNCTION. Note: Body can be empty even if IsUDF is true.
-	IsUDF bool
-	// Body is the SQL string body of a function. It can be set even if IsUDF is
-	// false if a builtin function is defined using a SQL string.
+	// Type indicates if the overload represents a built-in function, a
+	// user-defined function, or a user-define procedure.
+	Type RoutineType
+	// Body is the SQL string body of a function. It can be set even if Type is
+	// BuiltinRoutine if a builtin function is defined using a SQL string.
 	Body string
 	// UDFContainsOnlySignature is only set to true for Overload signatures cached
 	// in a Schema descriptor, which means that the full UDF descriptor need to be
@@ -280,7 +310,7 @@ func (b Overload) IsGenerator() bool {
 // HasSQLBody returns true if the function was defined using a SQL string body.
 // This is the case for user-defined functions and some builtins.
 func (b Overload) HasSQLBody() bool {
-	return b.IsUDF || b.Body != ""
+	return b.Type == UDFRoutine || b.Type == ProcedureRoutine || b.Body != ""
 }
 
 // Signature returns a human-readable signature.

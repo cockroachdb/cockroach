@@ -113,12 +113,12 @@ func TestKVFeed(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	runTest := func(t *testing.T, tc testCase) {
 		settings := cluster.MakeTestingClusterSettings()
-		buf := kvevent.MakeChanBuffer()
 		mm := mon.NewUnlimitedMonitor(
 			context.Background(), "test", mon.MemoryResource,
 			nil /* curCount */, nil /* maxHist */, math.MaxInt64, settings,
 		)
 		metrics := kvevent.MakeMetrics(time.Minute)
+		buf := kvevent.NewMemBuffer(mm.MakeBoundAccount(), &st.SV, &metrics)
 
 		// bufferFactory, when called, gives you a memory-monitored
 		// in-memory "buffer" to write to and read from.

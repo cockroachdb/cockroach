@@ -88,12 +88,12 @@ import {
 } from "../insightsTable/insightsTable";
 import { CockroachCloudContext } from "../contexts";
 import { SqlStatsSortType } from "src/api/statementsApi";
-import { FormattedTimescale } from "../timeScaleDropdown/formattedTimeScale";
 import {
   getStatementsForTransaction,
   getTxnFromSqlStatsMemoized,
   getTxnQueryString,
 } from "./transactionDetailsUtils";
+import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
@@ -289,12 +289,6 @@ export class TransactionDetails extends React.Component<
     const error = this.props.txnStatsResp?.error;
     const { latestTransactionText, statements } = this.state;
     const transactionStats = transaction?.stats_data?.stats;
-    const period = (
-      <FormattedTimescale
-        ts={this.props.timeScale}
-        requestTime={moment(this.props.requestTime)}
-      />
-    );
 
     return (
       <div>
@@ -324,8 +318,10 @@ export class TransactionDetails extends React.Component<
         <p
           className={timeScaleStylesCx("time-label", "label-no-margin-bottom")}
         >
-          Showing aggregated stats from{" "}
-          <span className={timeScaleStylesCx("bold")}>{period}</span>
+          <TimeScaleLabel
+            timeScale={this.props.timeScale}
+            requestTime={moment(this.props.requestTime)}
+          />
         </p>
         <Loading
           error={error}

@@ -22,22 +22,22 @@ import (
 )
 
 func init() {
-	RegisterReadOnlyCommand(kvpb.Get, DefaultDeclareIsolatedKeys, Get)
+	RegisterReadWriteCommand(kvpb.Get, DefaultDeclareIsolatedKeys, Get)
 }
 
 // Get returns the value for a specified key.
 func Get(
-	ctx context.Context, reader storage.Reader, cArgs CommandArgs, resp kvpb.Response,
+	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, resp kvpb.Response,
 ) (result.Result, error) {
 	args := cArgs.Args.(*kvpb.GetRequest)
 	h := cArgs.Header
 	reply := resp.(*kvpb.GetResponse)
 
-	getRes, err := storage.MVCCGet(ctx, reader, args.Key, h.Timestamp, storage.MVCCGetOptions{
+	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, h.Timestamp, storage.MVCCGetOptions{
 		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                   h.Txn,
-		FailOnMoreRecent:      args.KeyLocking != lock.None,
+		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
 		ScanStats:             cArgs.ScanStats,
 		Uncertainty:           cArgs.Uncertainty,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
@@ -70,7 +70,7 @@ func Get(
 		// CollectIntentRows as well so that we're guaranteed to use the same
 		// cached iterator and observe a consistent snapshot of the engine.
 		const usePrefixIter = true
-		intentVals, err = CollectIntentRows(ctx, reader, usePrefixIter, intents)
+		intentVals, err = CollectIntentRows(ctx, readWriter, usePrefixIter, intents)
 		if err == nil {
 			switch len(intentVals) {
 			case 0:
@@ -83,8 +83,12 @@ func Get(
 	}
 
 	var res result.Result
-	if args.KeyLocking != lock.None && h.Txn != nil && getRes.Value != nil {
-		acq := roachpb.MakeLockAcquisition(h.Txn, args.Key, lock.Unreplicated, args.KeyLocking)
+	if args.KeyLockingStrength != lock.None && h.Txn != nil && getRes.Value != nil {
+		acq, err := acquireLockOnKey(ctx, readWriter, h.Txn, args.KeyLockingStrength,
+			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
+		if err != nil {
+			return result.Result{}, err
+		}
 		res.Local.AcquiredLocks = []roachpb.LockAcquisition{acq}
 	}
 	res.Local.EncounteredIntents = intents

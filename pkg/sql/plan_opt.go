@@ -45,7 +45,7 @@ import (
 )
 
 var queryCacheEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.query_cache.enabled", "enable the query cache", true,
 )
 
@@ -358,6 +358,7 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 	// support it for all statements in principle, but it would increase the
 	// surface of potential issues (conditions we need to detect to invalidate a
 	// cached memo).
+	// TODO(mgartner): Enable memo caching for CALL statements.
 	switch p.stmt.AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause, *tree.UnionClause, *tree.ValuesClause,
 		*tree.Insert, *tree.Update, *tree.Delete, *tree.CannedOptPlan:
@@ -579,8 +580,13 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 
 	// For index recommendations, after building we must interrupt the flow to
 	// find potential index candidates in the memo.
-	_, isExplain := opc.p.stmt.AST.(*tree.Explain)
-	if isExplain && p.SessionData().IndexRecommendationsEnabled {
+	explainModeShowsRec := func(m tree.ExplainMode) bool {
+		// Only the PLAN (the default), DISTSQL, and GIST explain modes show
+		// index recommendations.
+		return m == tree.ExplainPlan || m == tree.ExplainDistSQL || m == tree.ExplainGist
+	}
+	e, isExplain := opc.p.stmt.AST.(*tree.Explain)
+	if isExplain && explainModeShowsRec(e.Mode) && p.SessionData().IndexRecommendationsEnabled {
 		indexRecs, err := opc.makeQueryIndexRecommendation(ctx)
 		if err != nil {
 			return nil, err
@@ -712,6 +718,9 @@ func (opc *optPlanningCtx) runExecBuilder(
 	}
 	if bld.ContainsNonDefaultKeyLocking {
 		planTop.flags.Set(planFlagContainsNonDefaultLocking)
+	}
+	if bld.CheckContainsNonDefaultKeyLocking {
+		planTop.flags.Set(planFlagCheckContainsNonDefaultLocking)
 	}
 	planTop.mem = mem
 	planTop.catalog = opc.catalog

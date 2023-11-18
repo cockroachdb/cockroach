@@ -45,21 +45,22 @@ stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-5 l
 >> del_range_ts k=c end=k ts=5
 stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 gc_bytes_age=+2108
 >> put k=g v=7 t=A ts=7
-stats: key_bytes=+12 val_count=+1 val_bytes=+54 live_count=+1 live_bytes=+68 gc_bytes_age=-194 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+54 live_count=+1 live_bytes=+68 gc_bytes_age=-194 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+93
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 
 # Inline value or tombstone below range tombstone should error.
 run stats error
@@ -74,12 +75,12 @@ data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*withstack.withStack:) "b"/0,0: put is inline=true, but existing value is inline=false
 
 run stats error
@@ -94,12 +95,12 @@ data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*withstack.withStack:) "b"/0,0: put is inline=true, but existing value is inline=false
 
 # DeleteRange at ts=5 should error with WriteTooOldError.
@@ -115,12 +116,12 @@ data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 5.000000000,0 too old; must write at or above 5.000000000,1
 
 # Point key below range tombstones should error.
@@ -136,12 +137,12 @@ data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "c" at timestamp 3.000000000,0 too old; must write at or above 5.000000000,1
 
 run stats error
@@ -156,12 +157,12 @@ data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "d" at timestamp 3.000000000,0 too old; must write at or above 5.000000000,1
 
 run stats error
@@ -176,12 +177,12 @@ data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "e" at timestamp 3.000000000,0 too old; must write at or above 5.000000000,1
 
 # CPuts expecting a value covered by a range tombstone should error.
@@ -197,12 +198,12 @@ data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*kvpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 > 
 
 # A CPut replay of an intent expecting a value covered by a range tombstone
@@ -220,12 +221,12 @@ data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*kvpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 > 
 
 # A CPut replacing an existing but ignored intent expecting a value covered
@@ -239,19 +240,19 @@ with t=A ts=7
 >> cput k=g v=g7 cond=g1 t=A ts=7
 stats: no change
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0 isn=1
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0 isn=1
 rangekey: {a-c}/[3.000000000,0=/<empty>]
 rangekey: {c-k}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*kvpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 > 
 
 # An InitPut with failOnTombstones above a range tombstone should error.
@@ -267,12 +268,12 @@ data: "d"/1.000000000,0 -> /BYTES/d1
 data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=108 val_count=8 val_bytes=94 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=1 live_bytes=68 gc_bytes_age=16400 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*kvpb.ConditionFailedError:) unexpected value: timestamp:<wall_time:5000000000 > 
 
 # An InitPut with a different value as an existing key should succeed when there's
@@ -290,12 +291,12 @@ data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/7.000000000,0 -> /BYTES/f7
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=120 val_count=9 val_bytes=101 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=2 live_bytes=89 gc_bytes_age=16206 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=120 val_count=9 val_bytes=101 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=2 live_bytes=89 gc_bytes_age=16206 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 
 # An increment below a range tombstone throw a WriteTooOldError.
 run stats error
@@ -311,12 +312,12 @@ data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/7.000000000,0 -> /BYTES/f7
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=120 val_count=9 val_bytes=101 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=2 live_bytes=89 gc_bytes_age=16206 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=120 val_count=9 val_bytes=101 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=2 live_bytes=89 gc_bytes_age=16206 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "i" at timestamp 2.000000000,0 too old; must write at or above 5.000000000,1
 
 # An increment above a range tombstone should reset to 1.
@@ -334,10 +335,10 @@ data: "e"/2.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
 data: "f"/7.000000000,0 -> /BYTES/f7
 data: "f"/1.000000000,0 -> /BYTES/f1
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/7
 data: "g"/1.000000000,0 -> /BYTES/g1
 data: "i"/1.000000000,0 -> /INT/1
 data: "j"/7.000000000,0 -> /INT/1
 data: "j"/1.000000000,0 -> /INT/1
-stats: key_count=6 key_bytes=132 val_count=10 val_bytes=107 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=3 live_bytes=109 gc_bytes_age=16012 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=93
+stats: key_count=6 key_bytes=132 val_count=10 val_bytes=107 range_key_count=2 range_key_bytes=35 range_val_count=3 live_count=3 live_bytes=109 gc_bytes_age=16012 intent_count=1 intent_bytes=18 lock_count=1 lock_age=93

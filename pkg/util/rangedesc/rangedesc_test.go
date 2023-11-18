@@ -67,7 +67,9 @@ func TestEverythingScanner(t *testing.T) {
 	ctx := context.Background()
 	for _, s := range splits {
 		t.Run(fmt.Sprintf("with-splits-at=%s", s), func(t *testing.T) {
-			server, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			server, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			})
 			defer server.Stopper().Stop(context.Background())
 
 			for _, split := range s {
@@ -187,7 +189,9 @@ func TestIterator(t *testing.T) {
 	ctx := context.Background()
 	for _, s := range splits {
 		t.Run(fmt.Sprintf("with-splits-at=%s", s), func(t *testing.T) {
-			server, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			server, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			})
 			defer server.Stopper().Stop(context.Background())
 
 			for _, split := range s {

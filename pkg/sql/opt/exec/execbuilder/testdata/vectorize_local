@@ -253,7 +253,7 @@ querying next range at /Table/109/1/0/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/109/1/10/0
 
-# Regression test for #46123 (rowexec.TableReader not implementing
+# Used to be a regression test for #46123 (rowexec.TableReader not implementing
 # execopnode.OpNode interface).
 statement ok
 CREATE TABLE t46123(c0 INT)
@@ -265,8 +265,9 @@ EXPLAIN (VEC) SELECT stddev(0) FROM t46123 WHERE ('' COLLATE en)::BOOL
 └ Node 1
   └ *colexec.orderedAggregator
     └ *colexecbase.constInt64Op
-      └ *rowexec.filtererProcessor
-        └ *colfetcher.ColBatchScan
+      └ *colexecbase.castDatumBoolOp
+        └ *colexecbase.constDatumOp
+          └ *colfetcher.ColBatchScan
 
 # Regression test for #46122.
 statement ok

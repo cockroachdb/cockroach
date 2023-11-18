@@ -16,7 +16,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -56,7 +55,7 @@ type tenantServerCreator interface {
 	newTenantServer(ctx context.Context,
 		tenantNameContainer *roachpb.TenantNameContainer,
 		tenantStopper *stop.Stopper,
-		index int,
+		portStartHint int,
 		testArgs base.TestSharedProcessTenantArgs,
 	) (onDemandServer, error)
 }
@@ -68,14 +67,14 @@ func (s *topLevelServer) newTenantServer(
 	ctx context.Context,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	tenantStopper *stop.Stopper,
-	index int,
+	portStartHint int,
 	testArgs base.TestSharedProcessTenantArgs,
 ) (onDemandServer, error) {
 	tenantID, err := s.getTenantID(ctx, tenantNameContainer.Get())
 	if err != nil {
 		return nil, err
 	}
-	baseCfg, sqlCfg, err := s.makeSharedProcessTenantConfig(ctx, tenantID, index, tenantStopper)
+	baseCfg, sqlCfg, err := s.makeSharedProcessTenantConfig(ctx, tenantID, portStartHint, tenantStopper)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +149,7 @@ func newTenantServerInternal(
 }
 
 func (s *topLevelServer) makeSharedProcessTenantConfig(
-	ctx context.Context, tenantID roachpb.TenantID, index int, stopper *stop.Stopper,
+	ctx context.Context, tenantID roachpb.TenantID, portStartHint int, stopper *stop.Stopper,
 ) (BaseConfig, SQLConfig, error) {
 	// Create a configuration for the new tenant.
 	parentCfg := s.cfg
@@ -159,7 +158,7 @@ func (s *topLevelServer) makeSharedProcessTenantConfig(
 		ServerInterceptors:              s.grpc.serverInterceptorsInfo,
 		SameProcessCapabilityAuthorizer: s.rpcContext.TenantRPCAuthorizer,
 	}
-	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, index, parentCfg, localServerInfo, stopper, s.recorder)
+	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, portStartHint, parentCfg, localServerInfo, stopper, s.recorder)
 	if err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
@@ -171,7 +170,7 @@ func (s *topLevelServer) makeSharedProcessTenantConfig(
 func makeSharedProcessTenantServerConfig(
 	ctx context.Context,
 	tenantID roachpb.TenantID,
-	index int,
+	portStartHint int,
 	kvServerCfg Config,
 	kvServerInfo LocalKVServerInfo,
 	stopper *stop.Stopper,
@@ -189,7 +188,7 @@ func makeSharedProcessTenantServerConfig(
 	// have to run all known migrations since then. So initialize
 	// the version setting to the minimum supported version.
 	if err := clusterversion.Initialize(
-		ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
+		ctx, st.Version.MinSupportedVersion(), &st.SV,
 	); err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
@@ -243,16 +242,27 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.StorageEngine = kvServerCfg.BaseConfig.StorageEngine
 	baseCfg.TestingInsecureWebAccess = kvServerCfg.BaseConfig.TestingInsecureWebAccess
 	baseCfg.Locality = kvServerCfg.BaseConfig.Locality
-	baseCfg.SpanConfigsDisabled = kvServerCfg.BaseConfig.SpanConfigsDisabled
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
+	baseCfg.DefaultZoneConfig = kvServerCfg.BaseConfig.DefaultZoneConfig
+	baseCfg.HeapProfileDirName = kvServerCfg.BaseConfig.HeapProfileDirName
+	baseCfg.GoroutineDumpDirName = kvServerCfg.BaseConfig.GoroutineDumpDirName
 
+	// The ListenerFactory allows us to dynamically choose a
+	// listen port based on the user's configuration.
+	//
 	// TODO(knz): use a single network interface for all tenant servers.
 	// See: https://github.com/cockroachdb/cockroach/issues/92524
-	portOffset := kvServerCfg.Config.SecondaryTenantPortOffset
-	var err1, err2 error
-	baseCfg.Addr, err1 = rederivePort(index, kvServerCfg.Config.Addr, "", portOffset)
-	baseCfg.AdvertiseAddr, err2 = rederivePort(index, kvServerCfg.Config.AdvertiseAddr, baseCfg.Addr, portOffset)
-	if err := errors.CombineErrors(err1, err2); err != nil {
+	baseCfg.RPCListenerFactory = ListenerFactoryForConfig(&kvServerCfg.BaseConfig, portStartHint)
+
+	// We reset the port of the KV Addr configuration to 0. If we
+	// don't have a customized listener factory, this will force
+	// the operating system to choose a port by default.
+	baseCfg.Config.Addr, err = resetPort(kvServerCfg.Config.Addr)
+	if err != nil {
+		return BaseConfig{}, SQLConfig{}, err
+	}
+	baseCfg.Config.AdvertiseAddr, err = resetPort(kvServerCfg.Config.AdvertiseAddr)
+	if err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
 
@@ -324,7 +334,6 @@ func makeSharedProcessTenantServerConfig(
 	}
 
 	sqlCfg = MakeSQLConfig(tenantID, tempStorageCfg)
-
 	baseCfg.Settings.ExternalIODir = kvServerCfg.BaseConfig.Settings.ExternalIODir
 	sqlCfg.ExternalIODirConfig = kvServerCfg.SQLConfig.ExternalIODirConfig
 
@@ -350,49 +359,13 @@ func makeSharedProcessTenantServerConfig(
 	return baseCfg, sqlCfg, nil
 }
 
-// rederivePort computes a host:port pair for a secondary tenant.
-// TODO(knz): All this can be removed once we implement a single
-// network listener.
-// See https://github.com/cockroachdb/cockroach/issues/84604.
-func rederivePort(index int, addrToChange string, prevAddr string, portOffset int) (string, error) {
-	h, port, err := addr.SplitHostPort(addrToChange, "0")
+func resetPort(addrToChange string) (string, error) {
+	h, _, err := addr.SplitHostPort(addrToChange, "0")
 	if err != nil {
-		return "", errors.Wrapf(err, "%d: %q", index, addrToChange)
+		return "", err
 	}
 
-	if portOffset == 0 {
-		// Shortcut: random selection for base address.
-		return net.JoinHostPort(h, "0"), nil
-	}
-
-	var pnum int
-	if port != "" {
-		pnum, err = strconv.Atoi(port)
-		if err != nil {
-			return "", errors.Wrapf(err, "%d: %q", index, addrToChange)
-		}
-	}
-
-	if prevAddr != "" && pnum == 0 {
-		// Try harder to find a port number, by taking one from
-		// the previously computed addr.
-		_, port2, err := addr.SplitHostPort(prevAddr, "0")
-		if err != nil {
-			return "", errors.Wrapf(err, "%d: %q", index, prevAddr)
-		}
-		pnum, err = strconv.Atoi(port2)
-		if err != nil {
-			return "", errors.Wrapf(err, "%d: %q", index, prevAddr)
-		}
-	}
-
-	// Do we have a base port to go with now?
-	if pnum == 0 {
-		// No, bail.
-		return "", errors.Newf("%d: no base port available for computation in %q / %q", index, addrToChange, prevAddr)
-	}
-	port = strconv.Itoa(pnum + portOffset + index)
-	return net.JoinHostPort(h, port), nil
+	return net.JoinHostPort(h, "0"), nil
 }
 
 func (s *SQLServerWrapper) reportTenantInfo(ctx context.Context) error {

@@ -16,7 +16,6 @@ go_library(
         "rule.go",
         "rule_registry.go",
         "test_helpers.go",
-        "tick_helper.go",
     ],
     embed = [":metric_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/metric",
@@ -26,6 +25,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/metric/tick",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -53,7 +53,6 @@ go_test(
         "registry_test.go",
         "rule_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":metric"],
     deps = [
@@ -64,6 +63,7 @@ go_test(
         "@com_github_kr_pretty//:pretty",
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_common//expfmt",
         "@com_github_stretchr_testify//require",
     ],
 )

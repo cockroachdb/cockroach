@@ -3,12 +3,13 @@
 set -xeuo pipefail
 
 # When updating to a new Go version, update all of these variables.
-GOVERS=1.19.10
+GOVERS=1.21.3
 GOLINK=https://go.dev/dl/go$GOVERS.src.tar.gz
-SRCSHASUM=13755bcce529747d5f2930dee034730c86d02bd3e521ab3e2bbede548d3b953f
-# We mirror the upstream freebsd because we don't have a cross-compiler targeting it.
-GOFREEBSDLINK=https://go.dev/dl/go$GOVERS.freebsd-amd64.tar.gz
-FREEBSDSHASUM=0d22265662eaa9b8136223f8ab68f5c06c58c6a6311748fb810e830ebd17cbe2
+SRCSHASUM=186f2b6f8c8b704e696821b09ab2041a5c1ee13dcbc3156a13adcf75931ee488
+# We use this for bootstrapping (this is NOT re-published). Note the version
+# matches the version we're publishing, although it doesn't technically have to.
+GOLINUXLINK=https://go.dev/dl/go$GOVERS.linux-amd64.tar.gz
+LINUXSHASUM=1241381b2843fae5a9707eec1f8fb2ef94d827990582c7c7c32f5bdfbfd420c8
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -19,7 +20,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     curl \
     git \
     gnupg2 \
-    golang \
     make \
     python-is-python3 \
     python3 \
@@ -28,8 +28,12 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
 update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
     --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10
 
-curl -fsSL $GOFREEBSDLINK -o /artifacts/go$GOVERS.freebsd-amd64.tar.gz
-echo "$FREEBSDSHASUM  /artifacts/go$GOVERS.freebsd-amd64.tar.gz" | sha256sum -c -
+curl -fsSL $GOLINUXLINK -o golang.tar.gz \
+ && echo "$LINUXSHASUM  golang.tar.gz" | sha256sum -c - \
+ && rm -rf /usr/local/go && tar -C /usr/local -xzf golang.tar.gz \
+ && rm golang.tar.gz
+
+PATH=$PATH:/usr/local/go/bin
 
 # libtapi is required for later versions of MacOSX.
 git clone https://github.com/tpoechtrager/apple-libtapi.git
@@ -40,14 +44,14 @@ git checkout a66284251b46d591ee4a0cb4cf561b92a0c138d8
 cd ..
 rm -rf apple-libtapi
 
-curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/x86_64/20220711-205918/aarch64-unknown-linux-gnu.tar.gz -o aarch64-unknown-linux-gnu.tar.gz
-echo '58407f1f3ed490bd0a0a500b23b88503fbcc25f0f69a0b7f8a3e8e7b9237341b aarch64-unknown-linux-gnu.tar.gz' | sha256sum -c -
+curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/x86_64/20230906-034412/aarch64-unknown-linux-gnu.tar.gz -o aarch64-unknown-linux-gnu.tar.gz
+echo 'f9b073774826747cf2a91514d5ab27e3ba7f0c7b63acaf80a5ed58c82b08fd44 aarch64-unknown-linux-gnu.tar.gz' | sha256sum -c -
 curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/osxcross/x86_64/20220317-165434/x86_64-apple-darwin21.2.tar.gz -o x86_64-apple-darwin21.2.tar.gz
 echo '751365dbfb5db66fe8e9f47fcf82cbbd7d1c176b79112ab91945d1be1d160dd5 x86_64-apple-darwin21.2.tar.gz' | sha256sum -c -
-curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/x86_64/20220711-205918/x86_64-unknown-linux-gnu.tar.gz -o x86_64-unknown-linux-gnu.tar.gz
-echo '8b0c246c3ebd02aceeb48bb3d70c779a1503db3e99be332ac256d4f3f1c22d47 x86_64-unknown-linux-gnu.tar.gz' | sha256sum -c -
-curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/x86_64/20220711-205918/x86_64-w64-mingw32.tar.gz -o x86_64-w64-mingw32.tar.gz
-echo 'b87814aaeed8c68679852029de70cee28f96c352ed31c4c520e7bee55999b1c6 x86_64-w64-mingw32.tar.gz' | sha256sum -c -
+curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/x86_64/20230906-034412/x86_64-unknown-linux-gnu.tar.gz -o x86_64-unknown-linux-gnu.tar.gz
+echo '5f79da0a9e580bc0a869ca32c2e5a21990676ec567aabf54ccc1dec4c3f2c827 x86_64-unknown-linux-gnu.tar.gz' | sha256sum -c -
+curl -fsSL https://storage.googleapis.com/public-bazel-artifacts/toolchains/crosstool-ng/x86_64/20230906-034412/x86_64-w64-mingw32.tar.gz -o x86_64-w64-mingw32.tar.gz
+echo '94e64e0e8de05706dfd5ab2f1fee6e7f75280e35b09b5628980805d27939b418 x86_64-w64-mingw32.tar.gz' | sha256sum -c -
 echo *.tar.gz | xargs -n1 tar -xzf
 rm *.tar.gz
 

@@ -306,12 +306,12 @@ func EvalShardBucketCount(
 // count for hash sharded index when bucket count is not specified in index
 // definition.
 var DefaultHashShardedIndexBucketCount = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.default_hash_sharded_index_bucket_count",
 	"used as bucket count if bucket count is not specified in hash sharded index definition",
 	16,
 	settings.NonNegativeInt,
-).WithPublic()
+	settings.WithPublic)
 
 // GetShardColumnName generates a name for the hidden shard column to be used to create a
 // hash sharded index.

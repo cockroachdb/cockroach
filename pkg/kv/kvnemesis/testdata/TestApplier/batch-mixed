@@ -8,5 +8,5 @@ echo
   b.Del(tk(3) /* @s1 */) // <nil>
   b.Scan(tk(1), tk(3)) // <nil>
   b.ReverseScanForUpdate(tk(1), tk(5)) // <nil>
-  db1.Run(ctx, b) // @<ts> <nil>
+  db0.Run(ctx, b) // @<ts> <nil>
 }

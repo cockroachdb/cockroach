@@ -13,7 +13,6 @@ package tscache
 
 import (
 	"bytes"
-	"container/list"
 	"context"
 	"fmt"
 	"sync/atomic"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/andy-kimball/arenaskl"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -175,7 +175,7 @@ type intervalSkl struct {
 	// the list. However, earlier pages are accessed whenever necessary during
 	// lookups. Pages are evicted when they become too old, subject to a minimum
 	// retention policy described above.
-	pages    list.List // List<*sklPage>
+	pages    list.List[*sklPage]
 	minPages int
 
 	// In order to ensure that timestamps never decrease, intervalSkl maintains
@@ -377,7 +377,7 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 
 // frontPage returns the front page of the intervalSkl.
 func (s *intervalSkl) frontPage() *sklPage {
-	return s.pages.Front().Value.(*sklPage)
+	return s.pages.Front().Value
 }
 
 // pushNewPage prepends a new empty page to the front of the pages list. It
@@ -451,7 +451,7 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 	back := s.pages.Back()
 	var oldArena *arenaskl.Arena
 	for s.pages.Len() >= s.minPages {
-		bp := back.Value.(*sklPage)
+		bp := back.Value
 		bpMaxTS := bp.getMaxTimestamp()
 		if minTSToRetain.LessEq(bpMaxTS) {
 			// The back page's maximum timestamp is within the time
@@ -506,7 +506,7 @@ func (s *intervalSkl) LookupTimestampRange(from, to []byte, opt rangeOptions) ca
 	// maximum value we've seen so far.
 	var val cacheValue
 	for e := s.pages.Front(); e != nil; e = e.Next() {
-		p := e.Value.(*sklPage)
+		p := e.Value
 
 		// If the maximum value's timestamp is greater than the max timestamp in
 		// the current page, then there's no need to do the lookup in this page.

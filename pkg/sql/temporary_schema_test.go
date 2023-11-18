@@ -151,7 +151,7 @@ func TestTemporaryObjectCleaner(t *testing.T) {
 	}
 	settings := cluster.MakeTestingClusterSettings()
 	TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Microsecond)
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t,
 		numNodes,
 		base.TestClusterArgs{
@@ -231,7 +231,7 @@ func TestTemporarySchemaDropDatabase(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	numNodes := 3
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t,
 		numNodes,
 		base.TestClusterArgs{

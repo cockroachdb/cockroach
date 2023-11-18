@@ -84,11 +84,11 @@ var _ Batch = &OpLoggerBatch{}
 
 // LogLogicalOp implements the Writer interface.
 func (ol *OpLoggerBatch) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
-	ol.logLogicalOp(op, details)
+	ol.LogLogicalOpOnly(op, details)
 	ol.Batch.LogLogicalOp(op, details)
 }
 
-func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
+func (ol *OpLoggerBatch) LogLogicalOpOnly(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
 	if keys.IsLocal(details.Key) {
 		// Ignore mvcc operations on local keys.
 		if bytes.HasPrefix(details.Key, keys.LocalRangeLockTablePrefix) {

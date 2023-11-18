@@ -110,11 +110,12 @@ with t=A k=c
   txn_begin ts=4,0
   put v=1
 ----
+put: lock acquisition = {c id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
 data: "a"/5.000000000,0 -> /BYTES/12
 data: "a"/2.000000000,0 -> /BYTES/11
-meta: "c"/0,0 -> txn={id=00000000 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/4.000000000,0 -> /BYTES/1
 
 run ok stats
@@ -124,9 +125,9 @@ gc_points_clear_range k=a startTs=2 end=c ts=5
 stats: key_bytes=-12 val_count=-1 val_bytes=-7 gc_bytes_age=-1805
 >> at end:
 data: "a"/5.000000000,0 -> /BYTES/12
-meta: "c"/0,0 -> txn={id=00000000 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000001 key="c" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/4.000000000,0 -> /BYTES/1
-stats: key_count=2 key_bytes=28 val_count=2 val_bytes=64 live_count=2 live_bytes=92 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=96
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=64 live_count=2 live_bytes=92 intent_count=1 intent_bytes=18 lock_count=1 lock_age=96
 
 run ok
 clear_range k=a end=z

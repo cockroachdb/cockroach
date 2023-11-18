@@ -17,10 +17,12 @@ with t=A
   put  k=k v=v2
   get  k=k ts=3
 ----
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=4 Replicated Intent []}
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=5 Replicated Intent []}
 get: "k" -> /BYTES/v2 @1.000000000,0
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=5} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{4 /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=5} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=5} ts=1.000000000,0 del=false klen=12 vlen=7 ih={{4 /BYTES/v}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v2
 
 run ok
@@ -29,7 +31,7 @@ with t=A
   txn_step n=4
 ----
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=1.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=1.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 
 
 # We're operating at a higher epoch but a lower seqnum.
@@ -42,9 +44,10 @@ with t=A k=k
   put v=v3
   check_intent exists
 ----
-meta: "k" -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=1.000000000,0 min=0,0 seq=4} ts=1.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+put: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=1.000000000,0 min=0,0 seq=4 Replicated Intent []}
+meta: "k" -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=1.000000000,0 min=0,0 seq=4} ts=1.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
 >> at end:
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=1.000000000,0 min=0,0 seq=4} ts=1.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=1 ts=1.000000000,0 min=0,0 seq=4} ts=1.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/1.000000000,0 -> /BYTES/v3
 
 # We're expecting v3 here.

@@ -15,6 +15,7 @@ go_library(
         "float.go",
         "int.go",
         "masked.go",
+        "options.go",
         "protobuf.go",
         "registry.go",
         "setting.go",
@@ -44,11 +45,12 @@ go_test(
     name = "settings_test",
     size = "small",
     srcs = [
+        "alias_test.go",
         "encoding_test.go",
         "internal_test.go",
         "settings_test.go",
+        "validation_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":settings"],
     deps = [
         "//pkg/testutils",
@@ -57,6 +59,8 @@ go_test(
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//proto",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

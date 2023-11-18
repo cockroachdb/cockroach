@@ -33,7 +33,7 @@ import (
 )
 
 var pollingInterval = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.stmt_diagnostics.poll_interval",
 	"rate at which the stmtdiagnostics.Registry polls for requests, set to zero to disable",
 	10*time.Second,
@@ -41,16 +41,11 @@ var pollingInterval = settings.RegisterDurationSetting(
 )
 
 var bundleChunkSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stmt_diagnostics.bundle_chunk_size",
 	"chunk size for statement diagnostic bundles",
 	1024*1024,
-	func(val int64) error {
-		if val < 16 {
-			return errors.Errorf("chunk size must be at least 16 bytes")
-		}
-		return nil
-	},
+	settings.ByteSizeWithMinimum(16),
 )
 
 // collectUntilExpiration enables continuous collection of statement bundles for
@@ -75,7 +70,7 @@ var bundleChunkSize = settings.RegisterByteSizeSetting(
 // bounded set of bundles around per-request/fingerprint. See #82896 for more
 // details.
 var collectUntilExpiration = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stmt_diagnostics.collect_continuously.enabled",
 	"collect diagnostic bundles continuously until request expiration (to be "+
 		"used with care, only has an effect if the diagnostic request has an "+

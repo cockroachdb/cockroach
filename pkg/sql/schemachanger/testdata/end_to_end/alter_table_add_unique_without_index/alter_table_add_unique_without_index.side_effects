@@ -18,8 +18,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 104
-    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE
-      WITHOUT INDEX (‹j›)
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›)
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t
@@ -86,8 +85,7 @@ upsert descriptor #104
   +      name: t
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j›
-  +          UNIQUE WITHOUT INDEX (‹j›)
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›)
   +        statement: ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j)
   +        statementTag: ALTER TABLE
   +    revertible: true
@@ -165,8 +163,7 @@ upsert descriptor #104
   -      name: t
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j›
-  -          UNIQUE WITHOUT INDEX (‹j›)
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CONSTRAINT ‹unique_j› UNIQUE WITHOUT INDEX (‹j›)
   -        statement: ALTER TABLE t ADD UNIQUE WITHOUT INDEX (j)
   -        statementTag: ALTER TABLE
   -    revertible: true

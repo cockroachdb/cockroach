@@ -103,6 +103,25 @@ func (node *SetTransaction) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Modes)
 }
 
+// copyNode makes a copy of this Statement.
+func (stmt *SetTransaction) copyNode() *SetTransaction {
+	stmtCopy := *stmt
+	return &stmtCopy
+}
+
+// walkStmt is part of the walkableStmt interface.
+func (stmt *SetTransaction) walkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.Modes.AsOf.Expr != nil {
+		e, changed := WalkExpr(v, stmt.Modes.AsOf.Expr)
+		if changed {
+			ret = stmt.copyNode()
+			ret.Modes.AsOf.Expr = e
+		}
+	}
+	return ret
+}
+
 // SetSessionAuthorizationDefault represents a SET SESSION AUTHORIZATION DEFAULT
 // statement. This can be extended (and renamed) if we ever support names in the
 // last position.

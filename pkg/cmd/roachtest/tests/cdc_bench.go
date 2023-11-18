@@ -73,7 +73,7 @@ const (
 var (
 	cdcBenchScanTypes = []cdcBenchScanType{
 		cdcBenchInitialScan, cdcBenchCatchupScan, cdcBenchColdCatchupScan}
-	cdcBenchServers   = []cdcBenchServer{cdcBenchProcessorServer} // TODO(erikgrinaker): scheduler
+	cdcBenchServers   = []cdcBenchServer{cdcBenchProcessorServer, cdcBenchSchedulerServer}
 	cdcBenchProtocols = []cdcBenchProtocol{cdcBenchRangefeedProtocol, cdcBenchMuxProtocol}
 )
 
@@ -94,15 +94,14 @@ func registerCDCBench(r registry.Registry) {
 					Name: fmt.Sprintf(
 						"cdc/scan/%s/nodes=%d/cpu=%d/rows=%s/ranges=%s/protocol=%s/format=%s/sink=null",
 						scanType, nodes, cpus, formatSI(rows), formatSI(ranges), protocol, format),
-					Owner:           registry.OwnerCDC,
-					Benchmark:       true,
-					Cluster:         r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
-					RequiresLicense: true,
-					Timeout:         2 * time.Hour, // catchup scans with 100k ranges can take >1 hour
+					Owner:            registry.OwnerCDC,
+					Benchmark:        true,
+					Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
+					CompatibleClouds: registry.AllExceptAWS,
+					Suites:           registry.Suites(registry.Nightly),
+					RequiresLicense:  true,
+					Timeout:          4 * time.Hour, // Allow for the initial import and catchup scans with 100k ranges.
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						if ranges == 100000 && scanType == cdcBenchCatchupScan {
-							t.Skip("fails to complete, see https://github.com/cockroachdb/cockroach/issues/108157")
-						}
 						runCDCBenchScan(ctx, t, c, scanType, rows, ranges, protocol, format)
 					},
 				})
@@ -125,11 +124,13 @@ func registerCDCBench(r registry.Registry) {
 				Name: fmt.Sprintf(
 					"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/control",
 					readPercent, nodes, cpus, formatSI(ranges)),
-				Owner:           registry.OwnerCDC,
-				Benchmark:       true,
-				Cluster:         r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
-				RequiresLicense: true,
-				Timeout:         time.Hour,
+				Owner:            registry.OwnerCDC,
+				Benchmark:        true,
+				Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
+				RequiresLicense:  true,
+				Timeout:          time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "", "")
 				},
@@ -143,11 +144,13 @@ func registerCDCBench(r registry.Registry) {
 						Name: fmt.Sprintf(
 							"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=%s/format=%s/sink=null",
 							readPercent, nodes, cpus, formatSI(ranges), server, protocol, format),
-						Owner:           registry.OwnerCDC,
-						Benchmark:       true,
-						Cluster:         r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
-						RequiresLicense: true,
-						Timeout:         time.Hour,
+						Owner:            registry.OwnerCDC,
+						Benchmark:        true,
+						Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
+						CompatibleClouds: registry.AllExceptAWS,
+						Suites:           registry.Suites(registry.Nightly),
+						RequiresLicense:  true,
+						Timeout:          time.Hour,
 						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 							runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, protocol, format)
 						},
@@ -173,6 +176,36 @@ func makeCDCBenchOptions() (option.StartOpts, install.ClusterSettings) {
 	// ranges aren't able to keep up.
 	settings.ClusterSettings["kv.rangefeed.range_stuck_threshold"] = "0"
 
+	// Checkpoint frequently.  Some of the larger benchmarks might overload the
+	// cluster.  Producing frequent span-level checkpoints helps with recovery.
+	settings.ClusterSettings["changefeed.frontier_checkpoint_frequency"] = "60s"
+	settings.ClusterSettings["changefeed.frontier_highwater_lag_checkpoint_threshold"] = "30s"
+
+	// Bump up the number of allowed catchup scans.  Doing catchup for 100k ranges with default
+	// configuration (8 client side, 16 per store) takes a while (~1500-2000 ranges per min minutes).
+	settings.ClusterSettings["kv.rangefeed.concurrent_catchup_iterators"] = "16"
+
+	// Give changefeed more memory and slow down rangefeed checkpoints.
+	// When running large catchup scan benchmarks (100k ranges), as the benchmark
+	// nears completion, more and more ranges generate checkpoint events.  When
+	// the rate of checkpoints high (default used to be 200ms), the changefeed
+	// begins to block on memory acquisition since the fan in factor (~20k
+	// ranges/node) greatly exceeds processing loop speed (1 goroutine).
+	// The current pipeline looks like this:
+	//    rangefeed ->
+	//       1 goroutine physicalKVFeed (acquire Memory) ->
+	//       1 goroutine copyFromSourceToDestination (filter events) ->
+	//       1 goroutine changeAggregator.Next ->
+	//       N goroutines rest of the pipeline (encode and emit)
+	// The memory for the checkpoint events (even ones after end_time) must be allocated
+	// first; then these events are thrown away (many inefficiencies here -- but
+	// it's the only thing we can do w/out having to add "end time" support to the rangefeed library).
+	// The rate of incoming events greatly exceeds the rate with which we consume these events
+	// (and release allocations), resulting in significant drop in completed ranges throughput.
+	// Current default is 3s, but if needed increase this time out:
+	//    settings.ClusterSettings["kv.rangefeed.closed_timestamp_refresh_interval"] = "5s"
+	settings.ClusterSettings["changefeed.memory.per_changefeed_limit"] = "4G"
+
 	// Scheduled backups may interfere with performance, disable them.
 	opts.RoachprodOpts.ScheduleBackups = false
 
@@ -180,6 +213,13 @@ func makeCDCBenchOptions() (option.StartOpts, install.ClusterSettings) {
 	// reliable results, since we can otherwise randomly hit timeouts and incur
 	// catchup scans.
 	settings.Env = append(settings.Env, "COCKROACH_RANGEFEED_SEND_TIMEOUT=0")
+
+	// If this benchmark experiences periodic changefeed restarts due to rpc errors
+	// (grpc context canceled), consider increase network timeout.
+	// Under significant load (due to rangefeed), timeout could easily be triggered
+	// due to elevated goroutine scheduling latency.
+	// Current default is 4s which should be sufficient.
+	// settings.Env = append(settings.Env, "COCKROACH_NETWORK_TIMEOUT=6s")
 
 	return opts, settings
 }
@@ -220,7 +260,6 @@ func runCDCBenchScan(
 		t.Fatalf("unknown protocol %q", protocol)
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, nData)
 	m := c.NewMonitor(ctx, nData.Merge(nCoord))
 
@@ -286,6 +325,11 @@ func runCDCBenchScan(
 	default:
 		t.Fatalf("unknown scan type %q", scanType)
 	}
+
+	// Lock schema so that changefeed schema feed runs under fast path.
+	_, err := conn.ExecContext(ctx, "ALTER TABLE kv.kv  SET (schema_locked = true);")
+	require.NoError(t, err)
+
 	var jobID int
 	require.NoError(t, conn.QueryRowContext(ctx,
 		fmt.Sprintf(`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH %s`, sink, with)).
@@ -377,7 +421,16 @@ func runCDCBenchWorkload(
 		t.Fatalf("unknown protocol %q", protocol)
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	switch server {
+	case cdcBenchProcessorServer:
+		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "false"
+	case cdcBenchSchedulerServer:
+		settings.ClusterSettings["kv.rangefeed.scheduler.enabled"] = "true"
+	case cdcBenchNoServer:
+	default:
+		t.Fatalf("unknown server type %q", server)
+	}
+
 	c.Start(ctx, t.L(), opts, settings, nData)
 	m := c.NewMonitor(ctx, nData.Merge(nCoord))
 
@@ -430,6 +483,11 @@ func runCDCBenchWorkload(
 	var done atomic.Value // time.Time
 	if cdcEnabled {
 		t.L().Printf("starting changefeed")
+
+		// Lock schema so that changefeed schema feed runs under fast path.
+		_, err := conn.ExecContext(ctx, "ALTER TABLE kv.kv  SET (schema_locked = true);")
+		require.NoError(t, err)
+
 		require.NoError(t, conn.QueryRowContext(ctx, fmt.Sprintf(
 			`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH format = '%s', initial_scan = 'no'`,
 			sink, format)).

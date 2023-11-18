@@ -174,9 +174,12 @@ func (s *TestDirectoryServer) WatchPods(
 	// Make the channel with a small buffer to allow for a burst of notifications
 	// and a slow receiver.
 	c := make(chan *tenant.WatchPodsResponse, 10)
-	s.mu.Lock()
-	elem := s.mu.eventListeners.PushBack(c)
-	s.mu.Unlock()
+
+	elem := func() *list.Element {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.mu.eventListeners.PushBack(c)
+	}()
 	err := s.stopper.RunTask(context.Background(), "watch-pods-server",
 		func(ctx context.Context) {
 		out:
@@ -187,17 +190,11 @@ func (s *TestDirectoryServer) WatchPods(
 						break out
 					}
 					if err := server.Send(e); err != nil {
-						s.mu.Lock()
-						s.mu.eventListeners.Remove(elem)
-						close(c)
-						s.mu.Unlock()
+						s.removeEventListenerAndCloseChan(elem, c)
 						break out
 					}
 				case <-s.stopper.ShouldQuiesce():
-					s.mu.Lock()
-					s.mu.eventListeners.Remove(elem)
-					close(c)
-					s.mu.Unlock()
+					s.removeEventListenerAndCloseChan(elem, c)
 					break out
 				}
 			}
@@ -367,4 +364,13 @@ func (s *TestDirectoryServer) deregisterInstance(tenantID uint64, sqlAddr string
 	} else {
 		s.mu.processByAddrByTenantID[tenantID] = remaining
 	}
+}
+
+func (s *TestDirectoryServer) removeEventListenerAndCloseChan(
+	elem *list.Element, c chan *tenant.WatchPodsResponse,
+) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.eventListeners.Remove(elem)
+	close(c)
 }

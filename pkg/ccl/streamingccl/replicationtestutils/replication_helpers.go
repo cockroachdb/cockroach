@@ -14,12 +14,10 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -50,6 +48,12 @@ func KeyMatches(key roachpb.Key) FeedEventPredicate {
 			return false
 		}
 		return bytes.Equal(key, msg.GetKV().Key)
+	}
+}
+
+func AnySpanConfigMatches() FeedEventPredicate {
+	return func(msg streamingccl.Event) bool {
+		return msg.Type() == streamingccl.SpanConfigEvent
 	}
 }
 
@@ -111,6 +115,18 @@ func (rf *ReplicationFeed) ObserveKey(ctx context.Context, key roachpb.Key) roac
 		return false
 	})
 	return *rf.msg.GetKV()
+}
+
+// ObserveAnySpanConfigRecord consumes the feed until any span config record is observed.
+// Note: we don't do any buffering here.  Therefore, it is required that the key
+// we want to observe will arrive at some point in the future.
+func (rf *ReplicationFeed) ObserveAnySpanConfigRecord(
+	ctx context.Context,
+) streampb.StreamedSpanConfigEntry {
+	rf.consumeUntil(ctx, AnySpanConfigMatches(), func(err error) bool {
+		return false
+	})
+	return *rf.msg.GetSpanConfigEvent()
 }
 
 // ObserveResolved consumes the feed until we received resolved timestamp that's at least
@@ -183,7 +199,8 @@ type TenantState struct {
 // as a PGUrl to the underlying server.
 type ReplicationHelper struct {
 	// SysServer is the backing server.
-	SysServer serverutils.TestServerInterface
+	SysServer  serverutils.ApplicationLayerInterface
+	TestServer serverutils.TestServerInterface
 	// SysSQL is a sql connection to the system tenant.
 	SysSQL *sqlutils.SQLRunner
 	// PGUrl is the pgurl of this server.
@@ -199,19 +216,20 @@ func NewReplicationHelper(
 	ctx := context.Background()
 
 	// Start server
-	s, db, _ := serverutils.StartServer(t, serverArgs)
+	srv, db, _ := serverutils.StartServer(t, serverArgs)
+	s := srv.SystemLayer()
 
-	// Make changefeeds run faster.
-	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
-
-	// Set required cluster settings.
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.ExecMultiple(t, strings.Split(`
-SET CLUSTER SETTING kv.rangefeed.enabled = true;
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
-SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
-SET CLUSTER SETTING cross_cluster_replication.enabled = true;
-`, `;`)...)
+	sqlDB.ExecMultiple(t,
+		// Required for replication stremas to work.
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+		`SET CLUSTER SETTING physical_replication.enabled = true`,
+
+		// Speeds up the tests a bit.
+		`SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`,
+		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'`,
+		`SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'`,
+		`SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '10ms'`)
 
 	// Sink to read data from.
 	sink, cleanupSink := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
@@ -220,16 +238,16 @@ SET CLUSTER SETTING cross_cluster_replication.enabled = true;
 	t.Logf("Replication helper seed %d", seed)
 
 	h := &ReplicationHelper{
-		SysServer: s,
-		SysSQL:    sqlutils.MakeSQLRunner(db),
-		PGUrl:     sink,
-		rng:       rng,
+		SysServer:  s,
+		TestServer: srv,
+		SysSQL:     sqlutils.MakeSQLRunner(db),
+		PGUrl:      sink,
+		rng:        rng,
 	}
 
 	return h, func() {
 		cleanupSink()
-		resetFreq()
-		s.Stopper().Stop(ctx)
+		srv.Stopper().Stop(ctx)
 	}
 }
 
@@ -237,7 +255,7 @@ SET CLUSTER SETTING cross_cluster_replication.enabled = true;
 func (rh *ReplicationHelper) CreateTenant(
 	t *testing.T, tenantID roachpb.TenantID, tenantName roachpb.TenantName,
 ) (TenantState, func()) {
-	_, tenantConn := serverutils.StartTenant(t, rh.SysServer, base.TestTenantArgs{
+	_, tenantConn := serverutils.StartTenant(t, rh.TestServer, base.TestTenantArgs{
 		TenantID:   tenantID,
 		TenantName: tenantName,
 	})
@@ -270,18 +288,6 @@ func (rh *ReplicationHelper) StartReplicationStream(
 	err := protoutil.Unmarshal(rawReplicationProducerSpec, &replicationProducerSpec)
 	require.NoError(t, err)
 	return replicationProducerSpec
-}
-
-func (rh *ReplicationHelper) SetupSpanConfigsReplicationStream(
-	t *testing.T, sourceTenantName roachpb.TenantName,
-) streampb.ReplicationStreamSpec {
-	var rawSpec []byte
-	row := rh.SysSQL.QueryRow(t, `SELECT crdb_internal.setup_span_configs_stream($1)`, sourceTenantName)
-	row.Scan(&rawSpec)
-	var spec streampb.ReplicationStreamSpec
-	err := protoutil.Unmarshal(rawSpec, &spec)
-	require.NoError(t, err)
-	return spec
 }
 
 func (rh *ReplicationHelper) MaybeGenerateInlineURL(t *testing.T) *url.URL {

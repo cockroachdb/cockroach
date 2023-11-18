@@ -264,6 +264,12 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	var fatalTrigger chan struct{}
 	extraFlush := false
 	isFatal := entry.sev == severity.FATAL
+	// NB: Generally, we don't need to make this nil check. However, logging.metrics
+	// is injected from an external package's init() function, which isn't guaranteed
+	// to be called (e.g. during tests). Therefore, we protect against such a case.
+	if logging.metrics != nil {
+		logging.metrics.IncrementCounter(LogMessageCount, 1)
+	}
 
 	if isFatal {
 		extraFlush = true
@@ -370,7 +376,7 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 				// The sink was not accepting entries at this level. Nothing to do.
 				continue
 			}
-			if err := s.sink.output(bufs.b[i].Bytes(), sinkOutputOptions{extraFlush: extraFlush, forceSync: isFatal}); err != nil {
+			if err := s.sink.output(bufs.b[i].Bytes(), sinkOutputOptions{extraFlush: extraFlush, tryForceSync: isFatal}); err != nil {
 				if !s.criticality {
 					// An error on this sink is not critical. Just report
 					// the error and move on.

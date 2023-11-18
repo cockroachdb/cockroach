@@ -117,6 +117,7 @@ func newTimeSeriesMaintenanceQueue(
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.TimeSeriesMaintenanceQueueSuccesses,
 			failures:             store.metrics.TimeSeriesMaintenanceQueueFailures,
+			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.TimeSeriesMaintenanceQueuePending,
 			processingNanos:      store.metrics.TimeSeriesMaintenanceQueueProcessingNanos,
 			disabledConfig:       kvserverbase.TimeSeriesMaintenanceQueueEnabled,

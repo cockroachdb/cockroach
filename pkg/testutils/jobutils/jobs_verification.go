@@ -148,11 +148,14 @@ func RunJob(
 // related to bulk IO/backup/restore/import: Export, Import and AddSSTable. See
 // discussion on RunJob for where this might be useful.
 func BulkOpResponseFilter(allowProgressIota *chan struct{}) kvserverbase.ReplicaResponseFilter {
-	return func(_ context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
+	return func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
 		for _, ru := range br.Responses {
 			switch ru.GetInner().(type) {
 			case *kvpb.ExportResponse, *kvpb.AddSSTableResponse:
-				<-*allowProgressIota
+				select {
+				case <-*allowProgressIota:
+				case <-ctx.Done():
+				}
 			}
 		}
 		return nil

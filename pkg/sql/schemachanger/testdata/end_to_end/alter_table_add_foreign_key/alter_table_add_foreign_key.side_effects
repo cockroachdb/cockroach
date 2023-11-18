@@ -20,8 +20,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 104
-    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN
-      KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
+    statement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
     tag: ALTER TABLE
     user: root
   tableName: defaultdb.public.t1
@@ -111,8 +110,7 @@ upsert descriptor #104
   +      name: t1
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey›
-  +          FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
   +        statement: ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2 (i)
   +        statementTag: ALTER TABLE
   +    revertible: true
@@ -234,8 +232,7 @@ upsert descriptor #104
   -      name: t1
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey›
-  -          FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t1› ADD CONSTRAINT ‹t1_i_fkey› FOREIGN KEY (‹i›) REFERENCES ‹defaultdb›.‹public›.‹t2› (‹i›)
   -        statement: ALTER TABLE t1 ADD FOREIGN KEY (i) REFERENCES t2 (i)
   -        statementTag: ALTER TABLE
   -    revertible: true

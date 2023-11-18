@@ -69,7 +69,7 @@ func (w *schemaChangeWatchDog) isConnectionActive(ctx context.Context) bool {
 	}
 	lastNumRetries := w.numRetries
 	txnInfo := w.conn.QueryRow(ctx,
-		"SELECT sum(num_retries) + sum(num_auto_retries) FROM crdb_internal.cluster_transactions WHERE id=$1",
+		"SELECT coalesce(sum(num_retries),0) + coalesce(sum(num_auto_retries),0) FROM crdb_internal.cluster_transactions WHERE id=$1",
 		&w.txnID)
 	if err := txnInfo.Scan(&w.numRetries); err != nil {
 		w.logger.logWatchDog(fmt.Sprintf("failed to get transaction information: %v\n", err))

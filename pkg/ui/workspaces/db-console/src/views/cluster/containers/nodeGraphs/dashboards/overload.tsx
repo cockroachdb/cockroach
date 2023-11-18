@@ -35,6 +35,7 @@ export default function (props: GraphDashboardProps) {
       title="CPU Percent"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Percentage} label="CPU">
         {nodeIDs.map(nid => (
@@ -52,6 +53,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`P99 scheduling latency for goroutines`}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="latency">
         {nodeIDs.map(nid => (
@@ -73,6 +75,7 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       tooltip={`The number of Goroutines waiting per CPU.`}
+      showMetricsInTooltip={true}
     >
       <Axis label="goroutines">
         {nodeIDs.map(nid => (
@@ -86,26 +89,19 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="LSM L0 Health"
+      title="IO Overload"
       sources={storeSources}
       tenantSource={tenantSource}
-      tooltip={`The number of files and sublevels within Level 0.`}
+      tooltip={`The number of sublevels/files in L0 normalized by admission thresholds.`}
+      showMetricsInTooltip={true}
     >
-      <Axis label="count">
+      <Axis label="IO Overload">
         {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
-              name="cr.store.storage.l0-sublevels"
-              title={
-                "L0 Sublevels " + nodeDisplayName(nodeDisplayNameByID, nid)
-              }
-              sources={storeIDsForNode(storeIDsByNodeID, nid)}
-            />
-            <Metric
-              key={nid}
-              name="cr.store.storage.l0-num-files"
-              title={"L0 Files " + nodeDisplayName(nodeDisplayNameByID, nid)}
+              name="cr.store.admission.io.overload"
+              title={"IO Overload " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={storeIDsForNode(storeIDsByNodeID, nid)}
             />
           </>
@@ -114,26 +110,23 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="KV Admission Slots"
+      title="KV Admission Slots Exhausted"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
-      <Axis label="slots">
+      <Axis label="duration (micros/sec)">
         {nodeIDs.map(nid => (
-          <>
-            <Metric
-              key={nid}
-              name="cr.node.admission.granter.total_slots.kv"
-              title={"Total Slots " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-            />
-            <Metric
-              key={nid}
-              name="cr.node.admission.granter.used_slots.kv"
-              title={"Used Slots " + nodeDisplayName(nodeDisplayNameByID, nid)}
-              sources={[nid]}
-            />
-          </>
+          <Metric
+            key={nid}
+            name="cr.node.admission.granter.slots_exhausted_duration.kv"
+            title={
+              "Admission Slots Exhausted " +
+              nodeDisplayName(nodeDisplayNameByID, nid)
+            }
+            sources={[nid]}
+            nonNegativeRate
+          />
         ))}
       </Axis>
     </LineGraph>,
@@ -142,6 +135,7 @@ export default function (props: GraphDashboardProps) {
       title="KV Admission IO Tokens Exhausted Duration Per Second"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="duration (micros/sec)">
         {nodeIDs.map(nid => (
@@ -157,9 +151,108 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Flow Tokens Wait Time: 75th percentile"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="p75 flow token wait duration">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.regular_wait_duration-p75"
+              title={
+                "Regular flow token wait time " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+              downsampleMax
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.elastic_wait_duration-p75"
+              title={
+                "Elastic flow token wait time " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+              downsampleMax
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Requests Waiting For Flow Tokens"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="Count">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.regular_requests_waiting"
+              title={
+                "Regular requests waiting " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.elastic_requests_waiting"
+              title={
+                "Elastic requests waiting " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Blocked Replication Streams"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="Count">
+        {nodeIDs.map(nid => (
+          <>
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.regular_blocked_stream_count"
+              title={
+                "Blocked regular streams " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+            <Metric
+              key={nid}
+              name="cr.node.kvadmission.flow_controller.elastic_blocked_stream_count"
+              title={
+                "Blocked elastic streams " +
+                nodeDisplayName(nodeDisplayNameByID, nid)
+              }
+              sources={[nid]}
+            />
+          </>
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Admission Work Rate"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="work rate">
         {nodeIDs.map(nid => (
@@ -212,27 +305,28 @@ export default function (props: GraphDashboardProps) {
       title="Admission Delay Rate"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis label="delay rate (micros/sec)">
         {nodeIDs.map(nid => (
           <>
             <Metric
               key={nid}
-              name="cr.node.admission.wait_sum.kv"
+              name="cr.node.admission.wait_durations.kv-sum"
               title={"KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               nonNegativeRate
             />
             <Metric
               key={nid}
-              name="cr.node.admission.wait_sum.kv-stores"
+              name="cr.node.admission.wait_durations.kv-stores-sum"
               title={"KV write " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
               nonNegativeRate
             />
             <Metric
               key={nid}
-              name="cr.node.admission.wait_sum.sql-kv-response"
+              name="cr.node.admission.wait_durations.sql-kv-response-sum"
               title={
                 "SQL-KV response " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
@@ -241,7 +335,7 @@ export default function (props: GraphDashboardProps) {
             />
             <Metric
               key={nid}
-              name="cr.node.admission.wait_sum.sql-sql-response"
+              name="cr.node.admission.wait_durations.sql-sql-response-sum"
               title={
                 "SQL-SQL response " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
@@ -257,6 +351,7 @@ export default function (props: GraphDashboardProps) {
       title="Admission Delay: 75th percentile"
       sources={nodeSources}
       tenantSource={tenantSource}
+      showMetricsInTooltip={true}
     >
       <Axis units={AxisUnits.Duration} label="delay for requests that waited">
         {nodeIDs.map(nid => (

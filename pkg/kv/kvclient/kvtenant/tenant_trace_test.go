@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -106,7 +106,7 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 
 	t.Run("regular-tenant", func(t *testing.T) {
 		_, tenDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
-			TenantID:     roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0]),
+			TenantID:     roachpb.MustMakeTenantID(securitytest.EmbeddedTenantIDs()[0]),
 			TestingKnobs: args.Knobs,
 		})
 		defer tenDB.Close()

@@ -41,6 +41,7 @@ func _() {
 	_ = x[MinTimestampBoundUnsatisfiableErrType-42]
 	_ = x[RefreshFailedErrType-43]
 	_ = x[MVCCHistoryMutationErrType-44]
+	_ = x[LockConflictErrType-45]
 	_ = x[CommunicationErrType-22]
 	_ = x[InternalErrType-25]
 }
@@ -113,6 +114,8 @@ func (i ErrorDetailType) String() string {
 		return "RefreshFailedErrType"
 	case MVCCHistoryMutationErrType:
 		return "MVCCHistoryMutationErrType"
+	case LockConflictErrType:
+		return "LockConflictErrType"
 	case CommunicationErrType:
 		return "CommunicationErrType"
 	case InternalErrType:

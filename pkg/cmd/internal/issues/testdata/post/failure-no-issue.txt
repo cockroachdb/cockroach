@@ -6,7 +6,7 @@ searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title label:
 getBinaryVersion: result v3.3.0
 listMilestones owner=cockroachdb repo=cockroach: result [github.Milestone{Number:2, Title:"3.3"} github.Milestone{Number:1, Title:"3.2"}]
 createIssue owner=cockroachdb repo=cockroach:
-github.IssueRequest{Labels:["O-robot" "C-test-failure" "branch-release-0.1" "release-blocker"], Milestone:2}
+github.IssueRequest{Labels:["O-robot" "C-test-failure" "release-blocker" "branch-release-0.1" "release-blocker"], Milestone:2}
 
 storage: TestReplicateQueueRebalance failed
 

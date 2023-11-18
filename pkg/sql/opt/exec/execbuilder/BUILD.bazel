@@ -14,12 +14,13 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
+        "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/server/telemetry",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/execinfra",
         "//pkg/sql/lexbase",
-        "//pkg/sql/mutations",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
@@ -67,7 +68,6 @@ go_test(
         "main_test.go",
         "mutation_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = [
         ":testdata",
         "//c-deps:libgeos",

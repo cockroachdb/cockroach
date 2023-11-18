@@ -19,10 +19,6 @@ BACKUP INTO 'nodelocal://1/cluster_backup';
 new-cluster name=s2 nodes=1 share-io-dir=s1 disable-tenant
 ----
 
-exec-sql
-SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true;
-----
-
 # Restore's OnFailOrCancel deletes descriptors which requires us to wait for no
 # versions of that descriptor to be leased before proceeding. Since our test fails
 # the job after the descriptors have been published, it's possible for them to be leased

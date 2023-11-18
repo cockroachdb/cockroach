@@ -107,7 +107,7 @@ func (tc *TxnCoordSender) RollbackToSavepoint(ctx context.Context, s kv.Savepoin
 	}
 
 	// We don't allow rollback to savepoint after errors (except after
-	// ConditionFailedError and WriteIntentError, which are special-cased
+	// ConditionFailedError and LockConflictError, which are special-cased
 	// elsewhere and don't move the txn to the txnError state). In particular, we
 	// cannot allow rollbacks to savepoint after ambiguous errors where it's
 	// possible for a previously-successfully written intent to have been pushed
@@ -162,6 +162,22 @@ func (tc *TxnCoordSender) ReleaseSavepoint(ctx context.Context, s kv.SavepointTo
 	return tc.checkSavepointLocked(sp, "release")
 }
 
+// CanUseSavepoint is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) CanUseSavepoint(ctx context.Context, s kv.SavepointToken) bool {
+	if tc.typ != kv.RootTxn {
+		return false
+	}
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	if tc.mu.txnState != txnPending {
+		return false
+	}
+	// We swallow the error here because we aren't actually performing any
+	// operation with the savepoint; only checking if we are allowed to do so.
+	sp := s.(*savepoint)
+	return tc.checkSavepointLocked(sp, "release") == nil
+}
+
 type errSavepointOperationInErrorTxn struct{}
 
 // ErrSavepointOperationInErrorTxn is reported when CreateSavepoint()
@@ -193,6 +209,7 @@ func (tc *TxnCoordSender) checkSavepointLocked(s *savepoint, op redact.SafeStrin
 		return kvpb.NewTransactionRetryWithProtoRefreshError(
 			redact.Sprintf("cannot %s savepoint after a transaction restart", op),
 			s.txnID,
+			s.epoch,
 			tc.mu.txn,
 		)
 	}

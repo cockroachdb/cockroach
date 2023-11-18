@@ -13,8 +13,11 @@ package server
 import (
 	"context"
 	"net"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +34,65 @@ func (l *ListenError) Error() string { return l.cause.Error() }
 
 // Unwrap is because ListenError is a wrapper.
 func (l *ListenError) Unwrap() error { return l.cause }
+
+// ListenerFactoryForConfig return an RPCListenerFactory for the given
+// configuration. If the configuration does not specify any secondary
+// tenant port configuration, no factory is returned.
+func ListenerFactoryForConfig(cfg *BaseConfig, portStartHint int) RPCListenerFactory {
+	if cfg.Config.ApplicationInternalRPCPortMin > 0 {
+		rlf := &rangeListenerFactory{
+			startHint:  portStartHint,
+			lowerBound: cfg.Config.ApplicationInternalRPCPortMin,
+			upperBound: cfg.Config.ApplicationInternalRPCPortMax,
+		}
+		return rlf.ListenAndUpdateAddrs
+	}
+	return nil
+}
+
+// The rangeListenerFactory tries to listen on a port between
+// lowerBound and upperBound.  The provided startHint allows the
+// caller to specify an offset into the range to speed up port
+// selection.
+type rangeListenerFactory struct {
+	startHint  int
+	lowerBound int
+	upperBound int
+}
+
+func (rlf *rangeListenerFactory) ListenAndUpdateAddrs(
+	ctx context.Context, listenAddr, advertiseAddr *string, connName string,
+) (net.Listener, error) {
+	h, _, err := addr.SplitHostPort(*listenAddr, "0")
+	if err != nil {
+		return nil, err
+	}
+
+	if rlf.lowerBound > rlf.upperBound {
+		return nil, errors.AssertionFailedf("lower bound %d greater than upper bound %d", rlf.lowerBound, rlf.upperBound)
+	}
+
+	numCandidates := (rlf.upperBound - rlf.lowerBound) + 1
+	nextPort := rlf.lowerBound + (rlf.startHint % numCandidates)
+
+	var ln net.Listener
+	for numAttempts := 0; numAttempts < numCandidates; numCandidates++ {
+		nextAddr := net.JoinHostPort(h, strconv.Itoa(nextPort))
+		ln, err = net.Listen("tcp", nextAddr)
+		if err == nil {
+			if err := UpdateAddrs(ctx, listenAddr, advertiseAddr, ln.Addr()); err != nil {
+				return nil, errors.Wrapf(err, "internal error: cannot parse %s listen address", connName)
+			}
+			return ln, nil
+		}
+		if !sysutil.IsAddrInUse(err) {
+			return nil, err
+		}
+
+		nextPort = ((nextPort - rlf.lowerBound + 1) % numCandidates) + rlf.lowerBound
+	}
+	return nil, errors.Wrapf(err, "port range (%d, %d) exhausted", rlf.lowerBound, rlf.upperBound)
+}
 
 // ListenAndUpdateAddrs starts a TCP listener on the specified address
 // then updates the address and advertised address fields based on the

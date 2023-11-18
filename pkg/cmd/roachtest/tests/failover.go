@@ -80,7 +80,9 @@ func registerFailover(r registry.Registry) {
 				Owner:               registry.OwnerKV,
 				Benchmark:           true,
 				Timeout:             60 * time.Minute,
-				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.PreferLocalSSD(false), spec.ReuseNone()), // uses disk stalls
+				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.DisableLocalSSD(), spec.ReuseNone()), // uses disk stalls
+				CompatibleClouds:    registry.AllExceptAWS,
+				Suites:              registry.Suites(registry.Nightly),
 				Leases:              leases,
 				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -90,33 +92,39 @@ func registerFailover(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:      "failover/partial/lease-gateway" + suffix,
-			Owner:     registry.OwnerKV,
-			Benchmark: true,
-			Timeout:   30 * time.Minute,
-			Cluster:   r.MakeClusterSpec(8, spec.CPU(2)),
-			Leases:    leases,
-			Run:       runFailoverPartialLeaseGateway,
+			Name:             "failover/partial/lease-gateway" + suffix,
+			Owner:            registry.OwnerKV,
+			Benchmark:        true,
+			Timeout:          30 * time.Minute,
+			Cluster:          r.MakeClusterSpec(8, spec.CPU(2)),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           leases,
+			Run:              runFailoverPartialLeaseGateway,
 		})
 
 		r.Add(registry.TestSpec{
-			Name:      "failover/partial/lease-leader" + suffix,
-			Owner:     registry.OwnerKV,
-			Benchmark: true,
-			Timeout:   30 * time.Minute,
-			Cluster:   r.MakeClusterSpec(7, spec.CPU(2)),
-			Leases:    leases,
-			Run:       runFailoverPartialLeaseLeader,
+			Name:             "failover/partial/lease-leader" + suffix,
+			Owner:            registry.OwnerKV,
+			Benchmark:        true,
+			Timeout:          30 * time.Minute,
+			Cluster:          r.MakeClusterSpec(7, spec.CPU(2)),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           leases,
+			Run:              runFailoverPartialLeaseLeader,
 		})
 
 		r.Add(registry.TestSpec{
-			Name:      "failover/partial/lease-liveness" + suffix,
-			Owner:     registry.OwnerKV,
-			Benchmark: true,
-			Timeout:   30 * time.Minute,
-			Cluster:   r.MakeClusterSpec(8, spec.CPU(2)),
-			Leases:    leases,
-			Run:       runFailoverPartialLeaseLiveness,
+			Name:             "failover/partial/lease-liveness" + suffix,
+			Owner:            registry.OwnerKV,
+			Benchmark:        true,
+			Timeout:          30 * time.Minute,
+			Cluster:          r.MakeClusterSpec(8, spec.CPU(2)),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           leases,
+			Run:              runFailoverPartialLeaseLiveness,
 		})
 
 		for _, failureMode := range allFailureModes {
@@ -129,7 +137,7 @@ func registerFailover(r registry.Registry) {
 			if failureMode == failureModeDiskStall {
 				// Use PDs in an attempt to work around flakes encountered when using
 				// SSDs. See #97968.
-				clusterOpts = append(clusterOpts, spec.PreferLocalSSD(false))
+				clusterOpts = append(clusterOpts, spec.DisableLocalSSD())
 				// Don't reuse the cluster for tests that call dmsetup to avoid
 				// spurious flakes from previous runs. See #107865
 				clusterOpts = append(clusterOpts, spec.ReuseNone())
@@ -142,6 +150,8 @@ func registerFailover(r registry.Registry) {
 				Timeout:             30 * time.Minute,
 				SkipPostValidations: postValidation,
 				Cluster:             r.MakeClusterSpec(7, clusterOpts...),
+				CompatibleClouds:    registry.AllExceptAWS,
+				Suites:              registry.Suites(registry.Nightly),
 				Leases:              leases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverNonSystem(ctx, t, c, failureMode)
@@ -150,6 +160,8 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
+				CompatibleClouds:    registry.AllExceptAWS,
+				Suites:              registry.Suites(registry.Weekly),
 				Tags:                registry.Tags("weekly"),
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
@@ -163,6 +175,8 @@ func registerFailover(r registry.Registry) {
 			r.Add(registry.TestSpec{
 				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, suffix),
 				Owner:               registry.OwnerKV,
+				CompatibleClouds:    registry.AllExceptAWS,
+				Suites:              registry.Suites(registry.Weekly),
 				Tags:                registry.Tags("weekly"),
 				Benchmark:           true,
 				Timeout:             30 * time.Minute,
@@ -198,9 +212,6 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 9))
 
@@ -216,7 +227,6 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		failers = append(failers, failer)
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 9))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -225,7 +235,9 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 5, onlyNodes: []int{3, 4, 5, 6, 7, 8, 9}})
 
 	// Wait for upreplication.
-	require.NoError(t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */))
+	require.NoError(
+		t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */, atLeastReplicationFactor),
+	)
 
 	// Create the kv database. If this is a read-only workload, populate it with
 	// 100.000 keys.
@@ -246,7 +258,9 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	relocateRanges(t, ctx, conn, `true`, []int{1, 2}, []int{3, 4, 5, 6, 7, 8, 9})
 
 	// Wait for upreplication of the new ranges.
-	require.NoError(t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */))
+	require.NoError(
+		t, WaitForReplication(ctx, t, conn, 5 /* replicationFactor */, atLeastReplicationFactor),
+	)
 
 	// Run workload on n10 via n1-n2 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
@@ -379,9 +393,6 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 7))
 
@@ -389,7 +400,6 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -519,9 +529,6 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_DISABLE_LEADER_FOLLOWS_LEASEHOLDER=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
@@ -529,27 +536,23 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 3))
 
 	conn := c.Conn(ctx, t.L(), 1)
 
 	// Place all ranges on n1-n3 to start with, and wait for upreplication.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
-	require.NoError(t, WaitFor3XReplication(ctx, t, conn))
 
-	// Disable the replicate queue. It can otherwise end up with stuck
-	// overreplicated ranges during rebalancing, because downreplication requires
-	// the Raft leader to be colocated with the leaseholder.
-	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.replicate_queue.enabled = false`)
-	require.NoError(t, err)
+	// NB: We want to ensure the system ranges are all down-replicated from their
+	// initial RF of 5, so pass in exactlyReplicationFactor below.
+	require.NoError(t, WaitForReplication(ctx, t, conn, 3, exactlyReplicationFactor))
 
 	// Now that system ranges are properly placed on n1-n3, start n4-n6.
 	c.Start(ctx, t.L(), opts, settings, c.Range(4, 6))
 
 	// Create the kv database on n4-n6.
 	t.L().Printf("creating workload database")
-	_, err = conn.ExecContext(ctx, `CREATE DATABASE kv`)
+	_, err := conn.ExecContext(ctx, `CREATE DATABASE kv`)
 	require.NoError(t, err)
 	configureZone(t, ctx, conn, `DATABASE kv`, zoneConfig{replicas: 3, onlyNodes: []int{4, 5, 6}})
 
@@ -657,9 +660,6 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	opts.RoachprodOpts.ScheduleBackups = false
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 7))
 
@@ -667,7 +667,6 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 7))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -779,9 +778,6 @@ func runFailoverNonSystem(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
@@ -789,7 +785,6 @@ func runFailoverNonSystem(
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -892,9 +887,6 @@ func runFailoverLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 4))
 
@@ -902,7 +894,6 @@ func runFailoverLiveness(
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 4))
 
 	conn := c.Conn(ctx, t.L(), 1)
@@ -1011,9 +1002,6 @@ func runFailoverSystemNonLiveness(
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
-	// TODO(erikgrinaker): temporary workaround for
-	// https://github.com/cockroachdb/cockroach/issues/105274
-	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
 
 	m := c.NewMonitor(ctx, c.Range(1, 6))
 
@@ -1021,7 +1009,6 @@ func runFailoverSystemNonLiveness(
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(), opts, settings, c.Range(1, 6))
 
 	conn := c.Conn(ctx, t.L(), 1)

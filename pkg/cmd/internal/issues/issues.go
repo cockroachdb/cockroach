@@ -45,18 +45,38 @@ func enforceMaxLength(s string) string {
 	return s
 }
 
-var (
-	// Set of labels attached to created issues.
-	issueLabels = []string{"O-robot", "C-test-failure"}
-	// Label we expect when checking existing issues. Sometimes users open
-	// issues about flakes and don't assign all the labels. We want to at
-	// least require the test-failure label to avoid pathological situations
-	// in which a test name is so generic that it matches lots of random issues.
-	// Note that we'll only post a comment into an existing label if the labels
-	// match 100%, but we also cross-link issues whose labels differ. But we
-	// require that they all have searchLabel as a baseline.
-	searchLabel = issueLabels[1]
+const (
+	robotLabel          = "O-robot"
+	testFailureLabel    = "C-test-failure"
+	releaseBlockerLabel = "release-blocker"
 )
+
+// Label we expect when checking existing issues. Sometimes users open
+// issues about flakes and don't assign all the labels. We want to at
+// least require the one label to avoid pathological situations in
+// which a test name is so generic that it matches lots of random
+// issues.  Note that we'll only post a comment into an existing label
+// if the labels match 100%, but we also cross-link issues whose
+// labels differ. But we require that they all have searchLabel as a
+// baseline.
+func searchLabel(req PostRequest) string {
+	if req.SkipLabelTestFailure {
+		return robotLabel
+	}
+
+	return testFailureLabel
+}
+
+// issueLabels returns the set of labels attached by default to
+// created issues.
+func issueLabels(req PostRequest) []string {
+	labels := []string{robotLabel}
+	if req.SkipLabelTestFailure {
+		return labels
+	}
+
+	return append(labels, testFailureLabel, releaseBlockerLabel)
+}
 
 // context augments context.Context with a logger.
 type postCtx struct {
@@ -72,7 +92,11 @@ func (ctx *postCtx) Printf(format string, args ...interface{}) {
 }
 
 func (p *poster) getProbableMilestone(ctx *postCtx) *int {
-	bv := p.getBinaryVersion()
+	gbv := p.GetBinaryVersion
+	if gbv == nil {
+		gbv = build.BinaryVersion
+	}
+	bv := gbv()
 	v, err := version.Parse(bv)
 	if err != nil {
 		ctx.Printf("unable to parse version from binary version to determine milestone: %s", err)
@@ -137,14 +161,32 @@ func (p *poster) parameters(extraParams map[string]string) map[string]string {
 		ps[name] = value
 	}
 
-	if p.Tags != "" {
-		ps["TAGS"] = p.Tags
-	}
-	if p.Goflags != "" {
-		ps["GOFLAGS"] = p.Goflags
+	tcOpts := p.TeamCityOptions
+	if tcOpts != nil {
+		if tcOpts.Tags != "" {
+			ps["TAGS"] = tcOpts.Tags
+		}
+		if tcOpts.Goflags != "" {
+			ps["GOFLAGS"] = tcOpts.Goflags
+		}
 	}
 
 	return ps
+}
+
+// TeamCityOptions configures TeamCity-specific Options.
+type TeamCityOptions struct {
+	BuildTypeID string
+	BuildID     string
+	ServerURL   string
+	Tags        string
+	Goflags     string
+}
+
+// EngFlowOptions configures EngFlow-specific Options.
+type EngFlowOptions struct {
+	ServerURL    string
+	InvocationID string
 }
 
 // Options configures the issue poster.
@@ -153,18 +195,17 @@ type Options struct {
 	Org              string
 	Repo             string
 	SHA              string
-	BuildTypeID      string
-	BuildID          string
-	ServerURL        string
 	Branch           string
-	Tags             string
-	Goflags          string
-	getBinaryVersion func() string
+	GetBinaryVersion func() string
+	// One of the following sub-structs is expected to be populated. Post()
+	// will fail if one is not.
+	TeamCityOptions *TeamCityOptions
+	EngFlowOptions  *EngFlowOptions
 }
 
 // DefaultOptionsFromEnv initializes the Options from the environment variables,
 // falling back to placeholders if the environment is not or only partially
-// populated.
+// populated. Note these default options are TeamCity-specific.
 func DefaultOptionsFromEnv() *Options {
 	// NB: these are hidden here as "proof" that nobody uses them directly
 	// outside of this method.
@@ -190,13 +231,15 @@ func DefaultOptionsFromEnv() *Options {
 		// at least it'll be obvious that something went wrong (as an
 		// issue will be posted pointing at that SHA).
 		SHA:              maybeEnv(teamcityVCSNumberEnv, "8548987813ff9e1b8a9878023d3abfc6911c16db"),
-		BuildTypeID:      maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
-		BuildID:          maybeEnv(teamcityBuildIDEnv, "NOTFOUNDINENV"),
-		ServerURL:        maybeEnv(teamcityServerURLEnv, "https://server-url-not-found-in-env.com"),
 		Branch:           maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"),
-		Tags:             maybeEnv(tagsEnv, ""),
-		Goflags:          maybeEnv(goFlagsEnv, ""),
-		getBinaryVersion: build.BinaryVersion,
+		GetBinaryVersion: build.BinaryVersion,
+		TeamCityOptions: &TeamCityOptions{
+			BuildTypeID: maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
+			BuildID:     maybeEnv(teamcityBuildIDEnv, "NOTFOUNDINENV"),
+			ServerURL:   maybeEnv(teamcityServerURLEnv, "https://server-url-not-found-in-env.com"),
+			Tags:        maybeEnv(tagsEnv, ""),
+			Goflags:     maybeEnv(goFlagsEnv, ""),
+		},
 	}
 }
 
@@ -264,7 +307,7 @@ func (p *poster) templateData(
 		Branch:           p.Branch,
 		Commit:           p.SHA,
 		ArtifactsURL:     artifactsURL,
-		URL:              p.teamcityBuildLogURL().String(),
+		URL:              p.buildURL().String(),
 		RelatedIssues:    relatedIssues,
 		PackageNameShort: strings.TrimPrefix(req.PackageName, CockroachPkgPrefix),
 		CommitURL:        fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.Org, p.Repo, p.SHA),
@@ -288,7 +331,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 	// that would match if it weren't for their branch label.
 	qBase := fmt.Sprintf(
 		`repo:%q user:%q is:issue is:open in:title label:%q sort:created-desc %q`,
-		p.Repo, p.Org, searchLabel, title)
+		p.Repo, p.Org, searchLabel(req), title)
 
 	releaseLabel := fmt.Sprintf("branch-%s", p.Branch)
 	qExisting := qBase + " label:" + releaseLabel + " -label:X-noreuse"
@@ -339,7 +382,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 
 	body := enforceMaxLength(r.buf.String())
 
-	createLabels := append(issueLabels, releaseLabel)
+	createLabels := append(issueLabels(req), releaseLabel)
 	createLabels = append(createLabels, req.ExtraLabels...)
 	if foundIssue == nil {
 		issueRequest := github.IssueRequest{
@@ -383,22 +426,37 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 }
 
 func (p *poster) teamcityURL(tab, fragment string) *url.URL {
+	if p.TeamCityOptions == nil {
+		return nil
+	}
+	opts := p.TeamCityOptions
 	options := url.Values{}
 	options.Add("buildTab", tab)
 
-	u, err := url.Parse(p.ServerURL)
+	u, err := url.Parse(opts.ServerURL)
 	if err != nil {
 		log.Fatal(err)
 	}
 	u.Scheme = "https"
-	u.Path = fmt.Sprintf("buildConfiguration/%s/%s", p.BuildTypeID, p.BuildID)
+	u.Path = fmt.Sprintf("buildConfiguration/%s/%s", opts.BuildTypeID, opts.BuildID)
 	u.RawQuery = options.Encode()
 	u.Fragment = fragment
 	return u
 }
 
-func (p *poster) teamcityBuildLogURL() *url.URL {
-	return p.teamcityURL("log", "")
+func (p *poster) buildURL() *url.URL {
+	if p.Options.TeamCityOptions != nil {
+		u := p.teamcityURL("log", "")
+		return u
+	} else if p.Options.EngFlowOptions != nil {
+		u, err := url.Parse(p.Options.EngFlowOptions.ServerURL)
+		if err != nil {
+			log.Fatal(err)
+		}
+		u.Path = fmt.Sprintf("invocation/%s", p.Options.EngFlowOptions.InvocationID)
+		return u
+	}
+	return nil
 }
 
 func (p *poster) teamcityArtifactsURL(artifacts string) *url.URL {
@@ -412,6 +470,8 @@ type PostRequest struct {
 	PackageName string
 	// The name of the failing test.
 	TestName string
+	// If set, the C-test-failure label will not be applied.
+	SkipLabelTestFailure bool
 	// The test output.
 	Message string
 	// ExtraParams contains the parameters to be included in a failure
@@ -450,8 +510,9 @@ type Logger interface {
 // existing open issue. GITHUB_API_TOKEN must be set to a valid GitHub token
 // that has permissions to search and create issues and comments or an error
 // will be returned.
-func Post(ctx context.Context, l Logger, formatter IssueFormatter, req PostRequest) error {
-	opts := DefaultOptionsFromEnv()
+func Post(
+	ctx context.Context, l Logger, formatter IssueFormatter, req PostRequest, opts *Options,
+) error {
 	if !opts.CanPost() {
 		return errors.Newf("GITHUB_API_TOKEN env variable is not set; cannot post issue")
 	}

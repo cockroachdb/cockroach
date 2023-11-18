@@ -35,30 +35,30 @@ import (
 
 // Timeout is a cluster setting used for cloud storage interactions.
 var Timeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.timeout",
 	"the timeout for import/export storage operations",
 	10*time.Minute,
-).WithPublic()
+	settings.WithPublic)
 
 var httpCustomCA = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.http.custom_ca",
 	"custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage",
 	"",
-).WithPublic()
+	settings.WithPublic)
 
 // WriteChunkSize is used to control the size of each chunk that is buffered and
 // uploaded by the cloud storage client.
 var WriteChunkSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.write_chunk.size",
 	"controls the size of each file chunk uploaded by the cloud storage client",
 	8<<20,
 )
 
 var retryConnectionTimedOut = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.connection_timed_out_retries.enabled",
 	"retry generic connection timed out errors; use with extreme caution",
 	false,
@@ -166,7 +166,7 @@ func ResumingReaderRetryOnErrFnForSettings(
 
 		retryTimeouts := retryConnectionTimedOut.Get(&st.SV)
 		if retryTimeouts && sysutil.IsErrTimedOut(err) {
-			log.Warningf(ctx, "retrying connection timed out because %s = true", retryConnectionTimedOut.Key())
+			log.Warningf(ctx, "retrying connection timed out because %s = true", retryConnectionTimedOut.Name())
 			return true
 		}
 		return false
@@ -250,6 +250,8 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "cloud.ResumingReader.Read")
 	defer sp.Finish()
 
+	var read int
+
 	var lastErr error
 	for retries := 0; lastErr == nil; retries++ {
 		if r.Reader == nil {
@@ -257,10 +259,15 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 		}
 
 		if lastErr == nil {
-			n, readErr := r.Reader.Read(p)
+			n, readErr := r.Reader.Read(p[read:])
+			read += n
+			r.Pos += int64(n)
 			if readErr == nil || readErr == io.EOF {
-				r.Pos += int64(n)
-				return n, readErr
+				return read, readErr
+			}
+			if r.Size > 0 && r.Pos == r.Size {
+				log.Warningf(ctx, "read %s ignoring read error received after completed read (%d): %v", r.Filename, r.Pos, readErr)
+				return read, io.EOF
 			}
 			lastErr = errors.Wrapf(readErr, "read %s", r.Filename)
 		}
@@ -272,7 +279,7 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 		// Use the configured retry-on-error decider to check for a resumable error.
 		if r.RetryOnErrFn(lastErr) {
 			if retries >= maxNoProgressReads {
-				return 0, errors.Wrapf(lastErr, "multiple Read calls (%d) return no data", retries)
+				return read, errors.Wrapf(lastErr, "multiple Read calls (%d) return no data", retries)
 			}
 			log.Errorf(ctx, "Retry IO error: %s", lastErr)
 			lastErr = nil
@@ -287,7 +294,7 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 	// something with what was read before the error, but this mostly applies to
 	// err = EOF case which we handle above, so likely OK that we're discarding n
 	// here and pretending it was zero.
-	return 0, lastErr
+	return read, lastErr
 }
 
 // Close implements io.Closer.

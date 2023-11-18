@@ -114,7 +114,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	cleanupTenant := c.StartDestTenant(ctx)
+	cleanupTenant := c.StartDestTenant(ctx, nil, 0)
 	defer func() {
 		require.NoError(t, cleanupTenant())
 	}()
@@ -139,7 +139,6 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	})
 
 	t.Run("pause-resume-as-non-system-tenant", func(t *testing.T) {
-		c.DestTenantSQL.Exec(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true`)
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 PAUSE REPLICATION`, "foo")
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 RESUME REPLICATION`, "foo")
 	})
@@ -288,6 +287,10 @@ func (br *blockingResumer) OnFailOrCancel(context.Context, interface{}, error) e
 	panic("unimplemented")
 }
 
+func (br *blockingResumer) CollectProfile(context.Context, interface{}) error {
+	panic("unimplemented")
+}
+
 // TestTenantStatusWithFutureCutoverTime verifies we go through the tenants
 // states, including the state that the tenant is waiting for a future cutover.
 func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
@@ -303,7 +306,7 @@ func TestTenantStatusWithFutureCutoverTime(t *testing.T) {
 	waitBeforeCh := make(chan struct{})
 	waitAfterCh := make(chan struct{})
 	registry := c.DestSysServer.JobRegistry().(*jobs.Registry)
-	registry.TestingWrapResumerConstructor(jobspb.TypeStreamIngestion,
+	registry.TestingWrapResumerConstructor(jobspb.TypeReplicationStreamIngestion,
 		func(raw jobs.Resumer) jobs.Resumer {
 			r := blockingResumer{
 				orig:       raw,
@@ -391,7 +394,7 @@ func TestTenantStatusWithLatestCutoverTime(t *testing.T) {
 	waitBeforeCh := make(chan struct{})
 	waitAfterCh := make(chan struct{})
 	registry := c.DestSysServer.JobRegistry().(*jobs.Registry)
-	registry.TestingWrapResumerConstructor(jobspb.TypeStreamIngestion,
+	registry.TestingWrapResumerConstructor(jobspb.TypeReplicationStreamIngestion,
 		func(raw jobs.Resumer) jobs.Resumer {
 			r := blockingResumer{
 				orig:       raw,

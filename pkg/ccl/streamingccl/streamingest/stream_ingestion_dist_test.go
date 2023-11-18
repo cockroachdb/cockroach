@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -25,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -151,6 +154,7 @@ func fakeTopology(nls []sql.InstanceLocality) streamclient.Topology {
 // evenly.
 func TestSourceDestMatching(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -176,31 +180,31 @@ func TestSourceDestMatching(t *testing.T) {
 	}
 
 	// validatePairs tests that src-dst assignments are expected.
-	validatePairs := func(sipSpecs []*execinfrapb.StreamIngestionDataSpec, dstNodes []sql.InstanceLocality,
+	validatePairs := func(t *testing.T,
+		sipSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec,
 		expected map[pair]struct{}) {
-		for i, spec := range sipSpecs {
-
-			// SIPs are created in the order of the destination node ids
-			dstID := dstNodes[i].GetInstanceID()
+		for dstID, spec := range sipSpecs {
+			require.True(t, len(spec.PartitionSpecs) > 0, "empty node %s included in partition specs", dstID)
 			for srcID := range spec.PartitionSpecs {
 				srcIDNum, err := strconv.Atoi(srcID)
 				require.NoError(t, err)
-				_, ok := expected[pair{srcIDNum, int(dstID)}]
+				expectKey := pair{srcIDNum, int(dstID)}
+				_, ok := expected[expectKey]
 				require.True(t, ok, "Src %s,Dst %d do not match", srcID, dstID)
+				delete(expected, expectKey)
 			}
 		}
+		require.Equal(t, 0, len(expected), "expected matches not included")
 	}
 
 	// validateEvenDistribution tests that source node assignments were evenly
 	// distributed across destination nodes. This function is only called on test
 	// cases without an expected exact src-dst node match.
-	validateEvenDistribution := func(sipSpecs []*execinfrapb.StreamIngestionDataSpec, dstNodes []sql.InstanceLocality) {
-
+	validateEvenDistribution := func(t *testing.T, sipSpecs map[base.SQLInstanceID]*execinfrapb.StreamIngestionDataSpec, dstNodes []sql.InstanceLocality) {
+		require.Equal(t, len(sipSpecs), len(dstNodes))
 		dstNodeAssignmentCount := make(map[base.SQLInstanceID]int, len(dstNodes))
-		for i, spec := range sipSpecs {
-
-			// SIPs are created in the order of the destination node ids
-			dstID := dstNodes[i].GetInstanceID()
+		for dstID, spec := range sipSpecs {
+			dstNodeAssignmentCount[dstID] = 0
 			for range spec.PartitionSpecs {
 				dstNodeAssignmentCount[dstID]++
 			}
@@ -291,6 +295,12 @@ func TestSourceDestMatching(t *testing.T) {
 			srcNodes: nls(nl(1, "a=x"), nl(2, "a=y"), nl(3, "a=z"), nl(4, "a=x")),
 			dstNodes: nls(nl(99, "a=a"), nl(98, "a=b")),
 		},
+		{
+			name:          "ensure nodes with no work are not included in specs",
+			srcNodes:      nls(nl(1, "a=a")),
+			dstNodes:      nls(nl(99, "a=a"), nl(98, "a=b")),
+			expectedPairs: pairs(mkPair(1, 99)),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeStreamAddress := streamingccl.StreamAddress("")
@@ -309,10 +319,101 @@ func TestSourceDestMatching(t *testing.T) {
 			)
 			require.NoError(t, err)
 			if len(tc.expectedPairs) > 0 {
-				validatePairs(sipSpecs, tc.dstNodes, tc.expectedPairs)
+				validatePairs(t, sipSpecs, tc.expectedPairs)
 			} else {
-				validateEvenDistribution(sipSpecs, tc.dstNodes)
+				validateEvenDistribution(t, sipSpecs, tc.dstNodes)
 			}
 		})
 	}
+}
+
+type testSplitter struct {
+	splits     []roachpb.Key
+	scatters   []roachpb.Key
+	splitErr   func(key roachpb.Key) error
+	scatterErr func(key roachpb.Key) error
+}
+
+func (ts *testSplitter) split(_ context.Context, splitKey roachpb.Key, _ hlc.Timestamp) error {
+	ts.splits = append(ts.splits, splitKey)
+	if ts.splitErr != nil {
+		return ts.splitErr(splitKey)
+	}
+	return nil
+}
+
+func (ts *testSplitter) scatter(_ context.Context, scatterKey roachpb.Key) error {
+	ts.scatters = append(ts.scatters, scatterKey)
+	if ts.scatterErr != nil {
+		return ts.scatterErr(scatterKey)
+	}
+	return nil
+}
+
+func (ts *testSplitter) now() hlc.Timestamp {
+	return hlc.Timestamp{}
+}
+
+func TestCreateInitialSplits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	sourceTenantID := roachpb.MustMakeTenantID(11)
+	inputCodec := keys.MakeSQLCodec(sourceTenantID)
+	destTenantID := roachpb.MustMakeTenantID(12)
+	outputCodec := keys.MakeSQLCodec(destTenantID)
+
+	testSpan := func(codec keys.SQLCodec, tableID uint32) roachpb.Span {
+		return roachpb.Span{
+			Key:    codec.IndexPrefix(tableID, 1),
+			EndKey: codec.IndexPrefix(tableID, 2),
+		}
+	}
+	inputSpans := []roachpb.Span{
+		testSpan(inputCodec, 100),
+		testSpan(inputCodec, 200),
+		testSpan(inputCodec, 300),
+		testSpan(inputCodec, 400),
+	}
+	outputSpans := []roachpb.Span{
+		testSpan(outputCodec, 100),
+		testSpan(outputCodec, 200),
+		testSpan(outputCodec, 300),
+		testSpan(outputCodec, 400),
+	}
+	topo := streamclient.Topology{
+		SourceTenantID: sourceTenantID,
+		Partitions: []streamclient.PartitionInfo{
+			{Spans: inputSpans},
+		},
+	}
+
+	t.Run("rekeys before splitting", func(t *testing.T) {
+		ts := &testSplitter{}
+		err := createInitialSplits(ctx, keys.SystemSQLCodec, ts, topo, destTenantID)
+		require.NoError(t, err)
+		expectedSplitsAndScatters := make([]roachpb.Key, 0, len(outputSpans))
+		for _, sp := range outputSpans {
+			expectedSplitsAndScatters = append(expectedSplitsAndScatters, sp.Key)
+		}
+
+		require.Equal(t, expectedSplitsAndScatters, ts.splits)
+		require.Equal(t, expectedSplitsAndScatters, ts.scatters)
+
+	})
+	t.Run("split errors are fatal", func(t *testing.T) {
+		require.Error(t, createInitialSplits(ctx, keys.SystemSQLCodec, &testSplitter{
+			splitErr: func(_ roachpb.Key) error {
+				return errors.New("test error")
+			},
+		}, topo, destTenantID))
+	})
+	t.Run("ignores scatter errors", func(t *testing.T) {
+		require.NoError(t, createInitialSplits(ctx, keys.SystemSQLCodec, &testSplitter{
+			scatterErr: func(_ roachpb.Key) error {
+				return errors.New("test error")
+			},
+		}, topo, destTenantID))
+	})
 }

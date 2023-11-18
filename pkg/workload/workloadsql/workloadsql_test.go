@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
@@ -77,11 +78,14 @@ func TestSetup(t *testing.T) {
 
 func TestSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
-	defer s.Stopper().Stop(ctx)
-	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE test`)
 
 	for _, ranges := range []int{1, 2, 3, 4, 10} {
 
@@ -128,7 +132,6 @@ func TestSplits(t *testing.T) {
 		}
 
 		t.Run(fmt.Sprintf("ranges=%d", ranges), func(t *testing.T) {
-			sqlDB := sqlutils.MakeSQLRunner(db)
 			for _, table := range tables {
 				sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tree.NameString(table.Name)))
 				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, tree.NameString(table.Name), table.Schema))

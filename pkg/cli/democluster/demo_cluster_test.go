@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"reflect"
 	"testing"
 	"time"
 
@@ -21,10 +22,12 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -67,18 +70,19 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 2 << 10,
 			cacheSize:         1 << 10,
 			expected: base.TestServerArgs{
-				DefaultTestTenant:         base.TODOTestTenantDisabled,
-				PartOfCluster:             true,
-				JoinAddr:                  "127.0.0.1",
-				DisableTLSForHTTP:         true,
-				Addr:                      "127.0.0.1:1334",
-				SQLAddr:                   "127.0.0.1:1234",
-				HTTPAddr:                  "127.0.0.1:4567",
-				SecondaryTenantPortOffset: -2,
-				SQLMemoryPoolSize:         2 << 10,
-				CacheSize:                 1 << 10,
-				NoAutoInitializeCluster:   true,
-				EnableDemoLoginEndpoint:   true,
+				DefaultTestTenant:             base.TODOTestTenantDisabled,
+				PartOfCluster:                 true,
+				JoinAddr:                      "127.0.0.1",
+				DisableTLSForHTTP:             true,
+				Addr:                          "127.0.0.1:1334",
+				SQLAddr:                       "127.0.0.1:1234",
+				HTTPAddr:                      "127.0.0.1:4567",
+				ApplicationInternalRPCPortMin: 1332,
+				ApplicationInternalRPCPortMax: 2356,
+				SQLMemoryPoolSize:             2 << 10,
+				CacheSize:                     1 << 10,
+				NoAutoInitializeCluster:       true,
+				EnableDemoLoginEndpoint:       true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: stickyVFSRegistry,
@@ -92,18 +96,19 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 4 << 10,
 			cacheSize:         4 << 10,
 			expected: base.TestServerArgs{
-				DefaultTestTenant:         base.TODOTestTenantDisabled,
-				PartOfCluster:             true,
-				JoinAddr:                  "127.0.0.1",
-				Addr:                      "127.0.0.1:1336",
-				SQLAddr:                   "127.0.0.1:1236",
-				HTTPAddr:                  "127.0.0.1:4569",
-				SecondaryTenantPortOffset: -2,
-				DisableTLSForHTTP:         true,
-				SQLMemoryPoolSize:         4 << 10,
-				CacheSize:                 4 << 10,
-				NoAutoInitializeCluster:   true,
-				EnableDemoLoginEndpoint:   true,
+				DefaultTestTenant:             base.TODOTestTenantDisabled,
+				PartOfCluster:                 true,
+				JoinAddr:                      "127.0.0.1",
+				Addr:                          "127.0.0.1:1336",
+				SQLAddr:                       "127.0.0.1:1236",
+				HTTPAddr:                      "127.0.0.1:4569",
+				ApplicationInternalRPCPortMin: 1334,
+				ApplicationInternalRPCPortMax: 2358,
+				DisableTLSForHTTP:             true,
+				SQLMemoryPoolSize:             4 << 10,
+				CacheSize:                     4 << 10,
+				NoAutoInitializeCluster:       true,
+				EnableDemoLoginEndpoint:       true,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: stickyVFSRegistry,
@@ -303,6 +308,9 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 
+	// Ensure CREATE TABLE below works properly.
+	sql.RestrictAccessToSystemInterface.Override(ctx, &c.firstServer.SystemLayer().ClusterSettings().SV, false)
+
 	testutils.RunTrueAndFalse(t, "forSecondaryTenant", func(t *testing.T, forSecondaryTenant bool) {
 		url, err := c.getNetworkURLForServer(ctx, 0,
 			true /* includeAppName */, serverSelection(forSecondaryTenant))
@@ -319,4 +327,89 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		log.Infof(ctx, "test succeeded")
 		t.Log("test succeeded")
 	})
+}
+
+// Ensure that demo clusters are started with privileged tenants.
+func TestTenantCapabilities(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// This test is too slow to complete under the race detector, sometimes.
+	skip.UnderRace(t)
+
+	defer TestingForceRandomizeDemoPorts()()
+
+	demoCtx := newDemoCtx()
+	demoCtx.NumNodes = 1
+	demoCtx.Multitenant = true
+
+	securityassets.ResetLoader()
+	certsDir := t.TempDir()
+
+	ctx := context.Background()
+
+	// Set up the transient cluster.
+	c := transientCluster{
+		demoCtx:           demoCtx,
+		stopper:           stop.NewStopper(),
+		demoDir:           certsDir,
+		stickyVFSRegistry: server.NewStickyVFSRegistry(),
+		infoLog:           log.Infof,
+		warnLog:           log.Warningf,
+		shoutLog:          log.Ops.Shoutf,
+	}
+	// Stop the cluster when the test exits, including when it fails.
+	// This also calls the Stop() method on the stopper, and thus
+	// cancels everything controlled by the stopper.
+	defer c.Close(ctx)
+
+	require.NoError(t, c.generateCerts(ctx, certsDir))
+	require.NoError(t, c.Start(ctx))
+
+	// Also ensure the context gets canceled when the stopper
+	// terminates above.
+	var cancel func()
+	ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+
+	url, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, forSystemTenant)
+	require.NoError(t, err)
+	sqlConnCtx := clisqlclient.Context{}
+	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.ToPQ().String())
+	defer func() {
+		require.NoError(t, conn.Close())
+	}()
+
+	sqlExecCtx := clisqlexec.Context{}
+	cols, rows, err := sqlExecCtx.RunQuery(
+		context.Background(),
+		conn,
+		clisqlclient.MakeQuery(`SHOW TENANT $1 WITH CAPABILITIES`, demoTenantName),
+		false, /* showMoreChars */
+	)
+	require.NoError(t, err)
+
+	expectedCols := []string{
+		"id",
+		"name",
+		"data_state",
+		"service_mode",
+		"capability_name",
+		"capability_value",
+	}
+	if !reflect.DeepEqual(expectedCols, cols) {
+		t.Fatalf("expected:\n%v\ngot:\n%v", expectedCols, cols)
+	}
+
+	var expectedRows [][]string
+	for _, cap := range tenantcapabilities.IDs {
+		capValue := `true`
+		if cap == tenantcapabilities.TenantSpanConfigBounds {
+			capValue = `{}`
+		}
+		expectedRows = append(expectedRows, []string{`2`, demoTenantName, `ready`, `shared`, cap.String(), capValue})
+	}
+	if !reflect.DeepEqual(expectedRows, rows) {
+		t.Fatalf("expected:\n%v\ngot:\n%v", expectedRows, rows)
+	}
 }

@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
@@ -47,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
-	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -298,15 +296,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 				activeVersion := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
-				if !activeVersion.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-					d.Invisibility > 0.0 && d.Invisibility < 1.0 {
+				if !activeVersion.IsActive(clusterversion.V23_2) &&
+					d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 					return unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 				}
 				idx := descpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
-					NotVisible:       d.Invisibility != 0.0,
-					Invisibility:     d.Invisibility,
+					NotVisible:       d.Invisibility.Value != 0.0,
+					Invisibility:     d.Invisibility.Value,
 					StoreColumnNames: d.Storing.ToStrings(),
 					CreatedAtNanos:   params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 				}
@@ -571,7 +569,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if ck := c.AsCheck(); ck != nil {
 				if err := validateCheckInTxn(
 					params.ctx, params.p.InternalSQLTxn(), &params.p.semaCtx,
-					params.p.SessionData(), n.tableDesc, ck.GetExpr(),
+					params.p.SessionData(), n.tableDesc, ck,
 				); err != nil {
 					return err
 				}
@@ -867,6 +865,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Replace all UDF names with OIDs in check constraints and update back
+	// references in functions used.
+	for _, ck := range n.tableDesc.CheckConstraints() {
+		if err := params.p.updateFunctionReferencesForCheck(params.ctx, n.tableDesc, ck.CheckDesc()); err != nil {
+			return err
+		}
+	}
+
 	// Record this table alteration in the event log. This is an auditable log
 	// event and is recorded in the same transaction as the table descriptor
 	// update.
@@ -895,19 +901,13 @@ func (p *planner) setAuditMode(
 	}
 	if !hasAdmin {
 		// Check for system privilege first, otherwise fall back to role options.
-		hasModify, err := p.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING, p.User())
+		hasModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
 		if err != nil {
 			return false, err
 		}
 		if !hasModify {
-			hasModify, err = p.HasRoleOption(ctx, roleoption.MODIFYCLUSTERSETTING)
-			if err != nil {
-				return false, err
-			}
-			if !hasModify {
-				return false, pgerror.Newf(pgcode.InsufficientPrivilege,
-					"only users with admin or %s system privilege are allowed to change audit settings on a table ", privilege.MODIFYCLUSTERSETTING.String())
-			}
+			return false, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with admin or %s system privilege are allowed to change audit settings on a table ", privilege.MODIFYCLUSTERSETTING)
 		}
 	}
 
@@ -1341,47 +1341,13 @@ func insertJSONStatistic(
 	histogram interface{},
 ) error {
 	var (
-		ctx      = params.ctx
-		txn      = params.p.InternalSQLTxn()
-		settings = params.ExecCfg().Settings
+		ctx = params.ctx
+		txn = params.p.InternalSQLTxn()
 	)
 
 	var name interface{}
 	if s.Name != "" {
 		name = s.Name
-	}
-
-	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns) {
-
-		if s.PartialPredicate != "" {
-			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "statistic for columns %v with collection time %s to insert is partial but cluster version is below 23.1", s.Columns, s.CreatedAt)
-		}
-
-		_ /* rows */, err := txn.Exec(
-			ctx,
-			"insert-stats",
-			txn.KV(),
-			`INSERT INTO system.table_statistics (
-					"tableID",
-					"name",
-					"columnIDs",
-					"createdAt",
-					"rowCount",
-					"distinctCount",
-					"nullCount",
-					"avgSize",
-					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-			tableID,
-			name,
-			columnIDs,
-			s.CreatedAt,
-			s.RowCount,
-			s.DistinctCount,
-			s.NullCount,
-			s.AvgSize,
-			histogram)
-		return err
 	}
 
 	var predicateValue interface{}
@@ -1623,6 +1589,10 @@ func dropColumnImpl(
 		)
 	}
 
+	if err := params.p.disallowDroppingPrimaryIndexReferencedInUDFOrView(params.ctx, tableDesc); err != nil {
+		return nil, err
+	}
+
 	// If the dropped column uses a sequence, remove references to it from that sequence.
 	if colToDrop.NumUsesSequences() > 0 {
 		if err := params.p.removeSequenceDependencies(params.ctx, tableDesc, colToDrop); err != nil {
@@ -1827,13 +1797,17 @@ func dropColumnImpl(
 		}
 	}
 	if !found {
-		return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 			"column %q in the middle of being added, try again later", t.Column)
 	}
 
 	return droppedViews, validateDescriptor(params.ctx, params.p, tableDesc)
 }
 
+// handleTTLStorageParamChange changes TTL storage parameters. descriptorChanged
+// must be true if the descriptor was modified directly. The caller
+// (alterTableNode), has a separate check to see if any mutations were
+// enqueued.
 func handleTTLStorageParamChange(
 	params runParams, tn *tree.TableName, tableDesc *tabledesc.Mutable, after *catpb.RowLevelTTL,
 ) (descriptorChanged bool, err error) {
@@ -1899,14 +1873,8 @@ func handleTTLStorageParamChange(
 		}
 	}
 
-	// Add TTL mutation if TTL is newly SET.
-	addTTLMutation := before == nil && after != nil
-
 	// Create new column.
 	if (before == nil || !before.HasDurationExpr()) && (after != nil && after.HasDurationExpr()) {
-		// Adding a TTL requires adding the automatic column and deferring the TTL
-		// addition to after the column is successfully added.
-		addTTLMutation = true
 		if catalog.FindColumnByName(tableDesc, catpb.TTLDefaultExpirationColumnName) != nil {
 			return false, pgerror.Newf(
 				pgcode.InvalidTableDefinition,
@@ -1941,21 +1909,9 @@ func handleTTLStorageParamChange(
 		}
 	}
 
-	// Add TTL mutation so that job is scheduled in SchemaChanger.
-	if addTTLMutation {
-		tableDesc.AddModifyRowLevelTTLMutation(
-			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
-			descpb.DescriptorMutation_ADD,
-		)
-	}
-
-	dropTTLMutation := before != nil && after == nil
-
 	// Remove existing column.
 	if (before != nil && before.HasDurationExpr()) && (after == nil || !after.HasDurationExpr()) {
 		telemetry.Inc(sqltelemetry.RowLevelTTLDropped)
-		// Create the DROP COLUMN job and the associated mutation.
-		dropTTLMutation = true
 		droppedViews, err := dropColumnImpl(params, tn, tableDesc, after, &tree.AlterTableDropColumn{
 			Column: catpb.TTLDefaultExpirationColumnName,
 		})
@@ -1968,10 +1924,23 @@ func handleTTLStorageParamChange(
 		}
 	}
 
-	if dropTTLMutation {
+	// Adding TTL requires adding the TTL job before adding the TTL fields.
+	// Removing TTL requires removing the TTL job before removing the TTL fields.
+	var direction descpb.DescriptorMutation_Direction
+	directlyModifiesDescriptor := false
+	switch {
+	case before == nil && after != nil:
+		direction = descpb.DescriptorMutation_ADD
+	case before != nil && after == nil:
+		direction = descpb.DescriptorMutation_DROP
+	default:
+		directlyModifiesDescriptor = true
+	}
+	if !directlyModifiesDescriptor {
+		// Add TTL mutation so that job is scheduled in SchemaChanger.
 		tableDesc.AddModifyRowLevelTTLMutation(
 			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
-			descpb.DescriptorMutation_DROP,
+			direction,
 		)
 	}
 
@@ -1985,12 +1954,12 @@ func handleTTLStorageParamChange(
 		}
 	}
 
-	descriptorChanged = !addTTLMutation && !dropTTLMutation
-	if descriptorChanged {
+	// Modify the TTL fields here because it will not be done in a mutation.
+	if directlyModifiesDescriptor {
 		tableDesc.RowLevelTTL = after
 	}
 
-	return descriptorChanged, nil
+	return directlyModifiesDescriptor, nil
 }
 
 // tryRemoveFKBackReferences determines whether the provided unique constraint

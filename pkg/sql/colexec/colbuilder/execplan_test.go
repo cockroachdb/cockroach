@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -48,8 +47,9 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// We will set up the following chain:
 	//
@@ -75,7 +75,7 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
-	txn := kv.NewTxn(ctx, s.DB(), s.NodeID())
+	txn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
 	flowCtx := &execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
@@ -89,10 +89,10 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	streamingMemAcc := evalCtx.TestingMon.MakeBoundAccount()
 	defer streamingMemAcc.Close(ctx)
 
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "test", "t")
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, keys.SystemSQLCodec,
+		&spec, s.Codec(),
 		desc, desc.GetPrimaryIndex(),
 		[]descpb.ColumnID{desc.PublicColumns()[0].GetID()},
 	); err != nil {
@@ -103,11 +103,11 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 		Spans:     make([]roachpb.Span, 1),
 	}
 	var err error
-	tr.Spans[0].Key, err = randgen.TestingMakePrimaryIndexKey(desc, 0)
+	tr.Spans[0].Key, err = randgen.TestingMakePrimaryIndexKeyForTenant(desc, s.Codec(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr.Spans[0].EndKey, err = randgen.TestingMakePrimaryIndexKey(desc, numRows+1)
+	tr.Spans[0].EndKey, err = randgen.TestingMakePrimaryIndexKeyForTenant(desc, s.Codec(), numRows+1)
 	if err != nil {
 		t.Fatal(err)
 	}

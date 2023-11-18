@@ -27,11 +27,12 @@ type physicalFeedFactory interface {
 }
 
 type rangeFeedConfig struct {
-	Frontier hlc.Timestamp
-	Spans    []kvcoord.SpanTimePair
-	WithDiff bool
-	Knobs    TestingKnobs
-	UseMux   bool
+	Frontier      hlc.Timestamp
+	Spans         []kvcoord.SpanTimePair
+	WithDiff      bool
+	RangeObserver func(fn kvcoord.ForEachRangeFn)
+	Knobs         TestingKnobs
+	UseMux        bool
 }
 
 type rangefeedFactory func(
@@ -81,6 +82,12 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	if cfg.WithDiff {
 		rfOpts = append(rfOpts, kvcoord.WithDiff())
 	}
+	if cfg.RangeObserver != nil {
+		rfOpts = append(rfOpts, kvcoord.WithRangeObserver(cfg.RangeObserver))
+	}
+	if len(cfg.Knobs.RangefeedOptions) != 0 {
+		rfOpts = append(rfOpts, cfg.Knobs.RangefeedOptions...)
+	}
 
 	g.GoCtx(func(ctx context.Context) error {
 		return p(ctx, cfg.Spans, feed.eventC, rfOpts...)
@@ -113,7 +120,8 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				}
 			case *kvpb.RangeFeedCheckpoint:
 				if p.knobs.ModifyTimestamps != nil {
-					p.knobs.ModifyTimestamps(&t.ResolvedTS)
+					e = kvcoord.RangeFeedMessage{RangeFeedEvent: e.ShallowCopy(), RegisteredSpan: e.RegisteredSpan}
+					p.knobs.ModifyTimestamps(&e.Checkpoint.ResolvedTS)
 				}
 				if !t.ResolvedTS.IsEmpty() && t.ResolvedTS.Less(p.cfg.Frontier) {
 					// RangeFeed happily forwards any closed timestamps it receives as

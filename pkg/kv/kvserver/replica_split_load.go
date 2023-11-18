@@ -26,13 +26,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
+// SplitByLoadEnabled wraps "kv.range_split.by_load.enabled".
 var SplitByLoadEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.range_split.by_load_enabled",
 	"allow automatic splits of ranges based on where load is concentrated",
 	true,
-).WithPublic()
+	settings.WithName("kv.range_split.by_load.enabled"),
+	settings.WithPublic)
 
 // SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".
 var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
@@ -40,7 +41,7 @@ var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	"kv.range_split.load_qps_threshold",
 	"the QPS over which, the range becomes a candidate for load based splitting",
 	2500, // 2500 req/s
-).WithPublic()
+	settings.WithPublic)
 
 // SplitByLoadCPUThreshold wraps "kv.range_split.load_cpu_threshold". The
 // default threshold of 500ms translates to a replica utilizing 50% of a CPU
@@ -58,21 +59,15 @@ var SplitByLoadCPUThreshold = settings.RegisterDurationSetting(
 	"kv.range_split.load_cpu_threshold",
 	"the CPU use per second over which, the range becomes a candidate for load based splitting",
 	500*time.Millisecond,
-	func(threshold time.Duration) error {
-		// We enforce a minimum because of recursive splitting that may occur if
-		// the threshold is set too low. There is a fixed CPU overhead for a
-		// replica. At the moment no split key will be produced unless there are
-		// more than 100 samples (batch requests) to that replica, however the
-		// memory overhead of tracking split keys in split/weighted_finder.go is
-		// noticeable and a finder is created after exceeding this threshold.
-		if threshold < 10*time.Millisecond {
-			return errors.Errorf(
-				"Cannot set `kv.range_split.load_cpu_threshold` less than 10ms",
-			)
-		}
-		return nil
-	},
-).WithPublic()
+	// We enforce a minimum because of recursive splitting that may occur if
+	// the threshold is set too low. There is a fixed CPU overhead for a
+	// replica. At the moment no split key will be produced unless there are
+	// more than 100 samples (batch requests) to that replica, however the
+	// memory overhead of tracking split keys in split/weighted_finder.go is
+	// noticeable and a finder is created after exceeding this threshold.
+	settings.DurationWithMinimum(10*time.Millisecond),
+	settings.WithPublic,
+)
 
 func (obj LBRebalancingObjective) ToSplitObjective() split.SplitObjective {
 	switch obj {

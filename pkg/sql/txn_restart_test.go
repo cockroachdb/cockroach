@@ -1316,7 +1316,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 	// +2 since the first two available ids are allocated to the database and
 	// public schema.
 	firstTableID := func() (id uint32) {
-		tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+		tc := serverutils.StartCluster(t, 3, /* numNodes */
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs:      base.TestServerArgs{UseDatabase: "test"},
@@ -1336,7 +1336,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 
 	restarted := true
 
-	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+	tc := serverutils.StartCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{

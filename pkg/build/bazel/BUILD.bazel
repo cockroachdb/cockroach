@@ -1,9 +1,20 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "bazel",
     srcs = ["bazel.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/build/bazel",
     visibility = ["//visibility:public"],
-    deps = ["@io_bazel_rules_go//go/tools/bazel:go_default_library"],
+    deps = [
+        "@io_bazel_rules_go//go/tools/bazel:go_default_library",
+    ],
+)
+
+go_test(
+    name = "bazel_test",
+    srcs = ["bazel_test.go"],
+    embed = [":bazel"],  # keep
+    deps = [
+        "@com_github_stretchr_testify//require",
+    ],
 )

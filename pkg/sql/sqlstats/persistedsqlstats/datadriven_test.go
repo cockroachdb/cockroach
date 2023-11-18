@@ -81,7 +81,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	knobs.OnTxnStatsFlushFinished = injector.invokePostTxnStatsFlushCallback
 	params.Knobs.SQLStatsKnobs = knobs
 
-	cluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+	cluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: params,
 	})
 	defer cluster.Stopper().Stop(ctx)

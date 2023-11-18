@@ -38,14 +38,14 @@ const SSTTargetSizeSetting = "kv.bulk_sst.target_size"
 // ExportRequestTargetFileSize controls the target file size for SSTs created
 // during backups.
 var ExportRequestTargetFileSize = settings.RegisterByteSizeSetting(
-	settings.SystemOnly,
+	settings.SystemVisible, // used by BACKUP
 	SSTTargetSizeSetting,
 	fmt.Sprintf("target size for SSTs emitted from export requests; "+
 		"export requests (i.e. BACKUP) may buffer up to the sum of %s and %s in memory",
 		SSTTargetSizeSetting, MaxExportOverageSetting,
 	),
 	16<<20,
-).WithPublic()
+	settings.WithPublic)
 
 // MaxExportOverageSetting is the cluster setting name for the
 // ExportRequestMaxAllowedFileSizeOverage setting.
@@ -63,7 +63,7 @@ var ExportRequestMaxAllowedFileSizeOverage = settings.RegisterByteSizeSetting(
 		SSTTargetSizeSetting, MaxExportOverageSetting,
 	),
 	64<<20, /* 64 MiB */
-).WithPublic()
+	settings.WithPublic)
 
 func init() {
 	RegisterReadOnlyCommand(kvpb.Export, declareKeysExport, evalExport)
@@ -76,14 +76,18 @@ func declareKeysExport(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+) error {
+	err := DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+	if err != nil {
+		return err
+	}
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeGCThresholdKey(header.RangeID)})
 	// Export requests will usually not hold latches during their evaluation.
 	//
 	// See call to `AssertAllowed()` in GetGCThreshold() to understand why we need
 	// to disable these assertions for export requests.
 	latchSpans.DisableUndeclaredAccessAssertions()
+	return nil
 }
 
 // evalExport dumps the requested keys into files of non-overlapping key ranges
@@ -104,7 +108,7 @@ func evalExport(
 	// ExportRequest is likely to find its target data has been GC'ed at this
 	// point, and so if the range being exported is part of such a table, we do
 	// not want to send back any row data to be backed up.
-	if cArgs.EvalCtx.ExcludeDataFromBackup() {
+	if cArgs.EvalCtx.ExcludeDataFromBackup(ctx) {
 		log.Infof(ctx, "[%s, %s) is part of a table excluded from backup, returning empty ExportResponse", args.Key, args.EndKey)
 		return result.Result{}, nil
 	}
@@ -154,9 +158,9 @@ func evalExport(
 		maxSize = targetSize + uint64(allowedOverage)
 	}
 
-	var maxIntents uint64
-	if m := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV); m > 0 {
-		maxIntents = uint64(m)
+	var maxLockConflicts uint64
+	if m := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV); m > 0 {
+		maxLockConflicts = uint64(m)
 	}
 
 	// Only use resume timestamp if splitting mid key is enabled.
@@ -184,8 +188,9 @@ func evalExport(
 			ExportAllRevisions: exportAllRevisions,
 			TargetSize:         targetSize,
 			MaxSize:            maxSize,
-			MaxIntents:         maxIntents,
+			MaxLockConflicts:   maxLockConflicts,
 			StopMidKey:         args.SplitMidKey,
+			ScanStats:          cArgs.ScanStats,
 		}
 		var summary kvpb.BulkOpSummary
 		var resumeInfo storage.ExportRequestResumeInfo

@@ -118,20 +118,22 @@ func (m *IntMap) Load(key int64) (value unsafe.Pointer, ok bool) {
 	read := m.getRead()
 	e, ok := read.m[key]
 	if !ok && read.amended {
-		m.mu.Lock()
-		// Avoid reporting a spurious miss if m.dirty got promoted while we were
-		// blocked on m.mu. (If further loads of the same key will not miss, it's
-		// not worth copying the dirty map for this key.)
-		read = m.getRead()
-		e, ok = read.m[key]
-		if !ok && read.amended {
-			e, ok = m.dirty[key]
-			// Regardless of whether the entry was present, record a miss: this key
-			// will take the slow path until the dirty map is promoted to the read
-			// map.
-			m.missLocked()
-		}
-		m.mu.Unlock()
+		func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			// Avoid reporting a spurious miss if m.dirty got promoted while we were
+			// blocked on m.mu. (If further loads of the same key will not miss, it's
+			// not worth copying the dirty map for this key.)
+			read = m.getRead()
+			e, ok = read.m[key]
+			if !ok && read.amended {
+				e, ok = m.dirty[key]
+				// Regardless of whether the entry was present, record a miss: this key
+				// will take the slow path until the dirty map is promoted to the read
+				// map.
+				m.missLocked()
+			}
+		}()
 	}
 	if !ok {
 		return nil, false
@@ -155,6 +157,7 @@ func (m *IntMap) Store(key int64, value unsafe.Pointer) {
 	}
 
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	read = m.getRead()
 	if e, ok := read.m[key]; ok {
 		if e.unexpungeLocked() {
@@ -174,7 +177,6 @@ func (m *IntMap) Store(key int64, value unsafe.Pointer) {
 		}
 		m.dirty[key] = newEntry(value)
 	}
-	m.mu.Unlock()
 }
 
 // tryStore stores a value if the entry has not been expunged.
@@ -226,6 +228,7 @@ func (m *IntMap) LoadOrStore(key int64, value unsafe.Pointer) (actual unsafe.Poi
 	}
 
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	read = m.getRead()
 	if e, ok := read.m[key]; ok {
 		if e.unexpungeLocked() {
@@ -245,7 +248,6 @@ func (m *IntMap) LoadOrStore(key int64, value unsafe.Pointer) (actual unsafe.Poi
 		m.dirty[key] = newEntry(value)
 		actual, loaded = value, false
 	}
-	m.mu.Unlock()
 
 	return actual, loaded
 }
@@ -283,13 +285,15 @@ func (m *IntMap) Delete(key int64) {
 	read := m.getRead()
 	e, ok := read.m[key]
 	if !ok && read.amended {
-		m.mu.Lock()
-		read = m.getRead()
-		e, ok = read.m[key]
-		if !ok && read.amended {
-			delete(m.dirty, key)
-		}
-		m.mu.Unlock()
+		func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			read = m.getRead()
+			e, ok = read.m[key]
+			if !ok && read.amended {
+				delete(m.dirty, key)
+			}
+		}()
 	}
 	if ok {
 		e.delete()
@@ -329,19 +333,21 @@ func (m *IntMap) Range(f func(key int64, value unsafe.Pointer) bool) {
 		// (assuming the caller does not break out early), so a call to Range
 		// amortizes an entire copy of the map: we can promote the dirty copy
 		// immediately!
-		m.mu.Lock()
-		read = m.getRead()
-		if read.amended {
-			// Don't let read escape directly, otherwise it will allocate even
-			// when read.amended is false. Instead, constrain the allocation to
-			// just this branch.
-			newRead := &readOnly{m: m.dirty}
-			atomic.StorePointer(&m.read, unsafe.Pointer(newRead))
-			read = *newRead
-			m.dirty = nil
-			m.misses = 0
-		}
-		m.mu.Unlock()
+		func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			read = m.getRead()
+			if read.amended {
+				// Don't let read escape directly, otherwise it will allocate even
+				// when read.amended is false. Instead, constrain the allocation to
+				// just this branch.
+				newRead := &readOnly{m: m.dirty}
+				atomic.StorePointer(&m.read, unsafe.Pointer(newRead))
+				read = *newRead
+				m.dirty = nil
+				m.misses = 0
+			}
+		}()
 	}
 
 	for k, e := range read.m {

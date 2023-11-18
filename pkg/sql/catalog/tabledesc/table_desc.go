@@ -613,6 +613,11 @@ func (desc *wrapper) GetObjectType() privilege.ObjectType {
 	return privilege.Table
 }
 
+// GetObjectTypeString implements the Object interface.
+func (desc *wrapper) GetObjectTypeString() string {
+	return string(desc.GetObjectType())
+}
+
 // GetInProgressImportStartTime returns the start wall time of the import if there's one in progress
 func (desc *wrapper) GetInProgressImportStartTime() int64 {
 	return desc.ImportStartWallTime

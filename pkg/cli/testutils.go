@@ -115,7 +115,10 @@ const testUserfileUploadTempDirPrefix = "test-userfile-upload-temp-dir-"
 
 func (c *TestCLI) fail(err error) {
 	if c.t != nil {
-		defer c.logScope.Close(c.t)
+		if c.logScope != nil {
+			c.logScope.Close(c.t)
+			c.logScope = nil
+		}
 		c.t.Fatal(err)
 	} else {
 		panic(err)
@@ -189,14 +192,14 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		if params.Insecure {
 			params.TenantArgs.ForceInsecure = true
 		}
-		c.tenant, err = c.Server.StartTenant(context.Background(), *params.TenantArgs)
+		c.tenant, err = c.Server.TenantController().StartTenant(context.Background(), *params.TenantArgs)
 		if err != nil {
 			c.fail(err)
 		}
 	}
 
 	if params.SharedProcessTenantArgs != nil {
-		c.tenant, _, err = c.Server.StartSharedProcessTenant(context.Background(), *params.SharedProcessTenantArgs)
+		c.tenant, _, err = c.Server.TenantController().StartSharedProcessTenant(context.Background(), *params.SharedProcessTenantArgs)
 		if err != nil {
 			c.fail(err)
 		}

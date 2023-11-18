@@ -10,6 +10,7 @@ stmt ::=
 stmt_without_legacy_transaction ::=
 	preparable_stmt
 	| analyze_stmt
+	| call_stmt
 	| copy_stmt
 	| comment_stmt
 	| execute_stmt
@@ -63,6 +64,9 @@ analyze_stmt ::=
 	'ANALYZE' analyze_target
 	| 'ANALYSE' analyze_target
 
+call_stmt ::=
+	'CALL' func_application
+
 copy_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN' opt_with_copy_options opt_where_clause
 	| 'COPY' table_name opt_column_list 'TO' 'STDOUT' opt_with_copy_options
@@ -100,6 +104,7 @@ grant_stmt ::=
 	| 'GRANT' privileges 'ON' 'ALL' 'SEQUENCES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' privileges 'ON' 'ALL' 'FUNCTIONS' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
+	| 'GRANT' privileges 'ON' 'ALL' 'PROCEDURES' 'IN' 'SCHEMA' schema_name_list 'TO' role_spec_list opt_with_grant_option
 	| 'GRANT' 'SYSTEM' privileges 'TO' role_spec_list opt_with_grant_option
 
 prepare_stmt ::=
@@ -119,6 +124,8 @@ revoke_stmt ::=
 	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' 'ALL' 'TABLES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' privileges 'ON' 'ALL' 'FUNCTIONS' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' 'ALL' 'FUNCTIONS' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' privileges 'ON' 'ALL' 'PROCEDURES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
+	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' 'ALL' 'PROCEDURES' 'IN' 'SCHEMA' schema_name_list 'FROM' role_spec_list
 	| 'REVOKE' 'SYSTEM' privileges 'FROM' role_spec_list
 	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' 'SYSTEM' privileges 'FROM' role_spec_list
 
@@ -274,6 +281,7 @@ show_stmt ::=
 	| show_enums_stmt
 	| show_types_stmt
 	| show_functions_stmt
+	| show_procedures_stmt
 	| show_grants_stmt
 	| show_indexes_stmt
 	| show_partitions_stmt
@@ -312,6 +320,13 @@ upsert_stmt ::=
 
 analyze_target ::=
 	table_name
+
+func_application ::=
+	func_application_name '(' ')'
+	| func_application_name '(' expr_list opt_sort_clause ')'
+	| func_application_name '(' 'ALL' expr_list opt_sort_clause ')'
+	| func_application_name '(' 'DISTINCT' expr_list ')'
+	| func_application_name '(' '*' ')'
 
 table_name ::=
 	db_object_name
@@ -385,6 +400,7 @@ grant_targets ::=
 	| 'DATABASE' name_list
 	| 'EXTERNAL' 'CONNECTION' name_list
 	| 'FUNCTION' function_with_paramtypes_list
+	| 'PROCEDURE' function_with_paramtypes_list
 
 role_spec_list ::=
 	( role_spec ) ( ( ',' role_spec ) )*
@@ -509,6 +525,7 @@ alter_ddl_stmt ::=
 	| alter_changefeed_stmt
 	| alter_backup_stmt
 	| alter_func_stmt
+	| alter_proc_stmt
 	| alter_backup_schedule
 
 alter_role_stmt ::=
@@ -637,6 +654,7 @@ drop_ddl_stmt ::=
 	| drop_schema_stmt
 	| drop_type_stmt
 	| drop_func_stmt
+	| drop_proc_stmt
 
 drop_role_stmt ::=
 	'DROP' role_or_group_or_user role_spec_list
@@ -785,8 +803,7 @@ show_backup_stmt ::=
 	| 'SHOW' 'BACKUP' 'FILES' string_or_placeholder opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' 'RANGES' string_or_placeholder opt_with_show_backup_options
 	| 'SHOW' 'BACKUP' 'VALIDATE' string_or_placeholder opt_with_show_backup_options
-	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder
-	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder 'WITH' show_backup_connection_options_list
+	| 'SHOW' 'BACKUP' 'CONNECTION' string_or_placeholder opt_with_show_backup_connection_options_list
 
 show_columns_stmt ::=
 	'SHOW' 'COLUMNS' 'FROM' table_name with_comment
@@ -824,6 +841,11 @@ show_functions_stmt ::=
 	'SHOW' 'FUNCTIONS' 'FROM' name '.' name
 	| 'SHOW' 'FUNCTIONS' 'FROM' name
 	| 'SHOW' 'FUNCTIONS'
+
+show_procedures_stmt ::=
+	'SHOW' 'PROCEDURES' 'FROM' name '.' name
+	| 'SHOW' 'PROCEDURES' 'FROM' name
+	| 'SHOW' 'PROCEDURES'
 
 show_grants_stmt ::=
 	'SHOW' 'GRANTS' opt_on_targets_roles for_grantee_clause
@@ -971,6 +993,13 @@ opt_from_list ::=
 	'FROM' from_list
 	| 
 
+func_application_name ::=
+	func_name
+	| '[' 'FUNCTION' iconst32 ']'
+
+expr_list ::=
+	( a_expr ) ( ( ',' a_expr ) )*
+
 db_object_name ::=
 	simple_db_object_name
 	| complex_db_object_name
@@ -1001,9 +1030,6 @@ index_name ::=
 
 standalone_index_name ::=
 	db_object_name
-
-expr_list ::=
-	( a_expr ) ( ( ',' a_expr ) )*
 
 unreserved_keyword ::=
 	'ABORT'
@@ -1157,6 +1183,7 @@ unreserved_keyword ::=
 	| 'HOUR'
 	| 'IDENTITY'
 	| 'IMMEDIATE'
+	| 'IMMEDIATELY'
 	| 'IMMUTABLE'
 	| 'IMPORT'
 	| 'INCLUDE'
@@ -1296,6 +1323,7 @@ unreserved_keyword ::=
 	| 'PRIORITY'
 	| 'PRIVILEGES'
 	| 'PROCEDURE'
+	| 'PROCEDURES'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -1318,6 +1346,7 @@ unreserved_keyword ::=
 	| 'RELATIVE'
 	| 'RELEASE'
 	| 'RELOCATE'
+	| 'REMOVE_REGIONS'
 	| 'RENAME'
 	| 'REPEATABLE'
 	| 'REPLACE'
@@ -1438,6 +1467,7 @@ unreserved_keyword ::=
 	| 'UNSPLIT'
 	| 'UNTIL'
 	| 'UPDATE'
+	| 'UPDATES_CLUSTER_MONITORING_METRICS'
 	| 'UPSERT'
 	| 'USE'
 	| 'USERS'
@@ -1672,6 +1702,11 @@ alter_func_stmt ::=
 	| alter_func_set_schema_stmt
 	| alter_func_dep_extension_stmt
 
+alter_proc_stmt ::=
+	alter_proc_rename_stmt
+	| alter_proc_owner_stmt
+	| alter_proc_set_schema_stmt
+
 alter_backup_schedule ::=
 	'ALTER' 'BACKUP' 'SCHEDULE' iconst64 alter_backup_schedule_cmds
 
@@ -1846,6 +1881,10 @@ drop_func_stmt ::=
 	'DROP' 'FUNCTION' function_with_paramtypes_list opt_drop_behavior
 	| 'DROP' 'FUNCTION' 'IF' 'EXISTS' function_with_paramtypes_list opt_drop_behavior
 
+drop_proc_stmt ::=
+	'DROP' 'PROCEDURE' function_with_paramtypes_list opt_drop_behavior
+	| 'DROP' 'PROCEDURE' 'IF' 'EXISTS' function_with_paramtypes_list opt_drop_behavior
+
 explain_option_name ::=
 	non_reserved_word
 
@@ -1870,6 +1909,7 @@ session_var ::=
 	| 'LC_COLLATE'
 	| 'LC_CTYPE'
 	| 'TIME' 'ZONE'
+	| 'VIRTUAL_CLUSTER_NAME'
 
 var_name ::=
 	name
@@ -1935,8 +1975,10 @@ opt_with_show_backup_options ::=
 	| 'WITH' 'OPTIONS' '(' show_backup_options_list ')'
 	| 
 
-show_backup_connection_options_list ::=
-	( show_backup_connection_options ) ( ( ',' show_backup_connection_options ) )*
+opt_with_show_backup_connection_options_list ::=
+	'WITH' show_backup_connection_options_list
+	| 'WITH' 'OPTIONS' '(' show_backup_connection_options_list ')'
+	| 
 
 with_comment ::=
 	'WITH' 'COMMENT'
@@ -2010,6 +2052,14 @@ relation_expr ::=
 set_clause ::=
 	single_set_clause
 	| multiple_set_clause
+
+func_name ::=
+	type_function_name
+	| prefixed_column_path
+	| 'INDEX'
+
+iconst32 ::=
+	'ICONST'
 
 simple_db_object_name ::=
 	db_object_name_component
@@ -2280,6 +2330,15 @@ alter_func_set_schema_stmt ::=
 alter_func_dep_extension_stmt ::=
 	'ALTER' 'FUNCTION' function_with_paramtypes opt_no 'DEPENDS' 'ON' 'EXTENSION' name
 
+alter_proc_rename_stmt ::=
+	'ALTER' 'PROCEDURE' function_with_paramtypes 'RENAME' 'TO' name
+
+alter_proc_owner_stmt ::=
+	'ALTER' 'PROCEDURE' function_with_paramtypes 'OWNER' 'TO' role_spec
+
+alter_proc_set_schema_stmt ::=
+	'ALTER' 'PROCEDURE' function_with_paramtypes 'SET' 'SCHEMA' schema_name
+
 iconst64 ::=
 	'ICONST'
 
@@ -2300,6 +2359,8 @@ backup_options ::=
 	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
 	| include_all_clusters '=' a_expr
+	| 'UPDATES_CLUSTER_MONITORING_METRICS'
+	| 'UPDATES_CLUSTER_MONITORING_METRICS' '=' a_expr
 
 c_expr ::=
 	d_expr
@@ -2576,7 +2637,7 @@ table_ref ::=
 	| '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
 
 sortby_list ::=
-	( sortby ) ( ( ',' sortby ) )*
+	( sortby | sortby_index ) ( ( ',' sortby | ',' sortby_index ) )*
 
 first_or_next ::=
 	'FIRST'
@@ -2647,6 +2708,7 @@ restore_options ::=
 	| 'UNSAFE_RESTORE_INCOMPATIBLE_VERSION'
 	| 'EXECUTION' 'LOCALITY' '=' string_or_placeholder
 	| 'EXPERIMENTAL' 'DEFERRED' 'COPY'
+	| 'REMOVE_REGIONS'
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
@@ -2685,10 +2747,8 @@ extra_var_value ::=
 show_backup_options_list ::=
 	( show_backup_options ) ( ( ',' show_backup_options ) )*
 
-show_backup_connection_options ::=
-	'TRANSFER' '=' string_or_placeholder
-	| 'TIME' '=' string_or_placeholder
-	| 'CONCURRENTLY' '=' a_expr
+show_backup_connection_options_list ::=
+	( show_backup_connection_options ) ( ( ',' show_backup_connection_options ) )*
 
 targets_roles ::=
 	'ROLE' role_spec_list
@@ -2711,6 +2771,11 @@ single_set_clause ::=
 
 multiple_set_clause ::=
 	'(' insert_column_list ')' '=' in_expr
+
+type_function_name ::=
+	'identifier'
+	| unreserved_keyword
+	| type_func_name_keyword
 
 type_func_name_crdb_extra_keyword ::=
 	'FAMILY'
@@ -2933,6 +2998,8 @@ alter_backup_schedule_cmd ::=
 	| 'SET' 'FULL' 'BACKUP' 'ALWAYS'
 	| 'SET' 'FULL' 'BACKUP' sconst_or_placeholder
 	| 'SET' 'SCHEDULE' 'OPTION' kv_option
+	| 'EXECUTE' 'IMMEDIATELY'
+	| 'EXECUTE' 'FULL' 'IMMEDIATELY'
 
 role_option ::=
 	'CREATEROLE'
@@ -3181,7 +3248,9 @@ row_source_extension_stmt ::=
 
 sortby ::=
 	a_expr opt_asc_desc opt_nulls_order
-	| 'PRIMARY' 'KEY' table_name opt_asc_desc
+
+sortby_index ::=
+	'PRIMARY' 'KEY' table_name opt_asc_desc
 	| 'INDEX' table_name '@' index_name opt_asc_desc
 
 only_signed_fconst ::=
@@ -3253,6 +3322,11 @@ show_backup_options ::=
 	| 'ENCRYPTION_INFO_DIR' '=' string_or_placeholder
 	| 'DEBUG_DUMP_METADATA_SST'
 
+show_backup_connection_options ::=
+	'TRANSFER' '=' string_or_placeholder
+	| 'TIME' '=' string_or_placeholder
+	| 'CONCURRENTLY' '=' a_expr
+
 schema_wildcard ::=
 	wildcard_pattern
 
@@ -3281,9 +3355,6 @@ func_params_list ::=
 
 general_type_name ::=
 	type_function_name_no_crdb_extra
-
-iconst32 ::=
-	'ICONST'
 
 complex_type_name ::=
 	general_type_name '.' unrestricted_name
@@ -3686,6 +3757,7 @@ bare_label_keywords ::=
 	| 'IGNORE_FOREIGN_KEYS'
 	| 'ILIKE'
 	| 'IMMEDIATE'
+	| 'IMMEDIATELY'
 	| 'IMMUTABLE'
 	| 'IMPORT'
 	| 'IN'
@@ -3858,6 +3930,7 @@ bare_label_keywords ::=
 	| 'PRIORITY'
 	| 'PRIVILEGES'
 	| 'PROCEDURE'
+	| 'PROCEDURES'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -3882,6 +3955,7 @@ bare_label_keywords ::=
 	| 'RELATIVE'
 	| 'RELEASE'
 	| 'RELOCATE'
+	| 'REMOVE_REGIONS'
 	| 'RENAME'
 	| 'REPEATABLE'
 	| 'REPLACE'
@@ -4023,6 +4097,7 @@ bare_label_keywords ::=
 	| 'UNSPLIT'
 	| 'UNTIL'
 	| 'UPDATE'
+	| 'UPDATES_CLUSTER_MONITORING_METRICS'
 	| 'UPSERT'
 	| 'USE'
 	| 'USER'
@@ -4214,7 +4289,7 @@ alter_column_default ::=
 	| 'DROP' 'DEFAULT'
 
 alter_column_on_update ::=
-	'SET' 'ON' 'UPDATE' b_expr
+	'SET' 'ON' 'UPDATE' a_expr
 	| 'DROP' 'ON' 'UPDATE'
 
 alter_column_visible ::=
@@ -4264,13 +4339,6 @@ func_name_no_crdb_extra ::=
 opt_interval_qualifier ::=
 	interval_qualifier
 	| 
-
-func_application ::=
-	func_application_name '(' ')'
-	| func_application_name '(' expr_list opt_sort_clause ')'
-	| func_application_name '(' 'ALL' expr_list opt_sort_clause ')'
-	| func_application_name '(' 'DISTINCT' expr_list ')'
-	| func_application_name '(' '*' ')'
 
 within_group_clause ::=
 	'WITHIN' 'GROUP' '(' single_sort_clause ')'
@@ -4463,13 +4531,10 @@ reference_actions ::=
 	| reference_on_delete reference_on_update
 	| 
 
-func_application_name ::=
-	func_name
-	| '[' 'FUNCTION' iconst32 ']'
-
 single_sort_clause ::=
 	'ORDER' 'BY' sortby
 	| 'ORDER' 'BY' sortby ',' sortby_list
+	| 'ORDER' 'BY' sortby_index ',' sortby_list
 
 window_specification ::=
 	'(' opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause ')'
@@ -4524,11 +4589,6 @@ create_as_params ::=
 col_def_list ::=
 	( col_def ) ( ( ',' col_def ) )*
 
-type_function_name ::=
-	'identifier'
-	| unreserved_keyword
-	| type_func_name_keyword
-
 char_aliases ::=
 	'CHAR'
 	| 'CHARACTER'
@@ -4547,11 +4607,6 @@ reference_on_update ::=
 
 reference_on_delete ::=
 	'ON' 'DELETE' reference_action
-
-func_name ::=
-	type_function_name
-	| prefixed_column_path
-	| 'INDEX'
 
 opt_existing_window_name ::=
 	name

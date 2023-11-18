@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -37,11 +37,18 @@ func MakeRangeFeedValueReader(
 ) (func(t testing.TB) *kvpb.RangeFeedValue, func()) {
 	t.Helper()
 	execCfg := execCfgI.(sql.ExecutorConfig)
+
+	// Rangefeeds might still work even when this setting is false because span
+	// configs may enable them, but relying on span configs can be prone to
+	// issues as seen in #109507. Therefore, we assert that the cluster setting
+	// is set.
+	require.True(t, kvserver.RangefeedEnabled.Get(&execCfg.Settings.SV))
+
 	rows := make(chan *kvpb.RangeFeedValue)
 	ctx, cleanup := context.WithCancel(context.Background())
 
 	_, err := execCfg.RangeFeedFactory.RangeFeed(ctx, "feed-"+desc.GetName(),
-		[]roachpb.Span{desc.PrimaryIndexSpan(keys.SystemSQLCodec)},
+		[]roachpb.Span{desc.PrimaryIndexSpan(execCfg.Codec)},
 		execCfg.Clock.Now(),
 		func(ctx context.Context, value *kvpb.RangeFeedValue) {
 			select {

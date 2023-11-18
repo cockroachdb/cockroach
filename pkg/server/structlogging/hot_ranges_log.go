@@ -31,7 +31,7 @@ import (
 const ReportTopHottestRanges = 5
 
 var TelemetryHotRangesStatsInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.telemetry.hot_ranges_stats.interval",
 	"the time interval to log hot ranges stats",
 	4*time.Hour,
@@ -39,14 +39,14 @@ var TelemetryHotRangesStatsInterval = settings.RegisterDurationSetting(
 )
 
 var TelemetryHotRangesStatsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.telemetry.hot_ranges_stats.enabled",
 	"enable/disable capturing hot ranges statistics to the telemetry logging channel",
 	true,
 )
 
 var TelemetryHotRangesStatsLoggingDelay = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.telemetry.hot_ranges_stats.logging_delay",
 	"the time delay between emitting individual hot ranges stats logs",
 	1*time.Second,
@@ -80,12 +80,17 @@ func StartHotRangesLoggingScheduler(
 
 func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Stopper) error {
 	return stopper.RunAsyncTask(ctx, "hot-ranges-stats", func(ctx context.Context) {
+		intervalChangedChan := make(chan struct{})
+		// We have to register this callback first. Otherwise we may run into
+		// an unlikely but possible scenario where we've started the ticker,
+		// and the setting is changed before we register the callback and the
+		// ticker will not be reset to the new value.
+		TelemetryHotRangesStatsInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
+			intervalChangedChan <- struct{}{}
+		})
+
 		ticker := time.NewTicker(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
 		defer ticker.Stop()
-
-		TelemetryHotRangesStatsInterval.SetOnChange(&s.st.SV, func(ctx context.Context) {
-			ticker.Reset(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
-		})
 
 		for {
 			select {
@@ -126,6 +131,9 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 					events = append(events, hrEvent)
 				}
 				logutil.LogEventsWithDelay(ctx, events, stopper, TelemetryHotRangesStatsLoggingDelay.Get(&s.st.SV))
+
+			case <-intervalChangedChan:
+				ticker.Reset(TelemetryHotRangesStatsInterval.Get(&s.st.SV))
 			}
 		}
 	})

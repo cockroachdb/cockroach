@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -48,22 +49,28 @@ import (
 
 func TestExportCmd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
-	defer tc.Stopper().Stop(ctx)
-	kvDB := tc.Server(0).DB()
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109429),
+		ExternalIODir:     dir,
+	})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
 	export := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter kvpb.MVCCFilter, maxResponseSSTBytes int64,
 	) (kvpb.Response, *kvpb.Error) {
+		startKey := ts.Codec().TablePrefix(bootstrap.TestingUserDescID(0))
+		endKey := ts.Codec().TenantSpan().EndKey
 		req := &kvpb.ExportRequest{
-			RequestHeader:  kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+			RequestHeader:  kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 			StartTime:      start,
 			MVCCFilter:     mvccFilter,
-			TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV),
+			TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&ts.ClusterSettings().SV),
 		}
 		var h kvpb.Header
 		h.TargetBytes = maxResponseSSTBytes
@@ -172,7 +179,7 @@ func TestExportCmd(t *testing.T) {
 			"unexpected ResumeReason in latest export")
 	}
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE DATABASE mvcclatest`)
 	sqlDB.Exec(t, `CREATE TABLE mvcclatest.export (id INT PRIMARY KEY, value INT)`)
 	tableID := descpb.ID(sqlutils.QueryTableID(
@@ -427,6 +434,7 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 
 	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
+
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "test",
@@ -448,17 +456,17 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 					}
 					return nil
 				},
-			}},
-		},
-	})
-
+			}}}})
 	defer tc.Stopper().Stop(context.Background())
 
-	s := tc.ApplicationLayer(0)
+	srv := tc.Server(0)
+
+	s := srv.ApplicationLayer()
 	sqlDB := tc.Conns[0]
+	kvDB := s.DB()
+
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	kvDB := s.DB()
 
 	const (
 		initRows = 1000
@@ -486,14 +494,18 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 
 func TestExportGCThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	kvDB := tc.Server(0).DB()
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	startKey := bootstrap.TestingUserTableDataMin(ts.Codec())
+	endKey := ts.Codec().TenantEndKey()
 
 	req := &kvpb.ExportRequest{
-		RequestHeader: kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+		RequestHeader: kvpb.RequestHeader{Key: startKey, EndKey: endKey},
 		StartTime:     hlc.Timestamp{WallTime: -1},
 	}
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
@@ -530,16 +542,19 @@ func exportUsingGoIterator(
 		return nil, nil
 	}
 
-	iter := storage.NewMVCCIncrementalIterator(reader, storage.MVCCIncrementalIterOptions{
+	iter, err := storage.NewMVCCIncrementalIterator(ctx, reader, storage.MVCCIncrementalIterOptions{
 		EndKey:    endKey,
 		StartTime: startTime,
 		EndTime:   endTime,
 	})
+	if err != nil {
+		return nil, err
+	}
 	defer iter.Close()
 	for iter.SeekGE(storage.MakeMVCCMetadataKey(startKey)); ; iterFn(iter) {
 		ok, err := iter.Valid()
 		if err != nil {
-			// The error may be a WriteIntentError. In which case, returning it will
+			// The error may be a LockConflictError. In which case, returning it will
 			// cause this command to be retried.
 			return nil, err
 		}
@@ -748,6 +763,8 @@ func assertEqualKVs(
 
 func TestRandomKeyAndTimestampExport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 
 	ctx := context.Background()
@@ -808,7 +825,9 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 			valueSize := randutil.RandIntInRange(rnd, averageValueSize-100, averageValueSize+100)
 			value := roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, valueSize))
 			value.InitChecksum(key)
-			if err := storage.MVCCPut(ctx, batch, key, ts, value, storage.MVCCWriteOptions{}); err != nil {
+			if _, err := storage.MVCCPut(
+				ctx, batch, key, ts, value, storage.MVCCWriteOptions{},
+			); err != nil {
 				t.Fatal(err)
 			}
 
@@ -819,7 +838,9 @@ func TestRandomKeyAndTimestampExport(t *testing.T) {
 				ts = hlc.Timestamp{WallTime: int64(curWallTime), Logical: int32(curLogical)}
 				value = roachpb.MakeValueFromBytes(randutil.RandBytes(rnd, 200))
 				value.InitChecksum(key)
-				if err := storage.MVCCPut(ctx, batch, key, ts, value, storage.MVCCWriteOptions{}); err != nil {
+				if _, err := storage.MVCCPut(
+					ctx, batch, key, ts, value, storage.MVCCWriteOptions{},
+				); err != nil {
 					t.Fatal(err)
 				}
 			}

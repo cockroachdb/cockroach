@@ -715,15 +715,19 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		}
 
 		if n.Cfg.RPCPort == 0 {
-			n.Lock()
-			n.rpcPort = pgURL.Port()
-			n.Unlock()
+			func() {
+				n.Lock()
+				defer n.Unlock()
+				n.rpcPort = pgURL.Port()
+			}()
 		}
 
 		pgURL.Path = n.Cfg.DB
-		n.Lock()
-		n.pgURL = pgURL.String()
-		n.Unlock()
+		func() {
+			n.Lock()
+			defer n.Unlock()
+			n.pgURL = pgURL.String()
+		}()
 
 		var uiURL *url.URL
 
@@ -737,9 +741,11 @@ func (n *Node) waitUntilLive(dur time.Duration) error {
 		//
 		// This can be improved by making the below code run opportunistically whenever the
 		// http port is required but isn't initialized yet.
-		n.Lock()
-		n.db = makeDB(n.pgURL, n.Cfg.NumWorkers, n.Cfg.DB)
-		n.Unlock()
+		func() {
+			n.Lock()
+			defer n.Unlock()
+			n.db = makeDB(n.pgURL, n.Cfg.NumWorkers, n.Cfg.DB)
+		}()
 
 		{
 			var uiStr string

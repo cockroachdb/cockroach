@@ -39,7 +39,7 @@ func newTestConnector(
 	cleanup := func() { stopper.Stop(ctx) }
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	s, err := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(ctx, rpcContext)
 	require.NoError(t, err)
 
 	tenantID := roachpb.MustMakeTenantID(5)
@@ -130,10 +130,10 @@ func TestConnectorSettingOverrides(t *testing.T) {
 
 	ch := expectSettings(t, c, "foo=default bar=default baz=default")
 
-	st := func(name, val string) kvpb.TenantSetting {
+	st := func(key settings.InternalKey, val string) kvpb.TenantSetting {
 		return kvpb.TenantSetting{
-			Name:  name,
-			Value: settings.EncodedValue{Value: val},
+			InternalKey: key,
+			Value:       settings.EncodedValue{Value: val},
 		}
 	}
 
@@ -200,8 +200,8 @@ func waitForNotify(t *testing.T, ch <-chan struct{}) {
 
 func expectSettings(t *testing.T, c *connector, exp string) <-chan struct{} {
 	t.Helper()
-	vars := []string{"foo", "bar", "baz"}
-	values := make(map[string]string)
+	vars := []settings.InternalKey{"foo", "bar", "baz"}
+	values := make(map[settings.InternalKey]string)
 	for i := range vars {
 		values[vars[i]] = "default"
 	}
@@ -327,7 +327,7 @@ func TestCrossVersionMetadataSupport(t *testing.T) {
 
 			clock := hlc.NewClockForTesting(nil)
 			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-			s, err := rpc.NewServer(rpcContext)
+			s, err := rpc.NewServer(ctx, rpcContext)
 			require.NoError(t, err)
 
 			gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {

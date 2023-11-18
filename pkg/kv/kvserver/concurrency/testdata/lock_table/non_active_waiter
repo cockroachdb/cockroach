@@ -20,33 +20,33 @@ add-discovered r=req1 k=a txn=txn2
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 add-discovered r=req1 k=b txn=txn2
 ----
 num=2
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
 
 add-discovered r=req1 k=c txn=txn2
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 # req1 is not in the queue for "b" as readers are never inactive waiters.
 
@@ -54,15 +54,15 @@ print
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 new-request r=req2 txn=txn1 ts=10 spans=intent@c
 ----
@@ -77,16 +77,16 @@ print
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 2
 
 scan r=req1
@@ -101,17 +101,17 @@ print
 ----
 num=3
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: true req: 1, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: true req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 1
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 2
 
 # req1 waits at "c" but not as distinguished waiter.
@@ -119,15 +119,15 @@ release txn=txn2 span=a
 ----
 num=3
  lock: "a"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 2
 
 guard-state r=req1
@@ -138,15 +138,15 @@ print
 ----
 num=3
  lock: "a"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: true req: 1, txn: 00000000-0000-0000-0000-000000000001
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: true req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 2
 
 # req1 waits at "b" as reader.
@@ -155,14 +155,14 @@ release txn=txn2 span=c
 ----
 num=3
  lock: "a"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
  lock: "c"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req1
 ----
@@ -176,17 +176,17 @@ print
 ----
 num=3
  lock: "a"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "b"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
    waiting readers:
     req: 1, txn: 00000000-0000-0000-0000-000000000001
    distinguished req: 1
  lock: "c"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 # req1 is done waiting.
 
@@ -194,12 +194,12 @@ release txn=txn2 span=b
 ----
 num=2
  lock: "a"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "c"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+    active: true req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req1
 ----
@@ -209,8 +209,8 @@ dequeue r=req1
 ----
 num=1
  lock: "c"
-   queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 guard-state r=req2
 ----

@@ -34,5 +34,5 @@ SELECT crdb_internal.update_tenant_resource_limits('apptenant', 1000, 100, 0, no
 
 user testuser
 
-statement error only users with the admin role are allowed to update tenant resource limits
+statement error crdb_internal.update_tenant_resource_limits\(\): user testuser does not have REPAIRCLUSTERMETADATA system privilege
 SELECT crdb_internal.update_tenant_resource_limits(5, 1000, 100, 0, now(), 0)

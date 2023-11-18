@@ -89,7 +89,7 @@ num locks: 2, bytes returned: 82, resume reason: RESUME_KEY_LIMIT, resume span: 
 
 query span=a,f max-bytes=50 uncontended
 ----
-num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
+num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {e-f}
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
 
@@ -97,7 +97,7 @@ num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span:
 
 query span=a,f max-bytes=10 uncontended
 ----
-num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
+num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {e-f}
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
 
@@ -136,15 +136,15 @@ print
 num=3
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,2, info: unrepl [(str: Exclusive seq: 0)]
-   queued writers:
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000002
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
  lock: "c"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "e"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
-   queued writers:
-    active: true req: 4, txn: 00000000-0000-0000-0000-000000000003
+   queued locking requests:
+    active: true req: 4, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 4
 
 query span=a,/Max max-bytes=100

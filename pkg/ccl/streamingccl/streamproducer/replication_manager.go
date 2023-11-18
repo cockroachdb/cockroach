@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -26,15 +27,16 @@ import (
 )
 
 type replicationStreamManagerImpl struct {
-	evalCtx *eval.Context
-	txn     isql.Txn
+	evalCtx   *eval.Context
+	txn       isql.Txn
+	sessionID clusterunique.ID
 }
 
 // StartReplicationStream implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) StartReplicationStream(
-	ctx context.Context, tenantName roachpb.TenantName,
+	ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
-	return startReplicationProducerJob(ctx, r.evalCtx, r.txn, tenantName)
+	return startReplicationProducerJob(ctx, r.evalCtx, r.txn, tenantName, req)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.
@@ -67,12 +69,12 @@ func (r *replicationStreamManagerImpl) CompleteReplicationStream(
 
 func (r *replicationStreamManagerImpl) SetupSpanConfigsStream(
 	ctx context.Context, tenantName roachpb.TenantName,
-) (*streampb.ReplicationStreamSpec, error) {
+) (eval.ValueGenerator, error) {
 	return setupSpanConfigsStream(ctx, r.evalCtx, r.txn, tenantName)
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
-	ctx context.Context, evalCtx *eval.Context, txn isql.Txn,
+	ctx context.Context, evalCtx *eval.Context, txn isql.Txn, sessionID clusterunique.ID,
 ) (eval.ReplicationStreamManager, error) {
 	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
@@ -92,10 +94,10 @@ func newReplicationStreamManagerWithPrivilegesCheck(
 		execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), "REPLICATION")
 	if enterpriseCheckErr != nil {
 		return nil, pgerror.Wrap(enterpriseCheckErr,
-			pgcode.InsufficientPrivilege, "replication requires enterprise license")
+			pgcode.CCLValidLicenseRequired, "physical replication requires an enterprise license on the primary (and secondary) cluster")
 	}
 
-	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn}, nil
+	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn, sessionID: sessionID}, nil
 }
 
 func init() {

@@ -7,9 +7,32 @@ WHILE x > 0 LOOP
 END LOOP;
 END
 ----
-expected parse error: at or near "while": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+x := 10;
+WHILE x > 0 LOOP
+x := x - 1;
+END LOOP;
+END
 
-
+parse
+DECLARE
+BEGIN
+x := 10;
+WHILE x > 0 AND x < 100 LOOP
+  x := x - 1;
+  x := x - 2;
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+x := 10;
+WHILE (x > 0) AND (x < 100) LOOP
+x := x - 1;
+x := x - 2;
+END LOOP;
+END
 
 parse
 DECLARE
@@ -21,4 +44,10 @@ WHILE x > 0 LOOP
 END LOOP labeled;
 END
 ----
-expected parse error: at or near "while": syntax error: unimplemented: this syntax
+DECLARE
+BEGIN
+x := 10;
+WHILE x > 0 LOOP
+x := x - 1;
+END LOOP labeled;
+END

@@ -34,15 +34,18 @@ const statementTimeout = time.Minute
 
 func registerTLP(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:            "tlp",
-		Owner:           registry.OwnerSQLQueries,
-		Timeout:         time.Hour * 1,
-		RequiresLicense: true,
-		Tags:            nil,
-		Cluster:         r.MakeClusterSpec(1),
-		Leases:          registry.MetamorphicLeases,
-		NativeLibs:      registry.LibGEOS,
-		Run:             runTLP,
+		Name:             "tlp",
+		Owner:            registry.OwnerSQLQueries,
+		Timeout:          time.Hour * 1,
+		RequiresLicense:  true,
+		Tags:             nil,
+		Cluster:          r.MakeClusterSpec(1),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		NativeLibs:       registry.LibGEOS,
+		Run:              runTLP,
+		ExtraLabels:      []string{"O-rsg"},
 	})
 }
 
@@ -62,8 +65,6 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 			return false
 		}
 	}
-
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	for i := 0; ; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())

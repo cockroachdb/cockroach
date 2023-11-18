@@ -23,11 +23,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// AdmittedRaftLogEntriesBytes is an estimate that comes from
+// kvflowdispatch.TestDispatchSize().
+const AdmittedRaftLogEntriesBytes = 50
+
 // Dispatch is a concrete implementation of the kvflowcontrol.Dispatch
 // interface. It's used to (i) dispatch information about admitted raft log
 // entries to specific nodes, and (ii) to read pending dispatches.
 type Dispatch struct {
 	mu struct {
+		// TODO(irfansharif,aaditya): On kv0/enc=false/nodes=3/cpu=96 this mutex
+		// is responsible for ~3.7% of the mutex contention. Look to address it
+		// as part of #104154. Perhaps shard this mutex by node ID? Or use a
+		// sync.Map instead?
 		syncutil.Mutex
 		// outbox maintains pending dispatches on a per-node basis.
 		outbox map[roachpb.NodeID]dispatches
@@ -142,17 +150,25 @@ func (d *Dispatch) PendingDispatch() []roachpb.NodeID {
 
 // PendingDispatchFor is part of the kvflowcontrol.Dispatch interface.
 func (d *Dispatch) PendingDispatchFor(
-	nodeID roachpb.NodeID,
-) []kvflowcontrolpb.AdmittedRaftLogEntries {
+	nodeID roachpb.NodeID, maxBytes int64,
+) ([]kvflowcontrolpb.AdmittedRaftLogEntries, int) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	if _, ok := d.mu.outbox[nodeID]; !ok {
-		return nil
+		return nil, 0
 	}
 
 	var entries []kvflowcontrolpb.AdmittedRaftLogEntries
+	maxEntries := maxBytes / AdmittedRaftLogEntriesBytes
 	for key, dispatch := range d.mu.outbox[nodeID] {
+		if maxEntries == 0 {
+			break
+		}
+		// TODO(irfansharif,aaditya): This contributes to 0.5% of alloc_objects
+		// under kv0/enc=false/nodes=3/cpu=96. Maybe address it as part of
+		// #104154; we're simply copying things over. Maybe use a sync.Pool here
+		// and around the outbox map?
 		entries = append(entries, kvflowcontrolpb.AdmittedRaftLogEntries{
 			RangeID:             key.RangeID,
 			StoreID:             key.StoreID,
@@ -161,11 +177,17 @@ func (d *Dispatch) PendingDispatchFor(
 		})
 		wc := admissionpb.WorkClassFromPri(key.WorkPriority)
 		d.metrics.PendingDispatches[wc].Dec(1)
+		maxEntries -= 1
+		delete(d.mu.outbox[nodeID], key)
 	}
 
-	delete(d.mu.outbox, nodeID)
-	d.metrics.PendingNodes.Dec(1)
-	return entries
+	remainingDispatches := len(d.mu.outbox[nodeID])
+	if remainingDispatches == 0 {
+		delete(d.mu.outbox, nodeID)
+		d.metrics.PendingNodes.Dec(1)
+	}
+
+	return entries, remainingDispatches
 }
 
 // testingMetrics returns the underlying metrics struct for testing purposes.

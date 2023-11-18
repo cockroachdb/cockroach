@@ -22,7 +22,11 @@ import {
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
-import { databaseNameAttr, tableNameAttr } from "src/util/constants";
+import {
+  databaseNameAttr,
+  indexUnusedDuration,
+  tableNameAttr,
+} from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 import moment from "moment-timezone";
@@ -101,10 +105,13 @@ class TestDriver {
     expect(rest).toEqual(expectedRest);
     expect(
       // Moments are the same
-      moment(statsLastUpdated).isSame(expectedStatsLastUpdated) ||
+      moment(statsLastUpdated.stats_last_created_at).isSame(
+        expectedStatsLastUpdated.stats_last_created_at,
+      ) ||
         // Moments are null.
-        (statsLastUpdated === expectedStatsLastUpdated &&
-          statsLastUpdated === null),
+        (statsLastUpdated.stats_last_created_at ===
+          expectedStatsLastUpdated.stats_last_created_at &&
+          statsLastUpdated.stats_last_created_at === null),
     ).toBe(true);
   }
 
@@ -139,7 +146,11 @@ class TestDriver {
     return this.actions.refreshSettings();
   }
   async refreshTableDetails() {
-    return this.actions.refreshTableDetails(this.database, this.table);
+    return this.actions.refreshTableDetails(
+      this.database,
+      this.table,
+      indexUnusedDuration,
+    );
   }
 
   async refreshIndexStats() {
@@ -180,22 +191,23 @@ describe("Database Table Page", function () {
       details: {
         loading: false,
         loaded: false,
-        lastError: undefined,
-        createStatement: "",
-        replicaCount: 0,
-        indexNames: [],
-        grants: [],
-        statsLastUpdated: null,
-        livePercentage: 0,
-        liveBytes: 0,
-        totalBytes: 0,
-        sizeInBytes: 0,
-        rangeCount: 0,
+        requestError: undefined,
+        queryError: undefined,
+        createStatement: undefined,
+        replicaData: undefined,
+        spanStats: undefined,
+        indexData: undefined,
+        grants: {
+          all: [],
+          error: undefined,
+        },
+        statsLastUpdated: undefined,
         nodesByRegionString: "",
       },
       automaticStatsCollectionEnabled: true,
       indexUsageStatsEnabled: true,
       showIndexRecommendations: true,
+      csIndexUnusedDuration: indexUnusedDuration,
       hasAdminRole: false,
       indexStats: {
         loading: false,
@@ -211,7 +223,11 @@ describe("Database Table Page", function () {
     const mockStatsLastCreatedTimestamp = moment();
 
     fakeApi.stubSqlApiCall<clusterUiApi.TableDetailsRow>(
-      clusterUiApi.createTableDetailsReq("DATABASE", "TABLE"),
+      clusterUiApi.createTableDetailsReq(
+        "DATABASE",
+        "TABLE",
+        indexUnusedDuration,
+      ),
       [
         // Table ID query
         { rows: [{ table_id: "1" }] },
@@ -273,20 +289,31 @@ describe("Database Table Page", function () {
     driver.assertTableDetails({
       loading: false,
       loaded: true,
-      lastError: null,
-      createStatement: "CREATE TABLE foo",
-      replicaCount: 5,
-      indexNames: ["primary", "anotha", "one"],
-      grants: [
-        { user: "admin", privileges: ["CREATE", "DROP"] },
-        { user: "public", privileges: ["SELECT"] },
-      ],
-      statsLastUpdated: mockStatsLastCreatedTimestamp,
-      livePercentage: 1,
-      liveBytes: 45,
-      totalBytes: 45,
-      sizeInBytes: 23,
-      rangeCount: 56,
+      requestError: null,
+      queryError: undefined,
+      createStatement: { create_statement: "CREATE TABLE foo" },
+      replicaData: { replicaCount: 5, nodeCount: 5, nodeIDs: [1, 2, 3, 4, 5] },
+      spanStats: {
+        approximate_disk_bytes: 23,
+        live_bytes: 45,
+        total_bytes: 45,
+        range_count: 56,
+        live_percentage: 1,
+      },
+      indexData: {
+        columns: ["colA", "colB", "c"],
+        indexes: ["primary", "anotha", "one"],
+      },
+      grants: {
+        all: [
+          { user: "admin", privileges: ["CREATE", "DROP"] },
+          { user: "public", privileges: ["SELECT"] },
+        ],
+        error: undefined,
+      },
+      statsLastUpdated: {
+        stats_last_created_at: mockStatsLastCreatedTimestamp,
+      },
       nodesByRegionString: "",
     });
   });

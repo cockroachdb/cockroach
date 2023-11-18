@@ -32,11 +32,9 @@ go_test(
         "main_test.go",
         "privchecker_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":privchecker",
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

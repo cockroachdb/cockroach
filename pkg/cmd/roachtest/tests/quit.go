@@ -57,7 +57,6 @@ func runQuitTransfersLeases(
 func (q *quitTest) init(ctx context.Context) {
 	q.args = []string{"--vmodule=replica_proposal=1,allocator=3,allocator_scorer=3"}
 	q.env = []string{"COCKROACH_SCAN_MAX_IDLE_TIME=5ms"}
-	q.c.Put(ctx, q.t.Cockroach(), "./cockroach")
 	settings := install.MakeClusterSettings(install.EnvOption(q.env))
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, q.args...)
@@ -165,7 +164,7 @@ func (q *quitTest) setupIncrementalDrain(ctx context.Context) {
 	db := q.c.Conn(ctx, q.t.L(), 1)
 	defer db.Close()
 	if _, err := db.ExecContext(ctx, `
-SET CLUSTER SETTING server.shutdown.lease_transfer_wait = '10ms'`); err != nil {
+SET CLUSTER SETTING server.shutdown.lease_transfer_iteration.timeout = '10ms'`); err != nil {
 		if strings.Contains(err.Error(), "unknown cluster setting") {
 			// old version; ok
 		} else {
@@ -360,10 +359,12 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 func registerQuitTransfersLeases(r registry.Registry) {
 	registerTest := func(name, minver string, method func(context.Context, test.Test, cluster.Cluster, int)) {
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("transfer-leases/%s", name),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(3),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("transfer-leases/%s", name),
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(3),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runQuitTransfersLeases(ctx, t, c, name, method)
 			},

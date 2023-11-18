@@ -33,10 +33,12 @@ func registerSlowDrain(r registry.Registry) {
 	duration := time.Minute
 
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("slow-drain/duration=%s", duration),
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("slow-drain/duration=%s", duration),
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSlowDrain(ctx, t, c, duration)
 		},
@@ -55,13 +57,10 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 
 	var verboseStoreLogRe = "failed to transfer lease.*when draining.*no suitable transfer target found"
 
-	err := c.PutE(ctx, t.L(), t.Cockroach(), "./cockroach", c.All())
-	require.NoError(t, err)
-
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
 	run := func(db *gosql.DB, stmt string) {
-		_, err = db.ExecContext(ctx, stmt)
+		_, err := db.ExecContext(ctx, stmt)
 		require.NoError(t, err)
 
 		t.L().Printf("run: %s\n", stmt)
@@ -76,7 +75,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		run(db, fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
 
 		// Wait for initial up-replication.
-		err := WaitForReplication(ctx, t, db, replicationFactor)
+		err := WaitForReplication(ctx, t, db, replicationFactor, atLeastReplicationFactor)
 		require.NoError(t, err)
 
 		// Ensure that leases are sent away from pinned node to avoid situation
@@ -149,6 +148,6 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 
 	// Expect the drain timeout to expire.
 	t.Status("waiting for the drain timeout to elapse...")
-	err = m.WaitE()
+	err := m.WaitE()
 	require.Error(t, err)
 }

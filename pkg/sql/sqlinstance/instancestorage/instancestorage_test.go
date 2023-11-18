@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
@@ -63,8 +62,9 @@ func TestStorage(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	setup := func(t *testing.T) (
 		*stop.Stopper, *instancestorage.Storage, *slstorage.FakeStorage, *hlc.Clock,
@@ -78,7 +78,7 @@ func TestStorage(t *testing.T) {
 		stopper := stop.NewStopper()
 		slStorage := slstorage.NewFakeStorage()
 		f := s.RangeFeedFactory().(*rangefeed.Factory)
-		storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings(), s.Clock(), f, s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
+		storage := instancestorage.NewTestingStorage(kvDB, s.Codec(), table, slStorage, s.ClusterSettings(), s.Clock(), f, s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
 		return stopper, storage, slStorage, clock
 	}
 
@@ -245,8 +245,9 @@ func TestSQLAccess(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	clock := hlc.NewClockForTesting(nil)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	dbName := t.Name()
@@ -258,7 +259,7 @@ func TestSQLAccess(t *testing.T) {
 	defer stopper.Stop(ctx)
 	f := s.RangeFeedFactory().(*rangefeed.Factory)
 	storage := instancestorage.NewTestingStorage(
-		kvDB, keys.SystemSQLCodec, table, slstorage.NewFakeStorage(), s.ClusterSettings(), s.Clock(), f, s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
+		kvDB, s.Codec(), table, slstorage.NewFakeStorage(), s.ClusterSettings(), s.Clock(), f, s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
 	const (
 		tierStr         = "region=test1,zone=test2"
 		expiration      = time.Minute
@@ -321,7 +322,14 @@ func TestRefreshSession(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "abc", Value: "xyz"}}}})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109410),
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "abc", Value: "xyz"},
+			},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 
 	c1 := sqlutils.MakeSQLRunner(sqlDB)
@@ -369,8 +377,9 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	clock := hlc.NewClockForTesting(nil)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	dbName := t.Name()
@@ -382,7 +391,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 	slStorage := slstorage.NewFakeStorage()
 	defer stopper.Stop(ctx)
 	f := s.RangeFeedFactory().(*rangefeed.Factory)
-	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, table, slStorage, s.ClusterSettings(), s.Clock(), f, s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
+	storage := instancestorage.NewTestingStorage(kvDB, s.Codec(), table, slStorage, s.ClusterSettings(), s.Clock(), f, s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
 	instancestorage.PreallocatedCount.Override(ctx, &s.ClusterSettings().SV, 1)
 
 	const (
@@ -522,8 +531,9 @@ func TestReclaimLoop(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	clock := hlc.NewClockForTesting(nil)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	dbName := t.Name()
@@ -533,7 +543,7 @@ func TestReclaimLoop(t *testing.T) {
 	tableID := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), dbName, "sql_instances")
 	slStorage := slstorage.NewFakeStorage()
 	f := s.RangeFeedFactory().(*rangefeed.Factory)
-	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings(), s.Clock(), f, s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
+	storage := instancestorage.NewTestingStorage(kvDB, s.Codec(), tableID, slStorage, s.ClusterSettings(), s.Clock(), f, s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
 	storage.TestingKnobs.JitteredIntervalFn = func(d time.Duration) time.Duration {
 		// For deterministic tests.
 		return d
@@ -550,7 +560,7 @@ func TestReclaimLoop(t *testing.T) {
 	sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 
 	db := s.InternalDB().(descs.DB)
-	err := storage.RunInstanceIDReclaimLoop(ctx, s.Stopper(), ts, db, func() hlc.Timestamp {
+	err := storage.RunInstanceIDReclaimLoop(ctx, s.AppStopper(), ts, db, func() hlc.Timestamp {
 		return sessionExpiry
 	})
 	require.NoError(t, err)

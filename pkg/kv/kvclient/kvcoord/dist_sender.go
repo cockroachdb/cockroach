@@ -222,13 +222,6 @@ This counts the number of ranges with an active rangefeed that are performing ca
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaDistSenderRangefeedRestartStuck = metric.Metadata{
-		Name: "distsender.rangefeed.restart_stuck",
-		Help: `Number of times a rangefeed was restarted due to not receiving ` +
-			`timely updates (kv.rangefeed.range_stuck_threshold cluster setting)`,
-		Measurement: "Count",
-		Unit:        metric.Unit_COUNT,
-	}
 )
 
 // CanSendToFollower is used by the DistSender to determine if it needs to look
@@ -257,28 +250,43 @@ const (
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.range_descriptor_cache.size",
 	"maximum number of entries in the range descriptor cache",
 	1e6,
-	func(v int64) error {
-		// Set a minimum value to avoid a cache that is too small to be useful.
-		const minVal = 64
-		if v < minVal {
-			return errors.Errorf("cannot be set to a value less than %d", minVal)
-		}
-		return nil
-	},
+	// Set a minimum value to avoid a cache that is too small to be useful.
+	settings.IntWithMinimum(64),
 )
 
 // senderConcurrencyLimit controls the maximum number of asynchronous send
 // requests.
 var senderConcurrencyLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.dist_sender.concurrency_limit",
 	"maximum number of asynchronous send requests",
 	max(defaultSenderConcurrency, int64(64*runtime.GOMAXPROCS(0))),
 	settings.NonNegativeInt,
+)
+
+// FollowerReadsUnhealthy controls whether we will send follower reads to nodes
+// that are not considered healthy. By default, we will sort these nodes behind
+// healthy nodes.
+var FollowerReadsUnhealthy = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.dist_sender.follower_reads_unhealthy.enabled",
+	"send follower reads to unhealthy nodes",
+	true,
+)
+
+// sortByLocalityFirst controls whether we sort by locality before sorting by
+// latency. If it is set to false we will only look at the latency values.
+// TODO(baptist): Remove this in 25.1 once we have validated that we don't need
+// to fall back to the previous behavior of only sorting by latency.
+var sortByLocalityFirst = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.dist_sender.sort_locality_first.enabled",
+	"sort followers by locality before sorting by latency",
+	true,
 )
 
 func max(a, b int64) int64 {
@@ -316,9 +324,7 @@ type DistSenderMetrics struct {
 type DistSenderRangeFeedMetrics struct {
 	RangefeedRanges        *metric.Gauge
 	RangefeedCatchupRanges *metric.Gauge
-	RangefeedErrorCatchup  *metric.Counter
-	RangefeedRestartRanges *metric.Counter
-	RangefeedRestartStuck  *metric.Counter
+	Errors                 rangeFeedErrorCounters
 }
 
 func makeDistSenderMetrics() DistSenderMetrics {
@@ -359,13 +365,87 @@ func makeDistSenderMetrics() DistSenderMetrics {
 	return m
 }
 
+// rangeFeedErrorCounters are various error related counters for rangefeed.
+type rangeFeedErrorCounters struct {
+	RangefeedRestartRanges *metric.Counter
+	RangefeedErrorCatchup  *metric.Counter
+	RetryErrors            []*metric.Counter
+	Stuck                  *metric.Counter
+	SendErrors             *metric.Counter
+	StoreNotFound          *metric.Counter
+	NodeNotFound           *metric.Counter
+	RangeNotFound          *metric.Counter
+	RangeKeyMismatch       *metric.Counter
+}
+
+func makeRangeFeedErrorCounters() rangeFeedErrorCounters {
+	var retryCounters []*metric.Counter
+	for name := range kvpb.RangeFeedRetryError_Reason_value {
+		name = strings.TrimPrefix(name, "REASON_")
+		retryCounters = append(retryCounters, metric.NewCounter(metric.Metadata{
+			Name:        fmt.Sprintf("distsender.rangefeed.retry.%s", strings.ToLower(name)),
+			Help:        fmt.Sprintf(`Number of ranges that encountered retryable %s error`, name),
+			Measurement: "Ranges",
+			Unit:        metric.Unit_COUNT,
+		}))
+	}
+
+	retryMeta := func(name string) metric.Metadata {
+		return metric.Metadata{
+			Name:        fmt.Sprintf("distsender.rangefeed.retry.%s", strings.ReplaceAll(name, " ", "_")),
+			Help:        fmt.Sprintf("Number of ranges that encountered retryable %s error", name),
+			Measurement: "Ranges",
+			Unit:        metric.Unit_COUNT,
+		}
+	}
+
+	return rangeFeedErrorCounters{
+		RangefeedRestartRanges: metric.NewCounter(metaDistSenderRangefeedRestartRanges),
+		RangefeedErrorCatchup:  metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
+		RetryErrors:            retryCounters,
+		Stuck:                  metric.NewCounter(retryMeta("stuck")),
+		SendErrors:             metric.NewCounter(retryMeta("send")),
+		StoreNotFound:          metric.NewCounter(retryMeta("store not found")),
+		NodeNotFound:           metric.NewCounter(retryMeta("node not found")),
+		RangeNotFound:          metric.NewCounter(retryMeta("range not found")),
+		RangeKeyMismatch:       metric.NewCounter(retryMeta("range key mismatch")),
+	}
+}
+
+// GetRangeFeedRetryCounter returns retry reason counter for the specified reason.
+// Use this method instead of direct counter access (since this method handles
+// potential gaps in retry reason values).
+func (c rangeFeedErrorCounters) GetRangeFeedRetryCounter(
+	reason kvpb.RangeFeedRetryError_Reason,
+) *metric.Counter {
+	// Normally, retry reason values are contiguous.  One way gaps could be
+	// introduced, is if some retry reasons are retired (deletions are
+	// accomplished by reserving enum value to prevent its re-use), and then more
+	// reason added after.  Then, we can't use reason value as an index into
+	// retryCounters.  Because this scenario is believed to be very unlikely, we
+	// forego any fancy re-mapping schemes, and instead opt for explicit handling.
+	switch reason {
+	case kvpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
+		kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
+		kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
+		kvpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
+		kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
+		kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER,
+		kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER,
+		kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED:
+		return c.RetryErrors[reason]
+	default:
+		panic(errors.AssertionFailedf("unknown retry reason %d", reason))
+	}
+}
+
+func (rangeFeedErrorCounters) MetricStruct() {}
+
 func makeDistSenderRangeFeedMetrics() DistSenderRangeFeedMetrics {
 	return DistSenderRangeFeedMetrics{
 		RangefeedRanges:        metric.NewGauge(metaDistSenderRangefeedTotalRanges),
 		RangefeedCatchupRanges: metric.NewGauge(metaDistSenderRangefeedCatchupRanges),
-		RangefeedErrorCatchup:  metric.NewCounter(metaDistSenderRangefeedErrorCatchupRanges),
-		RangefeedRestartRanges: metric.NewCounter(metaDistSenderRangefeedRestartRanges),
-		RangefeedRestartStuck:  metric.NewCounter(metaDistSenderRangefeedRestartStuck),
+		Errors:                 makeRangeFeedErrorCounters(),
 	}
 }
 
@@ -443,6 +523,11 @@ type DistSender struct {
 	// nodeDescs provides information on the KV nodes that DistSender may
 	// consider routing requests to.
 	nodeDescs NodeDescStore
+	// nodeIDGetter provides access to the local KV node ID if it's available
+	// (0 otherwise). The default implementation uses the Gossip network if it's
+	// available, but custom implementation can be provided via
+	// DistSenderConfig.NodeIDGetter.
+	nodeIDGetter func() roachpb.NodeID
 	// metrics stored DistSender-related metrics.
 	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
@@ -478,6 +563,9 @@ type DistSender struct {
 	// LatencyFunc is used to estimate the latency to other nodes.
 	latencyFunc LatencyFunc
 
+	// HealthFunc returns true if the node is alive and not draining.
+	healthFunc atomic.Pointer[HealthFunc]
+
 	onRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
 
 	// locality is the description of the topography of the server on which the
@@ -509,6 +597,10 @@ type DistSenderConfig struct {
 	Settings  *cluster.Settings
 	Clock     *hlc.Clock
 	NodeDescs NodeDescStore
+	// NodeIDGetter, if set, provides non-gossip based implementation for
+	// obtaining the local KV node ID. The DistSender uses the node ID to
+	// preferentially route requests to a local replica (if one exists).
+	NodeIDGetter func() roachpb.NodeID
 	// nodeDescriptor, if provided, is used to describe which node the
 	// DistSender lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
@@ -552,10 +644,22 @@ type DistSenderConfig struct {
 // DistSenderContext or the fields within is optional. For omitted values, sane
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig) *DistSender {
+	nodeIDGetter := cfg.NodeIDGetter
+	if nodeIDGetter == nil {
+		// Fallback to gossip-based implementation if other is not provided.
+		nodeIDGetter = func() roachpb.NodeID {
+			g, ok := cfg.NodeDescs.(*gossip.Gossip)
+			if !ok {
+				return 0
+			}
+			return g.NodeID.Get()
+		}
+	}
 	ds := &DistSender{
 		st:            cfg.Settings,
 		clock:         cfg.Clock,
 		nodeDescs:     cfg.NodeDescs,
+		nodeIDGetter:  nodeIDGetter,
 		metrics:       makeDistSenderMetrics(),
 		kvInterceptor: cfg.KVInterceptor,
 		locality:      cfg.Locality,
@@ -637,12 +741,32 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.onRangeSpanningNonTxnalBatch = cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch
 	}
 
+	// Placeholder function until we inject the real health function in using
+	// SetHealthFunc.
+	// TODO(baptist): Restructure the code to allow injecting the correct
+	// HealthFunc at construction time.
+	healthFunc := HealthFunc(func(id roachpb.NodeID) bool {
+		return true
+	})
+	ds.healthFunc.Store(&healthFunc)
+
 	return ds
+}
+
+// SetHealthFunc is called after construction due to the circular dependency
+// between DistSender and NodeLiveness.
+func (ds *DistSender) SetHealthFunc(healthFn HealthFunc) {
+	ds.healthFunc.Store(&healthFn)
 }
 
 // LatencyFunc returns the LatencyFunc of the DistSender.
 func (ds *DistSender) LatencyFunc() LatencyFunc {
 	return ds.latencyFunc
+}
+
+// HealthFunc returns the HealthFunc of the DistSender.
+func (ds *DistSender) HealthFunc() HealthFunc {
+	return *ds.healthFunc.Load()
 }
 
 // DisableFirstRangeUpdates disables updates of the first range via
@@ -719,22 +843,6 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return ds.firstRangeProvider.GetFirstRangeDescriptor()
 }
 
-// getNodeID attempts to return the local node ID. It returns 0 if the DistSender
-// does not have access to the Gossip network.
-func (ds *DistSender) getNodeID() roachpb.NodeID {
-	// Today, secondary tenants don't run in process with KV instances, so they
-	// don't have access to the Gossip network. The DistSender uses the node ID to
-	// preferentially route requests to a local replica (if one exists). Not
-	// knowing the node ID, and thus not being able to take advantage of this
-	// optimization is okay, given tenants not running in-process with KV
-	// instances have no such optimization to take advantage of to begin with.
-	g, ok := ds.nodeDescs.(*gossip.Gossip)
-	if !ok {
-		return 0
-	}
-	return g.NodeID.Get()
-}
-
 // CountRanges returns the number of ranges that encompass the given key span.
 func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64, error) {
 	var count int64
@@ -800,7 +908,7 @@ func (ds *DistSender) getRoutingInfo(
 func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 	// Attach the local node ID to each request.
 	if ba.GatewayNodeID == 0 {
-		ba.GatewayNodeID = ds.getNodeID()
+		ba.GatewayNodeID = ds.nodeIDGetter()
 	}
 
 	// Attach a clock reading from the local node to help stabilize HLCs across
@@ -1065,7 +1173,11 @@ func (ds *DistSender) incrementBatchCounters(ba *kvpb.BatchRequest) {
 }
 
 type response struct {
-	reply     *kvpb.BatchResponse
+	reply *kvpb.BatchResponse
+	// positions argument describes how the given batch request corresponds to
+	// the original, un-truncated one, and allows us to combine the response
+	// later via BatchResponse.Combine. (nil positions should be used when the
+	// original batch request is fully contained within a single range.)
 	positions []int
 	pErr      *kvpb.Error
 }
@@ -1274,7 +1386,7 @@ func (ds *DistSender) detectIntentMissingDueToIntentResolution(
 		// We weren't able to determine whether the intent missing error is
 		// due to intent resolution or not, so it is still ambiguous whether
 		// the commit succeeded.
-		return false, kvpb.NewAmbiguousResultErrorf("error=%s [intent missing]", pErr)
+		return false, kvpb.NewAmbiguousResultErrorf("error=%v [intent missing]", pErr)
 	}
 	resp := br.Responses[0].GetQueryTxn()
 	respTxn := &resp.QueriedTxn
@@ -1385,8 +1497,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
 		resp := ds.sendPartialBatch(
-			ctx, ba, rs, isReverse, withCommit, batchIdx, ri.Token(), nil, /* positions */
+			ctx, ba, rs, isReverse, withCommit, batchIdx, ri.Token(),
 		)
+		// resp.positions remains nil since the original batch is fully
+		// contained within a single range.
 		return resp.reply, resp.pErr
 	}
 
@@ -1470,6 +1584,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		for _, responseCh := range responseChs {
 			resp := <-responseCh
 			if resp.pErr != nil {
+				// Re-map the error index within this partial batch back to its
+				// position in the encompassing batch.
+				if resp.pErr.Index != nil && resp.pErr.Index.Index != -1 && resp.positions != nil {
+					resp.pErr.Index.Index = int32(resp.positions[resp.pErr.Index.Index])
+				}
 				if pErr == nil {
 					pErr = resp.pErr
 					// Update the error's transaction with any new information from
@@ -1583,8 +1702,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// Sent the batch asynchronously.
 		} else {
 			resp := ds.sendPartialBatch(
-				ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), positions,
+				ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(),
 			)
+			resp.positions = positions
 			responseCh <- resp
 			if resp.pErr != nil {
 				return
@@ -1685,9 +1805,9 @@ func (ds *DistSender) sendPartialBatchAsync(
 		},
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
-			responseCh <- ds.sendPartialBatch(
-				ctx, ba, rs, isReverse, withCommit, batchIdx, routing, positions,
-			)
+			resp := ds.sendPartialBatch(ctx, ba, rs, isReverse, withCommit, batchIdx, routing)
+			resp.positions = positions
+			responseCh <- resp
 		},
 	); err != nil {
 		ds.metrics.AsyncThrottledCount.Inc(1)
@@ -1725,11 +1845,7 @@ func slowRangeRPCReturnWarningStr(s *redact.StringBuilder, dur time.Duration, at
 // request are limited to the range's key span. The rs argument corresponds to
 // the span encompassing the key ranges of all requests in the truncated batch.
 // It should be entirely contained within the range descriptor of the supplied
-// routing token. The positions argument describes how the given batch request
-// corresponds to the original, un-truncated one, and allows us to combine the
-// response later via BatchResponse.Combine. (nil positions argument should be
-// used when the original batch request is fully contained within a single
-// range.)
+// routing token.
 //
 // The send occurs in a retry loop to handle send failures. On failure to send
 // to any replicas, we backoff and retry by refetching the range descriptor. If
@@ -1745,7 +1861,6 @@ func (ds *DistSender) sendPartialBatch(
 	withCommit bool,
 	batchIdx int,
 	routingTok rangecache.EvictionToken,
-	positions []int,
 ) response {
 	if batchIdx == 1 {
 		ds.metrics.PartialBatchCount.Inc(2) // account for first batch
@@ -1808,7 +1923,7 @@ func (ds *DistSender) sendPartialBatch(
 			if !intersection.Equal(rs) {
 				log.Eventf(ctx, "range shrunk; sub-dividing the request")
 				reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
-				return response{reply: reply, positions: positions, pErr: pErr}
+				return response{reply: reply, pErr: pErr}
 			}
 		}
 
@@ -1866,18 +1981,12 @@ func (ds *DistSender) sendPartialBatch(
 
 		// If sending succeeded, return immediately.
 		if reply.Error == nil {
-			return response{reply: reply, positions: positions}
+			return response{reply: reply}
 		}
 
 		// Untangle the error from the received response.
 		pErr = reply.Error
 		reply.Error = nil // scrub the response error
-
-		// Re-map the error index within this partial batch back
-		// to its position in the encompassing batch.
-		if pErr.Index != nil && pErr.Index.Index != -1 && positions != nil {
-			pErr.Index.Index = int32(positions[pErr.Index.Index])
-		}
 
 		log.VErrEventf(ctx, 2, "reply error %s: %s", ba, pErr)
 
@@ -1915,7 +2024,7 @@ func (ds *DistSender) sendPartialBatch(
 			// with unknown mapping to our truncated reply).
 			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges)
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
-			return response{reply: reply, positions: positions, pErr: pErr}
+			return response{reply: reply, pErr: pErr}
 		}
 		break
 	}
@@ -2088,7 +2197,8 @@ func maybeSetResumeSpan(
 // the error that the last attempt to execute the request returned.
 func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 	if ambiguousErr != nil {
-		return kvpb.NewAmbiguousResultErrorf("error=%s [exhausted]", ambiguousErr)
+		return kvpb.NewAmbiguousResultErrorf("error=%v [exhausted] (last error: %v)",
+			ambiguousErr, lastAttemptErr)
 	}
 
 	// TODO(bdarnell): The error from the last attempt is not necessarily the best
@@ -2175,7 +2285,7 @@ func (ds *DistSender) sendToReplicas(
 		// First order by latency, then move the leaseholder to the front of the
 		// list, if it is known.
 		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
+			replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.HealthFunc(), ds.latencyFunc, ds.locality)
 		}
 
 		idx := -1
@@ -2194,7 +2304,7 @@ func (ds *DistSender) sendToReplicas(
 	case kvpb.RoutingPolicy_NEAREST:
 		// Order by latency.
 		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
+		replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.HealthFunc(), ds.latencyFunc, ds.locality)
 
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
@@ -2266,6 +2376,28 @@ func (ds *DistSender) sendToReplicas(
 		ba = ba.ShallowCopy()
 		ba.Replica = curReplica
 		ba.RangeID = desc.RangeID
+
+		// When a sub-batch from a batch containing a commit experiences an
+		// ambiguous error, it is critical to ensure subsequent replay attempts
+		// do not permit changing the write timestamp, as the transaction may
+		// already have been considered implicitly committed.
+		ba.AmbiguousReplayProtection = ambiguousError != nil
+
+		// In the case that the batch has already seen an ambiguous error, in
+		// addition to enabling ambiguous replay protection, we also need to
+		// disable the ability for the server to forward the read timestamp, as
+		// the transaction may have been implicitly committed. If the intents for
+		// the implicitly committed transaction were already resolved, on a replay
+		// attempt encountering committed values above the read timestamp the
+		// server will attempt to handle what seems to be a write-write conflict by
+		// throwing a WriteTooOld, which could be refreshed away on the server if
+		// the read timestamp can be moved. Disabling this ability protects against
+		// refreshing away the error when retrying the ambiguous operation, instead
+		// returning to the DistSender so the ambiguous error can be propagated.
+		if ambiguousError != nil && ba.CanForwardReadTimestamp {
+			ba.CanForwardReadTimestamp = false
+		}
+
 		// Communicate to the server the information our cache has about the
 		// range. If it's stale, the server will return an update.
 		ba.ClientRangeInfo = roachpb.ClientRangeInfo{
@@ -2292,7 +2424,7 @@ func (ds *DistSender) sendToReplicas(
 				(desc.Generation == 0 && routing.LeaseSeq() == 0),
 		}
 
-		comparisonResult := ds.getLocalityComparison(ctx, ds.getNodeID(), ba.Replica.NodeID)
+		comparisonResult := ds.getLocalityComparison(ctx, ds.nodeIDGetter(), ba.Replica.NodeID)
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(comparisonResult, int64(ba.Size()))
 
 		br, err = transport.SendNext(ctx, ba)
@@ -2300,10 +2432,13 @@ func (ds *DistSender) sendToReplicas(
 		ds.maybeIncrementErrCounters(br, err)
 
 		if err != nil {
+			log.VErrEventf(ctx, 2, "RPC error: %s", err)
+
 			if grpcutil.IsAuthError(err) {
 				// Authentication or authorization error. Propagate.
 				if ambiguousError != nil {
-					return nil, kvpb.NewAmbiguousResultErrorf("error=%s [propagate]", ambiguousError)
+					return nil, kvpb.NewAmbiguousResultErrorf("error=%v [propagate] (last error: %v)",
+						ambiguousError, err)
 				}
 				return nil, err
 			}
@@ -2325,10 +2460,6 @@ func (ds *DistSender) sendToReplicas(
 			// ambiguity.
 			// 2) SQL recognizes AmbiguousResultErrors and gives them a special code
 			// (StatementCompletionUnknown).
-			// TODO(andrei): The use of this code is inconsistent because a) the
-			// DistSender tries to only return the code for commits, but it'll happily
-			// forward along AmbiguousResultErrors coming from the replica and b) we
-			// probably should be returning that code for non-commit statements too.
 			//
 			// We retry requests in order to avoid returning errors (in particular,
 			// AmbiguousResultError). Retrying the batch will either:
@@ -2343,6 +2474,12 @@ func (ds *DistSender) sendToReplicas(
 			//    can't claim success (and even if we could claim success, we still
 			//    wouldn't have the complete result of the successful evaluation).
 			//
+			// Note that in case c), a request is not idempotent if the retry finds
+			// the request succeeded the first time around, but requires a change to
+			// the transaction's write timestamp. This is guarded against by setting
+			// the AmbiguousReplayProtection flag, so that the replay is aware the
+			// batch has seen an ambiguous error.
+			//
 			// Case a) is great - the retry made the request succeed. Case b) is also
 			// good; due to idempotency we managed to swallow a communication error.
 			// Case c) is not great - we'll end up returning an error even though the
@@ -2355,10 +2492,12 @@ func (ds *DistSender) sendToReplicas(
 			// evaluating twice, overwriting another unrelated write that fell
 			// in-between.
 			//
+			// NB: If this partial batch does not contain the EndTxn request but the
+			// batch contains a commit, the ambiguous error should be caught on
+			// retrying the writes, should it need to be propagated.
 			if withCommit && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
 			}
-			log.VErrEventf(ctx, 2, "RPC error: %s", err)
 
 			// If the error wasn't just a context cancellation and the down replica
 			// is cached as the lease holder, evict it. The only other eviction
@@ -2514,7 +2653,8 @@ func (ds *DistSender) sendToReplicas(
 				}
 			default:
 				if ambiguousError != nil {
-					return nil, kvpb.NewAmbiguousResultErrorf("error=%s [propagate]", ambiguousError)
+					return nil, kvpb.NewAmbiguousResultErrorf("error=%v [propagate] (last error: %v)",
+						ambiguousError, br.Error.GoError())
 				}
 
 				// The error received is likely not specific to this
@@ -2561,12 +2701,12 @@ func (ds *DistSender) getLocalityComparison(
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
-	comparisonResult, regionErr, zoneErr := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
-	if regionErr != nil {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross region %v", regionErr)
+	comparisonResult, regionValid, zoneValid := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
+	if !regionValid {
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross region")
 	}
-	if zoneErr != nil {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross zone %v", zoneErr)
+	if !zoneValid {
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross zone")
 	}
 	return comparisonResult
 }

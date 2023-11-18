@@ -148,7 +148,6 @@ func UserAuthCertHook(
 	tlsState *tls.ConnectionState,
 	tenantID roachpb.TenantID,
 	certManager *CertificateManager,
-	cache *ClientCertExpirationCache,
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
@@ -193,11 +192,10 @@ func UserAuthCertHook(
 
 		if ValidateUserScope(certUserScope, systemIdentity.Normalized(), tenantID) {
 			if certManager != nil {
-				cache.MaybeUpsert(
+				certManager.MaybeUpsertClientExpiration(
 					ctx,
-					systemIdentity.Normalized(),
+					systemIdentity,
 					peerCert.NotAfter.Unix(),
-					certManager.certMetrics.ClientExpiration,
 				)
 			}
 			return nil

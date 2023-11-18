@@ -49,6 +49,10 @@ type Cluster interface {
 		ctx context.Context, content, dest string, mode os.FileMode, opts ...option.Option,
 	) error
 
+	// SetRandomSeed allows tests to set their own random seed to be
+	// used by builds with runtime assertions enabled.
+	SetRandomSeed(seed int64)
+
 	// Starting and stopping CockroachDB.
 
 	StartE(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
@@ -69,10 +73,11 @@ type Cluster interface {
 
 	// SQL connection strings.
 
-	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error)
-	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string) ([]string, error)
+	InternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]string, error)
+	ExternalPGUrl(ctx context.Context, l *logger.Logger, node option.NodeListOption, tenant string, sqlInstance int) ([]string, error)
 
 	// SQL clients to nodes.
+
 	Conn(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) *gosql.DB
 	ConnE(ctx context.Context, l *logger.Logger, node int, opts ...func(*option.ConnOption)) (*gosql.DB, error)
 
@@ -107,10 +112,11 @@ type Cluster interface {
 
 	Spec() spec.ClusterSpec
 	Name() string
+	Cloud() string
 	IsLocal() bool
 	// IsSecure returns true iff the cluster uses TLS.
 	IsSecure() bool
-	// Returns CPU architecture of the nodes.
+	// Architecture returns CPU architecture of the nodes.
 	Architecture() vm.CPUArch
 
 	// Deleting CockroachDB data and logs on nodes.
@@ -134,7 +140,7 @@ type Cluster interface {
 	) error
 
 	FetchTimeseriesData(ctx context.Context, l *logger.Logger) error
-	FetchDebugZip(ctx context.Context, l *logger.Logger, dest string) error
+	FetchDebugZip(ctx context.Context, l *logger.Logger, dest string, opts ...option.Option) error
 	RefetchCertsFromNode(ctx context.Context, node int) error
 
 	StartGrafana(ctx context.Context, l *logger.Logger, promCfg *prometheus.Config) error

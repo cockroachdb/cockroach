@@ -36,7 +36,7 @@ func declareKeysComputeChecksum(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// The correctness of range merges depends on the lease applied index of a
 	// range not being bumped while the RHS is subsumed. ComputeChecksum bumps a
 	// range's LAI and thus needs to be serialized with Subsume requests, in order
@@ -47,6 +47,7 @@ func declareKeysComputeChecksum(
 	// declare access over at least one key. We choose to declare read-only access
 	// over the range descriptor key.
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(rs.GetStartKey())})
+	return nil
 }
 
 // ReplicaChecksumVersion versions the checksum computation. Requests silently no-op

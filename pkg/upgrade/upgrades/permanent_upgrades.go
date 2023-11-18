@@ -111,7 +111,7 @@ func populateVersionSetting(
 	if v == (roachpb.Version{}) {
 		// The cluster was bootstrapped at v1.0 (or even earlier), so just use
 		// the TestingBinaryMinSupportedVersion of the binary.
-		v = clusterversion.TestingBinaryMinSupportedVersion
+		v = clusterversion.MinSupported.Version()
 	}
 
 	b, err := protoutil.Marshal(&clusterversion.ClusterVersion{Version: v})

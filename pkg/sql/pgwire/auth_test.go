@@ -639,9 +639,7 @@ func TestClientAddrOverride(t *testing.T) {
 
 	s := srv.ApplicationLayer()
 
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "testClientAddrOverride" /* prefix */, url.User(username.TestUser),
-	)
+	pgURL, cleanupFunc := s.PGUrl(t, serverutils.CertsDirPrefix("testClientAddrOverride"), serverutils.User(username.TestUser))
 	defer cleanupFunc()
 
 	// Ensure the test user exists.
@@ -746,7 +744,7 @@ func TestClientAddrOverride(t *testing.T) {
 			t.Run("check-server-log-uses-override", func(t *testing.T) {
 				// Wait for the disconnection event in logs.
 				testutils.SucceedsSoon(t, func() error {
-					log.Flush()
+					log.FlushFiles()
 					entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, sessionTerminatedRe,
 						log.WithMarkedSensitiveData)
 					if err != nil {
@@ -759,7 +757,7 @@ func TestClientAddrOverride(t *testing.T) {
 				})
 
 				// Now we want to check that the logging tags are also updated.
-				log.Flush()
+				log.FlushFiles()
 				entries, err := log.FetchEntriesFromFiles(testStartTime.UnixNano(), math.MaxInt64, 10000, authLogFileRe,
 					log.WithMarkedSensitiveData)
 				if err != nil {
@@ -805,17 +803,28 @@ func TestSSLSessionVar(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Set the system layer to accept SQL without TLS in the event of a shared
+	// process virtual cluster.
+	srv.SystemLayer().SetAcceptSQLWithoutTLS(true)
+
+	// TODO(herko): What effect should this have on a shared process virtual
+	// cluster? See: https://github.com/cockroachdb/cockroach/issues/112961
 	s.SetAcceptSQLWithoutTLS(true)
 
-	pgURLWithCerts, cleanupFuncCerts := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.AdvSQLAddr(), "TestSSLSessionVarCerts" /* prefix */, url.User(username.TestUser), true,
+	pgURLWithCerts, cleanupFuncCerts := s.PGUrl(t,
+		serverutils.CertsDirPrefix("TestSSLSessionVarCerts"),
+		serverutils.User(username.TestUser),
+		serverutils.ClientCerts(true),
 	)
 	defer cleanupFuncCerts()
 
-	pgURLWithoutCerts, cleanupFuncWithoutCerts := sqlutils.PGUrlWithOptionalClientCerts(
-		t, s.AdvSQLAddr(), "TestSSLSessionVarNoCerts" /* prefix */, url.UserPassword(username.TestUser, "abc"), false,
+	pgURLWithoutCerts, cleanupFuncWithoutCerts := s.PGUrl(t,
+		serverutils.CertsDirPrefix("TestSSLSessionVarNoCerts"),
+		serverutils.UserPassword(username.TestUser, "abc"),
+		serverutils.ClientCerts(false),
 	)
 	defer cleanupFuncWithoutCerts()
+
 	q := pgURLWithoutCerts.Query()
 	q.Set("sslmode", "disable")
 	pgURLWithoutCerts.RawQuery = q.Encode()

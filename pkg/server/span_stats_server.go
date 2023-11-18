@@ -12,24 +12,59 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"strconv"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+)
+
+var SpanStatsNodeTimeout = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"server.span_stats.node.timeout",
+	"the duration allowed for a single node to return span stats data before"+
+		" the request is cancelled; if set to 0, there is no timeout",
+	time.Minute,
+	settings.NonNegativeDuration,
+)
+
+const defaultRangeStatsBatchLimit = 100
+
+// RangeStatsBatchLimit registers the maximum number of ranges to be batched
+// when fetching range stats for a span.
+var RangeStatsBatchLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"server.span_stats.range_batch_limit",
+	"the maximum batch size when fetching ranges statistics for a span",
+	defaultRangeStatsBatchLimit,
+	settings.PositiveInt,
+)
+
+// RangeDescPageSize controls the page size when iterating through range
+// descriptors.
+var RangeDescPageSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"server.span_stats.range_desc_page_size",
+	"the page size when iterating through range descriptors",
+	100,
+	settings.IntInRange(5, 25000),
 )
 
 const MixedVersionErr = "span stats request - unable to service a mixed version request"
 const UnexpectedLegacyRequest = "span stats request - unexpected populated legacy fields (StartKey, EndKey)"
 const nodeErrorMsgPlaceholder = "could not get span stats sample for node %d: %v"
-const exceedSpanLimitPlaceholder = "error getting span statistics - number of spans in request payload (%d) exceeds 'server.span_stats.span_batch_limit' cluster setting limit (%d)"
 
 func (s *systemStatusServer) spanStatsFanOut(
 	ctx context.Context, req *roachpb.SpanStatsRequest,
@@ -37,8 +72,14 @@ func (s *systemStatusServer) spanStatsFanOut(
 	res := &roachpb.SpanStatsResponse{
 		SpanToStats: make(map[string]*roachpb.SpanStats),
 	}
-	// Response level error
-	var respErr error
+	// Populate SpanToStats with empty values for each span,
+	// so that clients may still access stats for a specific span
+	// in the extreme case of an error encountered on every node.
+	for _, sp := range req.Spans {
+		res.SpanToStats[sp.String()] = &roachpb.SpanStats{}
+	}
+
+	responses := make(map[string]struct{})
 
 	spansPerNode, err := s.getSpansPerNode(ctx, req)
 	if err != nil {
@@ -51,6 +92,14 @@ func (s *systemStatusServer) spanStatsFanOut(
 		ctx context.Context,
 		nodeID roachpb.NodeID,
 	) (interface{}, error) {
+		if s.knobs != nil {
+			if s.knobs.IterateNodesDialCallback != nil {
+				if err := s.knobs.IterateNodesDialCallback(nodeID); err != nil {
+					return nil, err
+				}
+			}
+		}
+
 		if _, ok := spansPerNode[nodeID]; ok {
 			return s.dialNode(ctx, nodeID)
 		}
@@ -58,6 +107,14 @@ func (s *systemStatusServer) spanStatsFanOut(
 	}
 
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
+		if s.knobs != nil {
+			if s.knobs.IterateNodesNodeCallback != nil {
+				if err := s.knobs.IterateNodesNodeCallback(ctx, nodeID); err != nil {
+					return nil, err
+				}
+			}
+		}
+
 		// `smartDial` may skip this node, so check to see if the client is nil.
 		// If it is, return nil response.
 		if client == nil {
@@ -80,24 +137,40 @@ func (s *systemStatusServer) spanStatsFanOut(
 
 		nodeResponse := resp.(*roachpb.SpanStatsResponse)
 
+		// Values of ApproximateDiskBytes, RemoteFileBytes, and ExternalFileBytes should be physical values, but
+		// TotalStats (MVCC stats) should be the logical, pre-replicated value.
+		// Note: This implementation can return arbitrarily stale values, because instead of getting
+		// MVCC stats from the leaseholder, MVCC stats are taken from the node that responded first.
+		// See #108779.
 		for spanStr, spanStats := range nodeResponse.SpanToStats {
-			_, exists := res.SpanToStats[spanStr]
-			if !exists {
-				res.SpanToStats[spanStr] = spanStats
-			} else {
-				res.SpanToStats[spanStr].Add(spanStats)
+			// Accumulate physical values across all replicas:
+			res.SpanToStats[spanStr].ApproximateDiskBytes += spanStats.ApproximateDiskBytes
+			res.SpanToStats[spanStr].RemoteFileBytes += spanStats.RemoteFileBytes
+			res.SpanToStats[spanStr].ExternalFileBytes += spanStats.ExternalFileBytes
+
+			// Logical values: take the values from the node that responded first.
+			// TODO: This should really be read from the leaseholder.
+			if _, ok := responses[spanStr]; !ok {
+				res.SpanToStats[spanStr].TotalStats = spanStats.TotalStats
+				res.SpanToStats[spanStr].RangeCount = spanStats.RangeCount
+				responses[spanStr] = struct{}{}
 			}
 		}
 	}
 
 	errorFn := func(nodeID roachpb.NodeID, err error) {
 		log.Errorf(ctx, nodeErrorMsgPlaceholder, nodeID, err)
-		respErr = err
+		errorMessage := fmt.Sprintf("%v", err)
+		res.Errors = append(res.Errors, errorMessage)
 	}
 
-	if err := s.statusServer.iterateNodes(
+	timeout := SpanStatsNodeTimeout.Get(&s.st.SV)
+	if err := iterateNodes(
 		ctx,
+		s.serverIterator,
+		s.stopper,
 		"iterating nodes for span stats",
+		timeout,
 		smartDial,
 		nodeFn,
 		responseFn,
@@ -106,7 +179,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 		return nil, err
 	}
 
-	return res, respErr
+	return res, nil
 }
 
 func (s *systemStatusServer) getLocalStats(
@@ -129,7 +202,7 @@ func (s *systemStatusServer) statsForSpan(
 
 	var descriptors []roachpb.RangeDescriptor
 	scanner := rangedesc.NewScanner(s.db)
-	pageSize := int(roachpb.RangeDescPageSize.Get(&s.st.SV))
+	pageSize := int(RangeDescPageSize.Get(&s.st.SV))
 	err := scanner.Scan(ctx, pageSize, func() {
 		// If the underlying txn fails and needs to be retried,
 		// clear the descriptors we've collected so far.
@@ -161,7 +234,7 @@ func (s *systemStatusServer) statsForSpan(
 			// Collect into fullyContainedKeys batch.
 			fullyContainedKeysBatch = append(fullyContainedKeysBatch, desc.StartKey.AsRawKey())
 			// If we've exceeded the batch limit, request range stats for the current batch.
-			if len(fullyContainedKeysBatch) > int(roachpb.RangeStatsBatchLimit.Get(&s.st.SV)) {
+			if len(fullyContainedKeysBatch) > int(RangeStatsBatchLimit.Get(&s.st.SV)) {
 				// Obtain stats for fully contained ranges via RangeStats.
 				fullyContainedKeysBatch, err = flushBatchedContainedKeys(ctx, s.rangeStatsFetcher, fullyContainedKeysBatch, spanStats)
 				if err != nil {
@@ -186,6 +259,7 @@ func (s *systemStatusServer) statsForSpan(
 			}
 			err = s.stores.VisitStores(func(s *kvserver.Store) error {
 				stats, err := storage.ComputeStats(
+					ctx,
 					s.TODOEngine(),
 					scanStart.AsRawKey(),
 					scanEnd.AsRawKey(),
@@ -275,7 +349,7 @@ func (s *systemStatusServer) getSpansPerNode(
 ) (map[roachpb.NodeID][]roachpb.Span, error) {
 	// Mapping of node ids to spans with a replica on the node.
 	spansPerNode := make(map[roachpb.NodeID][]roachpb.Span)
-	pageSize := int(roachpb.RangeDescPageSize.Get(&s.st.SV))
+	pageSize := int(RangeDescPageSize.Get(&s.st.SV))
 	for _, span := range req.Spans {
 		nodeIDs, err := nodeIDsForSpan(ctx, s.db, span, pageSize)
 		if err != nil {
@@ -342,4 +416,95 @@ func flushBatchedContainedKeys(
 func isLegacyRequest(req *roachpb.SpanStatsRequest) bool {
 	// If the start/end key fields are not nil, we have a request using the old request format.
 	return req.StartKey != nil || req.EndKey != nil
+}
+
+// verifySpanStatsRequest returns an error if the request can not be serviced.
+// Requests can not be serviced if the active cluster version is less than 23.1,
+// or if the request is made using the pre 23.1 format.
+func verifySpanStatsRequest(
+	ctx context.Context, req *roachpb.SpanStatsRequest, version clusterversion.Handle,
+) error {
+
+	// If the cluster's active version is less than 23.1 return a mixed version error.
+	if !version.IsActive(ctx, clusterversion.V23_1) {
+		return errors.New(MixedVersionErr)
+	}
+
+	// If we receive a request using the old format.
+	if isLegacyRequest(req) {
+		// We want to force 23.1 callers to use the new format (e.g. Spans field).
+		if req.NodeID == "0" {
+			return errors.New(UnexpectedLegacyRequest)
+		}
+		// We want to error if we receive a legacy request from a 22.2
+		// node (e.g. during a mixed-version fanout).
+		return errors.New(MixedVersionErr)
+	}
+
+	return nil
+}
+
+// batchedSpanStats breaks the request spans down into batches that are
+// batchSize large. impl is invoked for each batch. Then, responses from
+// each batch are merged together and returned to the caller of this function.
+func batchedSpanStats(
+	ctx context.Context,
+	req *roachpb.SpanStatsRequest,
+	impl func(
+		ctx context.Context, req *roachpb.SpanStatsRequest,
+	) (*roachpb.SpanStatsResponse, error),
+	batchSize int,
+) (*roachpb.SpanStatsResponse, error) {
+
+	if len(req.Spans) == 0 {
+		return &roachpb.SpanStatsResponse{}, nil
+	}
+
+	if len(req.Spans) <= batchSize {
+		return impl(ctx, req)
+	}
+
+	// Just in case, check for an invalid batch size. The batch size
+	// should originate from server.span_stats.span_batch_limit, which
+	// is validated to be a positive integer.
+	if batchSize <= 0 {
+		return nil, errors.Newf("invalid batch size of %d, "+
+			"batch size must be positive", batchSize)
+	}
+
+	totalSpans := len(req.Spans)
+	batches := (totalSpans + batchSize - 1) / batchSize
+
+	// Keep a reference of the original spans slice.
+	s := req.Spans
+	res := &roachpb.SpanStatsResponse{}
+	res.SpanToStats = make(map[string]*roachpb.SpanStats, totalSpans)
+
+	for i := 0; i < batches; i++ {
+
+		start := i * batchSize
+		end := start + batchSize
+
+		// The total number of spans may not divide evenly by the
+		// batch size. If that's the case, take action here
+		// to prevent the last batch from indexing past the end
+		// of the spans slice.
+		if i == batches-1 && totalSpans%batchSize != 0 {
+			end = start + totalSpans%batchSize
+		}
+
+		req.Spans = s[start:end]
+		batchRes, batchErr := impl(ctx, req)
+		if batchErr != nil {
+			return nil, batchErr
+		}
+
+		for k, v := range batchRes.SpanToStats {
+			res.SpanToStats[k] = v
+		}
+
+		res.Errors = append(res.Errors, batchRes.Errors...)
+	}
+
+	return res, nil
 }

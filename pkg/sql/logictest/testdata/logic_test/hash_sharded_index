@@ -7,7 +7,7 @@ query TT
 SHOW CREATE TABLE sharded_primary
 ----
 sharded_primary  CREATE TABLE public.sharded_primary (
-                   crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
+                   crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                    a INT8 NOT NULL,
                    CONSTRAINT sharded_primary_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
                  )
@@ -43,7 +43,7 @@ SHOW CREATE TABLE sharded_primary
 ----
 sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
-                   crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
+                   crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                    CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
                  )
 
@@ -96,7 +96,7 @@ SHOW CREATE TABLE specific_family
 specific_family  CREATE TABLE public.specific_family (
                    a INT8 NULL,
                    b INT8 NULL,
-                   crdb_internal_b_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 10:::INT8)) VIRTUAL,
+                   crdb_internal_b_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 10:::INT8)) VIRTUAL,
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                    CONSTRAINT specific_family_pkey PRIMARY KEY (rowid ASC),
                    INDEX specific_family_b_idx (b ASC) USING HASH WITH (bucket_count=10),
@@ -113,7 +113,7 @@ SHOW CREATE TABLE sharded_secondary
 ----
 sharded_secondary  CREATE TABLE public.sharded_secondary (
                      a INT8 NULL,
-                     crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
+                     crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
                      INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=4)
@@ -134,7 +134,7 @@ SHOW CREATE TABLE sharded_secondary
 ----
 sharded_secondary  CREATE TABLE public.sharded_secondary (
                      a INT8 NULL,
-                     crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
+                     crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
                      INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH (bucket_count=4)
@@ -163,7 +163,7 @@ SHOW CREATE TABLE sharded_secondary
 sharded_secondary  CREATE TABLE public.sharded_secondary (
                      a INT8 NULL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                     crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
+                     crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
                      INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10)
                    )
@@ -181,8 +181,8 @@ SHOW CREATE TABLE sharded_secondary
 sharded_secondary  CREATE TABLE public.sharded_secondary (
                      a INT8 NULL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                     crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
-                     crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
+                     crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
+                     crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
                      INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
                      INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4)
@@ -198,7 +198,7 @@ SHOW CREATE TABLE sharded_secondary
 sharded_secondary  CREATE TABLE public.sharded_secondary (
                      a INT8 NULL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                     crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
+                     crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
                      INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4)
                    )
@@ -255,7 +255,7 @@ SHOW CREATE TABLE sharded_secondary
 sharded_secondary  CREATE TABLE public.sharded_secondary (
                      a INT8 NULL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                     crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
+                     crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
                      INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
                      INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=10),
@@ -277,8 +277,8 @@ SHOW CREATE TABLE sharded_primary
 ----
 sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
-                   crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
-                   crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
+                   crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
+                   crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                    CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10),
                    INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=4)
                  )
@@ -294,7 +294,7 @@ SHOW CREATE TABLE sharded_primary
 ----
 sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
-                   crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
+                   crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                    CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
                  )
 
@@ -306,7 +306,7 @@ SHOW CREATE TABLE sharded_primary
 ----
 sharded_primary  CREATE TABLE public.sharded_primary (
                    a INT8 NOT NULL,
-                   crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
+                   crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                    CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10),
                    INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=10)
                  )
@@ -384,7 +384,7 @@ SHOW CREATE TABLE column_used_on_unsharded
 ----
 column_used_on_unsharded  CREATE TABLE public.column_used_on_unsharded (
                             a INT8 NULL,
-                            crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
+                            crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                             CONSTRAINT column_used_on_unsharded_pkey PRIMARY KEY (rowid ASC),
                             INDEX column_used_on_unsharded_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC)
@@ -408,7 +408,7 @@ SHOW CREATE TABLE column_used_on_unsharded_create_table
 ----
 column_used_on_unsharded_create_table  CREATE TABLE public.column_used_on_unsharded_create_table (
                                          a INT8 NULL,
-                                         crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
+                                         crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                          CONSTRAINT column_used_on_unsharded_create_table_pkey PRIMARY KEY (rowid ASC),
                                          INDEX column_used_on_unsharded_create_table_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC)
@@ -443,10 +443,10 @@ query TT
 SHOW CREATE TABLE weird_names
 ----
 weird_names  CREATE TABLE public.weird_names (
-               "crdb_internal_I am a column with spaces_shard_12" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes("I am a column with spaces")), 12:::INT8)) VIRTUAL,
+               "crdb_internal_I am a column with spaces_shard_12" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes("I am a column with spaces"))), 12:::INT8)) VIRTUAL,
                "I am a column with spaces" INT8 NOT NULL,
                "'quotes' in the column's name" INT8 NULL,
-               "crdb_internal_'quotes' in the column's name_shard_4" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes("'quotes' in the column's name")), 4:::INT8)) VIRTUAL,
+               "crdb_internal_'quotes' in the column's name_shard_4" INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes("'quotes' in the column's name"))), 4:::INT8)) VIRTUAL,
                CONSTRAINT weird_names_pkey PRIMARY KEY ("I am a column with spaces" ASC) USING HASH WITH (bucket_count=12),
                INDEX foo ("'quotes' in the column's name" ASC) USING HASH WITH (bucket_count=4)
              )
@@ -520,8 +520,8 @@ rename_column  CREATE TABLE public.rename_column (
                  c0 INT8 NOT NULL,
                  c1 INT8 NOT NULL,
                  c2 INT8 NULL,
-                 crdb_internal_c0_c1_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c0, c1)), 8:::INT8)) VIRTUAL,
-                 crdb_internal_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c2)), 8:::INT8)) VIRTUAL,
+                 crdb_internal_c0_c1_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c0, c1))), 8:::INT8)) VIRTUAL,
+                 crdb_internal_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c2))), 8:::INT8)) VIRTUAL,
                  CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8),
                  INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8)
                )
@@ -543,8 +543,8 @@ rename_column  CREATE TABLE public.rename_column (
                  c1 INT8 NOT NULL,
                  c2 INT8 NOT NULL,
                  c3 INT8 NULL,
-                 crdb_internal_c1_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c1, c2)), 8:::INT8)) VIRTUAL,
-                 crdb_internal_c3_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c3)), 8:::INT8)) VIRTUAL,
+                 crdb_internal_c1_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c1, c2))), 8:::INT8)) VIRTUAL,
+                 crdb_internal_c3_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c3))), 8:::INT8)) VIRTUAL,
                  CONSTRAINT rename_column_pkey PRIMARY KEY (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8),
                  INDEX rename_column_c2_idx (c3 ASC) USING HASH WITH (bucket_count=8)
                )
@@ -565,8 +565,8 @@ rename_column  CREATE TABLE public.rename_column (
                  c0 INT8 NOT NULL,
                  c1 INT8 NOT NULL,
                  c2 INT8 NULL,
-                 crdb_internal_c0_c1_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c0, c1)), 8:::INT8)) VIRTUAL,
-                 crdb_internal_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c2)), 8:::INT8)) VIRTUAL,
+                 crdb_internal_c0_c1_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c0, c1))), 8:::INT8)) VIRTUAL,
+                 crdb_internal_c2_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c2))), 8:::INT8)) VIRTUAL,
                  CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8),
                  INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8)
                )
@@ -773,7 +773,7 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
-  crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
   CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
 )
@@ -856,12 +856,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_default_bucket_16]
 ----
 CREATE TABLE public.t_default_bucket_16 (
-  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 16:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
   b INT8 NULL,
   c INT8 NULL,
-  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 16:::INT8)) VIRTUAL,
-  crdb_internal_c_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c)), 4:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
+  crdb_internal_c_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(c))), 4:::INT8)) VIRTUAL,
   CONSTRAINT t_default_bucket_16_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_t_default_bucket_16_b (b ASC) USING HASH WITH (bucket_count=16),
   INDEX idx_t_default_bucket_16_c (c ASC) USING HASH WITH (bucket_count=4),
@@ -879,7 +879,7 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t_default_bucket_8]
 ----
 CREATE TABLE public.t_default_bucket_8 (
-  crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
   a INT8 NOT NULL,
   CONSTRAINT t_default_bucket_8_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
 )
@@ -1094,3 +1094,38 @@ CREATE TABLE t104484 (c0 VARBIT(10) AS (B'1') STORED)
 # that the error does not include the schema plan details.
 statement error cannot create a sharded index on a computed column$
 CREATE INDEX ON t104484(c0 DESC) USING HASH
+
+# Regression test for #91109 to make sure decimals are properly distributed.
+subtest evenly_distributed_decimals
+
+statement ok
+CREATE TABLE decimals (
+  d DECIMAL NOT NULL PRIMARY KEY USING HASH WITH (bucket_count=16),
+  id INT8
+)
+
+statement ok
+INSERT INTO decimals SELECT generate_series(0, 1023), 101;
+
+# Crude check to make sure that no shard has "too few" rows in it.
+query IB
+SELECT crdb_internal_d_shard_16 AS shard, count(*) < 20 FROM decimals GROUP BY 1 ORDER BY 1
+----
+0   false
+1   false
+2   false
+3   false
+4   false
+5   false
+6   false
+7   false
+8   false
+9   false
+10  false
+11  false
+12  false
+13  false
+14  false
+15  false
+
+subtest end

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -109,7 +110,7 @@ pushed-txn-updated txn=<name> status=committed|aborted|pending [ts=<ts>]
 
  Informs the lock table that the named transaction is finalized.
 
-add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>] [consult-txn-status-cache=<bool>]
+add-discovered r=<name> k=<key> txn=<name> [lease-seq=<seq>] [consult-txn-status-cache=<bool>] [strength=<strength>]
 ----
 <error string>
 
@@ -204,7 +205,7 @@ func TestLockTableBasic(t *testing.T) {
 				)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
-				ltImpl.minLocks = 0
+				ltImpl.minKeysLocked = 0
 				lt = ltImpl
 				txnsByName = make(map[string]*enginepb.TxnMeta)
 				txnCounter = uint128.FromInts(0, 0)
@@ -347,7 +348,11 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				g := guardsByReqName[reqName]
-				g = lt.ScanAndEnqueue(req, g)
+				var err *Error
+				g, err = lt.ScanAndEnqueue(req, g)
+				if err != nil {
+					return err.String()
+				}
 				guardsByReqName[reqName] = g
 				return fmt.Sprintf("start-waiting: %t", g.ShouldWait())
 
@@ -385,10 +390,12 @@ func TestLockTableBasic(t *testing.T) {
 					durability = lock.Replicated
 				}
 				strength := ScanLockStrength(t, d)
-				acq := roachpb.MakeLockAcquisition(req.Txn, roachpb.Key(key), durability, strength)
+				acq := roachpb.MakeLockAcquisition(
+					req.Txn.TxnMeta, roachpb.Key(key), durability, strength, req.Txn.IgnoredSeqNums,
+				)
 				var ignored []enginepb.IgnoredSeqNumRange
 				if d.HasArg("ignored-seqs") {
-					ignored = scanIgnoredSeqNumbers(t, d)
+					ignored = ScanIgnoredSeqNumbers(t, d)
 				}
 				acq.IgnoredSeqNums = ignored
 				if err := lt.AcquireLock(&acq); err != nil {
@@ -432,7 +439,7 @@ func TestLockTableBasic(t *testing.T) {
 				span := getSpan(t, d, s)
 				var ignored []enginepb.IgnoredSeqNumRange
 				if d.HasArg("ignored-seqs") {
-					ignored = scanIgnoredSeqNumbers(t, d)
+					ignored = ScanIgnoredSeqNumbers(t, d)
 				}
 				// TODO(sbhola): also test STAGING.
 				intent := &roachpb.LockUpdate{
@@ -457,7 +464,7 @@ func TestLockTableBasic(t *testing.T) {
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
-				intent := roachpb.MakeIntent(txnMeta, roachpb.Key(key))
+				foundLock := roachpb.MakeLock(txnMeta, roachpb.Key(key), lock.Intent)
 				seq := int(1)
 				if d.HasArg("lease-seq") {
 					d.ScanArgs(t, "lease-seq", &seq)
@@ -467,8 +474,14 @@ func TestLockTableBasic(t *testing.T) {
 					d.ScanArgs(t, "consult-txn-status-cache", &consultTxnStatusCache)
 				}
 				leaseSeq := roachpb.LeaseSequence(seq)
+				str := lock.Intent // default replicated locks to write intents
+				if d.HasArg("strength") {
+					str = ScanLockStrength(t, d)
+				}
+				foundLock.Strength = str
+
 				if _, err := lt.AddDiscoveredLock(
-					&intent, leaseSeq, consultTxnStatusCache, g); err != nil {
+					&foundLock, leaseSeq, consultTxnStatusCache, g); err != nil {
 					return err.Error()
 				}
 				return lt.String()
@@ -497,7 +510,11 @@ func TestLockTableBasic(t *testing.T) {
 				var key string
 				d.ScanArgs(t, "k", &key)
 				strength := ScanLockStrength(t, d)
-				if ok, txn := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength); ok {
+				ok, txn, err := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength)
+				if err != nil {
+					return err.Error()
+				}
+				if ok {
 					holder := "<nil>"
 					if txn != nil {
 						holder = txn.ID.String()
@@ -543,7 +560,10 @@ func TestLockTableBasic(t *testing.T) {
 				default:
 					str = "old: "
 				}
-				state := g.CurState()
+				state, err := g.CurState()
+				if err != nil {
+					return err.Error()
+				}
 				var typeStr string
 				switch state.kind {
 				case waitForDistinguished:
@@ -703,30 +723,42 @@ func scanSpans(
 		}
 		strS := parts[0]
 		spanStr := parts[1]
-		str := getStrength(t, d, strS)
+		str := GetStrength(t, d, strS)
 		// Compute latch span access based on the supplied strength.
-		var sa spanset.SpanAccess
-		switch str {
-		case lock.None:
-			sa = spanset.SpanReadOnly
-		case lock.Intent:
-			sa = spanset.SpanReadWrite
-		case lock.Exclusive:
-			sa = spanset.SpanReadWrite
-		case lock.Shared:
-			// Unlike non-locking reads, shared-locking reads are isolated at all
-			// timestamps (not just the request's timestamp); so we acquire a read
-			// latch at max timestamp. See
-			// https://github.com/cockroachdb/cockroach/issues/102264.
-			sa = spanset.SpanReadOnly
-			ts = hlc.MaxTimestamp
-		default:
-			d.Fatalf(t, "unsupported lock strength: %s", str)
-		}
-		latchSpans.AddMVCC(sa, getSpan(t, d, spanStr), ts)
+		sa, latchTs := latchAccessForLockStrength(str, ts)
+		latchSpans.AddMVCC(sa, getSpan(t, d, spanStr), latchTs)
 		lockSpans.Add(str, getSpan(t, d, spanStr))
 	}
 	return latchSpans, lockSpans
+}
+
+// latchAccessForLockStrength returns the latch access and timestamp to use for
+// a given lock strength and request timestamp. It duplicates some of the logic
+// in DefaultDeclareIsolatedKeys to avoid the package dependency.
+func latchAccessForLockStrength(
+	str lock.Strength, ts hlc.Timestamp,
+) (spanset.SpanAccess, hlc.Timestamp) {
+	switch str {
+	case lock.None:
+		return spanset.SpanReadOnly, ts
+	case lock.Shared:
+		// Unlike non-locking reads, shared-locking reads are isolated at all
+		// timestamps (not just the request's timestamp); so we acquire a read
+		// latch at max timestamp. See
+		// https://github.com/cockroachdb/cockroach/issues/102264.
+		//
+		// We don't need to duplicate the special case for replicated shared
+		// locks here (see ReplicatedSharedLocksTransactionLatchingKey) because
+		// there is no risk in these tests of two shared lock acquisitions from
+		// the same transaction clobbering each other's state.
+		return spanset.SpanReadOnly, hlc.MaxTimestamp
+	case lock.Exclusive:
+		return spanset.SpanReadWrite, ts
+	case lock.Intent:
+		return spanset.SpanReadWrite, ts
+	default:
+		panic(fmt.Sprintf("unsupported lock strength: %s", str))
+	}
 }
 
 func ScanIsoLevel(t *testing.T, d *datadriven.TestData) isolation.Level {
@@ -752,10 +784,10 @@ func ScanIsoLevel(t *testing.T, d *datadriven.TestData) isolation.Level {
 func ScanLockStrength(t *testing.T, d *datadriven.TestData) lock.Strength {
 	var strS string
 	d.ScanArgs(t, "strength", &strS)
-	return getStrength(t, d, strS)
+	return GetStrength(t, d, strS)
 }
 
-func getStrength(t *testing.T, d *datadriven.TestData, strS string) lock.Strength {
+func GetStrength(t *testing.T, d *datadriven.TestData, strS string) lock.Strength {
 	switch strS {
 	case "none":
 		return lock.None
@@ -773,7 +805,7 @@ func getStrength(t *testing.T, d *datadriven.TestData, strS string) lock.Strengt
 	}
 }
 
-func scanIgnoredSeqNumbers(t *testing.T, d *datadriven.TestData) []enginepb.IgnoredSeqNumRange {
+func ScanIgnoredSeqNumbers(t *testing.T, d *datadriven.TestData) []enginepb.IgnoredSeqNumRange {
 	var ignored []enginepb.IgnoredSeqNumRange
 	var seqsStr string
 	d.ScanArgs(t, "ignored-seqs", &seqsStr)
@@ -817,11 +849,16 @@ func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) 
 	return buf.String()
 }
 
+func newLock(txn *enginepb.TxnMeta, key roachpb.Key, str lock.Strength) *roachpb.Lock {
+	l := roachpb.MakeLock(txn, key, str)
+	return &l
+}
+
 func TestLockTableMaxLocks(t *testing.T) {
 	lt := newLockTable(
 		5, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
 	)
-	lt.minLocks = 0
+	lt.minKeysLocked = 0
 	lt.enabled = true
 	var keys []roachpb.Key
 	var guards []lockTableGuard
@@ -843,7 +880,8 @@ func TestLockTableMaxLocks(t *testing.T) {
 			LockSpans:  lockSpans,
 		}
 		reqs = append(reqs, req)
-		ltg := lt.ScanAndEnqueue(req, nil)
+		ltg, err := lt.ScanAndEnqueue(req, nil)
+		require.Nil(t, err)
 		require.Nil(t, ltg.ResolveBeforeScanning())
 		require.False(t, ltg.ShouldWait())
 		guards = append(guards, ltg)
@@ -856,9 +894,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 		for j := 0; j < 10; j++ {
 			k := i*20 + j
 			added, err := lt.AddDiscoveredLock(
-				&roachpb.Intent{
-					Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[k]}, Txn: txnMeta,
-				},
+				newLock(&txnMeta, keys[k], lock.Intent),
 				0, false, guards[i])
 			require.True(t, added)
 			require.NoError(t, err)
@@ -872,15 +908,15 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(10), lt.lockCountForTesting())
 	// Two guards do ScanAndEnqueue.
 	for i := 2; i < 4; i++ {
-		guards[i] = lt.ScanAndEnqueue(reqs[i], guards[i])
+		var err *Error
+		guards[i], err = lt.ScanAndEnqueue(reqs[i], guards[i])
+		require.Nil(t, err)
 		require.True(t, guards[i].ShouldWait())
 	}
 	require.Equal(t, int64(10), lt.lockCountForTesting())
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err := lt.AddDiscoveredLock(
-		&roachpb.Intent{
-			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+10]}, Txn: txnMeta,
-		},
+		newLock(&txnMeta, keys[9*20+10], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -889,9 +925,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(101), int64(lt.locks.lockIDSeqNum))
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{
-			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+11]}, Txn: txnMeta,
-		},
+		newLock(&txnMeta, keys[9*20+11], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -905,9 +939,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 	lt.locks.lockAddMaxLocksCheckInterval = 2
 	// Add another discovered lock.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{
-			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+12]}, Txn: txnMeta,
-		},
+		newLock(&txnMeta, keys[9*20+12], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -915,26 +947,22 @@ func TestLockTableMaxLocks(t *testing.T) {
 	require.Equal(t, int64(7), lt.lockCountForTesting())
 	// Add another discovered lock, to trigger tryClearLocks.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{
-			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+13]}, Txn: txnMeta,
-		},
+		newLock(&txnMeta, keys[9*20+13], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
 	// Now enforcement is done, so only 4 remain.
 	require.Equal(t, int64(4), lt.lockCountForTesting())
-	// Bump down the enforcement interval manually, and bump up minLocks
+	// Bump down the enforcement interval manually, and bump up minKeysLocked.
 	lt.locks.lockAddMaxLocksCheckInterval = 1
-	lt.minLocks = 2
+	lt.minKeysLocked = 2
 	// Three more guards dequeued.
 	lt.Dequeue(guards[6])
 	lt.Dequeue(guards[7])
 	lt.Dequeue(guards[8])
 	// Add another discovered lock.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{
-			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+14]}, Txn: txnMeta,
-		},
+		newLock(&txnMeta, keys[9*20+14], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -942,22 +970,19 @@ func TestLockTableMaxLocks(t *testing.T) {
 	// Add another discovered lock, to trigger tryClearLocks, and push us over 5
 	// locks.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{
-			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+15]}, Txn: txnMeta,
-		},
+		newLock(&txnMeta, keys[9*20+15], lock.Intent),
 		0, false, guards[9])
 	require.True(t, added)
 	require.NoError(t, err)
-	// Enforcement keeps the 1 notRemovable lock, and another, since minLocks=2.
+	// Enforcement keeps the 1 notRemovable lock, and another, since
+	// minKeysLocked=2.
 	require.Equal(t, int64(2), lt.lockCountForTesting())
-	// Restore minLocks to 0.
-	lt.minLocks = 0
+	// Restore minKeysLocked to 0.
+	lt.minKeysLocked = 0
 	// Add locks to push us over 5 locks.
 	for i := 16; i < 20; i++ {
 		added, err = lt.AddDiscoveredLock(
-			&roachpb.Intent{
-				Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[9*20+i]}, Txn: txnMeta,
-			},
+			newLock(&txnMeta, keys[9*20+i], lock.Intent),
 			0, false, guards[9])
 		require.True(t, added)
 		require.NoError(t, err)
@@ -972,7 +997,7 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	lt := newLockTable(
 		2, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
 	)
-	lt.minLocks = 0
+	lt.minKeysLocked = 0
 	lt.enabled = true
 	var keys []roachpb.Key
 	var guards []lockTableGuard
@@ -991,7 +1016,8 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 			LatchSpans: latchSpans,
 			LockSpans:  lockSpans,
 		}
-		ltg := lt.ScanAndEnqueue(req, nil)
+		ltg, err := lt.ScanAndEnqueue(req, nil)
+		require.Nil(t, err)
 		require.Nil(t, ltg.ResolveBeforeScanning())
 		require.False(t, ltg.ShouldWait())
 		guards = append(guards, ltg)
@@ -1003,9 +1029,7 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	// The first 6 requests discover 3 locks total.
 	for i := 0; i < 6; i++ {
 		added, err := lt.AddDiscoveredLock(
-			&roachpb.Intent{
-				Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[i/2]}, Txn: txnMeta,
-			},
+			newLock(&txnMeta, keys[i/2], lock.Intent),
 			0, false, guards[i])
 		require.True(t, added)
 		require.NoError(t, err)
@@ -1020,9 +1044,7 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	}
 	// Add another lock using request 6.
 	added, err := lt.AddDiscoveredLock(
-		&roachpb.Intent{
-			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[6/2]}, Txn: txnMeta,
-		},
+		newLock(&txnMeta, keys[6/2], lock.Intent),
 		0, false, guards[6])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -1040,9 +1062,7 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 	require.Equal(t, int64(4), lt.lockCountForTesting())
 	// Add another lock using request 8.
 	added, err = lt.AddDiscoveredLock(
-		&roachpb.Intent{
-			Intent_SingleKeySpan: roachpb.Intent_SingleKeySpan{Key: keys[8/2]}, Txn: txnMeta,
-		},
+		newLock(&txnMeta, keys[8/2], lock.Intent),
 		0, false, guards[8])
 	require.True(t, added)
 	require.NoError(t, err)
@@ -1055,7 +1075,7 @@ type workItem struct {
 
 	// Request.
 	request        *Request
-	locksToAcquire []roachpb.Key
+	locksToAcquire []lockToAcquire
 
 	// Update locks.
 	intents []roachpb.LockUpdate
@@ -1075,6 +1095,16 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 	if item.request != nil {
 		var lg *spanlatch.Guard
 		var g lockTableGuard
+		defer func() {
+			if lg != nil {
+				e.lm.Release(lg)
+				lg = nil
+			}
+			if g != nil {
+				e.lt.Dequeue(g)
+				g = nil
+			}
+		}()
 		var err error
 		for {
 			// Since we can't do a select involving latch acquisition and context
@@ -1085,11 +1115,16 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			if err != nil {
 				return err
 			}
-			g = e.lt.ScanAndEnqueue(*item.request, g)
+			var kvErr *Error
+			g, kvErr = e.lt.ScanAndEnqueue(*item.request, g)
+			if kvErr != nil {
+				return kvErr.GoError()
+			}
 			if !g.ShouldWait() {
 				break
 			}
 			e.lm.Release(lg)
+			lg = nil
 			var lastID uuid.UUID
 		L:
 			for {
@@ -1098,20 +1133,21 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 				case <-ctx.Done():
 					return ctx.Err()
 				}
-				state := g.CurState()
+				state, err := g.CurState()
+				if err != nil {
+					return err
+				}
 				switch state.kind {
 				case doneWaiting:
 					if !lastID.Equal(uuid.UUID{}) && item.request.Txn != nil {
 						_, err = e.waitingFor(item.request.Txn.ID, lastID, uuid.UUID{})
 						if err != nil {
-							e.lt.Dequeue(g)
 							return err
 						}
 					}
 					break L
 				case waitSelf:
 					if item.request.Txn == nil {
-						e.lt.Dequeue(g)
 						return errors.Errorf("non-transactional request cannot waitSelf")
 					}
 				case waitForDistinguished, waitFor, waitElsewhere:
@@ -1122,7 +1158,6 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 							lastID = state.txn.ID
 						}
 						if aborted {
-							e.lt.Dequeue(g)
 							return err
 						}
 					}
@@ -1132,15 +1167,13 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			}
 		}
 
-		// acquire locks.
-		for _, k := range item.locksToAcquire {
-			err = e.acquireLock(item.request.Txn, k)
+		// Acquire locks.
+		for _, toAcq := range item.locksToAcquire {
+			err = e.acquireLock(item.request.Txn, toAcq)
 			if err != nil {
 				break
 			}
 		}
-		e.lt.Dequeue(g)
-		e.lm.Release(lg)
 		return err
 	}
 	for i := range item.intents {
@@ -1157,10 +1190,17 @@ type workloadItem struct {
 	// Request to be executed, iff request != nil
 	request *Request
 	// locks to be acquired by the request.
-	locksToAcquire []roachpb.Key
+	locksToAcquire []lockToAcquire
 
 	// Non-empty when transaction should release locks.
 	finish uuid.UUID
+}
+
+// lockToAcquire is a lock that should be acquired by a request.
+type lockToAcquire struct {
+	key roachpb.Key
+	str lock.Strength
+	dur lock.Durability
 }
 
 // state of a transaction maintained by workloadExecutor, for deadlock
@@ -1233,8 +1273,10 @@ func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecuto
 	}
 }
 
-func (e *workloadExecutor) acquireLock(txn *roachpb.Transaction, k roachpb.Key) error {
-	acq := roachpb.MakeLockAcquisition(txn, k, lock.Unreplicated, lock.Exclusive)
+func (e *workloadExecutor) acquireLock(txn *roachpb.Transaction, toAcq lockToAcquire) error {
+	acq := roachpb.MakeLockAcquisition(
+		txn.TxnMeta, toAcq.key, toAcq.dur, toAcq.str, txn.IgnoredSeqNums,
+	)
 	err := e.lt.AcquireLock(&acq)
 	if err != nil {
 		return err
@@ -1245,7 +1287,7 @@ func (e *workloadExecutor) acquireLock(txn *roachpb.Transaction, k roachpb.Key) 
 	if !ok {
 		return errors.Errorf("testbug: lock acquiring request with txnID %v has no transaction", txn.ID)
 	}
-	tstate.acquiredLocks = append(tstate.acquiredLocks, k)
+	tstate.acquiredLocks = append(tstate.acquiredLocks, toAcq.key)
 	return nil
 }
 
@@ -1446,6 +1488,7 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		keys = append(keys, roachpb.Key(string(rune('a'+i))))
 	}
+	strs := []lock.Strength{lock.None, lock.Shared, lock.Exclusive, lock.Intent}
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 
 	const numKeys = 2
@@ -1460,12 +1503,9 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 		lockSpans := &lockspanset.LockSpanSet{}
 		for i := 0; i < numKeys; i++ {
 			span := roachpb.Span{Key: keys[keysPerm[i]]}
-			acc := spanset.SpanAccess(rng.Intn(int(spanset.NumSpanAccess)))
-			str := lock.None
-			if acc == spanset.SpanReadWrite {
-				str = lock.Intent
-			}
-			latchSpans.AddMVCC(acc, span, ts)
+			str := strs[rand.Intn(len(strs))]
+			sa, latchTs := latchAccessForLockStrength(str, ts)
+			latchSpans.AddMVCC(sa, span, latchTs)
 			lockSpans.Add(str, span)
 		}
 		var txn *roachpb.Transaction
@@ -1525,6 +1565,7 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		keys = append(keys, roachpb.Key(string(rune('a'+i))))
 	}
+	strs := []lock.Strength{lock.None, lock.Shared, lock.Exclusive, lock.Intent}
 	rng := rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano())))
 	const numActiveTxns = 8
 	var activeTxns [numActiveTxns]*enginepb.TxnMeta
@@ -1573,27 +1614,33 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 		wi := workloadItem{request: request}
 		for i := 0; i < numKeys; i++ {
 			span := roachpb.Span{Key: keys[keysPerm[i]]}
-			acc := spanset.SpanReadOnly
+
 			str := lock.None
-			dupRead := false
-			if !onlyReads {
-				acc = spanset.SpanAccess(rng.Intn(int(spanset.NumSpanAccess)))
-				if acc == spanset.SpanReadWrite && txnMeta != nil && rng.Intn(2) == 0 {
-					// Acquire lock.
-					wi.locksToAcquire = append(wi.locksToAcquire, span.Key)
-					str = lock.Intent
-				}
-				if acc == spanset.SpanReadWrite && rng.Intn(2) == 0 {
-					// Also include the key as read.
-					dupRead = true
-					str = lock.Intent
-				}
+			if !onlyReads && txnMeta != nil {
+				// Randomly select a lock strength (including lock.None).
+				str = strs[rand.Intn(len(strs))]
 			}
-			latchSpans.AddMVCC(acc, span, ts)
+			sa, latchTs := latchAccessForLockStrength(str, ts)
+			latchSpans.AddMVCC(sa, span, latchTs)
 			lockSpans.Add(str, span)
+			if str != lock.None {
+				// Randomly select a lock durability. Shared and Exclusive locks
+				// can be unreplicated, but Intent can not.
+				dur := lock.Replicated
+				if str != lock.Intent && rng.Intn(2) == 0 {
+					dur = lock.Unreplicated
+				}
+				toAcq := lockToAcquire{span.Key, str, dur}
+				wi.locksToAcquire = append(wi.locksToAcquire, toAcq)
+			}
+
+			dupRead := str != lock.None && rng.Intn(2) == 0
 			if dupRead {
-				latchSpans.AddMVCC(spanset.SpanReadOnly, span, ts)
-				lockSpans.Add(lock.None, span)
+				// Also include the key as a non-locking read.
+				str = lock.None
+				sa, latchTs := latchAccessForLockStrength(str, ts)
+				latchSpans.AddMVCC(sa, span, latchTs)
+				lockSpans.Add(str, span)
 			}
 		}
 		items = append(items, wi)
@@ -1608,7 +1655,10 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 		t.Run(fmt.Sprintf("concurrency %d", c), func(t *testing.T) {
 			exec := newWorkLoadExecutor(items, c)
 			if err := exec.execute(false, 200); err != nil {
-				t.Fatal(err)
+				// TODO(nvanbenschoten): remove this once #110435 is fixed.
+				if !testutils.IsError(err, "lock promotion from Shared to .* is not allowed") {
+					t.Fatal(err)
+				}
 			}
 		})
 	}
@@ -1644,7 +1694,12 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 			doneCh <- err
 			return
 		}
-		g = env.lt.ScanAndEnqueue(item.Request, g)
+		var kvErr *Error
+		g, kvErr = env.lt.ScanAndEnqueue(item.Request, g)
+		if kvErr != nil {
+			doneCh <- kvErr.GoError()
+			return
+		}
 		atomic.AddUint64(env.numScanCalls, 1)
 		if !g.ShouldWait() {
 			break
@@ -1656,14 +1711,20 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		env.lm.Release(lg)
 		for {
 			<-g.NewStateChan()
-			state := g.CurState()
+			state, err := g.CurState()
+			if err != nil {
+				doneCh <- err
+				return
+			}
 			if state.kind == doneWaiting {
 				break
 			}
 		}
 	}
 	for _, k := range item.locksToAcquire {
-		acq := roachpb.MakeLockAcquisition(item.Txn, k, lock.Unreplicated, lock.Exclusive)
+		acq := roachpb.MakeLockAcquisition(
+			item.Txn.TxnMeta, k, lock.Unreplicated, lock.Exclusive, item.Txn.IgnoredSeqNums,
+		)
 		if err = env.lt.AcquireLock(&acq); err != nil {
 			doneCh <- err
 			return
@@ -1860,7 +1921,9 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 			}
 			for i := 0; i < locks; i++ {
 				k := roachpb.Key(fmt.Sprintf("%03d", i))
-				acq := roachpb.MakeLockAcquisition(txn, k, lock.Unreplicated, lock.Exclusive)
+				acq := roachpb.MakeLockAcquisition(
+					txn.TxnMeta, k, lock.Unreplicated, lock.Exclusive, txn.IgnoredSeqNums,
+				)
 				err := lt.AcquireLock(&acq)
 				if err != nil {
 					b.Fatal(err)
@@ -1886,23 +1949,59 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 //     non-empty one has been inserted.
 
 func TestLockStateSafeFormat(t *testing.T) {
-	l := &lockState{
+	l := &keyLocks{
 		id:     1,
 		key:    []byte("KEY"),
 		endKey: []byte("END"),
 	}
-	l.holder.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
-	// TODO(arul): add something about replicated locks here too.
-	l.holder.unreplicatedInfo.init()
-	l.holder.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 7}
-	require.NoError(t, l.holder.unreplicatedInfo.acquire(lock.Exclusive, 1))
-	require.NoError(t, l.holder.unreplicatedInfo.acquire(lock.Shared, 3))
+	holder := &txnLock{}
+	l.holders.PushFront(holder)
+	holder.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
+	holder.unreplicatedInfo.init()
+	holder.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 7}
+	require.NoError(t, holder.unreplicatedInfo.acquire(lock.Exclusive, 1))
+	require.NoError(t, holder.unreplicatedInfo.acquire(lock.Shared, 3))
+	replTS := hlc.Timestamp{WallTime: 125, Logical: 1}
+	holder.replicatedInfo.acquire(lock.Intent, replTS)
+	holder.replicatedInfo.acquire(lock.Shared, replTS)
 	require.EqualValues(t,
-		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
+		" lock: ‹\"KEY\"›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000125,1, info: repl [Intent, Shared], unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
 		redact.Sprint(l))
 	require.EqualValues(t,
-		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000123,7, info: unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
+		" lock: ‹×›\n  holder: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, ts: 0.000000125,1, info: repl [Intent, Shared], unrepl [(str: Exclusive seq: 1), (str: Shared seq: 3)]\n",
 		redact.Sprint(l).Redact())
+}
+
+// TestLockStateSafeFormatMultipleLockHolders ensures multiple lock holders on
+// a single key are correctly formatted.
+func TestLockStateSafeFormatMultipleLockHolders(t *testing.T) {
+	kl := &keyLocks{
+		id:     1,
+		key:    []byte("KEY"),
+		endKey: []byte("END"),
+	}
+	holder1 := &txnLock{}
+	holder2 := &txnLock{}
+	kl.holders.PushBack(holder1)
+	kl.holders.PushBack(holder2)
+	holder1.txn = &enginepb.TxnMeta{ID: uuid.NamespaceDNS}
+	holder1.unreplicatedInfo.init()
+	holder1.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 123, Logical: 7}
+	require.NoError(t, holder1.unreplicatedInfo.acquire(lock.Shared, 3))
+	holder2.txn = &enginepb.TxnMeta{ID: uuid.NamespaceURL}
+	holder2.unreplicatedInfo.init()
+	holder2.unreplicatedInfo.ts = hlc.Timestamp{WallTime: 125, Logical: 1}
+	require.NoError(t, holder2.unreplicatedInfo.acquire(lock.Shared, 6))
+	require.EqualValues(t,
+		" lock: ‹\"KEY\"›\n"+
+			"  holders: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]\n"+
+			"           txn: 6ba7b811-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 6)]\n",
+		redact.Sprint(kl))
+	require.EqualValues(t,
+		" lock: ‹×›\n"+
+			"  holders: txn: 6ba7b810-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]\n"+
+			"           txn: 6ba7b811-9dad-11d1-80b4-00c04fd430c8 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 6)]\n",
+		redact.Sprint(kl).Redact())
 }
 
 // TestElideWaitingStateUpdatesConsidersAllFields ensures all fields in the
@@ -1919,13 +2018,13 @@ func TestCanElideWaitingStateUpdateConsidersAllFields(t *testing.T) {
 		doNotIncludeWhenDeciding inclusionStatus = false
 	)
 	fieldMap := map[string]inclusionStatus{
-		"kind":          includeWhenDeciding,
-		"txn":           includeWhenDeciding,
-		"key":           includeWhenDeciding,
-		"held":          includeWhenDeciding,
-		"queuedWriters": doNotIncludeWhenDeciding,
-		"queuedReaders": doNotIncludeWhenDeciding,
-		"guardStrength": doNotIncludeWhenDeciding,
+		"kind":                  includeWhenDeciding,
+		"txn":                   includeWhenDeciding,
+		"key":                   includeWhenDeciding,
+		"held":                  includeWhenDeciding,
+		"queuedLockingRequests": doNotIncludeWhenDeciding,
+		"queuedReaders":         doNotIncludeWhenDeciding,
+		"guardStrength":         doNotIncludeWhenDeciding,
 	}
 	ws := waitingState{}
 	typ := reflect.ValueOf(ws).Type()

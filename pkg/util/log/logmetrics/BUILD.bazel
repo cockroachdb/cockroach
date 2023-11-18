@@ -10,18 +10,17 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_prometheus_client_model//go",
     ],
 )
 
 go_test(
     name = "logmetrics_test",
     srcs = ["metrics_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":logmetrics"],
     deps = [
         "//pkg/util/leaktest",
         "//pkg/util/log",
-        "//pkg/util/metric",
         "@com_github_stretchr_testify//require",
     ],
 )

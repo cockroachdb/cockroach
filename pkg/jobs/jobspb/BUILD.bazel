@@ -4,7 +4,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "jobspb",
-    srcs = ["wrap.go"],
+    srcs = [
+        "jobs.go",
+        "schedule.go",
+        "wrap.go",
+    ],
     embed = [":jobspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb",
     visibility = ["//visibility:public"],
@@ -13,6 +17,7 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect",
+        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
     ],
@@ -71,7 +76,6 @@ go_proto_library(
 go_test(
     name = "jobspb_test",
     srcs = ["wrap_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":jobspb",
         "@com_github_stretchr_testify//assert",

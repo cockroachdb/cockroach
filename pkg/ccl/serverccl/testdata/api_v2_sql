@@ -13,6 +13,7 @@ sql admin
   "database": "system",
   "execute": false,
   "max_result_size": 10000,
+  "separate_txns": false,
   "statements": [
    {
     "arguments": [
@@ -21,6 +22,7 @@ sql admin
     "sql": "SELECT username FROM users WHERE username = $1"
    }
   ],
+  "stop_on_error": false,
   "timeout": "5s"
  }
 }

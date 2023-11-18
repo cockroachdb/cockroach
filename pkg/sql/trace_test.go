@@ -279,7 +279,7 @@ func TestTrace(t *testing.T) {
 
 	// Create a cluster. We'll run sub-tests using each node of this cluster.
 	const numNodes = 3
-	cluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{})
+	cluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{})
 	defer cluster.Stopper().Stop(context.Background())
 
 	clusterDB := cluster.ServerConn(0)
@@ -346,7 +346,7 @@ func TestTrace(t *testing.T) {
 							}
 
 							if _, err := cluster.ServerConn(0).Exec(
-								fmt.Sprintf(`SET CLUSTER SETTING trace.debug.enable = %t`, enableTr),
+								fmt.Sprintf(`SET CLUSTER SETTING trace.debug_http_endpoint.enabled = %t`, enableTr),
 							); err != nil {
 								t.Fatal(err)
 							}
@@ -572,7 +572,7 @@ func TestKVTraceDistSQL(t *testing.T) {
 
 	// Test that kv tracing works in distsql.
 	const numNodes = 2
-	cluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	cluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "test",
@@ -622,7 +622,7 @@ func TestTraceDistSQL(t *testing.T) {
 	recCh := make(chan tracingpb.Recording, 2)
 
 	const numNodes = 2
-	cluster := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	cluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "test",

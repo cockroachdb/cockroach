@@ -68,7 +68,7 @@ num=3
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,1, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,1, info: repl [Intent]
 
 # A non-transactional read comes in at a and blocks on the lock.
 
@@ -116,16 +116,16 @@ num=3
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
    waiting readers:
     req: 3, txn: none
-   queued writers:
-    active: true req: 4, txn: none
+   queued locking requests:
+    active: true req: 4, strength: Intent, txn: none
    distinguished req: 3
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
-   queued writers:
-    active: true req: 5, txn: 00000000-0000-0000-0000-000000000003
+   queued locking requests:
+    active: true req: 5, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 5
  lock: "c"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,1, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 8.000000000,1, info: repl [Intent]
 
 # Clearing removes all locks and allows all waiting requests to proceed.
 

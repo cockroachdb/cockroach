@@ -17,9 +17,9 @@ go_library(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/sql",
         "//pkg/sql/catalog",
@@ -46,7 +46,6 @@ go_test(
         "main_test.go",
         "validator_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":cdctest"],
     tags = ["ccl_test"],
     deps = [

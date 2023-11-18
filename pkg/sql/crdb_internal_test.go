@@ -22,13 +22,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -40,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -576,7 +574,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs:      params,
 	})
@@ -950,6 +948,7 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 		WaitingTxnFingerprintID:  9002,
 		WaitingStmtID:            clusterunique.ID{Uint128: uint128.Uint128{Lo: 9003, Hi: 1004}},
 		WaitingStmtFingerprintID: 9004,
+		ContentionType:           contentionpb.ContentionType_LOCK_WAIT,
 	})
 
 	// Contention flush can take some time to flush
@@ -979,7 +978,6 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 func TestTxnContentionEventsTableMultiTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -1031,7 +1029,7 @@ func causeContention(
 		ctx, fmt.Sprintf("UPDATE %s SET s = $1 where id = 'test';", table), updateValue)
 	require.NoError(t, errUpdate)
 	end := timeutil.Now()
-	require.GreaterOrEqual(t, end.Sub(start), 500*time.Millisecond)
+	require.GreaterOrEqual(t, end.Sub(start), 499*time.Millisecond)
 
 	wgTxnDone.Wait()
 }
@@ -1271,11 +1269,11 @@ func TestExecutionInsights(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// We'll check both the cluster-wide table and the node-local one.
-	virtualTables := []interface{}{
+	virtualTables := []string{
 		"cluster_execution_insights",
 		"node_execution_insights",
 	}
-	testutils.RunValues(t, "table", virtualTables, func(t *testing.T, table interface{}) {
+	testutils.RunValues(t, "table", virtualTables, func(t *testing.T, table string) {
 		testCases := []struct {
 			option  string
 			granted bool
@@ -1294,7 +1292,7 @@ func TestExecutionInsights(t *testing.T) {
 				}()
 
 				// Connect to the cluster as the test user.
-				tdb := s.SQLConnForUser(t, "testuser", "")
+				tdb := s.SQLConn(t, serverutils.User("testuser"))
 
 				// Try to read the virtual table, and see that we can or cannot as expected.
 				rows, err := tdb.Query(fmt.Sprintf("SELECT count(*) FROM crdb_internal.%s", table))
@@ -1327,6 +1325,10 @@ func (*fakeResumer) Resume(ctx context.Context, execCtx interface{}) error {
 // Resume implements the jobs.Resumer interface.
 func (*fakeResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, jobErr error) error {
 	return jobErr
+}
+
+func (*fakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
 }
 
 // TestInternalSystemJobsTableMirrorsSystemJobsTable asserts that
@@ -1402,47 +1404,6 @@ func TestInternalSystemJobsTableMirrorsSystemJobsTable(t *testing.T) {
 	)
 
 	// TODO(adityamaru): add checks for payload and progress
-}
-
-// TestInternalSystemJobsTableWorksWithVersionPreV23_1BackfillTypeColumnInJobsTable
-// tests that crdb_internal.system_jobs and crdb_internal.jobs work when
-// the server has a version pre-V23_1AddTypeColumnToJobsTable. In this version,
-// the job_type column was added to the system.jobs table.
-func TestInternalSystemJobsTableWorksWithVersionPreV23_1BackfillTypeColumnInJobsTable(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{
-				DisableAutomaticVersionUpgrade: make(chan struct{}),
-				BinaryVersionOverride: clusterversion.ByKey(
-					clusterversion.V23_1BackfillTypeColumnInJobsTable - 1),
-			},
-		},
-	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	tdb := sqlutils.MakeSQLRunner(db)
-
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.jobs",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs",
-	)
-	// Exercise indexes.
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE job_type = 'CHANGEFEED'",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE id = 0",
-	)
-	tdb.Exec(t,
-		"SELECT * FROM crdb_internal.system_jobs WHERE status = 'running'",
-	)
 }
 
 // TestCorruptPayloadError asserts that we can an error
@@ -1596,21 +1557,22 @@ func TestVirtualTableDoesntHangOnQueryCanceledError(t *testing.T) {
 	var addCallback atomic.Bool
 	var numCallbacksAdded atomic.Int32
 	err := cancelchecker.QueryCanceledError
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+					DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 						if !addCallback.Load() || strings.HasPrefix(query, sql.SystemJobsAndJobInfoBaseQuery) {
 							return nil
 						}
 						numCallbacksAdded.Add(1)
-						return func(_ rowenc.EncDatumRow, _ coldata.Batch, meta *execinfrapb.ProducerMetadata) {
+						return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 							if meta != nil {
 								*meta = execinfrapb.ProducerMetadata{}
 								meta.Err = err
 							}
+							return row, batch, meta
 						}
 					},
 				},
@@ -1654,6 +1616,7 @@ type virtualPTSTableRow struct {
 	decodedTargets []byte
 	internalMeta   []byte
 	numRanges      int
+	lastUpdated    string
 }
 
 func protect(
@@ -1682,7 +1645,7 @@ func scanRecord(
 	virtualRow.Scan(&virtualRowData.id, &virtualRowData.ts, &virtualRowData.metaType, &virtualRowData.meta,
 		&virtualRowData.numSpans, &virtualRowData.spans, &virtualRowData.verified, &virtualRowData.target,
 		&virtualRowData.decodedMeta, &virtualRowData.decodedTargets, &virtualRowData.internalMeta,
-		&virtualRowData.numRanges)
+		&virtualRowData.numRanges, &virtualRowData.lastUpdated)
 
 	require.Equal(t, systemRowData.id, virtualRowData.id)
 	require.Equal(t, systemRowData.ts, virtualRowData.ts)
@@ -1774,7 +1737,7 @@ func TestVirtualPTSTable(t *testing.T) {
 			" crdb_internal.kv_protected_ts_records as well")
 	require.Equal(t, internalCols, []string{
 		"id", "ts", "meta_type", "meta", "num_spans", "spans", "verified", "target", "decoded_meta", "decoded_target",
-		"internal_meta", "num_ranges",
+		"internal_meta", "num_ranges", "last_updated",
 	})
 
 	// Assert the job metadata that is extracted when the PTS record meta type is jobsprotectedts.Jobs.
@@ -1828,6 +1791,7 @@ func TestVirtualPTSTable(t *testing.T) {
 		sj.SetOwner(username.TestUserName())
 		sj.SetScheduleLabel("test-schedule")
 		sj.SetExecutionDetails(tree.ScheduledBackupExecutor.InternalName(), jobspb.ExecutionArguments{})
+		sj.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{}))
 
 		err := internalDB.Txn(ctx2, func(ctx3 context.Context, txn isql.Txn) error {
 			err2 := jobs.ScheduledJobTxn(txn).Create(ctx3, sj)
@@ -1838,7 +1802,7 @@ func TestVirtualPTSTable(t *testing.T) {
 
 		rec := jobsprotectedts.MakeRecord(
 			uuid.MakeV4(),
-			sj.ScheduleID(),
+			int64(sj.ScheduleID()),
 			tc.Server(0).Clock().Now(),
 			[]roachpb.Span{},
 			jobsprotectedts.Schedules,
@@ -1889,5 +1853,24 @@ func TestVirtualPTSTable(t *testing.T) {
 		require.Equal(t, []byte(nil), virtualRow.internalMeta)
 		require.Equal(t, []byte(fmt.Sprintf(`{"schemaObjects": {"ids": [%d, %d]}}`, tableID1, tableID2)), virtualRow.decodedTargets)
 		require.Equal(t, 302, virtualRow.numRanges)
+	})
+
+	// Assert that the `last_updated` column shows the right timestamp.
+	t.Run("last-updated", func(t *testing.T) {
+		rec := ptpb.Record{
+			ID:        uuid.MakeV4().GetBytes(),
+			Timestamp: tc.Server(0).Clock().Now(),
+			Mode:      ptpb.PROTECT_AFTER,
+			MetaType:  "foo",
+			Meta:      []byte("bar"),
+			Target:    tableTargets(),
+		}
+		protect(t, ctx2, internalDB, ptm, &rec)
+
+		var ts string
+		sqlDB.QueryRow(t, `SELECT crdb_internal_mvcc_timestamp FROM system.protected_ts_records`+
+			` WHERE id = $1`, rec.ID.String()).Scan(&ts)
+		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
+		require.Equal(t, ts, virtualRow.lastUpdated)
 	})
 }

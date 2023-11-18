@@ -4,6 +4,7 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
 
 .dropdown-btn {
   font-family: $font-family--semi-bold;
+  font-size: $font-size--medium;
   padding: 8px 0 8px 17px;
   vertical-align: middle;
   border: 1px solid $colors--neutral-4;

@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -674,10 +673,12 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 		})
 	}
 
-	// Restore the breaker via the probe.
+	// Restore the breaker via the probe, and wait for any pending (re)proposals
+	// from previous tests to be flushed.
 	resumeHeartbeats()
 	tc.SetProbeEnabled(n1, true)
 	tc.UntripsSoon(t, tc.Write, n1)
+	tc.WaitForProposals(t, n1)
 
 	// Lose quorum (liveness stays intact).
 	tc.SetSlowThreshold(10 * time.Millisecond)
@@ -818,8 +819,6 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 		},
 	}
 	tc := testcluster.StartTestCluster(t, 2, args)
-	tc.Stopper().AddCloser(stop.CloserFn(reg.CloseAllEngines))
-
 	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '45s'`)
 	require.NoError(t, err)
 
@@ -886,6 +885,19 @@ func (cbt *circuitBreakerTest) UntripsSoon(t *testing.T, method func(idx int) er
 			t.Fatalf("saw unexpected error %+v", err)
 		}
 		return err
+	})
+}
+
+func (cbt *circuitBreakerTest) WaitForProposals(t *testing.T, idx int) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		t.Helper()
+
+		repl := cbt.repls[idx].Replica
+		if n := repl.NumPendingProposals(); n > 0 {
+			return errors.Errorf("%d pending proposals", n)
+		}
+		return nil
 	})
 }
 
@@ -1072,14 +1084,14 @@ func (cbt *circuitBreakerTest) Write(idx int) error {
 func (cbt *circuitBreakerTest) Read(idx int) error {
 	cbt.t.Helper()
 	repl := cbt.repls[idx]
-	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
+	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey())
 	return cbt.Send(idx, get)
 }
 
 func (cbt *circuitBreakerTest) FollowerRead(idx int) error {
 	cbt.t.Helper()
 	repl := cbt.repls[idx]
-	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
+	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey())
 	ctx := context.Background()
 	ts := repl.GetCurrentClosedTimestamp(ctx)
 	return cbt.SendCtxTS(ctx, idx, get, ts)

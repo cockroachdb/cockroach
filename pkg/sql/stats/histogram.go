@@ -29,21 +29,21 @@ import (
 // DefaultHistogramBuckets is the maximum number of histogram buckets to build
 // when creating statistics.
 var DefaultHistogramBuckets = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.histogram_buckets.count",
 	"maximum number of histogram buckets to build during table statistics collection",
 	200,
 	settings.NonNegativeIntWithMaximum(math.MaxUint32),
-).WithPublic()
+	settings.WithPublic)
 
 // HistogramClusterMode controls the cluster setting for enabling
 // histogram collection.
 var HistogramClusterMode = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.histogram_collection.enabled",
 	"histogram collection mode",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // HistogramVersion identifies histogram versions.
 type HistogramVersion uint32

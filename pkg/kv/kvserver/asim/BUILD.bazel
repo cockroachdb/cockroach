@@ -7,11 +7,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/event",
         "//pkg/kv/kvserver/asim/gossip",
+        "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/op",
         "//pkg/kv/kvserver/asim/queue",
+        "//pkg/kv/kvserver/asim/scheduled",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/storerebalancer",
         "//pkg/kv/kvserver/asim/workload",
@@ -22,14 +23,14 @@ go_library(
 go_test(
     name = "asim_test",
     srcs = ["asim_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":asim",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/history",
         "//pkg/kv/kvserver/asim/metrics",
+        "//pkg/kv/kvserver/asim/scheduled",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
-        "//pkg/testutils/skip",
         "@com_github_stretchr_testify//require",
     ],
 )

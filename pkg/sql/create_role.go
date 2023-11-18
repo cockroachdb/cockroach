@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -62,7 +63,7 @@ func (p *planner) CreateRoleNode(
 	opName string,
 	kvOptions tree.KVOptions,
 ) (*CreateRoleNode, error) {
-	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
+	if err := p.CheckGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE); err != nil {
 		return nil, err
 	}
 
@@ -187,6 +188,11 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 		if err := params.p.bumpRoleOptionsTableVersion(params.ctx); err != nil {
 			return err
 		}
+	}
+	// Bump role membership table version to force a refresh of role membership
+	// cache.
+	if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
+		return err
 	}
 
 	return params.p.logEvent(params.ctx,

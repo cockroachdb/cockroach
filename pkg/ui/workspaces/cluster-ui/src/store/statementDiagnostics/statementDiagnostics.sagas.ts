@@ -23,7 +23,8 @@ import {
 } from "src/api/statementDiagnosticsApi";
 import { actions } from "./statementDiagnostics.reducer";
 import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
-import { rootActions } from "../reducers";
+
+import { rootActions } from "../rootActions";
 
 export function* createDiagnosticsReportSaga(
   action: ReturnType<typeof actions.createReport>,

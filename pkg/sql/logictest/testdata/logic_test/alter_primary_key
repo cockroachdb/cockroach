@@ -266,16 +266,16 @@ t  CREATE TABLE public.t (
      z INT8 NOT NULL,
      w INT8 NULL,
      v JSONB NULL,
-     crdb_internal_z_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 4:::INT8)) VIRTUAL,
+     crdb_internal_z_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(z))), 4:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC),
      UNIQUE INDEX i3 (z ASC) STORING (y),
-     UNIQUE INDEX t_x_key (x ASC),
      INDEX i1 (w ASC),
      INDEX i2 (y ASC),
      UNIQUE INDEX i4 (z ASC),
      UNIQUE INDEX i5 (w ASC) STORING (y),
      INVERTED INDEX i6 (v),
      INDEX i7 (z ASC) USING HASH WITH (bucket_count=4),
+     UNIQUE INDEX t_x_key (x ASC),
      FAMILY fam_0_x_y_z_w_v (x, y, z, w, v)
    )
 
@@ -287,13 +287,13 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 ----
 4   i3
 9   t_pkey
-11  t_x_key
-13  i1
-15  i2
-17  i4
-19  i5
-21  i6
-23  i7
+11  i1
+13  i2
+15  i4
+17  i5
+19  i6
+21  i7
+23  t_x_key
 
 # Make sure that each index can index join against the new primary key;
 
@@ -426,11 +426,11 @@ t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      y INT8 NOT NULL,
      z INT8 NULL,
-     crdb_internal_z_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 5:::INT8)) VIRTUAL,
-     crdb_internal_y_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 10:::INT8)) VIRTUAL,
+     crdb_internal_z_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(z))), 5:::INT8)) VIRTUAL,
+     crdb_internal_y_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 10:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=10),
-     UNIQUE INDEX t_x_key (x ASC),
      INDEX i1 (z ASC) USING HASH WITH (bucket_count=5),
+     UNIQUE INDEX t_x_key (x ASC),
      FAMILY fam_0_x_y_z (x, y, z)
    )
 
@@ -448,8 +448,8 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 3  t_pkey
-5  t_x_key
-7  i1
+5  i1
+7  t_x_key
 
 query III
 SELECT * FROM t@t_pkey
@@ -489,13 +489,13 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-     crdb_internal_x_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 5:::INT8)) VIRTUAL,
+     crdb_internal_x_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 5:::INT8)) VIRTUAL,
      x INT8 NOT NULL,
      y INT8 NOT NULL,
      z INT8 NULL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC),
-     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=5),
      INDEX i (z ASC),
+     UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=5),
      FAMILY fam_0_x_y_z (x, y, z)
    )
 
@@ -641,7 +641,7 @@ SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
-     crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) VIRTUAL,
+     crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 4:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
    )
 
@@ -1061,13 +1061,12 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH (bucket_count=
 
 # old shard column isn't removed by legacy schema changer.
 skipif config local-legacy-schema-changer
-skipif config local-mixed-22.2-23.1
 query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
-     crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) VIRTUAL,
+     crdb_internal_x_shard_3 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 3:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
    )
 
@@ -1086,10 +1085,10 @@ query TT
 SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
-     crdb_internal_x_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
+     crdb_internal_x_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 2:::INT8)) VIRTUAL,
      x INT8 NOT NULL,
      y INT8 NOT NULL,
-     crdb_internal_y_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 2:::INT8)) VIRTUAL,
+     crdb_internal_y_shard_2 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 2:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2),
      UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2),
      FAMILY fam_0_x_y (x, y)
@@ -1397,23 +1396,6 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 
-# Legacy schema changer and declarative schema changer will produce slightly
-# different secondary index ordering for alter primary key, hence we assert
-# separately with slightly different expected output.
-onlyif config local-legacy-schema-changer
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  k INT8 NOT NULL AS (a + b) VIRTUAL,
-  CONSTRAINT t_pkey PRIMARY KEY (k ASC),
-  UNIQUE INDEX t_a_key (a ASC),
-  INDEX t_idx_b_k (b ASC, k ASC)
-)
-
-skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1450,24 +1432,6 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (b, k);
 
-# Legacy schema changer and declarative schema changer will produce slightly
-# different secondary index ordering for alter primary key, hence we assert
-# separately with slightly different expected output.
-onlyif config local-legacy-schema-changer
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  k INT8 NOT NULL AS (a + b) VIRTUAL,
-  CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
-  UNIQUE INDEX t_k_key (k ASC),
-  UNIQUE INDEX t_a_key (a ASC),
-  INDEX t_idx_b_k (b ASC, k ASC)
-)
-
-skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1512,25 +1476,6 @@ a  b  k
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (a);
 
-# Legacy schema changer and declarative schema changer will produce slightly
-# different secondary index ordering for alter primary key, hence we assert
-# separately with slightly different expected output.
-onlyif config local-legacy-schema-changer
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  a INT8 NOT NULL,
-  b INT8 NOT NULL,
-  k INT8 NOT NULL AS (a + b) VIRTUAL,
-  CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-  UNIQUE INDEX t_b_k_key (b ASC, k ASC),
-  UNIQUE INDEX t_k_key (k ASC),
-  UNIQUE INDEX t_a_key (a ASC),
-  INDEX t_idx_b_k (b ASC, k ASC)
-)
-
-skipif config local-legacy-schema-changer
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -1611,7 +1556,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE t_test_param]
 CREATE TABLE public.t_test_param (
   a INT8 NOT NULL,
   b INT8 NOT NULL,
-  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_5 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 5:::INT8)) VIRTUAL,
   CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
   UNIQUE INDEX t_test_param_a_key (a ASC),
   FAMILY fam_0_a_b (a, b)
@@ -1627,6 +1572,7 @@ statement ok
 COMMENT ON INDEX pkey IS 'idx';
 COMMENT ON CONSTRAINT pkey ON pkey_comment IS 'const';
 
+# Create a unique secondary index and add a comment on it.
 statement ok
 CREATE UNIQUE INDEX i2 ON pkey_comment(c);
 
@@ -1647,7 +1593,9 @@ COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
 statement ok
 ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
 
-# No comment exists inside the CREATE statement
+# Verify that all comments are appropriately carried over. The output of `SHOW
+# CREATE` between LSC and DSC are slightly different so we query them
+# separately.
 skipif config local-legacy-schema-changer
 query T
 SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
@@ -1656,6 +1604,16 @@ COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
 COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
 COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3';
 COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const'
+
+onlyif config local-legacy-schema-changer
+query T
+SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+----
+COMMENT ON INDEX public.pkey_comment@pkey_comment_pkey IS 'idx';
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
+COMMENT ON CONSTRAINT pkey_comment_pkey ON public.pkey_comment IS 'const';
+COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+
 
 subtest test-index-deduplication
 
@@ -1933,7 +1891,7 @@ t_96730  CREATE TABLE public.t_96730 (
            i INT8 NOT NULL,
            j INT8 NOT NULL,
            k STRING NOT NULL,
-           crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(j, k)), 16:::INT8)) VIRTUAL,
+           crdb_internal_j_k_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(j, k))), 16:::INT8)) VIRTUAL,
            CONSTRAINT t_96730_pkey PRIMARY KEY (j ASC, k ASC) USING HASH WITH (bucket_count=16),
            UNIQUE INDEX t_96730_i_key (i ASC)
          )
@@ -1950,22 +1908,6 @@ CREATE TABLE t_99303 (i INT NOT NULL PRIMARY KEY, j INT NOT NULL, UNIQUE INDEX (
 statement ok
 ALTER TABLE t_99303 ALTER PRIMARY KEY USING COLUMNS (j);
 
-# Legacy schema changer and declarative schema changer will produce slightly
-# different secondary index ordering for alter primary key, hence we assert
-# separately with slightly different expected output.
-onlyif config local-legacy-schema-changer
-query TT
-SHOW CREATE t_99303
-----
-t_99303  CREATE TABLE public.t_99303 (
-           i INT8 NOT NULL,
-           j INT8 NOT NULL,
-           CONSTRAINT t_99303_pkey PRIMARY KEY (j ASC),
-           UNIQUE INDEX t_99303_i_key1 (i ASC),
-           UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8
-         )
-
-skipif config local-legacy-schema-changer
 query TT
 SHOW CREATE t_99303
 ----

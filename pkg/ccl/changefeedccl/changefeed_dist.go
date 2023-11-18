@@ -121,6 +121,11 @@ func distChangefeedFlow(
 		}
 	}
 
+	if knobs, ok := execCtx.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+		if knobs != nil && knobs.StartDistChangefeedInitialHighwater != nil {
+			knobs.StartDistChangefeedInitialHighwater(ctx, initialHighWater)
+		}
+	}
 	return startDistChangefeed(
 		ctx, execCtx, jobID, schemaTS, details, initialHighWater, localState, resultsCh)
 }
@@ -298,7 +303,7 @@ func startDistChangefeed(
 			finishedSetupFn = func(flowinfra.Flow) { resultsCh <- tree.Datums(nil) }
 		}
 
-		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
+		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID, execCfg.Settings.Version)
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
@@ -311,12 +316,13 @@ func startDistChangefeed(
 }
 
 var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.balance_range_distribution.enable",
 	"if enabled, the ranges are balanced equally among all nodes",
 	util.ConstantWithMetamorphicTestBool(
-		"changefeed.balance_range_distribution.enable", false),
-).WithPublic()
+		"changefeed.balance_range_distribution.enabled", false),
+	settings.WithName("changefeed.balance_range_distribution.enabled"),
+	settings.WithPublic)
 
 func makePlan(
 	execCtx sql.JobExecContext,
@@ -502,7 +508,7 @@ func (w *changefeedResultWriter) Err() error {
 }
 
 var rebalanceThreshold = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.balance_range_distribution.sensitivity",
 	"rebalance if the number of ranges on a node exceeds the average by this fraction",
 	0.05,

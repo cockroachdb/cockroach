@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -455,6 +454,87 @@ func (desc *wrapper) validateInboundTableRef(
 		backReferencedTable.GetName(), by.ID)
 }
 
+// validateFK asserts that references to desc from inbound and outbound FKs are
+// valid.
+func (desc *wrapper) validateSelfFKs() error {
+	colsByID := catalog.ColumnsByIDs(desc)
+
+	// Validate all FKs where desc is the origin table.
+	// We'll validate the referenced table elsewhere.
+	for _, wrapper := range desc.OutboundForeignKeys() {
+		fk := wrapper.ForeignKeyDesc()
+
+		// OriginTableID should be equal to desc's ID because desc is the origin.
+		if fk.OriginTableID != desc.GetID() {
+			return errors.AssertionFailedf(
+				"invalid outbound foreign key %q: origin table ID should be %d. got %d",
+				fk.Name,
+				desc.GetID(),
+				fk.OriginTableID,
+			)
+		}
+
+		if len(fk.OriginColumnIDs) == 0 {
+			return errors.AssertionFailedf("invalid outbound foreign key %q: no origin columns", fk.Name)
+		}
+
+		if len(fk.OriginColumnIDs) != len(fk.ReferencedColumnIDs) {
+			return errors.AssertionFailedf("invalid outbound foreign key %q: mismatched number of referenced and origin columns", fk.Name)
+		}
+
+		for _, colID := range fk.OriginColumnIDs {
+			if _, ok := colsByID[colID]; !ok {
+				return errors.AssertionFailedf(
+					"invalid outbound foreign key %q from table %q (%d): missing origin column=%d",
+					fk.Name,
+					desc.GetName(),
+					desc.GetID(),
+					colID,
+				)
+			}
+		}
+	}
+
+	// Validate all FKs where desc is the referenced table.
+	// We'll validate the origin table elsewhere.
+	for _, wrapper := range desc.InboundForeignKeys() {
+		fk := wrapper.ForeignKeyDesc()
+
+		// ReferencedTableID should be equal to desc's ID because desc is the
+		// referenced table.
+		if fk.ReferencedTableID != desc.GetID() {
+			return errors.AssertionFailedf(
+				"invalid inbound foreign key %q: referenced table ID should be %d. got %d",
+				fk.Name,
+				desc.GetID(),
+				fk.ReferencedTableID,
+			)
+		}
+
+		if len(fk.ReferencedColumnIDs) == 0 {
+			return errors.AssertionFailedf("invalid inbound foreign key %q: no referenced columns", fk.Name)
+		}
+
+		if len(fk.ReferencedColumnIDs) != len(fk.OriginColumnIDs) {
+			return errors.AssertionFailedf("invalid inbound foreign key %q: mismatched number of referenced and origin columns", fk.Name)
+		}
+
+		for _, colID := range fk.ReferencedColumnIDs {
+			if _, ok := colsByID[colID]; !ok {
+				return errors.AssertionFailedf(
+					"invalid inbound foreign key %q to table %q (%d): missing referenced column=%d",
+					fk.Name,
+					desc.GetName(),
+					desc.GetID(),
+					colID,
+				)
+			}
+		}
+	}
+
+	return nil
+}
+
 func (desc *wrapper) validateOutboundFK(
 	fk *descpb.ForeignKeyConstraint, vdg catalog.ValidationDescGetter,
 ) error {
@@ -467,6 +547,7 @@ func (desc *wrapper) validateOutboundFK(
 		return errors.AssertionFailedf("referenced table %q (%d) is dropped",
 			referencedTable.GetName(), referencedTable.GetID())
 	}
+
 	return nil
 }
 
@@ -480,11 +561,24 @@ func (desc *wrapper) validateOutboundFKBackReference(
 		return nil
 	}
 
+	colsByID := catalog.ColumnsByIDs(referencedTable)
+	for _, colID := range fk.ReferencedColumnIDs {
+		if _, ok := colsByID[colID]; !ok {
+			return errors.AssertionFailedf(
+				"invalid outbound foreign key backreference from table %q (%d): missing referenced column=%d",
+				referencedTable.GetName(),
+				referencedTable.GetID(),
+				colID,
+			)
+		}
+	}
+
 	for _, backref := range referencedTable.InboundForeignKeys() {
 		if backref.GetOriginTableID() == desc.ID && backref.GetName() == fk.Name {
 			return nil
 		}
 	}
+
 	return errors.AssertionFailedf("missing fk back reference %q to %q from %q",
 		fk.Name, desc.Name, referencedTable.GetName())
 }
@@ -497,15 +591,30 @@ func (desc *wrapper) validateInboundFK(
 		return errors.Wrapf(err,
 			"invalid foreign key backreference: missing table=%d", backref.OriginTableID)
 	}
+
 	if originTable.Dropped() {
 		return errors.AssertionFailedf("origin table %q (%d) is dropped",
 			originTable.GetName(), originTable.GetID())
 	}
+
+	colsByID := catalog.ColumnsByIDs(originTable)
+	for _, colID := range backref.OriginColumnIDs {
+		if _, ok := colsByID[colID]; !ok {
+			return errors.AssertionFailedf(
+				"invalid foreign key backreference from table %q (%d): missing origin column=%d",
+				originTable.GetName(),
+				originTable.GetID(),
+				colID,
+			)
+		}
+	}
+
 	for _, fk := range originTable.OutboundForeignKeys() {
 		if fk.GetReferencedTableID() == desc.ID && fk.GetName() == backref.Name {
 			return nil
 		}
 	}
+
 	return errors.AssertionFailedf("missing fk forward reference %q to %q from %q",
 		backref.Name, desc.Name, originTable.GetName())
 }
@@ -689,6 +798,11 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return
 	}
 
+	if err := desc.validateSelfFKs(); err != nil {
+		vea.Report(err)
+		return
+	}
+
 	if desc.IsVirtualTable() {
 		return
 	}
@@ -863,7 +977,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// ValidateRowLevelTTL is also used before the table descriptor is fully
 	// initialized to validate the storage parameters.
 	vea.Report(ValidateTTLExpirationExpr(desc))
-	vea.Report(ValidateTTLExpirationColumn(desc, vea.IsActive(clusterversion.V23_2TTLAllowDescPK)))
+	vea.Report(ValidateTTLExpirationColumn(desc, vea.IsActive(clusterversion.V23_2)))
 
 	// Validate that there are no column with both a foreign key ON UPDATE and an
 	// ON UPDATE expression. This check is made to ensure that we know which ON
@@ -1821,8 +1935,8 @@ func (desc *wrapper) validateMinStaleRows(vea catalog.ValidationErrorAccumulator
 	if value != nil {
 		settingName := catpb.AutoStatsMinStaleTableSettingName
 		desc.verifyProperTableForStatsSetting(vea, settingName)
-		if err := settings.NonNegativeInt(*value); err != nil {
-			vea.Report(errors.Wrapf(err, "invalid integer value for %s", settingName))
+		if *value < 0 {
+			vea.Report(errors.Newf("invalid integer value for %s: cannot be set to a negative value: %d", settingName, *value))
 		}
 	}
 }
@@ -1833,8 +1947,8 @@ func (desc *wrapper) validateFractionStaleRows(
 	if value != nil {
 		settingName := catpb.AutoStatsFractionStaleTableSettingName
 		desc.verifyProperTableForStatsSetting(vea, settingName)
-		if err := settings.NonNegativeFloat(*value); err != nil {
-			vea.Report(errors.Wrapf(err, "invalid float value for %s", settingName))
+		if *value < 0 {
+			vea.Report(errors.Newf("invalid float value for %s: cannot set to a negative value: %f", settingName, *value))
 		}
 	}
 }

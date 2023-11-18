@@ -115,7 +115,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 			baWrite := &kvpb.BatchRequest{}
 			r := &kvpb.DeleteRequest{}
 			r.Key = desc.StartKey.AsRawKey()
-			txn := roachpb.MakeTransaction("testwrite", r.Key, isolation.Serializable, roachpb.NormalUserPriority, ts, 100, int32(tc.Server(0).SQLInstanceID()))
+			txn := roachpb.MakeTransaction("testwrite", r.Key, isolation.Serializable, roachpb.NormalUserPriority, ts, 100, int32(tc.Server(0).SQLInstanceID()), 0)
 			baWrite.Txn = &txn
 			baWrite.Add(r)
 			baWrite.RangeID = repls[0].RangeID
@@ -286,7 +286,7 @@ func TestClosedTimestampCantServeWithConflictingIntent(t *testing.T) {
 	// replica.
 	txnKey := desc.StartKey.AsRawKey()
 	txnKey = txnKey[:len(txnKey):len(txnKey)] // avoid aliasing
-	txn := roachpb.MakeTransaction("txn", txnKey, 0, 0, tc.Server(0).Clock().Now(), 0, int32(tc.Server(0).SQLInstanceID()))
+	txn := roachpb.MakeTransaction("txn", txnKey, 0, 0, tc.Server(0).Clock().Now(), 0, int32(tc.Server(0).SQLInstanceID()), 0)
 	var keys []roachpb.Key
 	for i := range repls {
 		key := append(txnKey, []byte(strconv.Itoa(i))...)
@@ -387,7 +387,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 	tc, db0, desc := setupClusterForClosedTSTesting(ctx, t, testingTargetDuration, 0, cArgs, "cttest", "kv")
 	repls := replsForRange(ctx, t, tc, desc)
 	// Disable the automatic merging.
-	if _, err := db0.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
+	if _, err := db0.Exec("SET CLUSTER SETTING kv.range_merge.queue.enabled = false"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -737,11 +737,12 @@ func TestClosedTimestampFrozenAfterSubsumption(t *testing.T) {
 			tc, _, _ := setupClusterForClosedTSTesting(ctx, t, 5*time.Second, 100*time.Millisecond, clusterArgs, "cttest", "kv")
 			defer tc.Stopper().Stop(ctx)
 			sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-			sqlDB.ExecMultiple(t, strings.Split(fmt.Sprintf(`
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
-SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
-SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
-`, 5*time.Second, 100*time.Millisecond), ";")...)
+			sqlDB.ExecMultiple(t, strings.Split(`
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5s';
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '100ms';
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '100ms';
+SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
+`, ";")...)
 			leftDesc, rightDesc := splitDummyRangeInTestCluster(t, tc, "cttest", "kv", hlc.Timestamp{} /* splitExpirationTime */)
 
 			leftLeaseholder := getCurrentLeaseholder(t, tc, leftDesc)
@@ -1130,6 +1131,8 @@ const testingTargetDuration = 300 * time.Millisecond
 
 const testingSideTransportInterval = 100 * time.Millisecond
 
+const testingRangeFeedInterval = 100 * time.Millisecond
+
 func replsForRange(
 	ctx context.Context,
 	t *testing.T,
@@ -1226,9 +1229,10 @@ func setupClusterForClosedTSTesting(
 	sqlRunner.ExecMultiple(t, strings.Split(fmt.Sprintf(`
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
 SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s';
-SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '%s';
+SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true;
 SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
-`, targetDuration, sideTransportInterval),
+`, targetDuration, sideTransportInterval, sideTransportInterval),
 		";")...)
 
 	desc = tc.AddVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(1), tc.Target(2))
@@ -1242,7 +1246,7 @@ SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
 func setupTestClusterWithDummyRange(
 	t *testing.T, clusterArgs base.TestClusterArgs, dbName, tableName string, numNodes int,
 ) (serverutils.TestClusterInterface, roachpb.RangeDescriptor) {
-	tc := serverutils.StartNewTestCluster(t, numNodes, clusterArgs)
+	tc := serverutils.StartCluster(t, numNodes, clusterArgs)
 	db0 := tc.ServerConn(0)
 
 	if _, err := db0.Exec(fmt.Sprintf(`
@@ -1365,7 +1369,7 @@ func verifyCanReadFromAllRepls(
 }
 
 func makeTxnReadBatchForDesc(desc roachpb.RangeDescriptor, ts hlc.Timestamp) *kvpb.BatchRequest {
-	txn := roachpb.MakeTransaction("txn", nil, 0, 0, ts, 0, 0)
+	txn := roachpb.MakeTransaction("txn", nil, 0, 0, ts, 0, 0, 0)
 
 	baRead := &kvpb.BatchRequest{}
 	baRead.Header.RangeID = desc.RangeID

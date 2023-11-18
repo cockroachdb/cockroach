@@ -172,7 +172,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		}
 	}
 
-	p.createDropDatabaseJob(
+	if err := p.createDropDatabaseJob(
 		ctx,
 		n.dbDesc.GetID(),
 		schemasIDsToDelete,
@@ -180,7 +180,9 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		n.d.typesToDelete,
 		n.d.functionsToDelete,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
-	)
+	); err != nil {
+		return err
+	}
 
 	n.dbDesc.SetDropped()
 	b := p.txn.NewBatch()
@@ -212,6 +214,11 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	if err := p.deleteComment(
 		ctx, n.dbDesc.GetID(), 0 /* subID */, catalogkeys.DatabaseCommentType,
 	); err != nil {
+		return err
+	}
+
+	// TODO(jeffswenson): delete once region_livess is implemented (#107966)
+	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
 		return err
 	}
 

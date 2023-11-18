@@ -16,7 +16,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -214,6 +213,10 @@ type FlowBase struct {
 	// is used in Wait() to avoid the overhead of waiting for non-existent
 	// goroutines.
 	startedGoroutines bool
+
+	// headProcStarted tracks whether Start was called on the "head" processor
+	// in Run.
+	headProcStarted bool
 
 	// inboundStreams are streams that receive data from other hosts; this map
 	// is to be passed to FlowRegistry.RegisterFlow. This map is populated in
@@ -488,7 +491,7 @@ func (f *FlowBase) StartInternal(
 
 	f.setStatus(flowRunning)
 
-	if multitenant.TenantRUEstimateEnabled.Get(&f.Cfg.Settings.SV) &&
+	if execinfra.IncludeRUEstimateInExplainAnalyze.Get(&f.Cfg.Settings.SV) &&
 		!f.Gateway && f.CollectStats {
 		// Remote flows begin collecting CPU usage here, and finish when the last
 		// outbox finishes. Gateway flows are handled by the connExecutor.
@@ -572,6 +575,7 @@ func (f *FlowBase) Run(ctx context.Context, noWait bool) {
 	}
 	f.resumeCtx = ctx
 	log.VEventf(ctx, 1, "running %T in the flow's goroutine", headProc)
+	f.headProcStarted = true
 	headProc.Run(ctx, headOutput)
 }
 
@@ -654,6 +658,39 @@ func (f *FlowBase) GetOnCleanupFns() (startCleanup, endCleanup func()) {
 		onCleanupEnd = noopFn
 	}
 	return onCleanupStart, onCleanupEnd
+}
+
+// ConsumerClosedOnHeadProc calls ConsumerClosed method on the "head" processor
+// of this flow to make sure that all resources are released. This is needed for
+// pausable portal execution model where execinfra.Run might never call
+// ConsumerClosed on the source (i.e. the "head" processor).
+//
+// The method is only called if:
+// - the flow is local (pausable portals currently don't support DistSQL)
+// - there is exactly 1 processor in the flow that runs in its own goroutine
+// (which is always the case for pausable portal model at this time)
+// - Start was called on that processor (ConsumerClosed is only valid to be
+// called after Start)
+// - that single processor implements execinfra.RowSource interface (those
+// processors that don't implement it shouldn't be running through pausable
+// portal model).
+//
+// Otherwise, this method is a noop.
+func (f *FlowBase) ConsumerClosedOnHeadProc() {
+	if !f.IsLocal() {
+		return
+	}
+	if len(f.processors) != 1 {
+		return
+	}
+	if !f.headProcStarted {
+		return
+	}
+	rs, ok := f.processors[0].(execinfra.RowSource)
+	if !ok {
+		return
+	}
+	rs.ConsumerClosed()
 }
 
 // Cleanup is part of the Flow interface.

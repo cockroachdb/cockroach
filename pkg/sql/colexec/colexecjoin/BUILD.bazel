@@ -47,9 +47,7 @@ go_test(
         "main_test.go",
         "mergejoiner_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":colexecjoin"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/col/coldata",
         "//pkg/col/coldataext",

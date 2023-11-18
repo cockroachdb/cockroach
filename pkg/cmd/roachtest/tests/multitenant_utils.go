@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -187,14 +188,16 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 		"--store=" + tn.storeDir()}
 
 	internalIPs, err := c.InternalIP(ctx, t.L(), c.Node(tn.node))
+	randomSeed := rand.Int63()
+	c.SetRandomSeed(randomSeed)
 	require.NoError(t, err)
 	tn.errCh = startTenantServer(
 		ctx, c, c.Node(tn.node), internalIPs[0], binary, tn.kvAddrs, tn.tenantID,
-		tn.httpPort, tn.sqlPort, tn.envVars,
+		tn.httpPort, tn.sqlPort, tn.envVars, randomSeed,
 		extraArgs...,
 	)
 
-	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), "")
+	externalUrls, err := c.ExternalPGUrl(ctx, t.L(), c.Node(tn.node), "" /* tenant */, 0 /* sqlInstance */)
 	require.NoError(t, err)
 	u, err := url.Parse(externalUrls[0])
 	require.NoError(t, err)
@@ -254,6 +257,7 @@ func startTenantServer(
 	httpPort int,
 	sqlPort int,
 	envVars []string,
+	randomSeed int64,
 	extraFlags ...string,
 ) chan error {
 	args := []string{
@@ -268,6 +272,10 @@ func startTenantServer(
 
 	errCh := make(chan error, 1)
 	go func() {
+		// Set the same random seed for every tenant; this is picked up by
+		// runs that use a build with runtime assertions enabled, and
+		// ignored otherwise.
+		envVars = append(envVars, fmt.Sprintf("COCKROACH_RANDOM_SEED=%d", randomSeed))
 		errCh <- c.RunE(tenantCtx, node,
 			append(append(append([]string{}, envVars...), binary, "mt", "start-sql"), args...)...,
 		)
@@ -327,9 +335,7 @@ func createTenantAdminRole(t test.Test, tenantName string, tenantSQL *sqlutils.S
 const appTenantName = "app"
 
 // createInMemoryTenant runs through the necessary steps to create an in-memory
-// tenant without resource limits and full dbconsole viewing privileges. As a
-// convenience, it also returns a connection to the tenant (on a random node in
-// the cluster).
+// tenant without resource limits and full dbconsole viewing privileges.
 func createInMemoryTenant(
 	ctx context.Context,
 	t test.Test,
@@ -337,14 +343,60 @@ func createInMemoryTenant(
 	tenantName string,
 	nodes option.NodeListOption,
 	secure bool,
+) {
+	db := createInMemoryTenantWithConn(ctx, t, c, tenantName, nodes, secure)
+	db.Close()
+}
+
+// createInMemoryTenantWithConn runs through the necessary steps to create an
+// in-memory tenant without resource limits and full dbconsole viewing
+// privileges. As a convenience, it also returns a connection to the tenant (on
+// a random node in the cluster).
+func createInMemoryTenantWithConn(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	tenantName string,
+	nodes option.NodeListOption,
+	secure bool,
 ) *gosql.DB {
-	sysSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), nodes.RandNode()[0]))
+	sysDB := c.Conn(ctx, t.L(), nodes.RandNode()[0])
+	defer sysDB.Close()
+	sysSQL := sqlutils.MakeSQLRunner(sysDB)
 	sysSQL.Exec(t, "CREATE TENANT $1", tenantName)
+
+	tenantConn := startInMemoryTenant(ctx, t, c, tenantName, nodes)
+	tenantSQL := sqlutils.MakeSQLRunner(tenantConn)
+	if secure {
+		createTenantAdminRole(t, tenantName, tenantSQL)
+	}
+	return tenantConn
+}
+
+// startInMemoryTenant starts an in memory tenant that has already been created.
+// This function also removes tenant rate limiters and sets a few cluster
+// settings on the tenant.  As a convenience, it also returns a connection to
+// the tenant (on a random node in the cluster).
+func startInMemoryTenant(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	tenantName string,
+	nodes option.NodeListOption,
+) *gosql.DB {
+	sysDB := c.Conn(ctx, t.L(), nodes.RandNode()[0])
+	defer sysDB.Close()
+	sysSQL := sqlutils.MakeSQLRunner(sysDB)
 	sysSQL.Exec(t, "ALTER TENANT $1 START SERVICE SHARED", tenantName)
 	sysSQL.Exec(t, `ALTER TENANT $1 GRANT CAPABILITY can_view_node_info=true, can_admin_split=true,can_view_tsdb_metrics=true`, tenantName)
 	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.split_at.allow_for_secondary_tenant.enabled=true`, tenantName)
 	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.scatter.allow_for_secondary_tenant.enabled=true`, tenantName)
-
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled=true`, tenantName)
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled=true`, tenantName)
+	// The following two statements can be removed once this code only ever
+	// runs for v23.2 and later.
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING enterprise.license = $2`, tenantName, config.CockroachDevLicense)
+	sysSQL.Exec(t, `ALTER TENANT $1 SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing'`, tenantName)
 	removeTenantRateLimiters(t, sysSQL, tenantName)
 
 	// Opening a SQL session to a newly created in-process tenant may require a
@@ -353,7 +405,6 @@ func createInMemoryTenant(
 	// first query. Therefore, wrap connection opening and a ping to the tenant
 	// server in a retry loop.
 	var tenantConn *gosql.DB
-	var tenantSQL *sqlutils.SQLRunner
 	testutils.SucceedsSoon(t, func() error {
 		var err error
 		tenantConn, err = c.ConnE(ctx, t.L(), nodes.RandNode()[0], option.TenantName(tenantName))
@@ -361,15 +412,12 @@ func createInMemoryTenant(
 			return err
 		}
 		if err = tenantConn.Ping(); err != nil {
+			tenantConn.Close()
 			return err
 		}
-		tenantSQL = sqlutils.MakeSQLRunner(tenantConn)
 		return nil
 	})
 
-	if secure {
-		createTenantAdminRole(t, tenantName, tenantSQL)
-	}
 	return tenantConn
 }
 

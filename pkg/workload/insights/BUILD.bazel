@@ -26,7 +26,6 @@ go_test(
         "insights_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":insights"],
     deps = [
         "//pkg/base",
@@ -38,6 +37,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/workload/workloadsql",
     ],

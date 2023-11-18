@@ -15,6 +15,7 @@ import (
 	"math/rand"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -88,8 +89,25 @@ var rng struct {
 // strconv.ParseBool then metamorphic testing will not be enabled.
 const DisableMetamorphicEnvVar = "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING"
 
+// Returns true iff the current process is eligible to enable metamorphic
+// variables. When run under Bazel, checking if we are in the Go test wrapper
+// ensures that metamorphic variables are not initialized and logged twice
+// from both the wrapper and the main test process, as both will perform
+// initialization of the test module and its dependencies.
+func metamorphicEligible() bool {
+	if !buildutil.CrdbTestBuild {
+		return false
+	}
+
+	if bazel.InTestWrapper() {
+		return false
+	}
+
+	return true
+}
+
 func init() {
-	if buildutil.CrdbTestBuild {
+	if metamorphicEligible() {
 		if !disableMetamorphicTesting {
 			rng.r, _ = randutil.NewTestRand()
 			metamorphicBuild = rng.r.Float64() < metamorphicBuildProbability

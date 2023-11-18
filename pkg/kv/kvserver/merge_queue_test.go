@@ -37,7 +37,6 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tsc := TestStoreConfig(nil)
-	tsc.SpanConfigsDisabled = true
 	testCtx.StartWithStoreConfig(ctx, t, stopper, tsc)
 
 	mq := newMergeQueue(testCtx.store, testCtx.store.DB())

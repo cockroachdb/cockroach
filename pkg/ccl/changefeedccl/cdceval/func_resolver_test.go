@@ -27,8 +27,9 @@ func TestResolveFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `
@@ -87,7 +88,11 @@ $$`)
 					defer cleanup()
 					semaCtx := execCtx.SemaCtx()
 					r := newCDCFunctionResolver(semaCtx.FunctionResolver)
-					funcDef, err = r.ResolveFunction(context.Background(), &tc.fnName, semaCtx.SearchPath)
+					funcDef, err = r.ResolveFunction(
+						context.Background(),
+						tree.MakeUnresolvedFunctionName(&tc.fnName),
+						semaCtx.SearchPath,
+					)
 					return err
 				})
 

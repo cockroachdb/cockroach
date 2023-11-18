@@ -78,7 +78,7 @@ func (r *taskRunner) OnFailOrCancel(ctx context.Context, execCtx interface{}, jo
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		return markTaskComplete(ctx, txn,
 			InfoKeyTaskRef{Environment: r.envID, Task: r.task.TaskID},
-			[]byte("task error"))
+			[]byte("task error"), execCfg.Settings.Version)
 	}); err != nil {
 		return err
 	}
@@ -90,6 +90,11 @@ func (r *taskRunner) OnFailOrCancel(ctx context.Context, execCtx interface{}, jo
 		// how to pop upon finding unexpected completion markers.
 		log.Warningf(ctx, "error popping the task off the queue: %v", err)
 	}
+	return nil
+}
+
+// CollectProfile implements the jobs.Resumer interface.
+func (r *taskRunner) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
 }
 
@@ -175,7 +180,7 @@ func execSimpleSQL(
 		log.Infof(ctx, "finished executing txn statements")
 		return markTaskComplete(ctx, txn,
 			InfoKeyTaskRef{Environment: envID, Task: taskID},
-			[]byte("task success"))
+			[]byte("task success"), execCfg.Settings.Version)
 	})
 }
 

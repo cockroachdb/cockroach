@@ -113,7 +113,7 @@ var LoadBasedRebalancingObjective = settings.RegisterEnumSetting(
 		"`cpu` the cluster will attempt to balance cpu usage among stores",
 	"cpu",
 	LoadBasedRebalancingObjectiveMap,
-).WithPublic()
+	settings.WithPublic)
 
 // ToDimension returns the equivalent allocator load dimension of a rebalancing
 // objective.
@@ -264,14 +264,6 @@ func ResolveLBRebalancingObjective(
 	set := LoadBasedRebalancingObjective.Get(&st.SV)
 	// Queries should always be supported, return early if set.
 	if set == int64(LBRebalancingQueries) {
-		return LBRebalancingQueries
-	}
-	// When the cluster version hasn't finalized to 23.1, some unupgraded
-	// stores will not be populating additional fields in their StoreCapacity,
-	// in such cases we cannot balance another objective since the data may not
-	// exist. Fall back to QPS balancing.
-	if !st.Version.IsActive(ctx, clusterversion.V23_1AllocatorCPUBalancing) {
-		log.Infof(ctx, "version doesn't support cpu objective, reverting to qps balance objective")
 		return LBRebalancingQueries
 	}
 	// When the cpu timekeeping utility is unsupported on this aarch, the cpu

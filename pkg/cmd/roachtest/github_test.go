@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,7 +83,7 @@ func TestShouldPost(t *testing.T) {
 		{false, 1, "token", "master", true, ""},
 	}
 
-	reg := makeTestRegistry(spec.GCE, "", "", false, false)
+	reg := makeTestRegistry()
 	for _, c := range testCases {
 		t.Setenv("GITHUB_API_TOKEN", c.envGithubAPIToken)
 		t.Setenv("TC_BUILD_BRANCH", c.envTcBuildBranch)
@@ -111,12 +112,12 @@ func TestGenerateHelpCommand(t *testing.T) {
 	end := time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC)
 
 	r := &issues.Renderer{}
-	generateHelpCommand("foo-cluster", spec.GCE, start, end)(r)
+	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", spec.GCE, start, end)(r)
 
 	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command.txt"))
 
 	r = &issues.Renderer{}
-	generateHelpCommand("foo-cluster", spec.AWS, start, end)(r)
+	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", spec.AWS, start, end)(r)
 
 	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command_non_gce.txt"))
 }
@@ -127,56 +128,77 @@ func TestCreatePostRequest(t *testing.T) {
 	}
 
 	testCases := []struct {
-		nonReleaseBlocker      bool
-		clusterCreationFailed  bool
-		loadTeamsFailed        bool
-		localSSD               bool
-		arch                   vm.CPUArch
-		failure                failure
-		expectedPost           bool
-		expectedReleaseBlocker bool
-		expectedParams         map[string]string
+		nonReleaseBlocker       bool
+		clusterCreationFailed   bool
+		loadTeamsFailed         bool
+		localSSD                bool
+		metamorphicBuild        bool
+		extraLabels             []string
+		arch                    vm.CPUArch
+		failure                 failure
+		expectedPost            bool
+		expectedReleaseBlocker  bool
+		expectedSkipTestFailure bool
+		expectedParams          map[string]string
 	}{
-		{true, false, false, false, "", createFailure(errors.New("other")), true, false,
+		{true, false, false, false, false, nil, "", createFailure(errors.New("other")), true, false, false,
 			prefixAll(map[string]string{
-				"cloud":     "gce",
-				"encrypted": "false",
-				"fs":        "ext4",
-				"ssd":       "0",
-				"cpu":       "4",
-				"arch":      "amd64",
-				"localSSD":  "false",
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "amd64",
+				"localSSD":         "false",
+				"metamorphicBuild": "false",
 			}),
 		},
-		{true, false, false, true, vm.ArchARM64, createFailure(errClusterProvisioningFailed), true, false,
+		{true, false, false, true, true, nil, vm.ArchARM64, createFailure(errClusterProvisioningFailed), true, false, true,
 			prefixAll(map[string]string{
-				"cloud":     "gce",
-				"encrypted": "false",
-				"fs":        "ext4",
-				"ssd":       "0",
-				"cpu":       "4",
-				"arch":      "arm64",
-				"localSSD":  "true",
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "arm64",
+				"localSSD":         "true",
+				"metamorphicBuild": "true",
 			}),
 		},
 		// Assert that release-blocker label doesn't exist when
 		// !nonReleaseBlocker and issue is an SSH flake. Also ensure that
 		// in the event of a failed cluster creation, nil `vmOptions` and
 		// `clusterImpl` are not dereferenced
-		{false, true, false, false, "", createFailure(rperrors.ErrSSH255), true, false,
+		{false, true, false, false, false, nil, "", createFailure(rperrors.ErrSSH255), true, false, true,
 			prefixAll(map[string]string{
-				"cloud": "gce",
-				"ssd":   "0",
-				"cpu":   "4",
+				"cloud":            "gce",
+				"ssd":              "0",
+				"cpu":              "4",
+				"metamorphicBuild": "false",
 			}),
 		},
 		//Simulate failure loading TEAMS.yaml
-		{true, false, true, false, "", createFailure(errors.New("other")), false, false, nil},
+		{true, false, true, false, false, nil, "", createFailure(errors.New("other")), false, false, false, nil},
 		//Error during post test assertions
-		{true, false, false, false, "", createFailure(errDuringPostAssertions), false, false, nil},
+		{true, false, false, false, false, nil, "", createFailure(errDuringPostAssertions), false, false, false, nil},
+		//Error during dns operation
+		{true, false, false, false, false, nil, "", createFailure(gce.ErrDNSOperation), true, false, true, nil},
+		// Assert that extra labels in the test spec are added to the issue.
+		{true, false, false, false, false, []string{"foo-label"}, "", createFailure(errors.New("other")), true, false, false,
+			prefixAll(map[string]string{
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "amd64",
+				"localSSD":         "false",
+				"metamorphicBuild": "false",
+			}),
+		},
 	}
 
-	reg := makeTestRegistry(spec.GCE, "", "", false, false)
+	reg := makeTestRegistry()
 	for idx, c := range testCases {
 		t.Run(fmt.Sprintf("%d", idx+1), func(t *testing.T) {
 			clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))
@@ -186,6 +208,7 @@ func TestCreatePostRequest(t *testing.T) {
 				Owner:             OwnerUnitTest,
 				Cluster:           clusterSpec,
 				NonReleaseBlocker: c.nonReleaseBlocker,
+				ExtraLabels:       c.extraLabels,
 			}
 
 			ti := &testImpl{
@@ -221,10 +244,10 @@ func TestCreatePostRequest(t *testing.T) {
 
 			if c.loadTeamsFailed {
 				// Assert that if TEAMS.yaml cannot be loaded then function errors.
-				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message")
+				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild)
 				assert.Error(t, err, "Expected an error in createPostRequest when loading teams fails, but got nil")
 			} else {
-				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message")
+				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild)
 				assert.NoError(t, err, "Expected no error in createPostRequest")
 
 				r := &issues.Renderer{}
@@ -237,20 +260,30 @@ func TestCreatePostRequest(t *testing.T) {
 				}
 
 				require.True(t, contains(req.ExtraLabels, nil, "O-roachtest"))
+				for _, l := range c.extraLabels {
+					require.True(t, contains(req.ExtraLabels, nil, l), "expected extra label %q", l)
+				}
 				require.Equal(t, c.expectedReleaseBlocker, contains(req.ExtraLabels, nil, "release-blocker"))
+				require.Equal(t, c.expectedSkipTestFailure, req.SkipLabelTestFailure)
 
 				expectedTeam := "@cockroachdb/unowned"
 				expectedName := "github_test"
-				expectedLabel := ""
+				expectedLabels := []string{}
 				expectedMessagePrefix := ""
 
-				if errors.Is(c.failure.squashedErr, errClusterProvisioningFailed) {
-					expectedTeam = "@cockroachdb/dev-inf"
+				if errors.Is(c.failure.squashedErr, gce.ErrDNSOperation) {
+					expectedTeam = "@cockroachdb/test-eng"
+					expectedLabels = []string{"T-testeng", "X-infra-flake"}
+					expectedName = "dns_problem"
+					expectedMessagePrefix = "test github_test failed due to "
+				} else if errors.Is(c.failure.squashedErr, errClusterProvisioningFailed) {
+					expectedTeam = "@cockroachdb/test-eng"
+					expectedLabels = []string{"T-testeng", "X-infra-flake"}
 					expectedName = "cluster_creation"
 					expectedMessagePrefix = "test github_test was skipped due to "
 				} else if errors.Is(c.failure.squashedErr, rperrors.ErrSSH255) {
 					expectedTeam = "@cockroachdb/test-eng"
-					expectedLabel = "T-testeng"
+					expectedLabels = []string{"T-testeng", "X-infra-flake"}
 					expectedName = "ssh_problem"
 					expectedMessagePrefix = "test github_test failed due to "
 				} else if errors.Is(c.failure.squashedErr, errDuringPostAssertions) {
@@ -260,11 +293,12 @@ func TestCreatePostRequest(t *testing.T) {
 				require.Contains(t, req.MentionOnCreate, expectedTeam)
 				require.Equal(t, expectedName, req.TestName)
 				require.True(t, strings.HasPrefix(req.Message, expectedMessagePrefix), req.Message)
-				if expectedLabel != "" {
-					require.Contains(t, req.ExtraLabels, expectedLabel)
+				if len(expectedLabels) > 0 {
+					for _, expectedLabel := range expectedLabels {
+						require.Contains(t, req.ExtraLabels, expectedLabel)
+					}
 				}
 			}
 		})
-
 	}
 }

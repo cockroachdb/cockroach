@@ -10,9 +10,7 @@
 
 const fs = require("fs");
 const fsp = require("fs/promises");
-const os = require("os");
 const path = require("path");
-const semver = require("semver");
 const { validate } = require("schema-utils");
 
 const { cleanDestinationPaths, tildeify } = require("../util");
@@ -82,19 +80,24 @@ class CopyEmittedFilesPlugin {
     compiler.hooks.afterEnvironment.tap(PLUGIN_NAME, () => {
       logger.warn("Deleting destinations in preparation for copied files:");
       for (const dst of destinations) {
-        const stat = fs.statSync(dst);
+        // Use lstat to avoid resolving the possible symbolic link.
+        const stat = fs.lstatSync(dst);
+        const jsDir = path.join(dst, "js");
 
-        if (stat.isDirectory()) {
+        if (stat.isDirectory() && fs.existsSync(jsDir)) {
           // Since the destination is already a directory, it's likely been
           // created by webpack or typescript already. Don't remove the entire
           // directory --- only remove the js subtree.
-          const jsDir = path.join(dst, "js");
           logger.warn(`  rm -r ${tildeify(jsDir)}`);
           fs.rmSync(jsDir, { recursive: true });
+        } else if (stat.isSymbolicLink()) {
+          // Since the destination is a symlink, just unlink it.
+          logger.warn(`  unlink ${tildeify(dst)}`);
+          fs.unlinkSync(dst);
         } else {
-          // Since the destination is a symlink, just remove the single file.
-          logger.warn(`  rm ${tildeify(dst)}`);
-          fs.rmSync(dst, { recursive: false });
+          // Avoid weird "deleting destinations" message with no destinations
+          // listed. :)
+          logger.info(`  ${dst} OK`);
         }
 
         // Ensure the destination directory and package.json exist.
@@ -113,11 +116,13 @@ class CopyEmittedFilesPlugin {
     // @see https://v4.webpack.js.org/api/compiler-hooks/#assetemitted
     compiler.hooks.assetEmitted.tapPromise(PLUGIN_NAME, (file) => {
       return Promise.all(
-        destinations.map((dstBase) => {
-          const prettyDst = tildeify(dstBase);
+        destinations.map(async (dstBase) => {
           const src = path.join(relOutputPath, file);
           const dst = path.join(dstBase, relOutputPath, file);
-          logger.info(`cp ${src} ${path.join(prettyDst, relOutputPath)}`);
+          const dstDir = path.dirname(dst);
+          // Ensure destination directories actually exist before copying.
+          await fsp.mkdir(dstDir, { recursive: true });
+          logger.info(`cp ${src} ${tildeify(dstDir)}`);
           return fsp.copyFile(src, dst);
         }),
       );

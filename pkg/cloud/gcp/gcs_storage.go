@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -61,7 +60,7 @@ const (
 // gcsChunkingEnabled is used to enable and disable chunking of file upload to
 // Google Cloud Storage.
 var gcsChunkingEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.gs.chunking.enabled",
 	"enable chunking of file upload to Google Cloud Storage",
 	true, /* default */
@@ -70,10 +69,11 @@ var gcsChunkingEnabled = settings.RegisterBoolSetting(
 // gcsChunkRetryTimeout is used to configure the per-chunk retry deadline when
 // uploading chunks to Google Cloud Storage.
 var gcsChunkRetryTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"cloudstorage.gs.chunking.retry_timeout",
 	"per-chunk retry deadline when chunking of file upload to Google Cloud Storage",
 	60*time.Second,
+	settings.WithName("cloudstorage.gs.chunking.per_chunk_retry.timeout"),
 )
 
 func parseGSURL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
@@ -181,10 +181,6 @@ func makeGCSStorage(
 	if conf.AssumeRole == "" {
 		opts = append(opts, credentialsOpt...)
 	} else {
-		if !args.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2SupportAssumeRoleAuth) {
-			return nil, errors.New("cannot authenticate to cloud storage via assume role until cluster has fully upgraded to 22.2")
-		}
-
 		assumeOpt, err := createImpersonateCredentials(ctx, conf.AssumeRole, conf.AssumeRoleDelegates, []string{scope}, credentialsOpt...)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to assume role")

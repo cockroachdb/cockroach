@@ -12,9 +12,8 @@ package application_api_test
 
 import (
 	"context"
-	gosql "database/sql"
+	"encoding/json"
 	"fmt"
-	"net/url"
 	"reflect"
 	"sort"
 	"strings"
@@ -23,15 +22,19 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -44,22 +47,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// additionalTimeoutUnderStress is the additional timeout to use for the http
+// client if under stress.
+const additionalTimeoutUnderStress = 30 * time.Second
+
 func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Increase the timeout for the http client if under stress.
+	additionalTimeout := 0 * time.Second
+	if skip.Stress() {
+		additionalTimeout = additionalTimeoutUnderStress
+	}
+
 	var params base.TestServerArgs
 	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true} // TODO(irfansharif): #74919.
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: params,
 	})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
 	thirdServer := testCluster.Server(2)
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, thirdServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer cleanupGoDB()
 	firstServerProto := testCluster.Server(0)
 
 	type testCase struct {
@@ -106,10 +116,11 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 
 		// Create a brand new connection for each app, so that we don't pollute
 		// transaction stats collection with `SET application_name` queries.
-		sqlDB, err := gosql.Open("postgres", pgURL.String())
+		sqlDB, err := thirdServer.ApplicationLayer().SQLConnE()
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if _, err := sqlDB.Exec(fmt.Sprintf(`SET application_name = "%s"`, appName)); err != nil {
 			t.Fatal(err)
 		}
@@ -125,7 +136,7 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 
 	// Hit query endpoint.
 	var resp serverpb.StatementsResponse
-	if err := srvtestutils.GetStatusJSONProto(firstServerProto, "combinedstmts", &resp); err != nil {
+	if err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, "combinedstmts", &resp, true, additionalTimeout); err != nil {
 		t.Fatal(err)
 	}
 
@@ -187,14 +198,11 @@ func TestStatusAPITransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer testCluster.Stopper().Stop(ctx)
 
 	thirdServer := testCluster.Server(2)
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, thirdServer.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer cleanupGoDB()
 	firstServerProto := testCluster.Server(0)
 
 	type testCase struct {
@@ -239,9 +247,9 @@ func TestStatusAPITransactions(t *testing.T) {
 		appName := fmt.Sprintf("app%d", i)
 		appNameToTestCase[appName] = tc
 
-		// Create a brand new connection for each app, so that we don't pollute
+		// Create a brand-new connection for each app, so that we don't pollute
 		// transaction stats collection with `SET application_name` queries.
-		sqlDB, err := gosql.Open("postgres", pgURL.String())
+		sqlDB, err := thirdServer.ApplicationLayer().SQLConnE()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -322,10 +330,10 @@ func TestStatusAPITransactionStatementFingerprintIDsTruncation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
-	firstServerProto := testCluster.Server(0)
+	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 	testingApp := "testing"
 
@@ -380,11 +388,17 @@ func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// Increase the timeout for the http client if under stress.
+	additionalTimeout := 0 * time.Second
+	if skip.Stress() {
+		additionalTimeout = additionalTimeoutUnderStress
+	}
+
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
 	statsKnobs := sqlstats.CreateTestingKnobs()
 	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
@@ -396,7 +410,7 @@ func TestStatusAPIStatements(t *testing.T) {
 	})
 	defer testCluster.Stopper().Stop(context.Background())
 
-	firstServerProto := testCluster.Server(0)
+	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
 	statements := []struct {
@@ -419,14 +433,14 @@ func TestStatusAPIStatements(t *testing.T) {
 
 	// Test that non-admin without VIEWACTIVITY privileges cannot access.
 	var resp serverpb.StatementsResponse
-	err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, "statements", &resp, false)
+	err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, "statements", &resp, false, additionalTimeout)
 	if !testutils.IsError(err, "status: 403") {
 		t.Fatalf("expected privilege error, got %v", err)
 	}
 
 	testPath := func(path string, expectedStmts []string) {
 		// Hit query endpoint.
-		if err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, path, &resp, false); err != nil {
+		if err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, path, &resp, false, additionalTimeout); err != nil {
 			t.Fatal(err)
 		}
 
@@ -487,15 +501,199 @@ func TestStatusAPIStatements(t *testing.T) {
 	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
 }
 
+func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Increase the timeout for the http client if under stress.
+	additionalTimeout := 0 * time.Second
+	if skip.Stress() {
+		additionalTimeout = additionalTimeoutUnderStress
+	}
+	skip.UnderStressRace(t, "test is too slow to run under race")
+
+	// Aug 30 2021 19:50:00 GMT+0000
+	aggregatedTs := int64(1630353000)
+	oneMinAfterAggregatedTs := aggregatedTs + 60
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: statsKnobs,
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
+				},
+			},
+		},
+	})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	endpoint := fmt.Sprintf("combinedstmts?start=%d&end=%d", aggregatedTs-3600, oneMinAfterAggregatedTs)
+	findJobQuery := "SELECT status FROM [SHOW JOBS] WHERE statement = 'CREATE INDEX idx_age ON football.public.players (age) STORING (name)';"
+	testAppName := "TestCombinedStatementsWithFullScans"
+
+	firstServerProto := testCluster.Server(0).ApplicationLayer()
+	sqlSB := testCluster.ServerConn(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	var resp serverpb.StatementsResponse
+	// Test that non-admin without VIEWACTIVITY privileges cannot access.
+	err := srvtestutils.GetStatusJSONProtoWithAdminOption(firstServerProto, endpoint, &resp, false)
+	if !testutils.IsError(err, "status: 403") {
+		t.Fatalf("expected privilege error, got %v", err)
+	}
+
+	thirdServerSQL.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWACTIVITY TO %s", apiconstants.TestingUserNameNoAdmin().Normalized()))
+	thirdServerSQL.Exec(t, fmt.Sprintf(`SET application_name = '%s'`, testAppName))
+
+	type TestCases struct {
+		stmt      string
+		respQuery string
+		fullScan  bool
+		distSQL   bool
+		failed    bool
+		count     int
+	}
+
+	// These test statements are executed before the index is introduced.
+	statementsBeforeIndex := []TestCases{
+		{stmt: `CREATE DATABASE football`, respQuery: `CREATE DATABASE football`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `SET database = football`, respQuery: `SET database = football`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `CREATE TABLE players (id INT PRIMARY KEY, name TEXT, position TEXT, age INT,goals INT)`, respQuery: `CREATE TABLE players (id INT8 PRIMARY KEY, name STRING, "position" STRING, age INT8, goals INT8)`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `INSERT INTO players (id, name, position, age, goals) VALUES (1, 'Lionel Messi', 'Forward', 34, 672), (2, 'Cristiano Ronaldo', 'Forward', 36, 674)`, respQuery: `INSERT INTO players(id, name, "position", age, goals) VALUES (_, '_', __more1_10__), (__more1_10__)`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `SELECT avg(goals) FROM players`, respQuery: `SELECT avg(goals) FROM players`, fullScan: true, distSQL: true, failed: false, count: 1},
+		{stmt: `SELECT name FROM players WHERE age >= 32`, respQuery: `SELECT name FROM players WHERE age >= _`, fullScan: true, distSQL: true, failed: false, count: 1},
+	}
+
+	statementsCreateIndex := []TestCases{
+		// Drop the index, if it exists. Then, create the index.
+		{stmt: `DROP INDEX IF EXISTS idx_age`, respQuery: `DROP INDEX IF EXISTS idx_age`, fullScan: false, distSQL: false, failed: false, count: 1},
+		{stmt: `CREATE INDEX idx_age ON players (age) STORING (name)`, respQuery: `CREATE INDEX idx_age ON players (age) STORING (name)`, fullScan: false, distSQL: false, failed: false, count: 1},
+	}
+
+	// These test statements are executed after an index is created on the players table.
+	statementsAfterIndex := []TestCases{
+		// Since the index is created, the fullScan value should be false.
+		{stmt: `SELECT name FROM players WHERE age < 32`, respQuery: `SELECT name FROM players WHERE age < _`, fullScan: false, distSQL: false, failed: false, count: 1},
+		// Although the index is created, the fullScan value should be true because the previous query was not using the index. Its count should also be 2.
+		{stmt: `SELECT name FROM players WHERE age >= 32`, respQuery: `SELECT name FROM players WHERE age >= _`, fullScan: true, distSQL: true, failed: false, count: 2},
+	}
+
+	type ExpectedStatementData struct {
+		count    int
+		fullScan bool
+		distSQL  bool
+		failed   bool
+	}
+
+	// expectedStatementStatsMap maps the query response format to the associated
+	// expected statement statistics for verification.
+	expectedStatementStatsMap := make(map[string]ExpectedStatementData)
+
+	// Helper function to execute the statements and store the expected statement
+	executeStatements := func(statements []TestCases) {
+		// Clear the map at the start of each execution batch.
+		expectedStatementStatsMap = make(map[string]ExpectedStatementData)
+		for _, stmt := range statements {
+			thirdServerSQL.Exec(t, stmt.stmt)
+			expectedStatementStatsMap[stmt.respQuery] = ExpectedStatementData{
+				fullScan: stmt.fullScan,
+				distSQL:  stmt.distSQL,
+				failed:   stmt.failed,
+				count:    stmt.count,
+			}
+		}
+	}
+
+	// Helper function to convert a response into a JSON string representation.
+	responseToJSON := func(resp interface{}) string {
+		bytes, err := json.Marshal(resp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(bytes)
+	}
+
+	// Helper function to verify the combined statement statistics response.
+	verifyCombinedStmtStats := func() {
+		err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(firstServerProto, endpoint, &resp, false, additionalTimeout)
+		require.NoError(t, err)
+
+		// actualResponseStatsMap maps the query response format to the actual
+		// statement statistics received from the server response.
+		actualResponseStatsMap := make(map[string]serverpb.StatementsResponse_CollectedStatementStatistics)
+		for _, respStatement := range resp.Statements {
+			// Skip failed statements: The test app may encounter transient 40001
+			// errors that are automatically retried. Thus, we only consider
+			// statements that were that were successfully executed by the test app
+			// to avoid counting such failures. If a statement that we expect to be
+			// successful is not found in the response, the test will fail later.
+			if respStatement.Key.KeyData.App == testAppName && !respStatement.Key.KeyData.Failed {
+				actualResponseStatsMap[respStatement.Key.KeyData.Query] = respStatement
+			}
+		}
+
+		for respQuery, expectedData := range expectedStatementStatsMap {
+			respStatement, exists := actualResponseStatsMap[respQuery]
+			require.True(t, exists, "Expected statement '%s' not found in response: %v", respQuery, responseToJSON(resp))
+
+			actualCount := respStatement.Stats.FirstAttemptCount
+			actualFullScan := respStatement.Key.KeyData.FullScan
+			actualDistSQL := respStatement.Key.KeyData.DistSQL
+			actualFailed := respStatement.Key.KeyData.Failed
+
+			stmtJSONString := responseToJSON(respStatement)
+
+			require.Equal(t, expectedData.fullScan, actualFullScan, "failed for respStatement: %v", stmtJSONString)
+			require.Equal(t, expectedData.distSQL, actualDistSQL, "failed for respStatement: %v", stmtJSONString)
+			require.Equal(t, expectedData.failed, actualFailed, "failed for respStatement: %v", stmtJSONString)
+			require.Equal(t, expectedData.count, int(actualCount), "failed for respStatement: %v", stmtJSONString)
+		}
+	}
+
+	// Execute and verify the queries that will be executed before the index is created.
+	executeStatements(statementsBeforeIndex)
+	verifyCombinedStmtStats()
+
+	// Execute the queries that will create the index.
+	executeStatements(statementsCreateIndex)
+
+	// Wait for the job which creates the index to complete.
+	testutils.SucceedsWithin(t, func() error {
+		var status string
+		for {
+			row := sqlSB.QueryRow(findJobQuery)
+			err = row.Scan(&status)
+			if err != nil {
+				return err
+			}
+			if status == "succeeded" {
+				break
+			}
+			// sleep for a fraction of a second
+			time.Sleep(100 * time.Millisecond)
+		}
+		return nil
+	}, 3*time.Second)
+
+	// Execute and verify the queries that will be executed after the index is created.
+	executeStatements(statementsAfterIndex)
+	verifyCombinedStmtStats()
+}
+
 func TestStatusAPICombinedStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// Resource-intensive test, times out under stress.
+	skip.UnderStressRace(t, "expensive tests")
 
 	// Aug 30 2021 19:50:00 GMT+0000
 	aggregatedTs := int64(1630353000)
 	statsKnobs := sqlstats.CreateTestingKnobs()
 	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
@@ -507,7 +705,7 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 	})
 	defer testCluster.Stopper().Stop(context.Background())
 
-	firstServerProto := testCluster.Server(0)
+	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
 	statements := []struct {
@@ -568,6 +766,9 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 		for _, respTxn := range resp.Transactions {
 			delete(expectedTxnFingerprints, respTxn.StatsData.TransactionFingerprintID)
 		}
+		// We set the default value of Transaction Fingerprint as 0 for some cases,
+		// so this also needs to be removed from the list.
+		delete(expectedTxnFingerprints, 0)
 
 		sort.Strings(expectedStmts)
 		sort.Strings(statementsInResponse)
@@ -665,7 +866,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	aggregatedTs := int64(1630353000)
 	statsKnobs := sqlstats.CreateTestingKnobs()
 	statsKnobs.StubTimeNow = func() time.Time { return timeutil.Unix(aggregatedTs, 0) }
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: statsKnobs,
@@ -677,7 +878,7 @@ func TestStatusAPIStatementDetails(t *testing.T) {
 	})
 	defer testCluster.Stopper().Stop(context.Background())
 
-	firstServerProto := testCluster.Server(0)
+	firstServerProto := testCluster.Server(0).ApplicationLayer()
 	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
 
 	statements := []string{
@@ -916,7 +1117,7 @@ func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
-	sqlConn.Exec(t, "CREATE USER nonAdminUser")
+	sqlConn.Exec(t, "CREATE USER non_admin_user")
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 
@@ -925,10 +1126,254 @@ func TestUnprivilegedUserResetIndexUsageStats(t *testing.T) {
 		"test-reset-index-usage-stats-as-non-admin-user",
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: username.MakeSQLUsernameFromPreNormalizedString("nonAdminUser"),
+			User: username.MakeSQLUsernameFromPreNormalizedString("non_admin_user"),
 		},
 		"SELECT crdb_internal.reset_index_usage_stats()",
 	)
 
 	require.Contains(t, err.Error(), "requires admin privilege")
+}
+
+// TestCombinedStatementUsesCorrectSourceTable tests that requests read from
+// the expected crdb_internal table given the table states. We have a lot of
+// different tables that requests could potentially read from (in-memory, cached,
+// system tables etc.), so we should sanity check that we are using the expected ones.
+// given some simple table states.
+func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Disable flushing sql stats so we can manually set the table states
+	// without worrying about unexpected stats appearing.
+	settings := cluster.MakeTestingClusterSettings()
+	statsKnobs := sqlstats.CreateTestingKnobs()
+	defaultMockInsertedAggTs := timeutil.Unix(1696906800, 0)
+	statsKnobs.StubTimeNow = func() time.Time { return defaultMockInsertedAggTs }
+	persistedsqlstats.SQLStatsFlushEnabled.Override(ctx, &settings.SV, false)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings: settings,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: statsKnobs,
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	conn := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t))
+	conn.Exec(t, "SET application_name = $1", server.CrdbInternalStmtStatsCombined)
+	conn.Exec(t, "SET CLUSTER SETTING sql.stats.activity.flush.enabled = 'f'")
+	// Clear the in-memory stats so we only have the above app name.
+	// Then populate it with 1 query.
+	conn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+	conn.Exec(t, "SELECT 1")
+
+	type testCase struct {
+		name               string
+		tableSetupFn       func() error
+		expectedStmtsTable string
+		expectedTxnsTable  string
+		reqs               []serverpb.CombinedStatementsStatsRequest
+		isEmpty            bool
+	}
+
+	ie := srv.InternalExecutor().(*sql.InternalExecutor)
+
+	defaultMockOneEach := func() error {
+		startTs := defaultMockInsertedAggTs
+		stmt := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+		stmt.ID = 1
+		stmt.AggregatedTs = startTs
+		stmt.Key.App = server.CrdbInternalStmtStatsPersisted
+		stmt.Key.TransactionFingerprintID = 1
+		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtStats(ctx, ie, &stmt, 1 /* nodeId */, nil))
+
+		stmt.Key.App = server.CrdbInternalStmtStatsCached
+		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemStmtActivity(ctx, ie, &stmt, nil))
+
+		txn := sqlstatstestutil.GetRandomizedCollectedTransactionStatisticsForTest(t)
+		txn.StatementFingerprintIDs = []appstatspb.StmtFingerprintID{1}
+		txn.TransactionFingerprintID = 1
+		txn.AggregatedTs = startTs
+		txn.App = server.CrdbInternalTxnStatsPersisted
+		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnStats(ctx, ie, &txn, 1, nil))
+		txn.App = server.CrdbInternalTxnStatsCached
+		require.NoError(t, sqlstatstestutil.InsertMockedIntoSystemTxnActivity(ctx, ie, &txn, nil))
+
+		return nil
+	}
+	testCases := []testCase{
+		{
+			name:         "activity and persisted tables empty",
+			tableSetupFn: func() error { return nil },
+			// We should attempt to read from the in-memory tables, since
+			// they are the last resort.
+			expectedStmtsTable: server.CrdbInternalStmtStatsCombined,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCombined,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{FetchMode: createTxnFetchMode(0)},
+			},
+		},
+		{
+			name:               "all tables have data in selected range",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsCached,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCached,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix()},
+				{
+					Start: defaultMockInsertedAggTs.Unix(),
+					End:   defaultMockInsertedAggTs.Unix(),
+				},
+			},
+		},
+		{
+			name:         "all tables have data but no start range is provided",
+			tableSetupFn: defaultMockOneEach,
+			// When no date range is provided, we should default to reading from
+			// persisted or in-memory (whichever has data first). In this case the
+			// persisted table has data.
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsPersisted,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{},
+				{End: defaultMockInsertedAggTs.Unix()},
+			},
+		},
+		{
+			name:               "all tables have data but not in the selected range",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsCombined,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCombined,
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Add(time.Hour).Unix()},
+				{End: defaultMockInsertedAggTs.Truncate(time.Hour * 2).Unix()},
+			},
+			isEmpty: true,
+		},
+		{
+			name:         "activity table has data in range with specified sort, fetchmode=txns",
+			tableSetupFn: defaultMockOneEach,
+			// For txn mode, we should not use the activity table for stmts.
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsCached,
+			// These sort options do exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(0)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(1)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(2)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(3)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(4)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(5)},
+			},
+		},
+		{
+			name:               "activity table has data in range with specified sort, fetchmode=stmts",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsCached,
+			expectedTxnsTable:  "",
+			// These sort options do exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(0)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(1)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(2)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(3)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(4)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(5)},
+			},
+		},
+		{
+			name:               "activity table has data in range, but selected sort is not on it, fetchmode=txns",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  server.CrdbInternalTxnStatsPersisted,
+			// These sort options do not exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(6)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(7)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(8)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(9)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(10)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(11)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(12)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(13)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(14)},
+			},
+		},
+		{
+			name:               "activity table has data in range, but selected sort is not on it, fetchmode=stmts",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  "",
+			// These sort options do not exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(6)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(7)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(8)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(9)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(10)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(11)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(12)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(13)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(14)},
+			},
+		},
+	}
+
+	client := srv.ApplicationLayer().GetStatusClient(t)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, tc.tableSetupFn())
+
+			defer func() {
+				// Reset tables.
+				conn.Exec(t, "SELECT crdb_internal.reset_sql_stats()")
+				conn.Exec(t, "SELECT crdb_internal.reset_activity_tables()")
+				conn.Exec(t, "SELECT 1")
+			}()
+
+			for _, r := range tc.reqs {
+				resp, err := client.CombinedStatementStats(ctx, &r)
+				require.NoError(t, err)
+
+				require.Equal(t, tc.expectedStmtsTable, resp.StmtsSourceTable, "req: %v", r)
+				require.Equal(t, tc.expectedTxnsTable, resp.TxnsSourceTable, "req: %v", r)
+
+				if tc.isEmpty {
+					continue
+				}
+
+				require.NotZero(t, len(resp.Statements), "req: %v", r)
+				// Verify we used the correct queries to return data.
+				require.Equal(t, tc.expectedStmtsTable, resp.Statements[0].Key.KeyData.App, "req: %v", r)
+				if tc.expectedTxnsTable == server.CrdbInternalTxnStatsCombined {
+					// For the combined query, we're using in-mem data and we set the
+					// app name there to the in-memory stmts table.
+					require.Equal(t, server.CrdbInternalStmtStatsCombined, resp.Transactions[0].StatsData.App, "req: %v", r)
+				} else if tc.expectedTxnsTable != "" {
+					require.NotZero(t, len(resp.Transactions))
+					require.Equal(t, tc.expectedTxnsTable, resp.Transactions[0].StatsData.App, "req: %v", r)
+				}
+			}
+
+		})
+	}
+}
+
+func createStmtFetchMode(
+	sort serverpb.StatsSortOptions,
+) *serverpb.CombinedStatementsStatsRequest_FetchMode {
+	return &serverpb.CombinedStatementsStatsRequest_FetchMode{
+		StatsType: serverpb.CombinedStatementsStatsRequest_StmtStatsOnly,
+		Sort:      sort,
+	}
+}
+func createTxnFetchMode(
+	sort serverpb.StatsSortOptions,
+) *serverpb.CombinedStatementsStatsRequest_FetchMode {
+	return &serverpb.CombinedStatementsStatsRequest_FetchMode{
+		StatsType: serverpb.CombinedStatementsStatsRequest_TxnStatsOnly,
+		Sort:      sort,
+	}
 }

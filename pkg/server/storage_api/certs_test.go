@@ -25,16 +25,18 @@ import (
 func TestCertificatesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer ts.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
 
 	var response serverpb.CertificatesResponse
 	if err := srvtestutils.GetStatusJSONProto(ts, "certificates/local", &response); err != nil {
 		t.Fatal(err)
 	}
 
-	// We expect 5 certificates: CA, node, and client certs for root, testuser, testuser2.
-	if a, e := len(response.Certificates), 5; a != e {
+	// We expect 6 certificates: CA, node, and client certs for root, testuser,
+	// testuser2, testuser3.
+	if a, e := len(response.Certificates), 6; a != e {
 		t.Errorf("expected %d certificates, found %d", e, a)
 	}
 

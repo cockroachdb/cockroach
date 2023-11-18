@@ -39,9 +39,13 @@ import (
 func TestAdminAPINonTableStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110012),
+		},
+	})
 	defer testCluster.Stopper().Stop(context.Background())
-	s := testCluster.Server(0)
+	s := testCluster.Server(0).ApplicationLayer()
 
 	// Skip TableStatsResponse.Stats comparison, since it includes data which
 	// aren't consistent (time, bytes).
@@ -80,7 +84,11 @@ func TestAdminAPINonTableStats(t *testing.T) {
 func TestRangeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
+		},
+	})
 	require.NoError(t, testCluster.WaitForFullReplication())
 	defer testCluster.Stopper().Stop(context.Background())
 	s := testCluster.Server(0)
@@ -165,9 +173,14 @@ func TestRangeCount(t *testing.T) {
 func TestStatsforSpanOnLocalMax(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
-	defer testCluster.Stopper().Stop(context.Background())
-	firstServer := testCluster.Server(0)
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// We want to look at all the ranges in the cluster.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+	firstServer := tc.Server(0)
 
 	underTest := roachpb.Span{
 		Key:    keys.LocalMax,
@@ -184,15 +197,26 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
-	defer testCluster.Stopper().Stop(context.Background())
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109501),
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
 
-	firstServer := testCluster.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	firstServer := tc.Server(0).ApplicationLayer()
 
-	// TODO(irfansharif): The data-distribution page and underyling APIs don't
-	// know how to deal with coalesced ranges. See #97942.
-	sqlDB.Exec(t, `SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = false`)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	{
+		// TODO(irfansharif): The data-distribution page and underyling APIs don't
+		// know how to deal with coalesced ranges. See #97942.
+		sysDB := sqlutils.MakeSQLRunner(tc.Server(0).SystemLayer().SQLConn(t))
+		sysDB.Exec(t, `SET CLUSTER SETTING spanconfig.range_coalescing.system.enabled = false`)
+		sysDB.Exec(t, `SET CLUSTER SETTING spanconfig.range_coalescing.application.enabled = false`)
+		// Make sure extra secondary tenants don't cause the endpoint to error.
+		sysDB.Exec(t, "CREATE TENANT 'app'")
+	}
 
 	// Create some tables.
 	sqlDB.Exec(t, `CREATE DATABASE roachblog`)
@@ -207,9 +231,6 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	// Test special characters in DB and table names.
 	sqlDB.Exec(t, `CREATE DATABASE "sp'ec\ch""ars"`)
 	sqlDB.Exec(t, `CREATE TABLE "sp'ec\ch""ars"."more\spec'chars" (id INT PRIMARY KEY)`)
-
-	// Make sure secondary tenants don't cause the endpoint to error.
-	sqlDB.Exec(t, "CREATE TENANT 'app'")
 
 	// Verify that we see their replicas in the DataDistribution response, evenly spread
 	// across the test cluster's three nodes.
@@ -296,11 +317,11 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 
 func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 	skip.UnderShort(b, "TODO: fix benchmark")
-	testCluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
-	defer testCluster.Stopper().Stop(context.Background())
+	tc := serverutils.StartCluster(b, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(context.Background())
 
-	firstServer := testCluster.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	firstServer := tc.Server(0).ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	sqlDB.Exec(b, `CREATE DATABASE roachblog`)
 
@@ -326,8 +347,15 @@ func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 func TestHotRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ts := rangetestutils.StartServer(t)
-	defer ts.Stopper().Stop(context.Background())
+
+	defer serverutils.TestingSetDefaultTenantSelectionOverride(
+		// bug: HotRanges not available with secondary tenants yet.
+		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109499),
+	)()
+
+	srv := rangetestutils.StartServer(t)
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
 
 	var hotRangesResp serverpb.HotRangesResponse
 	if err := srvtestutils.GetStatusJSONProto(ts, "hotranges", &hotRangesResp); err != nil {
@@ -382,8 +410,10 @@ func TestHotRangesResponse(t *testing.T) {
 func TestHotRanges2Response(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ts := rangetestutils.StartServer(t)
-	defer ts.Stopper().Stop(context.Background())
+
+	srv := rangetestutils.StartServer(t)
+	defer srv.Stopper().Stop(context.Background())
+	ts := srv.ApplicationLayer()
 
 	var hotRangesResp serverpb.HotRangesResponseV2
 	if err := srvtestutils.PostStatusJSONProto(ts, "v2/hotranges", &serverpb.HotRangesRequest{}, &hotRangesResp); err != nil {
@@ -419,8 +449,10 @@ func TestHotRanges2ResponseWithViewActivityOptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
 	db := sqlutils.MakeSQLRunner(sqlDB)
 
 	req := &serverpb.HotRangesRequest{}
@@ -450,7 +482,10 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// We want to look at all the ranges in the cluster.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	defer s.Stopper().Stop(ctx)
 
 	span := roachpb.Span{

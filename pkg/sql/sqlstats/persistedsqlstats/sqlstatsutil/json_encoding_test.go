@@ -36,7 +36,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	t.Run("statement_statistics", func(t *testing.T) {
-		data := genRandomData()
+		data := GenRandomData()
 		input := appstatspb.CollectedStatementStatistics{}
 
 		expectedMetadataStrTemplate := `
@@ -200,7 +200,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 
 		expectedMetadataStr := fillTemplate(t, expectedMetadataStrTemplate, data)
 		expectedStatisticsStr := fillTemplate(t, expectedStatisticsStrTemplate, data)
-		fillObject(t, reflect.ValueOf(&input), &data)
+		FillObject(t, reflect.ValueOf(&input), &data)
 
 		actualMetadataJSON, err := BuildStmtMetadataJSON(&input)
 		require.NoError(t, err)
@@ -228,7 +228,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 	// new parameter, so this test is to confirm that all other parameters will be set and
 	// the new one will be empty, without breaking the decoding process.
 	t.Run("statement_statistics with new parameter", func(t *testing.T) {
-		data := genRandomData()
+		data := GenRandomData()
 		expectedStatistics := appstatspb.CollectedStatementStatistics{}
 
 		expectedMetadataStrTemplate := `
@@ -385,7 +385,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 
 		fillTemplate(t, expectedMetadataStrTemplate, data)
 		fillTemplate(t, expectedStatisticsStrTemplate, data)
-		fillObject(t, reflect.ValueOf(&expectedStatistics), &data)
+		FillObject(t, reflect.ValueOf(&expectedStatistics), &data)
 
 		actualMetadataJSON, err := BuildStmtMetadataJSON(&expectedStatistics)
 		require.NoError(t, err)
@@ -412,7 +412,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 	})
 
 	t.Run("transaction_statistics", func(t *testing.T) {
-		data := genRandomData()
+		data := GenRandomData()
 
 		input := appstatspb.CollectedTransactionStatistics{
 			StatementFingerprintIDs: []appstatspb.StmtFingerprintID{
@@ -552,7 +552,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 }
 		 `
 		expectedStatisticsStr := fillTemplate(t, expectedStatisticsStrTemplate, data)
-		fillObject(t, reflect.ValueOf(&input), &data)
+		FillObject(t, reflect.ValueOf(&input), &data)
 
 		actualMetadataJSON, err := BuildTxnMetadataJSON(&input)
 		require.NoError(t, err)
@@ -574,7 +574,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 	})
 
 	t.Run("statement aggregated metadata", func(t *testing.T) {
-		data := genRandomData()
+		data := GenRandomData()
 
 		input := appstatspb.AggregatedStatementMetadata{}
 
@@ -596,7 +596,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 }
 		 `
 		expectedAggregatedMetadataStr := fillTemplate(t, expectedAggregatedMetadataStrTemplate, data)
-		fillObject(t, reflect.ValueOf(&input), &data)
+		FillObject(t, reflect.ValueOf(&input), &data)
 
 		actualMetadataJSON, err := BuildStmtDetailsMetadataJSON(&input)
 		require.NoError(t, err)
@@ -607,6 +607,15 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 		err = DecodeAggregatedMetadataJSON(actualMetadataJSON, &actualJSONUnmarshalled)
 		require.NoError(t, err)
 		require.Equal(t, input, actualJSONUnmarshalled)
+	})
+
+	t.Run("random metadata JSON structure and values", func(t *testing.T) {
+		input := `{"HcEN0pht": null, "bar": [false, "foobar", true], "c": {"8r8qmK": 1.4687388461922657, "vbF3TH0I": null, "yNNmkGr6": 2.0887609844362762}, "db": {"KKDmambo": 0.10124464952424544}, "foobar": {"LM8G": {"zniUw24Z": 0.14422951431111297}, "bar": "lp7jfTq2"}, "r0O": false}`
+		value, err := json.ParseJSON(input)
+		require.NoError(t, err)
+		var actualJSONUnmarshalled appstatspb.AggregatedStatementMetadata
+		err = DecodeAggregatedMetadataJSON(value, &actualJSONUnmarshalled)
+		require.NoError(t, err)
 	})
 }
 

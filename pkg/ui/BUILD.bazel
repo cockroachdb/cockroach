@@ -38,14 +38,12 @@ test_suite(
     tests = [
         "//pkg/ui/workspaces/cluster-ui:lint",
         "//pkg/ui/workspaces/db-console:lint",
-        "//pkg/ui/workspaces/e2e-tests:lint",
     ],
 )
 
 go_test(
     name = "ui_test",
     srcs = ["ui_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":ui"],
     deps = [
         "//pkg/base",

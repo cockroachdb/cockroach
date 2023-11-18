@@ -858,12 +858,13 @@ func (b *exportedSpanBuilder) build() exportedSpan {
 func fileSSTSinkTestSetUp(
 	ctx context.Context, t *testing.T, tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner,
 ) (*fileSSTSink, cloud.ExternalStorage) {
+	srv := tc.Servers[0].ApplicationLayer()
 	store, err := cloud.ExternalStorageFromURI(ctx, "userfile:///0",
 		base.ExternalIODirConfig{},
-		tc.Servers[0].ClusterSettings(),
+		srv.ClusterSettings(),
 		blobs.TestEmptyBlobClientFactory,
 		username.RootUserName(),
-		tc.Servers[0].InternalDB().(isql.DB),
+		srv.InternalDB().(isql.DB),
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
@@ -876,7 +877,7 @@ func fileSSTSinkTestSetUp(
 		id:       1,
 		enc:      nil,
 		progCh:   progCh,
-		settings: &tc.Servers[0].ClusterSettings().SV,
+		settings: &srv.ClusterSettings().SV,
 	}
 
 	sink := makeFileSSTSink(sinkConf, store)

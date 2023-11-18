@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/kr/pretty"
 )
@@ -56,8 +57,8 @@ func TestJSONFormats(t *testing.T) {
 		}(),
 		// Normal (non-header) entries.
 		{},
-		{IDPayload: serverident.IDPayload{TenantIDInternal: "1", ClusterID: "abc", NodeID: "123"}},
-		{IDPayload: serverident.IDPayload{TenantIDInternal: "456", SQLInstanceID: "123"}},
+		{IDPayload: serverident.IDPayload{TenantID: "1", TenantName: "system", ClusterID: "abc", NodeID: "123"}},
+		{IDPayload: serverident.IDPayload{TenantID: "456", TenantName: "vc42", SQLInstanceID: "123"}},
 		makeStructuredEntry(ctx, severity.INFO, channel.DEV, 0, &logpb.TestingStructuredLogEvent{
 			CommonEventDetails: logpb.CommonEventDetails{
 				Timestamp: 123,
@@ -119,7 +120,7 @@ func TestJsonDecode(t *testing.T) {
 				for {
 					var e logpb.Entry
 					if err := d.Decode(&e); err != nil {
-						if err == io.EOF {
+						if err == io.EOF || errors.Is(err, ErrMalformedLogEntry) {
 							break
 						}
 						td.Fatalf(t, "error while decoding: %v", err)

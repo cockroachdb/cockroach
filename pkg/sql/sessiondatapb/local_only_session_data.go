@@ -293,12 +293,16 @@ const (
 	// Normal denotes an end user QoS level unchanged from the default.
 	Normal = QoSLevel(admissionpb.NormalPri)
 
+	// LockingNormal denotes an internal increased priority for normal
+	// transactions that are acquiring locks.
+	LockingNormal = QoSLevel(admissionpb.LockingNormalPri)
+
 	// UserHigh denotes an end user QoS level higher than the default.
 	UserHigh = QoSLevel(admissionpb.UserHighPri)
 
-	// Locking denotes an internal increased priority for transactions that are
-	// acquiring locks.
-	Locking = QoSLevel(admissionpb.LockingPri)
+	// LockingHigh denotes an internal increased priority for UserHigh
+	// transactions that are acquiring locks.
+	LockingHigh = QoSLevel(admissionpb.LockingUserHighPri)
 
 	// SystemHigh denotes the maximum system QoS level, which is not settable as a
 	// session default_transaction_quality_of_service value.
@@ -329,18 +333,24 @@ const (
 	// TTLLowName is the string value to display indicating a TTLLow QoS level.
 	TTLLowName = "ttl_low"
 
-	// LockingName is the string value to display indicating a Locking QoS level.
-	LockingName = "locking"
+	// LockingNormalName is the string value to display indicating a
+	// LockingNormal QoS level.
+	LockingNormalName = "locking-normal"
+
+	// LockingHighName is the string value to display indicating a LockingHigh
+	// QoS level.
+	LockingHighName = "locking-high"
 )
 
 var qosLevelsDict = map[QoSLevel]string{
-	SystemLow:  SystemLowName,
-	TTLLow:     TTLLowName,
-	UserLow:    UserLowName,
-	Normal:     NormalName,
-	UserHigh:   UserHighName,
-	Locking:    LockingName,
-	SystemHigh: SystemHighName,
+	SystemLow:     SystemLowName,
+	TTLLow:        TTLLowName,
+	UserLow:       UserLowName,
+	Normal:        NormalName,
+	LockingNormal: LockingNormalName,
+	UserHigh:      UserHighName,
+	LockingHigh:   LockingHighName,
+	SystemHigh:    SystemHighName,
 }
 
 // ParseQoSLevelFromString converts a string into a QoSLevel

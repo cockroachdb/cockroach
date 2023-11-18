@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -34,17 +35,13 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-
-	testTenants := s.TestTenants()
-	if len(testTenants) > 0 {
-		kvDB = testTenants[0].DB()
-		execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
-	}
 
 	var m sessiondatapb.MigratableSession
 	var sessionSerialized []byte
@@ -68,11 +65,12 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		})
 		defer cleanup()
 		ec := pi.EvalContext()
-		return newReplicationStreamManagerWithPrivilegesCheck(ctx, ec, pi.InternalSQLTxn())
+		return newReplicationStreamManagerWithPrivilegesCheck(ctx, ec, pi.InternalSQLTxn(), clusterunique.ID{})
 	}
 
 	tDB.Exec(t, "CREATE ROLE somebody")
 	tDB.Exec(t, "GRANT SYSTEM REPLICATION TO somebody")
+	tDB.Exec(t, "CREATE ROLE anybody")
 
 	for _, tc := range []struct {
 		user         string
@@ -82,12 +80,14 @@ func TestReplicationManagerRequiresReplicationPrivilege(t *testing.T) {
 		{user: "admin", expErr: "", isEnterprise: true},
 		{user: "root", expErr: "", isEnterprise: true},
 		{user: "somebody", expErr: "", isEnterprise: true},
-		{user: "nobody", expErr: "user nobody does not have REPLICATION privilege on global", isEnterprise: true},
+		{user: "anybody", expErr: "user anybody does not have REPLICATION system privilege", isEnterprise: true},
+		{user: "nobody", expErr: `role/user "nobody" does not exist`, isEnterprise: true},
 
 		{user: "admin", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
 		{user: "root", expErr: " use of REPLICATION requires an enterprise license", isEnterprise: false},
 		{user: "somebody", expErr: "use of REPLICATION requires an enterprise license", isEnterprise: false},
-		{user: "nobody", expErr: "user nobody does not have REPLICATION privilege on global", isEnterprise: false},
+		{user: "anybody", expErr: "user anybody does not have REPLICATION system privilege", isEnterprise: false},
+		{user: "nobody", expErr: `role/user "nobody" does not exist`, isEnterprise: false},
 	} {
 		t.Run(fmt.Sprintf("%s/ent=%t", tc.user, tc.isEnterprise), func(t *testing.T) {
 			if tc.isEnterprise {

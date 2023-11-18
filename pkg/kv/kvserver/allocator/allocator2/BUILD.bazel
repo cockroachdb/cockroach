@@ -28,7 +28,6 @@ go_test(
         "load_test.go",
         "memo_helper_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":allocator2"],
     deps = [

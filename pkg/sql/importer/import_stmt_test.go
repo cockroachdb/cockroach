@@ -42,9 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -65,7 +64,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -73,7 +71,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -1396,7 +1393,7 @@ func TestImportIntoUserDefinedTypes(t *testing.T) {
 	ctx := context.Background()
 	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -1690,17 +1687,16 @@ func TestImportRowLimit(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Also create a pgx connection so we can check notices.
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := tc.ApplicationLayer(0).PGUrl(
 		t,
-		tc.ApplicationLayer(0).AdvSQLAddr(),
-		"TestImportRowLimit",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestImportRowLimit"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanup()
 	config, err := pgx.ParseConfig(pgURL.String())
@@ -2035,7 +2031,7 @@ func TestFailedImportGC(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "pgdump")
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails within a test tenant. This may be because we're trying
 		// to access files in nodelocal://1, which is off node. More
 		// investigation is required. Tracked with #76378.
@@ -2138,7 +2134,7 @@ func TestImportIntoCSVCancel(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				BulkAdderFlushesEveryBatch: true,
@@ -2199,7 +2195,7 @@ func TestImportCSVStmt(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More
 		// investigation is required. Tracked with #76378.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
@@ -2734,7 +2730,7 @@ func TestImportFeatureFlag(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
@@ -2772,7 +2768,7 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "pgdump")
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		// Test fails when run within a test tenant. More investigation
 		// is required. Tracked with #76378.
 		DefaultTestTenant: base.TODOTestTenantDisabled,
@@ -2886,7 +2882,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 
@@ -2939,106 +2935,6 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 }
 
-// TestImportRetriesBreakerOpenFailure tests that errors resulting from open
-// breakers on the coordinator node are retried.
-func TestImportRetriesBreakerOpenFailure(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderShort(t)
-	skip.UnderRace(t, "takes >1min under race")
-
-	const nodes = 3
-	numFiles := nodes + 2
-	rowsPerFile := 1
-
-	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     datapathutils.TestDataPath(t, "csv")}})
-	defer tc.Stopper().Stop(ctx)
-
-	aboutToRunDSP := make(chan struct{})
-	allowRunDSP := make(chan struct{})
-	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
-				r := raw.(*importResumer)
-				r.testingKnobs.beforeRunDSP = func() error {
-					select {
-					case aboutToRunDSP <- struct{}{}:
-					case <-time.After(testutils.DefaultSucceedsSoonDuration):
-						return errors.New("timed out on aboutToRunDSP")
-					}
-					select {
-					case <-allowRunDSP:
-					case <-time.After(testutils.DefaultSucceedsSoonDuration):
-						return errors.New("timed out on allowRunDSP")
-					}
-					return nil
-				}
-				return r
-			})
-	}
-
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	setSmallIngestBufferSizes(t, sqlDB)
-	sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-	var tableID int64
-	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
-
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
-		testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerFile)
-		fileListStr := strings.Join(testFiles.files, ", ")
-		redactedFileListStr := strings.ReplaceAll(fileListStr, "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")
-		query := fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, fileListStr)
-		sqlDB.Exec(t, query)
-		return jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
-			Username:      username.RootUserName(),
-			Description:   fmt.Sprintf(`IMPORT INTO defaultdb.public.t(a, b) CSV DATA (%s)`, redactedFileListStr),
-			DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
-		})
-	})
-
-	// On the first attempt, we trip the node 3 breaker between distsql planning
-	// and actually running the plan.
-	select {
-	case <-aboutToRunDSP:
-	case <-time.After(testutils.DefaultSucceedsSoonDuration):
-		t.Fatal("timed out on aboutToRunDSP")
-	}
-	{
-		b, ok := tc.Server(0).NodeDialer().(*nodedialer.Dialer).GetCircuitBreaker(roachpb.NodeID(3), rpc.DefaultClass)
-		require.True(t, ok)
-		undo := circuit.TestingSetTripped(b, errors.New("boom"))
-		defer undo()
-	}
-
-	timeout := testutils.DefaultSucceedsSoonDuration
-	select {
-	case allowRunDSP <- struct{}{}:
-	case <-time.After(timeout):
-		t.Fatalf("timed out on allowRunDSP attempt 1")
-	}
-
-	// The failure above should be retried. We expect this to succeed even if we
-	// don't reset the breaker because node 3 should no longer be included in
-	// the plan.
-	select {
-	case <-aboutToRunDSP:
-	case <-time.After(timeout):
-		t.Fatalf("timed out on aboutToRunDSP")
-	}
-	select {
-	case allowRunDSP <- struct{}{}:
-	case <-time.After(timeout):
-		t.Fatalf("timed out on allowRunDSP")
-	}
-	require.NoError(t, g.Wait())
-}
-
 // TODO(adityamaru): Tests still need to be added incrementally as
 // relevant IMPORT INTO logic is added. Some of them include:
 // -> FK and constraint violation
@@ -3059,7 +2955,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
@@ -3957,7 +3853,7 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 	require.NoError(b, err)
 	testFileBase := fmt.Sprintf("/%s", filepath.Base(f.Name()))
 
-	tc := serverutils.StartNewTestCluster(b, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartCluster(b, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
@@ -4224,7 +4120,7 @@ func TestImportDefault(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
@@ -4614,7 +4510,7 @@ func TestUniqueUUID(t *testing.T) {
 	)
 	ctx := context.Background()
 	args := base.TestServerArgs{}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	connDB := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
@@ -4651,7 +4547,7 @@ func TestImportDefaultNextVal(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
@@ -4753,7 +4649,9 @@ func TestImportDefaultNextVal(t *testing.T) {
 					if util.RaceEnabled {
 						expectedVal = test.seqToNumNextval[seqName].expectedImportChunkAllocsUnderRace
 					}
-					require.Equal(t, expectedVal, seqVal)
+					// The seqVal may have advanced further due to retries, so it may be
+					// greater than the expectedVal.
+					require.LessOrEqual(t, expectedVal, seqVal)
 				}
 			})
 		}
@@ -4915,7 +4813,7 @@ func TestImportComputed(t *testing.T) {
 
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 
@@ -5281,6 +5179,10 @@ func (d fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error)
 	return nil
 }
 
+func (d fakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // TestImportControlJobRBAC tests that a root user can control any job, but
 // a non-admin user can only control jobs which are created by them.
 // TODO(adityamaru): Verifying the state of the job after the control command
@@ -5291,7 +5193,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			// Test fails when run within a test tenant. More investigation
 			// is required. Tracked with #76378.
@@ -5417,9 +5319,9 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressWithIssue(t, 102839, "flaky test")
-	skip.UnderDeadlockWithIssue(t, 102839, "flaky test")
-	skip.UnderRaceWithIssue(t, 102839, "flaky test")
+	skip.UnderStressWithIssue(t, 108547, "flaky test")
+	skip.UnderDeadlockWithIssue(t, 108547, "flaky test")
+	skip.UnderRaceWithIssue(t, 108547, "flaky test")
 
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
@@ -5429,7 +5331,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 3, params)
+	tc := serverutils.StartCluster(t, 3, params)
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -5468,10 +5370,15 @@ func TestImportWorkerFailure(t *testing.T) {
 	tc.StopServer(1)
 
 	close(allowResponse)
-	// We expect the statement to retry since it should have encountered a
-	// retryable error.
+	// We expect the IMPORT statement to usually retry since it should have
+	// encountered a retryable error. We don't currently catch all such retryable
+	// errors, however, so in some cases the IMPORT statement will return the
+	// error to the client. In this case we verify that the import was completely
+	// rolled back.
 	if err := <-errCh; err != nil {
-		t.Fatal(err)
+		t.Logf("%s failed, checking that imported data was completely removed: %q", query, err)
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t ORDER BY i`, [][]string{})
+		return
 	}
 
 	// But the job should be restarted and succeed eventually.
@@ -5518,7 +5425,7 @@ func TestImportMysql(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
@@ -5647,7 +5554,7 @@ func TestImportIntoMysql(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	data := `INSERT INTO t VALUES (1, 2), (3, 4)`
@@ -5674,7 +5581,7 @@ func TestImportDelimited(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "mysqlout")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -5764,7 +5671,7 @@ func TestImportPgCopy(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "pgcopy")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -5850,7 +5757,7 @@ func TestImportPgDump(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6039,7 +5946,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 1 /* nodes */, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 1 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6221,7 +6128,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 	args := base.TestServerArgs{ExternalIODir: baseDir}
 
 	t.Run("geo_shp2pgsql.sql", func(t *testing.T) {
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6264,7 +6171,7 @@ func TestImportPgDumpGeo(t *testing.T) {
 	})
 
 	t.Run("geo_ogr2ogr.sql", func(t *testing.T) {
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6294,7 +6201,7 @@ func TestImportPgDumpDropTable(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6379,7 +6286,6 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	baseDir := datapathutils.TestDataPath(t, "pgdump")
 	mkArgs := func() base.TestServerArgs {
 		s := cluster.MakeTestingClusterSettings()
-		storage.MVCCRangeTombstonesEnabledInMixedClusters.Override(ctx, &s.SV, true)
 		return base.TestServerArgs{
 			Settings:      s,
 			ExternalIODir: baseDir,
@@ -6394,7 +6300,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	// Simple schema test which creates 3 schemas with a single `test` table in
 	// each schema.
 	t.Run("schema.sql", func(t *testing.T) {
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: mkArgs()})
+		tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: mkArgs()})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6405,7 +6311,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		// Check that we have imported 4 schemas.
 		expectedSchemaNames := [][]string{{"bar"}, {"baz"}, {"foo"}, {"public"}}
 		sqlDB.CheckQueryResults(t,
-			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner IS NOT NULL ORDER BY schema_name`,
+			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner != 'node' ORDER BY schema_name`,
 			expectedSchemaNames)
 
 		// Check that we have a test table in each schema with the expected content.
@@ -6447,7 +6353,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	})
 
 	t.Run("target-table-schema.sql", func(t *testing.T) {
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: mkArgs()})
+		tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: mkArgs()})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6484,7 +6390,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE schemadb.public.test`)
 		}
 		sqlDB.CheckQueryResults(t,
-			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner <> 'NULL' ORDER BY schema_name`,
+			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner <> 'node' ORDER BY schema_name`,
 			[][]string{{"bar"}, {"public"}})
 	})
 
@@ -6494,7 +6400,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		// Tracked with #76378.
 		args := mkArgs()
 		args.DefaultTestTenant = base.TODOTestTenantDisabled
-		tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+		tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 		defer tc.Stopper().Stop(ctx)
 		conn := tc.ServerConn(0)
 		sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6592,7 +6498,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		}
 
 		// As a final sanity check that the schemas have been removed.
-		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner IS NOT NULL`,
+		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner != 'node'`,
 			[][]string{{"public"}})
 
 		// Check that the database descriptor has been updated with the removed schemas.
@@ -6610,7 +6516,7 @@ func TestImportCockroachDump(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t)
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6674,7 +6580,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 		DefaultTestTenant: base.TODOTestTenantDisabled,
 		ExternalIODir:     baseDir,
 	}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
@@ -6709,7 +6615,7 @@ func TestImportAvro(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
@@ -6847,7 +6753,7 @@ func TestImportClientDisconnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	args := base.TestClusterArgs{}
-	tc := serverutils.StartNewTestCluster(t, 1, args)
+	tc := serverutils.StartCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
 	// TODO(dt): add this to testcluster interface and uncomment.
@@ -6880,8 +6786,9 @@ func TestImportClientDisconnect(t *testing.T) {
 	// Make credentials for the new connection.
 	runner.Exec(t, `CREATE USER testuser`)
 	runner.Exec(t, `GRANT admin TO testuser`)
-	pgURL, cleanup := sqlutils.PGUrl(t, tc.ApplicationLayer(0).AdvSQLAddr(),
-		"TestImportClientDisconnect-testuser", url.User("testuser"))
+	pgURL, cleanup := tc.ApplicationLayer(0).PGUrl(t,
+		serverutils.CertsDirPrefix("TestImportClientDisconnect-testuser"), serverutils.User("testuser"),
+	)
 	defer cleanup()
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v STRING)")
 
@@ -7035,7 +6942,7 @@ func TestDetachedImport(t *testing.T) {
 	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	connDB := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
@@ -7108,12 +7015,14 @@ func TestImportRowErrorLargeRows(t *testing.T) {
 		_, _ = w.Write([]byte("\n"))
 	}))
 	defer srv.Close()
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	connDB := tc.ServerConn(0)
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
 	// Our input file has an 8MB row
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.raft.command.max_size = '4MiB'`)
+	for _, l := range []serverutils.ApplicationLayerInterface{tc.Server(0), tc.Server(0).SystemLayer()} {
+		kvserverbase.MaxCommandSize.Override(ctx, &l.ClusterSettings().SV, 4<<20)
+	}
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 	sqlDB.Exec(t, "CREATE TABLE simple (s string)")
 	defer sqlDB.Exec(t, "DROP table simple")
@@ -7141,7 +7050,7 @@ func TestImportJobEventLogging(t *testing.T) {
 	args.DefaultTestTenant = base.TODOTestTenantDisabled
 	args.Knobs = base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}
 	params := base.TestClusterArgs{ServerArgs: args}
-	tc := serverutils.StartNewTestCluster(t, nodes, params)
+	tc := serverutils.StartCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
 
 	var forceFailure bool
@@ -7219,7 +7128,7 @@ func TestImportDefautIntSizeSetting(t *testing.T) {
 	ctx := context.Background()
 	baseDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -7360,7 +7269,7 @@ func TestUDTChangeDuringImport(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			requestReceived := make(chan struct{})
 			allowResponse := make(chan struct{})
-			tc := serverutils.StartNewTestCluster(
+			tc := serverutils.StartCluster(
 				t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 					ExternalIODir: baseDir,
 					Knobs: base.TestingKnobs{
@@ -7438,7 +7347,7 @@ func TestImportIntoPartialIndexes(t *testing.T) {
 	ctx := context.Background()
 	baseDir := filepath.Join("testdata", "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
@@ -7546,7 +7455,7 @@ func TestImportIntoWithHashShardedIndex(t *testing.T) {
 	ctx := context.Background()
 	baseDir := filepath.Join("testdata", "avro")
 	args := base.TestServerArgs{ExternalIODir: baseDir}
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t, 1, base.TestClusterArgs{ServerArgs: args})
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)

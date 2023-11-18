@@ -22,6 +22,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
         "@com_github_slack_go_slack//:slack",
+        "@org_golang_x_exp//maps",
         "@org_golang_x_sync//errgroup",
     ],
 )
@@ -29,7 +30,6 @@ go_library(
 go_test(
     name = "cloud_test",
     srcs = ["cloud_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":cloud"],
     deps = [
         "@com_github_aws_aws_sdk_go_v2_service_ec2//types",

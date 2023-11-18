@@ -173,7 +173,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 				hlc.MaxTimestamp, storage.MVCCScanOptions{})
 			if err != nil {
 				// Wait for the intent to be resolved.
-				if errors.HasType(err, (*kvpb.WriteIntentError)(nil)) {
+				if errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
 					return err
 				}
 				t.Fatal(err)

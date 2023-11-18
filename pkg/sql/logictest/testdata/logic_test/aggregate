@@ -3968,3 +3968,17 @@ FROM t;
 
 statement ok
 RESET null_ordered_last
+
+# Regression test for #109629. Implicit casts should be added during
+# type-checking when necessary.
+query T
+SELECT array_cat_agg(ARRAY[(1::INT,), (1::FLOAT8,)]);
+----
+{(1),(1)}
+
+query T
+SELECT array_cat_agg(
+  ARRAY[(416644234484367676:::INT8,),(NULL,),((-0.12116245180368423):::FLOAT8,)]
+)
+----
+{(4.166442344843677e+17),(),(-0.12116245180368423)}

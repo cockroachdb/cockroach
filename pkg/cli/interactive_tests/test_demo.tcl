@@ -36,7 +36,9 @@ eexpect "http://127.0.0.1:8080"
 eexpect "(sql)"
 eexpect "root"
 eexpect ":26257/movr"
-eexpect "movr>"
+# Check that the system tenant's name is not printed in the prompt since we
+# don't have any application tenants.
+eexpect ":26257/movr>"
 send_eof
 eexpect eof
 end_test

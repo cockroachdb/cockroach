@@ -85,7 +85,7 @@ num=0
 # --------------------------------
 
 # req2 begins evaluating and hits the replicated intent. However, before
-# handle-write-intent-error, it pauses.
+# handle-lock-conflict-error, it pauses.
 sequence req=req2
 ----
 [2] sequence req2: sequencing request
@@ -129,16 +129,16 @@ sequence req=req4
 [3] sequence req4: scanning lock table for conflicting locks
 [3] sequence req4: sequencing complete, returned guard
 
-handle-write-intent-error req=req4 lease-seq=3
-  intent txn=txn3 key=k
+handle-lock-conflict-error req=req4 lease-seq=3
+  lock txn=txn3 key=k
 ----
-[4] handle write intent error req4: handled conflicting intents on ‹"k"›, released latches
+[4] handle lock conflict error req4: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
 
 sequence req=req4
 ----
@@ -146,22 +146,22 @@ sequence req=req4
 [5] sequence req4: acquiring latches
 [5] sequence req4: scanning lock table for conflicting locks
 [5] sequence req4: waiting in lock wait-queues
-[5] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 1)
-[5] sequence req4: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[5] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 1)
+[5] sequence req4: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req4: pushing timestamp of txn 00000003 above 10.000000000,0
 [5] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
 
-handle-write-intent-error req=req2 lease-seq=1
-  intent txn=txn1 key=k
+handle-lock-conflict-error req=req2 lease-seq=1
+  lock txn=txn1 key=k
 ----
-[6] handle write intent error req2: intent on ‹"k"› discovered but not added to disabled lock table
-[6] handle write intent error req2: handled conflicting intents on ‹"k"›, released latches
+[6] handle lock conflict error req2: intent on ‹"k"› discovered but not added to disabled lock table
+[6] handle lock conflict error req2: handled conflicting locks on ‹"k"›, released latches
 
 debug-lock-table
 ----
 num=1
  lock: "k"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
    waiting readers:
     req: 3, txn: 00000004-0000-0000-0000-000000000000
    distinguished req: 3
@@ -172,8 +172,8 @@ sequence req=req2
 [7] sequence req2: acquiring latches
 [7] sequence req2: scanning lock table for conflicting locks
 [7] sequence req2: waiting in lock wait-queues
-[7] sequence req2: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"k"› (queuedWriters: 0, queuedReaders: 2)
-[7] sequence req2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[7] sequence req2: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"k"› (queuedLockingRequests: 0, queuedReaders: 2)
+[7] sequence req2: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [7] sequence req2: pushing timestamp of txn 00000003 above 10.000000000,0
 [7] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
 

@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -181,9 +182,9 @@ type planner struct {
 	internalSQLTxn internalTxn
 
 	atomic struct {
-		// innerPlansMustUseLeafTxn is set to 1 if the "outer" plan is using
-		// the LeafTxn forcing the "inner" plans to use the LeafTxns too. An
-		// example of this is apply-join iterations when the main query has
+		// innerPlansMustUseLeafTxn is a counter that is non-zero if the "outer"
+		// plan is using the LeafTxn forcing the "inner" plans to use the LeafTxns,
+		// too. An example of this is apply-join iterations when the main query has
 		// concurrency.
 		//
 		// Note that even though the planner is not safe for concurrent usage,
@@ -195,7 +196,7 @@ type planner struct {
 		// planNodeToRowSource adapter before the "outer" query figured out that
 		// it must use the LeafTxn. Solving that issue properly is not trivial
 		// and is tracked in #41992.
-		innerPlansMustUseLeafTxn uint32
+		innerPlansMustUseLeafTxn int32
 	}
 
 	monitor *mon.BytesMonitor
@@ -404,6 +405,7 @@ func newInternalPlanner(
 	p.semaCtx.NameResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
+	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(execCfg.Settings.Version)
 
 	plannerMon := mon.NewMonitor(redact.Sprintf("internal-planner.%s.%s", user, opName),
 		mon.MemoryResource,
@@ -903,6 +905,7 @@ func (p *planner) resetPlanner(
 	p.semaCtx.NameResolver = p
 	p.semaCtx.DateStyle = sd.GetDateStyle()
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
+	p.semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(p.execCfg.Settings.Version)
 
 	p.autoCommit = false
 
@@ -918,12 +921,12 @@ func (p *planner) resetPlanner(
 func (p *planner) GetReplicationStreamManager(
 	ctx context.Context,
 ) (eval.ReplicationStreamManager, error) {
-	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn())
+	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
 }
 
 // GetStreamIngestManager returns a StreamIngestManager.
 func (p *planner) GetStreamIngestManager(ctx context.Context) (eval.StreamIngestManager, error) {
-	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn())
+	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn(), p.ExtendedEvalContext().SessionID)
 }
 
 // SpanStats returns a stats for the given span of keys.
@@ -962,7 +965,7 @@ func (p *planner) GetDetailsForSpanStats(
 	return p.QueryIteratorEx(
 		ctx,
 		"crdb_internal.database_span_stats",
-		sessiondata.NoSessionDataOverride,
+		sessiondata.NodeUserSessionDataOverride,
 		query,
 		args...,
 	)
@@ -980,4 +983,14 @@ func (p *planner) MaybeReallocateAnnotations(numAnnotations tree.AnnotationIdx) 
 // Optimizer is part of the eval.Planner interface.
 func (p *planner) Optimizer() interface{} {
 	return p.optPlanningCtx.Optimizer()
+}
+
+// AutoCommit is part of the eval.Planner interface.
+func (p *planner) AutoCommit() bool {
+	return p.autoCommit
+}
+
+// mustUseLeafTxn returns true if inner plans must use a leaf transaction.
+func (p *planner) mustUseLeafTxn() bool {
+	return atomic.LoadInt32(&p.atomic.innerPlansMustUseLeafTxn) >= 1
 }

@@ -18,7 +18,6 @@ go_test(
         "fingerprint_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":fingerprintutils",
         "//pkg/base",

@@ -36,7 +36,9 @@ func TestChangefeedNemeses(t *testing.T) {
 		// TODO(dan): Ugly hack to disable `eventPause` in sinkless feeds. See comment in
 		// `RunNemesis` for details.
 		isSinkless := strings.Contains(t.Name(), "sinkless")
-		v, err := cdctest.RunNemesis(f, s.DB, isSinkless, withLegacySchemaChanger, rng)
+		isCloudstorage := strings.Contains(t.Name(), "cloudstorage")
+
+		v, err := cdctest.RunNemesis(f, s.DB, isSinkless, isCloudstorage, withLegacySchemaChanger, rng)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -46,12 +48,13 @@ func TestChangefeedNemeses(t *testing.T) {
 	}
 
 	// Tenant tests disabled because ALTER TABLE .. SPLIT is not
-	// support in multi-tenancy mode:
+	// supported with cluster virtualization:
 	//
-	// nemeses_test.go:39: pq: unimplemented: operation is
-	// unsupported in multi-tenancy mode
+	// nemeses_test.go:39: pq: unimplemented: operation is unsupported inside virtual clusters
+	//
+	// TODO(knz): This seems incorrect, see issue #109417.
 	cdcTest(t, testFn, feedTestNoTenants)
-	log.Flush()
+	log.FlushFiles()
 	entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 		regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)
 	if err != nil {

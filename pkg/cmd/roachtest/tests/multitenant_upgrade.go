@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +34,8 @@ func registerMultiTenantUpgrade(r registry.Registry) {
 		Name:              "multitenant-upgrade",
 		Timeout:           1 * time.Hour,
 		Cluster:           r.MakeClusterSpec(2),
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Owner:             registry.OwnerMultiTenant,
 		NonReleaseBlocker: false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -77,32 +78,18 @@ func runMultiTenantUpgrade(
 ) {
 	// Update this map with every new release.
 	versionToMinSupportedVersion := map[string]string{
-		"23.2": "22.2",
+		"23.2": "23.1",
+		"24.1": "23.1",
 	}
 	curBinaryMajorAndMinorVersion := getMajorAndMinorVersionOnly(v)
 	currentBinaryMinSupportedVersion, ok := versionToMinSupportedVersion[curBinaryMajorAndMinorVersion]
 	require.True(t, ok, "current binary '%s' not found in 'versionToMinSupportedVersion' map", curBinaryMajorAndMinorVersion)
 
-	getPredecessorVersion := func() string {
-		predecessor, err := release.LatestPredecessor(v)
-		require.NoError(t, err)
+	predecessorVersionStr, err := release.LatestPredecessor(v)
+	require.NoError(t, err)
+	predecessor := clusterupgrade.MustParseVersion(predecessorVersionStr)
 
-		// Hard-code the pre-decessor release to 23.1.4 if 23.1.9 is not out yet because
-		// the test is in-compatible with 23.1.{5,6,7,8} due to an erroneous PR merged on the 23.1 branch.
-		// See https://github.com/cockroachdb/cockroach/pull/108202 for more context.
-		parsedPredecessor := strings.Split(predecessor, ".")
-		major := parsedPredecessor[0]
-		minor := parsedPredecessor[1]
-		patch, err := strconv.Atoi(parsedPredecessor[2])
-		require.NoError(t, err)
-		if major == "23" && minor == "1" && patch < 9 {
-			predecessor = "23.1.4"
-		}
-		return predecessor
-	}
-
-	predecessor := getPredecessorVersion()
-	currentBinary := uploadVersion(ctx, t, c, c.All(), clusterupgrade.MainVersion)
+	currentBinary := uploadVersion(ctx, t, c, c.All(), clusterupgrade.CurrentVersion())
 	predecessorBinary := uploadVersion(ctx, t, c, c.All(), predecessor)
 
 	kvNodes := c.Node(1)
@@ -266,7 +253,7 @@ func runMultiTenantUpgrade(
 
 	finalVersion := tenant11aRunner.QueryStr(t, "SELECT * FROM crdb_internal.node_executable_version();")[0][0]
 	// Remove patch release from predecessorVersion.
-	predecessorVersion := predecessor[:strings.LastIndex(predecessor, ".")]
+	predecessorVersion := fmt.Sprintf("%d.%d", predecessor.Major(), predecessor.Minor())
 
 	t.Status("migrating first tenant 11 server to the current version after system tenant is finalized which should fail because second server is still on old binary - expecting a failure here too")
 	expectErr(t, tenant11a.pgURL,

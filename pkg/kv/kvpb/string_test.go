@@ -40,10 +40,12 @@ func TestBatchRequestString(t *testing.T) {
 		hlc.Timestamp{}, // now
 		0,               // maxOffsetNs
 		99,              // coordinatorNodeID
+		0,
 	)
 	txn.ID = uuid.NamespaceDNS
 	ba.Txn = &txn
 	ba.WaitPolicy = lock.WaitPolicy_Error
+	ba.AmbiguousReplayProtection = true
 	ba.CanForwardReadTimestamp = true
 	ba.BoundedStaleness = &kvpb.BoundedStalenessHeader{
 		MinTimestampBound:       hlc.Timestamp{WallTime: 1},
@@ -60,7 +62,7 @@ func TestBatchRequestString(t *testing.T) {
 	ba.Requests = append(ba.Requests, ru)
 
 	{
-		exp := `Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min),... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTxn(abort) [/Min], [txn: 6ba7b810], [wait-policy: Error], [can-forward-ts], [bounded-staleness, min_ts_bound: 0.000000001,0, min_ts_bound_strict, max_ts_bound: 0.000000002,0]`
+		exp := `Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min),... 76 skipped ..., Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), Get [/Min,/Min), EndTxn(abort) [/Min], [txn: 6ba7b810], [wait-policy: Error], [protect-ambiguous-replay], [can-forward-ts], [bounded-staleness, min_ts_bound: 0.000000001,0, min_ts_bound_strict, max_ts_bound: 0.000000002,0]`
 		act := ba.String()
 		require.Equal(t, exp, act)
 	}

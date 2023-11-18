@@ -599,7 +599,6 @@ CREATE TABLE public.t (
   u STRING NULL,
   e INT8 NOT NULL,
   CONSTRAINT t_pkey PRIMARY KEY (pk2 ASC),
-  UNIQUE INDEX t_pk_key (pk ASC),
   UNIQUE INDEX t_u_key (u ASC),
   INDEX t_a_idx (a ASC),
   UNIQUE INDEX t_b_key (b ASC),
@@ -608,12 +607,14 @@ CREATE TABLE public.t (
   INDEX created_idx (c ASC),
   UNIQUE INDEX t_e_key (e ASC),
   UNIQUE INDEX unique_c_d (c ASC, d ASC),
+  UNIQUE INDEX t_pk_key (pk ASC),
   FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e)
 ) PARTITION ALL BY LIST (partition_by) (
   PARTITION one VALUES IN ((1)),
   PARTITION two VALUES IN ((2))
 )
 -- Warning: Partitioned table with no zone configurations.
+
 
 query TTB colnames
 SELECT index_name, column_name, implicit FROM crdb_internal.index_columns

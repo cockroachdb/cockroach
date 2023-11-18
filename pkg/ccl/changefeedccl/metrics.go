@@ -68,6 +68,10 @@ type AggMetrics struct {
 	InternalRetryMessageCount *aggmetric.AggGauge
 	SchemaRegistrations       *aggmetric.AggCounter
 	SchemaRegistryRetries     *aggmetric.AggCounter
+	AggregatorProgress        *aggmetric.AggGauge
+	CheckpointProgress        *aggmetric.AggGauge
+	LaggingRanges             *aggmetric.AggGauge
+	CloudstorageBufferedBytes *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -97,6 +101,7 @@ type metricsRecorder interface {
 	recordSizeBasedFlush()
 	recordParallelIOQueueLatency(time.Duration)
 	recordSinkIOInflightChange(int64)
+	makeCloudstorageFileAllocCallback() func(delta int64)
 }
 
 var _ metricsRecorder = (*sliMetrics)(nil)
@@ -128,6 +133,57 @@ type sliMetrics struct {
 	InternalRetryMessageCount *aggmetric.Gauge
 	SchemaRegistrations       *aggmetric.Counter
 	SchemaRegistryRetries     *aggmetric.Counter
+	AggregatorProgress        *aggmetric.Gauge
+	CheckpointProgress        *aggmetric.Gauge
+	LaggingRanges             *aggmetric.Gauge
+	CloudstorageBufferedBytes *aggmetric.Gauge
+
+	mu struct {
+		syncutil.Mutex
+		id         int64
+		resolved   map[int64]hlc.Timestamp
+		checkpoint map[int64]hlc.Timestamp
+	}
+}
+
+// closeId unregisters an id. The id can still be used after its closed, but
+// such usages will be noops.
+func (m *sliMetrics) closeId(id int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.mu.checkpoint, id)
+	delete(m.mu.resolved, id)
+}
+
+// setResolved writes a resolved timestamp entry for the given id.
+func (m *sliMetrics) setResolved(id int64, ts hlc.Timestamp) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.mu.resolved[id]; ok {
+		m.mu.resolved[id] = ts
+	}
+}
+
+// setCheckpoint writes a checkpoint timestamp entry for the given id.
+func (m *sliMetrics) setCheckpoint(id int64, ts hlc.Timestamp) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.mu.checkpoint[id]; ok {
+		m.mu.checkpoint[id] = ts
+	}
+}
+
+// claimId claims a unique ID.
+func (m *sliMetrics) claimId() int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	id := m.mu.id
+	// Seed entries with the zero timestamp and expect these to be
+	// ignored until a nonzero timestamp is written.
+	m.mu.checkpoint[id] = hlc.Timestamp{}
+	m.mu.resolved[id] = hlc.Timestamp{}
+	m.mu.id++
+	return id
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -151,6 +207,14 @@ func (m *sliMetrics) recordOneMessage() recordOneMessageCallback {
 func (m *sliMetrics) recordMessageSize(sz int64) {
 	if m != nil {
 		m.MessageSize.RecordValue(sz)
+	}
+}
+
+func (m *sliMetrics) makeCloudstorageFileAllocCallback() func(delta int64) {
+	return func(delta int64) {
+		if m != nil {
+			m.CloudstorageBufferedBytes.Inc(delta)
+		}
 	}
 }
 
@@ -308,6 +372,10 @@ func (w *wrappingCostController) recordMessageSize(sz int64) {
 	w.inner.recordMessageSize(sz)
 }
 
+func (w *wrappingCostController) makeCloudstorageFileAllocCallback() func(delta int64) {
+	return w.inner.makeCloudstorageFileAllocCallback()
+}
+
 func (w *wrappingCostController) recordInternalRetry(numMessages int64, reducedBatchSize bool) {
 	w.inner.recordInternalRetry(numMessages, reducedBatchSize)
 }
@@ -383,7 +451,7 @@ var (
 	// for now.
 	metaChangefeedMaxBehindNanos = metric.Metadata{
 		Name:        "changefeed.max_behind_nanos",
-		Help:        "The most any changefeed's persisted checkpoint is behind the present",
+		Help:        "(Deprecated in favor of checkpoint_progress) The most any changefeed's persisted checkpoint is behind the present",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
@@ -544,6 +612,41 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaAggregatorProgress := metric.Metadata{
+		Name:        "changefeed.aggregator_progress",
+		Help:        "The earliest timestamp up to which any aggregator is guaranteed to have emitted all values for",
+		Measurement: "Unix Timestamp Nanoseconds",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
+	metaCheckpointProgress := metric.Metadata{
+		Name:        "changefeed.checkpoint_progress",
+		Help:        "The earliest timestamp of any changefeed's persisted checkpoint (values prior to this timestamp will never need to be re-emitted)",
+		Measurement: "Unix Timestamp Nanoseconds",
+		Unit:        metric.Unit_TIMESTAMP_NS,
+	}
+	metaLaggingRangePercentage := metric.Metadata{
+		Name:        "changefeed.lagging_ranges",
+		Help:        "The number of ranges considered to be lagging behind",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaCloudstorageBufferedBytes := metric.Metadata{
+		Name:        "changefeed.cloudstorage_buffered_bytes",
+		Help:        "The number of bytes buffered in cloudstorage sink files which have not been emitted yet",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	functionalGaugeMinFn := func(childValues []int64) int64 {
+		var min int64
+		for _, val := range childValues {
+			if min == 0 || (val != 0 && val < min) {
+				min = val
+			}
+		}
+		return min
+	}
+
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
@@ -606,6 +709,10 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		InternalRetryMessageCount: b.Gauge(metaInternalRetryMessageCount),
 		SchemaRegistryRetries:     b.Counter(metaSchemaRegistryRetriesCount),
 		SchemaRegistrations:       b.Counter(metaSchemaRegistryRegistrations),
+		AggregatorProgress:        b.FunctionalGauge(metaAggregatorProgress, functionalGaugeMinFn),
+		CheckpointProgress:        b.FunctionalGauge(metaCheckpointProgress, functionalGaugeMinFn),
+		LaggingRanges:             b.Gauge(metaLaggingRangePercentage),
+		CloudstorageBufferedBytes: b.Gauge(metaCloudstorageBufferedBytes),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -665,10 +772,65 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		InternalRetryMessageCount: a.InternalRetryMessageCount.AddChild(scope),
 		SchemaRegistryRetries:     a.SchemaRegistryRetries.AddChild(scope),
 		SchemaRegistrations:       a.SchemaRegistrations.AddChild(scope),
+		LaggingRanges:             a.LaggingRanges.AddChild(scope),
+		CloudstorageBufferedBytes: a.CloudstorageBufferedBytes.AddChild(scope),
 	}
+	sm.mu.resolved = make(map[int64]hlc.Timestamp)
+	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
+	sm.mu.id = 1 // start the first id at 1 so we can detect intiialization
+
+	minTimestampGetter := func(m map[int64]hlc.Timestamp) func() int64 {
+		return func() int64 {
+			sm.mu.Lock()
+			defer sm.mu.Unlock()
+			var minTs int64
+			for _, hlcTs := range m {
+				// Ignore empty timestamps which new entries are seeded with.
+				if hlcTs.WallTime != 0 {
+					// Track the min timestamp.
+					if minTs == 0 || hlcTs.WallTime < minTs {
+						minTs = hlcTs.WallTime
+					}
+				}
+			}
+			return minTs
+		}
+	}
+	sm.AggregatorProgress = a.AggregatorProgress.AddFunctionalChild(minTimestampGetter(sm.mu.resolved), scope)
+	sm.CheckpointProgress = a.CheckpointProgress.AddFunctionalChild(minTimestampGetter(sm.mu.checkpoint), scope)
 
 	a.mu.sliMetrics[scope] = sm
 	return sm, nil
+}
+
+// getLaggingRangesCallback returns a function which can be called to update the
+// lagging ranges metric. It should be called with the current number of lagging
+// ranges.
+func (s *sliMetrics) getLaggingRangesCallback() func(int64) {
+	// Because this gauge is shared between changefeeds in the same metrics scope,
+	// we must instead modify it using `Inc` and `Dec` (as opposed to `Update`) to
+	// ensure values written by others are not overwritten. The code below is used
+	// to determine the deltas based on the last known number of lagging ranges.
+	//
+	// Example:
+	//
+	// Initially there are 0 lagging ranges, so `last` is 0. Assume the gauge
+	// has an arbitrary value X.
+	//
+	// If 10 ranges are behind, last=0,i=10: X.Dec(0 - 10) = X.Inc(10)
+	// If 3 ranges catch up, last=10,i=7: X.Dec(10 - 7) = X.Dec(3)
+	// If 4 ranges fall behind, last=7,i=11: X.Dec(7 - 11) = X.Inc(4)
+	// If 1 lagging range is deleted, last=7,i=10: X.Dec(11-10) = X.Dec(1)
+	last := struct {
+		syncutil.Mutex
+		v int64
+	}{}
+	return func(i int64) {
+		last.Lock()
+		defer last.Unlock()
+		s.LaggingRanges.Dec(last.v - i)
+		last.v = i
+	}
 }
 
 // Metrics are for production monitoring of changefeeds.
@@ -686,6 +848,8 @@ type Metrics struct {
 	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
 
+	// This map and the MaxBehindNanos metric are deprecated in favor of
+	// CheckpointProgress which is stored in the sliMetrics.
 	mu struct {
 		syncutil.Mutex
 		id       int
@@ -743,12 +907,12 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		now := timeutil.Now()
 		var maxBehind time.Duration
 		m.mu.Lock()
+		defer m.mu.Unlock()
 		for _, resolved := range m.mu.resolved {
 			if behind := now.Sub(resolved.GoTime()); behind > maxBehind {
 				maxBehind = behind
 			}
 		}
-		m.mu.Unlock()
 		return maxBehind.Nanoseconds()
 	})
 	return m

@@ -1166,8 +1166,8 @@ var _ kvflowcontrol.Handle = &testFlowTokenHandle{}
 
 func (t *testFlowTokenHandle) Admit(
 	ctx context.Context, priority admissionpb.WorkPriority, t2 time.Time,
-) error {
-	return nil
+) (bool, error) {
+	return false, nil
 }
 
 func (t *testFlowTokenHandle) DeductTokensFor(

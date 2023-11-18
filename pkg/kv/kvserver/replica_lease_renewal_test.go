@@ -46,7 +46,7 @@ func TestLeaseRenewer(t *testing.T) {
 		ctx := context.Background()
 		st := cluster.MakeTestingClusterSettings()
 		ExpirationLeasesOnly.Override(ctx, &st.SV, expOnly)
-		tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Settings: st,
 				// Speed up lease extensions to speed up the test, but adjust tick-based

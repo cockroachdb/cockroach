@@ -56,7 +56,7 @@ func (s *Store) Transport() *RaftTransport {
 }
 
 func (s *Store) FindTargetAndTransferLease(
-	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig,
+	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor, conf *roachpb.SpanConfig,
 ) (bool, error) {
 	transferStatus, err := s.replicateQueue.shedLease(
 		ctx, repl, desc, conf, allocator.TransferLeaseOptions{ExcludeLeaseRepl: true},
@@ -81,14 +81,14 @@ func (s *Store) AddReplica(repl *Replica) error {
 // ComputeMVCCStats immediately computes correct total MVCC usage statistics
 // for the store, returning the computed values (but without modifying the
 // store).
-func (s *Store) ComputeMVCCStats() (enginepb.MVCCStats, error) {
+func (s *Store) ComputeMVCCStats(reader storage.Reader) (enginepb.MVCCStats, error) {
 	var totalStats enginepb.MVCCStats
 	var err error
 
 	now := s.Clock().PhysicalNow()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
-		stats, err = rditer.ComputeStatsForRange(r.Desc(), s.TODOEngine(), now)
+		stats, err = rditer.ComputeStatsForRange(context.Background(), r.Desc(), reader, now)
 		if err != nil {
 			return false
 		}
@@ -400,6 +400,12 @@ func (r *Replica) QuotaReleaseQueueLen() int {
 	return len(r.mu.quotaReleaseQueue)
 }
 
+func (r *Replica) NumPendingProposals() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.numPendingProposalsRLocked()
+}
+
 func (r *Replica) IsFollowerActiveSince(
 	ctx context.Context, followerID roachpb.ReplicaID, threshold time.Duration,
 ) bool {
@@ -419,7 +425,7 @@ func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 
 // ShouldBackpressureWrites returns whether writes to the range should be
 // subject to backpressure.
-func (r *Replica) ShouldBackpressureWrites() bool {
+func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 	return r.shouldBackpressureWrites()
 }
 

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -321,7 +322,7 @@ func getFirstStoreReplica(
 	t *testing.T, s serverutils.TestServerInterface, key roachpb.Key,
 ) (*kvserver.Store, *kvserver.Replica) {
 	t.Helper()
-	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	store, err := s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	var repl *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {
@@ -389,9 +390,9 @@ func thresholdFromTrace(t *testing.T, traceString string) hlc.Timestamp {
 	return thresh
 }
 
-func setAndWaitForTenantReadOnlyClusterSetting(
+func setAndWaitForSystemVisibleClusterSetting(
 	t *testing.T,
-	setting string,
+	settingName settings.SettingName,
 	systemTenantRunner *sqlutils.SQLRunner,
 	tenantRunner *sqlutils.SQLRunner,
 	tenantID roachpb.TenantID,
@@ -402,7 +403,7 @@ func setAndWaitForTenantReadOnlyClusterSetting(
 		t,
 		fmt.Sprintf(
 			"ALTER TENANT [$1] SET CLUSTER SETTING %s = '%s'",
-			setting,
+			settingName,
 			val,
 		),
 		tenantID.ToUint64(),
@@ -412,7 +413,7 @@ func setAndWaitForTenantReadOnlyClusterSetting(
 		var currentVal string
 		tenantRunner.QueryRow(t,
 			fmt.Sprintf(
-				"SHOW CLUSTER SETTING %s", setting,
+				"SHOW CLUSTER SETTING %s", settingName,
 			),
 		).Scan(&currentVal)
 
@@ -536,7 +537,7 @@ func requireRecoveryEvent(
 	expected eventpb.RecoveryEvent,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		log.Flush()
+		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(
 			startTime,
 			math.MaxInt64,
@@ -582,6 +583,7 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 	const splitSize = 10
 	numAccounts := numSplits * splitSize
 	var expectedNumFiles int
+	var actualNumFiles int
 	restoreProcessorKnobCount := atomic.Uint32{}
 	args := base.TestServerArgs{
 		DefaultTestTenant: base.TODOTestTenantDisabled,
@@ -592,7 +594,7 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 					RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry) {
 						// The total size of the backup files should be less than the target
 						// SST size, thus should all fit in one import span.
-						require.Equal(t, expectedNumFiles, len(entry.Files))
+						require.Equal(t, actualNumFiles, len(entry.Files))
 						restoreProcessorKnobCount.Add(1)
 					},
 				},
@@ -603,7 +605,7 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.memory_monitor_ssts=true")
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.sst_memory_limit.enabled=true")
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.bulk_io_write.restore_node_concurrency=2")
 
 	// Add some splits in the table, and set the target file size to be something
@@ -630,11 +632,11 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 		numIncFiles += len(incSplitsWithFile)
 	}
 
+	// Verify the file counts in the backup is at least what's expected. The
+	// actual number can be more due to elastic CPU preempting export responses.
 	expectedNumFiles += numSplits + numIncFiles
-	// Verify the file counts in the backup.
-	var numFiles int
-	sqlDB.QueryRow(t, "SELECT count(*) FROM [SHOW BACKUP FILES FROM latest IN 'userfile:///backup']").Scan(&numFiles)
-	require.Equal(t, expectedNumFiles, numFiles)
+	sqlDB.QueryRow(t, "SELECT count(*) FROM [SHOW BACKUP FILES FROM latest IN 'userfile:///backup']").Scan(&actualNumFiles)
+	require.GreaterOrEqual(t, actualNumFiles, expectedNumFiles)
 
 	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.restore.per_processor_memory_limit = $1", restoreProcessorMaxFiles*sstReaderOverheadBytesPerFile)
 
@@ -643,8 +645,8 @@ func runTestRestoreMemoryMonitoring(t *testing.T, numSplits, numInc, restoreProc
 
 	// Assert that the restore processor is processing the same span multiple
 	// times, and the count is based on what's expected from the memory budget.
-	// The expected number is just the ceiling of expectedNumFiles/restoreProcessorMaxFiles.
-	require.Equal(t, (expectedNumFiles-1)/restoreProcessorMaxFiles+1, int(restoreProcessorKnobCount.Load()))
+	// The expected number is just the ceiling of actualNumFiles/restoreProcessorMaxFiles.
+	require.Equal(t, (actualNumFiles-1)/restoreProcessorMaxFiles+1, int(restoreProcessorKnobCount.Load()))
 
 	// Verify data in the restored table.
 	expectedFingerprints := sqlDB.QueryStr(t, "SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE data.bank")

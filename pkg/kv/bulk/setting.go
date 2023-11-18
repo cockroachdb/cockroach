@@ -19,7 +19,7 @@ import (
 var (
 	// IngestBatchSize controls the size of ingest ssts.
 	IngestBatchSize = settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"kv.bulk_ingest.batch_size",
 		"the maximum size of the payload in an AddSSTable request",
 		16<<20,

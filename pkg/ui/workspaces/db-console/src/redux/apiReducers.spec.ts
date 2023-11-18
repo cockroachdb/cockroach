@@ -22,6 +22,7 @@ import moment from "moment-timezone";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RouteComponentProps } from "react-router";
 import { queryByName } from "src/util/query";
+import { indexUnusedDuration } from "../util/constants";
 
 describe("table id generator", function () {
   it("generates encoded db/table id", function () {
@@ -42,7 +43,12 @@ describe("table id generator", function () {
 describe("request to string functions", function () {
   it("correctly generates a string from a database details request", function () {
     const database = "testDatabase";
-    expect(databaseRequestPayloadToID(database)).toEqual(database);
+    expect(
+      databaseRequestPayloadToID({
+        database,
+        csIndexUnusedDuration: indexUnusedDuration,
+      }),
+    ).toEqual(database);
   });
   it("correctly generates a string from a table details request", function () {
     const database = "testDatabase";
@@ -50,6 +56,7 @@ describe("request to string functions", function () {
     const tableRequest: clusterUiApi.TableDetailsReqParams = {
       database,
       table,
+      csIndexUnusedDuration: indexUnusedDuration,
     };
     expect(tableRequestToID(tableRequest)).toEqual(
       util.generateTableID(database, table),

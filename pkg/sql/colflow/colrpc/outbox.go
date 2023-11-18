@@ -314,6 +314,7 @@ func (o *Outbox) sendBatches(
 			// o.scratch.msg can be reused as soon as Send returns since it returns as
 			// soon as the message is written to the control buffer. The message is
 			// marshaled (bytes are copied) before writing.
+			log.VEvent(ctx, 2, "Outbox sending batch")
 			if err := stream.Send(o.scratch.msg); err != nil {
 				flowinfra.HandleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
 				return
@@ -360,6 +361,7 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 	if len(msg.Data.Metadata) == 0 {
 		return nil
 	}
+	log.VEvent(ctx, 2, "Outbox sending metadata")
 	return stream.Send(msg)
 }
 

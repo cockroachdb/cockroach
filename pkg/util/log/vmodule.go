@@ -102,12 +102,15 @@ func (c *vmoduleConfig) vDepth(l Level, depth int) bool {
 			c.pcsPool.Put(poolObj)
 			return false
 		}
-		c.mu.Lock()
-		v, ok := c.mu.vmap[pcs[0]]
-		if !ok {
-			v = c.setV(pcs)
-		}
-		c.mu.Unlock()
+		v := func() Level {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			lvl, ok := c.mu.vmap[pcs[0]]
+			if !ok {
+				lvl = c.setV(pcs)
+			}
+			return lvl
+		}()
 		c.pcsPool.Put(poolObj)
 		return v >= l
 	}

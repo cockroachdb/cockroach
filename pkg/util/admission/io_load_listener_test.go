@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
@@ -45,6 +46,7 @@ func TestIOLoadListener(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
+	L0MinimumSizePerSubLevel.Override(ctx, &st.SV, 0)
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "io_load_listener"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -54,6 +56,8 @@ func TestIOLoadListener(t *testing.T) {
 					kvRequester:           req,
 					perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 					diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
+					l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
+					l0TokensProduced:      metric.NewCounter(l0TokensProduced),
 				}
 				// The mutex is needed by ioLoadListener but is not useful in this
 				// test -- the channels provide synchronization and prevent this
@@ -80,12 +84,27 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("ingested-bytes") {
 					d.ScanArgs(t, "ingested-bytes", &req.stats.ingestedAccountedBytes)
 				}
+				belowRaft := false
+				if d.HasArg("below-raft") {
+					d.ScanArgs(t, "below-raft", &belowRaft)
+				}
+				if !belowRaft {
+					req.stats.aboveRaftStats.workCount = req.stats.workCount
+					req.stats.aboveRaftStats.writeAccountedBytes = req.stats.writeAccountedBytes
+					req.stats.aboveRaftStats.ingestedAccountedBytes = req.stats.ingestedAccountedBytes
+				}
 				return fmt.Sprintf("%+v", req.stats)
 
 			case "set-min-flush-util":
 				var percent int
 				d.ScanArgs(t, "percent", &percent)
 				MinFlushUtilizationFraction.Override(ctx, &st.SV, float64(percent)/100)
+				return ""
+
+			case "set-min-size-per-sub-level":
+				var minSize int64
+				d.ScanArgs(t, "size", &minSize)
+				L0MinimumSizePerSubLevel.Override(ctx, &st.SV, minSize)
 				return ""
 
 			// TODO(sumeer): the output printed by set-state is hard to follow. It
@@ -207,8 +226,10 @@ func TestIOLoadListenerOverflow(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	ioll := ioLoadListener{
-		settings:    st,
-		kvRequester: req,
+		settings:         st,
+		kvRequester:      req,
+		l0CompactedBytes: metric.NewCounter(l0CompactedBytes),
+		l0TokensProduced: metric.NewCounter(l0TokensProduced),
 	}
 	ioll.kvGranter = kvGranter
 	// Bug 1: overflow when totalNumByteTokens is too large.
@@ -268,9 +289,14 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 	var buf redact.StringBuilder
 	for _, tt := range tests {
 		buf.Printf("%s:\n", tt.name)
-		res := (*ioLoadListener)(nil).adjustTokensInner(
+		ioll := &ioLoadListener{
+			settings:         cluster.MakeTestingClusterSettings(),
+			l0CompactedBytes: metric.NewCounter(l0CompactedBytes),
+			l0TokensProduced: metric.NewCounter(l0TokensProduced),
+		}
+		res := ioll.adjustTokensInner(
 			ctx, tt.prev, tt.l0Metrics, 12, pebble.ThroughputMetric{},
-			100, 10, 0.50)
+			100, 10, 0, 0.50)
 		buf.Printf("%s\n", res)
 	}
 	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(datapathutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))
@@ -299,8 +325,9 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		req.stats.workCount = rand.Uint64()
 		req.stats.writeAccountedBytes = rand.Uint64()
 		req.stats.ingestedAccountedBytes = rand.Uint64()
-		req.stats.statsToIgnore.Bytes = rand.Uint64()
-		req.stats.statsToIgnore.ApproxIngestedIntoL0Bytes = rand.Uint64()
+		req.stats.statsToIgnore.ingestStats.Bytes = rand.Uint64()
+		req.stats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes = rand.Uint64()
+		req.stats.statsToIgnore.writeBytes = rand.Uint64()
 	}
 	kvGranter := &testGranterNonNegativeTokens{t: t}
 	st := cluster.MakeTestingClusterSettings()
@@ -309,6 +336,8 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		kvRequester:           req,
 		perWorkTokenEstimator: makeStorePerWorkTokenEstimator(),
 		diskBandwidthLimiter:  makeDiskBandwidthLimiter(),
+		l0CompactedBytes:      metric.NewCounter(l0CompactedBytes),
+		l0TokensProduced:      metric.NewCounter(l0TokensProduced),
 	}
 	ioll.kvGranter = kvGranter
 	for i := 0; i < 100; i++ {
@@ -361,18 +390,28 @@ type testGranterWithIOTokens struct {
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
 
 func (g *testGranterWithIOTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64, maxIOTokens int64, maxElasticTokens int64,
-) (tokensUsed int64) {
-	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s elastic-disk-bw-tokens=%s max-byte-tokens=%s max-disk-bw-tokens=%s",
+	ioTokens int64,
+	elasticIOTokens int64,
+	elasticDiskBandwidthTokens int64,
+	maxIOTokens int64,
+	maxElasticIOTokens int64,
+	maxElasticDiskBandwidthTokens int64,
+	lastTick bool,
+) (tokensUsed int64, tokensUsedByElasticWork int64) {
+	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s(elastic %s) "+
+		"elastic-disk-bw-tokens=%s max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
 		tokensForTokenTickDurationToString(ioTokens),
+		tokensForTokenTickDurationToString(elasticIOTokens),
 		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
 		tokensForTokenTickDurationToString(maxIOTokens),
-		tokensForTokenTickDurationToString(maxElasticTokens),
+		tokensForTokenTickDurationToString(maxElasticIOTokens),
+		tokensForTokenTickDurationToString(maxElasticDiskBandwidthTokens),
+		lastTick,
 	)
 	if g.allTokensUsed {
-		return ioTokens * 2
+		return ioTokens * 2, 0
 	}
-	return 0
+	return 0, 0
 }
 
 func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {
@@ -407,11 +446,18 @@ type testGranterNonNegativeTokens struct {
 var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
 
 func (g *testGranterNonNegativeTokens) setAvailableTokens(
-	ioTokens int64, elasticDiskBandwidthTokens int64, _ int64, _ int64,
-) (tokensUsed int64) {
+	ioTokens int64,
+	elasticIOTokens int64,
+	elasticDiskBandwidthTokens int64,
+	_ int64,
+	_ int64,
+	_ int64,
+	_ bool,
+) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	require.LessOrEqual(g.t, int64(0), ioTokens)
+	require.LessOrEqual(g.t, int64(0), elasticIOTokens)
 	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
-	return 0
+	return 0, 0
 }
 
 func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() [admissionpb.NumWorkClasses]int64 {

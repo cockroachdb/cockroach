@@ -212,9 +212,14 @@ func StageApplication(
 		}
 		return nil
 	case "workload":
-		// N.B. workload binary is only available for linux amd64: https://github.com/cockroachdb/cockroach/issues/103563
+		// N.B. After https://github.com/cockroachdb/cockroach/issues/103563, only arm64 build uses the $os-$arch suffix.
+		// E.g., workload.LATEST is for linux-amd64, workload.linux-gnu-arm64.LATEST is for linux-arm64.
+		archSuffix := ""
+		if arch == vm.ArchARM64 {
+			archSuffix = archInfo.DebugArchitecture
+		}
 		err := stageRemoteBinary(
-			ctx, l, c, applicationName, "cockroach/workload", version, "" /* arch */, destDir,
+			ctx, l, c, applicationName, "cockroach/workload", version, archSuffix, destDir,
 		)
 		return err
 	case "release":
@@ -256,8 +261,13 @@ func URLsForApplication(
 		}
 		return urls, nil
 	case "workload":
-		// N.B. workload binary is only available for linux amd64: https://github.com/cockroachdb/cockroach/issues/103563
-		u, err := getEdgeURL("cockroach/workload", version, "" /* arch */, "" /* extension */)
+		// N.B. After https://github.com/cockroachdb/cockroach/issues/103563, only arm64 build uses the $os-$arch suffix.
+		// E.g., workload.LATEST is for linux-amd64, workload.linux-gnu-arm64.LATEST is for linux-arm64.
+		archSuffix := ""
+		if arch == vm.ArchARM64 {
+			archSuffix = archInfo.DebugArchitecture
+		}
+		u, err := getEdgeURL("cockroach/workload", version, archSuffix, "" /* extension */)
 		if err != nil {
 			return nil, err
 		}
@@ -293,7 +303,7 @@ func stageRemoteBinary(
 		`curl -sfSL -o "%s" "%s" && chmod 755 %s`, target, binURL, target,
 	)
 	return c.Run(
-		ctx, l, l.Stdout, l.Stderr, c.Nodes, fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
+		ctx, l, l.Stdout, l.Stderr, OnNodes(c.Nodes), fmt.Sprintf("staging binary (%s)", applicationName), cmdStr,
 	)
 }
 
@@ -323,7 +333,7 @@ curl -sfSL -o "%s" "%s" 2>/dev/null || echo 'optional library %s not found; cont
 		libraryName+ext,
 	)
 	return c.Run(
-		ctx, l, l.Stdout, l.Stderr, c.Nodes, fmt.Sprintf("staging library (%s)", libraryName), cmdStr,
+		ctx, l, l.Stdout, l.Stderr, OnNodes(c.Nodes), fmt.Sprintf("staging library (%s)", libraryName), cmdStr,
 	)
 }
 
@@ -362,6 +372,6 @@ if [ -d ${tmpdir}/lib ]; then mv ${tmpdir}/lib/* ${dir}/lib; fi && \
 chmod 755 ${dir}/cockroach
 `, dir, binURL)
 	return c.Run(
-		ctx, l, l.Stdout, l.Stderr, c.Nodes, "staging cockroach release binary", cmdStr,
+		ctx, l, l.Stdout, l.Stderr, OnNodes(c.Nodes), "staging cockroach release binary", cmdStr,
 	)
 }

@@ -668,6 +668,9 @@ message LogsRequest {
 message LogEntriesResponse {
   repeated cockroach.util.log.Entry entries = 1
       [ (gogoproto.nullable) = false ];
+  // parse_errors contains list of errors that occurred during retrieving individual log entries
+  // that don't prevent to return at least partial response.
+  repeated string parse_errors = 2;
 }
 
 message LogFilesListRequest {
@@ -1638,6 +1641,16 @@ message StatementsResponse {
   float stmts_total_runtime_secs = 6;
 
   float txns_total_runtime_secs = 7;
+
+  // OldestAggregatedTsReturned is the timestamp of the oldest entry returned,
+  // or null if there is no data returned.
+  google.protobuf.Timestamp oldest_aggregated_ts_returned = 8 [(gogoproto.stdtime) = true];
+
+  // StmtsSourceTable returns the table used to return the statements data.
+  string stmts_source_table = 9;
+
+  // TxnsSourceTable returns the table used to return the transactions data.
+  string txns_source_table = 10;
 }
 
 enum StatsSortOptions {
@@ -2065,6 +2078,12 @@ message NetworkConnectivityResponse {
     (gogoproto.nullable) = false
   ];
 }
+
+message RequestJobProfilerExecutionDetailsRequest {
+  int64 job_id = 1;
+}
+
+message RequestJobProfilerExecutionDetailsResponse {}
 
  message GetJobProfilerExecutionDetailRequest {
    int64 job_id = 1;
@@ -2553,10 +2572,16 @@ service Status {
     };
   }
 
+  rpc RequestJobProfilerExecutionDetails(RequestJobProfilerExecutionDetailsRequest) returns(RequestJobProfilerExecutionDetailsResponse) {
+    option (google.api.http) = {
+      get: "/_status/request_job_profiler_execution_details/{job_id}"
+    };
+  }
+
 
   rpc GetJobProfilerExecutionDetails(GetJobProfilerExecutionDetailRequest) returns (GetJobProfilerExecutionDetailResponse) {
     option (google.api.http) = {
-      get: "/_status/job_profiler_execution_details/{job_id}/{filename}"
+      get: "/_status/job_profiler_execution_details/{job_id}"
     };
   }
 

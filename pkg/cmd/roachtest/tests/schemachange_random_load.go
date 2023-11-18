@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -30,11 +29,6 @@ const (
 )
 
 func registerSchemaChangeRandomLoad(r registry.Registry) {
-	geoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
-	if r.MakeClusterSpec(1).Cloud == spec.AWS {
-		geoZones = []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
-	}
-	geoZonesStr := strings.Join(geoZones, ",")
 	r.Add(registry.TestSpec{
 		Name:      "schemachange/random-load",
 		Owner:     registry.OwnerSQLFoundations,
@@ -42,10 +36,14 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(
 			3,
 			spec.Geo(),
-			spec.Zones(geoZonesStr),
+			spec.GCEZones("us-east1-b,us-west1-b,europe-west2-b"),
+			spec.AWSZones("us-east-2b,us-west-1a,eu-west-1a"),
 		),
-		Leases:     registry.MetamorphicLeases,
-		NativeLibs: registry.LibGEOS,
+		// TODO(radu): enable this test on AWS.
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		NativeLibs:       registry.LibGEOS,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxOps := 5000
 			concurrency := 20
@@ -95,7 +93,6 @@ func runSchemaChangeRandomLoad(
 	loadNode := c.Node(1)
 	roachNodes := c.Range(1, c.Spec().NodeCount)
 	t.Status("copying binaries")
-	c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", loadNode)
 
 	t.Status("starting cockroach nodes")

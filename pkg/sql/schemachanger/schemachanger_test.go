@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -489,6 +490,67 @@ func TestSchemaChangeWaitsForConcurrentSchemaChanges(t *testing.T) {
 			"defaultdb", "t", expectedKeyCount)
 	}
 
+	typeSchemaChangeFunc := func(t *testing.T, modeFor1stStmt, modeFor2ndStmt sessiondatapb.NewSchemaChangerMode) {
+		ctx, cancel := context.WithCancel(context.Background())
+		addTypeStartedChan := make(chan struct{})
+		resumeAddTypeJobChan := make(chan struct{})
+		var closeAddTypeValueChanOnce sync.Once
+		schemaChangeWaitCompletedChan := make(chan struct{})
+
+		var params base.TestServerArgs
+		params.Knobs = base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+				// If the blocked schema changer is from legacy schema changer, we let
+				// it hijack this knob (which is originally design for declarative
+				// schema changer) if `stmt` is nil.
+				WhileWaitingForConcurrentSchemaChanges: func(stmts []string) {
+					if (len(stmts) == 1 && strings.Contains(stmts[0], "DROP TYPE")) ||
+						stmts == nil {
+						closeAddTypeValueChanOnce.Do(func() {
+							close(resumeAddTypeJobChan)
+							close(schemaChangeWaitCompletedChan)
+						})
+					}
+				},
+			},
+			// Decrease the adopt loop interval so that retries happen quickly.
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			// Prevent the GC job from running so we ensure that all the keys which
+			// were written remain.
+			GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(jobID jobspb.JobID) error {
+				<-ctx.Done()
+				return ctx.Err()
+			}},
+		}
+		s, sqlDB, _ := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+		defer cancel()
+		tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+		tdb.Exec(t, "CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');")
+
+		// Execute 1st DDL asynchronously and block until it's executing.
+		tdb.Exec(t, `SET use_declarative_schema_changer = $1`, modeFor1stStmt.String())
+		go func() {
+			tdb.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints="typeschemachanger.before.exec"`)
+			tdb.ExpectErr(t,
+				".*was paused before it completed with reason: pause point \"typeschemachanger.before.exec\" hit",
+				`ALTER TYPE status ADD VALUE 'unknown';`)
+			close(addTypeStartedChan)
+			<-resumeAddTypeJobChan // wait for DROP TYPE to unblock me
+			tdb.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints=""`)
+			tdb.Exec(t, "RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE status='paused' FETCH FIRST 1 ROWS ONLY);\n")
+		}()
+		<-addTypeStartedChan
+
+		// Execute 2st DDL synchronously. During waiting, it will unblock 1st DDL so
+		// it will eventually be able to proceed after waiting for a while.
+		tdb.Exec(t, `SET use_declarative_schema_changer = $1`, modeFor2ndStmt.String())
+		tdb.Exec(t, `DROP TYPE STATUS;`)
+		// After completion make sure we actually waited for schema changes.
+		<-schemaChangeWaitCompletedChan
+	}
+
 	t.Run("declarative-then-declarative", func(t *testing.T) {
 		tf(t, sessiondatapb.UseNewSchemaChangerUnsafeAlways, sessiondatapb.UseNewSchemaChangerUnsafeAlways)
 	})
@@ -499,6 +561,10 @@ func TestSchemaChangeWaitsForConcurrentSchemaChanges(t *testing.T) {
 
 	t.Run("legacy-then-declarative", func(t *testing.T) {
 		tf(t, sessiondatapb.UseNewSchemaChangerOff, sessiondatapb.UseNewSchemaChangerUnsafeAlways)
+	})
+
+	t.Run("typedesc legacy-then-declarative", func(t *testing.T) {
+		typeSchemaChangeFunc(t, sessiondatapb.UseNewSchemaChangerOff, sessiondatapb.UseNewSchemaChangerUnsafeAlways)
 	})
 
 	// legacy + legacy case is tested in TestLegacySchemaChangerWaitsForOtherSchemaChanges
@@ -778,6 +844,7 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 	}
 }
 
+// IsPQErrWithCode returns true if `err` is a pq error whose code is in `codes`.
 func isPQErrWithCode(err error, codes ...pgcode.Code) bool {
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
 		for _, code := range codes {
@@ -787,4 +854,111 @@ func isPQErrWithCode(err error, codes ...pgcode.Code) bool {
 		}
 	}
 	return false
+}
+
+// TestCompareLegacyAndDeclarative tests that when processing a sequence of
+// DDL statements, legacy and declarative schema change should transition the
+// descriptors into the same final state.
+func TestCompareLegacyAndDeclarative(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "too slow under stress race")
+
+	ss := &staticSQLStmtLineProvider{
+		stmts: []string{
+			// Statements expected to succeed.
+			"SET sql_safe_updates = false;",
+			"CREATE DATABASE testdb1; SET DATABASE = testdb1",
+			"CREATE TABLE testdb1.t1 (i INT PRIMARY KEY); CREATE TABLE testdb1.t2 (i INT PRIMARY KEY REFERENCES testdb1.t1(i));",
+			"DROP DATABASE testdb1 CASCADE  -- current db is dropped; expect no post-execution checks",
+			"USE defaultdb",
+			"CREATE TABLE t2 (i INT PRIMARY KEY, j INT NOT NULL);",
+			"CREATE TABLE t1 (i INT PRIMARY KEY, j INT REFERENCES t2(i));",
+			"INSERT INTO t2 SELECT k, k+1 FROM generate_series(1,1000) AS tmp(k);",
+			"INSERT INTO t1 SELECT k-1, k FROM generate_series(1,1000) AS tmp(k);",
+			"CREATE INDEX t1_idx_1 ON t1(j);",
+			"CREATE INDEX t2_idx_1 ON t2(j);",
+			"ALTER TABLE t1 ADD COLUMN k INT DEFAULT 34;",
+			"ALTER TABLE t2 ADD COLUMN p INT DEFAULT 50;",
+			"ALTER TABLE t2 DROP COLUMN p;",
+			"ALTER TABLE t2 ALTER PRIMARY KEY USING COLUMNS (j);",
+			"DROP TABLE IF EXISTS t1, t2;",
+			"CREATE TABLE t1 (rowid INT NOT NULL);",
+			"ALTER TABLE t1 ALTER PRIMARY KEY USING COLUMNS (rowid); -- special case where column name `rowid` is used",
+			"CREATE TABLE t8 (i INT PRIMARY KEY, j STRING);",
+			"CREATE INVERTED INDEX ON t8 (j gin_trgm_ops);",
+
+			// Statements expected to fail.
+			"CREATE TABLE t1 (); -- expect a DuplicateRelation error",
+			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a rejected (sql_safe_updates = true) warning",
+			"ALTER TABLE t1 DROP COLUMN xyz; -- expect a UndefinedColumn error",
+			"ALTER TABLE txyz ADD COLUMN i INT DEFAULT 30; -- expect a UndefinedTable error",
+			"SELECT (*) FROM t1; -- expect a Syntax error",
+			"FROM t1 SELECT *; -- ditto",
+			"sdfsd  -- ditto",
+			"CREATE VIEW v AS (SELECT (*,1) FROM t);  -- ditto",
+			"CREATE MATERIALIZED VIEW v AS (xlsd);  -- ditto",
+			"CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $$ SELECT $$vsd $$;  -- ditto",
+			"CREATE FUNCTION f1() RETURNS INT LANGUAGE SQL AS $funcTag$ SELECT $$vsd $funcTag$;  -- ditto",
+			"CREATE TABLE t9 (i INT PRIMARY KEY);",
+			"BEGIN;",
+			"ALTER TABLE t9 DROP CONSTRAINT t9_pkey;",
+			"COMMIT; -- expect a FeatureNotSupported error but should be executed on both clusters",
+			"ALTER t9 ADD COLUMN j INT DEFAULT 30;  -- ensure we did not silently skip COMMIT on DSC cluster",
+
+			// Statements with TCL commands or empty content.
+			"",
+			"BEGIN;",
+			"INSERT INTO t2 VALUES (1001, 1002); INSERT INTO t1 VALUES (1000, 1001);",
+			"COMMIT;",
+			"CREATE TABLE t3 (i INT NOT NULL); INSERT INTO t3 SELECT generate_series(1,1000);",
+			"BEGIN; ALTER TABLE t3 ALTER PRIMARY KEY USING COLUMNS (i); INSERT INTO t3 VALUES (1001); COMMIT;",
+			"DROP TABLE IF EXISTS t3; CREATE TABLE t3 (i INT NOT NULL); BEGIN;",
+			"ALTER TABLE t3 ADD PRIMARY KEY (i);",
+			"COMMIT;",
+			"BEGIN;",
+			"SELECT 1/0;  -- move txn into ERROR state",
+			"DROP TABLE IF EXISTS t2;  -- expect to be ignored",
+			"INSERT INTO t2 VALUES (1002, 1003); INSERT INTO t1 VALUES (1001, 1002);  -- expect to be ignored",
+			"ROLLBACK;",
+			"DROP TABLE IF EXISTS t3; CREATE TABLE t3 (i INT PRIMARY KEY);",
+			"BEGIN;",
+			"ALTER TABLE t3 DROP CONSTRAINT t3_pkey;",
+			"DELETE FROM t3 WHERE i = 1;  -- expect to result in an error",
+			"ROLLBACK;",
+			"BEGIN; ALTER TABLE t3 ADD COLUMN j INT CREATE FAMILY;",
+			"ROLLBACK;",
+			"BEGIN; SAVEPOINT cockroach_restart;",
+			"RELEASE SAVEPOINT cockroach_restart;  -- move txn into DONE state",
+			"SELECT 1;  -- expect to be ignored",
+			"COMMIT;",
+			"CREATE TABLE t11 (i INT NOT NULL); ALTER TABLE t11 ALTER PRIMARY KEY USING COLUMNS (i); -- multi-statement implicit txn",
+
+			// statements that will be altered due to known behavioral differences in LSC vs DSC.
+			"ALTER TABLE t1 ADD COLUMN xyz INT DEFAULT 30, ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- unimplemented in legacy schema changer; expect to skip this line",
+			"CREATE SEQUENCE s;",
+			`CREATE TABLE t4 (i INT CHECK (i > nextval('s')) CHECK (i > 0), CONSTRAINT "ck_i" CHECK (i > nextval('s'::REGCLASS)), CONSTRAINT "ck_i2" CHECK (i > 0)); -- expect to rewrite expressions that reference sequences to just (True)`,
+			"ALTER TABLE t4 ADD CHECK (i > nextval('s')); -- ditto",
+			"ALTER TABLE t4 ADD COLUMN j INT CHECK (j > 0) CHECK (i+j > nextval('s'));  -- ditto",
+			"CREATE TABLE t5 (i INT NOT NULL);",
+			"ALTER TABLE t5 ALTER PRIMARY KEY USING COLUMNS (i);",
+			"SET use_DEClarative_sChema_changer = off; -- expect to skip this line",
+			`SET CLUSTER SETTING sql.scHEma.fOrce_declarative_statements="-CREATE SCHEMA, +CREATE SEQUENCE"  -- expect to skip this line`,
+			"CREATE TABLE t6 (i INT PRIMARY KEY, j INT NOT NULL, k INT NOT NULL);",
+			"ALTER TABLE t6 DROP COLUMN i; -- unimplemented in legacy schema changer; expect to skip this line",
+			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN i; -- ditto",
+			"ALTER TABLE t6 ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k; -- ditto",
+			"ALTER TABLE t6 ADD COLUMN p INT DEFAULT 30, DROP COLUMN p; -- ditto",
+			"SET experimental_enable_temp_tables = true;",
+			"CREATE TEMPORARY TABLE t7 (i INT);  -- expect to skip this line",
+			"CREATE TEMP TABLE t7 (i INT);  -- ditto",
+			"CREATE TABLE t10 (i INT NOT NULL, j INT NOT NULL, k INT NOT NULL, PRIMARY KEY (i, k) USING HASH WITH (bucket_count=3));",
+			"INSERT INTO t10 VALUES (0, 1, 2);",
+			"ALTER TABLE t10 ALTER PRIMARY KEY USING COLUMNS (i, k) USING HASH;  -- expect to be rewritten to have `DROP COLUMN IF EXISTS old-shard-col` appended to it",
+			"ALTER TABLE t10 ALTER PRIMARY KEY USING COLUMNS (i, k); -- ditto",
+			"ALTER TABLE t10 ALTER PRIMARY KEY USING COLUMNS (j) USING HASH;  -- expect to not be rewritten because old-shard-col is used",
+		},
+	}
+
+	sctest.CompareLegacyAndDeclarative(t, ss)
 }

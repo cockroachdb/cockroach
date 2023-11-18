@@ -79,7 +79,9 @@ func New(
 var _ kvflowcontrol.Handle = &Handle{}
 
 // Admit is part of the kvflowcontrol.Handle interface.
-func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct time.Time) error {
+func (h *Handle) Admit(
+	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
+) (bool, error) {
 	if h == nil {
 		// TODO(irfansharif): This can happen if we're proposing immediately on
 		// a newly split off RHS that doesn't know it's a leader yet (so we
@@ -92,14 +94,14 @@ func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct tim
 		// As for cluster settings that disable flow control entirely or only
 		// for regular traffic, that can be dealt with at the caller by not
 		// calling .Admit() and ensuring we use the right raft entry encodings.
-		return nil
+		return false, nil
 	}
 
 	h.mu.Lock()
 	if h.mu.closed {
 		h.mu.Unlock()
 		log.Errorf(ctx, "operating on a closed handle")
-		return nil
+		return false, nil
 	}
 
 	// NB: We're using a copy-on-write scheme elsewhere to maintain this slice
@@ -115,15 +117,20 @@ func (h *Handle) Admit(ctx context.Context, pri admissionpb.WorkPriority, ct tim
 	h.metrics.onWaiting(class)
 	tstart := h.clock.PhysicalTime()
 
+	// NB: We track whether the last stream was subject to flow control, this
+	// helps us decide later if we should be deducting tokens for this work.
+	var admitted bool
 	for _, c := range connections {
-		if err := h.controller.Admit(ctx, pri, ct, c); err != nil {
+		var err error
+		admitted, err = h.controller.Admit(ctx, pri, ct, c)
+		if err != nil {
 			h.metrics.onErrored(class, h.clock.PhysicalTime().Sub(tstart))
-			return err
+			return false, err
 		}
 	}
 
 	h.metrics.onAdmitted(class, h.clock.PhysicalTime().Sub(tstart))
-	return nil
+	return admitted, nil
 }
 
 // DeductTokensFor is part of the kvflowcontrol.Handle interface.
@@ -163,6 +170,11 @@ func (h *Handle) deductTokensForInner(
 			// Only deduct tokens if we're able to track them for subsequent
 			// returns. We risk leaking flow tokens otherwise.
 			h.controller.DeductTokens(ctx, pri, tokens, c.Stream())
+
+			// TODO(irfansharif,aaditya): This accounts for 0.4% of
+			// alloc_objects when running kv0/enc=false/nodes=3/cpu=9. Except
+			// this return type is not used in production code. Clean it up as
+			// part of #104154.
 			streams = append(streams, c.Stream())
 		}
 	}
@@ -204,14 +216,19 @@ func (h *Handle) ReturnTokensUpto(
 		// instantiated.
 		stream.TenantID = h.tenantID
 	}
+
+	// TODO(irfansharif,aaditya): This mutex still shows up in profiles, ~0.3%
+	// for kv0/enc=false/nodes=3/cpu=9. Maybe clean it up as part of #104154.
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if h.mu.closed {
+		h.mu.Unlock()
 		log.Errorf(ctx, "operating on a closed handle")
 		return
 	}
 
 	tokens := h.mu.perStreamTokenTracker[stream].Untrack(ctx, pri, upto)
+	h.mu.Unlock()
+
 	h.controller.ReturnTokens(ctx, pri, tokens, stream)
 }
 

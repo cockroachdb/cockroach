@@ -4192,6 +4192,8 @@ type loggerSensitiveAccess struct{}
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4215,6 +4217,8 @@ var _ ChannelLogger = SensitiveAccess
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4238,6 +4242,8 @@ func (loggerSensitiveAccess) Infof(ctx context.Context, format string, args ...i
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4261,6 +4267,8 @@ func (loggerSensitiveAccess) VInfof(ctx context.Context, level Level, format str
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4283,6 +4291,8 @@ func (loggerSensitiveAccess) Info(ctx context.Context, msg string) {
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4304,6 +4314,8 @@ func (loggerSensitiveAccess) InfofDepth(ctx context.Context, depth int, format s
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4327,6 +4339,8 @@ func (loggerSensitiveAccess) Warningf(ctx context.Context, format string, args .
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4350,6 +4364,8 @@ func (loggerSensitiveAccess) VWarningf(ctx context.Context, level Level, format 
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4372,6 +4388,8 @@ func (loggerSensitiveAccess) Warning(ctx context.Context, msg string) {
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4393,6 +4411,8 @@ func (loggerSensitiveAccess) WarningfDepth(ctx context.Context, depth int, forma
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4417,6 +4437,8 @@ func (loggerSensitiveAccess) Errorf(ctx context.Context, format string, args ...
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4441,6 +4463,8 @@ func (loggerSensitiveAccess) VErrorf(ctx context.Context, level Level, format st
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4464,6 +4488,8 @@ func (loggerSensitiveAccess) Error(ctx context.Context, msg string) {
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4486,6 +4512,8 @@ func (loggerSensitiveAccess) ErrorfDepth(ctx context.Context, depth int, format 
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4510,6 +4538,8 @@ func (loggerSensitiveAccess) Fatalf(ctx context.Context, format string, args ...
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4534,6 +4564,8 @@ func (loggerSensitiveAccess) VFatalf(ctx context.Context, level Level, format st
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4557,6 +4589,8 @@ func (loggerSensitiveAccess) Fatal(ctx context.Context, msg string) {
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4578,6 +4612,8 @@ func (loggerSensitiveAccess) FatalfDepth(ctx context.Context, depth int, format 
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4596,6 +4632,8 @@ func (loggerSensitiveAccess) Shout(ctx context.Context, sev Severity, msg string
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4613,6 +4651,8 @@ func (loggerSensitiveAccess) Shoutf(ctx context.Context, sev Severity, format st
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4630,6 +4670,8 @@ func (loggerSensitiveAccess) VEvent(ctx context.Context, level Level, msg string
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4646,6 +4688,8 @@ func (loggerSensitiveAccess) VEventf(ctx context.Context, level Level, format st
 //
 //   - Data access audit events (when table audit is enabled via
 //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+//   - Data access audit events (when role-based audit is enabled via
+//     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
 //   - SQL statements executed by users with the admin role
 //   - Operations that write to system tables
 //
@@ -4664,7 +4708,7 @@ type loggerSqlExec struct{}
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 var SqlExec loggerSqlExec
 
@@ -4683,7 +4727,7 @@ var _ ChannelLogger = SqlExec
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
@@ -4702,7 +4746,7 @@ func (loggerSqlExec) Infof(ctx context.Context, format string, args ...interface
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
@@ -4721,7 +4765,7 @@ func (loggerSqlExec) VInfof(ctx context.Context, level Level, format string, arg
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
@@ -4739,7 +4783,7 @@ func (loggerSqlExec) Info(ctx context.Context, msg string) {
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `INFO` severity is used for informational messages that do not
@@ -4756,7 +4800,7 @@ func (loggerSqlExec) InfofDepth(ctx context.Context, depth int, format string, a
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
@@ -4775,7 +4819,7 @@ func (loggerSqlExec) Warningf(ctx context.Context, format string, args ...interf
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
@@ -4794,7 +4838,7 @@ func (loggerSqlExec) VWarningf(ctx context.Context, level Level, format string, 
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
@@ -4812,7 +4856,7 @@ func (loggerSqlExec) Warning(ctx context.Context, msg string) {
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `WARNING` severity is used for situations which may require special handling,
@@ -4829,7 +4873,7 @@ func (loggerSqlExec) WarningfDepth(ctx context.Context, depth int, format string
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
@@ -4849,7 +4893,7 @@ func (loggerSqlExec) Errorf(ctx context.Context, format string, args ...interfac
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
@@ -4869,7 +4913,7 @@ func (loggerSqlExec) VErrorf(ctx context.Context, level Level, format string, ar
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
@@ -4888,7 +4932,7 @@ func (loggerSqlExec) Error(ctx context.Context, msg string) {
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `ERROR` severity is used for situations that require special handling,
@@ -4906,7 +4950,7 @@ func (loggerSqlExec) ErrorfDepth(ctx context.Context, depth int, format string, 
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
@@ -4926,7 +4970,7 @@ func (loggerSqlExec) Fatalf(ctx context.Context, format string, args ...interfac
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
@@ -4946,7 +4990,7 @@ func (loggerSqlExec) VFatalf(ctx context.Context, level Level, format string, ar
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
@@ -4965,7 +5009,7 @@ func (loggerSqlExec) Fatal(ctx context.Context, msg string) {
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 //
 // The `FATAL` severity is used for situations that require an immedate, hard
@@ -4982,7 +5026,7 @@ func (loggerSqlExec) FatalfDepth(ctx context.Context, depth int, format string, 
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, msg)
@@ -4996,7 +5040,7 @@ func (loggerSqlExec) Shout(ctx context.Context, sev Severity, msg string) {
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) Shoutf(ctx context.Context, sev Severity, format string, args ...interface{}) {
 	shoutfDepth(ctx, 1, sev, channel.SQL_EXEC, format, args...)
@@ -5009,7 +5053,7 @@ func (loggerSqlExec) Shoutf(ctx context.Context, sev Severity, format string, ar
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) VEvent(ctx context.Context, level Level, msg string) {
 	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_EXEC, msg)
@@ -5022,7 +5066,7 @@ func (loggerSqlExec) VEvent(ctx context.Context, level Level, msg string) {
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) VEventf(ctx context.Context, level Level, format string, args ...interface{}) {
 	vEventf(ctx, false /* isErr */, 1, level, channel.SQL_EXEC, format, args...)
@@ -5034,7 +5078,7 @@ func (loggerSqlExec) VEventf(ctx context.Context, level Level, format string, ar
 // behalf of client connections:
 //
 //   - Logical SQL statement executions (when enabled via the
-//     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+//     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
 //   - uncaught Go panic errors during the execution of a SQL statement.
 func (loggerSqlExec) VEventfDepth(ctx context.Context, depth int, level Level, format string, args ...interface{}) {
 	vEventf(ctx, false /* isErr */, 1+depth, level, channel.SQL_EXEC, format, args...)

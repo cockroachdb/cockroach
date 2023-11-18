@@ -11,7 +11,6 @@ go_test(
     name = "shuffle_test",
     size = "small",
     srcs = ["shuffle_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":shuffle"],
     deps = ["//pkg/util/leaktest"],
 )

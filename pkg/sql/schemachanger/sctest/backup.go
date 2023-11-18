@@ -206,7 +206,7 @@ func backupSuccess(t *testing.T, factory TestServerFactory, cs CumulativeTestCas
 		}
 
 		// Upgrade the cluster if applicable.
-		tdb.Exec(t, "SET CLUSTER SETTING VERSION = $1", clusterversion.TestingBinaryVersion.String())
+		tdb.Exec(t, "SET CLUSTER SETTING VERSION = $1", clusterversion.Latest.String())
 
 		// Restore the backup of the database taken mid-successful-schema-change
 		// in various ways, check that it ends up in the same state as present.
@@ -509,7 +509,7 @@ func containsUDF(expr tree.Expr) (bool, error) {
 	_, err := tree.SimpleVisit(expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, _ error) {
 		if fe, ok := expr.(*tree.FuncExpr); ok {
 			ref := fe.Func.FunctionReference.(*tree.UnresolvedName)
-			fn, err := ref.ToFunctionName()
+			fn, err := ref.ToRoutineName()
 			if err != nil {
 				return false, nil, err
 			}

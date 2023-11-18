@@ -174,6 +174,9 @@ var prettyCfg = func() tree.PrettyCfg {
 	return cfg
 }()
 
+// TestingPrettyCfg is only exposed to be used in tests.
+var TestingPrettyCfg = prettyCfg
+
 // Generate returns a random SQL string.
 func (s *Smither) Generate() string {
 	i := 0
@@ -187,7 +190,12 @@ func (s *Smither) Generate() string {
 			continue
 		}
 		i = 0
-		return prettyCfg.Pretty(stmt)
+		p, err := prettyCfg.Pretty(stmt)
+		if err != nil {
+			// Use simple printing if pretty-printing fails.
+			p = tree.AsStringWithFlags(stmt, tree.FmtParsable)
+		}
+		return p
 	}
 }
 

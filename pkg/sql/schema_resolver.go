@@ -153,6 +153,14 @@ func (sr *schemaResolver) LookupObject(
 
 	b := sr.descCollection.ByName(sr.txn)
 	if !sr.skipDescriptorCache && !flags.RequireMutable {
+		// The caller requires this descriptor to *not* be leased,
+		// so lets assert this here. Normally the planner / resolver
+		// will propagate flags so we don' need to check on a
+		// look up level.
+		if flags.AssertNotLeased {
+			return false, prefix, nil,
+				errors.AssertionFailedf("unable to get leased descriptor for (%q), resolver was not configured properly", obName)
+		}
 		b = sr.descCollection.ByNameWithLeased(sr.txn)
 	}
 	if flags.IncludeOffline {
@@ -427,13 +435,14 @@ func (sr *schemaResolver) runWithOptions(flags resolveFlags, fn func()) {
 }
 
 func (sr *schemaResolver) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	if name.NumParts > 3 || len(name.Parts[0]) == 0 || name.Star {
+	uname := name.UnresolvedName()
+	if uname.NumParts > 3 || len(uname.Parts[0]) == 0 || uname.Star {
 		return nil, pgerror.Newf(pgcode.InvalidName, "invalid function name: %s", name)
 	}
 
-	fn, err := name.ToFunctionName()
+	fn, err := uname.ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -447,14 +456,14 @@ func (sr *schemaResolver) ResolveFunction(
 	if err != nil {
 		return nil, err
 	}
-	udfDef, err := maybeLookUpUDF(ctx, sr, path, fn)
+	routine, err := maybeLookupRoutine(ctx, sr, path, fn)
 	if err != nil {
 		return nil, err
 	}
 
 	switch {
-	case builtinDef != nil && udfDef != nil:
-		return builtinDef.MergeWith(udfDef)
+	case builtinDef != nil && routine != nil:
+		return builtinDef.MergeWith(routine)
 	case builtinDef != nil:
 		props, _ := builtinsregistry.GetBuiltinProperties(builtinDef.Name)
 		if props.UnsupportedWithIssue != 0 {
@@ -470,8 +479,8 @@ func (sr *schemaResolver) ResolveFunction(
 			return nil, pgerror.Wrapf(unImplErr, pgcode.InvalidParameterValue, "%s()", builtinDef.Name)
 		}
 		return builtinDef, nil
-	case udfDef != nil:
-		return udfDef, nil
+	case routine != nil:
+		return routine, nil
 	default:
 		return nil, makeFunctionUndefinedError(ctx, name, path, fn, sr)
 	}
@@ -482,20 +491,35 @@ func (sr *schemaResolver) ResolveFunction(
 // function name and find a suggested function name if possible.
 func makeFunctionUndefinedError(
 	ctx context.Context,
-	name *tree.UnresolvedName,
+	name tree.UnresolvedRoutineName,
 	path tree.SearchPath,
 	fn tree.RoutineName,
 	sr *schemaResolver,
 ) error {
+	uname := name.UnresolvedName()
+	makeRoutineName := func(n *tree.UnresolvedName) (tree.UnresolvedRoutineName, error) {
+		switch name.(type) {
+		case tree.UnresolvedFunctionName:
+			return tree.MakeUnresolvedFunctionName(n), nil
+		case tree.UnresolvedProcedureName:
+			return tree.MakeUnresolvedProcedureName(n), nil
+		default:
+			return nil, errors.AssertionFailedf("unexpected routine name type")
+		}
+	}
 	var lowerName tree.UnresolvedName
 	if fn.ExplicitSchema {
-		lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[1]), strings.ToLower(name.Parts[0]))
+		lowerName = tree.MakeUnresolvedName(strings.ToLower(uname.Parts[1]), strings.ToLower(uname.Parts[0]))
 	} else {
-		lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]))
+		lowerName = tree.MakeUnresolvedName(strings.ToLower(uname.Parts[0]))
+	}
+	lowerRoutineName, err := makeRoutineName(&lowerName)
+	if err != nil {
+		return err
 	}
 	wrap := func(err error) error { return err }
-	if lowerName != *name {
-		alternative, err := sr.ResolveFunction(ctx, &lowerName, path)
+	if lowerName != *uname {
+		alternative, err := sr.ResolveFunction(ctx, lowerRoutineName, path)
 		if err != nil {
 			switch pgerror.GetPGCode(err) {
 			case pgcode.UndefinedFunction, pgcode.UndefinedSchema:
@@ -513,12 +537,21 @@ func makeFunctionUndefinedError(
 			}
 		}
 	}
-	return wrap(errors.Wrapf(
-		tree.ErrFunctionUndefined, "unknown function: %s()", tree.ErrString(name),
-	))
+	if _, ok := name.(tree.UnresolvedProcedureName); ok {
+		err = errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "unknown procedure: %s()", tree.ErrString(uname)),
+			tree.ErrRoutineUndefined,
+		)
+	} else {
+		err = errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "unknown function: %s()", tree.ErrString(uname)),
+			tree.ErrRoutineUndefined,
+		)
+	}
+	return wrap(err)
 }
 
-func maybeLookUpUDF(
+func maybeLookupRoutine(
 	ctx context.Context, sr *schemaResolver, path tree.SearchPath, fn tree.RoutineName,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	if sr.txn == nil {
@@ -567,7 +600,10 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 	if !funcdesc.IsOIDUserDefinedFunc(oid) {
 		qol, ok := tree.OidToQualifiedBuiltinOverload[oid]
 		if !ok {
-			return nil, nil, errors.Wrapf(tree.ErrFunctionUndefined, "function %d not found", oid)
+			return nil, nil, errors.Mark(
+				pgerror.Newf(pgcode.UndefinedFunction, "function %d not found", oid),
+				tree.ErrRoutineUndefined,
+			)
 		}
 		fnName := tree.MakeQualifiedRoutineName(sr.CurrentDatabase(), qol.Schema, tree.OidToBuiltinName[oid])
 		return &fnName, qol.Overload, nil
@@ -588,6 +624,21 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 		return nil, nil, err
 	}
 	return fnName, ret, nil
+}
+
+// FunctionDesc returns the descriptor for the function with the given OID.
+func (sr *schemaResolver) FunctionDesc(
+	ctx context.Context, oid oid.Oid,
+) (catalog.FunctionDescriptor, error) {
+	if !funcdesc.IsOIDUserDefinedFunc(oid) {
+		return nil, errors.Mark(
+			pgerror.Newf(pgcode.UndefinedFunction, "function %d  not user-defined", oid),
+			tree.ErrRoutineUndefined,
+		)
+	}
+	g := sr.byIDGetterBuilder().WithoutNonPublic().WithoutOtherParent(sr.typeResolutionDbID).Get()
+	descID := funcdesc.UserDefinedFunctionOIDToID(oid)
+	return g.Function(ctx, descID)
 }
 
 // NewSkippingCacheSchemaResolver constructs a schemaResolver which always skip

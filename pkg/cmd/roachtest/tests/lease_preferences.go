@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,11 +49,12 @@ import (
 type leasePreferencesEventFn func(context.Context, test.Test, cluster.Cluster)
 
 type leasePreferencesSpec struct {
-	preferences          string
-	ranges, replFactor   int
-	eventFn              leasePreferencesEventFn
-	checkNodes           []int
-	waitForLessPreferred bool
+	preferences           string
+	ranges, replFactor    int
+	eventFn               leasePreferencesEventFn
+	checkNodes            []int
+	waitForLessPreferred  bool
+	postEventWaitDuration time.Duration
 }
 
 // makeStopNodesEventFn returns a leasePreferencesEventFn which stops the
@@ -101,14 +103,17 @@ func registerLeasePreferences(r registry.Registry) {
 		// validation.
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Cluster:             r.MakeClusterSpec(5, spec.CPU(4)),
+		CompatibleClouds:    registry.AllExceptAWS,
+		Suites:              registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLeasePreferences(ctx, t, c, leasePreferencesSpec{
-				preferences:          `[+dc=1],[+dc=2]`,
-				ranges:               1000,
-				replFactor:           5,
-				checkNodes:           []int{1, 3, 4, 5},
-				eventFn:              makeStopNodesEventFn(2 /* targets */),
-				waitForLessPreferred: false,
+				preferences:           `[+dc=1],[+dc=2]`,
+				ranges:                1000,
+				replFactor:            5,
+				checkNodes:            []int{1, 3, 4, 5},
+				eventFn:               makeStopNodesEventFn(2 /* targets */),
+				waitForLessPreferred:  false,
+				postEventWaitDuration: 10 * time.Minute,
 			})
 		},
 	})
@@ -124,14 +129,17 @@ func registerLeasePreferences(r registry.Registry) {
 		// validation.
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Cluster:             r.MakeClusterSpec(5, spec.CPU(4)),
+		CompatibleClouds:    registry.AllExceptAWS,
+		Suites:              registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLeasePreferences(ctx, t, c, leasePreferencesSpec{
-				preferences:          `[+dc=1],[+dc=2]`,
-				ranges:               1000,
-				replFactor:           5,
-				eventFn:              makeStopNodesEventFn(1, 2 /* targets */),
-				checkNodes:           []int{3, 4, 5},
-				waitForLessPreferred: false,
+				preferences:           `[+dc=1],[+dc=2]`,
+				ranges:                1000,
+				replFactor:            5,
+				eventFn:               makeStopNodesEventFn(1, 2 /* targets */),
+				checkNodes:            []int{3, 4, 5},
+				waitForLessPreferred:  false,
+				postEventWaitDuration: 10 * time.Minute,
 			})
 		},
 	})
@@ -139,10 +147,12 @@ func registerLeasePreferences(r registry.Registry) {
 		// NB: This test manually transfers leases onto [+dc=3], which violates the
 		// lease preferences. This test then waits until all the leases are back on
 		// the most preferred locality.
-		Name:    "lease-preferences/manual-violating-transfer",
-		Owner:   registry.OwnerKV,
-		Timeout: 30 * time.Minute,
-		Cluster: r.MakeClusterSpec(5, spec.CPU(4)),
+		Name:             "lease-preferences/manual-violating-transfer",
+		Owner:            registry.OwnerKV,
+		Timeout:          30 * time.Minute,
+		Cluster:          r.MakeClusterSpec(5, spec.CPU(4)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runLeasePreferences(ctx, t, c, leasePreferencesSpec{
 				preferences: `[+dc=1],[+dc=2]`,
@@ -150,8 +160,9 @@ func registerLeasePreferences(r registry.Registry) {
 				replFactor:  5,
 				eventFn: makeTransferLeasesEventFn(
 					5 /* gateway */, 5 /* target */),
-				checkNodes:           []int{1, 2, 3, 4, 5},
-				waitForLessPreferred: false,
+				checkNodes:            []int{1, 2, 3, 4, 5},
+				waitForLessPreferred:  false,
+				postEventWaitDuration: 10 * time.Minute,
 			})
 		},
 	})
@@ -176,6 +187,7 @@ func runLeasePreferences(
 	// https://github.com/cockroachdb/cockroach/issues/105274
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["server.span_stats.span_batch_limit"] = "4096"
+	settings.ClusterSettings["kv.enqueue_in_replicate_queue_on_span_config_update.enabled"] = "true"
 
 	startNodes := func(nodes ...int) {
 		for _, node := range nodes {
@@ -201,7 +213,6 @@ func runLeasePreferences(
 		spec.ranges = 100
 	}
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	t.Status("starting cluster")
 	startNodes(allNodes...)
 
@@ -223,7 +234,7 @@ func runLeasePreferences(
 
 	checkLeasePreferenceConformance := func(ctx context.Context) {
 		result, err := waitForLeasePreferences(
-			ctx, t, c, spec.checkNodes, spec.waitForLessPreferred, stableDuration)
+			ctx, t, c, spec.checkNodes, spec.waitForLessPreferred, stableDuration, spec.postEventWaitDuration)
 		require.NoError(t, err, result)
 		require.Truef(t, !result.violating(), "violating lease preferences %s", result)
 		if spec.waitForLessPreferred {
@@ -244,13 +255,13 @@ func runLeasePreferences(
 	// Wait for the existing ranges (not kv) to be up-replicated. That way,
 	// creating the splits and waiting for up-replication on kv will be much
 	// quicker.
-	require.NoError(t, WaitForReplication(ctx, t, conn, spec.replFactor))
+	require.NoError(t, WaitForReplication(ctx, t, conn, spec.replFactor, atLeastReplicationFactor))
 	c.Run(ctx, c.Node(numNodes), fmt.Sprintf(
 		`./cockroach workload init kv --scatter --splits %d {pgurl:%d}`,
 		spec.ranges, numNodes))
 	// Wait for under-replicated ranges before checking lease preference
 	// enforcement.
-	require.NoError(t, WaitForReplication(ctx, t, conn, spec.replFactor))
+	require.NoError(t, WaitForReplication(ctx, t, conn, spec.replFactor, atLeastReplicationFactor))
 
 	// Set a lease preference for the liveness range, to be on n5. This test
 	// would occasionally fail due to the liveness heartbeat failures, when the
@@ -337,7 +348,7 @@ func waitForLeasePreferences(
 	c cluster.Cluster,
 	nodes []int,
 	waitForLessPreferred bool,
-	stableDuration time.Duration,
+	stableDuration, maxWaitDuration time.Duration,
 ) (leasePreferencesResult, error) {
 	// NB: We are querying metrics, expect these to be populated approximately
 	// every 10s.
@@ -369,6 +380,8 @@ func waitForLeasePreferences(
 		select {
 		case <-ctx.Done():
 			return ret, ctx.Err()
+		case <-time.After(maxWaitDuration):
+			return ret, errors.Errorf("timed out before lease preferences satisfied")
 		case <-checkTimer.C:
 			checkTimer.Read = true
 			violating, lessPreferred := preferenceMetrics(ctx)

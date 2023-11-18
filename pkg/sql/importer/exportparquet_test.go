@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -140,7 +141,8 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *ty
 		eArr := expected.(*tree.DArray)
 		aArr := actual.(*tree.DArray)
 		for i := 0; i < eArr.Len(); i++ {
-			validateDatum(t, tree.UnwrapDOidWrapper(eArr.Array[i]), aArr.Array[i], typ.ArrayContents())
+			validateDatum(t, tree.UnwrapDOidWrapper(eArr.Array[i]),
+				tree.UnwrapDOidWrapper(aArr.Array[i]), typ.ArrayContents())
 		}
 	case types.DateFamily:
 		// pgDate.orig property doesn't matter and can cause the test to fail
@@ -180,6 +182,7 @@ func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *ty
 func TestRandomParquetExports(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer ccl.TestingEnableEnterprise()() // allow usage of partitions
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()

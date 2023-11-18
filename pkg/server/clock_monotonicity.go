@@ -24,14 +24,15 @@ import (
 
 var (
 	forwardClockJumpCheckEnabled = settings.RegisterBoolSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"server.clock.forward_jump_check_enabled",
 		"if enabled, forward clock jumps > max_offset/2 will cause a panic",
 		false,
-	).WithPublic()
+		settings.WithName("server.clock.forward_jump_check.enabled"),
+		settings.WithPublic)
 
 	persistHLCUpperBoundInterval = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"server.clock.persist_upper_bound_interval",
 		"the interval between persisting the wall time upper bound of the clock. The clock "+
 			"does not generate a wall time greater than the persisted timestamp and will panic if "+
@@ -40,7 +41,7 @@ var (
 			"time across server restarts. Not setting this or setting a value of 0 disables this "+
 			"feature.",
 		0,
-	).WithPublic()
+		settings.WithPublic)
 )
 
 // startMonitoringForwardClockJumps starts a background task to monitor forward
@@ -62,7 +63,7 @@ func (s *topLevelServer) startMonitoringForwardClockJumps(ctx context.Context) e
 		return errors.Wrap(err, "monitoring forward clock jumps")
 	}
 
-	log.Ops.Info(ctx, "monitoring forward clock jumps based on server.clock.forward_jump_check_enabled")
+	log.Ops.Info(ctx, "monitoring forward clock jumps based on server.clock.forward_jump_check.enabled")
 	return nil
 }
 

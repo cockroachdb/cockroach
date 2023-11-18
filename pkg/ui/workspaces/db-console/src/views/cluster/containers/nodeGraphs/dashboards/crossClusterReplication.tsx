@@ -29,7 +29,7 @@ export default function (props: GraphDashboardProps) {
     >
       <Axis units={AxisUnits.Duration} label="time">
         <Metric
-          name="cr.node.replication.frontier_lag_nanos"
+          name="cr.node.physical_replication.frontier_lag_nanos"
           title="Replication Lag"
         />
       </Axis>
@@ -42,7 +42,7 @@ export default function (props: GraphDashboardProps) {
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
         <Metric
-          name="cr.node.replication.logical_bytes"
+          name="cr.node.physical_replication.logical_bytes"
           title="Logical Bytes"
           nonNegativeRate
         />
@@ -56,7 +56,7 @@ export default function (props: GraphDashboardProps) {
     >
       <Axis units={AxisUnits.Bytes} label="bytes">
         <Metric
-          name="cr.node.replication.sst_bytes"
+          name="cr.node.physical_replication.sst_bytes"
           title="SST Bytes"
           nonNegativeRate
         />

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/sentryutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -34,11 +35,11 @@ import (
 // UseStatisticsForecasts controls whether statistics forecasts are generated in
 // the stats cache.
 var UseStatisticsForecasts = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.forecasts.enabled",
 	"when true, enables generation of statistics forecasts by default for all tables",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // minObservationsForForecast is the minimum number of observed statistics
 // required to produce a statistics forecast. Forecasts based on 1 or 2
@@ -342,7 +343,7 @@ func forecastColumnStatistics(
 					"forecasted histogram had first bucket with non-zero NumRange or DistinctRange: %s",
 					debugging,
 				)
-				errorutil.SendReport(ctx, sv, err)
+				sentryutil.SendReport(ctx, sv, err)
 				return nil, err
 			}
 			if bucket.UpperBound != tree.DNull {
@@ -410,6 +411,9 @@ func predictHistogram(
 	// Construct a linear regression model of quantile functions over time, and
 	// use it to predict a quantile function at the given time.
 	yₙ, r2 := quantileSimpleLinearRegression(createdAts, quantiles, forecastAt)
+	if yₙ.isInvalid() {
+		return histogram{}, errors.Newf("predicted histogram contains overflow values")
+	}
 	yₙ = yₙ.fixMalformed()
 	log.VEventf(
 		ctx, 3, "forecast for table %v columns %v predicted quantile %v R² %v",

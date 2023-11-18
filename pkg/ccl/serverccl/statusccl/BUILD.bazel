@@ -7,7 +7,6 @@ go_test(
         "tenant_grpc_test.go",
         "tenant_status_test.go",
     ],
-    args = ["-test.timeout=295s"],
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
@@ -18,7 +17,6 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/security",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

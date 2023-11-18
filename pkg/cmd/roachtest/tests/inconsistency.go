@@ -24,17 +24,18 @@ import (
 
 func registerInconsistency(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "inconsistency",
-		Owner:   registry.OwnerReplication,
-		Cluster: r.MakeClusterSpec(3),
-		Leases:  registry.MetamorphicLeases,
-		Run:     runInconsistency,
+		Name:             "inconsistency",
+		Owner:            registry.OwnerReplication,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Run:              runInconsistency,
 	})
 }
 
 func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	nodes := c.Range(1, 3)
-	c.Put(ctx, t.Cockroach(), "./cockroach", nodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
 
 	{

@@ -37,8 +37,6 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	n := c.Spec().NodeCount
 	serverNodes, clientNode := c.Range(1, n-1), c.Node(n)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-
 	t.L().Printf("starting nodes to initialize TLS certs...")
 	// NB: we need to start two times, because when we use
 	// c.Start() separately on nodes 1 and nodes 2-3,
@@ -298,10 +296,12 @@ sudo iptables-save
 func registerNetwork(r registry.Registry) {
 	const numNodes = 4
 	r.Add(registry.TestSpec{
-		Name:    fmt.Sprintf("network/authentication/nodes=%d", numNodes),
-		Owner:   registry.OwnerKV, // Should be moved to new security team once one exists.
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
+		Name:             fmt.Sprintf("network/authentication/nodes=%d", numNodes),
+		Owner:            registry.OwnerKV, // Should be moved to new security team once one exists.
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkAuthentication(ctx, t, c)
 		},

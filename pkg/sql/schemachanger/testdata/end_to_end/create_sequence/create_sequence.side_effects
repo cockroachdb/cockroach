@@ -12,8 +12,7 @@ write *eventpb.CreateSequence to event log:
   sequenceName: defaultdb.public.sq1
   sql:
     descriptorId: 104
-    statement: CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807
-      INCREMENT 1 START 32
+    statement: CREATE SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32
     tag: CREATE SEQUENCE
     user: root
 ## StatementPhase stage 1 of 1 with 23 MutationType ops
@@ -76,7 +75,7 @@ upsert descriptor #104
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:
@@ -153,7 +152,7 @@ upsert descriptor #104
   +    - privileges: "2"
   +      userProto: root
   +      withGrantOption: "2"
-  +    version: 2
+  +    version: 3
   +  replacementOf:
   +    time: {}
   +  sequenceOpts:

@@ -25,7 +25,6 @@ go_test(
         "bank_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":bank"],
     deps = [
         "//pkg/base",
@@ -36,6 +35,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/workload/workloadsql",
     ],

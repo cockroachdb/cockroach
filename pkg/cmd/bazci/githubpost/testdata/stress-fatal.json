@@ -6,7 +6,7 @@
 {"Action":"run","Test":"TestGossipHandlesReplacedNode"}
 {"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"=== RUN   TestGossipHandlesReplacedNode\n"}
 {"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"W180711 20:13:15.808212 83 server/status/runtime.go:143  Could not parse build timestamp: parsing time \"\" as \"2006/01/02 15:04:05\": cannot parse \"\" as \"2006\"\n"}
-{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"I180711 20:13:15.814446 83 server/server.go:794  [n?] monitoring forward clock jumps based on server.clock.forward_jump_check_enabled\n"}
+{"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"I180711 20:13:15.814446 83 server/server.go:794  [n?] monitoring forward clock jumps based on server.clock.forward_jump_check.enabled\n"}
 {"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"I180711 20:13:15.818214 83 server/config.go:545  [n?] 1 storage engine initialized\n"}
 {"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"I180711 20:13:15.818267 83 server/config.go:548  [n?] RocksDB cache size: 128 MiB\n"}
 {"Action":"output","Test":"TestGossipHandlesReplacedNode","Output":"I180711 20:13:15.818307 83 server/config.go:548  [n?] store 0: in-memory, size 0 B\n"}

@@ -24,7 +24,6 @@ import (
 
 func registerRoachmart(r registry.Registry) {
 	runRoachmart := func(ctx context.Context, t test.Test, c cluster.Cluster, partition bool) {
-		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 
@@ -72,10 +71,12 @@ func registerRoachmart(r registry.Registry) {
 	for _, v := range []bool{true, false} {
 		v := v
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("roachmart/partition=%v", v),
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(9, spec.Geo(), spec.Zones("us-central1-b,us-west1-b,europe-west2-b")),
-			Leases:  registry.MetamorphicLeases,
+			Name:             fmt.Sprintf("roachmart/partition=%v", v),
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(9, spec.Geo(), spec.GCEZones("us-central1-b,us-west1-b,europe-west2-b")),
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

@@ -30,10 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -105,14 +106,17 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		defer log.Scope(t).Close(t)
+
 		ctx := context.Background()
 		ctx, cancel := context.WithCancel(ctx)
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 		defer cancel()
-		defer tc.Stopper().Stop(ctx)
+		ts, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		})
+		defer ts.Stopper().Stop(ctx)
 
-		ts := tc.Server(0)
-		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
@@ -125,10 +129,10 @@ func TestDataDriven(t *testing.T) {
 		).Scan(&dummyTableID)
 
 		kvAccessor := spanconfigkvaccessor.New(
-			tc.Server(0).DB(),
-			tc.Server(0).InternalExecutor().(isql.Executor),
-			tc.Server(0).ClusterSettings(),
-			tc.Server(0).Clock(),
+			kvDB,
+			ts.InternalExecutor().(isql.Executor),
+			ts.ClusterSettings(),
+			ts.Clock(),
 			fmt.Sprintf("defaultdb.public.%s", dummyTableName),
 			nil, /* knobs */
 		)
@@ -147,7 +151,7 @@ func TestDataDriven(t *testing.T) {
 			dummyTableID,
 			10<<20, /* 10 MB */
 			spanconfigtestutils.ParseConfig(t, "FALLBACK"),
-			tc.Server(0).ClusterSettings(),
+			ts.ClusterSettings(),
 			spanconfigstore.NewEmptyBoundsReader(),
 			&spanconfig.TestingKnobs{
 				KVSubscriberRangeFeedKnobs: &rangefeedcache.TestingKnobs{

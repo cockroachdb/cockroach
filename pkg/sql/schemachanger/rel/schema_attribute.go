@@ -11,9 +11,8 @@
 package rel
 
 import (
+	"fmt"
 	"unsafe"
-
-	"github.com/cockroachdb/errors"
 )
 
 // GetAttribute returns the requested attribute from the passed entity. If
@@ -34,9 +33,12 @@ func (sc *Schema) GetAttribute(attribute Attr, v interface{}) (interface{}, erro
 
 	fi, ok := ti.attrFields[ord]
 	if !ok {
-		return nil, errors.Errorf(
-			"no field defined on %v for %v", ti.typ, attribute,
-		)
+		// We avoid using errors.Errorf here because this is a hot path that
+		// showed up when profiling TestRandomSyntaxSchemaChangeColumn. Errorf
+		// calls runtime.Callers to construct the call stack, which is expensive.
+		// No production code actually uses this error message, so using a
+		// simpler error doesn't have much downside.
+		return nil, fmt.Errorf("no field defined on type")
 	}
 
 	// There may be more than one field which stores this attribute. At most one

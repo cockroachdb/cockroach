@@ -69,7 +69,6 @@ func (f SingleNodeTestClusterFactory) WithSchemaChangerKnobs(
 // WithMixedVersion implements the TestServerFactory interface.
 func (f SingleNodeTestClusterFactory) WithMixedVersion() TestServerFactory {
 	f.server = &server.TestingKnobs{
-		BootstrapVersionKeyOverride:    OldVersionKey,
 		BinaryVersionOverride:          clusterversion.ByKey(OldVersionKey),
 		DisableAutomaticVersionUpgrade: make(chan struct{}),
 	}
@@ -97,8 +96,6 @@ func (f SingleNodeTestClusterFactory) Run(
 		args.Knobs.SQLDeclarativeSchemaChanger = f.scexec
 	}
 	s, db, _ := serverutils.StartServer(t, args)
-	sv := &s.ApplicationLayer().ClusterSettings().SV
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, sv, true)
 	defer func() {
 		s.Stopper().Stop(ctx)
 	}()
@@ -107,7 +104,7 @@ func (f SingleNodeTestClusterFactory) Run(
 
 // OldVersionKey is the version key used by the WithMixedVersion method
 // in the TestServerFactory interface.
-const OldVersionKey = clusterversion.BinaryMinSupportedVersionKey
+const OldVersionKey = clusterversion.MinSupported
 
 // newJobsKnobs constructs jobs.TestingKnobs for the end-to-end tests.
 func newJobsKnobs() *jobs.TestingKnobs {

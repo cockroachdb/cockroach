@@ -19,18 +19,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
@@ -49,7 +47,7 @@ import (
 //     simulation. The default values are: rw_ratio=0 rate=0 min_block=1
 //     max_block=1 min_key=1 max_key=10_000 access_skew=false.
 //
-//   - "ken_cluster" [nodes=<int>] [stores_per_node=<int>]
+//   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
 //     simulation. The default values are: nodes=3 stores_per_node=1.
@@ -75,6 +73,11 @@ import (
 //     Set the liveness status of the node with ID NodeID. This applies at the
 //     start of the simulation or with some delay after the simulation starts,
 //     if specified.
+//
+//   - set_locality node=<int> [delay=<duration] locality=string
+//     Sets the locality of the node with ID NodeID. This applies at the start
+//     of the simulation or with some delay after the simulation stats, if
+//     specified.
 //
 //   - add_node: [stores=<int>] [locality=<string>] [delay=<duration>]
 //     Add a node to the cluster after initial generation with some delay,
@@ -157,19 +160,22 @@ import (
 //     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
 	ctx := context.Background()
-	dir := datapathutils.TestDataPath(t, ".")
+	dir := datapathutils.TestDataPath(t, "non_rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
-		if strings.Contains(path, "example_fulldisk") {
-			skip.WithIssue(t, 105904, "asim is non-deterministic")
-		}
 		const defaultKeyspace = 10000
 		loadGen := gen.BasicLoad{}
 		var clusterGen gen.ClusterGen
-		rangeGen := defaultBasicRangesGen()
+		var rangeGen gen.RangeGen = gen.BasicRanges{
+			BaseRanges: gen.BaseRanges{
+				Ranges:            1,
+				ReplicationFactor: 1,
+				KeySpace:          defaultKeyspace,
+			},
+		}
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
-		eventGen := gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
-		assertions := []SimulationAssertion{}
-		runs := []asim.History{}
+		eventGen := gen.NewStaticEventsWithNoEvents()
+		assertions := []assertion.SimulationAssertion{}
+		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "gen_load":
@@ -248,26 +254,10 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "delay", &delay)
 				scanIfExists(t, d, "stores", &numStores)
 				scanIfExists(t, d, "locality", &localityString)
-
-				addEvent := event.DelayedEvent{
-					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
-						node := s.AddNode()
-						if localityString != "" {
-							var locality roachpb.Locality
-							if err := locality.Set(localityString); err != nil {
-								panic(fmt.Sprintf("unable to set node locality %s", err.Error()))
-							}
-							s.SetNodeLocality(node.NodeID(), locality)
-						}
-						for i := 0; i < numStores; i++ {
-							if _, ok := s.AddStore(node.NodeID()); !ok {
-								panic(fmt.Sprintf("adding store to node=%d failed", node))
-							}
-						}
-					},
-					At: settingsGen.Settings.StartTime.Add(delay),
-				}
-				eventGen.DelayedEvents = append(eventGen.DelayedEvents, addEvent)
+				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.AddNodeEvent{
+					NumStores:      numStores,
+					LocalityString: localityString,
+				})
 				return ""
 			case "set_span_config":
 				var delay time.Duration
@@ -282,45 +272,35 @@ func TestDataDriven(t *testing.T) {
 					tag, data = strings.TrimSpace(tag), strings.TrimSpace(data)
 					span := spanconfigtestutils.ParseSpan(t, tag)
 					conf := spanconfigtestutils.ParseZoneConfig(t, data).AsSpanConfig()
-					eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
-						EventFn: func(ctx context.Context, tick time.Time, s state.State) {
-							s.SetSpanConfig(span, conf)
-						},
-						At: settingsGen.Settings.StartTime.Add(delay),
+					eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetSpanConfigEvent{
+						Span:   span,
+						Config: conf,
 					})
 				}
 				return ""
 			case "set_liveness":
 				var nodeID int
-				var liveness string
 				var delay time.Duration
-				livenessStatus := 3
+				livenessStatus := livenesspb.NodeLivenessStatus_LIVE
 				scanArg(t, d, "node", &nodeID)
-				scanArg(t, d, "liveness", &liveness)
+				scanArg(t, d, "liveness", &livenessStatus)
 				scanIfExists(t, d, "delay", &delay)
-				switch liveness {
-				case "unknown":
-					livenessStatus = 0
-				case "dead":
-					livenessStatus = 1
-				case "unavailable":
-					livenessStatus = 2
-				case "live":
-					livenessStatus = 3
-				case "decommissioning":
-					livenessStatus = 4
-				case "draining":
-					livenessStatus = 5
-					panic(fmt.Sprintf("unkown liveness status: %s", liveness))
-				}
-				eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
-					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
-						s.SetNodeLiveness(
-							state.NodeID(nodeID),
-							livenesspb.NodeLivenessStatus(livenessStatus),
-						)
-					},
-					At: settingsGen.Settings.StartTime.Add(delay),
+				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLivenessEvent{
+					NodeId:         state.NodeID(nodeID),
+					LivenessStatus: livenessStatus,
+				})
+				return ""
+			case "set_locality":
+				var nodeID int
+				var localityString string
+				var delay time.Duration
+				scanArg(t, d, "node", &nodeID)
+				scanArg(t, d, "locality", &localityString)
+				scanIfExists(t, d, "delay", &delay)
+
+				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLocalityEvent{
+					NodeID:         state.NodeID(nodeID),
+					LocalityString: localityString,
 				})
 				return ""
 			case "set_capacity":
@@ -341,13 +321,9 @@ func TestDataDriven(t *testing.T) {
 				if ioThreshold != -1 {
 					capacityOverride.IOThreshold = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
 				}
-
-				eventGen.DelayedEvents = append(eventGen.DelayedEvents, event.DelayedEvent{
-					EventFn: func(ctx context.Context, tick time.Time, s state.State) {
-						log.Infof(ctx, "setting capacity override %+v", capacityOverride)
-						s.SetCapacityOverride(state.StoreID(store), capacityOverride)
-					},
-					At: settingsGen.Settings.StartTime.Add(delay),
+				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetCapacityOverrideEvent{
+					StoreID:          state.StoreID(store),
+					CapacityOverride: capacityOverride,
 				})
 
 				return ""
@@ -411,45 +387,51 @@ func TestDataDriven(t *testing.T) {
 				case "balance":
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
-					assertions = append(assertions, balanceAssertion{
-						ticks:     ticks,
-						stat:      stat,
-						threshold: scanThreshold(t, d),
+					assertions = append(assertions, assertion.BalanceAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
 					})
 				case "steady":
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
-					assertions = append(assertions, steadyStateAssertion{
-						ticks:     ticks,
-						stat:      stat,
-						threshold: scanThreshold(t, d),
+					assertions = append(assertions, assertion.SteadyStateAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
 					})
 				case "stat":
 					var stores []int
 					scanArg(t, d, "stat", &stat)
 					scanArg(t, d, "ticks", &ticks)
 					scanArg(t, d, "stores", &stores)
-					assertions = append(assertions, storeStatAssertion{
-						ticks:     ticks,
-						stat:      stat,
-						threshold: scanThreshold(t, d),
-						stores:    stores,
+					assertions = append(assertions, assertion.StoreStatAssertion{
+						Ticks:     ticks,
+						Stat:      stat,
+						Threshold: scanThreshold(t, d),
+						Stores:    stores,
 					})
 				case "conformance":
-					var under, over, unavailable, violating int
-					under = conformanceAssertionSentinel
-					over = conformanceAssertionSentinel
-					unavailable = conformanceAssertionSentinel
-					violating = conformanceAssertionSentinel
+					var under, over, unavailable, violating, leaseViolating, leaseLessPref int
+					under = assertion.ConformanceAssertionSentinel
+					over = assertion.ConformanceAssertionSentinel
+					unavailable = assertion.ConformanceAssertionSentinel
+					violating = assertion.ConformanceAssertionSentinel
+					leaseLessPref = assertion.ConformanceAssertionSentinel
+					leaseViolating = assertion.ConformanceAssertionSentinel
 					scanIfExists(t, d, "under", &under)
 					scanIfExists(t, d, "over", &over)
 					scanIfExists(t, d, "unavailable", &unavailable)
 					scanIfExists(t, d, "violating", &violating)
-					assertions = append(assertions, conformanceAssertion{
-						underreplicated: under,
-						overreplicated:  over,
-						violating:       violating,
-						unavailable:     unavailable,
+					scanIfExists(t, d, "lease-violating", &leaseViolating)
+					scanIfExists(t, d, "lease-less-preferred", &leaseLessPref)
+					assertions = append(assertions, assertion.ConformanceAssertion{
+						Underreplicated:           under,
+						Overreplicated:            over,
+						ViolatingConstraints:      violating,
+						Unavailable:               unavailable,
+						ViolatingLeasePreferences: leaseViolating,
+						LessPreferredLeases:       leaseLessPref,
 					})
 				}
 				return ""

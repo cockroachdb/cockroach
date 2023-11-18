@@ -54,7 +54,7 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 
 	// mrs := &dummyMultiRaftServer{}
 
-	grpcServer, err := rpc.NewServer(rpcC)
+	grpcServer, err := rpc.NewServer(ctx, rpcC)
 	require.NoError(t, err)
 	// RegisterMultiRaftServer(grpcServer, mrs)
 

@@ -23,6 +23,8 @@ proto_library(
         "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:v1_proto",
         "//pkg/obsservice/obspb/opentelemetry-proto/resource/v1:v1_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
     ],
 )
 

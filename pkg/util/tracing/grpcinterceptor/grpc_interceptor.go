@@ -349,7 +349,7 @@ func newTracingClientStream(
 	// non-cancellable context here, it's not exactly broken if we never invoke
 	// this function because of context cancellation.  The finishFunc
 	// can still be invoked directly.
-	_ = ctxutil.WhenDone(ctx, func(err error) {
+	_ = ctxutil.WhenDone(ctx, func() {
 		// A streaming RPC can be finished by the caller cancelling the ctx. If
 		// the ctx is cancelled, the caller doesn't necessarily need to interact
 		// with the stream anymore (see [1]), so finishChan might never be

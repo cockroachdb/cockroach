@@ -51,6 +51,7 @@ func newRuntimeHistogram(metadata metric.Metadata, buckets []float64) *runtimeHi
 	if buckets[0] == math.Inf(-1) {
 		buckets = buckets[1:]
 	}
+	metadata.MetricType = prometheusgo.MetricType_HISTOGRAM
 	h := &runtimeHistogram{
 		Metadata: metadata,
 		// Go runtime histograms as of go1.19 are always in seconds whereas

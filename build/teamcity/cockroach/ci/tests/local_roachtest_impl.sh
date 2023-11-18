@@ -27,4 +27,5 @@ $BAZEL_BIN/pkg/cmd/roachtest/roachtest_/roachtest run acceptance kv/splits cdc/b
   --cockroach "$BAZEL_BIN/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short" \
   --workload "$BAZEL_BIN/pkg/cmd/workload/workload_/workload" \
   --artifacts /artifacts \
+  --artifacts-literal="${LITERAL_ARTIFACTS_DIR:-}" \
   --teamcity

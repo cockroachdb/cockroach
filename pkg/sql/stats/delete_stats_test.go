@@ -20,13 +20,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -40,15 +40,16 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	db := s.InternalDB().(descs.DB)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
 		s.ClusterSettings(),
 		db,
 	)
-	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 
 	// The test data must be ordered by CreatedAt DESC so the calculated set of
 	// expected deleted stats is correct.
@@ -335,15 +336,16 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	db := s.InternalDB().(isql.DB)
 	cache := NewTableStatisticsCache(
 		10, /* cacheSize */
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 	)
-	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
 	testData := []TableStatisticProto{
 		{
 			TableID:       descpb.ID(100),
@@ -670,28 +672,48 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t) // slow test
+
 	var params base.TestServerArgs
 	params.ScanMaxIdleTime = time.Millisecond // speed up MVCC GC queue scans
+	params.DefaultTestTenant = base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109380)
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 
+	// Poll for MVCC GC more frequently.
+	systemDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
+	systemDB.Exec(t, "SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';")
+
 	// Disable auto stats so that it doesn't interfere.
 	runner.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
-	// Poll for MVCC GC more frequently.
-	runner.Exec(t, "SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';")
 	// Cached protected timestamp state delays MVCC GC, update it every second.
 	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';")
+
+	if s.TenantController().StartedDefaultTestTenant() {
+		systemDB.Exec(t, "SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
+		// Block until we see that zone configs are enabled.
+		testutils.SucceedsSoon(t, func() error {
+			var enabled bool
+			runner.QueryRow(t, "SHOW CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled").Scan(&enabled)
+			if !enabled {
+				return errors.New("zone configs are not yet enabled")
+			}
+			return nil
+		})
+	}
 
 	// This subtest verifies that the statistic for a single dropped table is
 	// deleted promptly.
 	t.Run("basic", func(t *testing.T) {
 		// Lower the garbage collection interval to speed up the test.
 		runner.Exec(t, "SET CLUSTER SETTING sql.stats.garbage_collection_interval = '1s';")
-		// Create a table with short TTL and collect stats on it.
+		// Create the table and collect stats on it. Set a short TTL interval after
+		// the stats collection to ensure that the stats job doesn't exceed the gc
+		// threshold and fail.
 		runner.Exec(t, "CREATE TABLE t (k PRIMARY KEY) AS SELECT 1;")
-		runner.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		runner.Exec(t, "ANALYZE t;")
+		runner.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;")
 
 		r := runner.QueryRow(t, "SELECT 't'::regclass::oid")
 		var tableID int
@@ -726,9 +748,11 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 		const numTables = 5
 		countStatisticsQuery := `SELECT count(*) FROM system.table_statistics WHERE "tableID"  IN (`
 		for i := 1; i <= numTables; i++ {
+			// Analyze the table before setting the gc.ttl to avoid hitting the gc
+			// threshold.
 			runner.Exec(t, fmt.Sprintf("CREATE TABLE t%d (k PRIMARY KEY) AS SELECT 1;", i))
-			runner.Exec(t, fmt.Sprintf("ALTER TABLE t%d CONFIGURE ZONE USING gc.ttlseconds = 1;", i))
 			runner.Exec(t, fmt.Sprintf("ANALYZE t%d;", i))
+			runner.Exec(t, fmt.Sprintf("ALTER TABLE t%d CONFIGURE ZONE USING gc.ttlseconds = 1;", i))
 			r := runner.QueryRow(t, fmt.Sprintf("SELECT 't%d'::regclass::oid", i))
 			var tableID int
 			r.Scan(&tableID)

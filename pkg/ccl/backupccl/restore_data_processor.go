@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -76,7 +78,10 @@ type restoreDataProcessor struct {
 	// concurrent workers and sent down the flow by the processor.
 	progCh chan backuppb.RestoreProgress
 
-	agg *bulkutil.TracingAggregator
+	// Aggregator that aggregates StructuredEvents emitted in the
+	// restoreDataProcessors' trace recording.
+	agg      *bulkutil.TracingAggregator
+	aggTimer *timeutil.Timer
 
 	// qp is a MemoryBackedQuotaPool that restricts the amount of memory that
 	// can be used by this processor to open iterators on SSTs.
@@ -135,7 +140,7 @@ var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
 // The maximum is not enforced since if the maximum is reduced in the future that
 // may cause the cluster setting to fail.
 var numRestoreWorkers = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.bulk_io_write.restore_node_concurrency",
 	fmt.Sprintf("the number of workers processing a restore per job per node; maximum %d",
 		maxConcurrentRestoreWorkers),
@@ -148,7 +153,7 @@ var numRestoreWorkers = settings.RegisterIntSetting(
 // and the limit determined by restorePerProcessorMemoryLimitSQLFraction
 // and --max-sql-memory.
 var restorePerProcessorMemoryLimit = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.per_processor_memory_limit",
 	"limit on the amount of memory that can be used by a restore processor",
 	1<<30, // 1 GiB
@@ -157,7 +162,7 @@ var restorePerProcessorMemoryLimit = settings.RegisterByteSizeSetting(
 // restorePerProcessorMemoryLimitSQLFraction is the maximum percentage of the
 // SQL memory pool that could be used by a restoreDataProcessor.
 var restorePerProcessorMemoryLimitSQLFraction = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.per_processor_memory_limit_sql_fraction",
 	"limit on the amount of memory that can be used by a restore processor as a fraction of max SQL memory",
 	0.5,
@@ -206,6 +211,11 @@ func newRestoreDataProcessor(
 			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				rd.ConsumerClosed()
+				if rd.agg != nil {
+					meta := bulkutil.ConstructTracingAggregatorProducerMeta(ctx,
+						rd.flowCtx.NodeID.SQLInstanceID(), rd.flowCtx.ID, rd.agg)
+					return []execinfrapb.ProducerMetadata{*meta}
+				}
 				return nil
 			},
 		}); err != nil {
@@ -217,12 +227,17 @@ func newRestoreDataProcessor(
 // Start is part of the RowSource interface.
 func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", rd.spec.JobID)
-	ctx = rd.StartInternal(ctx, restoreDataProcName)
+	rd.agg = bulkutil.TracingAggregatorForContext(ctx)
+	rd.aggTimer = timeutil.NewTimer()
+	// If the aggregator is nil, we do not want the timer to fire.
+	if rd.agg != nil {
+		rd.aggTimer.Reset(15 * time.Second)
+	}
+
+	ctx = rd.StartInternal(ctx, restoreDataProcName, rd.agg)
 	rd.input.Start(ctx)
 
 	ctx, cancel := context.WithCancel(ctx)
-	ctx, rd.agg = bulkutil.MakeTracingAggregatorWithSpan(ctx, fmt.Sprintf("%s-aggregator", restoreDataProcName), rd.EvalCtx.Tracer)
-
 	rd.cancelWorkersAndWait = func() {
 		cancel()
 		_ = rd.phaseGroup.Wait()
@@ -479,10 +494,6 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 			return err
 		}
 
-		ctx, agg := bulkutil.MakeTracingAggregatorWithSpan(ctx,
-			fmt.Sprintf("%s-worker-%d-aggregator", restoreDataProcName, worker), rd.EvalCtx.Tracer)
-		defer agg.Close()
-
 		var sstIter mergedSST
 		for {
 			done, err := func() (done bool, _ error) {
@@ -702,14 +713,18 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 			return nil, rd.DrainHelper()
 		}
 		prog.ProgressDetails = *details
+		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
+	case <-rd.aggTimer.C:
+		rd.aggTimer.Read = true
+		rd.aggTimer.Reset(15 * time.Second)
+		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(rd.Ctx(),
+			rd.flowCtx.NodeID.SQLInstanceID(), rd.flowCtx.ID, rd.agg)
 	case meta := <-rd.metaCh:
 		return nil, meta
 	case <-rd.Ctx().Done():
 		rd.MoveToDraining(rd.Ctx().Err())
 		return nil, rd.DrainHelper()
 	}
-
-	return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -720,7 +735,7 @@ func (rd *restoreDataProcessor) ConsumerClosed() {
 	rd.cancelWorkersAndWait()
 
 	rd.qp.Close(rd.Ctx())
-	rd.agg.Close()
+	rd.aggTimer.Stop()
 	rd.InternalClose()
 }
 
@@ -752,7 +767,7 @@ func reserveRestoreWorkerMemory(
 // implement a mock SSTBatcher used purely for job progress tracking.
 type SSTBatcherExecutor interface {
 	AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error
-	Reset(ctx context.Context) error
+	Reset(ctx context.Context)
 	Flush(ctx context.Context) error
 	Close(ctx context.Context)
 	GetSummary() kvpb.BulkOpSummary
@@ -771,9 +786,7 @@ func (b *sstBatcherNoop) AddMVCCKey(ctx context.Context, key storage.MVCCKey, va
 }
 
 // Reset resets the counter
-func (b *sstBatcherNoop) Reset(ctx context.Context) error {
-	return nil
-}
+func (b *sstBatcherNoop) Reset(ctx context.Context) {}
 
 // Flush noops.
 func (b *sstBatcherNoop) Flush(ctx context.Context) error {

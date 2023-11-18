@@ -92,7 +92,7 @@ func makeRunCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&config.excludeList, "exclude", []string{}, "comma-separated regex of packages and benchmarks to exclude e.g. 'pkg/util/.*:BenchmarkIntPool,pkg/sql:.*'")
 	cmd.Flags().IntVar(&config.iterations, "iterations", config.iterations, "number of iterations to run each benchmark")
 	cmd.Flags().BoolVar(&config.copyBinaries, "copy", config.copyBinaries, "copy and extract test binaries and libraries to the target cluster")
-	cmd.Flags().BoolVar(&config.lenient, "lenient", config.lenient, "tolerate errors in the benchmark results")
+	cmd.Flags().BoolVar(&config.lenient, "lenient", config.lenient, "tolerate errors while running benchmarks")
 	cmd.Flags().BoolVar(&config.affinity, "affinity", config.affinity, "run benchmarks with iterations and binaries having affinity to the same node, only applies when more than one archive is specified")
 	cmd.Flags().BoolVar(&config.quiet, "quiet", config.quiet, "suppress roachprod progress output")
 
@@ -100,7 +100,7 @@ func makeRunCommand() *cobra.Command {
 }
 
 func makeCompareCommand() *cobra.Command {
-	config := compareConfig{}
+	config := defaultCompareConfig()
 	runCmdFunc := func(cmd *cobra.Command, commandLine []string) error {
 		args, _ := splitArgsAtDash(cmd, commandLine)
 
@@ -115,7 +115,18 @@ func makeCompareCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return c.publishToGoogleSheets(metricMaps)
+
+		links, err := c.publishToGoogleSheets(metricMaps)
+		if err != nil {
+			return err
+		}
+		if config.slackToken != "" {
+			err = c.postToSlack(links, metricMaps)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	cmd := &cobra.Command{
@@ -125,7 +136,10 @@ func makeCompareCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE:  runCmdFunc,
 	}
-	cmd.Flags().StringVar(&config.sheetDesc, "sheet-desc", "", "append a description to the sheet title when doing a comparison")
+	cmd.Flags().StringVar(&config.sheetDesc, "sheet-desc", config.sheetDesc, "append a description to the sheet title when doing a comparison")
+	cmd.Flags().StringVar(&config.slackToken, "slack-token", config.slackToken, "pass a slack token to post the results to a slack channel")
+	cmd.Flags().StringVar(&config.slackUser, "slack-user", config.slackUser, "slack user to post the results as")
+	cmd.Flags().StringVar(&config.slackChannel, "slack-channel", config.slackChannel, "slack channel to post the results to")
 	return cmd
 }
 
@@ -155,7 +169,7 @@ func main() {
 	ssh.InsecureIgnoreHostKey = true
 	cmd := makeRoachprodMicrobenchCommand()
 	if err := cmd.Execute(); err != nil {
-		log.Printf("ERROR: %v", err)
+		log.Printf("ERROR: %+v", err)
 		os.Exit(1)
 	}
 }

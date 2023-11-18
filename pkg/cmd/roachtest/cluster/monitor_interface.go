@@ -30,6 +30,7 @@ type Monitor interface {
 	// Wait() or WaitE() before returning.
 	Go(fn func(context.Context) error)
 	GoWithCancel(fn func(context.Context) error) func()
+	WaitForNodeDeath() error
 	WaitE() error
 	Wait()
 }

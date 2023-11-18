@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -250,19 +251,22 @@ var jsonTags = map[byte]struct {
 		"The binary version with which the event was generated.", true},
 	// SQL servers in multi-tenant deployments.
 	'q': {[2]string{"q", "instance_id"},
-		"The SQL instance ID where the event was generated, once known. Only reported for multi-tenant SQL servers.", true},
-	'T': {[2]string{tenantIDLogTagStringPrefix, TenantIDLogTagKeyJSON},
-		"The SQL tenant ID where the event was generated, once known. Only reported for multi-tenant SQL servers.", true},
+		"The SQL instance ID where the event was generated, once known.", true},
+	'T': {[2]string{string(tenantIDLogTagKey), tenantIDLogTagKeyJSON},
+		"The SQL tenant ID where the event was generated, once known.", true},
+	'V': {[2]string{string(tenantNameLogTagKey), tenantNameLogTagKeyJSON},
+		"The SQL virtual cluster where the event was generated, once known.", true},
 }
 
-const serverIdentifierFields = "NxqT"
+const serverIdentifierFields = "NxqTV"
 
 type tagChoice int
 
 const (
-	tagCompact            tagChoice = 0
-	tagVerbose            tagChoice = 1
-	TenantIDLogTagKeyJSON string    = "tenant_id"
+	tagCompact              tagChoice = 0
+	tagVerbose              tagChoice = 1
+	tenantIDLogTagKeyJSON   string    = "tenant_id"
+	tenantNameLogTagKeyJSON string    = "tenant_name"
 )
 
 func (t tagChoice) String() string {
@@ -372,11 +376,18 @@ func (f formatJSONFull) formatEntry(entry logEntry) *buffer {
 		buf.WriteString(`":`)
 		buf.WriteString(entry.NodeID)
 	}
-	if entry.TenantID() != "" {
+	if entry.TenantID != "" {
 		buf.WriteString(`,"`)
 		buf.WriteString(jtags['T'].tags[f.tags])
 		buf.WriteString(`":`)
-		buf.WriteString(entry.TenantID())
+		buf.WriteString(entry.TenantID)
+	}
+	if entry.TenantName != "" {
+		buf.WriteString(`,"`)
+		buf.WriteString(jtags['V'].tags[f.tags])
+		buf.WriteString(`":"`)
+		escapeString(buf, entry.TenantName)
+		buf.WriteByte('"')
 	}
 	if entry.SQLInstanceID != "" {
 		buf.WriteString(`,"`)
@@ -513,10 +524,10 @@ type jsonCommon struct {
 type JSONEntry struct {
 	jsonCommon
 
-	//Channel         Channel  `json:"channel,omitempty"`
+	// Channel         Channel  `json:"channel,omitempty"`
 	ChannelNumeric int64  `json:"channel_numeric,omitempty"`
 	Timestamp      string `json:"timestamp,omitempty"`
-	//Severity        Severity `json:"severity,omitempty"`
+	// Severity        Severity `json:"severity,omitempty"`
 	SeverityNumeric int64  `json:"severity_numeric,omitempty"`
 	Goroutine       int64  `json:"goroutine,omitempty"`
 	File            string `json:"file,omitempty"`
@@ -528,16 +539,17 @@ type JSONEntry struct {
 	Version         string `json:"version,omitempty"`
 	InstanceID      int64  `json:"instance_id,omitempty"`
 	TenantID        int64  `json:"tenant_id,omitempty"`
+	TenantName      string `json:"tenant_name,omitempty"`
 }
 
 // JSONCompactEntry represents a JSON log entry in the compact format.
 type JSONCompactEntry struct {
 	jsonCommon
 
-	//Channel         Channel  `json:"C,omitempty"`
+	// Channel         Channel  `json:"C,omitempty"`
 	ChannelNumeric int64  `json:"c,omitempty"`
 	Timestamp      string `json:"t,omitempty"`
-	//Severity        Severity `json:"sev,omitempty"`
+	// Severity        Severity `json:"sev,omitempty"`
 	SeverityNumeric int64  `json:"s,omitempty"`
 	Goroutine       int64  `json:"g,omitempty"`
 	File            string `json:"f,omitempty"`
@@ -549,6 +561,7 @@ type JSONCompactEntry struct {
 	Version         string `json:"v,omitempty"`
 	InstanceID      int64  `json:"q,omitempty"`
 	TenantID        int64  `json:"T,omitempty"`
+	TenantName      string `json:"V,omitempty"`
 }
 
 // populate is a method that populates fields from the source JSONEntry
@@ -571,6 +584,7 @@ func (e *JSONEntry) populate(entry *logpb.Entry, d *entryDecoderJSON) (*redactab
 	if e.TenantID != 0 {
 		entry.TenantID = fmt.Sprint(e.TenantID)
 	}
+	entry.TenantName = e.TenantName
 
 	if e.Header == 0 {
 		entry.Severity = Severity(e.SeverityNumeric)
@@ -635,15 +649,23 @@ func (e *JSONCompactEntry) toEntry(entry *JSONEntry) {
 	entry.Version = e.Version
 	entry.InstanceID = e.InstanceID
 	entry.TenantID = e.TenantID
+	entry.TenantName = e.TenantName
 }
 
 // Decode decodes the next log entry into the provided protobuf message.
-func (d *entryDecoderJSON) Decode(entry *logpb.Entry) error {
+func (d *entryDecoderJSON) Decode(entry *logpb.Entry) (err error) {
+	defer func() {
+		// Wrap all errors except EOF as a malformed entries to make it easier to
+		// handle this type of error later on.
+		if err != nil && err != io.EOF {
+			err = errors.CombineErrors(ErrMalformedLogEntry, err)
+		}
+	}()
 	var rp *redactablePackage
 	var e JSONEntry
 	if d.compact {
 		var compact JSONCompactEntry
-		err := d.decoder.Decode(&compact)
+		err = d.decoder.Decode(&compact)
 		if err != nil {
 			return err
 		}
@@ -654,7 +676,7 @@ func (d *entryDecoderJSON) Decode(entry *logpb.Entry) error {
 			return err
 		}
 	}
-	rp, err := e.populate(entry, d)
+	rp, err = e.populate(entry, d)
 	if err != nil {
 		return err
 	}

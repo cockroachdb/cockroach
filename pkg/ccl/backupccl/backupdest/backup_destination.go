@@ -59,12 +59,12 @@ var backupPathRE = regexp.MustCompile("^/?[^\\/]+/[^\\/]+/[^\\/]+/" + backupbase
 // specified subdirectory if no backup already exists at that subdirectory. As
 // of 22.1, this feature is default disabled, and will be totally disabled by 22.2.
 var featureFullBackupUserSubdir = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.backup.deprecated_full_backup_with_subdir.enabled",
 	"when true, a backup command with a user specified subdirectory will create a full backup at"+
 		" the subdirectory if no backup already exists at that subdirectory",
 	false,
-).WithPublic()
+	settings.WithPublic)
 
 // TODO(adityamaru): Move this to the soon to be `backupinfo` package.
 func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (bool, error) {
@@ -197,7 +197,7 @@ func ResolveDest(
 						"Or, to take a full backup at a specific subdirectory, "+
 						"enable the deprecated syntax by switching the %q cluster setting to true; "+
 						"however, note this deprecated syntax will not be available in a future release.",
-						chosenSuffix, featureFullBackupUserSubdir.Key())
+						chosenSuffix, featureFullBackupUserSubdir.Name())
 			}
 		}
 		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
@@ -540,7 +540,7 @@ func ResolveBackupManifests(
 			mem.Shrink(ctx, ownedMemSize)
 		}
 	}()
-	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0],
+	baseManifest, memSize, err := backupinfo.ReadBackupManifestFromStore(ctx, mem, baseStores[0], fullyResolvedBaseDirectory[0],
 		encryption, kmsEnv)
 	if err != nil {
 		return nil, nil, nil, 0, err
@@ -692,7 +692,7 @@ func DeprecatedResolveBackupManifestsExplicitIncrementals(
 
 		var memSize int64
 		mainBackupManifests[i], memSize, err = backupinfo.ReadBackupManifestFromStore(ctx, mem,
-			stores[0], encryption, kmsEnv)
+			stores[0], uris[0], encryption, kmsEnv)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}

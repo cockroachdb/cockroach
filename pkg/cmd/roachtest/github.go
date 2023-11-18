@@ -18,19 +18,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 )
 
 type githubIssues struct {
 	disable      bool
 	cluster      *clusterImpl
 	vmCreateOpts *vm.CreateOpts
-	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest) error
+	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) error
 	teamLoader   func() (team.Map, error)
 }
 
@@ -50,7 +53,7 @@ func roachtestPrefix(p string) string {
 
 // generateHelpCommand creates a HelpCommand for createPostRequest
 func generateHelpCommand(
-	clusterName string, cloud string, start time.Time, end time.Time,
+	testName string, clusterName string, cloud string, start time.Time, end time.Time,
 ) func(renderer *issues.Renderer) {
 	return func(renderer *issues.Renderer) {
 		issues.HelpCommandAsLink(
@@ -63,11 +66,19 @@ func generateHelpCommand(
 		)(renderer)
 		// An empty clusterName corresponds to a cluster creation failure.
 		// We only scrape metrics from GCE clusters for now.
-		if spec.GCE == cloud && clusterName != "" {
-			issues.HelpCommandAsLink(
-				"Grafana",
-				fmt.Sprintf("https://go.crdb.dev/p/roachfana/%s/%d/%d", clusterName, start.UnixMilli(), end.UnixMilli()),
-			)(renderer)
+		if clusterName != "" {
+			if spec.GCE == cloud {
+				// N.B. This assumes we are posting from a source that does not run a test more than once.
+				// Otherwise, we'd need to use `testRunId`, which encodes the run number and allows us
+				// to distinguish between multiple runs of the same test, instead of `testName`.
+				issues.HelpCommandAsLink(
+					"Grafana",
+					fmt.Sprintf("https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d", vm.SanitizeLabel(runID),
+						vm.SanitizeLabel(testName), start.UnixMilli(), end.Add(2*time.Minute).UnixMilli()),
+				)(renderer)
+			} else {
+				renderer.Escaped(fmt.Sprintf("_Grafana is not yet available for %s clusters_", cloud))
+			}
 		}
 	}
 }
@@ -130,6 +141,7 @@ func (g *githubIssues) createPostRequest(
 	spec *registry.TestSpec,
 	firstFailure failure,
 	message string,
+	metamorphicBuild bool,
 ) (issues.PostRequest, error) {
 	var mention []string
 	var projColID int
@@ -143,13 +155,18 @@ func (g *githubIssues) createPostRequest(
 	// Overrides to shield eng teams from potential flakes
 	switch {
 	case failureContainsError(firstFailure, errClusterProvisioningFailed):
-		issueOwner = registry.OwnerDevInf
+		issueOwner = registry.OwnerTestEng
 		issueName = "cluster_creation"
 		messagePrefix = fmt.Sprintf("test %s was skipped due to ", testName)
 		infraFlake = true
 	case failureContainsError(firstFailure, rperrors.ErrSSH255):
 		issueOwner = registry.OwnerTestEng
 		issueName = "ssh_problem"
+		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
+		infraFlake = true
+	case failureContainsError(firstFailure, gce.ErrDNSOperation):
+		issueOwner = registry.OwnerTestEng
+		issueName = "dns_problem"
 		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
 		infraFlake = true
 	case failureContainsError(firstFailure, errDuringPostAssertions):
@@ -159,8 +176,13 @@ func (g *githubIssues) createPostRequest(
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers
 	// (this label may be removed by a human upon closer investigation).
 	labels := []string{"O-roachtest"}
-	if !spec.NonReleaseBlocker && !infraFlake {
+	if infraFlake {
+		labels = append(labels, "X-infra-flake")
+	} else if !spec.NonReleaseBlocker {
 		labels = append(labels, "release-blocker")
+	}
+	if len(spec.ExtraLabels) > 0 {
+		labels = append(labels, spec.ExtraLabels...)
 	}
 
 	teams, err := g.teamLoader()
@@ -168,7 +190,7 @@ func (g *githubIssues) createPostRequest(
 		return issues.PostRequest{}, err
 	}
 
-	if sl, ok := teams.GetAliasesForPurpose(ownerToAlias(issueOwner), team.PurposeRoachtest); ok {
+	if sl, ok := teams.GetAliasesForPurpose(issueOwner.ToTeamAlias(), team.PurposeRoachtest); ok {
 		for _, alias := range sl {
 			mention = append(mention, "@"+string(alias))
 			if label := teams[alias].Label; label != "" {
@@ -186,9 +208,10 @@ func (g *githubIssues) createPostRequest(
 	artifacts := fmt.Sprintf("/%s", testName)
 
 	clusterParams := map[string]string{
-		roachtestPrefix("cloud"): spec.Cluster.Cloud,
-		roachtestPrefix("cpu"):   fmt.Sprintf("%d", spec.Cluster.CPUs),
-		roachtestPrefix("ssd"):   fmt.Sprintf("%d", spec.Cluster.SSDs),
+		roachtestPrefix("cloud"):            roachtestflags.Cloud,
+		roachtestPrefix("cpu"):              fmt.Sprintf("%d", spec.Cluster.CPUs),
+		roachtestPrefix("ssd"):              fmt.Sprintf("%d", spec.Cluster.SSDs),
+		roachtestPrefix("metamorphicBuild"): fmt.Sprintf("%t", metamorphicBuild),
 	}
 	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
 	if spec.Cluster.Arch != "" {
@@ -217,15 +240,16 @@ func (g *githubIssues) createPostRequest(
 			"consult the logs for details. WARNING: DO NOT COPY UNREDACTED ARTIFACTS TO THIS ISSUE."
 	}
 	return issues.PostRequest{
-		MentionOnCreate: mention,
-		ProjectColumnID: projColID,
-		PackageName:     "roachtest",
-		TestName:        issueName,
-		Message:         issueMessage,
-		Artifacts:       artifacts,
-		ExtraLabels:     labels,
-		ExtraParams:     clusterParams,
-		HelpCommand:     generateHelpCommand(issueClusterName, spec.Cluster.Cloud, start, end),
+		MentionOnCreate:      mention,
+		ProjectColumnID:      projColID,
+		PackageName:          "roachtest",
+		TestName:             issueName,
+		Message:              issueMessage,
+		SkipLabelTestFailure: infraFlake, // infra-flakes are not marked as C-test-failure
+		Artifacts:            artifacts,
+		ExtraLabels:          labels,
+		ExtraParams:          clusterParams,
+		HelpCommand:          generateHelpCommand(testName, issueClusterName, roachtestflags.Cloud, start, end),
 	}, nil
 }
 
@@ -236,15 +260,26 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 		return nil
 	}
 
-	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message)
+	var metamorphicBuild bool
+	switch t.spec.CockroachBinary {
+	case registry.StandardCockroach:
+		metamorphicBuild = false
+	case registry.RuntimeAssertionsCockroach:
+		metamorphicBuild = true
+	default:
+		metamorphicBuild = tests.UsingRuntimeAssertions(t)
+	}
+	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message, metamorphicBuild)
 	if err != nil {
 		return err
 	}
+	opts := issues.DefaultOptionsFromEnv()
 
 	return g.issuePoster(
 		context.Background(),
 		l,
 		issues.UnitTestFormatter,
 		postRequest,
+		opts,
 	)
 }

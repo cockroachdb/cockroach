@@ -12,7 +12,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/metric",
+        "//pkg/util/metric/tick",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//proto",
         "@com_github_google_btree//:btree",
@@ -24,10 +26,9 @@ go_test(
     name = "aggmetric_test",
     size = "small",
     srcs = ["agg_metric_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
+    embed = [":aggmetric"],
     deps = [
-        ":aggmetric",
         "//pkg/base",
         "//pkg/roachpb",
         "//pkg/testutils/datapathutils",
@@ -35,6 +36,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "@com_github_prometheus_client_model//go",
+        "@com_github_prometheus_common//expfmt",
         "@com_github_stretchr_testify//require",
     ],
 )

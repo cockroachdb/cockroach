@@ -14,11 +14,13 @@ consumption:
   write_bytes: 50
   sql_pods_cpu_usage: 60
   pgwire_egress_bytes: 70
+  cross_region_network_ru: 80
 ----
 
 metrics
 tenant_id="5"
 ----
+tenant_consumption_cross_region_network_ru{tenant_id="5"} 80
 tenant_consumption_external_io_egress_bytes{tenant_id="5"} 0
 tenant_consumption_external_io_ingress_bytes{tenant_id="5"} 0
 tenant_consumption_kv_request_units{tenant_id="5"} 8
@@ -45,6 +47,7 @@ consumption:
   write_bytes: 500
   sql_pods_cpu_usage: 600
   pgwire_egress_bytes: 700
+  cross_region_network_ru: 800
 ----
 
 token-bucket-request tenant=5
@@ -60,11 +63,12 @@ consumption:
   write_bytes: 5000
   sql_pods_cpu_usage: 6000
   pgwire_egress_bytes: 7000
+  cross_region_network_ru: 8000
 ----
 
 inspect tenant=5
 ----
-Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  current-share-sum=0
+Bucket state: ru-burst-limit=0  ru-refill-rate=100  ru-current=10000000  ru-current-avg=5781250
 Consumption: ru=1110 kvru=888  reads=2220 in 222 batches (3330 bytes)  writes=4440 in 333 batches (5550 bytes)  pod-cpu-usage: 6660 secs  pgwire-egress=7770 bytes  external-egress=0 bytes  external-ingress=0 bytes
 Last update: 00:00:00.000
 First active instance: 1
@@ -74,6 +78,7 @@ First active instance: 1
 metrics
 tenant_id="5"
 ----
+tenant_consumption_cross_region_network_ru{tenant_id="5"} 8880
 tenant_consumption_external_io_egress_bytes{tenant_id="5"} 0
 tenant_consumption_external_io_ingress_bytes{tenant_id="5"} 0
 tenant_consumption_kv_request_units{tenant_id="5"} 888

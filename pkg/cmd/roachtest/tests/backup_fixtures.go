@@ -13,7 +13,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -51,10 +50,10 @@ var defaultBackupFixtureSpecs = scheduledBackupSpecs{
 	ignoreExistingBackups: false,
 
 	backupSpecs: backupSpecs{
-		version:         "v23.1.1",
-		cloud:           spec.AWS,
-		fullBackupDir:   "LATEST",
-		backupsIncluded: 48,
+		version:           "v23.1.1",
+		cloud:             spec.AWS,
+		fullBackupDir:     "LATEST",
+		numBackupsInChain: 48,
 		workload: tpceRestore{
 			customers: 25000,
 		},
@@ -99,6 +98,8 @@ type backupFixtureSpecs struct {
 	initFromBackupSpecs backupSpecs
 
 	timeout  time.Duration
+	clouds   registry.CloudSet
+	suites   registry.SuiteSet
 	tags     map[string]struct{}
 	testName string
 
@@ -127,13 +128,12 @@ type backupDriver struct {
 
 func (bd *backupDriver) prepareCluster(ctx context.Context) {
 
-	if bd.c.Spec().Cloud != bd.sp.backup.cloud {
+	if bd.c.Cloud() != bd.sp.backup.cloud {
 		// For now, only run the test on the cloud provider that also stores the backup.
 		bd.t.Skip(fmt.Sprintf("test configured to run on %s", bd.sp.backup.cloud))
 	}
-	version := strings.Replace(bd.sp.backup.version, "v", "", 1)
 	binaryPath, err := clusterupgrade.UploadVersion(ctx, bd.t, bd.t.L(), bd.c,
-		bd.sp.hardware.getCRDBNodes(), version)
+		bd.sp.hardware.getCRDBNodes(), clusterupgrade.MustParseVersion(bd.sp.backup.version))
 	require.NoError(bd.t, err)
 
 	require.NoError(bd.t, clusterupgrade.StartWithSettings(ctx, bd.t.L(), bd.c,
@@ -217,7 +217,7 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) {
 		backupCountQuery := fmt.Sprintf(`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM LATEST IN %s]`, bd.sp.backup.backupCollection())
 		sql.QueryRow(bd.t, backupCountQuery).Scan(&backupCount)
 		bd.t.L().Printf(`%d scheduled backups taken`, backupCount)
-		if backupCount >= bd.sp.backup.backupsIncluded {
+		if backupCount >= bd.sp.backup.numBackupsInChain {
 			pauseSchedulesQuery := fmt.Sprintf(`PAUSE SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = '%s'`, scheduleLabel)
 			sql.QueryRow(bd.t, pauseSchedulesQuery)
 			break
@@ -234,7 +234,10 @@ func registerBackupFixtures(r registry.Registry) {
 			timeout:             5 * time.Hour,
 			initFromBackupSpecs: backupSpecs{version: "v22.2.0"},
 			skip:                "only for fixture generation",
-			tags:                registry.Tags("aws"),
+			// TODO(radu): this should be only AWS.
+			clouds: registry.AllClouds,
+			suites: registry.Suites(registry.Nightly),
+			tags:   registry.Tags("aws"),
 		},
 		{
 			// Default Fixture, Run on GCE. Initiated by the tpce --init.
@@ -242,6 +245,9 @@ func registerBackupFixtures(r registry.Registry) {
 			backup: makeBackupFixtureSpecs(scheduledBackupSpecs{
 				backupSpecs: backupSpecs{
 					cloud: spec.GCE}}),
+			// TODO(radu): this should be OnlyGCE.
+			clouds:  registry.AllExceptAWS,
+			suites:  registry.Suites(registry.Nightly),
 			timeout: 5 * time.Hour,
 			skip:    "only for fixture generation",
 		},
@@ -254,10 +260,12 @@ func registerBackupFixtures(r registry.Registry) {
 					incrementalBackupCrontab: "*/2 * * * *",
 					ignoreExistingBackups:    true,
 					backupSpecs: backupSpecs{
-						backupsIncluded: 4,
-						workload:        tpceRestore{customers: 1000}}}),
-			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
+						numBackupsInChain: 4,
+						workload:          tpceRestore{customers: 1000}}}),
+			initFromBackupSpecs: backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
 			timeout:             2 * time.Hour,
+			clouds:              registry.AllClouds,
+			suites:              registry.Suites(registry.Weekly),
 			tags:                registry.Tags("weekly", "aws-weekly"),
 		},
 		{
@@ -267,7 +275,9 @@ func registerBackupFixtures(r registry.Registry) {
 				backupSpecs: backupSpecs{
 					workload: tpceRestore{customers: 500000}}}),
 			timeout:             25 * time.Hour,
-			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
+			initFromBackupSpecs: backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
+			clouds:              registry.AllClouds,
+			suites:              registry.Suites(registry.Weekly),
 			// add the weekly tags to allow an over 24 hour timeout.
 			tags: registry.Tags("weekly", "aws-weekly"),
 			skip: "only for fixture generation",
@@ -278,8 +288,10 @@ func registerBackupFixtures(r registry.Registry) {
 			backup: makeBackupFixtureSpecs(scheduledBackupSpecs{
 				backupSpecs: backupSpecs{
 					workload: tpceRestore{customers: 2000000}}}),
-			initFromBackupSpecs: backupSpecs{version: "v22.2.1", backupProperties: "inc-count=48"},
+			initFromBackupSpecs: backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
 			timeout:             48 * time.Hour,
+			clouds:              registry.AllClouds,
+			suites:              registry.Suites(registry.Weekly),
 			// add the weekly tags to allow an over 24 hour timeout.
 			tags: registry.Tags("weekly", "aws-weekly"),
 			skip: "only for fixture generation",
@@ -293,6 +305,8 @@ func registerBackupFixtures(r registry.Registry) {
 			Cluster:           bf.hardware.makeClusterSpecs(r, bf.backup.cloud),
 			Timeout:           bf.timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
+			CompatibleClouds:  bf.clouds,
+			Suites:            bf.suites,
 			Tags:              bf.tags,
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

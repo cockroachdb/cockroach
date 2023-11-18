@@ -19,9 +19,9 @@ import (
 	"io"
 	"math"
 	"net"
+	"sync/atomic"
 	"time"
 
-	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -58,8 +58,8 @@ import (
 // NewServer sets up an RPC server. Depending on the ServerOptions, the Server
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
-func NewServer(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, error) {
-	srv, _ /* interceptors */, err := NewServerEx(rpcCtx, opts...)
+func NewServer(ctx context.Context, rpcCtx *Context, opts ...ServerOption) (*grpc.Server, error) {
+	srv, _ /* interceptors */, err := NewServerEx(ctx, rpcCtx, opts...)
 	return srv, err
 }
 
@@ -86,7 +86,7 @@ type ClientInterceptorInfo struct {
 // manually when bypassing gRPC to call into the server (like the
 // internalClientAdapter does).
 func NewServerEx(
-	rpcCtx *Context, opts ...ServerOption,
+	ctx context.Context, rpcCtx *Context, opts ...ServerOption,
 ) (s *grpc.Server, sii ServerInterceptorInfo, err error) {
 	var o serverOpts
 	for _, f := range opts {
@@ -102,8 +102,8 @@ func NewServerEx(
 		grpc.MaxSendMsgSize(math.MaxInt32),
 		// Adjust the stream and connection window sizes. The gRPC defaults are too
 		// low for high latency connections.
-		grpc.InitialWindowSize(initialWindowSize),
-		grpc.InitialConnWindowSize(initialConnWindowSize),
+		grpc.InitialWindowSize(rpcCtx.initialWindowSize(ctx)),
+		grpc.InitialConnWindowSize(rpcCtx.initialConnWindowSize(ctx)),
 		// The default number of concurrent streams/requests on a client connection
 		// is 100, while the server is unlimited. The client setting can only be
 		// controlled by adjusting the server value. Set a very large value for the
@@ -230,7 +230,6 @@ type Context struct {
 	metrics Metrics
 
 	// For unittesting.
-	BreakerFactory  func() *circuit.Breaker
 	testingDialOpts []grpc.DialOption
 
 	// For testing. See the comment on the same field in HeartbeatService.
@@ -271,6 +270,10 @@ type Context struct {
 
 	// clientCreds is used to pass additional headers to called RPCs.
 	clientCreds credentials.PerRPCCredentials
+
+	// windowSizeSettings contains the memoized window size
+	// settings for this context.
+	windowSizeSettings
 }
 
 // SetLoopbackDialer configures the loopback dialer function.
@@ -1256,6 +1259,17 @@ type pipe struct {
 	errC  chan error
 }
 
+// buffer size for channel used to connect local streaming rpcs.
+var localStreamChannelBufferSize int64 = 128 // accessed atomically.
+
+// TestingSetLocalStreamChannelBufferSize overrides channel buffer size
+// used for streaming RPCs.
+func TestingSetLocalStreamChannelBufferSize(s int64) func() {
+	old := atomic.LoadInt64(&localStreamChannelBufferSize)
+	atomic.StoreInt64(&localStreamChannelBufferSize, s)
+	return func() { atomic.StoreInt64(&localStreamChannelBufferSize, old) }
+}
+
 // makePipe creates a pipe and return it as its two ends.
 //
 // assignPtr is a function that implements *dst = *src for the type of the
@@ -1265,7 +1279,7 @@ type pipe struct {
 // (i.e. interface{}) way.
 func makePipe(assignPtr func(dst interface{}, src interface{})) (pipeWriter, pipeReader) {
 	p := &pipe{
-		respC: make(chan interface{}, 128),
+		respC: make(chan interface{}, atomic.LoadInt64(&localStreamChannelBufferSize)),
 		errC:  make(chan error, 1),
 	}
 	w := pipeWriter{pipe: p}
@@ -1519,7 +1533,7 @@ func (rpcCtx *Context) GRPCDialOptions(
 func (rpcCtx *Context) grpcDialOptionsInternal(
 	ctx context.Context, target string, class ConnectionClass, transport transportType,
 ) ([]grpc.DialOption, error) {
-	dialOpts, err := rpcCtx.dialOptsCommon(target, class)
+	dialOpts, err := rpcCtx.dialOptsCommon(ctx, target, class)
 	if err != nil {
 		return nil, err
 	}
@@ -1747,7 +1761,7 @@ func (rpcCtx *Context) dialOptsNetwork(
 // dialOptsCommon computes options used for both in-memory and
 // over-the-network RPC connections.
 func (rpcCtx *Context) dialOptsCommon(
-	target string, class ConnectionClass,
+	ctx context.Context, target string, class ConnectionClass,
 ) ([]grpc.DialOption, error) {
 	// The limiting factor for lowering the max message size is the fact
 	// that a single large kv can be sent over the network in one message.
@@ -1771,11 +1785,11 @@ func (rpcCtx *Context) dialOptsCommon(
 	dialOpts = append(dialOpts, grpc.WithDisableRetry())
 
 	// Configure the window sizes with optional env var overrides.
-	dialOpts = append(dialOpts, grpc.WithInitialConnWindowSize(initialConnWindowSize))
+	dialOpts = append(dialOpts, grpc.WithInitialConnWindowSize(rpcCtx.initialConnWindowSize(ctx)))
 	if class == RangefeedClass {
-		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(rangefeedInitialWindowSize))
+		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(rpcCtx.rangefeedInitialWindowSize(ctx)))
 	} else {
-		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(initialWindowSize))
+		dialOpts = append(dialOpts, grpc.WithInitialWindowSize(rpcCtx.initialWindowSize(ctx)))
 	}
 	unaryInterceptors := rpcCtx.clientUnaryInterceptors
 	unaryInterceptors = unaryInterceptors[:len(unaryInterceptors):len(unaryInterceptors)]

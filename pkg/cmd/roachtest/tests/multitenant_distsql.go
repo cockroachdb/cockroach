@@ -37,10 +37,12 @@ func registerMultiTenantDistSQL(r registry.Registry) {
 			b := bundle
 			to := timeout
 			r.Add(registry.TestSpec{
-				Name:    fmt.Sprintf("multitenant/distsql/instances=%d/bundle=%s/timeout=%d", numInstances, b, to),
-				Owner:   registry.OwnerSQLQueries,
-				Cluster: r.MakeClusterSpec(4),
-				Leases:  registry.MetamorphicLeases,
+				Name:             fmt.Sprintf("multitenant/distsql/instances=%d/bundle=%s/timeout=%d", numInstances, b, to),
+				Owner:            registry.OwnerSQLQueries,
+				Cluster:          r.MakeClusterSpec(4),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
+				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runMultiTenantDistSQL(ctx, t, c, numInstances, b == "on", to)
 				},
@@ -57,7 +59,6 @@ func runMultiTenantDistSQL(
 	bundle bool,
 	timeoutMillis int,
 ) {
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	// This test sets a smaller default range size than the default due to
 	// performance and resource limitations. We set the minimum range max bytes to
 	// 1 byte to bypass the guardrails.

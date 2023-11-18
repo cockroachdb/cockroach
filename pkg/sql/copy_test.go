@@ -37,7 +37,7 @@ func TestCopyLogging(t *testing.T) {
 	ctx := context.Background()
 
 	for _, strings := range [][]string{
-		{`SET CLUSTER SETTING sql.trace.log_statement_execute = true`},
+		{`SET CLUSTER SETTING sql.log.all_statements.enabled = true`},
 		{`SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true`},
 		{`SET CLUSTER SETTING sql.log.admin_audit.enabled = true`},
 	} {
@@ -69,7 +69,7 @@ func TestCopyLogging(t *testing.T) {
 
 			// We have to start a new connection every time to exercise all possible paths.
 			t.Run("success during COPY FROM", func(t *testing.T) {
-				db := s.SQLConn(t, "")
+				db := s.SQLConn(t)
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -101,7 +101,7 @@ func TestCopyLogging(t *testing.T) {
 			})
 
 			t.Run("error in statement", func(t *testing.T) {
-				db := s.SQLConn(t, "")
+				db := s.SQLConn(t)
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -113,7 +113,7 @@ func TestCopyLogging(t *testing.T) {
 			})
 
 			t.Run("error during COPY FROM", func(t *testing.T) {
-				db := s.SQLConn(t, "")
+				db := s.SQLConn(t)
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -129,7 +129,7 @@ func TestCopyLogging(t *testing.T) {
 			})
 
 			t.Run("error in statement during COPY FROM", func(t *testing.T) {
-				db := s.SQLConn(t, "")
+				db := s.SQLConn(t)
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -141,7 +141,7 @@ func TestCopyLogging(t *testing.T) {
 			})
 
 			t.Run("error during insert phase of COPY FROM", func(t *testing.T) {
-				db := s.SQLConn(t, "")
+				db := s.SQLConn(t)
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{
@@ -170,7 +170,7 @@ func TestCopyLogging(t *testing.T) {
 			})
 
 			t.Run("error during copy during COPY FROM", func(t *testing.T) {
-				db := s.SQLConn(t, "")
+				db := s.SQLConn(t)
 				txn, err := db.Begin()
 				require.NoError(t, err)
 				{

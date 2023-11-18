@@ -29,7 +29,6 @@ go_library(
 go_test(
     name = "auditlogging_test",
     srcs = ["audit_log_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":auditlogging"],
     deps = [

@@ -41,6 +41,9 @@ func TestServerQuery(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// For now, direct access to the tsdb is reserved to the storage layer.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableTimeSeriesMaintenanceQueue: true,
@@ -261,6 +264,9 @@ func TestServerQueryStarvation(t *testing.T) {
 
 	workerCount := 20
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// For now, direct access to the tsdb is reserved to the storage layer.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
 		TimeSeriesQueryWorkerMax: workerCount,
 	})
 	defer s.Stopper().Stop(context.Background())
@@ -294,7 +300,8 @@ func TestServerQueryTenant(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableTimeSeriesMaintenanceQueue: true,
@@ -303,7 +310,7 @@ func TestServerQueryTenant(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
-	systemDB := s.SystemLayer().SQLConn(t, "")
+	systemDB := s.SystemLayer().SQLConn(t)
 
 	// Populate data directly.
 	tsdb := s.TsDB().(*ts.DB)
@@ -368,8 +375,8 @@ func TestServerQueryTenant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// System tenant should aggregate across all tenants.
-	expectedSystemResult := &tspb.TimeSeriesQueryResponse{
+	// Undefined tenant ID should aggregate across all tenants.
+	expectedAggregatedResult := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
 				Query: tspb.Query{
@@ -408,7 +415,7 @@ func TestServerQueryTenant(t *testing.T) {
 
 	conn := s.RPCClientConn(t, username.RootUserName())
 	client := tspb.NewTimeSeriesClient(conn)
-	systemResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+	aggregatedResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
 		EndNanos:   500 * 1e9,
 		Queries: []tspb.Query{
@@ -417,7 +424,72 @@ func TestServerQueryTenant(t *testing.T) {
 				Sources: []string{"1"},
 			},
 			{
+				// Not providing a source (nodeID or storeID) will aggregate across all sources.
 				Name: "test.metric",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range aggregatedResponse.Results {
+		sort.Strings(r.Sources)
+	}
+	require.Equal(t, expectedAggregatedResult, aggregatedResponse)
+
+	// System tenant ID should provide system tenant ts data.
+	systemID := roachpb.MustMakeTenantID(1)
+	expectedSystemResult := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:     "test.metric",
+					Sources:  []string{"1"},
+					TenantID: systemID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          100.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          200.0,
+					},
+				},
+			},
+			{
+				Query: tspb.Query{
+					Name:     "test.metric",
+					Sources:  []string{"1", "10"},
+					TenantID: systemID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          300.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          600.0,
+					},
+				},
+			},
+		},
+	}
+
+	systemResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:     "test.metric",
+				Sources:  []string{"1"},
+				TenantID: systemID,
+			},
+			{
+				Name:     "test.metric",
+				TenantID: systemID,
 			},
 		},
 	})
@@ -489,6 +561,7 @@ func TestServerQueryTenant(t *testing.T) {
 				Sources: []string{"1"},
 			},
 			{
+				// Not providing a source (nodeID or storeID) will aggregate across all sources.
 				Name: "test.metric",
 			},
 		},
@@ -526,6 +599,9 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 	budget := 3 * sizeOfSlab * int64(sourceCount) * int64(workerCount)
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// For now, direct access to the tsdb is reserved to the storage layer.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
 		TimeSeriesQueryWorkerMax:    workerCount,
 		TimeSeriesQueryMemoryBudget: budget,
 	})
@@ -592,6 +668,9 @@ func TestServerDump(t *testing.T) {
 	expTotalMsgCount := seriesCount * sourceCount * (endSlab - startSlab)
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// For now, direct access to the tsdb is reserved to the storage layer.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableTimeSeriesMaintenanceQueue: true,
@@ -682,6 +761,9 @@ func TestServerDump(t *testing.T) {
 
 	// Start a new server, into which to write the raw dump.
 	s = serverutils.StartServerOnly(t, base.TestServerArgs{
+		// For now, direct access to the tsdb is reserved to the storage layer.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableTimeSeriesMaintenanceQueue: true,

@@ -179,7 +179,7 @@ func (d *buildDeps) MayResolveTable(
 	ctx context.Context, name tree.UnresolvedObjectName,
 ) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor) {
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, tree.ObjectLookupFlags{
-		AvoidLeased:       true,
+		AssertNotLeased:   true,
 		DesiredObjectKind: tree.TableObject,
 	})
 	if err != nil {
@@ -196,7 +196,7 @@ func (d *buildDeps) MayResolveType(
 	ctx context.Context, name tree.UnresolvedObjectName,
 ) (catalog.ResolvedObjectPrefix, catalog.TypeDescriptor) {
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, tree.ObjectLookupFlags{
-		AvoidLeased:       true,
+		AssertNotLeased:   true,
 		DesiredObjectKind: tree.TypeObject,
 	})
 	if err != nil {
@@ -252,7 +252,7 @@ func (d *buildDeps) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T
 
 // ResolveFunction implements the scbuild.CatalogReader interface.
 func (d *buildDeps) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	return d.schemaResolver.ResolveFunction(ctx, name, path)
 }

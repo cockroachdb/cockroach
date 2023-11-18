@@ -29,9 +29,9 @@ import (
 
 type testMetricSource struct{}
 
-func (t testMetricSource) MarshalJSON() ([]byte, error)                       { return nil, nil }
-func (t testMetricSource) PrintAsText(writer io.Writer) error                 { return nil }
-func (t testMetricSource) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {}
+func (t testMetricSource) MarshalJSON() ([]byte, error)                                  { return nil, nil }
+func (t testMetricSource) PrintAsText(writer io.Writer, contentType expfmt.Format) error { return nil }
+func (t testMetricSource) ScrapeIntoPrometheus(pm *metric.PrometheusExporter)            {}
 
 func extractPrometheusMetrics(
 	t *testing.T, w *httptest.ResponseRecorder,

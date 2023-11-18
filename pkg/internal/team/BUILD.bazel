@@ -3,13 +3,26 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "team",
     srcs = ["team.go"],
+    data = [
+        ":gen-teams-yaml",  # keep
+    ],
+    embedsrcs = ["TEAMS.yaml"],
     importpath = "github.com/cockroachdb/cockroach/pkg/internal/team",
     visibility = ["//pkg:__subpackages__"],
     deps = [
-        "//pkg/build/bazel",
-        "//pkg/internal/reporoot",
         "@com_github_cockroachdb_errors//:errors",
         "@in_gopkg_yaml_v2//:yaml_v2",
+    ],
+)
+
+genrule(
+    name = "gen-teams-yaml",
+    srcs = ["//:TEAMS.yaml"],
+    outs = ["TEAMS.yaml"],
+    cmd = "cat $(SRCS) > $@",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )
 
@@ -17,7 +30,6 @@ go_test(
     name = "team_test",
     size = "small",
     srcs = ["team_test.go"],
-    args = ["-test.timeout=55s"],
     data = [
         "//:TEAMS.yaml",
     ],

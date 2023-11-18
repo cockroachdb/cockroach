@@ -13,12 +13,10 @@ package gen
 import (
 	"fmt"
 	"math/rand"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -37,6 +35,7 @@ type LoadGen interface {
 	// Generate returns a workload generator that is parameterized randomly by
 	// the seed and simulation settings provided.
 	Generate(seed int64, settings *config.SimulationSettings) []workload.Generator
+	String() string
 }
 
 // ClusterGen provides a method to generate the initial cluster state,  given a
@@ -46,6 +45,8 @@ type ClusterGen interface {
 	// Generate returns a new State that is parameterized randomly by the seed
 	// and simulation settings provided.
 	Generate(seed int64, settings *config.SimulationSettings) state.State
+	String() string
+	Regions() []state.Region
 }
 
 // RangeGen provides a method to generate the initial range splits, range
@@ -55,14 +56,7 @@ type RangeGen interface {
 	// simulation settings provided. In the updated state, ranges will have been
 	// created, replicas and leases assigned to stores in the cluster.
 	Generate(seed int64, settings *config.SimulationSettings, s state.State) state.State
-}
-
-// EventGen provides a  method to generate a list of events that will apply to
-// the simulated cluster. Currently, only delayed (fixed time) events are
-// supported.
-type EventGen interface {
-	// Generate returns a list of events, which should be exectued at the delay specified.
-	Generate(seed int64) event.DelayedEventList
+	String() string
 }
 
 // GenerateSimulation is a utility function that creates a new allocation
@@ -79,13 +73,14 @@ func GenerateSimulation(
 	settings := settingsGen.Generate(seed)
 	s := clusterGen.Generate(seed, &settings)
 	s = rangeGen.Generate(seed, &settings, s)
+	eventExecutor := eventGen.Generate(seed, &settings)
 	return asim.NewSimulator(
 		duration,
 		loadGen.Generate(seed, &settings),
 		s,
 		&settings,
 		metrics.NewTracker(settings.MetricsInterval),
-		eventGen.Generate(seed)...,
+		eventExecutor,
 	)
 }
 
@@ -111,6 +106,13 @@ type BasicLoad struct {
 	MinBlockSize   int
 	MaxBlockSize   int
 	MinKey, MaxKey int64
+}
+
+func (bl BasicLoad) String() string {
+	return fmt.Sprintf(
+		"basic load with rw_ratio=%0.2f, rate=%0.2f, skewed_access=%t, min_block_size=%d, max_block_size=%d, "+
+			"min_key=%d, max_key=%d",
+		bl.RWRatio, bl.Rate, bl.SkewedAccess, bl.MinBlockSize, bl.MaxBlockSize, bl.MinKey, bl.MaxKey)
 }
 
 // Generate returns a new list of workload generators where the generator
@@ -156,24 +158,45 @@ func (lc LoadedCluster) Generate(seed int64, settings *config.SimulationSettings
 	return state.LoadClusterInfo(lc.Info, settings)
 }
 
+func (lc LoadedCluster) String() string {
+	return fmt.Sprintf("loaded cluster with\n %v", lc.Info)
+}
+
+func (lc LoadedCluster) Regions() []state.Region {
+	return lc.Info.Regions
+}
+
 // BasicCluster implements the ClusterGen interace.
 type BasicCluster struct {
 	Nodes         int
 	StoresPerNode int
 }
 
+func (bc BasicCluster) String() string {
+	return fmt.Sprintf("basic cluster with nodes=%d, stores_per_node=%d", bc.Nodes, bc.StoresPerNode)
+}
+
 // Generate returns a new simulator state, where the cluster is created with all
 // nodes having the same locality and with the specified number of stores/nodes
 // created. The cluster is created based on the stores and stores-per-node
 // values the basic cluster generator is created with.
-func (lc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
-	info := state.ClusterInfoWithStoreCount(lc.Nodes, lc.StoresPerNode)
+func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
+	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
 	return state.LoadClusterInfo(info, settings)
+}
+
+func (bc BasicCluster) Regions() []state.Region {
+	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
+	return info.Regions
 }
 
 // LoadedRanges implements the RangeGen interface.
 type LoadedRanges struct {
 	Info state.RangesInfo
+}
+
+func (lr LoadedRanges) String() string {
+	return fmt.Sprintf("loaded ranges with ranges=%d", len(lr.Info))
 }
 
 // Generate returns an updated simulator state, where the cluster is loaded
@@ -192,12 +215,45 @@ type PlacementType int
 const (
 	Even PlacementType = iota
 	Skewed
+	Random
+	WeightedRandom
 )
+
+func (p PlacementType) String() string {
+	switch p {
+	case Even:
+		return "even"
+	case Skewed:
+		return "skewed"
+	case Random:
+		return "random"
+	case WeightedRandom:
+		return "weighted_rand"
+	default:
+		panic("unknown placement type")
+	}
+}
+
+func GetRangePlacementType(s string) PlacementType {
+	switch s {
+	case "even":
+		return Even
+	case "skewed":
+		return Skewed
+	case "random":
+		return Random
+	case "weighted_rand":
+		return WeightedRandom
+	default:
+		panic(fmt.Sprintf("unknown placement type %s", s))
+	}
+}
 
 // BaseRanges provide fundamental range functionality and are embedded in
 // specialized range structs. These structs implement the RangeGen interface
 // which is then utilized to generate allocator simulation. Key structs that
-// embed BaseRanges are: BasicRanges.
+// embed BaseRanges are: BasicRanges, RandomizedBasicRanges, and
+// WeightedRandomizedBasicRanges.
 type BaseRanges struct {
 	Ranges            int
 	KeySpace          int
@@ -205,21 +261,31 @@ type BaseRanges struct {
 	Bytes             int64
 }
 
-// getRangesInfo generates and distributes ranges across stores based on
+func (b BaseRanges) String() string {
+	return fmt.Sprintf("ranges=%d, key_space=%d, replication_factor=%d, bytes=%d", b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+}
+
+// GetRangesInfo generates and distributes ranges across stores based on
 // PlacementType while using other BaseRanges fields for range configuration.
-func (b BaseRanges) getRangesInfo(pType PlacementType, numOfStores int) state.RangesInfo {
+func (b BaseRanges) GetRangesInfo(
+	pType PlacementType, numOfStores int, randSource *rand.Rand, weightedRandom []float64,
+) state.RangesInfo {
 	switch pType {
 	case Even:
 		return state.RangesInfoEvenDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
 	case Skewed:
 		return state.RangesInfoSkewedDistribution(numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	case Random:
+		return state.RangesInfoRandDistribution(randSource, numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+	case WeightedRandom:
+		return state.RangesInfoWeightedRandDistribution(randSource, weightedRandom, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
 	default:
 		panic(fmt.Sprintf("unexpected range placement type %v", pType))
 	}
 }
 
-// loadRangeInfo loads the given state with the specified rangesInfo.
-func (b BaseRanges) loadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
+// LoadRangeInfo loads the given state with the specified rangesInfo.
+func (b BaseRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
 	for _, rangeInfo := range rangesInfo {
 		rangeInfo.Size = b.Bytes
 	}
@@ -233,26 +299,20 @@ type BasicRanges struct {
 	PlacementType PlacementType
 }
 
+func (br BasicRanges) String() string {
+	return fmt.Sprintf("basic ranges with placement_type=%v, %v", br.PlacementType, br.BaseRanges)
+}
+
 // Generate returns an updated simulator state, where the cluster is loaded with
 // ranges generated based on the parameters specified in the fields of
 // BasicRanges.
 func (br BasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
-	rangesInfo := br.getRangesInfo(br.PlacementType, len(s.Stores()))
-	br.loadRangeInfo(s, rangesInfo)
+	if br.PlacementType == Random || br.PlacementType == WeightedRandom {
+		panic("BasicRanges generate only uniform or skewed distributions")
+	}
+	rangesInfo := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
+	br.LoadRangeInfo(s, rangesInfo)
 	return s
-}
-
-// StaticEvents implements the EventGen interface.
-// TODO(kvoli): introduce conditional events.
-type StaticEvents struct {
-	DelayedEvents event.DelayedEventList
-}
-
-// Generate returns a list of events, exactly the same as the events
-// StaticEvents was created with.
-func (se StaticEvents) Generate(seed int64) event.DelayedEventList {
-	sort.Sort(se.DelayedEvents)
-	return se.DelayedEvents
 }

@@ -40,22 +40,23 @@ var (
 	wipePreserveCerts     bool
 	grafanaConfig         string
 	grafanaArch           string
-	grafanaurlOpen        bool
 	grafanaDumpDir        string
+	jaegerConfigNodes     string
 	listDetails           bool
 	listJSON              bool
 	listMine              bool
 	listPattern           string
 	secure                = false
-	tenantName            string
+	virtualClusterName    string
+	sqlInstance           int
 	extraSSHOptions       = ""
 	nodeEnv               []string
 	tag                   string
 	external              = false
 	pgurlCertsDir         string
-	adminurlOpen          = false
 	adminurlPath          = ""
 	adminurlIPs           = false
+	urlOpen               = false
 	useTreeDist           = true
 	sig                   = 9
 	waitFlag              = false
@@ -77,8 +78,11 @@ var (
 	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
 
-	// hostCluster is used for multi-tenant functionality.
-	hostCluster string
+	// storageCluster is used for cluster virtualization and multi-tenant functionality.
+	storageCluster string
+	// externalProcessNodes indicates the cluster/nodes where external
+	// process SQL instances should be deployed.
+	externalProcessNodes string
 
 	revertUpdate bool
 )
@@ -155,7 +159,6 @@ func initFlags() {
 	listCmd.Flags().StringVar(&listPattern,
 		"pattern", "", "Show only clusters matching the regex pattern. Empty string matches everything.")
 
-	adminurlCmd.Flags().BoolVar(&adminurlOpen, "open", false, "Open the url in a browser")
 	adminurlCmd.Flags().StringVar(&adminurlPath,
 		"path", "/", "Path to add to URL (e.g. to open a same page on each node)")
 	adminurlCmd.Flags().BoolVar(&adminurlIPs,
@@ -207,15 +210,18 @@ func initFlags() {
 		`Recurrence and scheduled backup options specification.
 Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS first_run = 'now'"`)
 
-	startTenantCmd.Flags().StringVarP(&hostCluster,
-		"host-cluster", "H", "", "host cluster")
-	_ = startTenantCmd.MarkFlagRequired("host-cluster")
-	startTenantCmd.Flags().IntVarP(&startOpts.TenantID,
-		"tenant-id", "t", startOpts.TenantID, "tenant ID")
+	startInstanceCmd.Flags().StringVarP(&storageCluster, "storage-cluster", "S", "", "storage cluster")
+	_ = startInstanceCmd.MarkFlagRequired("storage-cluster")
+	startInstanceCmd.Flags().IntVar(&startOpts.SQLInstance,
+		"sql-instance", 0, "specific SQL/HTTP instance to connect to (this is a roachprod abstraction for separate-process deployments distinct from the internal instance ID)")
+	startInstanceCmd.Flags().StringVar(&externalProcessNodes, "external-cluster", externalProcessNodes, "start service in external mode, as a separate process in the given nodes")
 
-	stopCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
-	stopCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
-	stopCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
+	// Flags for processes that stop (kill) processes.
+	for _, stopProcessesCmd := range []*cobra.Command{stopCmd, stopInstanceCmd} {
+		stopProcessesCmd.Flags().IntVar(&sig, "sig", sig, "signal to pass to kill")
+		stopProcessesCmd.Flags().BoolVar(&waitFlag, "wait", waitFlag, "wait for processes to exit")
+		stopProcessesCmd.Flags().IntVar(&maxWait, "max-wait", maxWait, "approx number of seconds to wait for processes to exit")
+	}
 
 	syncCmd.Flags().BoolVar(&listOpts.IncludeVolumes, "include-volumes", false, "Include volumes when syncing")
 
@@ -265,11 +271,11 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	grafanaStartCmd.Flags().StringVar(&grafanaArch, "arch", "",
 		"binary architecture override [amd64, arm64]")
 
-	grafanaURLCmd.Flags().BoolVar(&grafanaurlOpen,
-		"open", false, "open the grafana dashboard url on the browser")
-
 	grafanaDumpCmd.Flags().StringVar(&grafanaDumpDir, "dump-dir", "",
 		"the absolute path to dump prometheus data to (use the contained 'prometheus-docker-run.sh' to visualize")
+
+	jaegerStartCmd.Flags().StringVar(&jaegerConfigNodes, "configure-nodes", "",
+		"the nodes on which to set the relevant CRDB cluster settings")
 
 	initCmd.Flags().IntVar(&startOpts.InitTarget,
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
@@ -313,6 +319,10 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 	updateCmd.Flags().BoolVar(&revertUpdate, "revert", false, "restore roachprod to the previous version "+
 		"which would have been renamed to roachprod.bak during the update process")
 
+	for _, cmd := range []*cobra.Command{adminurlCmd, grafanaURLCmd, jaegerURLCmd} {
+		cmd.Flags().BoolVar(&urlOpen, "open", false, "Open the url in a browser")
+	}
+
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),
 			"Username to run under, detect if blank")
@@ -326,15 +336,13 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 			&ssh.InsecureIgnoreHostKey, "insecure-ignore-host-key", true, "don't check ssh host keys")
 	}
 
-	for _, cmd := range []*cobra.Command{startCmd, startTenantCmd} {
-		cmd.Flags().BoolVar(&startOpts.Sequential,
-			"sequential", startOpts.Sequential, "start nodes sequentially so node IDs match hostnames")
+	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd} {
 		cmd.Flags().Int64Var(&startOpts.NumFilesLimit, "num-files-limit", startOpts.NumFilesLimit,
 			"limit the number of files that can be created by the cockroach process")
 	}
 
 	for _, cmd := range []*cobra.Command{
-		startCmd, statusCmd, stopCmd, runCmd,
+		startCmd, startInstanceCmd, statusCmd, stopCmd, runCmd,
 	} {
 		cmd.Flags().StringVar(&tag, "tag", "", "the process tag")
 	}
@@ -350,13 +358,15 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 		cmd.Flags().StringVarP(&config.Binary,
 			"binary", "b", config.Binary, "the remote cockroach binary to use")
 	}
-	for _, cmd := range []*cobra.Command{startCmd, startTenantCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd} {
+	for _, cmd := range []*cobra.Command{startCmd, startInstanceCmd, stopInstanceCmd, sqlCmd, pgurlCmd, adminurlCmd, runCmd, jaegerStartCmd} {
 		cmd.Flags().BoolVar(&secure,
 			"secure", false, "use a secure cluster")
 	}
-	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd} {
-		cmd.Flags().StringVar(&tenantName,
-			"tenant-name", "", "specific tenant to connect to")
+	for _, cmd := range []*cobra.Command{pgurlCmd, sqlCmd, adminurlCmd, stopInstanceCmd, jaegerStartCmd} {
+		cmd.Flags().StringVar(&virtualClusterName,
+			"cluster", "", "specific virtual cluster to connect to")
+		cmd.Flags().IntVar(&sqlInstance,
+			"sql-instance", 0, "specific SQL/HTTP instance to connect to (this is a roachprod abstraction distinct from the internal instance ID)")
 	}
 
 }

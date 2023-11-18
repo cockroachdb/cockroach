@@ -310,5 +310,8 @@ func TestPartitionedDiskQueueSimulatedExternal(t *testing.T) {
 		}
 
 		joinRepartition(0, 0, numRepartitions, 0)
+
+		require.NoError(t, p.Close(ctx))
+		countingFS.assertOpenFDs(t, sem, 0, 0)
 	})
 }

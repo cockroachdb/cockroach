@@ -29,6 +29,10 @@ import (
 // admissionpb.WorkPriority, for replication along an individual
 // kvflowcontrol.Stream.
 type Tracker struct {
+	// TODO(irfansharif,aaditya): Everytime we track something, we incur a map
+	// assignment (shows up in CPU profiles). We could introduce a struct that
+	// internally embeds this list of tracked deductions, and append there
+	// instead. Do this as part of #104154.
 	trackedM map[admissionpb.WorkPriority][]tracked
 
 	// lowerBound tracks on a per-stream basis the log position below which
@@ -110,11 +114,15 @@ func (dt *Tracker) Track(
 			return false
 		}
 	}
+
+	// TODO(irfansharif,aaditya): The tracked instances here make up about ~0.4%
+	// of allocations under kv0/enc=false/nodes=3/cpu=9. Maybe clean it up as
+	// part of #104154, by using a sync.Pool perhaps.
 	dt.trackedM[pri] = append(dt.trackedM[pri], tracked{
 		tokens:   tokens,
 		position: pos,
 	})
-	if log.ExpensiveLogEnabled(ctx, 1) {
+	if log.V(1) {
 		log.Infof(ctx, "tracking %s flow control tokens for pri=%s stream=%s pos=%s",
 			tokens, pri, dt.stream, pos)
 	}
@@ -155,7 +163,7 @@ func (dt *Tracker) Untrack(
 
 	trackedBefore := len(dt.trackedM[pri])
 	dt.trackedM[pri] = dt.trackedM[pri][untracked:]
-	if log.ExpensiveLogEnabled(ctx, 1) {
+	if log.V(1) {
 		remaining := ""
 		if len(dt.trackedM[pri]) > 0 {
 			remaining = fmt.Sprintf(" (%s, ...)", dt.trackedM[pri][0].tokens)

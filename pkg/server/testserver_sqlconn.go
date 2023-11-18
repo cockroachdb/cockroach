@@ -42,21 +42,15 @@ import (
 // TODO(#107747): re-enable this.
 const useLoopbackListener = false
 
-// openTestSQLConn is a test helper that supports the SQLConn* methods
-// of serverutils.ApplicationLayerInterface.
-func openTestSQLConn(
-	userName, dbName string,
+func pgURL(
+	dbName string,
+	user *url.Userinfo,
 	tenantName roachpb.TenantName,
-	stopper *stop.Stopper,
-	// When useLoopbackListener is set, only this is used:
-	pgL *netutil.LoopbackListener,
-	// When useLoopbackListener is not set, this is used:
 	sqlAddr string,
 	insecure bool,
-) (*gosql.DB, error) {
-	cleanupFn := func() {}
-	var goDB *gosql.DB
-
+	clientCerts bool,
+	prefix string,
+) (pgURL url.URL, cleanupFn func(), err error) {
 	opts := url.Values{}
 	if tenantName != "" && !strings.HasPrefix(dbName, "cluster:") {
 		opts.Add("options", fmt.Sprintf("-ccluster=%s", tenantName))
@@ -66,39 +60,63 @@ func openTestSQLConn(
 	}
 
 	if useLoopbackListener {
-		pgurl := url.URL{
+		return url.URL{
 			Scheme:   "postgres",
-			User:     url.User(userName),
+			User:     user,
 			Host:     "unused",
 			Path:     dbName,
 			RawQuery: opts.Encode(),
-		}
+		}, func() {}, nil
+	}
+
+	// No LoopbackListener
+	pgURL, cleanupFn, err = sqlutils.PGUrlWithOptionalClientCertsE(sqlAddr, prefix, user, clientCerts)
+	if err != nil {
+		return pgURL, cleanupFn, err
+	}
+	pgURL.Path = dbName
+
+	// Add the common query options decided above to those prepared by
+	// PGUrlE().
+	qv := pgURL.Query()
+	for k, v := range opts {
+		qv[k] = v
+	}
+	pgURL.RawQuery = qv.Encode()
+	return pgURL, cleanupFn, nil
+}
+
+// openTestSQLConn is a test helper that supports the SQLConn* methods
+// of serverutils.ApplicationLayerInterface.
+func openTestSQLConn(
+	dbName string,
+	user *url.Userinfo,
+	tenantName roachpb.TenantName,
+	stopper *stop.Stopper,
+	// When useLoopbackListener is set, only this is used:
+	pgL *netutil.LoopbackListener,
+	// When useLoopbackListener is not set, this is used:
+	sqlAddr string,
+	insecure bool,
+	clientCerts bool,
+	prefix string,
+) (*gosql.DB, error) {
+	var goDB *gosql.DB
+	u, cleanupFn, err := pgURL(dbName, user, tenantName, sqlAddr, insecure, clientCerts, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	if useLoopbackListener {
 		// TODO(sql): consider using pgx for tests instead of lib/pq.
-		connector, err := pq.NewConnector(pgurl.String())
+		connector, err := pq.NewConnector(u.String())
 		if err != nil {
 			return nil, err
 		}
 		connector.Dialer(testDialer{pgL})
 		goDB = gosql.OpenDB(connector)
 	} else /* useLoopbackListener == false */ {
-		var pgURL url.URL
-		var err error
-		pgURL, cleanupFn, err = sqlutils.PGUrlE(sqlAddr, "openTestSQLConn", url.User(userName))
-		if err != nil {
-			return nil, err
-		}
-		pgURL.Path = dbName
-
-		// Add the common query options decided above to those prepared by
-		// PGUrlE().
-		qv := pgURL.Query()
-		for k, v := range opts {
-			qv[k] = v
-		}
-		pgURL.RawQuery = qv.Encode()
-
-		// Open the connection.
-		goDB, err = gosql.Open("postgres", pgURL.String())
+		goDB, err = gosql.Open("postgres", u.String())
 		if err != nil {
 			cleanupFn()
 			return nil, err

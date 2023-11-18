@@ -387,9 +387,11 @@ func (s *server) start(addr net.Addr) {
 	waitQuiesce := func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
 
-		s.mu.Lock()
-		unregister()
-		s.mu.Unlock()
+		func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			unregister()
+		}()
 
 		broadcast()
 	}

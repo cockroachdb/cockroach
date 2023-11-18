@@ -59,7 +59,6 @@ go_test(
         "sql_internal_test.go",
         "sql_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":clisqlshell"],
     deps = [

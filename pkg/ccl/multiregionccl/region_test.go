@@ -860,7 +860,6 @@ CREATE DATABASE db WITH PRIMARY REGION "us-east1" REGIONS "us-east2" PLACEMENT R
 // - Validate that the database and its tables look as expected.
 func TestRegionAddDropWithConcurrentBackupOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 68341, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "times out under race")
@@ -982,7 +981,7 @@ INSERT INTO db.rbr VALUES (1,1),(2,2),(3,3);
 							defer mu.Unlock()
 							if !regionAlterCmd.shouldSucceed {
 								// Trigger a roll-back.
-								return errors.New("nope")
+								return jobs.MarkAsPermanentJobError(errors.New("nope"))
 							}
 							// Trod on.
 							return nil
@@ -1020,7 +1019,9 @@ INSERT INTO db.rbr VALUES (1,1),(2,2),(3,3);
 					dbRegions := make([]string, 0, len(regionAlterCmd.expectedPartitions))
 					rowsRegions, err := sqlDBRestore.Query("SELECT region FROM [SHOW REGIONS FROM DATABASE db]")
 					require.NoError(t, err)
-					defer rowsRegions.Close()
+					defer func() {
+						require.NoError(t, rowsRegions.Close())
+					}()
 					for {
 						done := rowsRegions.Next()
 						if !done {

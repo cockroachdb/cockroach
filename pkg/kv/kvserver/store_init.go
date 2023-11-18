@@ -205,7 +205,7 @@ func WriteInitialClusterData(
 		for _, kv := range rangeInitialValues {
 			// Initialize the checksums.
 			kv.Value.InitChecksum(kv.Key)
-			if err := storage.MVCCPut(
+			if _, err := storage.MVCCPut(
 				ctx, batch, kv.Key, now, kv.Value, storage.MVCCWriteOptions{},
 			); err != nil {
 				return err
@@ -216,7 +216,7 @@ func WriteInitialClusterData(
 			ctx, batch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
 			return err
 		}
-		computedStats, err := rditer.ComputeStatsForRange(desc, batch, now.WallTime)
+		computedStats, err := rditer.ComputeStatsForRange(ctx, desc, batch, now.WallTime)
 		if err != nil {
 			return err
 		}

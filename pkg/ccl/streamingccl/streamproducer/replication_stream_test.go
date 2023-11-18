@@ -9,10 +9,12 @@
 package streamproducer_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -27,14 +29,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -180,7 +187,7 @@ func startReplication(
 	conn, err := pgx.ConnectConfig(queryCtx, pgxConfig)
 	require.NoError(t, err)
 
-	rows, err := conn.Query(queryCtx, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
+	rows, err := conn.Query(queryCtx, `SET CLUSTER SETTING physical_replication.enabled = true;`)
 	require.NoError(t, err)
 	rows.Close()
 
@@ -224,13 +231,9 @@ func testStreamReplicationStatus(
 		expectedStreamStatus.ProtectedTimestamp = &updatedFrontier
 	}
 	checkStreamStatus(t, updatedFrontier, expectedStreamStatus)
-	// Send a query.
-	// The expected protected timestamp is still 'updatedFrontier' as the protected
-	// timestamp doesn't get updated when this is a query.
-	checkStreamStatus(t, hlc.MaxTimestamp, expectedStreamStatus)
 }
 
-func TestSpanConfigReplicationStreamSetup(t *testing.T) {
+func TestReplicationStreamInitialization(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -244,46 +247,11 @@ func TestSpanConfigReplicationStreamSetup(t *testing.T) {
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, serverArgs)
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
-	h.SysSQL.Exec(t, "CREATE TENANT $1", testTenantName)
-	specs := h.SetupSpanConfigsReplicationStream(t, testTenantName)
-
-	var spanConfigTableID uint32
-	h.SysSQL.QueryRow(t, `SELECT id FROM system.namespace WHERE name = $1`,
-		systemschema.SpanConfigurationsTableName.Table()).Scan(&spanConfigTableID)
-	codec := keys.MakeSQLCodec(roachpb.SystemTenantID)
-	spanConfigKey := codec.TablePrefix(spanConfigTableID)
-	expectedSpan := roachpb.Span{Key: spanConfigKey, EndKey: spanConfigKey.PrefixEnd()}
-
-	require.Equal(t, 1, len(specs.Partitions))
-	require.Equal(t, 1, len(specs.Partitions[0].PartitionSpec.Spans))
-
-	require.NotEqual(t, 0, specs.SpanConfigStreamID)
-
-	require.Equal(t, expectedSpan, specs.Partitions[0].PartitionSpec.Spans[0])
-
-}
-func TestReplicationStreamInitialization(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	serverArgs := base.TestServerArgs{
-		// This test fails when run from within a test tenant. This is likely
-		// due to the lack of support for tenant streaming, but more
-		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		},
-	}
-
-	h, cleanup := replicationtestutils.NewReplicationHelper(t, serverArgs)
-	defer cleanup()
-	testTenantName := roachpb.TenantName("test-tenant")
 	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
 	defer cleanupTenant()
 
 	// Makes the stream time out really soon
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
+	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness.timeout = '10ms'")
 	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
 	t.Run("failed-after-timeout", func(t *testing.T) {
 		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
@@ -295,7 +263,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	})
 
 	// Make sure the stream does not time out within the test timeout
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s'")
+	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness.timeout = '500s'")
 	t.Run("continuously-running-within-timeout", func(t *testing.T) {
 		replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
 		streamID := replicationProducerSpec.StreamID
@@ -311,18 +279,16 @@ func TestReplicationStreamInitialization(t *testing.T) {
 			testStreamReplicationStatus(t, h.SysSQL, streamID, streampb.StreamReplicationStatus_STREAM_ACTIVE)
 		}
 
-		// Get a replication stream spec
+		// Get a replication stream spec.
 		spec, rawSpec := &streampb.ReplicationStreamSpec{}, make([]byte, 0)
 		row := h.SysSQL.QueryRow(t, "SELECT crdb_internal.replication_stream_spec($1)", streamID)
 		row.Scan(&rawSpec)
 		require.NoError(t, protoutil.Unmarshal(rawSpec, spec))
 
-		// Ensures the processor spec tracks the tenant span
+		// Ensures the processor spec tracks the tenant span.
 		require.Equal(t, 1, len(spec.Partitions))
 		require.Equal(t, 1, len(spec.Partitions[0].PartitionSpec.Spans))
-		tenantPrefix := keys.MakeTenantPrefix(srcTenant.ID)
-		require.Equal(t, roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()},
-			spec.Partitions[0].PartitionSpec.Spans[0])
+		require.Equal(t, keys.MakeTenantSpan(srcTenant.ID), spec.Partitions[0].PartitionSpec.Spans[0])
 	})
 
 	t.Run("nonexistent-replication-stream-has-inactive-status", func(t *testing.T) {
@@ -377,9 +343,7 @@ func TestStreamPartition(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
-			// Test fails within a test tenant. More investigation is required.
-			// Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -400,34 +364,6 @@ USE d;
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
 	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t1")
-
-	t.Run("stream-table-cursor-error", func(t *testing.T) {
-
-		srcTenant.SQL.Exec(t, `
-CREATE TABLE d.t2(i int primary key, a string, b string);
-INSERT INTO d.t2 (i) VALUES (42);
-`)
-		_, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp, hlc.Timestamp{}, "t2"))
-		defer feed.Close(ctx)
-		t2Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t2")
-		expected := replicationtestutils.EncodeKV(t, srcTenant.Codec, t2Descr, 42)
-		feed.ObserveKey(ctx, expected.Key)
-
-		subscribedSpan := h.TableSpan(srcTenant.Codec, "t2")
-		// Send a ClearRange to trigger rows cursor to return internal error from rangefeed.
-		_, err := kv.SendWrapped(ctx, h.SysServer.DB().NonTransactionalSender(), &kvpb.ClearRangeRequest{
-			RequestHeader: kvpb.RequestHeader{
-				Key:    subscribedSpan.Key,
-				EndKey: subscribedSpan.EndKey,
-			},
-		})
-		require.Nil(t, err)
-
-		feed.ObserveError(ctx, func(err error) bool {
-			return strings.Contains(err.Error(), "unexpected MVCC history mutation")
-		})
-	})
 
 	t.Run("stream-table", func(t *testing.T) {
 		_, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
@@ -525,9 +461,7 @@ func TestStreamAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
-		// Test hangs when run within the default test tenant. Tracked with
-		// #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -617,7 +551,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer cleanup()
 	srcTenantID := serverutils.TestTenantID()
@@ -627,7 +561,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 
 	// Make the producer job times out fast and fastly tracks ingestion cutover signal.
 	h.SysSQL.ExecMultiple(t,
-		"SET CLUSTER SETTING stream_replication.job_liveness_timeout = '2s';",
+		"SET CLUSTER SETTING stream_replication.job_liveness.timeout = '2s';",
 		"SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '2s';")
 
 	replicationProducerSpec := h.StartReplicationStream(t, testTenantName)
@@ -635,7 +569,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 	jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(timedOutStreamID))
 
 	// Makes the producer job not easily time out.
-	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10m';")
+	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness.timeout = '10m';")
 	testCompleteStreamReplication := func(t *testing.T, successfulIngestion bool) {
 		// Verify no error when completing a timed out replication stream.
 		h.SysSQL.Exec(t, "SELECT crdb_internal.complete_replication_stream($1, $2)",
@@ -685,9 +619,7 @@ func TestStreamDeleteRange(t *testing.T) {
 	skip.UnderStressRace(t, "disabled under stress and race")
 
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
-		// Test hangs when run within the default test tenant. Tracked with
-		// #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -722,32 +654,83 @@ USE d;
 	defer feed.Close(ctx)
 	codec := source.mu.codec.(*partitionStreamDecoder)
 
-	// We wait for the frontier to advance because we want to
-	// ensure that we encounter the range deletes during the
-	// rangefeed's steady state rather than the catchup scan.
-	//
-	// The representation of the range deletes we send is slightly
-	// different if we encounter them during the catchup scan.
-	//
-	// NB: It is _still_ possible that we encounter the range
-	// deletes during a catchup scan if we hit a rangefeed restart
-	// during the test.
-	f, err := span.MakeFrontier(spans...)
-	require.NoError(t, err)
-	for f.Frontier().IsEmpty() {
-		t.Logf("waiting for frontier to advance to a non-zero timestamp")
-		source.mu.Lock()
-		source.mu.rows.Next()
-		source.mu.codec.decode()
-		if codec.e.Checkpoint != nil {
-			for _, rs := range codec.e.Checkpoint.ResolvedSpans {
-				_, err := f.Forward(rs.Span, rs.Timestamp)
-				require.NoError(t, err)
+	// normalizeRangeKeys pushes all range keys into an in-memory pebble
+	// engine and then reads them back out. The goal here is to account for
+	// the fact that we may see a logical equivalent set of range keys on
+	// the replication stream that doesn't exactly match the keys above if
+	// we happen to get the range keys during the catchup scan.
+	normalizeRangeKeys := func(in []roachpb.Span) []roachpb.Span {
+		var (
+			// We don't currently care about timestamps in this
+			// test, so we write at a known ts.
+			startTS = hlc.Timestamp{WallTime: 1}
+			writeTS = hlc.Timestamp{WallTime: 2}
+			endTS   = hlc.Timestamp{WallTime: 10}
+			sp      = srcTenant.Codec.TenantSpan()
+		)
+		engine := storage.NewDefaultInMemForTesting()
+		defer engine.Close()
+		for _, key := range in {
+			rk := storage.MVCCRangeKey{
+				StartKey:  key.Key,
+				EndKey:    key.EndKey,
+				Timestamp: writeTS,
 			}
+			require.NoError(t, engine.PutRawMVCCRangeKey(rk, []byte{}))
 		}
-		source.mu.Unlock()
+		require.NoError(t, engine.Flush())
+
+		var sstFile bytes.Buffer
+		_, _, err := storage.MVCCExportToSST(ctx,
+			cluster.MakeTestingClusterSettings(), engine,
+			storage.MVCCExportOptions{
+				StartKey:           storage.MVCCKey{Key: sp.Key, Timestamp: startTS},
+				EndKey:             sp.EndKey,
+				StartTS:            startTS,
+				EndTS:              endTS,
+				ExportAllRevisions: true,
+			}, &sstFile)
+		require.NoError(t, err, "failed to export expected data")
+		keys, rKeys := storageutils.KeysFromSST(t, sstFile.Bytes())
+		require.Equal(t, 0, len(keys), "unexpected point keys")
+		rKeySpans := make([]roachpb.Span, 0, len(rKeys))
+		for _, rk := range rKeys {
+			rKeySpans = append(rKeySpans, rk.Bounds)
+			require.Equal(t, 1, len(rk.Versions))
+		}
+		return rKeySpans
 	}
-	t.Logf("frontier advanced to a %s", f.Frontier())
+
+	consumeUntilTimestamp := func(ts hlc.Timestamp) ([]roachpb.KeyValue, []roachpb.Span) {
+		t.Logf("consuming until %s", ts)
+		receivedKVs := make([]roachpb.KeyValue, 0)
+		receivedDelRangeSpans := make([]roachpb.Span, 0)
+		f, err := span.MakeFrontier(spans...)
+		require.NoError(t, err)
+		for f.Frontier().Less(ts) {
+			source.mu.Lock()
+			source.mu.rows.Next()
+			source.mu.codec.decode()
+			if codec.e.Checkpoint != nil {
+				for _, rs := range codec.e.Checkpoint.ResolvedSpans {
+					_, err := f.Forward(rs.Span, rs.Timestamp)
+					if err != nil {
+						source.mu.Unlock()
+					}
+					require.NoError(t, err)
+					t.Logf("%s current frontier %s", timeutil.Now(), f.Frontier())
+				}
+			} else if codec.e.Batch != nil {
+				receivedKVs = append(receivedKVs, codec.e.Batch.KeyValues...)
+				for _, dr := range codec.e.Batch.DelRanges {
+					receivedDelRangeSpans = append(receivedDelRangeSpans, dr.Span)
+				}
+			}
+			source.mu.Unlock()
+		}
+		t.Logf("consumer done")
+		return receivedKVs, receivedDelRangeSpans
+	}
 
 	t1Span, t2Span, t3Span := h.TableSpan(srcTenant.Codec, "t1"),
 		h.TableSpan(srcTenant.Codec, "t2"), h.TableSpan(srcTenant.Codec, "t3")
@@ -758,31 +741,12 @@ USE d;
 	// Range is t1e - t2sn, emitting t2s - t2sn.
 	require.NoError(t, h.SysServer.DB().DelRangeUsingTombstone(ctx, t1Span.EndKey, t2Span.Key.Next()))
 
-	// Expected DelRange events. We store these and the received
-	// del ranges in maps to account for possible duplicate
-	// delivery.
-	expectedDelRanges := make(map[string]struct{})
-	expectedDelRanges[roachpb.Span{Key: t1Span.Key, EndKey: t1Span.EndKey}.String()] = struct{}{}
-	expectedDelRanges[roachpb.Span{Key: t2Span.Key, EndKey: t2Span.EndKey}.String()] = struct{}{}
-	expectedDelRanges[roachpb.Span{Key: t2Span.Key, EndKey: t2Span.Key.Next()}.String()] = struct{}{}
+	// NB: We won't see this in our normalized form.
+	// {Key: t2Span.Key, EndKey: t2Span.Key.Next()},
+	expectedDelRanges := []roachpb.Span{t1Span, t2Span}
 
-	receivedDelRanges := make(map[string]struct{})
-	for {
-		source.mu.Lock()
-		require.True(t, source.mu.rows.Next())
-		source.mu.codec.decode()
-		if codec.e.Batch != nil {
-			for _, dr := range codec.e.Batch.DelRanges {
-				receivedDelRanges[dr.Span.String()] = struct{}{}
-			}
-		}
-		source.mu.Unlock()
-		if len(receivedDelRanges) >= 3 {
-			break
-		}
-	}
-
-	require.Equal(t, expectedDelRanges, receivedDelRanges)
+	_, actualDelRangeSpans := consumeUntilTimestamp(h.SysServer.Clock().Now())
+	require.Equal(t, expectedDelRanges, normalizeRangeKeys(actualDelRangeSpans))
 
 	// Adding a SSTable that contains DeleteRange
 	batchHLCTime := h.SysServer.Clock().Now()
@@ -802,36 +766,222 @@ USE d;
 	require.Equal(t, t1Span.Key, start)
 	require.Equal(t, t3Span.EndKey, end)
 
-	expectedDelRanges = make(map[string]struct{})
-	expectedDelRanges[t1Span.String()] = struct{}{}
-	expectedDelRanges[t2Span.String()] = struct{}{}
-
 	// Using same batch ts so that this SST can be emitted through rangefeed.
-	_, _, _, err = h.SysServer.DB().AddSSTableAtBatchTimestamp(ctx, start, end, data, false,
+	_, _, _, err := h.SysServer.DB().AddSSTableAtBatchTimestamp(ctx, start, end, data, false,
 		false, hlc.Timestamp{}, nil, false, batchHLCTime)
 	require.NoError(t, err)
 
-	receivedDelRanges = make(map[string]struct{})
-	receivedKVs := make([]roachpb.KeyValue, 0)
-	for {
-		source.mu.Lock()
-		require.True(t, source.mu.rows.Next())
-		source.mu.codec.decode()
-		if codec.e.Batch != nil {
-			require.Empty(t, codec.e.Batch.Ssts)
-			receivedKVs = append(receivedKVs, codec.e.Batch.KeyValues...)
-			for _, dr := range codec.e.Batch.DelRanges {
-				receivedDelRanges[dr.Span.String()] = struct{}{}
-			}
-		}
-		source.mu.Unlock()
+	receivedKVs, receivedDelRangeSpans := consumeUntilTimestamp(batchHLCTime)
+	require.Equal(t, t2Span.Key, receivedKVs[0].Key)
+	require.Equal(t, batchHLCTime, receivedKVs[0].Value.Timestamp)
+	require.Equal(t, expectedDelRanges, normalizeRangeKeys(receivedDelRangeSpans))
+}
 
-		if len(receivedDelRanges) >= 2 && len(receivedKVs) >= 1 {
+func TestStreamSpanConfigs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Use a dummy span config table to avoid dealing with the default span configs set on the tenant.
+	const dummySpanConfigurationsName = "dummy_span_configurations"
+	dummyFQN := tree.NewTableNameWithSchema("d", catconstants.PublicSchemaName, dummySpanConfigurationsName)
+
+	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		Knobs: base.TestingKnobs{
+			Streaming: &sql.StreamingTestingKnobs{
+				MockSpanConfigTableName: dummyFQN,
+			},
+		},
+	})
+	defer cleanup()
+
+	h.SysSQL.Exec(t, `
+CREATE DATABASE d;
+USE d;`)
+	h.SysSQL.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.span_configurations INCLUDING ALL)", dummyFQN))
+
+	tenantID := roachpb.MustMakeTenantID(uint64(10))
+	tenantName := roachpb.TenantName("app")
+
+	_, tenantCleanup := h.CreateTenant(t, tenantID, tenantName)
+	defer tenantCleanup()
+
+	tenantCodec := keys.MakeSQLCodec(tenantID)
+	accessor := spanconfigkvaccessor.New(
+		h.SysServer.DB(),
+		h.SysServer.InternalExecutor().(isql.Executor),
+		h.SysServer.ClusterSettings(),
+		h.SysServer.Clock(),
+		dummyFQN.String(),
+		nil, /* knobs */
+	)
+
+	const streamSpanConfigsQuery = `SELECT * FROM crdb_internal.setup_span_configs_stream($1)`
+	source, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
+		streamSpanConfigsQuery, tenantName)
+	defer feed.Close(ctx)
+
+	makeRecord := func(targetSpan roachpb.Span, ttl int) spanconfig.Record {
+		return replicationtestutils.MakeSpanConfigRecord(t, targetSpan, ttl)
+	}
+
+	makeTableSpan := func(highTableID uint32) roachpb.Span {
+		syntheticTableSpanPrefix := tenantCodec.TablePrefix(highTableID)
+		return roachpb.Span{Key: syntheticTableSpanPrefix, EndKey: syntheticTableSpanPrefix.PrefixEnd()}
+	}
+
+	irrelevantTenant := keys.MakeSQLCodec(roachpb.MustMakeTenantID(231))
+	t1Span, t2Span, t3Span := makeTableSpan(1001), makeTableSpan(1002), makeTableSpan(1003)
+	t123Span := roachpb.Span{Key: t1Span.Key, EndKey: t3Span.EndKey}
+	expectedSpanConfigs := makeSpanConfigUpdateRecorder()
+
+	for ts, toApply := range []struct {
+		updates  []spanconfig.Record
+		deletes  []spanconfig.Target
+		expected []spanconfig.Record
+	}{
+		{
+			// This irrelevant span should not surface.
+			updates:  []spanconfig.Record{makeRecord(irrelevantTenant.TenantSpan(), 3)},
+			expected: []spanconfig.Record{},
+		},
+		{
+			updates:  []spanconfig.Record{makeRecord(t1Span, 2)},
+			expected: []spanconfig.Record{makeRecord(t1Span, 2)},
+		},
+		{
+			// Update the Span.
+			updates:  []spanconfig.Record{makeRecord(t1Span, 3)},
+			expected: []spanconfig.Record{makeRecord(t1Span, 3)},
+		},
+		{
+			// Add Two new records at the same time
+			updates:  []spanconfig.Record{makeRecord(t2Span, 2), makeRecord(t3Span, 5)},
+			expected: []spanconfig.Record{makeRecord(t2Span, 2), makeRecord(t3Span, 5)},
+		},
+		{
+			// Merge these Records
+			deletes:  []spanconfig.Target{spanconfig.MakeTargetFromSpan(t2Span), spanconfig.MakeTargetFromSpan(t3Span)},
+			updates:  []spanconfig.Record{makeRecord(t123Span, 10)},
+			expected: []spanconfig.Record{makeRecord(t2Span, 0), makeRecord(t3Span, 0), makeRecord(t123Span, 10)},
+		},
+		{
+			// Split the records
+			updates:  []spanconfig.Record{makeRecord(t1Span, 1), makeRecord(t2Span, 2), makeRecord(t3Span, 3)},
+			expected: []spanconfig.Record{makeRecord(t1Span, 1), makeRecord(t2Span, 2), makeRecord(t3Span, 3)},
+		},
+		{
+			// Merge these Records again, but include a delete of the t1Span. The
+			// delete of the t1Span does not get replicated because the t123span
+			// update is the latest operation on that span config row in the
+			// accessor.UpdateSpanConfigRecords transaction.
+			deletes: []spanconfig.Target{
+				spanconfig.MakeTargetFromSpan(t1Span),
+				spanconfig.MakeTargetFromSpan(t2Span),
+				spanconfig.MakeTargetFromSpan(t3Span)},
+			updates:  []spanconfig.Record{makeRecord(t123Span, 10)},
+			expected: []spanconfig.Record{makeRecord(t2Span, 0), makeRecord(t3Span, 0), makeRecord(t123Span, 10)},
+		},
+		{
+			// Split the records, but include a delete of the t123 span. The delete
+			// does not get replicated because the t1 update is the latest operation
+			// on that row in the accessor.UpdateSpaConfigRecords
+			// transaction.
+			deletes:  []spanconfig.Target{spanconfig.MakeTargetFromSpan(t123Span)},
+			updates:  []spanconfig.Record{makeRecord(t1Span, 1), makeRecord(t2Span, 2), makeRecord(t3Span, 3)},
+			expected: []spanconfig.Record{makeRecord(t1Span, 1), makeRecord(t2Span, 2), makeRecord(t3Span, 3)},
+		},
+	} {
+		toApply := toApply
+		require.NoError(t, accessor.UpdateSpanConfigRecords(ctx, toApply.deletes, toApply.updates,
+			hlc.MinTimestamp,
+			hlc.MaxTimestamp), "failed on update %d (index starts at 0)", ts)
+		for _, record := range toApply.expected {
+			require.True(t, expectedSpanConfigs.maybeAddNewRecord(replicationtestutils.RecordToEntry(record), int64(ts)))
+		}
+	}
+	receivedSpanConfigs := makeSpanConfigUpdateRecorder()
+	codec := source.mu.codec.(*partitionStreamDecoder)
+	updateCount := 0
+	for {
+		func() {
+			// This codeblock is wrapped in an anonymous function to ensure the source
+			// gets unlocked if an assertion fails. Else, the test can hang.
+			source.mu.Lock()
+			defer source.mu.Unlock()
+			require.True(t, source.mu.rows.Next())
+			source.mu.codec.decode()
+			if codec.e.Batch != nil {
+				require.Greater(t, len(codec.e.Batch.SpanConfigs), 0, "a non empty batch had zero span config updates")
+				for _, cfg := range codec.e.Batch.SpanConfigs {
+					if receivedSpanConfigs.maybeAddNewRecord(cfg.SpanConfig, cfg.Timestamp.WallTime) {
+						updateCount++
+					}
+				}
+			}
+			if codec.e.Checkpoint != nil {
+				require.Equal(t, 1, len(codec.e.Checkpoint.ResolvedSpans))
+				// The frontier in the checkpoint must be greater or equal to the commit
+				// timestamp associated with the latest event.
+				require.LessOrEqual(t, receivedSpanConfigs.latestTime, codec.e.Checkpoint.ResolvedSpans[0].Timestamp.WallTime)
+			}
+		}()
+		if updateCount == len(expectedSpanConfigs.allUpdates) {
 			break
 		}
 	}
+	require.Equal(t, expectedSpanConfigs.String(), receivedSpanConfigs.String())
+}
 
-	require.Equal(t, t2Span.Key, receivedKVs[0].Key)
-	require.Equal(t, batchHLCTime, receivedKVs[0].Value.Timestamp)
-	require.Equal(t, expectedDelRanges, receivedDelRanges)
+type spanConfigUpdateRecorder struct {
+	allUpdates     map[string]struct{}
+	orderedUpdates []sortedSpanConfigUpdates
+	latestTime     int64
+}
+
+func (s *spanConfigUpdateRecorder) maybeAddNewRecord(
+	record roachpb.SpanConfigEntry, ts int64,
+) bool {
+	stringedUpdate := record.String() + fmt.Sprintf(" ts:%d", ts)
+	if _, ok := s.allUpdates[stringedUpdate]; !ok {
+		s.allUpdates[stringedUpdate] = struct{}{}
+	} else {
+		return false
+	}
+	if ts > s.latestTime {
+		s.latestTime = ts
+		s.orderedUpdates = append(s.orderedUpdates, make(sortedSpanConfigUpdates, 0))
+	}
+	idx := len(s.orderedUpdates) - 1
+	s.orderedUpdates[idx] = append(s.orderedUpdates[idx], record)
+	sort.Sort(s.orderedUpdates[idx])
+	return true
+}
+
+func (s *spanConfigUpdateRecorder) String() string {
+	var b strings.Builder
+	for i, updates := range s.orderedUpdates {
+		b.WriteString(fmt.Sprintf("\n Ts %d:", i))
+		for _, update := range updates {
+			b.WriteString(fmt.Sprintf(" %s: ttl %d,", update.Target.GetSpan(), update.Config.GCPolicy.TTLSeconds))
+		}
+	}
+	return b.String()
+}
+
+func makeSpanConfigUpdateRecorder() spanConfigUpdateRecorder {
+	return spanConfigUpdateRecorder{
+		orderedUpdates: make([]sortedSpanConfigUpdates, 0),
+		allUpdates:     make(map[string]struct{}),
+	}
+}
+
+type sortedSpanConfigUpdates []roachpb.SpanConfigEntry
+
+func (a sortedSpanConfigUpdates) Len() int      { return len(a) }
+func (a sortedSpanConfigUpdates) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a sortedSpanConfigUpdates) Less(i, j int) bool {
+	return a[i].Target.GetSpan().Key.Compare(a[j].Target.GetSpan().Key) < 0
 }

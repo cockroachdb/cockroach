@@ -41,13 +41,13 @@ subtest disallow_udf_in_views_and_udf
 statement ok
 CREATE FUNCTION test_vf_f() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
 
-statement error pgcode 42883 pq: unknown function: test_vf_f\(\): function undefined\nHINT:.*intention was to use a user-defined function in the function body, which is currently not supported.
+statement error pgcode 42883 pq: unknown function: test_vf_f\(\)\nHINT:.*intention was to use a user-defined function in the function body, which is currently not supported.
 CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT test_vf_f() $$;
 
 statement ok
 CREATE FUNCTION test_vf_g() RETURNS STRING LANGUAGE SQL AS $$ SELECT lower('hello') $$;
 
-statement error pgcode 42883 pq: unknown function: test_vf_f\(\): function undefined\nHINT:.*intention was to use a user-defined function in the view query, which is currently not supported.
+statement error pgcode 42883 pq: unknown function: test_vf_f\(\)\nHINT:.*intention was to use a user-defined function in the view query, which is currently not supported.
 CREATE VIEW v AS SELECT test_vf_f();
 
 statement ok
@@ -181,5 +181,23 @@ SELECT schema_name FROM [SHOW SCHEMAS] WHERE schema_name LIKE 'pg_temp_%';
 
 statement error pgcode 0A000 unimplemented: cannot create UDFs under a temporary schema
 CREATE FUNCTION $temp_schema_102964.f_102964 () RETURNS INT AS 'SELECT 1' LANGUAGE sql;
+
+subtest end
+
+subtest call
+
+statement ok
+CREATE FUNCTION f_call() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+# A function cannot be used with CALL.
+statement error pgcode 42809 f_call\(\) is not a procedure\nHINT: To call a function, use SELECT.
+CALL f_call()
+
+statement ok
+CREATE OR REPLACE FUNCTION f_call() RETURNS INT LANGUAGE SQL AS ''
+
+# Same test as above, but with an empty function.
+statement error pgcode 42809 f_call\(\) is not a procedure\nHINT: To call a function, use SELECT.
+CALL f_call()
 
 subtest end

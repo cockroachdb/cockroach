@@ -191,25 +191,25 @@ sequence req=reqDiscoverInitial
 [5] sequence reqDiscoverInitial: scanning lock table for conflicting locks
 [5] sequence reqDiscoverInitial: sequencing complete, returned guard
 
-handle-write-intent-error req=reqDiscoverInitial lease-seq=1
-  intent txn=txnRCHighPushee key=kRCHigh1
-  intent txn=txnRCHighPushee key=kRCHigh2
-  intent txn=txnRCHighPushee key=kRCHigh3
-  intent txn=txnRCHighPushee key=kRCHigh4
-  intent txn=txnRCNormalPushee key=kRCNormal1
-  intent txn=txnRCNormalPushee key=kRCNormal2
-  intent txn=txnRCNormalPushee key=kRCNormal3
-  intent txn=txnRCNormalPushee key=kRCNormal4
-  intent txn=txnSSIHighPushee key=kSSIHigh1
-  intent txn=txnSSIHighPushee key=kSSIHigh2
-  intent txn=txnSSIHighPushee key=kSSIHigh3
-  intent txn=txnSSIHighPushee key=kSSIHigh4
-  intent txn=txnSSINormalPushee  key=kSSINormal1
-  intent txn=txnSSINormalPushee  key=kSSINormal2
-  intent txn=txnSSINormalPushee  key=kSSINormal3
-  intent txn=txnSSINormalPushee  key=kSSINormal4
+handle-lock-conflict-error req=reqDiscoverInitial lease-seq=1
+  lock txn=txnRCHighPushee key=kRCHigh1
+  lock txn=txnRCHighPushee key=kRCHigh2
+  lock txn=txnRCHighPushee key=kRCHigh3
+  lock txn=txnRCHighPushee key=kRCHigh4
+  lock txn=txnRCNormalPushee key=kRCNormal1
+  lock txn=txnRCNormalPushee key=kRCNormal2
+  lock txn=txnRCNormalPushee key=kRCNormal3
+  lock txn=txnRCNormalPushee key=kRCNormal4
+  lock txn=txnSSIHighPushee key=kSSIHigh1
+  lock txn=txnSSIHighPushee key=kSSIHigh2
+  lock txn=txnSSIHighPushee key=kSSIHigh3
+  lock txn=txnSSIHighPushee key=kSSIHigh4
+  lock txn=txnSSINormalPushee  key=kSSINormal1
+  lock txn=txnSSINormalPushee  key=kSSINormal2
+  lock txn=txnSSINormalPushee  key=kSSINormal3
+  lock txn=txnSSINormalPushee  key=kSSINormal4
 ----
-[6] handle write intent error reqDiscoverInitial: handled conflicting intents on ‹"kRCHigh1"›, ‹"kRCHigh2"›, ‹"kRCHigh3"›, ‹"kRCHigh4"›, ‹"kRCNormal1"› ... ‹"kSSIHigh4"›, ‹"kSSINormal1"›, ‹"kSSINormal2"›, ‹"kSSINormal3"›, ‹"kSSINormal4"›, released latches
+[6] handle lock conflict error reqDiscoverInitial: handled conflicting locks on ‹"kRCHigh1"›, ‹"kRCHigh2"›, ‹"kRCHigh3"›, ‹"kRCHigh4"›, ‹"kRCNormal1"› ... ‹"kSSIHigh4"›, ‹"kSSINormal1"›, ‹"kSSINormal2"›, ‹"kSSINormal3"›, ‹"kSSINormal4"›, released latches
 
 finish req=reqDiscoverInitial
 ----
@@ -219,37 +219,37 @@ debug-lock-table
 ----
 num=16
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh2"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh3"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh4"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSINormal1"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSINormal2"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSINormal3"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSINormal4"
-  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 # -------------------------------------------------------------
 # Pushee: isolation=serializable, priority=normal
@@ -269,8 +269,8 @@ sequence req=req5
 [7] sequence req5: acquiring latches
 [7] sequence req5: scanning lock table for conflicting locks
 [7] sequence req5: waiting in lock wait-queues
-[7] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal1"› (queuedWriters: 0, queuedReaders: 1)
-[7] sequence req5: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[7] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal1"› (queuedLockingRequests: 0, queuedReaders: 1)
+[7] sequence req5: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [7] sequence req5: pushing timestamp of txn 00000001 above 10.000000000,1
 [7] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -299,8 +299,8 @@ sequence req=req6
 [8] sequence req6: acquiring latches
 [8] sequence req6: scanning lock table for conflicting locks
 [8] sequence req6: waiting in lock wait-queues
-[8] sequence req6: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal2"› (queuedWriters: 0, queuedReaders: 1)
-[8] sequence req6: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[8] sequence req6: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal2"› (queuedLockingRequests: 0, queuedReaders: 1)
+[8] sequence req6: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [8] sequence req6: pushing timestamp of txn 00000001 above 11.000000000,1
 [8] sequence req6: pusher pushed pushee to 11.000000000,2
 [8] sequence req6: resolving intent ‹"kSSINormal2"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,3}
@@ -336,8 +336,8 @@ sequence req=req7
 [9] sequence req7: acquiring latches
 [9] sequence req7: scanning lock table for conflicting locks
 [9] sequence req7: waiting in lock wait-queues
-[9] sequence req7: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal3"› (queuedWriters: 0, queuedReaders: 1)
-[9] sequence req7: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[9] sequence req7: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal3"› (queuedLockingRequests: 0, queuedReaders: 1)
+[9] sequence req7: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [9] sequence req7: pushing timestamp of txn 00000001 above 12.000000000,1
 [9] sequence req7: pusher pushed pushee to 12.000000000,2
 [9] sequence req7: resolving intent ‹"kSSINormal3"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,5}
@@ -369,8 +369,8 @@ sequence req=req8
 [10] sequence req8: acquiring latches
 [10] sequence req8: scanning lock table for conflicting locks
 [10] sequence req8: waiting in lock wait-queues
-[10] sequence req8: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal4"› (queuedWriters: 0, queuedReaders: 1)
-[10] sequence req8: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[10] sequence req8: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"kSSINormal4"› (queuedLockingRequests: 0, queuedReaders: 1)
+[10] sequence req8: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [10] sequence req8: pushing timestamp of txn 00000001 above 13.000000000,1
 [10] sequence req8: pusher pushed pushee to 13.000000000,2
 [10] sequence req8: resolving intent ‹"kSSINormal4"› for txn 00000001 with PENDING status and clock observation {1 123.000000000,7}
@@ -390,29 +390,29 @@ debug-lock-table
 ----
 num=12
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh1"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh2"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh3"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "kSSIHigh4"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 # -------------------------------------------------------------
 # Pushee: isolation=serializable, priority=high
@@ -432,8 +432,8 @@ sequence req=req9
 [11] sequence req9: acquiring latches
 [11] sequence req9: scanning lock table for conflicting locks
 [11] sequence req9: waiting in lock wait-queues
-[11] sequence req9: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh1"› (queuedWriters: 0, queuedReaders: 1)
-[11] sequence req9: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[11] sequence req9: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh1"› (queuedLockingRequests: 0, queuedReaders: 1)
+[11] sequence req9: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [11] sequence req9: pushing timestamp of txn 00000002 above 10.000000000,1
 [11] sequence req9: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -455,8 +455,8 @@ sequence req=req10
 [12] sequence req10: acquiring latches
 [12] sequence req10: scanning lock table for conflicting locks
 [12] sequence req10: waiting in lock wait-queues
-[12] sequence req10: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh2"› (queuedWriters: 0, queuedReaders: 1)
-[12] sequence req10: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[12] sequence req10: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh2"› (queuedLockingRequests: 0, queuedReaders: 1)
+[12] sequence req10: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [12] sequence req10: pushing timestamp of txn 00000002 above 11.000000000,1
 [12] sequence req10: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -478,8 +478,8 @@ sequence req=req11
 [13] sequence req11: acquiring latches
 [13] sequence req11: scanning lock table for conflicting locks
 [13] sequence req11: waiting in lock wait-queues
-[13] sequence req11: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh3"› (queuedWriters: 0, queuedReaders: 1)
-[13] sequence req11: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[13] sequence req11: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh3"› (queuedLockingRequests: 0, queuedReaders: 1)
+[13] sequence req11: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [13] sequence req11: pushing timestamp of txn 00000002 above 12.000000000,1
 [13] sequence req11: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -520,8 +520,8 @@ sequence req=req12
 [14] sequence req12: acquiring latches
 [14] sequence req12: scanning lock table for conflicting locks
 [14] sequence req12: waiting in lock wait-queues
-[14] sequence req12: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh4"› (queuedWriters: 0, queuedReaders: 1)
-[14] sequence req12: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[14] sequence req12: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"kSSIHigh4"› (queuedLockingRequests: 0, queuedReaders: 1)
+[14] sequence req12: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [14] sequence req12: pushing timestamp of txn 00000002 above 13.000000000,1
 [14] sequence req12: pusher pushed pushee to 13.000000000,2
 [14] sequence req12: resolving intent ‹"kSSIHigh4"› for txn 00000002 with PENDING status and clock observation {1 123.000000000,15}
@@ -551,21 +551,21 @@ debug-lock-table
 ----
 num=8
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal1"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal2"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal3"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCNormal4"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
 
 # -------------------------------------------------------------
 # Pushee: isolation=read-committed, priority=normal
@@ -584,8 +584,8 @@ sequence req=req13
 [15] sequence req13: acquiring latches
 [15] sequence req13: scanning lock table for conflicting locks
 [15] sequence req13: waiting in lock wait-queues
-[15] sequence req13: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal1"› (queuedWriters: 0, queuedReaders: 1)
-[15] sequence req13: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[15] sequence req13: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal1"› (queuedLockingRequests: 0, queuedReaders: 1)
+[15] sequence req13: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [15] sequence req13: pushing timestamp of txn 00000003 above 10.000000000,1
 [15] sequence req13: pusher pushed pushee to 10.000000000,2
 [15] sequence req13: resolving intent ‹"kRCNormal1"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,17}
@@ -616,8 +616,8 @@ sequence req=req14
 [16] sequence req14: acquiring latches
 [16] sequence req14: scanning lock table for conflicting locks
 [16] sequence req14: waiting in lock wait-queues
-[16] sequence req14: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal2"› (queuedWriters: 0, queuedReaders: 1)
-[16] sequence req14: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[16] sequence req14: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal2"› (queuedLockingRequests: 0, queuedReaders: 1)
+[16] sequence req14: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [16] sequence req14: pushing timestamp of txn 00000003 above 11.000000000,1
 [16] sequence req14: pusher pushed pushee to 11.000000000,2
 [16] sequence req14: resolving intent ‹"kRCNormal2"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,19}
@@ -648,8 +648,8 @@ sequence req=req15
 [17] sequence req15: acquiring latches
 [17] sequence req15: scanning lock table for conflicting locks
 [17] sequence req15: waiting in lock wait-queues
-[17] sequence req15: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal3"› (queuedWriters: 0, queuedReaders: 1)
-[17] sequence req15: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[17] sequence req15: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal3"› (queuedLockingRequests: 0, queuedReaders: 1)
+[17] sequence req15: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [17] sequence req15: pushing timestamp of txn 00000003 above 12.000000000,1
 [17] sequence req15: pusher pushed pushee to 12.000000000,2
 [17] sequence req15: resolving intent ‹"kRCNormal3"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,21}
@@ -680,8 +680,8 @@ sequence req=req16
 [18] sequence req16: acquiring latches
 [18] sequence req16: scanning lock table for conflicting locks
 [18] sequence req16: waiting in lock wait-queues
-[18] sequence req16: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal4"› (queuedWriters: 0, queuedReaders: 1)
-[18] sequence req16: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[18] sequence req16: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"kRCNormal4"› (queuedLockingRequests: 0, queuedReaders: 1)
+[18] sequence req16: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [18] sequence req16: pushing timestamp of txn 00000003 above 13.000000000,1
 [18] sequence req16: pusher pushed pushee to 13.000000000,2
 [18] sequence req16: resolving intent ‹"kRCNormal4"› for txn 00000003 with PENDING status and clock observation {1 123.000000000,23}
@@ -699,13 +699,13 @@ debug-lock-table
 ----
 num=4
  lock: "kRCHigh1"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh2"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh3"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
  lock: "kRCHigh4"
-  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl
+  holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: ReadCommitted, ts: 10.000000000,1, info: repl [Intent]
 
 # -------------------------------------------------------------
 # Pushee: isolation=read-committed, priority=high
@@ -724,8 +724,8 @@ sequence req=req17
 [19] sequence req17: acquiring latches
 [19] sequence req17: scanning lock table for conflicting locks
 [19] sequence req17: waiting in lock wait-queues
-[19] sequence req17: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh1"› (queuedWriters: 0, queuedReaders: 1)
-[19] sequence req17: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[19] sequence req17: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh1"› (queuedLockingRequests: 0, queuedReaders: 1)
+[19] sequence req17: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [19] sequence req17: pushing timestamp of txn 00000004 above 10.000000000,1
 [19] sequence req17: pusher pushed pushee to 10.000000000,2
 [19] sequence req17: resolving intent ‹"kRCHigh1"› for txn 00000004 with PENDING status and clock observation {1 123.000000000,25}
@@ -756,8 +756,8 @@ sequence req=req18
 [20] sequence req18: acquiring latches
 [20] sequence req18: scanning lock table for conflicting locks
 [20] sequence req18: waiting in lock wait-queues
-[20] sequence req18: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh2"› (queuedWriters: 0, queuedReaders: 1)
-[20] sequence req18: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[20] sequence req18: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh2"› (queuedLockingRequests: 0, queuedReaders: 1)
+[20] sequence req18: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [20] sequence req18: pushing timestamp of txn 00000004 above 11.000000000,1
 [20] sequence req18: pusher pushed pushee to 11.000000000,2
 [20] sequence req18: resolving intent ‹"kRCHigh2"› for txn 00000004 with PENDING status and clock observation {1 123.000000000,27}
@@ -788,8 +788,8 @@ sequence req=req19
 [21] sequence req19: acquiring latches
 [21] sequence req19: scanning lock table for conflicting locks
 [21] sequence req19: waiting in lock wait-queues
-[21] sequence req19: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh3"› (queuedWriters: 0, queuedReaders: 1)
-[21] sequence req19: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[21] sequence req19: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh3"› (queuedLockingRequests: 0, queuedReaders: 1)
+[21] sequence req19: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [21] sequence req19: pushing timestamp of txn 00000004 above 12.000000000,1
 [21] sequence req19: pusher pushed pushee to 12.000000000,2
 [21] sequence req19: resolving intent ‹"kRCHigh3"› for txn 00000004 with PENDING status and clock observation {1 123.000000000,29}
@@ -820,8 +820,8 @@ sequence req=req20
 [22] sequence req20: acquiring latches
 [22] sequence req20: scanning lock table for conflicting locks
 [22] sequence req20: waiting in lock wait-queues
-[22] sequence req20: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh4"› (queuedWriters: 0, queuedReaders: 1)
-[22] sequence req20: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true
+[22] sequence req20: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"kRCHigh4"› (queuedLockingRequests: 0, queuedReaders: 1)
+[22] sequence req20: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = true, wait policy error = false
 [22] sequence req20: pushing timestamp of txn 00000004 above 13.000000000,1
 [22] sequence req20: pusher pushed pushee to 13.000000000,2
 [22] sequence req20: resolving intent ‹"kRCHigh4"› for txn 00000004 with PENDING status and clock observation {1 123.000000000,31}

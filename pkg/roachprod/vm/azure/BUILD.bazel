@@ -13,7 +13,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachprod/config",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/vm",
         "//pkg/roachprod/vm/flagstub",
@@ -25,6 +24,7 @@ go_library(
         "@com_github_azure_azure_sdk_for_go//profiles/latest/resources/mgmt/subscriptions",
         "@com_github_azure_azure_sdk_for_go//services/compute/mgmt/2019-07-01/compute",
         "@com_github_azure_go_autorest_autorest//:autorest",
+        "@com_github_azure_go_autorest_autorest_adal//:adal",
         "@com_github_azure_go_autorest_autorest_azure_auth//:auth",
         "@com_github_azure_go_autorest_autorest_to//:to",
         "@com_github_cockroachdb_errors//:errors",

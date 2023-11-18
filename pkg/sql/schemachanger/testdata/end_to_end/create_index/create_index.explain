@@ -9,7 +9,7 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 5 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 2 (idx1+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (t), ColumnID: 1 (k), IndexID: 2 (idx1+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106 (t), IndexID: 2 (idx1+)}
@@ -18,7 +18,7 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (t), ColumnID: 1 (k), IndexID: 3}
- │         └── 9 Mutation operations
+ │         └── 10 Mutation operations
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── SetAddedIndexPartialPredicate {"Expr":"v = b'@':::@1001...","IndexID":2,"TableID":106}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":106}
@@ -26,12 +26,13 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":106}
  │              ├── SetIndexName {"IndexID":2,"Name":"idx1","TableID":106}
  │              ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │              ├── SetAddedIndexPartialPredicate {"Expr":"v = b'@':::@1001...","IndexID":3,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"TableID":106}
  │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":106}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 5 elements transitioning toward PUBLIC
- │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+ │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 2 (idx1+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (t), ColumnID: 1 (k), IndexID: 2 (idx1+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106 (t), IndexID: 2 (idx1+)}
@@ -44,7 +45,7 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 5 elements transitioning toward PUBLIC
- │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+ │         │    ├── ABSENT → BACKFILL_ONLY SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 2 (idx1+)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (t), ColumnID: 1 (k), IndexID: 2 (idx1+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106 (t), IndexID: 2 (idx1+)}
@@ -53,7 +54,7 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 3}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (t), ColumnID: 1 (k), IndexID: 3}
- │         └── 15 Mutation operations
+ │         └── 16 Mutation operations
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":106}
  │              ├── SetAddedIndexPartialPredicate {"Expr":"v = b'@':::@1001...","IndexID":2,"TableID":106}
@@ -62,6 +63,7 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":106}
  │              ├── SetIndexName {"IndexID":2,"Name":"idx1","TableID":106}
  │              ├── MakeAbsentTempIndexDeleteOnly {"IsSecondaryIndex":true}
+ │              ├── SetAddedIndexPartialPredicate {"Expr":"v = b'@':::@1001...","IndexID":3,"TableID":106}
  │              ├── MaybeAddSplitForIndex {"IndexID":3,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"TableID":106}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":106}
@@ -82,12 +84,12 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 2 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+ │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
  │    │    └── 1 Backfill operation
  │    │         └── BackfillIndex {"IndexID":2,"SourceIndexID":1,"TableID":106}
  │    ├── Stage 3 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+ │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
  │    │    └── 5 Mutation operations
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":2,"TableID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
@@ -96,7 +98,7 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 4 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+ │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
  │    │    └── 5 Mutation operations
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":2,"TableID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
@@ -105,12 +107,12 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    ├── Stage 5 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+ │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
  │    │    └── 1 Backfill operation
  │    │         └── MergeIndex {"BackfilledIndexID":2,"TableID":106,"TemporaryIndexID":3}
  │    ├── Stage 6 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+ │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
  │    │    └── 6 Mutation operations
@@ -122,13 +124,13 @@ Schema change plan for CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.�
  │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  │    └── Stage 7 of 7 in PostCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+ │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
  │         └── 1 Validation operation
  │              └── ValidateIndex {"IndexID":2,"TableID":106}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward PUBLIC
-           │    └── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+           │    └── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 106 (t), IndexID: 2 (idx1+), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
            ├── 4 elements transitioning toward TRANSIENT_ABSENT
            │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 106 (t), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (t_pkey)}
            │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 106 (t), ColumnID: 2 (v), IndexID: 3}

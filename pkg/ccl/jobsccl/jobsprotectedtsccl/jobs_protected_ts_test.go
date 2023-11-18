@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
@@ -62,6 +63,10 @@ func (f fakeResumer) Resume(ctx context.Context, _ interface{}) error {
 func (f fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error) error {
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+func (f fakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
 }
 
 func testJobsProtectedTimestamp(
@@ -215,6 +220,7 @@ func testSchedulesProtectedTimestamp(
 		j.SetOwner(username.TestUserName())
 		any, err := types.MarshalAny(&jobspb.SqlStatementExecutionArg{Statement: ""})
 		require.NoError(t, err)
+		j.SetScheduleDetails(jobstest.AddDummyScheduleDetails(jobspb.ScheduleDetails{}))
 		j.SetExecutionDetails(jobs.InlineExecutorName, jobspb.ExecutionArguments{Args: any})
 		return j
 	}
@@ -228,7 +234,7 @@ func testSchedulesProtectedTimestamp(
 			require.NoError(t, schedules.Create(ctx, sj))
 			deprecatedSpansToProtect := roachpb.Spans{{Key: keys.MinKey, EndKey: keys.MaxKey}}
 			targetToProtect := ptpb.MakeClusterTarget()
-			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), sj.ScheduleID(), ts,
+			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), int64(sj.ScheduleID()), ts,
 				deprecatedSpansToProtect, jobsprotectedts.Schedules, targetToProtect)
 			return ptp.WithTxn(txn).Protect(ctx, rec)
 		}))

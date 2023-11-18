@@ -38,15 +38,17 @@ with k=k t=a ts=0,1
 ----
 >> increment k=k t=a ts=0,1
 inc: current value = 1
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+51 live_count=+1 live_bytes=+65 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+100
+inc: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=1 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+51 live_count=+1 live_bytes=+65 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+100
 >> increment k=k t=a ts=0,1
 inc: current value = 2
+inc: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2 Replicated Intent []}
 stats: val_bytes=+10 live_bytes=+10
 >> at end:
-txn: "a" meta={id=00000000 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "a" meta={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/0,1 -> /INT/2
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=100
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=18 lock_count=1 lock_age=100
 
 
 # Increments at older timestamp generate WriteTooOld.
@@ -59,7 +61,7 @@ with k=r
 inc: current value = 1
 inc: current value = 2
 >> at end:
-meta: "k"/0,0 -> txn={id=00000000 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/0,1 -> /INT/2
 data: "r"/3.000000000,0 -> /INT/2
 data: "r"/1.000000000,0 -> /INT/1
@@ -68,7 +70,7 @@ run error
 increment k=r ts=2
 ----
 >> at end:
-meta: "k"/0,0 -> txn={id=00000000 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/0,1 -> /INT/2
 data: "r"/3.000000000,0 -> /INT/2
 data: "r"/1.000000000,0 -> /INT/1
@@ -81,8 +83,8 @@ with t=r
   increment k=r
 ----
 >> at end:
-txn: "r" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
-meta: "k"/0,0 -> txn={id=00000000 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "r" meta={id=00000002 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
+meta: "k"/0,0 -> txn={id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=2} ts=0,1 del=false klen=12 vlen=6 ih={{1 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k"/0,1 -> /INT/2
 data: "r"/3.000000000,0 -> /INT/2
 data: "r"/1.000000000,0 -> /INT/1

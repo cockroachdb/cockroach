@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Format, Identifier, Join, SQL } from "./safesql";
+import { Format, Identifier, Join, QuoteIdentifier, SQL } from "./safesql";
 
 describe("safesql", () => {
   test("format", () => {
@@ -143,5 +143,28 @@ describe("safesql", () => {
     testCases.forEach(tc => {
       expect(tc.got.SQLString()).toEqual(tc.expected);
     });
+  });
+
+  // https://www.cockroachlabs.com/docs/stable/keywords-and-identifiers#rules-for-identifiers
+  // https://www.postgresql.org/docs/15/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+  test("QuoteIdentifier", () => {
+    const testCases = [
+      ["foobar", '"foobar"'],
+      ['weird"table', '"weird""table"'],
+      ['"quoted"', '"""quoted"""'],
+
+      // Anti-test cases: The following cases document the inputs that
+      // QuoteIdentifier can not deal with.
+      // 1. A fully qualified name that is not comprised of quoted identifiers.
+      // 2. A fully qualified name that is already made of quoted identifiers.
+      ["schema.table", '"schema.table"'], // Invalid SQL output.
+      ['"schema"."table"', '"""schema"".""table"""'], // Invalid SQL output.
+    ];
+
+    for (const tcase of testCases) {
+      const res = QuoteIdentifier(tcase[0]);
+      const expected = tcase[1];
+      expect(res).toEqual(expected);
+    }
   });
 });

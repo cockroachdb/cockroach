@@ -42,7 +42,7 @@ type state struct {
 	stores                  map[StoreID]*store
 	load                    map[RangeID]ReplicaLoad
 	loadsplits              map[StoreID]LoadSplitter
-	quickLivenessMap        livenesspb.TestNodeVitality
+	nodeLiveness            MockNodeLiveness
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
 	configChangeListeners   []ConfigChangeListener
@@ -71,13 +71,17 @@ func newState(settings *config.SimulationSettings) *state {
 		nodes:             make(map[NodeID]*node),
 		stores:            make(map[StoreID]*store),
 		loadsplits:        make(map[StoreID]LoadSplitter),
-		quickLivenessMap:  livenesspb.TestNodeVitality{},
 		capacityOverrides: make(map[StoreID]CapacityOverride),
 		clock:             &ManualSimClock{nanos: settings.StartTime.UnixNano()},
 		ranges:            newRMap(),
 		usageInfo:         newClusterUsageInfo(),
 		settings:          settings,
 	}
+	s.nodeLiveness = MockNodeLiveness{
+		clock:     hlc.NewClockForTesting(s.clock),
+		statusMap: map[NodeID]livenesspb.NodeLivenessStatus{},
+	}
+
 	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
 	return s
 }
@@ -123,13 +127,36 @@ func (rm *rmap) initFirstRange() {
 		startKey:    MinKey,
 		endKey:      MaxKey,
 		desc:        desc,
-		config:      defaultSpanConfig,
+		config:      &defaultSpanConfig,
 		replicas:    make(map[StoreID]*replica),
 		leaseholder: -1,
 	}
 
 	rm.rangeTree.ReplaceOrInsert(rng)
 	rm.rangeMap[rangeID] = rng
+}
+
+// PrettyPrint returns a pretty formatted string representation of the
+// state (more concise than String()).
+func (s *state) PrettyPrint() string {
+	builder := &strings.Builder{}
+	nStores := len(s.stores)
+	builder.WriteString(fmt.Sprintf("stores(%d)=[", nStores))
+	var storeIDs StoreIDSlice
+	for storeID := range s.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for i, storeID := range storeIDs {
+		store := s.stores[storeID]
+		builder.WriteString(store.PrettyPrint())
+		if i < nStores-1 {
+			builder.WriteString(",")
+		}
+	}
+	builder.WriteString("]")
+	return builder.String()
 }
 
 // String returns a string containing a compact representation of the state.
@@ -145,14 +172,22 @@ func (s *state) String() string {
 	})
 
 	nStores := len(s.stores)
-	iterStores := 0
 	builder.WriteString(fmt.Sprintf("stores(%d)=[", nStores))
-	for _, store := range s.stores {
+
+	// Sort the unordered map storeIDs by its key to ensure deterministic
+	// printing.
+	var storeIDs StoreIDSlice
+	for storeID := range s.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for i, storeID := range storeIDs {
+		store := s.stores[storeID]
 		builder.WriteString(store.String())
-		if iterStores < nStores-1 {
+		if i < nStores-1 {
 			builder.WriteString(",")
 		}
-		iterStores++
 	}
 	builder.WriteString("] ")
 
@@ -377,7 +412,7 @@ func (s *state) AddNode() Node {
 		stores: []StoreID{},
 	}
 	s.nodes[nodeID] = node
-	s.quickLivenessMap.AddNode(roachpb.NodeID(nodeID))
+	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
 	return node
 }
 func (s *state) SetNodeLocality(nodeID NodeID, locality roachpb.Locality) {
@@ -623,7 +658,7 @@ func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 }
 
 // SetSpanConfigForRange set the span config for the Range with ID RangeID.
-func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig roachpb.SpanConfig) bool {
+func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig *roachpb.SpanConfig) bool {
 	if rng, ok := s.ranges.rangeMap[rangeID]; ok {
 		rng.config = spanConfig
 		return true
@@ -633,7 +668,7 @@ func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig roachpb.SpanCo
 
 // SetSpanConfig sets the span config for all ranges represented by the span,
 // splitting if necessary.
-func (s *state) SetSpanConfig(span roachpb.Span, config roachpb.SpanConfig) {
+func (s *state) SetSpanConfig(span roachpb.Span, config *roachpb.SpanConfig) {
 	startKey := ToKey(span.Key)
 	endKey := ToKey(span.EndKey)
 
@@ -752,7 +787,7 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 		rangeID:     rangeID,
 		startKey:    splitKey,
 		desc:        roachpb.RangeDescriptor{RangeID: roachpb.RangeID(rangeID), NextReplicaID: 1},
-		config:      defaultSpanConfig,
+		config:      &defaultSpanConfig,
 		replicas:    make(map[StoreID]*replica),
 		leaseholder: -1,
 	}
@@ -1054,18 +1089,7 @@ func (s *state) NextReplicasFn(storeID StoreID) func() []Replica {
 // SetNodeLiveness sets the liveness status of the node with ID NodeID to be
 // the status given.
 func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessStatus) {
-	switch status {
-	case livenesspb.NodeLivenessStatus_DRAINING:
-		s.quickLivenessMap.Draining(roachpb.NodeID(nodeID), true)
-	case livenesspb.NodeLivenessStatus_DECOMMISSIONED:
-		s.quickLivenessMap.Decommissioned(roachpb.NodeID(nodeID), false)
-	case livenesspb.NodeLivenessStatus_DECOMMISSIONING:
-		s.quickLivenessMap.Decommissioning(roachpb.NodeID(nodeID), true)
-	case livenesspb.NodeLivenessStatus_LIVE:
-		s.quickLivenessMap.RestartNode(roachpb.NodeID(nodeID))
-	case livenesspb.NodeLivenessStatus_DEAD:
-		s.quickLivenessMap.DownNode(roachpb.NodeID(nodeID))
-	}
+	s.nodeLiveness.statusMap[nodeID] = status
 }
 
 // NodeLivenessFn returns a function, that when called will return the
@@ -1073,18 +1097,23 @@ func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessSta
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
 	return func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
-		return s.quickLivenessMap[nid].Convert().LivenessStatus()
+		return s.nodeLiveness.statusMap[NodeID(nid)]
 	}
 }
 
 // NodeCountFn returns a function, that when called will return the current
 // number of nodes that exist in this state.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
+// TODO(wenyihu6): introduce the concept of membership separated from the
+// liveness map.
 func (s *state) NodeCountFn() storepool.NodeCountFunc {
 	return func() int {
 		count := 0
-		for _, entry := range s.quickLivenessMap {
-			if entry.Convert().IsLive(livenesspb.Rebalance) {
+		for _, status := range s.nodeLiveness.statusMap {
+			// Nodes with a liveness status other than decommissioned or
+			// decommissioning are considered active members (see
+			// liveness.MembershipStatus).
+			if status != livenesspb.NodeLivenessStatus_DECOMMISSIONED && status != livenesspb.NodeLivenessStatus_DECOMMISSIONING {
 				count++
 			}
 		}
@@ -1213,7 +1242,7 @@ func (s *state) GetSpanConfigForKey(
 	if rng == nil {
 		panic(fmt.Sprintf("programming error: range for key %s doesn't exist", key))
 	}
-	return rng.config, nil
+	return *rng.config, nil
 }
 
 // Scan is added for the rangedesc.Scanner interface, required for
@@ -1241,7 +1270,7 @@ func (s *state) Scan(
 // state of ranges.
 func (s *state) Report() roachpb.SpanConfigConformanceReport {
 	reporter := spanconfigreporter.New(
-		s.quickLivenessMap, s, s, s,
+		s.nodeLiveness, s, s, s,
 		cluster.MakeClusterSettings(), &spanconfig.TestingKnobs{})
 	report, err := reporter.SpanConfigConformance(context.Background(), []roachpb.Span{{}})
 	if err != nil {
@@ -1317,19 +1346,32 @@ type store struct {
 	replicas  map[RangeID]ReplicaID
 }
 
+// PrettyPrint returns pretty formatted string representation of the store.
+func (s *store) PrettyPrint() string {
+	builder := &strings.Builder{}
+	builder.WriteString(fmt.Sprintf("s%dn%d=(replicas(%d))", s.storeID, s.nodeID, len(s.replicas)))
+	return builder.String()
+}
+
 // String returns a compact string representing the current state of the store.
 func (s *store) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString(fmt.Sprintf("s%dn%d=(", s.storeID, s.nodeID))
 
-	nRepls := len(s.replicas)
-	iterRepls := 0
-	for rangeID, replicaID := range s.replicas {
+	// Sort the unordered map rangeIDs by its key to ensure deterministic
+	// printing.
+	var rangeIDs RangeIDSlice
+	for rangeID := range s.replicas {
+		rangeIDs = append(rangeIDs, rangeID)
+	}
+	sort.Sort(rangeIDs)
+
+	for i, rangeID := range rangeIDs {
+		replicaID := s.replicas[rangeID]
 		builder.WriteString(fmt.Sprintf("r%d:%d", rangeID, replicaID))
-		if iterRepls < nRepls-1 {
+		if i < len(s.replicas)-1 {
 			builder.WriteString(",")
 		}
-		iterRepls++
 	}
 	builder.WriteString(")")
 	return builder.String()
@@ -1362,7 +1404,7 @@ type rng struct {
 	rangeID          RangeID
 	startKey, endKey Key
 	desc             roachpb.RangeDescriptor
-	config           roachpb.SpanConfig
+	config           *roachpb.SpanConfig
 	replicas         map[StoreID]*replica
 	leaseholder      ReplicaID
 	size             int64
@@ -1383,17 +1425,24 @@ func (r *rng) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString(fmt.Sprintf("r%d(%d)=(", r.rangeID, r.startKey))
 
-	nRepls := len(r.replicas)
-	iterRepls := 0
-	for storeID, replica := range r.replicas {
+	// Sort the unordered map storeIDs by its key to ensure deterministic
+	// printing.
+	var storeIDs StoreIDSlice
+	for storeID := range r.replicas {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Sort(storeIDs)
+
+	for i, storeID := range storeIDs {
+		replica := r.replicas[storeID]
 		builder.WriteString(fmt.Sprintf("s%d:r%d", storeID, replica.replicaID))
 		if r.leaseholder == replica.replicaID {
 			builder.WriteString("*")
 		}
-		if iterRepls < nRepls-1 {
+		if i < len(r.replicas)-1 {
 			builder.WriteString(",")
 		}
-		iterRepls++
+		i++
 	}
 	builder.WriteString(")")
 
@@ -1401,7 +1450,7 @@ func (r *rng) String() string {
 }
 
 // SpanConfig returns the span config for this range.
-func (r *rng) SpanConfig() roachpb.SpanConfig {
+func (r *rng) SpanConfig() *roachpb.SpanConfig {
 	return r.config
 }
 

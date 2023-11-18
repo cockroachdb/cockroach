@@ -17,7 +17,7 @@ services:
       - keytab:/keytab
       - ${COCKROACH_BINARY:-../../../../cockroach-linux-2.6.32-gnu-amd64}:/cockroach/cockroach
   psql:
-    image: cockroachdb/acceptance-gss-psql:20221215-102339
+    image: cockroachdb/acceptance-gss-psql:20230907-113902
     user: "${UID}:${GID}"
     depends_on:
       - cockroach

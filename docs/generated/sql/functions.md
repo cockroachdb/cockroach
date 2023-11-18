@@ -43,6 +43,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: pg_lsn[], elem: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_append"></a><code>array_append(array: refcursor[], elem: refcursor) &rarr; refcursor[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: timetz[], elem: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_append"></a><code>array_append(array: tuple[], elem: tuple) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -88,6 +90,8 @@
 <tr><td><a name="array_cat"></a><code>array_cat(left: oid[], right: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: pg_lsn[], right: pg_lsn[]) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_cat"></a><code>array_cat(left: refcursor[], right: refcursor[]) &rarr; refcursor[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat"></a><code>array_cat(left: timetz[], right: timetz[]) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td><td>Immutable</td></tr>
@@ -139,6 +143,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: pg_lsn[], elem: pg_lsn) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_position"></a><code>array_position(array: refcursor[], elem: refcursor) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: timetz[], elem: timetz) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_position"></a><code>array_position(array: tuple[], elem: tuple) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
@@ -184,6 +190,8 @@
 <tr><td><a name="array_positions"></a><code>array_positions(array: oid[], elem: oid) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: pg_lsn[], elem: pg_lsn) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_positions"></a><code>array_positions(array: refcursor[], elem: refcursor) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_positions"></a><code>array_positions(array: timetz[], elem: timetz) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -231,6 +239,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: pg_lsn, array: pg_lsn[]) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_prepend"></a><code>array_prepend(elem: refcursor, array: refcursor[]) &rarr; refcursor[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: timetz, array: timetz[]) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_prepend"></a><code>array_prepend(elem: tuple, array: tuple[]) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
@@ -276,6 +286,8 @@
 <tr><td><a name="array_remove"></a><code>array_remove(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: pg_lsn[], elem: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_remove"></a><code>array_remove(array: refcursor[], elem: refcursor) &rarr; refcursor[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_remove"></a><code>array_remove(array: timetz[], elem: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -323,6 +335,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: pg_lsn[], toreplace: pg_lsn, replacewith: pg_lsn) &rarr; pg_lsn[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_replace"></a><code>array_replace(array: refcursor[], toreplace: refcursor, replacewith: refcursor) &rarr; refcursor[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: timetz[], toreplace: timetz, replacewith: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_replace"></a><code>array_replace(array: tuple[], toreplace: tuple, replacewith: tuple) &rarr; tuple[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
@@ -336,6 +350,8 @@
 <tr><td><a name="array_upper"></a><code>array_upper(input: anyelement[], array_dimension: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the maximum value of <code>input</code> on the provided <code>array_dimension</code>. However, because CockroachDB doesn’t yet support multi-dimensional arrays, the only supported <code>array_dimension</code> is <strong>1</strong>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="cardinality"></a><code>cardinality(input: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of elements contained in <code>input</code></p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="jsonb_array_to_string_array"></a><code>jsonb_array_to_string_array(input: jsonb) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Convert a JSONB array into a string array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="string_to_array"></a><code>string_to_array(str: <a href="string.html">string</a>, delimiter: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Split a string into components on a delimiter.</p>
 </span></td><td>Immutable</td></tr>
@@ -388,10 +404,48 @@
 <tbody>
 <tr><td><a name="crypt"></a><code>crypt(password: <a href="string.html">string</a>, salt: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a hash based on a password and salt. The hash algorithm and number of rounds if applicable are encoded in the salt.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="decrypt"></a><code>decrypt(data: <a href="bytes.html">bytes</a>, key: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decrypt <code>data</code> with <code>key</code> using the cipher method specified by <code>type</code>.</p>
+<p>The cipher type must have the format <code>&lt;algorithm&gt;[-&lt;mode&gt;][/pad:&lt;padding&gt;]</code> where:</p>
+<ul>
+<li><code>&lt;algorithm&gt;</code> is <code>aes</code></li>
+<li><code>&lt;mode&gt;</code> is <code>cbc</code> (default)</li>
+<li><code>&lt;padding&gt;</code> is <code>pkcs</code> (default) or <code>none</code></li>
+</ul>
+<p>This function requires an enterprise license on a CCL distribution.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="decrypt_iv"></a><code>decrypt_iv(data: <a href="bytes.html">bytes</a>, key: <a href="bytes.html">bytes</a>, iv: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decrypt <code>data</code> with <code>key</code> using the cipher method specified by <code>type</code>. If the mode is CBC, the provided <code>iv</code> will be used. Otherwise, it will be ignored.</p>
+<p>The cipher type must have the format <code>&lt;algorithm&gt;[-&lt;mode&gt;][/pad:&lt;padding&gt;]</code> where:</p>
+<ul>
+<li><code>&lt;algorithm&gt;</code> is <code>aes</code></li>
+<li><code>&lt;mode&gt;</code> is <code>cbc</code> (default)</li>
+<li><code>&lt;padding&gt;</code> is <code>pkcs</code> (default) or <code>none</code></li>
+</ul>
+<p>This function requires an enterprise license on a CCL distribution.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="digest"></a><code>digest(data: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Computes a binary hash of the given <code>data</code>. <code>type</code> is the algorithm to use (md5, sha1, sha224, sha256, sha384, or sha512).</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="digest"></a><code>digest(data: <a href="string.html">string</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Computes a binary hash of the given <code>data</code>. <code>type</code> is the algorithm to use (md5, sha1, sha224, sha256, sha384, or sha512).</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="encrypt"></a><code>encrypt(data: <a href="bytes.html">bytes</a>, key: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Encrypt <code>data</code> with <code>key</code> using the cipher method specified by <code>type</code>.</p>
+<p>The cipher type must have the format <code>&lt;algorithm&gt;[-&lt;mode&gt;][/pad:&lt;padding&gt;]</code> where:</p>
+<ul>
+<li><code>&lt;algorithm&gt;</code> is <code>aes</code></li>
+<li><code>&lt;mode&gt;</code> is <code>cbc</code> (default)</li>
+<li><code>&lt;padding&gt;</code> is <code>pkcs</code> (default) or <code>none</code></li>
+</ul>
+<p>This function requires an enterprise license on a CCL distribution.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="encrypt_iv"></a><code>encrypt_iv(data: <a href="bytes.html">bytes</a>, key: <a href="bytes.html">bytes</a>, iv: <a href="bytes.html">bytes</a>, type: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Encrypt <code>data</code> with <code>key</code> using the cipher method specified by <code>type</code>. If the mode is CBC, the provided <code>iv</code> will be used. Otherwise, it will be ignored.</p>
+<p>The cipher type must have the format <code>&lt;algorithm&gt;[-&lt;mode&gt;][/pad:&lt;padding&gt;]</code> where:</p>
+<ul>
+<li><code>&lt;algorithm&gt;</code> is <code>aes</code></li>
+<li><code>&lt;mode&gt;</code> is <code>cbc</code> (default)</li>
+<li><code>&lt;padding&gt;</code> is <code>pkcs</code> (default) or <code>none</code></li>
+</ul>
+<p>This function requires an enterprise license on a CCL distribution.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="gen_random_bytes"></a><code>gen_random_bytes(count: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Returns <code>count</code> cryptographically strong random bytes. At most 1024 bytes can be extracted at a time.</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="gen_salt"></a><code>gen_salt(type: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a salt for input into the <code>crypt</code> function using the default number of rounds.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="gen_salt"></a><code>gen_salt(type: <a href="string.html">string</a>, iter_count: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a salt for input into the <code>crypt</code> function using <code>iter_count</code> number of rounds.</p>
@@ -521,6 +575,11 @@ significant than <code>element</code> to zero (or one, for day and month)</p>
 <p>Compatible elements: millennium, century, decade, year, quarter, month,
 week, day, hour, minute, second, millisecond, microsecond.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="date_trunc"></a><code>date_trunc(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamptz</a>, timezone: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Truncates <code>input</code> to precision <code>element</code> in the specified <code>timezone</code>.  Sets all fields that are less
+significant than <code>element</code> to zero (or one, for day and month)</p>
+<p>Compatible elements: millennium, century, decade, year, quarter, month,
+week, day, hour, minute, second, millisecond, microsecond.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="experimental_follower_read_timestamp"></a><code>experimental_follower_read_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Same as follower_read_timestamp. This name is deprecated.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="experimental_strftime"></a><code>experimental_strftime(input: <a href="date.html">date</a>, extract_format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>From <code>input</code>, extracts and formats the time as identified in <code>extract_format</code> using standard <code>strftime</code> notation (though not all formatting is supported).</p>
@@ -604,6 +663,14 @@ has no relationship with the commit order of concurrent transactions.</p>
 <p>The value is based on a timestamp picked when the transaction starts
 and which stays constant throughout the transaction. This timestamp
 has no relationship with the commit order of concurrent transactions.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="make_date"></a><code>make_date(year: <a href="int.html">int</a>, month: <a href="int.html">int</a>, day: <a href="int.html">int</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Create date (formatted according to ISO 8601) from year, month, and day fields (negative years signify BC).</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="make_timestamp"></a><code>make_timestamp(year: <a href="int.html">int</a>, month: <a href="int.html">int</a>, day: <a href="int.html">int</a>, hour: <a href="int.html">int</a>, min: <a href="int.html">int</a>, sec: <a href="float.html">float</a>) &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Create timestamp (formatted according to ISO 8601) from year, month, day, hour, minute, and seconds fields (negative years signify BC).</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="make_timestamptz"></a><code>make_timestamptz(year: <a href="int.html">int</a>, month: <a href="int.html">int</a>, day: <a href="int.html">int</a>, hour: <a href="int.html">int</a>, min: <a href="int.html">int</a>, sec: <a href="float.html">float</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Create timestamp (formatted according to ISO 8601) with time zone from year, month, day, hour, minute and seconds fields (negative years signify BC). If timezone is not specified, the current time zone is used.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="make_timestamptz"></a><code>make_timestamptz(year: <a href="int.html">int</a>, month: <a href="int.html">int</a>, day: <a href="int.html">int</a>, hour: <a href="int.html">int</a>, min: <a href="int.html">int</a>, sec: <a href="float.html">float</a>, timezone: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Create timestamp (formatted according to ISO 8601) with time zone from year, month, day, hour, minute and seconds fields (negative years signify BC). If timezone is not specified, the current time zone is used.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="now"></a><code>now() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
@@ -2685,6 +2752,30 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="bit_length"></a><code>bit_length(val: varbit) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_and"></a><code>bitmask_and(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise AND value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_or"></a><code>bitmask_or(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise OR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: <a href="string.html">string</a>, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: <a href="string.html">string</a>, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: varbit, b: <a href="string.html">string</a>) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bitmask_xor"></a><code>bitmask_xor(a: varbit, b: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Calculates bitwise XOR value of unsigned bit arrays ‘a’ and ‘b’ that may have different lengths.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="btrim"></a><code>btrim(input: <a href="string.html">string</a>, trim_chars: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes any characters included in <code>trim_chars</code> from the beginning or end of <code>input</code> (applies recursively).</p>
 <p>For example, <code>btrim('doggie', 'eod')</code> returns <code>ggi</code>.</p>
 </span></td><td>Immutable</td></tr>
@@ -2715,7 +2806,7 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="decompress"></a><code>decompress(data: <a href="bytes.html">bytes</a>, codec: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decompress <code>data</code> with the specified <code>codec</code> (<code>gzip</code>, ‘lz4’, ‘snappy’, 'zstd).</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="difference"></a><code>difference(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert two strings to their Soundex codes and then reports the number of matching code positions.</p>
+<tr><td><a name="difference"></a><code>difference(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Convert two strings to their Soundex codes and then reports the number of matching code positions.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="encode"></a><code>encode(data: <a href="bytes.html">bytes</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Encodes <code>data</code> using <code>format</code> (<code>hex</code> / <code>escape</code> / <code>base64</code>).</p>
 </span></td><td>Immutable</td></tr>
@@ -3278,6 +3369,8 @@ may increase either contention or retry errors, or both.</p>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID alone. This is deprecated since there is no guarantee that OIDs are unique across different system catalogs; therefore, the wrong comment might be returned.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid, catalog_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID and the name of the containing system catalog. For example, obj_description(123456, ‘pg_class’) would retrieve the comment for the table with OID 123456.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="oidvectortypes"></a><code>oidvectortypes(vector: oidvector) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Generates a comma seperated string of type names from an oidvector.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_backend_pid"></a><code>pg_backend_pid() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns a numerical ID attached to this session. This ID is part of the query cancellation key used by the wire protocol. This function was only added for compatibility, and unlike in Postgres, the returned value does not correspond to a real process ID.</p>
 </span></td><td>Stable</td></tr>

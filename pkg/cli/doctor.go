@@ -51,8 +51,8 @@ var debugDoctorCmd = &cobra.Command{
 	Use:   "doctor [command]",
 	Short: "run a cockroach doctor tool command",
 	Long: `
-Run the doctor tool to recreate or examine cockroach system table contents. 
-System tables are queried either from a live cluster or from an unzipped 
+Run the doctor tool to recreate or examine cockroach system table contents.
+System tables are queried either from a live cluster or from an unzipped
 debug.zip.
 `,
 }
@@ -62,7 +62,7 @@ var doctorExamineCmd = &cobra.Command{
 	Short: "examine system tables for inconsistencies",
 	Long: `
 Run the doctor tool to examine the system table contents and perform validation
-checks. System tables are queried either from a live cluster or from an unzipped 
+checks. System tables are queried either from a live cluster or from an unzipped
 debug.zip.
 `,
 }
@@ -122,7 +122,7 @@ Run the doctor tool system data from a live cluster specified by --url.
 		Args: cobra.NoArgs,
 		RunE: clierrorplus.MaybeDecorateError(
 			func(cmd *cobra.Command, args []string) (resErr error) {
-				sqlConn, err := makeSQLClient("cockroach doctor", useSystemDb)
+				sqlConn, err := makeSQLClient(context.Background(), "cockroach doctor", useSystemDb)
 				if err != nil {
 					return errors.Wrap(err, "could not establish connection to cluster")
 				}
@@ -650,8 +650,8 @@ func slurp(zipDirPath string, fileName string, tableMapFn func(row string) error
 func tableMap(in io.Reader, fn func(string) error) error {
 	firstLine := true
 	sc := bufio.NewScanner(in)
-	// Read lines up to 50 MB in size.
-	sc.Buffer(make([]byte, 64*1024), 50*1024*1024)
+	// Read lines up to 200 MB in size.
+	sc.Buffer(make([]byte, 64*1024), 200*1024*1024)
 	for sc.Scan() {
 		if firstLine {
 			firstLine = false

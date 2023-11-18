@@ -41,7 +41,7 @@ func setup(
 	})
 
 	ten2ID := roachpb.MustMakeTenantID(2)
-	tenant2, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
+	tenant2, err := tc.Server(0).TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: ten2ID,
 	})
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestScanRangeDescriptors(t *testing.T) {
 	{
 		tc.SplitRangeOrFatal(t, ten2Split1)
 		tc.SplitRangeOrFatal(t, ten2Split2)
-		tc.SplitRangeOrFatal(t, ten2Codec.TenantPrefix().PrefixEnd()) // Last range
+		tc.SplitRangeOrFatal(t, ten2Codec.TenantEndKey()) // Last range
 	}
 
 	iter, err := iteratorFactory.NewIterator(ctx, ten2Codec.TenantSpan())
@@ -119,7 +119,7 @@ func TestScanRangeDescriptors(t *testing.T) {
 	// Last range we created above.
 	require.Equal(
 		t,
-		keys.MustAddr(ten2Codec.TenantPrefix().PrefixEnd()),
+		keys.MustAddr(ten2Codec.TenantEndKey()),
 		rangeDescs[numRanges-1].StartKey,
 	)
 }

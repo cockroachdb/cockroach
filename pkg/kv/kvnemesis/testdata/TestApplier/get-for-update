@@ -1,3 +1,3 @@
 echo
 ----
-db1.GetForUpdate(ctx, tk(1)) // @<ts> (v1, <nil>)
+db0.GetForUpdate(ctx, tk(1)) // @<ts> (v1, <nil>)

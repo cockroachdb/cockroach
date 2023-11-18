@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -143,11 +144,15 @@ func buildStatementBundle(
 	placeholders *tree.PlaceholderInfo,
 	queryErr, payloadErr, commErr error,
 	sv *settings.Values,
+	c inFlightTraceCollector,
 ) diagnosticsBundle {
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
-	b := makeStmtBundleBuilder(explainFlags, db, ie, stmtRawSQL, plan, trace, placeholders, sv)
+	b, err := makeStmtBundleBuilder(explainFlags, db, ie, stmtRawSQL, plan, trace, placeholders, sv)
+	if err != nil {
+		return diagnosticsBundle{collectionErr: err}
+	}
 
 	b.addStatement()
 	b.addOptPlans(ctx)
@@ -155,6 +160,7 @@ func buildStatementBundle(
 	b.addDistSQLDiagrams()
 	b.addExplainVec()
 	b.addTrace()
+	b.addInFlightTrace(c)
 	b.addEnv(ctx)
 	b.addErrors(queryErr, payloadErr, commErr)
 
@@ -224,18 +230,21 @@ func makeStmtBundleBuilder(
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 	sv *settings.Values,
-) stmtBundleBuilder {
+) (stmtBundleBuilder, error) {
 	b := stmtBundleBuilder{
 		flags: flags, db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders, sv: sv,
 	}
-	b.buildPrettyStatement(stmtRawSQL)
+	err := b.buildPrettyStatement(stmtRawSQL)
+	if err != nil {
+		return stmtBundleBuilder{}, err
+	}
 	b.z.Init()
-	return b
+	return b, nil
 }
 
 // buildPrettyStatement saves the pretty-printed statement (without any
 // placeholder arguments).
-func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
+func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) error {
 	// If we hit an early error, stmt or stmt.AST might not be initialized yet. In
 	// this case use the original raw SQL.
 	if b.plan.stmt == nil || b.plan.stmt.AST == nil {
@@ -253,7 +262,19 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
 		cfg.Align = tree.PrettyNoAlign
 		cfg.JSONFmt = true
 		cfg.ValueRedaction = b.flags.RedactValues
-		b.stmt = cfg.Pretty(b.plan.stmt.AST)
+		var err error
+		b.stmt, err = cfg.Pretty(b.plan.stmt.AST)
+		if errors.Is(err, pretty.ErrPrettyMaxRecursionDepthExceeded) {
+			// Use the raw statement string if pretty-printing fails.
+			b.stmt = stmtRawSQL
+			// If we're collecting a redacted bundle, redact the raw SQL
+			// completely.
+			if b.flags.RedactValues && b.stmt != "" {
+				b.stmt = string(redact.RedactedMarker())
+			}
+		} else if err != nil {
+			return err
+		}
 
 		// If we had ValueRedaction set, Pretty surrounded all constants with
 		// redaction markers. We must call Redact to fully redact them.
@@ -264,6 +285,7 @@ func (b *stmtBundleBuilder) buildPrettyStatement(stmtRawSQL string) {
 	if b.stmt == "" {
 		b.stmt = "-- no statement"
 	}
+	return nil
 }
 
 // addStatement adds the pretty-printed statement in b.stmt as file
@@ -311,7 +333,7 @@ func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
 
 	b.z.AddFile("opt.txt", formatOptPlan(memo.ExprFmtHideAll))
 	b.z.AddFile("opt-v.txt", formatOptPlan(
-		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo,
+		memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars|memo.ExprFmtHideTypes|memo.ExprFmtHideNotVisibleIndexInfo|memo.ExprFmtHideFastPathChecks,
 	))
 	b.z.AddFile("opt-vv.txt", formatOptPlan(memo.ExprFmtHideQualifications|memo.ExprFmtHideNotVisibleIndexInfo))
 }
@@ -400,6 +422,33 @@ The UI can then be accessed at http://localhost:16686/search`, b.stmt)
 		b.z.AddFile("trace-jaeger.txt", err.Error())
 	} else {
 		b.z.AddFile("trace-jaeger.json", jaegerJSON)
+	}
+}
+
+func (b *stmtBundleBuilder) addInFlightTrace(c inFlightTraceCollector) {
+	if b.flags.RedactValues {
+		return
+	}
+	for _, trace := range c.trace {
+		b.z.AddFile(fmt.Sprintf("inflight-trace-n%d.txt", trace.nodeID), trace.trace)
+		b.z.AddFile(fmt.Sprintf("inflight-trace-jaeger-n%d.json", trace.nodeID), trace.jaeger)
+	}
+	if len(c.trace) == 0 && len(c.errors) > 0 {
+		// Include all errors accumulated throughout the in-flight tracing if we
+		// weren't able to get even a single trace.
+		var sb strings.Builder
+		for j, err := range c.errors {
+			if j > 0 {
+				sb.WriteString("\n")
+			}
+			sb.WriteString(err.Error())
+		}
+		b.z.AddFile("inflight-trace-errors.txt", sb.String())
+	}
+	// Include the timeout trace if available.
+	for _, trace := range c.timeoutTrace {
+		b.z.AddFile(fmt.Sprintf("timeout-trace-n%d.txt", trace.nodeID), trace.trace)
+		b.z.AddFile(fmt.Sprintf("timeout-trace-jaeger-n%d.json", trace.nodeID), trace.jaeger)
 	}
 }
 
@@ -851,7 +900,7 @@ func (c *stmtEnvCollector) PrintRelevantCreateUdf(
 ) error {
 	// The select function_name returns a DOidWrapper,
 	// we need to cast it to string for queryRows function to process.
-	// TODO: consider getting the udf sql body statements from the memo metadata.
+	// TODO(#104976): consider getting the udf sql body statements from the memo metadata.
 	functionNameQuery := "SELECT function_name::STRING as function_name_str FROM [SHOW FUNCTIONS]"
 	udfNames, err := c.queryRows(functionNameQuery)
 	if err != nil {

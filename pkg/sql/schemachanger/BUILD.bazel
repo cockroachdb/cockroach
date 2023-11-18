@@ -24,19 +24,21 @@ go_test(
     name = "schemachanger_test",
     size = "enormous",
     srcs = [
+        "comparator_generated_test.go",  # keep
+        "comparator_test.go",
+        "dml_injection_test.go",
         "main_test.go",
         "schemachanger_test.go",
         ":test_gen",  # keep
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//pkg/sql/logictest:testdata",
+    ],
+    exec_properties = {"Pool": "large"},
     shard_count = 16,
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
+        "//pkg/build/bazel",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
@@ -60,7 +62,9 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
+        "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/protoutil",
@@ -70,6 +74,7 @@ go_test(
         "@com_github_lib_pq//:pq",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//slices",
     ],
 )
 
@@ -89,6 +94,26 @@ sctest_gen(
         "Pause",
         "PauseMixedVersion",
         "Rollback",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
+genrule(
+    name = "gen-comparator-tests",
+    srcs = [
+        "//pkg/sql/logictest:testdata",
+    ],
+    outs = [
+        "comparator_generated_test.go",
+    ],
+    cmd = """
+        $(location //pkg/sql/schemachanger/sctest/sccomparatortestgen) -out-file=$(location comparator_generated_test.go)
+    """,
+    exec_tools = [
+        "//pkg/sql/schemachanger/sctest/sccomparatortestgen",
     ],
     visibility = [
         ":__pkg__",

@@ -14,9 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -36,11 +38,11 @@ const (
 // on the coordinator during the lifetime of a transaction. Refresh spans
 // are used for SERIALIZABLE transactions to avoid client restarts.
 var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.transaction.max_refresh_spans_bytes",
 	"maximum number of bytes used to track refresh spans in serializable transactions",
 	1<<22, /* 4 MB */
-).WithPublic()
+	settings.WithPublic)
 
 // txnSpanRefresher is a txnInterceptor that collects the read spans of a
 // serializable transaction in the event it gets a serializable retry error. It
@@ -264,10 +266,7 @@ func (sr *txnSpanRefresher) sendLockedWithRefreshAttempts(
 		// chances that the refresh fails.
 		bumpedTxn := br.Txn.Clone()
 		bumpedTxn.WriteTooOld = false
-		pErr = kvpb.NewErrorWithTxn(
-			kvpb.NewTransactionRetryError(kvpb.RETRY_WRITE_TOO_OLD,
-				"WriteTooOld flag converted to WriteTooOldError"),
-			bumpedTxn)
+		pErr = kvpb.NewErrorWithTxn(kvpb.NewTransactionRetryError(kvpb.RETRY_WRITE_TOO_OLD, "WriteTooOld flag converted to WriteTooOldError"), bumpedTxn)
 		br = nil
 	}
 	if pErr != nil {
@@ -421,6 +420,10 @@ func (sr *txnSpanRefresher) splitEndTxnAndRetrySend(
 	if err := br.Combine(ctx, brSuffix, []int{etIdx}, ba); err != nil {
 		return nil, kvpb.NewError(err)
 	}
+	if br.Txn == nil || !br.Txn.Status.IsFinalized() {
+		return nil, kvpb.NewError(errors.AssertionFailedf(
+			"txn status not finalized after successful retried EndTxn: %v", br.Txn))
+	}
 	return br, nil
 }
 
@@ -519,22 +522,31 @@ func (sr *txnSpanRefresher) maybeRefreshPreemptively(
 }
 
 func newRetryErrorOnFailedPreemptiveRefresh(
-	txn *roachpb.Transaction, refreshErr *kvpb.Error,
+	txn *roachpb.Transaction, pErr *kvpb.Error,
 ) *kvpb.Error {
 	reason := kvpb.RETRY_SERIALIZABLE
 	if txn.WriteTooOld {
 		reason = kvpb.RETRY_WRITE_TOO_OLD
 	}
+	var conflictingTxn *enginepb.TxnMeta
 	msg := redact.StringBuilder{}
 	msg.SafeString("failed preemptive refresh")
-	if refreshErr != nil {
-		if refreshErr, ok := refreshErr.GetDetail().(*kvpb.RefreshFailedError); ok {
-			msg.Printf(" due to a conflict: %s on key %s", refreshErr.FailureReason(), refreshErr.Key)
+	if pErr != nil {
+		if refreshErr, ok := pErr.GetDetail().(*kvpb.RefreshFailedError); ok {
+			if refreshErr.ConflictingTxn != nil {
+				conflictingTxn = refreshErr.ConflictingTxn
+			}
+			msg.Printf(" due to %s", refreshErr)
+		} else if wiErr, ok := pErr.GetDetail().(*kvpb.WriteIntentError); ok {
+			if len(wiErr.Locks) > 0 {
+				conflictingTxn = &wiErr.Locks[0].Txn
+			}
+			msg.Printf(" due to %s", wiErr)
 		} else {
-			msg.Printf(" - unknown error: %s", refreshErr)
+			msg.Printf(" - unknown error: %s", pErr)
 		}
 	}
-	retryErr := kvpb.NewTransactionRetryError(reason, msg.RedactableString())
+	retryErr := kvpb.NewTransactionRetryError(reason, msg.RedactableString(), kvpb.WithConflictingTxn(conflictingTxn))
 	return kvpb.NewErrorWithTxn(retryErr, txn)
 }
 
@@ -573,6 +585,12 @@ func (sr *txnSpanRefresher) tryRefreshTxnSpans(
 	// TODO(nvanbenschoten): actually merge spans.
 	refreshSpanBa := &kvpb.BatchRequest{}
 	refreshSpanBa.Txn = refreshToTxn
+	// WaitPolicy_Error allows a Refresh request to immediately push any
+	// conflicting transactions in the lock table wait queue without blocking. If
+	// the push fails, the request returns either a RefreshFailedError (if it
+	// encountered a committed value) or a WriteIntentError (if it encountered
+	// an intent). These errors are handled in maybeRefreshPreemptively.
+	refreshSpanBa.WaitPolicy = lock.WaitPolicy_Error
 	addRefreshes := func(refreshes *condensableSpanSet) {
 		// We're going to check writes between the previous refreshed timestamp, if
 		// any, and the timestamp we want to bump the transaction to. Note that if

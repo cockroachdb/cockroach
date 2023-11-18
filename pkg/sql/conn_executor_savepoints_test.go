@@ -64,7 +64,7 @@ func TestSavepoints(t *testing.T) {
 					var ok bool
 					sqlConn, ok = sqlConns[connName]
 					if !ok {
-						sqlConn = s.ApplicationLayer().SQLConn(t, params.UseDatabase)
+						sqlConn = s.ApplicationLayer().SQLConn(t, serverutils.DBName(params.UseDatabase))
 						sqlConns[connName] = sqlConn
 					}
 				}

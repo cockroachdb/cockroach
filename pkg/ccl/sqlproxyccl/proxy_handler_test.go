@@ -135,7 +135,9 @@ func TestProxyProtocol(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
+	})
 
 	ts := sql.ApplicationLayer()
 	ts.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
@@ -244,7 +246,9 @@ func TestPrivateEndpointsACL(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
+	})
 	defer sql.Stopper().Stop(ctx)
 
 	ts := sql.ApplicationLayer()
@@ -412,7 +416,9 @@ func TestAllowedCIDRRangesACL(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
+	})
 	defer sql.Stopper().Stop(ctx)
 
 	ts := sql.ApplicationLayer()
@@ -571,7 +577,7 @@ func TestBackendDownRetry(t *testing.T) {
 		if callCount >= 3 {
 			directoryServer.DeleteTenant(roachpb.MustMakeTenantID(28))
 		}
-		return nil, withCode(errors.New("SQL pod is down"), codeBackendDown)
+		return nil, withCode(errors.New("SQL pod is down"), codeBackendDialFailed)
 	})()
 
 	// Valid connection, but no backend server running.
@@ -676,7 +682,9 @@ func TestProxyAgainstSecureCRDB(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
+	})
 	defer sql.Stopper().Stop(ctx)
 
 	ts := sql.ApplicationLayer()
@@ -873,7 +881,9 @@ func TestProxyTLSClose(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
+	})
 	defer sql.Stopper().Stop(ctx)
 
 	ts := sql.ApplicationLayer()
@@ -924,7 +934,9 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
+	})
 	defer sql.Stopper().Stop(ctx)
 
 	ts := sql.ApplicationLayer()
@@ -982,7 +994,9 @@ func TestInsecureProxy(t *testing.T) {
 	te := newTester()
 	defer te.Close()
 
-	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sql, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
+	})
 	defer sql.Stopper().Stop(ctx)
 
 	ts := sql.ApplicationLayer()
@@ -1004,8 +1018,16 @@ func TestInsecureProxy(t *testing.T) {
 	te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
 		require.NoError(t, runTestQuery(ctx, conn))
 	})
-	require.Equal(t, int64(1), s.metrics.AuthFailedCount.Count())
-	require.Equal(t, int64(1), s.metrics.SuccessfulConnCount.Count())
+	testutils.SucceedsSoon(t, func() error {
+		if s.metrics.AuthFailedCount.Count() != 1 ||
+			s.metrics.SuccessfulConnCount.Count() != 1 {
+			return errors.Newf("expected metrics to update, got: "+
+				"AuthFailedCount=%d, SuccessfulConnCount=%d",
+				s.metrics.AuthFailedCount.Count(), s.metrics.SuccessfulConnCount.Count(),
+			)
+		}
+		return nil
+	})
 	count, _ := s.metrics.ConnectionLatency.Total()
 	require.Equal(t, int64(1), count)
 }
@@ -1157,7 +1179,9 @@ func TestDenylistUpdate(t *testing.T) {
 	_, err = denyList.Write(bytes)
 	require.NoError(t, err)
 
-	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	sql, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestRequiresExplicitSQLConnection,
+	})
 	defer sql.Stopper().Stop(ctx)
 
 	ts := sql.ApplicationLayer()
@@ -1248,7 +1272,7 @@ func TestDenylistUpdate(t *testing.T) {
 		"Expected the connection to eventually fail",
 	)
 	require.Error(t, err)
-	require.Regexp(t, "closed|bad connection", err.Error())
+	require.Regexp(t, "(connection reset by peer|closed|bad connection)", err.Error())
 	require.Equal(t, int64(1), s.metrics.ExpiredClientConnCount.Count())
 }
 
@@ -1307,7 +1331,7 @@ func TestDirectoryConnect(t *testing.T) {
 			if countFailures >= 3 {
 				return nil, withCode(errors.New("backend disconnected"), codeBackendDisconnected)
 			}
-			return nil, withCode(errors.New("backend down"), codeBackendDown)
+			return nil, withCode(errors.New("backend down"), codeBackendDialFailed)
 		})()
 
 		// Ensure that Directory.ReportFailure is being called correctly.
@@ -1535,6 +1559,28 @@ func TestCancelQuery(t *testing.T) {
 		StateTimestamp: timeSource.Now(),
 	})
 
+	snapshotMetrics := func() map[string]int64 {
+		return map[string]int64{
+			"QueryCancelSuccessful":     proxy.metrics.QueryCancelSuccessful.Count(),
+			"QueryCancelIgnored":        proxy.metrics.QueryCancelIgnored.Count(),
+			"QueryCancelForwarded":      proxy.metrics.QueryCancelForwarded.Count(),
+			"QueryCancelReceivedPGWire": proxy.metrics.QueryCancelReceivedPGWire.Count(),
+			"QueryCancelReceivedHTTP":   proxy.metrics.QueryCancelReceivedHTTP.Count(),
+		}
+	}
+
+	requireIncrease := func(t *testing.T, start map[string]int64, metrics ...string) {
+		testutils.SucceedsSoon(t, func() error {
+			now := snapshotMetrics()
+			for _, metric := range metrics {
+				if now[metric] <= start[metric] {
+					return errors.Newf("expected metric %s to increase (was %d is now %d)", metric, start[metric], now[metric])
+				}
+			}
+			return nil
+		})
+	}
+
 	// Wait until the update gets propagated to the directory cache.
 	testutils.SucceedsSoon(t, func() error {
 		pods, err := proxy.handler.directoryCache.TryLookupTenantPods(ctx, tenantID)
@@ -1547,33 +1593,9 @@ func TestCancelQuery(t *testing.T) {
 		return nil
 	})
 
-	clearMetrics := func(t *testing.T, metrics *metrics) {
-		metrics.QueryCancelSuccessful.Clear()
-		metrics.QueryCancelIgnored.Clear()
-		metrics.QueryCancelForwarded.Clear()
-		metrics.QueryCancelReceivedPGWire.Clear()
-		metrics.QueryCancelReceivedHTTP.Clear()
-
-		testutils.SucceedsSoon(t, func() error {
-			if metrics.QueryCancelSuccessful.Count() != 0 ||
-				metrics.QueryCancelIgnored.Count() != 0 ||
-				metrics.QueryCancelForwarded.Count() != 0 ||
-				metrics.QueryCancelReceivedPGWire.Count() != 0 ||
-				metrics.QueryCancelReceivedHTTP.Count() != 0 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					metrics.QueryCancelSuccessful.Count(), metrics.QueryCancelIgnored.Count(),
-					metrics.QueryCancelForwarded.Count(), metrics.QueryCancelReceivedPGWire.Count(),
-					metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
-	}
-
 	t.Run("cancel over sql", func(t *testing.T) {
-		clearMetrics(t, proxy.metrics)
+		metrics := snapshotMetrics()
+
 		cancelFn = func() {
 			_ = conn.PgConn().CancelRequest(ctx)
 		}
@@ -1581,23 +1603,11 @@ func TestCancelQuery(t *testing.T) {
 		err = conn.QueryRow(ctx, "SELECT pg_sleep(5) AS cancel_me").Scan(&b)
 		require.Error(t, err)
 		require.Regexp(t, "query execution canceled", err.Error())
-		testutils.SucceedsSoon(t, func() error {
-			if proxy.metrics.QueryCancelSuccessful.Count() != 1 ||
-				proxy.metrics.QueryCancelReceivedPGWire.Count() != 1 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
-					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
-					proxy.metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
+		requireIncrease(t, metrics, "QueryCancelSuccessful", "QueryCancelReceivedPGWire")
 	})
 
 	t.Run("cancel over http", func(t *testing.T) {
-		clearMetrics(t, proxy.metrics)
+		metrics := snapshotMetrics()
 		cancelFn = func() {
 			cancelRequest := proxyCancelRequest{
 				ProxyIP:   net.IP{},
@@ -1623,19 +1633,7 @@ func TestCancelQuery(t *testing.T) {
 		err = conn.QueryRow(ctx, "SELECT pg_sleep(5) AS cancel_me").Scan(&b)
 		require.Error(t, err)
 		require.Regexp(t, "query execution canceled", err.Error())
-		testutils.SucceedsSoon(t, func() error {
-			if proxy.metrics.QueryCancelSuccessful.Count() != 1 ||
-				proxy.metrics.QueryCancelReceivedHTTP.Count() != 1 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
-					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
-					proxy.metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
+		requireIncrease(t, metrics, "QueryCancelSuccessful", "QueryCancelReceivedHTTP")
 	})
 
 	t.Run("cancel after migrating a session", func(t *testing.T) {
@@ -1685,7 +1683,7 @@ func TestCancelQuery(t *testing.T) {
 	})
 
 	t.Run("reject cancel from wrong client IP", func(t *testing.T) {
-		clearMetrics(t, proxy.metrics)
+		snapshot := snapshotMetrics()
 		cancelRequest := proxyCancelRequest{
 			ProxyIP:   net.IP{},
 			SecretKey: conn.PgConn().SecretKey(),
@@ -1703,23 +1701,12 @@ func TestCancelQuery(t *testing.T) {
 		assert.Equal(t, "OK", string(respBytes))
 		require.Error(t, httpCancelErr)
 		require.Regexp(t, "mismatched client IP for cancel request", httpCancelErr.Error())
-		testutils.SucceedsSoon(t, func() error {
-			if proxy.metrics.QueryCancelIgnored.Count() != 1 ||
-				proxy.metrics.QueryCancelReceivedHTTP.Count() != 1 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
-					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
-					proxy.metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
+
+		requireIncrease(t, snapshot, "QueryCancelIgnored", "QueryCancelReceivedHTTP")
 	})
 
 	t.Run("forward over http", func(t *testing.T) {
-		clearMetrics(t, proxy.metrics)
+		snapshot := snapshotMetrics()
 		var forwardedTo string
 		var forwardedReq proxyCancelRequest
 		var wg sync.WaitGroup
@@ -1756,23 +1743,11 @@ func TestCancelQuery(t *testing.T) {
 			ClientIP:  net.IP{127, 0, 0, 1},
 		}
 		require.Equal(t, expectedReq, forwardedReq)
-		testutils.SucceedsSoon(t, func() error {
-			if proxy.metrics.QueryCancelForwarded.Count() != 1 ||
-				proxy.metrics.QueryCancelReceivedPGWire.Count() != 1 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
-					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
-					proxy.metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
+		requireIncrease(t, snapshot, "QueryCancelForwarded", "QueryCancelReceivedPGWire")
 	})
 
 	t.Run("ignore unknown secret key", func(t *testing.T) {
-		clearMetrics(t, proxy.metrics)
+		snapshot := snapshotMetrics()
 		cancelRequest := proxyCancelRequest{
 			ProxyIP:   net.IP{},
 			SecretKey: conn.PgConn().SecretKey() + 1,
@@ -1790,19 +1765,7 @@ func TestCancelQuery(t *testing.T) {
 		assert.Equal(t, "OK", string(respBytes))
 		require.Error(t, httpCancelErr)
 		require.Regexp(t, "ignoring cancel request with unfamiliar key", httpCancelErr.Error())
-		testutils.SucceedsSoon(t, func() error {
-			if proxy.metrics.QueryCancelIgnored.Count() != 1 ||
-				proxy.metrics.QueryCancelReceivedHTTP.Count() != 1 {
-				return errors.Newf("expected metrics to update, got: "+
-					"QueryCancelSuccessful=%d, QueryCancelIgnored=%d "+
-					"QueryCancelForwarded=%d QueryCancelReceivedPGWire=%d QueryCancelReceivedHTTP=%d",
-					proxy.metrics.QueryCancelSuccessful.Count(), proxy.metrics.QueryCancelIgnored.Count(),
-					proxy.metrics.QueryCancelForwarded.Count(), proxy.metrics.QueryCancelReceivedPGWire.Count(),
-					proxy.metrics.QueryCancelReceivedHTTP.Count(),
-				)
-			}
-			return nil
-		})
+		requireIncrease(t, snapshot, "QueryCancelIgnored", "QueryCancelReceivedHTTP")
 	})
 }
 
@@ -1922,7 +1885,7 @@ func TestConnectionMigration(t *testing.T) {
 	// Start first SQL pod.
 	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
 	tenant1.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	defer tenant1.Stopper().Stop(ctx)
+	defer tenant1.AppStopper().Stop(ctx)
 	defer tenantDB1.Close()
 
 	// Start second SQL pod.
@@ -1931,7 +1894,7 @@ func TestConnectionMigration(t *testing.T) {
 		DisableCreateTenant: true,
 	})
 	tenant2.PGPreServer().(*pgwire.PreServeConnHandler).TestingSetTrustClientProvidedRemoteAddr(true)
-	defer tenant2.Stopper().Stop(ctx)
+	defer tenant2.AppStopper().Stop(ctx)
 	defer tenantDB2.Close()
 
 	_, err = tenantDB1.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
@@ -2271,7 +2234,7 @@ func TestConnectionMigration(t *testing.T) {
 			t.Fatalf("require that pg_sleep query terminates")
 		case err = <-errCh:
 			require.Error(t, err)
-			require.Regexp(t, "(closed|bad connection)", err.Error())
+			require.Regexp(t, "(connection reset by peer|closed|bad connection)", err.Error())
 		}
 
 		require.EqualError(t, f.ctx.Err(), context.Canceled.Error())

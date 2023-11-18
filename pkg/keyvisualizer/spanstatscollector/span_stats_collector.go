@@ -11,7 +11,6 @@
 package spanstatscollector
 
 import (
-	"container/ring"
 	"context"
 	"sync/atomic"
 	"time"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissettings"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/container/ring"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -65,7 +65,7 @@ type SpanStatsCollector struct {
 		// A ring buffer is used to persist previous samples until they're
 		// requested. After the last empty element is filled, r points to the
 		// oldest sample, which is the next sample to be overwritten.
-		r *ring.Ring
+		r *ring.Ring[keyvispb.Sample]
 	}
 }
 
@@ -78,7 +78,7 @@ func New(settings *cluster.Settings) *SpanStatsCollector {
 	collector := &SpanStatsCollector{}
 	collector.tree.Store(newTreeWithBoundaries(nil))
 	collector.settings = settings
-	collector.mu.r = ring.New(5) // Keep the 5 most recent samples.
+	collector.mu.r = ring.New[keyvispb.Sample](5) // Keep the 5 most recent samples.
 	return collector
 }
 

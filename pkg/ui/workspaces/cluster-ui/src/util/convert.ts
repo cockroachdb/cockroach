@@ -12,7 +12,7 @@ import moment from "moment-timezone";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { fromNumber } from "long";
 
-type Timestamp = protos.google.protobuf.ITimestamp;
+export type Timestamp = protos.google.protobuf.ITimestamp;
 
 export const minDate = moment.utc("0001-01-01"); // minimum value as per UTC.
 

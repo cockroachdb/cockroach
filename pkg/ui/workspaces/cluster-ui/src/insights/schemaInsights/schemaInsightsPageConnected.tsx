@@ -32,6 +32,7 @@ import { actions as localStorageActions } from "../../store/localStorage";
 import { Dispatch } from "redux";
 import { selectHasAdminRole } from "../../store/uiConfig";
 import { actions as analyticsActions } from "../../store/analytics";
+import { selectDropUnusedIndexDuration } from "src/store/clusterSettings/clusterSettings.selectors";
 
 const mapStateToProps = (
   state: AppState,
@@ -45,6 +46,7 @@ const mapStateToProps = (
   sortSetting: selectSortSetting(state),
   hasAdminRole: selectHasAdminRole(state),
   maxSizeApiReached: selectSchemaInsightsMaxApiSizeReached(state),
+  csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
 });
 
 const mapDispatchToProps = (
@@ -82,8 +84,8 @@ const mapDispatchToProps = (
       }),
     );
   },
-  refreshSchemaInsights: () => {
-    dispatch(actions.refresh());
+  refreshSchemaInsights: (csIndexUnusedDuration: string) => {
+    dispatch(actions.refresh({ csIndexUnusedDuration }));
   },
   refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
 });

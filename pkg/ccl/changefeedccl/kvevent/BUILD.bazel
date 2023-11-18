@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "alloc.go",
         "blocking_buffer.go",
-        "chan_buffer.go",
         "chunked_event_queue.go",
         "event.go",
         "metrics.go",
@@ -40,7 +39,6 @@ go_test(
         "blocking_buffer_test.go",
         "chunked_event_queue_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":kvevent"],
     tags = ["ccl_test"],
     deps = [
@@ -53,6 +51,7 @@ go_test(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/testutils",
         "//pkg/util",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",

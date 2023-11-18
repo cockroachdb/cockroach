@@ -12,11 +12,16 @@ package application_api_test
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	// To ensure the streaming replication cluster setting is defined.
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
+	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -29,26 +34,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 func TestAdminAPISettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// Disable the default test tenant for now as this tests fails
-		// with it enabled. Tracked with #81590.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
-	defer s.Stopper().Stop(context.Background())
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
 	// Any bool that defaults to true will work here.
 	const settingKey = "sql.metrics.statement_details.enabled"
 	st := s.ClusterSettings()
-	allKeys := settings.Keys(settings.ForSystemTenant)
+	target := settings.ForSystemTenant
+	if srv.TenantController().StartedDefaultTestTenant() {
+		target = settings.ForVirtualCluster
+	}
+	allKeys := settings.Keys(target)
 
-	checkSetting := func(t *testing.T, k string, v serverpb.SettingsResponse_Value) {
-		ref, ok := settings.LookupForReporting(k, settings.ForSystemTenant)
+	checkSetting := func(t *testing.T, k settings.InternalKey, v serverpb.SettingsResponse_Value) {
+		ref, ok := settings.LookupForReportingByKey(k, target)
 		if !ok {
 			t.Fatalf("%s: not found after initial lookup", k)
 		}
@@ -97,12 +105,12 @@ func TestAdminAPISettings(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Check that all expected keys were returned
+		// Check that all expected keys were returned.
 		if len(allKeys) != len(resp.KeyValues) {
 			t.Fatalf("expected %d keys, got %d", len(allKeys), len(resp.KeyValues))
 		}
 		for _, k := range allKeys {
-			if _, ok := resp.KeyValues[k]; !ok {
+			if _, ok := resp.KeyValues[string(k)]; !ok {
 				t.Fatalf("expected key %s not found in response", k)
 			}
 		}
@@ -118,7 +126,7 @@ func TestAdminAPISettings(t *testing.T) {
 				}
 			}
 
-			checkSetting(t, k, v)
+			checkSetting(t, settings.InternalKey(k), v)
 		}
 
 		if !seenRef {
@@ -133,7 +141,7 @@ func TestAdminAPISettings(t *testing.T) {
 		// type and description must match.
 		for _, k := range allKeys {
 			q := make(url.Values)
-			q.Add("keys", k)
+			q.Add("keys", string(k))
 			url := "settings?" + q.Encode()
 			if err := srvtestutils.GetAdminJSONProto(s, url, &resp); err != nil {
 				t.Fatalf("%s: %v", k, err)
@@ -141,13 +149,111 @@ func TestAdminAPISettings(t *testing.T) {
 			if len(resp.KeyValues) != 1 {
 				t.Fatalf("%s: expected 1 response, got %d", k, len(resp.KeyValues))
 			}
-			v, ok := resp.KeyValues[k]
+			v, ok := resp.KeyValues[string(k)]
 			if !ok {
 				t.Fatalf("%s: response does not contain key", k)
 			}
 
 			checkSetting(t, k, v)
 		}
+	})
+
+	t.Run("different-permissions", func(t *testing.T) {
+		var resp serverpb.SettingsResponse
+		nonAdminUser := apiconstants.TestingUserNameNoAdmin().Normalized()
+		var consoleKeys []settings.InternalKey
+		for _, k := range settings.ConsoleKeys() {
+			if _, ok := settings.LookupForLocalAccessByKey(k, target); !ok {
+				continue
+			}
+			consoleKeys = append(consoleKeys, k)
+		}
+		sort.Slice(consoleKeys, func(i, j int) bool { return consoleKeys[i] < consoleKeys[j] })
+
+		// Admin should return all cluster settings.
+		if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, "settings", &resp, true); err != nil {
+			t.Fatal(err)
+		}
+		require.True(t, len(resp.KeyValues) == len(allKeys))
+
+		// Admin requesting specific cluster setting should return that cluster setting.
+		if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, "settings?keys=sql.stats.persisted_rows.max",
+			&resp, true); err != nil {
+			t.Fatal(err)
+		}
+		require.NotNil(t, resp.KeyValues["sql.stats.persisted_rows.max"])
+		require.True(t, len(resp.KeyValues) == 1)
+
+		// Non-admin with no permission should return error message.
+		err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, "settings", &resp, false)
+		require.Error(t, err, "this operation requires the VIEWCLUSTERSETTING or MODIFYCLUSTERSETTING system privileges")
+
+		// Non-admin with VIEWCLUSTERSETTING permission should return all cluster settings.
+		_, err = conn.Exec(fmt.Sprintf("ALTER USER %s VIEWCLUSTERSETTING", nonAdminUser))
+		require.NoError(t, err)
+		if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, "settings", &resp, false); err != nil {
+			t.Fatal(err)
+		}
+		require.True(t, len(resp.KeyValues) == len(allKeys))
+
+		// Non-admin with VIEWCLUSTERSETTING permission requesting specific cluster setting should return that cluster setting.
+		if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, "settings?keys=sql.stats.persisted_rows.max",
+			&resp, false); err != nil {
+			t.Fatal(err)
+		}
+		require.NotNil(t, resp.KeyValues["sql.stats.persisted_rows.max"])
+		require.True(t, len(resp.KeyValues) == 1)
+
+		// Non-admin with VIEWCLUSTERSETTING and VIEWACTIVITY permission should return all cluster settings.
+		_, err = conn.Exec(fmt.Sprintf("ALTER USER %s VIEWACTIVITY", nonAdminUser))
+		require.NoError(t, err)
+		if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, "settings", &resp, false); err != nil {
+			t.Fatal(err)
+		}
+		require.True(t, len(resp.KeyValues) == len(allKeys))
+
+		// Non-admin with VIEWCLUSTERSETTING and VIEWACTIVITY permission requesting specific cluster setting
+		// should return that cluster setting
+		if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, "settings?keys=sql.stats.persisted_rows.max",
+			&resp, false); err != nil {
+			t.Fatal(err)
+		}
+		require.NotNil(t, resp.KeyValues["sql.stats.persisted_rows.max"])
+		require.True(t, len(resp.KeyValues) == 1)
+
+		// Non-admin with VIEWACTIVITY and not VIEWCLUSTERSETTING should only see console cluster settings.
+		_, err = conn.Exec(fmt.Sprintf("ALTER USER %s NOVIEWCLUSTERSETTING", nonAdminUser))
+		require.NoError(t, err)
+		if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, "settings", &resp, false); err != nil {
+			t.Fatal(err)
+		}
+
+		gotKeys := make([]string, 0, len(resp.KeyValues))
+		for k := range resp.KeyValues {
+			gotKeys = append(gotKeys, k)
+		}
+		sort.Strings(gotKeys)
+		require.Equal(t, len(consoleKeys), len(resp.KeyValues), "found:\n%+v\nexpected:\n%+v", gotKeys, consoleKeys)
+		for k := range resp.KeyValues {
+			require.True(t, slices.Contains(consoleKeys, settings.InternalKey(k)))
+		}
+
+		// Non-admin with VIEWACTIVITY and not VIEWCLUSTERSETTING permission requesting specific cluster setting
+		// from console should return that cluster setting
+		if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, "settings?keys=ui.display_timezone",
+			&resp, false); err != nil {
+			t.Fatal(err)
+		}
+		require.NotNil(t, resp.KeyValues["ui.display_timezone"])
+		require.True(t, len(resp.KeyValues) == 1)
+
+		// Non-admin with VIEWACTIVITY and not VIEWCLUSTERSETTING permission requesting specific cluster setting
+		// that is not from console should not return that cluster setting
+		if err := srvtestutils.GetAdminJSONProtoWithAdminOption(s, "settings?keys=sql.stats.persisted_rows.max",
+			&resp, false); err != nil {
+			t.Fatal(err)
+		}
+		require.True(t, len(resp.KeyValues) == 0)
 	})
 }
 

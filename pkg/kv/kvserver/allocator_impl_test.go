@@ -32,7 +32,7 @@ import (
 
 const firstRangeID = roachpb.RangeID(1)
 
-var simpleSpanConfig = roachpb.SpanConfig{
+var simpleSpanConfig = &roachpb.SpanConfig{
 	NumReplicas: 1,
 	Constraints: []roachpb.ConstraintsConjunction{
 		{
@@ -323,7 +323,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		result, _, details, ok := a.RebalanceVoter(
 			ctx,
 			sp,
-			roachpb.SpanConfig{},
+			&roachpb.SpanConfig{},
 			status,
 			replicas,
 			nil,
@@ -349,7 +349,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		target, _, details, ok := a.RebalanceVoter(
 			ctx,
 			sp,
-			roachpb.SpanConfig{},
+			&roachpb.SpanConfig{},
 			status,
 			replicas,
 			nil,
@@ -369,7 +369,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 		target, origin, details, ok := a.RebalanceVoter(
 			ctx,
 			sp,
-			roachpb.SpanConfig{},
+			&roachpb.SpanConfig{},
 			status,
 			replicas,
 			nil,

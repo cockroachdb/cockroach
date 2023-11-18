@@ -26,10 +26,9 @@ import (
 func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuration time.Duration) {
 	crdbNodes := c.Range(1, c.Spec().NodeCount)
 	workloadNode := c.Node(1)
-	const restartNode = 3
+	restartNode := c.Node(3)
 
 	t.Status("installing cockroach")
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--vmodule=raft_log_queue=3")
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)
@@ -56,7 +55,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	time.Sleep(11 * time.Minute)
 
 	// Stop a node.
-	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(restartNode))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), restartNode)
 
 	// Wait for between 10s and `server.time_until_store_dead` while sending
 	// traffic to one of the nodes that are not down. This used to cause lots of
@@ -67,7 +66,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 
 	// Bring it back up and make sure it can serve a query within a reasonable
 	// time limit. For now, less time than it was down for.
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(restartNode))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), restartNode)
 
 	// Dialing the formerly down node may still be prevented by the circuit breaker
 	// for a short moment (seconds) after n3 restarts. If it happens, the COUNT(*)
@@ -77,11 +76,14 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	// See https://github.com/cockroachdb/cockroach/issues/38602.
 	time.Sleep(15 * time.Second)
 
+	// Run the query with tracing and time how long it takes. The trace output
+	// will be written to a log file for debugging.
 	start := timeutil.Now()
-	restartNodeDB := c.Conn(ctx, t.L(), restartNode)
-	if _, err := restartNodeDB.Exec(`SELECT count(*) FROM tpcc.order_line`); err != nil {
-		t.Fatal(err)
-	}
+	const tracedQ = `SET TRACING = ON;
+	                 SELECT count(*) FROM tpcc.order_line;
+	                 SET TRACING = OFF;
+	                 SHOW TRACE FOR SESSION;`
+	c.Run(ctx, restartNode, fmt.Sprintf(`./cockroach sql --insecure -e "%s"`, tracedQ))
 	if took := timeutil.Since(start); took > downDuration {
 		t.Fatalf(`expected to recover within %s took %s`, downDuration, took)
 	} else {
@@ -91,10 +93,12 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 
 func registerRestart(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "restart/down-for-2m",
-		Owner:   registry.OwnerKV,
-		Cluster: r.MakeClusterSpec(3),
-		Leases:  registry.MetamorphicLeases,
+		Name:             "restart/down-for-2m",
+		Owner:            registry.OwnerKV,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		// "cockroach workload is only in 19.1+"
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runRestart(ctx, t, c, 2*time.Minute)

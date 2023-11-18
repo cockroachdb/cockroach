@@ -24,10 +24,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
+	"github.com/codahale/hdrhistogram"
+	"github.com/gogo/protobuf/proto"
 	"go.opentelemetry.io/otel/attribute"
 )
 
 var _ bulk.TracingAggregatorEvent = (*IngestionPerformanceStats)(nil)
+
+const (
+	sigFigs    = 1
+	minLatency = time.Millisecond
+	maxLatency = 100 * time.Second
+
+	minBytes = 1024              // 1 KB
+	maxBytes = 256 * 1024 * 1024 // 256 MB
+)
 
 // Identity implements the TracingAggregatorEvent interface.
 func (s *IngestionPerformanceStats) Identity() bulk.TracingAggregatorEvent {
@@ -37,6 +48,38 @@ func (s *IngestionPerformanceStats) Identity() bulk.TracingAggregatorEvent {
 	}
 	stats.SendWaitByStore = make(map[roachpb.StoreID]time.Duration)
 	return &stats
+}
+
+// getCombinedHist returns a new HistogramData that contains the currentHist
+// combined with the recordValue. If currentHist is nil, a new histogram is
+// initialized.
+func getCombinedHist(
+	currentHist *HistogramData, recordValue int64, dataType HistogramDataType,
+) *HistogramData {
+	var hist *hdrhistogram.Histogram
+	if currentHist != nil {
+		hist = hdrhistogram.Import(&hdrhistogram.Snapshot{
+			LowestTrackableValue:  currentHist.LowestTrackableValue,
+			HighestTrackableValue: currentHist.HighestTrackableValue,
+			SignificantFigures:    currentHist.SignificantFigures,
+			Counts:                currentHist.Counts,
+		})
+	} else if dataType == HistogramDataTypeLatency {
+		hist = hdrhistogram.New(minLatency.Nanoseconds(),
+			maxLatency.Nanoseconds(), sigFigs)
+	} else if dataType == HistogramDataTypeBytes {
+		hist = hdrhistogram.New(minBytes, maxBytes, sigFigs)
+	}
+	_ = hist.RecordValue(recordValue)
+	// Return the snapshot of this new merged histogram.
+	cumulativeSnapshot := hist.Export()
+	return &HistogramData{
+		DataType:              dataType,
+		LowestTrackableValue:  cumulativeSnapshot.LowestTrackableValue,
+		HighestTrackableValue: cumulativeSnapshot.HighestTrackableValue,
+		SignificantFigures:    cumulativeSnapshot.SignificantFigures,
+		Counts:                cumulativeSnapshot.Counts,
+	}
 }
 
 // Combine implements the TracingAggregatorEvent interface.
@@ -65,6 +108,12 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	s.SplitWait += otherStats.SplitWait
 	s.ScatterWait += otherStats.ScatterWait
 	s.CommitWait += otherStats.CommitWait
+	s.AsWrites += otherStats.AsWrites
+
+	s.BatchWaitHist = getCombinedHist(s.BatchWaitHist,
+		otherStats.BatchWait.Nanoseconds(), HistogramDataTypeLatency)
+	s.SstSizeHist = getCombinedHist(s.SstSizeHist,
+		otherStats.SSTDataSize, HistogramDataTypeBytes)
 
 	// Duration should not be used in throughput calculations as adding durations
 	// of multiple flushes does not account for concurrent execution of these
@@ -86,9 +135,80 @@ func (s *IngestionPerformanceStats) Combine(other bulk.TracingAggregatorEvent) {
 	}
 }
 
-// Tag implements the TracingAggregatorEvent interface.
-func (s *IngestionPerformanceStats) Tag() string {
-	return "IngestionPerformanceStats"
+// ProtoName implements the TracingAggregatorEvent interface.
+func (s *IngestionPerformanceStats) ProtoName() string {
+	return proto.MessageName(s)
+}
+
+func (s *IngestionPerformanceStats) ToText() []byte {
+	return []byte(s.String())
+}
+
+// String implements the stringer interface.
+func (s *IngestionPerformanceStats) String() string {
+	const mb = 1 << 20
+	var b strings.Builder
+	if s.Batches > 0 {
+		b.WriteString(fmt.Sprintf("num_batches: %d\n", s.Batches))
+		b.WriteString(fmt.Sprintf("num_batches_due_to_size: %d\n", s.BatchesDueToSize))
+		b.WriteString(fmt.Sprintf("num_batches_due_to_range: %d\n", s.BatchesDueToRange))
+		b.WriteString(fmt.Sprintf("split_retries: %d\n", s.SplitRetries))
+	}
+
+	if s.BufferFlushes > 0 {
+		b.WriteString(fmt.Sprintf("num_flushes: %d\n", s.BufferFlushes))
+		b.WriteString(fmt.Sprintf("num_flushes_due_to_size: %d\n", s.FlushesDueToSize))
+	}
+
+	if s.LogicalDataSize > 0 {
+		logicalDataSizeMB := float64(s.LogicalDataSize) / mb
+		b.WriteString(fmt.Sprintf("logical_data_size: %.2f MB\n", logicalDataSizeMB))
+
+		if !s.CurrentFlushTime.IsEmpty() && !s.LastFlushTime.IsEmpty() {
+			duration := s.CurrentFlushTime.GoTime().Sub(s.LastFlushTime.GoTime())
+			throughput := logicalDataSizeMB / duration.Seconds()
+			b.WriteString(fmt.Sprintf("logical_throughput: %.2f MB/s\n", throughput))
+		}
+	}
+
+	if s.SSTDataSize > 0 {
+		sstDataSizeMB := float64(s.SSTDataSize) / mb
+		b.WriteString(fmt.Sprintf("sst_data_size: %.2f MB\n", sstDataSizeMB))
+		b.WriteString(fmt.Sprintf("sst_data_hist:\n%s\n", s.SstSizeHist.String()))
+
+		if !s.CurrentFlushTime.IsEmpty() && !s.LastFlushTime.IsEmpty() {
+			duration := s.CurrentFlushTime.GoTime().Sub(s.LastFlushTime.GoTime())
+			throughput := sstDataSizeMB / duration.Seconds()
+			b.WriteString(fmt.Sprintf("sst_throughput: %.2f MB/s\n", throughput))
+		}
+	}
+
+	timeString(&b, "fill_wait", s.FillWait)
+	timeString(&b, "sort_wait", s.SortWait)
+	timeString(&b, "flush_wait", s.FlushWait)
+	timeString(&b, "batch_wait", s.BatchWait)
+	b.WriteString(fmt.Sprintf("batch_wait_hist:\n%s\n", s.BatchWaitHist.String()))
+	timeString(&b, "send_wait", s.SendWait)
+	timeString(&b, "split_wait", s.SplitWait)
+	timeString(&b, "scatter_wait", s.ScatterWait)
+	timeString(&b, "commit_wait", s.CommitWait)
+
+	b.WriteString(fmt.Sprintf("splits: %d\n", s.Splits))
+	b.WriteString(fmt.Sprintf("scatters: %d\n", s.Scatters))
+	b.WriteString(fmt.Sprintf("scatter_moved: %d\n", s.ScatterMoved))
+	b.WriteString(fmt.Sprintf("as_writes: %d\n", s.AsWrites))
+
+	// Sort store send wait by IDs before adding them as tags.
+	ids := make(roachpb.StoreIDSlice, 0, len(s.SendWaitByStore))
+	for i := range s.SendWaitByStore {
+		ids = append(ids, i)
+	}
+	sort.Sort(ids)
+	for _, id := range ids {
+		timeString(&b, fmt.Sprintf("store-%d_send_wait", id), s.SendWaitByStore[id])
+	}
+
+	return b.String()
 }
 
 // Render implements the TracingAggregatorEvent interface.
@@ -195,6 +315,10 @@ func timeKeyValue(key attribute.Key, time time.Duration) attribute.KeyValue {
 		Key:   key,
 		Value: attribute.StringValue(string(humanizeutil.Duration(time))),
 	}
+}
+
+func timeString(b *strings.Builder, key string, time time.Duration) {
+	b.WriteString(fmt.Sprintf("%s: %s\n", key, string(humanizeutil.Duration(time))))
 }
 
 // LogTimings logs the timing ingestion stats.

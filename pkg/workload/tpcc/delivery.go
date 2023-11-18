@@ -63,7 +63,8 @@ func createDelivery(
 		FROM new_order
 		WHERE no_w_id = $1 AND no_d_id = $2
 		ORDER BY no_o_id ASC
-		LIMIT 1`,
+		LIMIT 1
+		FOR UPDATE`,
 	)
 
 	del.sumAmount = del.sr.Define(`
@@ -87,7 +88,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 	olDeliveryD := timeutil.Now()
 
 	err := crdbpgx.ExecuteTx(
-		ctx, del.mcp.Get(), del.config.txOpts,
+		ctx, del.mcp.Get(), pgx.TxOptions{},
 		func(tx pgx.Tx) error {
 			// 2.7.4.2. For each district:
 			dIDoIDPairs := make(map[int]int)

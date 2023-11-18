@@ -56,7 +56,6 @@ sql.schema.alter_table
 sql.schema.alter_table.add_column
 sql.schema.alter_table.add_column.references
 sql.schema.alter_table.add_constraint
-sql.schema.get_virtual_table.pg_catalog.pg_attribute
 sql.schema.new_column_type.int8
 sql.schema.schema_changer_mode.declarative
 
@@ -108,7 +107,6 @@ ALTER TABLE on_update_t ADD COLUMN c INT DEFAULT 1 ON UPDATE 2;
 ----
 sql.schema.alter_table
 sql.schema.alter_table.add_column
-sql.schema.get_virtual_table.pg_catalog.pg_attribute
 sql.schema.new_column.qualification.default_expr
 sql.schema.new_column.qualification.on_update
 sql.schema.new_column_type.int8
@@ -160,7 +158,6 @@ feature-usage
 CREATE INDEX ON t(b)
 ----
 sql.schema.create_index
-sql.schema.get_virtual_table.pg_catalog.pg_attribute
 sql.schema.schema_changer_mode.declarative
 
 feature-usage

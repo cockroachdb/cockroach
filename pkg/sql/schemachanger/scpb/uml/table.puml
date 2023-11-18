@@ -170,6 +170,7 @@ Function :  FunctionID
 Function : []Params
 Function :  ReturnSet
 Function :  ReturnType
+Function :  IsProcedure
 
 object FunctionBody
 
@@ -294,6 +295,7 @@ object SecondaryIndex
 
 SecondaryIndex :  Index
 SecondaryIndex :  EmbeddedExpr
+SecondaryIndex :  RecreateSourceIndexID
 
 object SecondaryIndexPartial
 
@@ -370,6 +372,7 @@ object TemporaryIndex
 
 TemporaryIndex :  Index
 TemporaryIndex :  IsUsingSecondaryEncoding
+TemporaryIndex :  Expr
 
 object UniqueWithoutIndexConstraint
 

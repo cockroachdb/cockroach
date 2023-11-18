@@ -346,14 +346,22 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 		return descs, nil
 	}
 
-	if targets.Functions != nil {
-		if len(targets.Functions) == 0 {
+	if targets.Functions != nil || targets.Procedures != nil {
+		targetRoutines := targets.Functions
+		isFuncs := true
+		routineType := tree.UDFRoutine
+		if targets.Functions == nil {
+			targetRoutines = targets.Procedures
+			isFuncs = false
+			routineType = tree.ProcedureRoutine
+		}
+		if len(targetRoutines) == 0 {
 			return nil, errNoFunction
 		}
-		descs := make([]DescriptorWithObjectType, 0, len(targets.Functions))
+		descs := make([]DescriptorWithObjectType, 0, len(targetRoutines))
 		fnResolved := catalog.DescriptorIDSet{}
-		for _, f := range targets.Functions {
-			overload, err := p.matchUDF(ctx, &f, true /* required */)
+		for _, f := range targetRoutines {
+			overload, err := p.matchRoutine(ctx, &f, true /* required */, routineType)
 			if err != nil {
 				return nil, err
 			}
@@ -366,9 +374,17 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			if err != nil {
 				return nil, err
 			}
+			if isFuncs && fnDesc.IsProcedure() {
+				return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
+					fnDesc.Name, "function")
+			}
+			if !isFuncs && !fnDesc.IsProcedure() {
+				return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a %s",
+					fnDesc.Name, "procedure")
+			}
 			descs = append(descs, DescriptorWithObjectType{
 				descriptor: fnDesc,
-				objectType: privilege.Function,
+				objectType: privilege.Routine,
 			})
 		}
 		return descs, nil
@@ -435,7 +451,11 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			}
 
 			return descs, nil
-		} else if targets.AllFunctionsInSchema {
+		} else if targets.AllFunctionsInSchema || targets.AllProceduresInSchema {
+			isProcs := true
+			if targets.AllFunctionsInSchema {
+				isProcs = false
+			}
 			var descs []DescriptorWithObjectType
 			for _, scName := range targets.Schemas {
 				dbName := p.CurrentDatabase()
@@ -455,9 +475,14 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 					if err != nil {
 						return err
 					}
+					if isProcs != fn.IsProcedure() {
+						// Skip functions if ALL PROCEDURES was specified, and
+						// skip procedures if ALL FUNCTIONS was specified.
+						return nil
+					}
 					descs = append(descs, DescriptorWithObjectType{
 						descriptor: fn,
-						objectType: privilege.Function,
+						objectType: privilege.Routine,
 					})
 					return nil
 				})
@@ -866,7 +891,7 @@ var metamorphicDefaultUseIndexLookupForDescriptorsInDatabase = util.ConstantWith
 // namespace table should be used to fetch the set of descriptors needed to
 // materialize most system tables.
 var useIndexLookupForDescriptorsInDatabase = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.virtual_tables.use_index_lookup_for_descriptors_in_database.enabled",
 	"if enabled, virtual tables will do a lookup against the namespace table to"+
 		" find the descriptors in a database instead of scanning all descriptors",
@@ -1214,7 +1239,7 @@ func (p *planner) ResolveExistingObjectEx(
 ) (res catalog.TableDescriptor, err error) {
 	lookupFlags := tree.ObjectLookupFlags{
 		Required:             required,
-		AvoidLeased:          p.skipDescriptorCache,
+		AssertNotLeased:      p.skipDescriptorCache,
 		DesiredObjectKind:    tree.TableObject,
 		DesiredTableDescKind: requiredType,
 	}

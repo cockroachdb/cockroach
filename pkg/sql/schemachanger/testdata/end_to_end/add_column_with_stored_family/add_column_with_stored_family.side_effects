@@ -24,8 +24,7 @@ write *eventpb.AlterTable to event log:
   mutationId: 1
   sql:
     descriptorId: 106
-    statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL AS (‹k›)
-      STORED CREATE FAMILY ‹bob›
+    statement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL AS (‹k›) STORED CREATE FAMILY ‹bob›
     tag: ALTER TABLE
     user: root
   tableName: db.public.tbl
@@ -161,10 +160,8 @@ upsert descriptor #106
   +      name: tbl
   +    relevantStatements:
   +    - statement:
-  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
-  +          NULL AS (‹k›) STORED CREATE FAMILY ‹bob›
-  +        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED
-  +          CREATE FAMILY bob
+  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL AS (‹k›) STORED CREATE FAMILY ‹bob›
+  +        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE FAMILY bob
   +        statementTag: ALTER TABLE
   +    revertible: true
   +    targetRanks: <redacted>
@@ -433,7 +430,7 @@ upsert descriptor #106
      createAsOfTime:
        wallTime: "1640995200000000000"
   ...
-             CREATE FAMILY bob
+           statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE FAMILY bob
            statementTag: ALTER TABLE
   -    revertible: true
        targetRanks: <redacted>
@@ -607,10 +604,8 @@ upsert descriptor #106
   -      name: tbl
   -    relevantStatements:
   -    - statement:
-  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
-  -          NULL AS (‹k›) STORED CREATE FAMILY ‹bob›
-  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED
-  -          CREATE FAMILY bob
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL AS (‹k›) STORED CREATE FAMILY ‹bob›
+  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL AS (k) STORED CREATE FAMILY bob
   -        statementTag: ALTER TABLE
   -    targetRanks: <redacted>
   -    targets: <redacted>

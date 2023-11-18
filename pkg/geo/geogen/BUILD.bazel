@@ -18,7 +18,6 @@ go_test(
     name = "geogen_test",
     size = "small",
     srcs = ["geogen_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":geogen"],
     deps = [
         "//pkg/geo/geopb",

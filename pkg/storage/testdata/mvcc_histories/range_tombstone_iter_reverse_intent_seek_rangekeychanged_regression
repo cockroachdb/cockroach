@@ -21,11 +21,12 @@ with t=A
   txn_begin k=b ts=3
   put k=b v=b3
 ----
+put: lock acquisition = {b id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 data: "a"/2.000000000,0 -> /BYTES/a2
-meta: "b"/0,0 -> txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/3.000000000,0 -> /BYTES/b3
 
 run ok
@@ -35,8 +36,8 @@ iter_prev
 iter_seek_ge k=b
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_ge: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 
 run ok
 iter_new types=pointsAndRanges
@@ -45,7 +46,7 @@ iter_prev
 iter_next
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_next: "b"/3.000000000,0=/BYTES/b3
 
 run ok
@@ -55,29 +56,8 @@ iter_prev
 iter_seek_ge k=a
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_ge: {a-b}/[1.000000000,0=/<empty>] !
-
-# Test the same for SeekIntentGE.
-run ok
-iter_new types=pointsAndRanges
-iter_seek_lt k=b+
-iter_prev
-iter_seek_ge txn=A k=b
-----
-iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_ge: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-
-run ok
-iter_new types=pointsAndRanges
-iter_seek_lt k=b+
-iter_prev
-iter_seek_intent_ge txn=A k=a
-----
-iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_intent_ge: {a-b}/[1.000000000,0=/<empty>] !
 
 # Test the same for SeekLT.
 run ok
@@ -87,7 +67,7 @@ iter_prev
 iter_seek_lt k=b+
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
 
 run ok
@@ -97,7 +77,7 @@ iter_prev
 iter_seek_lt k=b
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_lt: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>] !
 
 # Test that stepping onto a and then seeking/stepping back to b emits correctly.
@@ -109,21 +89,9 @@ iter_prev
 iter_seek_ge k=b
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_prev: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>] !
-iter_seek_ge: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
-
-run ok
-iter_new types=pointsAndRanges
-iter_seek_lt k=b+
-iter_prev
-iter_prev
-iter_seek_intent_ge txn=A k=b
-----
-iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_prev: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>] !
-iter_seek_intent_ge: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+iter_seek_ge: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
 
 run ok
 iter_new types=pointsAndRanges
@@ -133,7 +101,7 @@ iter_prev
 iter_seek_lt k=b+
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_prev: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>] !
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3 !
 
@@ -146,7 +114,7 @@ del_range_ts k=c end=d ts=1
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {c-d}/[1.000000000,0=/<empty>]
 data: "a"/2.000000000,0 -> /BYTES/a2
-meta: "b"/0,0 -> txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/3.000000000,0 -> /BYTES/b3
 
 run ok
@@ -156,18 +124,8 @@ iter_prev
 iter_seek_ge k=c
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_ge: {c-d}/[1.000000000,0=/<empty>] !
-
-run ok
-iter_new types=pointsAndRanges
-iter_seek_lt k=b+
-iter_prev
-iter_seek_intent_ge txn=A k=c
-----
-iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_intent_ge: {c-d}/[1.000000000,0=/<empty>] !
 
 run ok
 iter_new types=pointsAndRanges
@@ -176,7 +134,7 @@ iter_prev
 iter_seek_lt k=c+
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_lt: {c-d}/[1.000000000,0=/<empty>] !
 
 # We also test the same scenario with a double range tombstone.
@@ -189,10 +147,11 @@ with t=A
   txn_begin k=b ts=3
   put k=b v=b3
 ----
+put: lock acquisition = {b id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
-meta: "b"/0,0 -> txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/3.000000000,0 -> /BYTES/b3
 
 run ok
@@ -202,8 +161,8 @@ iter_prev
 iter_seek_ge k=b
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_ge: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "b"/0,0=txn={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 
 run ok
 iter_new types=pointsAndRanges
@@ -212,7 +171,7 @@ iter_prev
 iter_next
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_next: "b"/3.000000000,0=/BYTES/b3
 
 run ok
@@ -222,29 +181,8 @@ iter_prev
 iter_seek_ge k=a
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_ge: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>] !
-
-# Test the same for SeekIntentGE.
-run ok
-iter_new types=pointsAndRanges
-iter_seek_lt k=b+
-iter_prev
-iter_seek_ge txn=A k=b
-----
-iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_ge: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-
-run ok
-iter_new types=pointsAndRanges
-iter_seek_lt k=b+
-iter_prev
-iter_seek_intent_ge txn=A k=a
-----
-iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_seek_intent_ge: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>] !
 
 # Test the same for SeekLT.
 run ok
@@ -254,7 +192,7 @@ iter_prev
 iter_seek_lt k=b+
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
 
 run ok
@@ -264,5 +202,5 @@ iter_prev
 iter_seek_lt k=b
 ----
 iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
-iter_prev: "b"/0,0=txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "b"/0,0=txn={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_seek_lt: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>] !

@@ -36,7 +36,7 @@ import (
 )
 
 func init() {
-	if numOperators != 61 {
+	if numOperators != 62 {
 		// This error occurs when an operator has been added or removed in
 		// pkg/sql/opt/exec/explain/factory.opt. If an operator is added at the
 		// end of factory.opt, simply adjust the hardcoded value above. If an
@@ -248,6 +248,9 @@ func (f *PlanGistFactory) decodeOp() execOperator {
 
 func (f *PlanGistFactory) popChild() *Node {
 	l := len(f.nodeStack)
+	if l == 0 {
+		return nil
+	}
 	n := f.nodeStack[l-1]
 	f.nodeStack = f.nodeStack[:l-1]
 

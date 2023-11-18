@@ -423,7 +423,13 @@ func getDescriptorByName(
 			return nil, err
 		}
 		// In all other cases, having an ID should imply having a descriptor.
-		return nil, errors.WithAssertionFailure(err)
+		return nil, errors.Wrapf(
+			err,
+			"resolved %s to %d but found no descriptor with id %d",
+			name,
+			id,
+			id,
+		)
 	}
 	return nil, err
 }
@@ -481,7 +487,7 @@ func (tc *Collection) getVirtualDescriptorByName(
 // getNonVirtualDescriptorID looks up a non-virtual descriptor ID by name by
 // going through layers in sequence.
 //
-// All flags except AvoidLeased, RequireMutable and AvoidSynthetic are ignored.
+// All flags except AssertNotLeased, RequireMutable and AvoidSynthetic are ignored.
 func (tc *Collection) getNonVirtualDescriptorID(
 	ctx context.Context,
 	txn *kv.Txn,

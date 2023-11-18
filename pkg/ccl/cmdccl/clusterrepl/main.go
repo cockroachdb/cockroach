@@ -99,7 +99,7 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 		return err
 	}
 
-	replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(*tenant))
+	replicationProducerSpec, err := client.Create(ctx, roachpb.TenantName(*tenant), streampb.ReplicationProducerRequest{})
 	if err != nil {
 		return err
 	}
@@ -119,8 +119,7 @@ func streamPartition(ctx context.Context, streamAddr *url.URL) error {
 		return err
 	}
 
-	prefix := keys.MakeTenantPrefix(plan.SourceTenantID)
-	tenantSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+	tenantSpan := keys.MakeTenantSpan(plan.SourceTenantID)
 
 	var sps streampb.StreamPartitionSpec
 	sps.Config.MinCheckpointFrequency = *checkpointInterval

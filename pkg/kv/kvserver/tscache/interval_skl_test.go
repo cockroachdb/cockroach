@@ -1282,7 +1282,7 @@ func TestArenaReuse(t *testing.T) {
 	const iters = 256
 	for i := 0; i < iters; i++ {
 		for e := s.pages.Front(); e != nil; e = e.Next() {
-			p := e.Value.(*sklPage)
+			p := e.Value
 			arenas[p.list.Arena()] = struct{}{}
 		}
 		s.rotatePages(s.frontPage())

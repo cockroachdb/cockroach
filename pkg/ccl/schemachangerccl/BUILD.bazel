@@ -23,14 +23,11 @@ go_test(
         ":test_gen_backup_base",  # keep
         ":test_gen_ccl",  # keep
     ],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = glob(["testdata/**"]) + [
         "//pkg/sql/schemachanger:end_to_end_testdata",
     ],
     embed = [":schemachangerccl"],
+    exec_properties = {"Pool": "large"},
     shard_count = 48,
     tags = [
         "ccl_test",

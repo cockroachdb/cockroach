@@ -18,11 +18,13 @@ put k=f ts=1 v=f1
 put_rangekey k=b end=d ts=5
 put_rangekey k=e end=g ts=5
 ----
+put: lock acquisition = {c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {e id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
 rangekey: {b-d}/[5.000000000,0=/<empty>]
 rangekey: {e-g}/[5.000000000,0=/<empty>]
-meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 error: (*withstack.withStack:) intentIter at intent, but iter not at provisional value
 
 # Forward and reverse scans should error eventually, and should never
@@ -44,7 +46,7 @@ iter_scan reverse
 ----
 iter_seek_lt: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>] !
 iter_scan: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>] !
-iter_scan: "e"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_scan: "e"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
 iter_scan: err=intentIter should not be after iter
 error: (*withstack.withStack:) intentIter should not be after iter
 
@@ -65,7 +67,7 @@ iter_new types=pointsAndRanges
 iter_seek_ge k=e
 iter_next
 ----
-iter_seek_ge: "e"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
+iter_seek_ge: "e"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
 iter_next: err=intentIter at intent, but iter not at provisional value
 error: (*withstack.withStack:) intentIter at intent, but iter not at provisional value
 
@@ -87,7 +89,7 @@ iter_new types=pointsAndRanges
 iter_seek_lt k=f
 iter_prev
 ----
-iter_seek_lt: "e"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
+iter_seek_lt: "e"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
 iter_prev: err=intentIter should not be after iter
 error: (*withstack.withStack:) intentIter should not be after iter
 
@@ -99,7 +101,7 @@ iter_seek_lt k=d
 iter_prev
 iter_prev
 ----
-iter_seek_lt: "c"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {b-d}/[5.000000000,0=/<empty>] !
+iter_seek_lt: "c"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {b-d}/[5.000000000,0=/<empty>] !
 iter_prev: {b-d}/[5.000000000,0=/<empty>]
 iter_prev: .
 
@@ -110,7 +112,7 @@ iter_new types=pointsAndRanges
 iter_seek_ge k=e
 iter_prev
 ----
-iter_seek_ge: "e"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
+iter_seek_ge: "e"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
 iter_prev: err=iter not at provisional value, cmp: -1
 error: (*withstack.withStack:) iter not at provisional value, cmp: -1
 
@@ -121,7 +123,7 @@ iter_next
 iter_prev
 iter_next
 ----
-iter_seek_lt: "e"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
+iter_seek_lt: "e"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>] !
 iter_next: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>]
-iter_prev: "e"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
+iter_prev: "e"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true {e-g}/[5.000000000,0=/<empty>]
 iter_next: "f"/1.000000000,0=/BYTES/f1 {e-g}/[5.000000000,0=/<empty>]

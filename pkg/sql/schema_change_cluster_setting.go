@@ -23,11 +23,11 @@ import (
 // any features that require schema changes. Documentation for which features
 // are covered TBD.
 var featureSchemaChangeEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"feature.schema_change.enabled",
 	"set to true to enable schema changes, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 // checkSchemaChangeEnabled is a method that wraps the featureflag.CheckEnabled
 // method specifically for all features that are categorized as schema changes.

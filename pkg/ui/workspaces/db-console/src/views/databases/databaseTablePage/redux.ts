@@ -32,6 +32,7 @@ import {
 import { selectHasAdminRole } from "src/redux/user";
 import {
   selectAutomaticStatsCollectionEnabled,
+  selectDropUnusedIndexDuration,
   selectIndexRecommendationsEnabled,
   selectIndexUsageStatsEnabled,
 } from "src/redux/clusterSettings";
@@ -69,6 +70,7 @@ export const mapStateToProps = (
       selectAutomaticStatsCollectionEnabled(state) || false,
     hasAdminRole: selectHasAdminRole(state) || false,
     showIndexRecommendations: selectIndexRecommendationsEnabled(state),
+    csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
     indexUsageStatsEnabled: selectIndexUsageStatsEnabled(state),
     indexStats: {
       loading: !!indexStats?.inFlight,
@@ -81,10 +83,15 @@ export const mapStateToProps = (
 };
 
 export const mapDispatchToProps = {
-  refreshTableDetails: (database: string, table: string) => {
+  refreshTableDetails: (
+    database: string,
+    table: string,
+    csIndexUnusedDuration: string,
+  ) => {
     return refreshTableDetails({
       database,
       table,
+      csIndexUnusedDuration,
     });
   },
   refreshIndexStats: (database: string, table: string) => {

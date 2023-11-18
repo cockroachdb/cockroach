@@ -34,7 +34,7 @@ func TestURIRequiresAdminOrPrivilege(t *testing.T) {
 	const nodes = 1
 
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		SQLMemoryPoolSize: 256 << 20,
 	}})
 	defer tc.Stopper().Stop(ctx)
@@ -42,7 +42,7 @@ func TestURIRequiresAdminOrPrivilege(t *testing.T) {
 	rootDB := sqlutils.MakeSQLRunner(conn)
 
 	rootDB.Exec(t, `CREATE USER testuser`)
-	testuser := tc.ApplicationLayer(0).SQLConnForUser(t, username.TestUser, "")
+	testuser := tc.ApplicationLayer(0).SQLConn(t, serverutils.User(username.TestUser))
 	rootDB.Exec(t, `CREATE TABLE foo (id INT)`)
 
 	// Grant SELECT so that EXPORT fails when checking URI privileges.

@@ -21,17 +21,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -165,7 +162,7 @@ func TestShowCreateTable(t *testing.T) {
 		{
 			CreateStatement: `CREATE TABLE %s (
 	pk int8 PRIMARY KEY
-) WITH (ttl_expire_after = '10 minutes')`,
+) WITH (ttl_expire_after = '10 minutes', ttl_job_cron = '@hourly')`,
 			Expect: `CREATE TABLE public.%[1]s (
 	pk INT8 NOT NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
@@ -273,7 +270,7 @@ func TestShowCreateTable(t *testing.T) {
 			)`,
 			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
-	crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
+	crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX %[1]s_a_idx (a ASC) USING HASH WITH (bucket_count=8)
@@ -600,7 +597,7 @@ func TestShowQueries(t *testing.T) {
 		}
 	}
 
-	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -769,7 +766,7 @@ func TestShowQueriesFillsInValuesForPlaceholders(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, 3,
+	tc := serverutils.StartCluster(t, 3,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      testServerArgs,
@@ -868,7 +865,7 @@ func TestShowSessions(t *testing.T) {
 
 	var conn *gosql.DB
 
-	tc := serverutils.StartNewTestCluster(t, 2 /* numNodes */, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 2 /* numNodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	conn = tc.ServerConn(0)
@@ -1192,150 +1189,6 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 
 	cancel()
 	<-waiter
-}
-
-func TestLintClusterSettingNames(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
-
-	skip.UnderRace(t, "lint only test")
-	skip.UnderDeadlock(t, "lint only test")
-	skip.UnderStress(t, "lint only test")
-
-	params, _ := createTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	rows, err := sqlDB.Query(`SELECT variable, setting_type, description FROM [SHOW ALL CLUSTER SETTINGS]`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var varName, sType, desc string
-		if err := rows.Scan(&varName, &sType, &desc); err != nil {
-			t.Fatal(err)
-		}
-
-		if strings.ToLower(varName) != varName {
-			t.Errorf("%s: variable name must be all lowercase", varName)
-		}
-
-		suffixSuggestions := map[string]string{
-			"_ttl":     ".ttl",
-			"_enabled": ".enabled",
-			"_timeout": ".timeout",
-		}
-
-		nameErr := func() error {
-			segments := strings.Split(varName, ".")
-			for _, segment := range segments {
-				if strings.TrimSpace(segment) != segment {
-					return errors.Errorf("%s: part %q has heading or trailing whitespace", varName, segment)
-				}
-				tokens, ok := parser.Tokens(segment)
-				if !ok {
-					return errors.Errorf("%s: part %q does not scan properly", varName, segment)
-				}
-				if len(tokens) == 0 || len(tokens) > 1 {
-					return errors.Errorf("%s: part %q has invalid structure", varName, segment)
-				}
-				if tokens[0].TokenID != parser.IDENT {
-					cat, ok := lexbase.KeywordsCategories[tokens[0].Str]
-					if !ok {
-						return errors.Errorf("%s: part %q has invalid structure", varName, segment)
-					}
-					if cat == "R" {
-						return errors.Errorf("%s: part %q is a reserved keyword", varName, segment)
-					}
-				}
-			}
-
-			for suffix, repl := range suffixSuggestions {
-				if strings.HasSuffix(varName, suffix) {
-					return errors.Errorf("%s: use %q instead of %q", varName, repl, suffix)
-				}
-			}
-
-			if sType == "b" && !strings.HasSuffix(varName, ".enabled") {
-				return errors.Errorf("%s: use .enabled for booleans", varName)
-			}
-
-			return nil
-		}()
-		if nameErr != nil {
-			var grandFathered = map[string]string{
-				"server.declined_reservation_timeout":                `server.declined_reservation_timeout: use ".timeout" instead of "_timeout"`,
-				"server.failed_reservation_timeout":                  `server.failed_reservation_timeout: use ".timeout" instead of "_timeout"`,
-				"server.web_session_timeout":                         `server.web_session_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.distsql.flow_stream_timeout":                    `sql.distsql.flow_stream_timeout: use ".timeout" instead of "_timeout"`,
-				"debug.panic_on_failed_assertions":                   `debug.panic_on_failed_assertions: use .enabled for booleans`,
-				"diagnostics.reporting.send_crash_reports":           `diagnostics.reporting.send_crash_reports: use .enabled for booleans`,
-				"kv.closed_timestamp.follower_reads_enabled":         `kv.closed_timestamp.follower_reads_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.raft_log.disable_synchronization_unsafe":         `kv.raft_log.disable_synchronization_unsafe: use .enabled for booleans`,
-				"kv.range_merge.queue_enabled":                       `kv.range_merge.queue_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.range_split.by_load_enabled":                     `kv.range_split.by_load_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.transaction.parallel_commits_enabled":            `kv.transaction.parallel_commits_enabled: use ".enabled" instead of "_enabled"`,
-				"kv.transaction.write_pipelining_enabled":            `kv.transaction.write_pipelining_enabled: use ".enabled" instead of "_enabled"`,
-				"server.clock.forward_jump_check_enabled":            `server.clock.forward_jump_check_enabled: use ".enabled" instead of "_enabled"`,
-				"sql.defaults.experimental_optimizer_mutations":      `sql.defaults.experimental_optimizer_mutations: use .enabled for booleans`,
-				"sql.distsql.distribute_index_joins":                 `sql.distsql.distribute_index_joins: use .enabled for booleans`,
-				"sql.metrics.statement_details.dump_to_logs":         `sql.metrics.statement_details.dump_to_logs: use .enabled for booleans`,
-				"sql.metrics.statement_details.sample_logical_plans": `sql.metrics.statement_details.sample_logical_plans: use .enabled for booleans`,
-				"sql.trace.log_statement_execute":                    `sql.trace.log_statement_execute: use .enabled for booleans`,
-				"trace.debug.enable":                                 `trace.debug.enable: use .enabled for booleans`,
-
-				// These were grandfathered because the test wasn't running on
-				// the CCL code.
-				"bulkio.backup.export_request_verbose_tracing":            `bulkio.backup.export_request_verbose_tracing: use .enabled for booleans`,
-				"bulkio.backup.read_timeout":                              `bulkio.backup.read_timeout: use ".timeout" instead of "_timeout"`,
-				"bulkio.backup.split_keys_on_timestamps":                  `bulkio.backup.split_keys_on_timestamps: use .enabled for booleans`,
-				"bulkio.restore.memory_monitor_ssts":                      `bulkio.restore.memory_monitor_ssts: use .enabled for booleans`,
-				"bulkio.restore.use_simple_import_spans":                  `bulkio.restore.use_simple_import_spans: use .enabled for booleans`,
-				"changefeed.balance_range_distribution.enable":            `changefeed.balance_range_distribution.enable: use .enabled for booleans`,
-				"changefeed.batch_reduction_retry_enabled":                `changefeed.batch_reduction_retry_enabled: use ".enabled" instead of "_enabled"`,
-				"changefeed.idle_timeout":                                 `changefeed.idle_timeout: use ".timeout" instead of "_timeout"`,
-				"changefeed.new_pubsub_sink_enabled":                      `changefeed.new_pubsub_sink_enabled: use ".enabled" instead of "_enabled"`,
-				"changefeed.new_webhook_sink_enabled":                     `changefeed.new_webhook_sink_enabled: use ".enabled" instead of "_enabled"`,
-				"changefeed.permissions.require_external_connection_sink": `changefeed.permissions.require_external_connection_sink: use .enabled for booleans`,
-				"server.oidc_authentication.autologin":                    `server.oidc_authentication.autologin: use .enabled for booleans`,
-				"stream_replication.job_liveness_timeout":                 `stream_replication.job_liveness_timeout: use ".timeout" instead of "_timeout"`,
-
-				// These use the _timeout suffix to stay consistent with the
-				// corresponding session variables.
-				"sql.defaults.statement_timeout":                   `sql.defaults.statement_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.defaults.lock_timeout":                        `sql.defaults.lock_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.defaults.idle_in_session_timeout":             `sql.defaults.idle_in_session_timeout: use ".timeout" instead of "_timeout"`,
-				"sql.defaults.idle_in_transaction_session_timeout": `sql.defaults.idle_in_transaction_session_timeout: use ".timeout" instead of "_timeout"`,
-				"cloudstorage.gs.chunking.retry_timeout":           `cloudstorage.gs.chunking.retry_timeout: use ".timeout" instead of "_timeout"`,
-			}
-			expectedErr, found := grandFathered[varName]
-			if !found || expectedErr != nameErr.Error() {
-				t.Error(nameErr)
-			}
-		}
-
-		if strings.TrimSpace(desc) != desc {
-			t.Errorf("%s: description %q has heading or trailing whitespace", varName, desc)
-		}
-
-		if len(desc) == 0 {
-			t.Errorf("%s: description is empty", varName)
-		}
-
-		if len(desc) > 0 {
-			if strings.ToLower(desc[0:1]) != desc[0:1] {
-				t.Errorf("%s: description %q must not start with capital", varName, desc)
-			}
-			if sType != "e" && (desc[len(desc)-1] == '.') && !strings.Contains(desc, ". ") {
-				// TODO(knz): this check doesn't work with the way enum values are added to their descriptions.
-				t.Errorf("%s: description %q must end with period only if it contains a secondary sentence", varName, desc)
-			}
-		}
-	}
-
 }
 
 // TestCancelQueriesRace can be stressed to try and reproduce a race

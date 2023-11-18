@@ -96,7 +96,7 @@ var (
 	smallEngineBlocks = util.ConstantWithMetamorphicTestBool("small-engine-blocks", false)
 )
 
-const intentAgeThreshold = 2 * time.Hour
+const lockAgeThreshold = 2 * time.Hour
 const txnCleanupThreshold = time.Hour
 
 // TestRunNewVsOld exercises the behavior of Run relative to the old
@@ -111,10 +111,10 @@ func TestRunNewVsOld(t *testing.T) {
 			ds: someVersionsMidSizeRowsLotsOfIntents,
 			// Current time in the future enough for intents to get resolved
 			now: hlc.Timestamp{
-				WallTime: (intentAgeThreshold + 100*time.Second).Nanoseconds(),
+				WallTime: (lockAgeThreshold + 100*time.Second).Nanoseconds(),
 			},
 			// GC everything beyond intent resolution threshold
-			ttlSec: int32(intentAgeThreshold.Seconds()),
+			ttlSec: int32(lockAgeThreshold.Seconds()),
 		},
 		{
 			ds: someVersionsMidSizeRows,
@@ -140,7 +140,7 @@ func TestRunNewVsOld(t *testing.T) {
 			newThreshold := CalculateThreshold(tc.now, ttl)
 			gcInfoOld, err := runGCOld(ctx, tc.ds.desc(), snap, tc.now,
 				newThreshold, RunOptions{
-					IntentAgeThreshold:  intentAgeThreshold,
+					LockAgeThreshold:    lockAgeThreshold,
 					TxnCleanupThreshold: txnCleanupThreshold,
 				}, ttl,
 				&oldGCer,
@@ -151,7 +151,7 @@ func TestRunNewVsOld(t *testing.T) {
 			newGCer := makeFakeGCer()
 			gcInfoNew, err := Run(ctx, tc.ds.desc(), snap, tc.now,
 				newThreshold, RunOptions{
-					IntentAgeThreshold:  intentAgeThreshold,
+					LockAgeThreshold:    lockAgeThreshold,
 					TxnCleanupThreshold: txnCleanupThreshold,
 				}, ttl,
 				&newGCer,
@@ -179,19 +179,19 @@ func BenchmarkRun(b *testing.B) {
 		snap := eng.NewSnapshot()
 		defer snap.Close()
 		ttl := time.Duration(spec.ttlSec) * time.Second
-		intentThreshold := intentAgeThreshold
+		intentThreshold := lockAgeThreshold
 		if spec.intentAgeSec > 0 {
 			intentThreshold = time.Duration(spec.intentAgeSec) * time.Second
 		}
 		return runGCFunc(ctx, spec.ds.desc(), snap, spec.now,
 			CalculateThreshold(spec.now, ttl), RunOptions{
-				IntentAgeThreshold:  intentThreshold,
+				LockAgeThreshold:    intentThreshold,
 				TxnCleanupThreshold: txnCleanupThreshold,
 				ClearRangeMinKeys:   defaultClearRangeMinKeys,
 			},
 			ttl,
 			NoopGCer{},
-			func(ctx context.Context, intents []roachpb.Intent) error {
+			func(ctx context.Context, locks []roachpb.Lock) error {
 				return nil
 			},
 			func(ctx context.Context, txn *roachpb.Transaction) error {
@@ -241,17 +241,21 @@ func BenchmarkRun(b *testing.B) {
 
 func TestNewVsInvariants(t *testing.T) {
 	ctx := context.Background()
-	const N = 100000
+	N := 100000
+	if util.RaceEnabled {
+		// Reduce the row count under race. Otherwise, the test takes >5m.
+		N /= 100
+	}
 
 	for _, tc := range []randomRunGCTestSpec{
 		{
 			ds: someVersionsMidSizeRowsLotsOfIntents,
 			// Current time in the future enough for intents to get resolved
 			now: hlc.Timestamp{
-				WallTime: (intentAgeThreshold + 100*time.Second).Nanoseconds(),
+				WallTime: (lockAgeThreshold + 100*time.Second).Nanoseconds(),
 			},
 			// GC everything beyond intent resolution threshold
-			ttlSec: int32(intentAgeThreshold.Seconds()),
+			ttlSec: int32(lockAgeThreshold.Seconds()),
 		},
 		{
 			ds: someVersionsMidSizeRows,
@@ -338,12 +342,12 @@ func TestNewVsInvariants(t *testing.T) {
 			// Run GCer over snapshot.
 			ttl := time.Duration(tc.ttlSec) * time.Second
 			gcThreshold := CalculateThreshold(tc.now, ttl)
-			intentThreshold := tc.now.Add(-intentAgeThreshold.Nanoseconds(), 0)
+			intentThreshold := tc.now.Add(-lockAgeThreshold.Nanoseconds(), 0)
 
 			gcer := makeFakeGCer()
 			gcInfoNew, err := Run(ctx, desc, beforeGC, tc.now,
 				gcThreshold, RunOptions{
-					IntentAgeThreshold:  intentAgeThreshold,
+					LockAgeThreshold:    lockAgeThreshold,
 					TxnCleanupThreshold: txnCleanupThreshold,
 					ClearRangeMinKeys:   clearRangeMinKeys,
 				}, ttl,
@@ -356,13 +360,15 @@ func TestNewVsInvariants(t *testing.T) {
 			var stats enginepb.MVCCStats
 			require.NoError(t,
 				storage.MVCCGarbageCollect(ctx, eng, &stats, gcer.pointKeys(), gcThreshold))
-			for _, i := range gcer.intents {
+			for _, i := range gcer.locks {
 				l := roachpb.LockUpdate{
 					Span:   roachpb.Span{Key: i.Key},
 					Txn:    i.Txn,
 					Status: roachpb.ABORTED,
 				}
-				_, _, _, err := storage.MVCCResolveWriteIntent(ctx, eng, &stats, l, storage.MVCCResolveWriteIntentOptions{})
+				_, _, _, _, err := storage.MVCCResolveWriteIntent(
+					ctx, eng, &stats, l, storage.MVCCResolveWriteIntentOptions{},
+				)
 				require.NoError(t, err, "failed to resolve intent")
 			}
 			for _, cr := range gcer.clearRanges() {
@@ -430,23 +436,23 @@ func assertLiveData(
 		GCTTL:     gcTTL,
 		Threshold: gcThreshold,
 	}
-	pointIt := before.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind,
-		storage.IterOptions{
-			LowerBound: desc.StartKey.AsRawKey(),
-			UpperBound: desc.EndKey.AsRawKey(),
-			KeyTypes:   storage.IterKeyTypePointsAndRanges,
-		})
+	pointIt, err := before.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+		LowerBound: desc.StartKey.AsRawKey(),
+		UpperBound: desc.EndKey.AsRawKey(),
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
+	})
+	require.NoError(t, err)
 	defer pointIt.Close()
 	pointIt.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 	pointExpectationsGenerator := getExpectationsGenerator(t, pointIt, gcThreshold, intentThreshold,
 		&expInfo)
 
-	rangeIt := before.NewMVCCIterator(storage.MVCCKeyIterKind,
-		storage.IterOptions{
-			LowerBound: desc.StartKey.AsRawKey(),
-			UpperBound: desc.EndKey.AsRawKey(),
-			KeyTypes:   storage.IterKeyTypeRangesOnly,
-		})
+	rangeIt, err := before.NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound: desc.StartKey.AsRawKey(),
+		UpperBound: desc.EndKey.AsRawKey(),
+		KeyTypes:   storage.IterKeyTypeRangesOnly,
+	})
+	require.NoError(t, err)
 	defer rangeIt.Close()
 	rangeIt.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 	expectedRanges := mergeRanges(filterRangeFragments(rangeFragmentsFromIt(t, rangeIt), gcThreshold,
@@ -454,11 +460,12 @@ func assertLiveData(
 
 	// Loop over engine data after applying GCer requests and compare with
 	// expected point keys.
-	itAfter := after.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	itAfter, err := after.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound: desc.StartKey.AsRawKey(),
 		UpperBound: desc.EndKey.AsRawKey(),
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 	})
+	require.NoError(t, err)
 	defer itAfter.Close()
 
 	itAfter.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
@@ -491,12 +498,13 @@ func assertLiveData(
 		}
 	}
 
-	rangeItAfter := after.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	rangeItAfter, err := after.NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound:           desc.StartKey.AsRawKey(),
 		UpperBound:           desc.EndKey.AsRawKey(),
 		KeyTypes:             storage.IterKeyTypeRangesOnly,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
+	require.NoError(t, err)
 	defer rangeItAfter.Close()
 	rangeItAfter.SeekGE(storage.MVCCKey{Key: desc.StartKey.AsRawKey()})
 	actualRanges := mergeRanges(rangeFragmentsFromIt(t, rangeItAfter))
@@ -607,10 +615,10 @@ func getExpectationsGenerator(
 						"failed to unmarshal txn metadata")
 					if meta.Timestamp.ToTimestamp().Less(intentThreshold) {
 						// This is an old intent. Skip intent with proposed value and continue.
-						expInfo.IntentsConsidered++
+						expInfo.LocksConsidered++
 						// We always use a new transaction for each intent and consider
 						// operations successful in testGCer.
-						expInfo.IntentTxns++
+						expInfo.LockTxns++
 						expInfo.PushTxn++
 						expInfo.ResolveTotal++
 					} else {
@@ -666,12 +674,13 @@ func getExpectationsGenerator(
 func getKeyHistory(t *testing.T, r storage.Reader, key roachpb.Key) string {
 	var result []string
 
-	it := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	it, err := r.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound:           key,
 		UpperBound:           key.Next(),
 		KeyTypes:             storage.IterKeyTypePointsAndRanges,
 		RangeKeyMaskingBelow: hlc.Timestamp{},
 	})
+	require.NoError(t, err)
 	defer it.Close()
 
 	it.SeekGE(storage.MVCCKey{Key: key})
@@ -812,8 +821,8 @@ type fakeGCer struct {
 	gcRangeKeyBatches [][]kvpb.GCRequest_GCRangeKey
 	gcClearRanges     []kvpb.GCRequest_GCClearRange
 	threshold         Threshold
-	intents           []roachpb.Intent
-	batches           [][]roachpb.Intent
+	locks             []roachpb.Lock
+	batches           [][]roachpb.Lock
 	txnIntents        []txnIntents
 }
 
@@ -860,9 +869,9 @@ func (f *fakeGCer) resolveIntentsAsync(_ context.Context, txn *roachpb.Transacti
 	return nil
 }
 
-func (f *fakeGCer) resolveIntents(_ context.Context, intents []roachpb.Intent) error {
-	f.intents = append(f.intents, intents...)
-	f.batches = append(f.batches, intents)
+func (f *fakeGCer) resolveIntents(_ context.Context, locks []roachpb.Lock) error {
+	f.locks = append(f.locks, locks...)
+	f.batches = append(f.batches, locks)
 	return nil
 }
 
@@ -872,9 +881,9 @@ func (f *fakeGCer) resolveIntents(_ context.Context, intents []roachpb.Intent) e
 // not relevant for old gc as it shouldn't be compared between such invocations.
 func (f *fakeGCer) normalize() {
 	sortIntents := func(i, j int) bool {
-		return intentLess(&f.intents[i], &f.intents[j])
+		return lockLess(&f.locks[i], &f.locks[j])
 	}
-	sort.Slice(f.intents, sortIntents)
+	sort.Slice(f.locks, sortIntents)
 	for i := range f.txnIntents {
 		sort.Slice(f.txnIntents[i].intents, sortIntents)
 	}
@@ -909,7 +918,7 @@ func (f *fakeGCer) clearRanges() []kvpb.GCRequest_GCClearRange {
 	return f.gcClearRanges
 }
 
-func intentLess(a, b *roachpb.Intent) bool {
+func lockLess(a, b *roachpb.Lock) bool {
 	cmp := a.Key.Compare(b.Key)
 	switch {
 	case cmp < 0:

@@ -36,7 +36,6 @@ go_test(
         "replicate_queue_test.go",
         "split_queue_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":queue"],
     deps = [
         "//pkg/kv/kvserver/asim/config",

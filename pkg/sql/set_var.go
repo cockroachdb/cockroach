@@ -65,7 +65,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant()); ok {
+	if _, ok, _ := settings.LookupForLocalAccess(settings.SettingName(name), p.ExecCfg().Codec.ForSystemTenant()); ok {
 		p.BufferClientNotice(
 			ctx,
 			errors.WithHint(

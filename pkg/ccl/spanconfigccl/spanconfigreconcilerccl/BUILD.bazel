@@ -6,7 +6,6 @@ go_test(
         "datadriven_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     tags = ["ccl_test"],
     deps = [
@@ -30,6 +29,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",

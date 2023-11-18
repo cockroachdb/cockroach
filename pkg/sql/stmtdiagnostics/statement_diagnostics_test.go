@@ -44,16 +44,17 @@ func TestDiagnosticsRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 	registry := s.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
 	runner := sqlutils.MakeSQLRunner(db)
 	runner.Exec(t, "CREATE TABLE test (x int PRIMARY KEY)")
 
 	// Disable polling interval since we're inserting requests directly into the
 	// registry manually and want precise control of updating the registry.
-	runner.Exec(t, "SET CLUSTER SETTING sql.stmt_diagnostics.poll_interval = '0';")
+	stmtdiagnostics.PollingInterval.Override(ctx, &s.ClusterSettings().SV, 0)
 
 	var collectUntilExpirationEnabled bool
 	isCompleted := func(reqID int64) (completed bool, diagnosticsID gosql.NullInt64) {
@@ -538,16 +539,17 @@ func TestDiagnosticsRequest(t *testing.T) {
 func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 2, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
-	db0 := tc.ServerConn(0)
-	db1 := tc.ServerConn(1)
+	s0 := tc.ApplicationLayer(0)
+	db0 := s0.SQLConn(t)
+	db1 := tc.ApplicationLayer(1).SQLConn(t)
 	_, err := db0.Exec("CREATE TABLE test (x int PRIMARY KEY)")
 	require.NoError(t, err)
 
 	// Lower the polling interval to speed up the test.
-	_, err = db0.Exec("SET CLUSTER SETTING sql.stmt_diagnostics.poll_interval = '1ms'")
+	stmtdiagnostics.PollingInterval.Override(ctx, &s0.ClusterSettings().SV, time.Millisecond)
 	require.NoError(t, err)
 
 	var anyPlan string
@@ -556,7 +558,7 @@ func TestDiagnosticsRequestDifferentNode(t *testing.T) {
 	var noLatencyThreshold, noExpiration time.Duration
 
 	// Ask to trace a particular query using node 0.
-	registry := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
+	registry := s0.ExecutorConfig().(sql.ExecutorConfig).StmtDiagnosticsRecorder
 	reqID, err := registry.InsertRequestInternal(
 		ctx, "INSERT INTO test VALUES (_)", anyPlan, noAntiMatch,
 		sampleAll, noLatencyThreshold, noExpiration,
@@ -624,6 +626,8 @@ func TestChangePollInterval(t *testing.T) {
 	ctx := context.Background()
 
 	// We'll inject a request filter to detect scans due to the polling.
+	// TODO(yuzefovich): it is suspicious that we're using the system codec, yet
+	// the test passes with the test tenant. Investigate this.
 	tableStart := keys.SystemSQLCodec.TablePrefix(uint32(systemschema.StatementDiagnosticsRequestsTable.GetID()))
 	tableSpan := roachpb.Span{
 		Key:    tableStart,
@@ -678,13 +682,12 @@ func TestChangePollInterval(t *testing.T) {
 			},
 		},
 	}
-	s, db, _ := serverutils.StartServer(t, args)
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, args)
+	defer srv.Stopper().Stop(ctx)
 
 	require.Equal(t, 1, waitForScans(1))
 	time.Sleep(time.Millisecond) // ensure no unexpected scan occur
 	require.Equal(t, 1, waitForScans(1))
-	_, err := db.Exec("SET CLUSTER SETTING sql.stmt_diagnostics.poll_interval = '200us'")
-	require.NoError(t, err)
+	stmtdiagnostics.PollingInterval.Override(ctx, &settings.SV, 200*time.Microsecond)
 	waitForScans(10) // ensure several scans occur
 }

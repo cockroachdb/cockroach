@@ -11,16 +11,18 @@ with t=A k=k2
   get
 ----
 >> put v=a t=A k=k2
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+60 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+99
+put: lock acquisition = {k2 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=10 Replicated Intent []}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+60 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+99
 >> put v=b t=A k=k2
+put: lock acquisition = {k2 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20 Replicated Intent [{5 15}]}
 stats: val_bytes=-2 live_bytes=-2
 get: "k2" -> /BYTES/b @1.000000000,0
 get: "k2" -> <no data>
 >> at end:
-txn: "A" meta={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0 isn=1
-meta: "k2"/0,0 -> txn={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0 isn=1
+meta: "k2"/0,0 -> txn={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k2"/1.000000000,0 -> /BYTES/b
-stats: key_count=1 key_bytes=15 val_count=1 val_bytes=58 live_count=1 live_bytes=73 intent_count=1 intent_bytes=18 separated_intent_count=1 intent_age=99
+stats: key_count=1 key_bytes=15 val_count=1 val_bytes=58 live_count=1 live_bytes=73 intent_count=1 intent_bytes=18 lock_count=1 lock_age=99
 
 run stats ok
 with t=A k=k3
@@ -31,17 +33,19 @@ with t=A k=k3
   del
 ----
 >> put v=a t=A k=k3
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+60 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+99
+put: lock acquisition = {k3 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=30 Replicated Intent [{5 25}]}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+60 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+99
 >> del t=A k=k3
 del: "k3": found key false
+del: lock acquisition = {k3 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40 Replicated Intent [{5 35}]}
 stats: val_bytes=-8 live_count=-1 live_bytes=-75 gc_bytes_age=+6633 intent_bytes=-6
 >> at end:
-txn: "A" meta={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0 isn=1
-meta: "k2"/0,0 -> txn={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0 isn=1
+meta: "k2"/0,0 -> txn={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k2"/1.000000000,0 -> /BYTES/b
-meta: "k3"/0,0 -> txn={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40} ts=1.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k3"/0,0 -> txn={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40} ts=1.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k3"/1.000000000,0 -> /<empty>
-stats: key_count=2 key_bytes=30 val_count=2 val_bytes=110 live_count=1 live_bytes=73 gc_bytes_age=6633 intent_count=2 intent_bytes=30 separated_intent_count=2 intent_age=198
+stats: key_count=2 key_bytes=30 val_count=2 val_bytes=110 live_count=1 live_bytes=73 gc_bytes_age=6633 intent_count=2 intent_bytes=30 lock_count=2 lock_age=198
 
 run stats ok
 with t=A k=k4
@@ -54,20 +58,23 @@ with t=A k=k4
   cput      v=c
 ----
 >> put v=a t=A k=k4
-stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+60 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+99
+put: lock acquisition = {k4 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=50 Replicated Intent [{5 35}]}
+stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+60 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+99
 >> cput v=b cond=a t=A k=k4
+cput: lock acquisition = {k4 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=51 Replicated Intent [{5 35}]}
 stats: val_bytes=+10 live_bytes=+10
 >> cput v=c t=A k=k4
+cput: lock acquisition = {k4 id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=60 Replicated Intent [{5 55}]}
 stats: val_bytes=-12 live_bytes=-12
 >> at end:
-txn: "A" meta={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=60} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0 isn=1
-meta: "k2"/0,0 -> txn={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "A" meta={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=60} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0 isn=1
+meta: "k2"/0,0 -> txn={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k2"/1.000000000,0 -> /BYTES/b
-meta: "k3"/0,0 -> txn={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40} ts=1.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k3"/0,0 -> txn={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40} ts=1.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k3"/1.000000000,0 -> /<empty>
-meta: "k4"/0,0 -> txn={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=60} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k4"/0,0 -> txn={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=60} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k4"/1.000000000,0 -> /BYTES/c
-stats: key_count=3 key_bytes=45 val_count=3 val_bytes=168 live_count=2 live_bytes=146 gc_bytes_age=6633 intent_count=3 intent_bytes=48 separated_intent_count=3 intent_age=297
+stats: key_count=3 key_bytes=45 val_count=3 val_bytes=168 live_count=2 live_bytes=146 gc_bytes_age=6633 intent_count=3 intent_bytes=48 lock_count=3 lock_age=297
 
 run stats ok
 put k=k5 v=foo ts=3
@@ -90,25 +97,30 @@ with t=B k=k5
 >> put k=k5 v=foo ts=3
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+8 live_count=+1 live_bytes=+23
 >> put v=a t=B k=k5
-stats: key_bytes=+12 val_count=+1 val_bytes=+60 live_bytes=+52 gc_bytes_age=+1900 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+95
+put: lock acquisition = {k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=10 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+60 live_bytes=+52 gc_bytes_age=+1900 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+95
 >> put v=b t=B k=k5
+put: lock acquisition = {k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=20 Replicated Intent []}
 stats: val_bytes=+10 live_bytes=+10
 >> put v=c t=B k=k5
+put: lock acquisition = {k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=30 Replicated Intent [{15 25}]}
 stats: no change
-meta: "k5" -> txn={id=00000000 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=30} ts=5.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k5" -> txn={id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=30} ts=5.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> put v=d t=B k=k5
+put: lock acquisition = {k5 id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=40 Replicated Intent [{5 35}]}
 stats: no change
-meta: "k5" -> txn={id=00000000 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=40} ts=5.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k5" -> txn={id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=40} ts=5.000000000,0 del=false klen=12 vlen=6 ih={{10 /BYTES/a}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> resolve_intent status=COMMITTED t=B k=k5
-stats: val_bytes=-64 live_bytes=-64 intent_count=-1 intent_bytes=-18 separated_intent_count=-1 intent_age=-95
+resolve_intent: "k5" -> resolved key = true
+stats: val_bytes=-64 live_bytes=-64 intent_count=-1 intent_bytes=-18 lock_count=-1 lock_age=-95
 >> at end:
-txn: "B" meta={id=00000000 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0 isn=1
-meta: "k2"/0,0 -> txn={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "B" meta={id=00000002 key="k5" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=40} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0 isn=1
+meta: "k2"/0,0 -> txn={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=20} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k2"/1.000000000,0 -> /BYTES/b
-meta: "k3"/0,0 -> txn={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40} ts=1.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k3"/0,0 -> txn={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=40} ts=1.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k3"/1.000000000,0 -> /<empty>
-meta: "k4"/0,0 -> txn={id=00000000 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=60} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "k4"/0,0 -> txn={id=00000001 key="k2" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=60} ts=1.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "k4"/1.000000000,0 -> /BYTES/c
 data: "k5"/5.000000000,0 -> /BYTES/d
 data: "k5"/3.000000000,0 -> /BYTES/foo
-stats: key_count=4 key_bytes=72 val_count=5 val_bytes=182 live_count=3 live_bytes=167 gc_bytes_age=8533 intent_count=3 intent_bytes=48 separated_intent_count=3 intent_age=297
+stats: key_count=4 key_bytes=72 val_count=5 val_bytes=182 live_count=3 live_bytes=167 gc_bytes_age=8533 intent_count=3 intent_bytes=48 lock_count=3 lock_age=297

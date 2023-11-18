@@ -79,6 +79,7 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms'`)
 
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
@@ -299,8 +300,9 @@ func TestSQLWatcherMultiple(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	ts := tc.Server(0 /* idx */)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	sdb := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+	sdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(

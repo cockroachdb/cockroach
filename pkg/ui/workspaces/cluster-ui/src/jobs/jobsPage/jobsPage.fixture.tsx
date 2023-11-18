@@ -127,7 +127,7 @@ const runningWithMessageRemainingJobFixture = {
 export const retryRunningJobFixture = {
   ...defaultJobProperties,
   id: new Long(3390625793, 70312826),
-  type: "STREAM INGESTION",
+  type: "REPLICATION STREAM INGESTION",
   description: "GC for DROP TABLE havent_started_running_2",
   status: "retry-running",
   fraction_completed: 0,
@@ -156,7 +156,7 @@ const retryRunningWithMessageJobFixture = {
 const retryRunningWithRemainingJobFixture = {
   ...defaultJobProperties,
   id: new Long(3390625793, 70312826),
-  type: "STREAM INGESTION",
+  type: "REPLICATION STREAM INGESTION",
   description:
     "RESTORE DATABASE backup_database_name FROM 'your_backup_location';",
   status: "retry-running",

@@ -29,6 +29,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvpb";
 import "errorspb/errors.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
+import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -263,6 +264,12 @@ message TransactionRetryError {
   // TODO(davidh): Remove in 23.2
   optional string extra_msg = 2 [(gogoproto.nullable) = false];
   optional string extra_msg_redactable = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+  // The conflicting transaction's TxnMeta. This is bubbled up from a
+  // RefreshFailedError. This field is only set if the retry error is
+  // constructed in response to a RefreshFailedError. In all other cases, or if
+  // the RefreshFailedError does not contain conflicting transaction
+  // information, this field is unset.
+  optional storage.enginepb.TxnMeta conflicting_txn = 4;
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -290,31 +297,51 @@ message TransactionStatusError {
   optional string msg_redactable = 3 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
 }
 
-// A WriteIntentError indicates that one or more write intents belonging
-// to another transaction were encountered, leading to a read/write or
-// write/write conflict. The keys at which the intents were encountered
-// are set, as are the txn metas for the intents' transactions.
+// A LockConflictError indicates that one or more locks belonging to
+// another transaction were encountered, leading to a read/write or
+// write/write lock conflict which prevented kvserver-local request
+// evaluation from completing. The keys at which the locks were
+// encountered are set, as are the txn metas for the locks'
+// transactions.
 //
-// WriteIntentErrors are used at two different levels of the system. In
-// both cases, they have the same meaning — that an intent or lock (an
-// intent is a form of replicated lock) is preventing an operation from
-// completing.
+// LockConflictErrors are returned from MVCC during request evaluation
+// when a request finds a conflicting lock. A LockConflictError is
+// propagated up through the Replica to the corresponding lock table and
+// passed to its AddDiscoveredLock method. This informs the lock table
+// about the lock(s) and allows the request to handle the conflicts
+// through a combination of waiting and pushing in the concurrency
+// manager. See concurrency_control.go for an explanation and diagram of
+// the flow.
 //
-// First, they are returned from MVCC during request evaluation when a
-// request finds a conflicting intent. A WriteIntentError is propagated
-// up through the Replica to the corresponding lock table and passed to
-// its AddDiscoveredLock method. This informs the lock table about the
-// intent(s) and allows the request to handle the conflicts through a
-// combination of waiting and pushing in the concurrency manager. See
-// concurrency_control.go for an explanation and diagram of the flow.
+// Unlike WriteIntentError, LockConflictError is never returned from the
+// kvserver. Instead, it is only used internally by concurrency control.
+message LockConflictError {
+  repeated roachpb.Lock locks = 1 [(gogoproto.nullable) = false];
+  reserved 2;
+  // The sequence of the lease that the operation which hit this error was
+  // operating under. Used on the server to avoid adding discovered locks
+  // which were discovered under old leases to the lock table.
+  optional int64 lease_sequence = 3 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
+  reserved 4;
+}
+
+// A WriteIntentError indicates that one or more locks belonging to
+// another transaction were encountered, leading to a read/write or
+// write/write lock conflict which prevented the kvserver from handling
+// a request and returning a response to the kvclient. The keys at which
+// the locks were encountered are set, as are the txn metas for the
+// locks' transactions.
 //
-// Second, WriteIntentErrors are returned from the concurrency manager
-// for intents/locks that conflict with a request and are not handled.
-// This is typically because the request was configured with an Error
-// wait policy instead of a Block wait policy, so it is opting to fail
-// fast on conflicting locks instead of waiting for a lock to be
-// released. These errors make their way back up from KV to SQL, where
-// they are converted to a LockNotAvailable error.
+// WriteIntentErrors are returned from the concurrency manager to the
+// kvclient for intents/locks that conflict with a request and are not
+// handled by the kvserver. This is typically because the request was
+// configured with an Error wait policy instead of a Block wait policy,
+// so it is opting to fail fast on conflicting locks instead of waiting
+// for a lock to be released. Alternatively, the error may be because of
+// a lock timeout or a lock wait-queue length limit. These errors make
+// their way back up from KV to SQL, where they are converted to a
+// LockNotAvailable error.
 //
 // Note that the KV client is free to send more requests after a
 // WriteIntentError. This is not generally allowed after other errors
@@ -323,17 +350,17 @@ message TransactionStatusError {
 // been written). WriteIntentError is a special case as we ensure
 // there's no ambiguity; the error carries a WriteTimestamp that's the
 // upper bound of the timestamps intents were written at.
+//
+// NOTE: the name of the error refers to "intents", but the error is
+// returned for any conflicting lock, regardless of locking strength.
+// The naming is an artifact of a time when intents were the only form
+// of lock, and renames have proven difficult (see #113271). One day
+// we'll be smart enough to pull it off.
 message WriteIntentError {
-  repeated roachpb.Intent intents = 1 [(gogoproto.nullable) = false];
-  reserved 2;
-  // The sequence of the lease that the operation which hit this error was
-  // operating under. Used on the server to avoid adding discovered locks
-  // which were discovered under old leases to the lock table.
-  optional int64 lease_sequence = 3 [(gogoproto.nullable) = false,
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseSequence"];
+  repeated roachpb.Lock locks = 1 [(gogoproto.nullable) = false];
+  reserved 2, 3;
   enum Reason {
-    // The reason for the WriteIntentError is unspecified. This will
-    // always be the case for errors returned from MVCC.
+    // The reason for the WriteIntentError is unspecified.
     REASON_UNSPECIFIED = 0;
     // The request used an Error wait policy because it did not want to
     // wait on locks and it encountered a conflicting lock.
@@ -345,9 +372,7 @@ message WriteIntentError {
     // already equal to or exceeding the configured maximum.
     REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED = 3;
   }
-  // The reason for the error. Applies to WriteIntentErrors that are
-  // returned from the concurrency manager (the second use described
-  // above).
+  // The reason for the error.
   optional Reason reason = 4 [(gogoproto.nullable) = false];
 }
 
@@ -474,22 +499,59 @@ message TransactionRetryWithProtoRefreshError {
   // TODO(davidh): Remove in 23.2
   optional string msg = 1 [(gogoproto.nullable) = false];
 
-  // The ID of the transaction being restarted. The client is supposed to check
-  // this against the ID of its transaction and make sure the retryable error
-  // is meant for its level and didn't escape from some inner transaction.
-  optional bytes txn_id = 2 [
+  // The ID of the transaction being retried. The client can compare this ID
+  // that of the new transaction (below) to check whether the transaction was
+  // aborted and will restart from the beginning with a new identity.
+  optional bytes prev_txn_id = 2 [
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
-    (gogoproto.customname) = "TxnID",
+    (gogoproto.customname) = "PrevTxnID",
+    (gogoproto.nullable) = false];
+
+  // The epoch of the transaction being retried. The client can compare this
+  // epoch that of the new transaction (below) to check whether the transaction
+  // is being restarted from the beginning with all writes discarded.
+  optional int32 prev_txn_epoch = 5 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/enginepb.TxnEpoch",
     (gogoproto.nullable) = false];
 
   // The Transaction that should be used by next attempts. Depending on the
-  // original cause of this method, this can either be the same Transaction as
-  // before, but with an incremented epoch and timestamp, or a completely new
-  // Transaction.
-  optional roachpb.Transaction transaction = 3 [(gogoproto.nullable) = false];
+  // original cause of this method and the isolation level of the transaction,
+  // this can be:
+  //
+  // - the same Transaction as before (same ID), but with an incremented epoch
+  // and read timestamp. The transaction must start again from the beginning,
+  // with all writes discarded. This case applies to isolation levels that do
+  // not use a per-statement read snapshot, and must therefore start from the
+  // beginning if the read snapshot must be adjusted.
+  //
+  // - the same Transaction as before (same ID) with the same epoch as before,
+  // but with an incremented read timestamp. The transaction can proceed without
+  // the loss of any of its writes, although clients may employ savepoints to
+  // selectively discard the writes from the read snapshot scope (i.e. the
+  // statement) being retried. This case applies to isolation levels that use a
+  // per-statement read snapshot, and can therefore retry select portions of the
+  // transaction if the read snapshot must be adjusted, without starting from
+  // the beginning.
+  //
+  // - a completely new Transaction (different ID). The transaction must start
+  // again from the beginning with all writes discarded and with a new identity.
+  // This case applies to all isolation levels. Transaction aborts are typically
+  // associated with locking deadlocks where the previous transaction's locks
+  // were discarded to break a deadlock between transactions and also with cases
+  // where the kv layer determines that it has lost information cannot process a
+  // certain transaction.
+  optional roachpb.Transaction next_transaction = 3 [(gogoproto.nullable) = false];
 
   // A user-readable message containing redaction markers.
   optional string msg_redactable = 4 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
+
+  // The conflicting transaction's TxnMeta. This field is bubbled up from a
+  // RefreshFailedError. This field is only set when a
+  // TransactionRetryWithProtoRefreshError is constructed in response to a
+  // RefreshFailedError which includes information about the conflicting
+  // transaction that caused the refresh to fail. In all other cases this field
+  // is unset
+  optional storage.enginepb.TxnMeta conflicting_txn = 6;
 }
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
@@ -531,7 +593,7 @@ message MVCCHistoryMutationError {
 // not there.
 message IntentMissingError {
   // The non-matching intent that was found at that key, if any.
-  optional roachpb.Intent wrong_intent = 1;
+  optional roachpb.Lock wrong_intent = 1;
   // The key where the intent was expected.
   optional bytes key = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.Key"];
 }
@@ -548,6 +610,10 @@ message MergeInProgressError {
 // because of a range lifecycle event, and can be retried.
 message RangeFeedRetryError {
   // Reason specifies what caused the error.
+  // NB: reason names should be stable because they are
+  // exposed as rangefeed error counters.
+  // NB: *never* delete enum values; if retry reason needs to be retired,
+  // reserve reason value.
   enum Reason {
     // The replica was removed from its store.
     REASON_REPLICA_REMOVED = 0;
@@ -620,52 +686,12 @@ message RefreshFailedError {
 
   // The timestamp the key was last updated.
   optional util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
-}
-
-// ErrorDetail is a union type containing all available errors.
-message ErrorDetail {
-  reserved 15, 19, 20, 21, 22, 23, 24, 25, 29, 30, 33;
-  oneof value {
-    NotLeaseHolderError not_lease_holder = 1;
-    RangeNotFoundError range_not_found = 2;
-    RangeKeyMismatchError range_key_mismatch = 3;
-    ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
-    TransactionAbortedError transaction_aborted = 5;
-    TransactionPushError transaction_push = 6;
-    TransactionRetryError transaction_retry = 7;
-    TransactionStatusError transaction_status = 8;
-    WriteIntentError write_intent = 9;
-    WriteTooOldError write_too_old = 10;
-    OpRequiresTxnError op_requires_txn = 11;
-    ConditionFailedError condition_failed = 12;
-    LeaseRejectedError lease_rejected = 13;
-    NodeUnavailableError node_unavailable = 14;
-    // TODO(kaneda): Following three are added to preserve the type when
-    // converting Go errors from/to proto Errors. Revisit this design.
-    RaftGroupDeletedError raft_group_deleted = 16;
-    ReplicaCorruptionError replica_corruption = 17;
-    ReplicaTooOldError replica_too_old = 18;
-    AmbiguousResultError ambiguous_result = 26;
-    StoreNotFoundError store_not_found = 27;
-    // The following three are ErrorDetails (and proto messages) because they
-    // needs to be communicated from the TxnCoordSender and Txn to the upper
-    // layers through the Sender interface.
-    TransactionRetryWithProtoRefreshError transaction_retry_with_proto_refresh = 28;
-    IntegerOverflowError integer_overflow = 31;
-    UnsupportedRequestError unsupported_request = 32;
-    BatchTimestampBeforeGCError timestamp_before = 34;
-    TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
-    IntentMissingError intent_missing = 36;
-    MergeInProgressError merge_in_progress = 37;
-    RangeFeedRetryError rangefeed_retry = 38;
-    IndeterminateCommitError indeterminate_commit = 39;
-    InvalidLeaseError invalid_lease_error = 40;
-    OptimisticEvalConflictsError optimistic_eval_conflicts = 41;
-    MinTimestampBoundUnsatisfiableError min_timestamp_bound_unsatisfiable = 42;
-    RefreshFailedError refresh_failed_error = 43;
-    MVCCHistoryMutationError mvcc_history_mutation = 44
-      [(gogoproto.customname) = "MVCCHistoryMutation"];
-  }
+  
+  // The conflicting transaction's TxnMeta, if available. This field is used
+  // when the refresh fails with REASON_INTENT and is bubbled up for
+  // observability purposes to track the conflicting transaction. This field is
+  // not set if the refresh fails because of REASON_COMMITTED_VALUE.
+  optional storage.enginepb.TxnMeta conflicting_txn = 4;
 }
 
 // TransactionRestart indicates how an error should be handled in a

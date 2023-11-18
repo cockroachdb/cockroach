@@ -176,7 +176,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test hangs with test tenant. More investigation is required.
 			// Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				TenantTestingKnobs: &sql.TenantTestingKnobs{
 					// Needed to pin down the ID of the replication target.
@@ -199,6 +199,9 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	params.ServerArgs.Knobs.Streaming = &sql.StreamingTestingKnobs{
+		SkipSpanConfigReplication: true,
+	}
 
 	numNodes := 3
 	tc := testcluster.StartTestCluster(t, numNodes, params)
@@ -217,9 +220,9 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	// Attempt to run the ingestion job without enabling the experimental setting.
 	_, err = conn.Exec(query)
-	require.True(t, testutils.IsError(err, "cross cluster replication is disabled"))
+	require.True(t, testutils.IsError(err, "physical replication is disabled"))
 
-	_, err = conn.Exec(`SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
+	_, err = conn.Exec(`SET CLUSTER SETTING physical_replication.enabled = true;`)
 	require.NoError(t, err)
 
 	_, err = conn.Exec(query)
@@ -276,9 +279,9 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tenantPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(uint64(newTenantID)))
-	t.Logf("counting kvs in span %v", tenantPrefix)
-	maxIngestedTS := assertExactlyEqualKVs(t, tc, streamValidator, revertRangeTargetTime, tenantPrefix)
+	tenantSpan := keys.MakeTenantSpan(roachpb.MustMakeTenantID(uint64(newTenantID)))
+	t.Logf("counting kvs in span %v", tenantSpan)
+	maxIngestedTS := assertExactlyEqualKVs(t, tc, streamValidator, revertRangeTargetTime, tenantSpan)
 	// Sanity check that the max ts in the store is less than the revert range
 	// target timestamp.
 	require.True(t, maxIngestedTS.LessEq(revertRangeTargetTime))
@@ -293,18 +296,20 @@ func assertExactlyEqualKVs(
 	tc *testcluster.TestCluster,
 	streamValidator *streamClientValidator,
 	frontierTimestamp hlc.Timestamp,
-	tenantPrefix roachpb.Key,
+	tenantSpan roachpb.Span,
 ) hlc.Timestamp {
 	// Iterate over the store.
 	store := tc.GetFirstStoreFromServer(t, 0)
-	it := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		LowerBound: tenantPrefix,
-		UpperBound: tenantPrefix.PrefixEnd(),
+	it, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound: tenantSpan.Key,
+		UpperBound: tenantSpan.EndKey,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer it.Close()
 	var prevKey roachpb.Key
 	var valueTimestampTuples []roachpb.KeyValue
-	var err error
 	var maxKVTimestampSeen hlc.Timestamp
 	var matchingKVs int
 	for it.SeekGE(storage.MVCCKey{}); ; it.Next() {

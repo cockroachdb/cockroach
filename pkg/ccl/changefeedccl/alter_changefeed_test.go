@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -142,7 +143,7 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 		})
 
 		// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
-		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink = true")
+		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true")
 		withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t,
 				"user user1 does not have USAGE privilege on external_connection second",
@@ -155,7 +156,7 @@ func TestAlterChangefeedAddTargetPrivileges(t *testing.T) {
 				fmt.Sprintf("ALTER CHANGEFEED %d ADD table_b, table_c set sink='external://second'", jobID),
 			)
 		})
-		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink = false")
+		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = false")
 	})
 
 	// TODO(#94757): remove CONTROLCHANGEFEED entirely
@@ -664,19 +665,22 @@ func TestAlterChangefeedPersistSinkURI(t *testing.T) {
 
 	const unredactedSinkURI = "null://blah?AWS_ACCESS_KEY_ID=the_secret"
 
-	s, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
-	registry := s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	srv, rawSQLDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	s := srv.ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
 
 	query := `CREATE TABLE foo (a string)`
 	sqlDB.Exec(t, query)
 
 	query = `CREATE TABLE bar (b string)`
-	sqlDB.Exec(t, query)
-
-	query = `SET CLUSTER SETTING kv.rangefeed.enabled = true`
 	sqlDB.Exec(t, query)
 
 	var changefeedID jobspb.JobID
@@ -1170,9 +1174,11 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		require.NoError(t, jobFeed.Pause())
 
 		var maxCheckpointSize int64 = 100 << 20
-		// Checkpoint progress frequently, and set the checkpoint size limit.
+		// Ensure that checkpoints happen every time by setting a large checkpoint size.
+		// Because setting 0 for the FrontierCheckpointFrequency disables checkpointing,
+		// setting 1 nanosecond is the smallest possible value.
 		changefeedbase.FrontierCheckpointFrequency.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+			context.Background(), &s.Server.ClusterSettings().SV, 1*time.Nanosecond)
 		changefeedbase.FrontierCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
 
@@ -1193,10 +1199,12 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 			if initialCheckpoint.Len() > 0 {
 				return true, nil
 			}
+			t.Logf("span %s %s %s", r.Span.String(), r.BoundaryType.String(), r.Timestamp.String())
 
 			// A backfill begins when the associated resolved event arrives, which has a
 			// timestamp such that all backfill spans have a timestamp of timestamp.Next().
 			if r.BoundaryType == expectedBoundaryType {
+				t.Logf("setting boundary timestamp %s", r.Timestamp.String())
 				backfillTimestamp = r.Timestamp
 				return false, nil
 			}
@@ -1206,18 +1214,24 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
 				initialCheckpoint.Add(p.Checkpoint.Spans...)
 				atomic.StoreInt32(&foundCheckpoint, 1)
+				t.Logf("found checkpoint %v", p.Checkpoint.Spans)
 			}
 
 			// Filter non-backfill-related spans
 			if !r.Timestamp.Equal(backfillTimestamp.Next()) {
+				skip := !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next()))
+				t.Logf("handling span %s: %t", r.Span.String(), skip)
 				// Only allow spans prior to a valid backfillTimestamp to avoid moving past the backfill
-				return !(backfillTimestamp.IsEmpty() || r.Timestamp.LessEq(backfillTimestamp.Next())), nil
+				return skip, nil
 			}
 
 			// Only allow resolving if we definitely won't have a completely resolved table
 			if !r.Span.Equal(tableSpan) && haveGaps {
-				return rnd.Intn(10) > 7, nil
+				skip := rnd.Intn(10) > 7
+				t.Logf("handling span %s: %t", r.Span.String(), skip)
+				return skip, nil
 			}
+			t.Logf("skipping span %s", r.Span.String())
 			haveGaps = true
 			return true, nil
 		}

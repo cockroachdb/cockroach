@@ -10,20 +10,48 @@
 
 package plpgsqltree
 
-type PLpgSQLExceptionBlock struct {
-	SqlStateVarNo int
-	SqlErrmNo     int
-	ExecList      []*PLpgSQLException
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
+
+type Exception struct {
+	StatementImpl
+	Conditions []Condition
+	Action     []Statement
 }
 
-type PLpgSQLException struct {
-	LineNo    int
-	Condition *PLpgSQLCondition
-	Action    []PLpgSQLStatement
+func (s *Exception) Format(ctx *tree.FmtCtx) {
+	ctx.WriteString("WHEN ")
+	for i, cond := range s.Conditions {
+		if i > 0 {
+			ctx.WriteString(" OR ")
+		}
+		if cond.SqlErrState != "" {
+			ctx.WriteString(fmt.Sprintf("SQLSTATE '%s'", cond.SqlErrState))
+		} else {
+			ctx.WriteString(cond.SqlErrName)
+		}
+	}
+	ctx.WriteString(" THEN\n")
+	for _, stmt := range s.Action {
+		stmt.Format(ctx)
+	}
 }
 
-type PLpgSQLCondition struct {
-	SqlErrState int
-	Name        string // TODO postgres says it's helpful for debugging.
-	Next        *PLpgSQLCondition
+func (s *Exception) PlpgSQLStatementTag() string {
+	return "proc_exception"
+}
+
+func (s *Exception) WalkStmt(visitor StatementVisitor) {
+	visitor.Visit(s)
+	for _, stmt := range s.Action {
+		stmt.WalkStmt(visitor)
+	}
+}
+
+type Condition struct {
+	SqlErrState string
+	SqlErrName  string
 }

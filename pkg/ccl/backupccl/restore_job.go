@@ -61,10 +61,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -77,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -84,15 +84,8 @@ import (
 // tables we process in a single txn when restoring their table statistics.
 const restoreStatsInsertBatchSize = 10
 
-var useSimpleImportSpans = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"bulkio.restore.use_simple_import_spans",
-	"if set to true, restore will generate its import spans using the makeSimpleImportSpans algorithm",
-	false,
-)
-
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.restore.insert_stats_workers",
 	"number of concurrent workers that will restore backed up table statistics",
 	5,
@@ -157,7 +150,7 @@ func restoreWithRetry(
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
-	job *jobs.Job,
+	resumer *restoreResumer,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (roachpb.RowCount, error) {
@@ -184,7 +177,7 @@ func restoreWithRetry(
 				backupLocalityInfo,
 				endTime,
 				dataToRestore,
-				job,
+				resumer,
 				encryption,
 				kmsEnv,
 			)
@@ -261,7 +254,7 @@ func restore(
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
-	job *jobs.Job,
+	resumer *restoreResumer,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (roachpb.RowCount, error) {
@@ -279,6 +272,7 @@ func restore(
 	// If we've already migrated some of the system tables we're about to
 	// restore, this implies that a previous attempt restored all of this data.
 	// We want to avoid restoring again since we'll be shadowing migrated keys.
+	job := resumer.job
 	details := job.Details().(jobspb.RestoreDetails)
 	if alreadyMigrated := checkForMigratedData(details, dataToRestore); alreadyMigrated {
 		return emptyRowCount, nil
@@ -309,15 +303,22 @@ func restore(
 		return emptyRowCount, err
 	}
 
-	progressTracker.mu.Lock()
-	filter, err := makeSpanCoveringFilter(
-		progressTracker.mu.checkpointFrontier,
-		job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
-		introducedSpanFrontier,
-		targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV),
-		progressTracker.useFrontier)
-	progressTracker.mu.Unlock()
-	if err != nil {
+	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
+	if details.ExperimentalOnline {
+		targetSize = targetOnlineRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
+	}
+
+	var filter spanCoveringFilter
+	if filter, err = func() (spanCoveringFilter, error) {
+		progressTracker.mu.Lock()
+		defer progressTracker.mu.Unlock()
+		return makeSpanCoveringFilter(
+			progressTracker.mu.checkpointFrontier,
+			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
+			introducedSpanFrontier,
+			targetSize,
+			progressTracker.useFrontier)
+	}(); err != nil {
 		return roachpb.RowCount{}, err
 	}
 
@@ -327,8 +328,6 @@ func restore(
 	if err != nil {
 		return roachpb.RowCount{}, err
 	}
-
-	simpleImportSpans := useSimpleImportSpans.Get(&execCtx.ExecCfg().Settings.SV)
 
 	countSpansCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
@@ -340,7 +339,6 @@ func restore(
 			layerToIterFactory,
 			backupLocalityMap,
 			filter,
-			simpleImportSpans,
 			spanCh,
 		)
 	}
@@ -402,6 +400,28 @@ func restore(
 	}
 	tasks = append(tasks, generativeCheckpointLoop)
 
+	// tracingAggLoop is responsible for draining the channel on which processors
+	// in the DistSQL flow will send back their tracing aggregator stats. These
+	// stats will be persisted to the job_info table whenever the job is told to
+	// collect a profile.
+	tracingAggCh := make(chan *execinfrapb.TracingAggregatorEvents)
+	tracingAggLoop := func(ctx context.Context) error {
+		for agg := range tracingAggCh {
+			componentID := execinfrapb.ComponentID{
+				FlowID:        agg.FlowID,
+				SQLInstanceID: agg.SQLInstanceID,
+			}
+
+			// Update the running aggregate of the component with the latest received
+			// aggregate.
+			resumer.mu.Lock()
+			resumer.mu.perNodeAggregatorStats[componentID] = agg.Events
+			resumer.mu.Unlock()
+		}
+		return nil
+	}
+	tasks = append(tasks, tracingAggLoop)
+
 	runRestore := func(ctx context.Context) error {
 		if details.ExperimentalOnline {
 			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
@@ -410,33 +430,32 @@ func restore(
 				execCtx,
 				job,
 				dataToRestore,
-				endTime,
 				encryption,
-				kmsEnv,
 				details.URIs,
 				backupLocalityInfo,
-				filter,
-				numImportSpans,
-				simpleImportSpans,
 				progCh,
+				tracingAggCh,
 				genSpan,
 			)
+		}
+		md := restoreJobMetadata{
+			jobID:              job.ID(),
+			dataToRestore:      dataToRestore,
+			restoreTime:        endTime,
+			encryption:         encryption,
+			kmsEnv:             kmsEnv,
+			uris:               details.URIs,
+			backupLocalityInfo: backupLocalityInfo,
+			spanFilter:         filter,
+			numImportSpans:     numImportSpans,
+			execLocality:       details.ExecutionLocality,
 		}
 		return distRestore(
 			ctx,
 			execCtx,
-			job.ID(),
-			dataToRestore,
-			endTime,
-			encryption,
-			kmsEnv,
-			details.URIs,
-			backupLocalityInfo,
-			filter,
-			numImportSpans,
-			simpleImportSpans,
-			details.ExecutionLocality,
+			md,
 			progCh,
+			tracingAggCh,
 		)
 	}
 	tasks = append(tasks, runRestore)
@@ -523,6 +542,14 @@ type restoreResumer struct {
 	settings     *cluster.Settings
 	execCfg      *sql.ExecutorConfig
 	restoreStats roachpb.RowCount
+
+	mu struct {
+		syncutil.Mutex
+		// perNodeAggregatorStats is a per component running aggregate of trace
+		// driven AggregatorStats pushed backed to the resumer from all the
+		// processors running the backup.
+		perNodeAggregatorStats bulkutil.ComponentAggregatorStats
+	}
 
 	testingKnobs struct {
 		// beforePublishingDescriptors is called right before publishing
@@ -1014,6 +1041,17 @@ func createImportingDescriptors(
 		typesByID[types[i].GetID()] = types[i]
 	}
 
+	if details.RemoveRegions {
+		// Can't restore multi-region tables into non-multi-region database
+		for _, t := range tables {
+			t.TableDesc().LocalityConfig = nil
+		}
+
+		for _, d := range databases {
+			d.DatabaseDesc().RegionConfig = nil
+		}
+	}
+
 	// Collect all databases, for doing lookups of whether a database is new when
 	// updating schema references later on.
 	dbsByID := make(map[descpb.ID]catalog.DatabaseDescriptor)
@@ -1038,6 +1076,17 @@ func createImportingDescriptors(
 				if regionTypeDesc == nil {
 					continue
 				}
+
+				// When stripping localities, there is no longer a need for a region config. In addition,
+				// we need to make sure that multi-region databases no longer get tagged as such - meaning
+				// that we want to change the TypeDescriptor_MULTIREGION_ENUM to a normal enum. We `continue`
+				// to skip the multi-region work below.
+				if details.RemoveRegions {
+					t.TypeDesc().Kind = descpb.TypeDescriptor_ENUM
+					t.TypeDesc().RegionConfig = nil
+					continue
+				}
+
 				// Check to see if we've found more than one multi-region enum on any
 				// given database.
 				if id, ok := mrEnumsFound[regionTypeDesc.GetParentID()]; ok {
@@ -1064,6 +1113,7 @@ func createImportingDescriptors(
 						var regionNames []catpb.RegionName
 						_ = regionTypeDesc.ForEachPublicRegion(func(name catpb.RegionName) error {
 							regionNames = append(regionNames, name)
+
 							return nil
 						})
 						regionConfig := multiregion.MakeRegionConfig(
@@ -1636,7 +1686,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// the first place, as a special case.
 		publishDescriptors := func(ctx context.Context, txn descs.Txn) error {
 			return r.publishDescriptors(
-				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, nil,
+				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, nil, p.ExecCfg().NodeInfo.LogicalClusterID(),
 			)
 		}
 		if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -1688,7 +1738,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			details.BackupLocalityInfo,
 			details.EndTime,
 			preData,
-			r.job,
+			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -1724,7 +1774,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			details.BackupLocalityInfo,
 			details.EndTime,
 			preValidateData,
-			r.job,
+			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -1745,7 +1795,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			details.BackupLocalityInfo,
 			details.EndTime,
 			mainData,
-			r.job,
+			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -1778,7 +1828,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	publishDescriptors := func(ctx context.Context, txn descs.Txn) (err error) {
 		return r.publishDescriptors(
 			ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(),
-			details, devalidateIndexes,
+			details, devalidateIndexes, p.ExecCfg().NodeInfo.LogicalClusterID(),
 		)
 	}
 	if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -1891,10 +1941,10 @@ func (r *restoreResumer) validateJobIsResumable(execConfig *sql.ExecutorConfig) 
 	// the CreationClusterVersion may still be equal to binaryVersion,
 	// which means the cluster restore will proceed.
 	creationClusterVersion := r.job.Payload().CreationClusterVersion
-	binaryVersion := execConfig.Settings.Version.BinaryVersion()
+	latestVersion := execConfig.Settings.Version.LatestVersion()
 	isClusterRestore := details.DescriptorCoverage == tree.AllDescriptors
-	if isClusterRestore && creationClusterVersion.Less(binaryVersion) {
-		return clusterRestoreDuringUpgradeErr(creationClusterVersion, binaryVersion)
+	if isClusterRestore && creationClusterVersion.Less(latestVersion) {
+		return clusterRestoreDuringUpgradeErr(creationClusterVersion, latestVersion)
 	}
 	return nil
 }
@@ -2161,6 +2211,7 @@ func (r *restoreResumer) publishDescriptors(
 	user username.SQLUsername,
 	details jobspb.RestoreDetails,
 	devalidateIndexes map[descpb.ID][]descpb.IndexID,
+	clusterID uuid.UUID,
 ) (err error) {
 	if details.DescriptorsPublished {
 		return nil
@@ -2228,6 +2279,7 @@ func (r *restoreResumer) publishDescriptors(
 				return err
 			}
 		}
+
 		version := r.settings.Version.ActiveVersion(ctx)
 		if err := mutTable.AllocateIDs(ctx, version); err != nil {
 			return err
@@ -2240,6 +2292,8 @@ func (r *restoreResumer) publishDescriptors(
 				jobs.ScheduledJobTxn(txn),
 				user,
 				mutTable,
+				clusterID,
+				version,
 			)
 			if err != nil {
 				return err
@@ -2483,6 +2537,20 @@ func (r *restoreResumer) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile implements jobs.Resumer interface
+func (r *restoreResumer) CollectProfile(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
+
+	var aggStatsCopy bulkutil.ComponentAggregatorStats
+	func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		aggStatsCopy = r.mu.perNodeAggregatorStats.DeepCopy()
+	}()
+	return bulkutil.FlushTracingAggregatorStats(ctx, r.job.ID(),
+		p.ExecCfg().InternalDB, aggStatsCopy, p.ExecCfg().Settings.Version)
+}
+
 // dropDescriptors implements the OnFailOrCancel logic.
 // TODO (lucy): If the descriptors have already been published, we need to queue
 // drop jobs for all the descriptors.
@@ -2518,7 +2586,7 @@ func (r *restoreResumer) dropDescriptors(
 		if !details.DescriptorsPublished {
 			if got, exp := mutableTables[i].Version, details.TableDescs[i].Version; got != exp {
 				log.Errorf(ctx, "version changed for restored descriptor %d before "+
-					"drop: got %d, expected %d", mutableTables[i].GetVersion(), got, exp)
+					"drop: got %d, expected %d", mutableTables[i].GetID(), got, exp)
 			}
 		}
 
@@ -2965,13 +3033,9 @@ func (r *restoreResumer) restoreSystemUsers(
 				return err
 			}
 
-			roleMembersHasIDColumns := r.execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1RoleMembersTableHasIDColumns)
 			insertRoleMember := `
 INSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id)
 VALUES ($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $1), (SELECT user_id FROM system.users WHERE username = $2))`
-			if !roleMembersHasIDColumns {
-				insertRoleMember = `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3)`
-			}
 
 			for _, roleMember := range roleMembers {
 				member := tree.MustBeDString(roleMember[1])
@@ -3145,185 +3209,18 @@ func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context) error {
 	return nil
 }
 
-var onlineRestoreGate = envutil.EnvOrDefaultBool("COCKROACH_UNSAFE_RESTORE", false)
-
-// sendAddRemoteSSTs is a stubbed out, very simplisitic version of restore used
-// to test out ingesting "remote" SSTs. It will be replaced with a real distsql
-// plan and processors in the future.
-func sendAddRemoteSSTs(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	job *jobs.Job,
-	dataToRestore restorationData,
-	restoreTime hlc.Timestamp,
-	encryption *jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
-	uris []string,
-	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
-	spanFilter spanCoveringFilter,
-	numImportSpans int,
-	useSimpleImportSpans bool,
-	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
-) error {
-	defer close(progCh)
-
-	if !onlineRestoreGate {
-		return errors.AssertionFailedf("experimental restore mode not supported")
-	}
-
-	if encryption != nil {
-		return errors.AssertionFailedf("encryption not supported with online restore")
-	}
-	if useSimpleImportSpans {
-		return errors.AssertionFailedf("useSimpleImportSpans is not supported with online restore")
-	}
-	if len(uris) > 1 {
-		return errors.AssertionFailedf("online restore can only restore data from a full backup")
-	}
-
-	restoreSpanEntriesCh := make(chan execinfrapb.RestoreSpanEntry, 1)
-
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
-		return genSpan(ctx, restoreSpanEntriesCh)
-	})
-	remainingBytesInTargetRange := int64(512 << 20)
-
-	// We lost the string URIs for the backup storage locations very early in the
-	// process of planning the restore, when the backups were resolved, and the
-	// parsed proto versions -- which we usually prefer -- were attached to the
-	// backup manifests and the individual files during span generation. However
-	// for telling pebble the locations of the files we need those raw string URIs
-	// again. We could plumb them side-by-side with the proto versions, but for
-	// now we'll just reverse engineer them: we'll make a map that has the proto
-	// version of every URI we might have parsed -- all the default backup URIs
-	// and any locality bucket URIs -- to the raw URI that produces that proto.
-	// We can then look in this map using the proto attached to each file to find
-	// the URI for that file.
-	// TODO(dt/butler): should we plumb the original string instead?
-	urisForDirs := make(map[string]string)
-	for _, u := range uris {
-		dir, err := cloud.ExternalStorageConfFromURI(u, username.SQLUsername{})
-		if err != nil {
-			return err
-		}
-		urisForDirs[dir.String()] = u
-	}
-	for _, loc := range backupLocalityInfo {
-		for _, u := range loc.URIsByOriginalLocalityKV {
-			dir, err := cloud.ExternalStorageConfFromURI(u, username.SQLUsername{})
-			if err != nil {
-				return err
-			}
-			urisForDirs[dir.String()] = u
-		}
-	}
-
-	openedStorages := make(map[cloudpb.ExternalStorage]cloud.ExternalStorage)
-	defer func() {
-		for _, es := range openedStorages {
-			es.Close()
-		}
-	}()
-
-	for entry := range restoreSpanEntriesCh {
-		for _, file := range entry.Files {
-
-			log.Infof(ctx, "Experimental restore: sending span %s of file %s",
-				file.BackupFileEntrySpan, file.Path)
-
-			restoringSubspan := file.BackupFileEntrySpan.Intersect(entry.Span)
-
-			// NB: Since the restored span is a subset of the BackupFileEntrySpan,
-			// these counts may be an overestimate of what actually gets restored.
-			counts := file.BackupFileEntryCounts
-
-			if counts.DataSize > remainingBytesInTargetRange {
-				log.Infof(ctx, "Experimental restore: need to split since %d > %d",
-					counts.DataSize, remainingBytesInTargetRange,
-				)
-				expiration := execCtx.ExecCfg().Clock.Now().AddDuration(time.Hour)
-				if err := execCtx.ExecCfg().DB.AdminSplit(ctx, restoringSubspan.Key, expiration); err != nil {
-					log.Warningf(ctx, "failed to split during experimental restore: %v", err)
-				}
-				if _, err := execCtx.ExecCfg().DB.AdminScatter(ctx, restoringSubspan.Key, 4<<20); err != nil {
-					log.Warningf(ctx, "failed to scatter during experimental restore: %v", err)
-				}
-			}
-
-			if file.BackingFileSize == 0 {
-				if _, ok := openedStorages[file.Dir]; !ok {
-					es, err := execCtx.ExecCfg().DistSQLSrv.ExternalStorage(ctx, file.Dir)
-					if err != nil {
-						return err
-					}
-					openedStorages[file.Dir] = es
-				}
-
-				sz, err := openedStorages[file.Dir].Size(ctx, file.Path)
-				if err != nil {
-					return err
-				}
-				file.BackingFileSize = uint64(sz)
-			}
-			uri, ok := urisForDirs[file.Dir.String()]
-			if !ok {
-				return errors.AssertionFailedf("URI not found for %s", file.Dir.String())
-			}
-
-			loc := kvpb.AddSSTableRequest_RemoteFile{
-				Locator:         uri,
-				Path:            file.Path,
-				BackingFileSize: file.BackingFileSize,
-			}
-			// TODO(dt): see if KV has any better ideas for making these up.
-			fileStats := &enginepb.MVCCStats{
-				ContainsEstimates: 1,
-				KeyBytes:          counts.DataSize / 2,
-				ValBytes:          counts.DataSize / 2,
-				LiveBytes:         counts.DataSize,
-				KeyCount:          counts.Rows + counts.IndexEntries,
-				LiveCount:         counts.Rows + counts.IndexEntries,
-			}
-			var err error
-			_, remainingBytesInTargetRange, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx,
-				restoringSubspan, loc,
-				fileStats)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	downloadSpans := dataToRestore.getSpans()
-
-	log.Infof(ctx, "creating job to track downloads in %d spans", len(downloadSpans))
-	downloadJobRecord := jobs.Record{
-		Description: fmt.Sprintf("Background Data Download for %s", job.Payload().Description),
-		Username:    job.Payload().UsernameProto.Decode(),
-		Details:     jobspb.RestoreDetails{DownloadSpans: downloadSpans},
-		Progress:    jobspb.RestoreProgress{},
-	}
-
-	return execCtx.ExecCfg().InternalDB.DescsTxn(ctx, func(
-		ctx context.Context, txn descs.Txn,
-	) error {
-		_, err := execCtx.ExecCfg().JobRegistry.CreateJobWithTxn(ctx, downloadJobRecord, job.ID()+1, txn)
-		return err
-	})
-}
-
 var _ jobs.Resumer = &restoreResumer{}
 
 func init() {
 	jobs.RegisterConstructor(
 		jobspb.TypeRestore,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-			return &restoreResumer{
+			r := &restoreResumer{
 				job:      job,
 				settings: settings,
 			}
+			r.mu.perNodeAggregatorStats = make(bulkutil.ComponentAggregatorStats)
+			return r
 		},
 		jobs.UsesTenantCostControl,
 	)

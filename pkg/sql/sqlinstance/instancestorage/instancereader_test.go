@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,12 +42,15 @@ func TestReader(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	s := tc.Server(0)
-	tDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
 	// Enable rangefeed for the test.
-	tDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
+
 	setup := func(t *testing.T) (
 		*instancestorage.Storage, *slstorage.FakeStorage, *hlc.Clock, *instancestorage.Reader,
 	) {
@@ -57,8 +60,8 @@ func TestReader(t *testing.T) {
 		tDB.Exec(t, schema)
 		table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), dbName, "sql_instances")
 		slStorage := slstorage.NewFakeStorage()
-		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, table, slStorage, s.ClusterSettings(), s.Clock(), s.RangeFeedFactory().(*rangefeed.Factory), s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
-		reader := instancestorage.NewTestingReader(storage, slStorage, s.Stopper(), s.DB())
+		storage := instancestorage.NewTestingStorage(s.DB(), s.Codec(), table, slStorage, s.ClusterSettings(), s.Clock(), s.RangeFeedFactory().(*rangefeed.Factory), s.SettingsWatcher().(*settingswatcher.SettingsWatcher))
+		reader := instancestorage.NewTestingReader(storage, slStorage, s.AppStopper(), s.DB())
 		return storage, slStorage, s.Clock(), reader
 	}
 

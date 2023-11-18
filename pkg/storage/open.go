@@ -81,16 +81,6 @@ var ForTesting ConfigOption = func(cfg *engineConfig) error {
 	return nil
 }
 
-// ForStickyEngineTesting is similar to ForTesting but leaves separated
-// intents as enabled since we cannot ensure consistency in the test setup
-// between what the KV layer thinks and what the engine does in terms of
-// writing separated intents. Since our optimizations are for the case where
-// we know there are only separated intents, this sidesteps any test issues
-// due to inconsistencies.
-var ForStickyEngineTesting ConfigOption = func(cfg *engineConfig) error {
-	return nil
-}
-
 // Attributes configures the engine's attributes.
 func Attributes(attrs roachpb.Attributes) ConfigOption {
 	return func(cfg *engineConfig) error {
@@ -181,11 +171,14 @@ func BallastSize(size int64) ConfigOption {
 func SharedStorage(sharedStorage cloud.ExternalStorage) ConfigOption {
 	return func(cfg *engineConfig) error {
 		cfg.SharedStorage = sharedStorage
-		// TODO(bilal): Do the format major version ratchet while accounting for
-		// version upgrade finalization. However, seeing as shared storage is
-		// an experimental feature and upgrading from existing stores is not
-		// supported, this is fine.
-		cfg.Opts.FormatMajorVersion = pebble.ExperimentalFormatVirtualSSTables
+		return nil
+	}
+}
+
+// SecondaryCache enables use of a secondary cache to store shared objects.
+func SecondaryCache(size int64) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.Opts.Experimental.SecondaryCacheSizeBytes = size
 		return nil
 	}
 }
@@ -255,6 +248,13 @@ func If(enable bool, opt ConfigOption) ConfigOption {
 type Location struct {
 	dir string
 	fs  vfs.FS
+}
+
+// MakeLocation constructs a Location from a directory and a vfs.FS. Typically
+// callers should prefer `Filesystem` or `InMemory` rather than directly
+// invoking MakeLocation.
+func MakeLocation(dir string, fs vfs.FS) Location {
+	return Location{dir: dir, fs: fs}
 }
 
 // Filesystem constructs a Location that instructs the storage engine to read

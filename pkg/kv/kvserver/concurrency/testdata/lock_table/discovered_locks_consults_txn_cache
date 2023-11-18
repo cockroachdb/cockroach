@@ -40,9 +40,9 @@ add-discovered r=req1 k=a txn=txn2 consult-txn-status-cache=false
 ----
 num=1
  lock: "a"
-  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [holder finalized: aborted]
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 # Nothing to resolve yet.
 resolve-before-scanning r=req1
@@ -63,8 +63,8 @@ print
 ----
 num=1
  lock: "a"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 scan r=req1
 ----
@@ -78,28 +78,28 @@ add-discovered r=req1 k=b txn=txn3 consult-txn-status-cache=true
 ----
 num=1
  lock: "a"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 # Txn is finalized and txnStatusCache is consulted.
 add-discovered r=req1 k=c txn=txn3 consult-txn-status-cache=true
 ----
 num=1
  lock: "a"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 # Txn is not finalized and txnStatusCache is consulted.
 add-discovered r=req1 k=d txn=txn4 consult-txn-status-cache=true
 ----
 num=2
  lock: "a"
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
-   queued writers:
-    active: false req: 1, txn: 00000000-0000-0000-0000-000000000001
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
+   queued locking requests:
+    active: false req: 1, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
 
 # Locks for b and c were not added to lock table.
 resolve-before-scanning r=req1
@@ -120,7 +120,7 @@ dequeue r=req1
 ----
 num=1
  lock: "d"
-  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000004 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
 
 clear
 ----
@@ -144,7 +144,7 @@ add-discovered r=req2 k=e txn=txn5 consult-txn-status-cache=false
 ----
 num=1
  lock: "e"
-  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000005 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
 
 # Nothing to resolve yet.
 resolve-before-scanning r=req2
@@ -187,7 +187,7 @@ add-discovered r=req2 k=g txn=txn7 consult-txn-status-cache=true
 ----
 num=1
  lock: "g"
-  holder: txn: 00000000-0000-0000-0000-000000000007 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000007 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
 
 # Locks for f and g were not added to lock table.
 resolve-before-scanning r=req2
@@ -208,7 +208,7 @@ dequeue r=req2
 ----
 num=1
  lock: "g"
-  holder: txn: 00000000-0000-0000-0000-000000000007 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl
+  holder: txn: 00000000-0000-0000-0000-000000000007 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Intent]
 
 clear
 ----

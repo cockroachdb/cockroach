@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func slurpUserDataKVs(t testing.TB, e storage.Engine) []roachpb.KeyValue {
+func slurpUserDataKVs(t testing.TB, e storage.Engine, codec keys.SQLCodec) []roachpb.KeyValue {
 	t.Helper()
 
 	// Scan meta keys directly from engine. We put this in a retry loop
@@ -44,9 +44,12 @@ func slurpUserDataKVs(t testing.TB, e storage.Engine) []roachpb.KeyValue {
 	var kvs []roachpb.KeyValue
 	testutils.SucceedsSoon(t, func() error {
 		kvs = nil
-		it := e.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: roachpb.KeyMax})
+		it, err := e.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: codec.TenantEndKey()})
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer it.Close()
-		for it.SeekGE(storage.MVCCKey{Key: bootstrap.TestingUserTableDataMin()}); ; it.NextKey() {
+		for it.SeekGE(storage.MVCCKey{Key: bootstrap.TestingUserTableDataMin(codec)}); ; it.NextKey() {
 			ok, err := it.Valid()
 			if err != nil {
 				t.Fatal(err)
@@ -73,11 +76,14 @@ func slurpUserDataKVs(t testing.TB, e storage.Engine) []roachpb.KeyValue {
 
 func TestRowFetcherMVCCMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	store, _ := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	codec := s.Codec()
+	store, _ := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -86,10 +92,10 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		a STRING PRIMARY KEY, b STRING, c STRING, d STRING,
 		FAMILY (a, b, c), FAMILY (d)
 	)`)
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, `d`, `parent`)
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, keys.SystemSQLCodec, desc, desc.GetPrimaryIndex(), desc.PublicColumnIDs(),
+		&spec, codec, desc, desc.GetPrimaryIndex(), desc.PublicColumnIDs(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +155,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts1)
 
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine())), []rowWithMVCCMetadata{
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine(), codec)), []rowWithMVCCMetadata{
 		{[]string{`1`, `a`, `a`, `a`}, false, ts1},
 		{[]string{`2`, `b`, `b`, `b`}, false, ts1},
 	}; !reflect.DeepEqual(expected, actual) {
@@ -163,7 +169,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts2)
 
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine())), []rowWithMVCCMetadata{
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine(), codec)), []rowWithMVCCMetadata{
 		{[]string{`1`, `NULL`, `NULL`, `NULL`}, false, ts2},
 		{[]string{`2`, `b`, `b`, `NULL`}, false, ts2},
 	}; !reflect.DeepEqual(expected, actual) {
@@ -175,7 +181,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		DELETE FROM parent WHERE a = '1';
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts3)
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine())), []rowWithMVCCMetadata{
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine(), codec)), []rowWithMVCCMetadata{
 		{[]string{`1`, `NULL`, `NULL`, `NULL`}, true, ts3},
 		{[]string{`2`, `b`, `b`, `NULL`}, false, ts2},
 	}; !reflect.DeepEqual(expected, actual) {

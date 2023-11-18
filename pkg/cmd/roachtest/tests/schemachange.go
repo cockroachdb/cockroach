@@ -29,17 +29,18 @@ import (
 
 func registerSchemaChangeDuringKV(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    `schemachange/during/kv`,
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(5),
-		Leases:  registry.MetamorphicLeases,
+		Name:             `schemachange/during/kv`,
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(5),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.GCE {
+			if c.Cloud() != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup?AUTH=implicit`
 
-			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
@@ -310,12 +311,14 @@ func makeIndexAddTpccTest(
 	spec spec.ClusterSpec, warehouses int, length time.Duration,
 ) registry.TestSpec {
 	return registry.TestSpec{
-		Name:      fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
-		Owner:     registry.OwnerSQLFoundations,
-		Benchmark: true,
-		Cluster:   spec,
-		Leases:    registry.MetamorphicLeases,
-		Timeout:   length * 3,
+		Name:             fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
+		Owner:            registry.OwnerSQLFoundations,
+		Benchmark:        true,
+		Cluster:          spec,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Timeout:          length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
@@ -337,18 +340,22 @@ func makeIndexAddTpccTest(
 }
 
 func registerSchemaChangeBulkIngest(r registry.Registry) {
-	r.Add(makeSchemaChangeBulkIngestTest(r, 5, 100000000, time.Minute*20))
+	// Allow a long running time to account for runs that use a
+	// cockroach build with runtime assertions enabled.
+	r.Add(makeSchemaChangeBulkIngestTest(r, 5, 100000000, time.Minute*60))
 }
 
 func makeSchemaChangeBulkIngestTest(
 	r registry.Registry, numNodes, numRows int, length time.Duration,
 ) registry.TestSpec {
 	return registry.TestSpec{
-		Name:    "schemachange/bulkingest",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(numNodes),
-		Leases:  registry.MetamorphicLeases,
-		Timeout: length * 2,
+		Name:             "schemachange/bulkingest",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(numNodes),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Timeout:          length * 2,
 		// `fixtures import` (with the workload paths) is not supported in 2.1
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Configure column a to have sequential ascending values, and columns b and c to be constant.
@@ -364,7 +371,6 @@ func makeSchemaChangeBulkIngestTest(
 			crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 			workloadNode := c.Node(c.Spec().NodeCount)
 
-			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 			// TODO (lucy): Remove flag once the faster import is enabled by default
 			settings := install.MakeClusterSettings(install.EnvOption([]string{"COCKROACH_IMPORT_WORKLOAD_FASTER=true"}))
@@ -431,12 +437,14 @@ func makeSchemaChangeDuringTPCC(
 	spec spec.ClusterSpec, warehouses int, length time.Duration,
 ) registry.TestSpec {
 	return registry.TestSpec{
-		Name:      "schemachange/during/tpcc",
-		Owner:     registry.OwnerSQLFoundations,
-		Benchmark: true,
-		Cluster:   spec,
-		Leases:    registry.MetamorphicLeases,
-		Timeout:   length * 3,
+		Name:             "schemachange/during/tpcc",
+		Owner:            registry.OwnerSQLFoundations,
+		Benchmark:        true,
+		Cluster:          spec,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Timeout:          length * 3,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,

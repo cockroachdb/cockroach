@@ -247,6 +247,8 @@ Additional options recognized via ` + "`format-options`" + `:
 	return buf.String()
 }
 
+const emptyTagMarker = "-"
+
 func (f formatCrdbV2) formatEntry(entry logEntry) *buffer {
 	// Note: the prefix up to and including the logging tags
 	// needs to remain the same as in crdb-v1, so as to
@@ -256,28 +258,34 @@ func (f formatCrdbV2) formatEntry(entry logEntry) *buffer {
 	cp := f.colorProfile
 	writeCrdbHeader(buf, cp, entry.sev, entry.ch, entry.file, entry.line, entry.ts, f.loc, int(entry.gid), entry.payload.redactable)
 
+	hasTenantLabel, tenantLabelLength := checkTenantLabel(entry.TenantID, entry.TenantName)
+	hasTags := len(entry.payload.tags) > 0
+
 	// The remainder is variable-length and could exceed
 	// the static size of tmp. But we do have a best-case upper bound.
-	buf.Grow(20 + len(entry.payload.message))
+	//
+	// We optimistically count 3 times the size of entry.Tags to have
+	// one character for the key, one character for the value and one
+	// for the comma.
+	buf.Grow(len(entry.payload.tags)*3 + 20 + tenantLabelLength + len(entry.payload.message))
 
 	// Display the tags if set.
 	buf.Write(cp[ttycolor.Blue])
 	// We must always tag with tenant ID if present.
-	tID := entry.TenantID()
-	if tID != "" || entry.payload.tags != nil {
+	if hasTenantLabel || hasTags {
 		buf.WriteByte('[')
-		if tID != "" {
-			writeTagToBuffer(buf, tenantIDLogTagBytePrefix, []byte(entry.TenantID()))
-			if entry.payload.tags != nil {
+		if hasTenantLabel {
+			writeTenantLabel(buf, entry.TenantID, entry.TenantName)
+			if hasTags {
 				buf.WriteByte(',')
 			}
 		}
-		if entry.payload.tags != nil {
+		if hasTags {
 			entry.payload.tags.formatToBuffer(buf)
 		}
 		buf.WriteByte(']')
 	} else {
-		buf.WriteString("[-]")
+		buf.WriteString("[" + emptyTagMarker + "]")
 	}
 	buf.Write(cp[ttycolor.Reset])
 	buf.WriteByte(' ')
@@ -480,9 +488,11 @@ var (
 	v2CounterIdx               = entryREV2.SubexpIndex("counter")
 	v2ContinuationIdx          = entryREV2.SubexpIndex("continuation")
 	v2MsgIdx                   = entryREV2.SubexpIndex("msg")
-	tenantIDLogTagStringPrefix = string(TenantIDLogTagKey)
-	tenantIDLogTagBytePrefix   = []byte{TenantIDLogTagKey}
+	tenantIDLogTagBytePrefix   = []byte{tenantIDLogTagKey}
+	tenantNameLogTagBytePrefix = []byte{tenantNameLogTagKey}
 )
+
+const tenantDetailsTags = string(tenantIDLogTagKey) + string(tenantNameLogTagKey)
 
 type entryDecoderV2 struct {
 	lines           int // number of lines read from reader
@@ -494,20 +504,16 @@ type entryDecoderV2 struct {
 // Decode decodes the next log entry into the provided protobuf message.
 func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 	defer func() {
-		switch r := recover().(type) {
-		case nil: // do nothing
-		case error:
-			err = errors.Wrapf(r, "decoding on line %d", d.lines)
-		default:
-			panic(r)
+		if err != nil && !errors.Is(err, io.EOF) {
+			err = errors.Wrapf(err, "decoding on line %d", d.lines)
 		}
 	}()
-	frag, atEOF := d.peekNextFragment()
-	if atEOF {
-		return io.EOF
+	frag, err := d.peekNextFragment()
+	if err != nil {
+		return err
 	}
 	d.popFragment()
-	if err := d.initEntryFromFirstLine(entry, frag); err != nil {
+	if err = d.initEntryFromFirstLine(entry, frag); err != nil {
 		return err
 	}
 
@@ -517,12 +523,16 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 
 	// While the entry has additional lines, collect the full message.
 	for {
-		frag, atEOF := d.peekNextFragment()
-		if atEOF || !frag.isContinuation() {
+		frag, err = d.peekNextFragment()
+		if err != nil || !frag.isContinuation() {
+			// Ignore this error as it is relevant to the next line and we don't
+			// know if it is continuation line or not.
 			break
 		}
 		d.popFragment()
-		d.addContinuationFragmentToEntry(entry, &entryMsg, frag)
+		if err = d.addContinuationFragmentToEntry(entry, &entryMsg, frag); err != nil {
+			return err
+		}
 	}
 
 	r := redactablePackage{
@@ -538,7 +548,7 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 
 func (d *entryDecoderV2) addContinuationFragmentToEntry(
 	entry *logpb.Entry, entryMsg *bytes.Buffer, frag entryDecoderV2Fragment,
-) {
+) error {
 	switch frag.getContinuation() {
 	case '+':
 		entryMsg.WriteByte('\n')
@@ -558,25 +568,26 @@ func (d *entryDecoderV2) addContinuationFragmentToEntry(
 			entryMsg.Write(frag.getMsg())
 		}
 	default:
-		panic(errors.Errorf("unexpected continuation character %c", frag.getContinuation()))
+		return errors.Wrapf(ErrMalformedLogEntry, "unexpected continuation character %c", frag.getContinuation())
 	}
+	return nil
 }
 
 // peekNextFragment populates the nextFragment buffer by reading from the
 // underlying reader a line at a time until a valid line is reached.
-// It will panic if a malformed log line is discovered. It permits the first
+// It returns error if malformed log line is discovered. It permits the first
 // line in the decoder to be malformed and it will skip that line. Upon EOF,
 // if there is no text left to consume, the atEOF return value will be true.
-func (d *entryDecoderV2) peekNextFragment() (_ entryDecoderV2Fragment, atEOF bool) {
+func (d *entryDecoderV2) peekNextFragment() (entryDecoderV2Fragment, error) {
 	for d.nextFragment == nil {
 		d.lines++
 		nextLine, err := d.reader.ReadBytes('\n')
-		if isEOF := errors.Is(err, io.EOF); isEOF {
+		if errors.Is(err, io.EOF) {
 			if len(nextLine) == 0 {
-				return nil, true
+				return nil, err
 			}
 		} else if err != nil {
-			panic(err)
+			return nil, err
 		}
 		nextLine = bytes.TrimSuffix(nextLine, []byte{'\n'})
 		m := entryREV2.FindSubmatch(nextLine)
@@ -584,11 +595,11 @@ func (d *entryDecoderV2) peekNextFragment() (_ entryDecoderV2Fragment, atEOF boo
 			if d.lines == 1 { // allow non-matching lines if we've never seen a line
 				continue
 			}
-			panic(errors.New("malformed log entry"))
+			return nil, ErrMalformedLogEntry
 		}
 		d.nextFragment = m
 	}
-	return d.nextFragment, false
+	return d.nextFragment, nil
 }
 
 func (d *entryDecoderV2) popFragment() {
@@ -602,6 +613,7 @@ func (d *entryDecoderV2) initEntryFromFirstLine(
 	entry *logpb.Entry, m entryDecoderV2Fragment,
 ) (err error) {
 	// Erase all the fields, to be sure.
+	tenantID, tenantName := m.getTenantDetails()
 	*entry = logpb.Entry{
 		Severity:   m.getSeverity(),
 		Time:       m.getTimestamp(),
@@ -611,7 +623,8 @@ func (d *entryDecoderV2) initEntryFromFirstLine(
 		Line:       m.getLine(),
 		Redactable: m.isRedactable(),
 		Tags:       m.getTags(d.sensitiveEditor),
-		TenantID:   m.getTenantID(),
+		TenantID:   tenantID,
+		TenantName: tenantName,
 		Counter:    m.getCounter(),
 	}
 	if m.isStructured() {
@@ -678,40 +691,47 @@ func (f entryDecoderV2Fragment) isRedactable() bool {
 }
 
 func (f entryDecoderV2Fragment) getTags(editor redactEditor) string {
-	tagsStr := string(f[v2TagsIdx])
-	if strings.HasPrefix(tagsStr, tenantIDLogTagStringPrefix) {
-		firstCommaIndex := strings.IndexByte(tagsStr, ',')
-		if firstCommaIndex >= 0 {
-			tagsStr = tagsStr[firstCommaIndex+1:]
-		} else {
-			tagsStr = tagsStr[len(tagsStr):]
-		}
-	}
-	switch tagsStr {
-	case "":
-		fallthrough
-	case "-":
+	origTags := f[v2TagsIdx]
+	remainingTags := skipTags(origTags, tenantDetailsTags)
+	if len(remainingTags) == 0 || bytes.Equal(origTags, []byte(emptyTagMarker)) {
 		return ""
-	default:
-		r := editor(redactablePackage{
-			msg:        []byte(tagsStr),
-			redactable: f.isRedactable(),
-		})
-		return string(r.msg)
+	}
+
+	r := editor(redactablePackage{
+		msg:        remainingTags,
+		redactable: f.isRedactable(),
+	})
+	return string(r.msg)
+}
+
+// skipTags advances tags to skip over the one-character tags
+// in skip.
+func skipTags(tags []byte, skip string) []byte {
+	for {
+		if len(tags) == 0 || len(skip) == 0 {
+			return tags
+		}
+		if tags[0] != skip[0] {
+			return tags
+		}
+		tags = tags[1:]
+		skip = skip[1:]
+		indexComma := bytes.IndexByte(tags, ',')
+		if indexComma < 0 {
+			return nil
+		}
+		tags = tags[indexComma+1:]
 	}
 }
 
-func (f entryDecoderV2Fragment) getTenantID() string {
-	out := serverident.SystemTenantID
-	switch tagsStr := string(f[v2TagsIdx]); tagsStr {
-	case "-":
-	default:
-		tags := string(f[v2TagsIdx])
-		if strings.HasPrefix(tags, tenantIDLogTagStringPrefix) {
-			out = strings.Split(tags, ",")[0][1:]
-		}
+func (f entryDecoderV2Fragment) getTenantDetails() (tenantID, tenantName string) {
+	tags := f[v2TagsIdx]
+	if bytes.Equal(tags, []byte(emptyTagMarker)) {
+		return serverident.SystemTenantID, ""
 	}
-	return out
+
+	tenantID, tenantName, _ = maybeReadTenantDetails(tags)
+	return tenantID, tenantName
 }
 
 func (f entryDecoderV2Fragment) getCounter() uint64 {

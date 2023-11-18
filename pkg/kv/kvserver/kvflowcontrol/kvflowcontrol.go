@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -39,7 +40,11 @@ var Mode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_control.mode",
 	"determines the 'mode' of flow control we use for replication traffic in KV, if enabled",
-	ApplyToAll.String(),
+	util.ConstantWithMetamorphicTestChoice(
+		"kv.snapshot.ingest_as_write_threshold",
+		modeDict[ApplyToElastic], /* default value */
+		modeDict[ApplyToAll],     /* other value */
+	).(string),
 	map[int64]string{
 		int64(ApplyToElastic): modeDict[ApplyToElastic],
 		int64(ApplyToAll):     modeDict[ApplyToAll],
@@ -60,12 +65,6 @@ const (
 	// virtually enqueued in below-raft admission queues and dequeued in
 	// priority order, but only empty elastic flow token buckets above-raft will
 	// block further elastic traffic from being admitted.
-	//
-	// TODO(irfansharif): We're potentially risking OOMs doing all this tracking
-	// for regular work, without coalescing state. With a bit of plumbing, for
-	// requests that bypass flow control we could fallback to using the non-AC
-	// raft encodings and avoid the potential OOMs. Address this as part of
-	// #95563.
 	ApplyToElastic ModeT = iota
 	// ApplyToAll uses flow control for both elastic and regular traffic,
 	// i.e. all work will wait for flow tokens to be available.
@@ -117,11 +116,15 @@ type Tokens int64
 // Controller provides flow control for replication traffic in KV, held at the
 // node-level.
 type Controller interface {
-	// Admit seeks admission to replicate data, regardless of size, for work
-	// with the given priority, create-time, and over the given stream. This
-	// blocks until there are flow tokens available or the stream disconnects,
-	// subject to context cancellation.
-	Admit(context.Context, admissionpb.WorkPriority, time.Time, ConnectedStream) error
+	// Admit seeks admission to replicate data, regardless of size, for work with
+	// the given priority, create-time, and over the given stream. This blocks
+	// until there are flow tokens available or the stream disconnects, subject to
+	// context cancellation. This returns true if the request was admitted through
+	// flow control. Ignore the first return type if err != nil. admitted ==
+	// false && err == nil is a valid return, when something (e.g.
+	// configuration) caused the callee to not care whether flow tokens were
+	// available.
+	Admit(context.Context, admissionpb.WorkPriority, time.Time, ConnectedStream) (admitted bool, _ error)
 	// DeductTokens deducts (without blocking) flow tokens for replicating work
 	// with given priority over the given stream. Requests are expected to
 	// have been Admit()-ed first.
@@ -158,10 +161,14 @@ type Controller interface {
 // given priority, takes log position into account -- see
 // kvflowcontrolpb.AdmittedRaftLogEntries for more details).
 type Handle interface {
-	// Admit seeks admission to replicate data, regardless of size, for work
-	// with the given priority and create-time. This blocks until there are
-	// flow tokens available for all connected streams.
-	Admit(context.Context, admissionpb.WorkPriority, time.Time) error
+	// Admit seeks admission to replicate data, regardless of size, for work with
+	// the given priority and create-time. This blocks until there are flow tokens
+	// available for all connected streams. This returns true if the request was
+	// admitted through flow control. Ignore the first return type if err != nil.
+	// admitted == false && err == nil is a valid return, when something (e.g.
+	// configuration) caused the callee to not care whether flow tokens were
+	// available.
+	Admit(context.Context, admissionpb.WorkPriority, time.Time) (admitted bool, _ error)
 	// DeductTokensFor deducts (without blocking) flow tokens for replicating
 	// work with given priority along connected streams. The deduction is
 	// tracked with respect to the specific raft log position it's expecting it
@@ -276,7 +283,7 @@ type DispatchWriter interface {
 // the stream breaking by freeing up all held tokens.
 type DispatchReader interface {
 	PendingDispatch() []roachpb.NodeID
-	PendingDispatchFor(roachpb.NodeID) []kvflowcontrolpb.AdmittedRaftLogEntries
+	PendingDispatchFor(nodeID roachpb.NodeID, maxBytes int64) (admittedRaftLogEntries []kvflowcontrolpb.AdmittedRaftLogEntries, remainingDispatches int)
 }
 
 func (t Tokens) String() string {
@@ -311,7 +318,8 @@ type raftAdmissionMetaKey struct{}
 // ContextWithMeta returns a Context wrapping the supplied raft admission meta,
 // if any.
 //
-// TODO(irfansharif): This causes a heap allocation. Revisit as part of #95563.
+// TODO(irfansharif,aaditya): This causes a heap allocation. Revisit as part of
+// #104154.
 func ContextWithMeta(ctx context.Context, meta *kvflowcontrolpb.RaftAdmissionMeta) context.Context {
 	if meta != nil {
 		ctx = context.WithValue(ctx, raftAdmissionMetaKey{}, meta)

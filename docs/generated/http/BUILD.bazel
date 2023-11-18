@@ -57,6 +57,7 @@ genrule(
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
         "@go_googleapis//google/api:annotations_proto",
+        "@go_googleapis//google/api:http_proto",
         "@io_etcd_go_raft_v3//raftpb:raftpb_proto",
     ],
     outs = [

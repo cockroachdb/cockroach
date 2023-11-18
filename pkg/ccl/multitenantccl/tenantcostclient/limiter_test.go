@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 // TestLimiterNotify tests that low RU notifications are sent at the expected
@@ -28,8 +31,11 @@ func TestLimiterNotify(t *testing.T) {
 	ts := timeutil.NewManualTime(start)
 	ch := make(chan struct{}, 100)
 
+	var met metrics
+	met.Init()
+
 	var lim limiter
-	lim.Init(ts, ch)
+	lim.Init(&met, ts, ch)
 	lim.Reconfigure(start, limiterReconfigureArgs{NewRate: 100})
 
 	check := func(expected string) {
@@ -163,4 +169,51 @@ func TestLimiterNotify(t *testing.T) {
 	}
 	checkNotification()
 	check("0.00 RU filling @ 0.00 RU/s")
+
+	// Ensure that MaxTokens is enforced.
+	args = limiterReconfigureArgs{
+		NewTokens: 100,
+		MaxTokens: 50,
+	}
+	lim.Reconfigure(ts.Now(), args)
+	checkNoNotification()
+	check("50.00 RU filling @ 0.00 RU/s (limited to 50.00 RU)")
+}
+
+// TestLimiterMetrics tests that limiter metrics are updated.
+func TestLimiterMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	start := timeutil.Now()
+	ts := timeutil.NewManualTime(start)
+	ch := make(chan struct{}, 100)
+
+	var met metrics
+	met.Init()
+
+	var lim limiter
+	lim.Init(&met, ts, ch)
+
+	ensureMetricValue := func(metric *metric.Gauge, expected int64) {
+		testutils.SucceedsWithin(t, func() error {
+			val := metric.Value()
+			if val == expected {
+				return nil
+			}
+			return errors.New("metric doesn't have expected value")
+		}, 30*time.Second)
+	}
+
+	// Create a blocking request and wait until the metric reflects that.
+	go func() {
+		if err := lim.Wait(ctx, 1000); err != nil {
+			t.Errorf("failed to wait: %v", err)
+		}
+	}()
+	ensureMetricValue(met.CurrentBlocked, 1)
+
+	// Unblock the request and ensure the metric changes.
+	lim.Reconfigure(ts.Now(), limiterReconfigureArgs{NewTokens: 1000})
+	ensureMetricValue(met.CurrentBlocked, 0)
 }

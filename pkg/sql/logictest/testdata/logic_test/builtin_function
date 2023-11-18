@@ -3038,7 +3038,7 @@ subtest crdb_internal.payloads_for_span
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error pq: only users with the admin role are allowed to use crdb_internal.payloads_for_span
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.payloads_for_span(0)
 
 user root
@@ -3054,7 +3054,7 @@ subtest crdb_internal.payloads_for_trace
 # switch users -- this one has no permissions so expect errors
 user testuser
 
-query error pq: only users with the admin role are allowed to use crdb_internal.payloads_for_span
+query error user testuser does not have VIEWCLUSTERMETADATA system privilege
 SELECT * FROM crdb_internal.payloads_for_span(0)
 
 user root
@@ -4005,7 +4005,9 @@ FROM crdb_internal.check_consistency(true, crdb_internal.tenant_span()[1], crdb_
 ORDER BY range_id
 LIMIT 1
 ----
-RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SeparatedIntentCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
+RANGE_CONSISTENT  stats: {ContainsEstimates: LastUpdateNanos: LockAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: LockBytes: LockCount: RangeKeyCount: RangeKeyBytes: RangeValCount: RangeValBytes: SysBytes: SysCount: AbortSpanBytes:}
+
+
 
 # Fill a table with consistency check results. This used to panic.
 # See: https://github.com/cockroachdb/cockroach/issues/88222
@@ -4037,3 +4039,179 @@ SELECT crdb_internal.merge_aggregated_stmt_metadata(ARRAY[ '{"aMalformedMetadaOb
 {"appNames": [], "db": [], "distSQLCount": 0, "failedCount": 0, "fingerprintID": "", "formattedQuery": "", "fullScanCount": 0, "implicitTxn": false, "query": "", "querySummary": "", "stmtType": "", "totalCount": 0, "vecCount": 0}
 
 subtest end
+
+# Test bitmask_or function for string and varbit data
+query T
+SELECT bitmask_or('1010010', '0101');
+----
+1010111
+
+query T
+SELECT bitmask_or('1010010'::bit(7), '0101'::bit(4));
+----
+1010111
+
+query T
+SELECT bitmask_or('1010010'::bit(7), '0101');
+----
+1010111
+
+query T
+SELECT bitmask_or('1010010', '0101'::bit(4));
+----
+1010111
+
+query T
+SELECT bitmask_or('1010010'::varbit, '0101'::varbit);
+----
+1010111
+
+# Test bitmask_and function for string and varbit data
+query T
+SELECT bitmask_and('1010010', '0101');
+----
+0000000
+
+query T
+SELECT bitmask_and('1010010'::bit(7), '0101'::bit(4));
+----
+0000000
+
+query T
+SELECT bitmask_and('1010010'::bit(7), '0101');
+----
+0000000
+
+query T
+SELECT bitmask_and('1010010', '0101'::bit(4));
+----
+0000000
+
+query T
+SELECT bitmask_and('1010010'::varbit, '0101'::varbit);
+----
+0000000
+
+# Test bitmask_xor function for string and varbit data
+query T
+SELECT bitmask_xor('1010010', '0101');
+----
+1010111
+
+query T
+SELECT bitmask_xor('1010010'::bit(7), '0101'::bit(4));
+----
+1010111
+
+query T
+SELECT bitmask_xor('1010010'::bit(7), '0101');
+----
+1010111
+
+query T
+SELECT bitmask_xor('1010010', '0101'::bit(4));
+----
+1010111
+
+query T
+SELECT bitmask_xor('1010010'::varbit, '0101'::varbit);
+----
+1010111
+
+# Test for invalid inputs.
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_or('not binary', '111')
+
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_or('111', 'not binary')
+
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_and('not binary', '111')
+
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_and('111', 'not binary')
+
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_xor('not binary', '111')
+
+statement error pgcode 22P02 could not parse string as bit array: "n" is not a valid binary digit
+SELECT bitmask_xor('111', 'not binary')
+
+# Accept hex as well as binary inputs.
+query T
+SELECT bitmask_or('xfe8c', '1111');
+----
+1111111010001111
+
+query T
+SELECT bitmask_and('1111', 'xfe8c');
+----
+0000000000001100
+
+query T
+SELECT bitmask_xor('xfe8c', '1111');
+----
+1111111010000011
+
+# Test on a large (>64 bit) input.
+query T
+SELECT bitmask_or('xffffffffffffffffff', '010');
+----
+111111111111111111111111111111111111111111111111111111111111111111111111
+
+query T
+SELECT bitmask_and('xffffffffffffffffff', '010');
+----
+000000000000000000000000000000000000000000000000000000000000000000000010
+
+query T
+SELECT bitmask_xor('xffffffffffffffffff', '010');
+----
+111111111111111111111111111111111111111111111111111111111111111111111101
+
+# Regression test for mixed-type arguments (#108976).
+query T
+SELECT bitmask_or('101'::STRING, B'001'::VARBIT);
+----
+101
+
+query T
+SELECT bitmask_or(B'001'::VARBIT, '101'::STRING);
+----
+101
+
+query T
+SELECT bitmask_and('101'::STRING, B'001'::VARBIT);
+----
+001
+
+query T
+SELECT bitmask_and(B'001'::VARBIT, '101'::STRING);
+----
+001
+
+query T
+SELECT bitmask_xor('101'::STRING, B'001'::VARBIT);
+----
+100
+
+query T
+SELECT bitmask_xor(B'001'::VARBIT, '101'::STRING);
+----
+100
+
+# Query `percentile_disc_impl(arg1: float, arg2: bool) -> bool` from pg_proc
+query T rowsort
+SELECT oidvectortypes(proargtypes) FROM pg_proc WHERE oid=263
+----
+float, bool
+
+# Query a custom type and function.
+statement ok
+CREATE TYPE custom_typ AS ENUM ('good', 'bad');
+CREATE OR REPLACE FUNCTION custom_fn(c custom_typ) RETURNS custom_typ AS 'SELECT c' LANGUAGE SQL;
+
+query T rowsort
+SELECT oidvectortypes(proargtypes) FROM pg_proc WHERE proname='custom_fn'
+----
+custom_typ

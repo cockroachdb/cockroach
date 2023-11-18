@@ -11,34 +11,18 @@
 package tests
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 )
 
-// This file defines the default parameters for allocator simulator testing,
-// including configurations for the cluster, ranges, load, static settings,
-// static events, assertions, and plot settings.
-
+// This file defines settings for default generations where randomization is
+// disabled. For instance, defaultBasicRangesGen is only used if
+// randOption.range is false.
 const (
 	defaultNodes         = 3
 	defaultStoresPerNode = 1
 )
-
-func defaultBasicClusterGen() gen.BasicCluster {
-	return gen.BasicCluster{
-		Nodes:         defaultNodes,
-		StoresPerNode: defaultStoresPerNode,
-	}
-}
-
-func defaultStaticSettingsGen() gen.StaticSettings {
-	return gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
-}
-
-func defaultStaticEventsGen() gen.StaticEvents {
-	return gen.StaticEvents{DelayedEvents: event.DelayedEventList{}}
-}
 
 const defaultKeyspace = 200000
 
@@ -49,62 +33,108 @@ const (
 	defaultSkewedAccess              = false
 )
 
-func defaultLoadGen() gen.BasicLoad {
-	return gen.BasicLoad{
-		RWRatio:      defaultRwRatio,
-		Rate:         defaultRate,
-		SkewedAccess: defaultSkewedAccess,
-		MinBlockSize: defaultMinBlock,
-		MaxBlockSize: defaultMaxBlock,
-		MinKey:       defaultMinKey,
-		MaxKey:       defaultMaxKey,
-	}
-}
-
 const (
-	defaultRanges            = 1
+	defaultRanges            = 10
 	defaultPlacementType     = gen.Even
-	defaultReplicationFactor = 1
-	defaultBytes             = 0
+	defaultReplicationFactor = 3
+	defaultBytes             = int64(0)
 )
-
-func defaultBasicRangesGen() gen.BasicRanges {
-	return gen.BasicRanges{
-		BaseRanges: gen.BaseRanges{
-			Ranges:            defaultRanges,
-			KeySpace:          defaultKeyspace,
-			ReplicationFactor: defaultReplicationFactor,
-			Bytes:             defaultBytes,
-		},
-		PlacementType: defaultPlacementType,
-	}
-}
-
-func defaultAssertions() []SimulationAssertion {
-	return []SimulationAssertion{
-		conformanceAssertion{
-			underreplicated: 0,
-			overreplicated:  0,
-			violating:       0,
-			unavailable:     0,
-		},
-	}
-}
 
 const (
 	defaultStat                 = "replicas"
 	defaultHeight, defaultWidth = 15, 80
 )
 
-type plotSettings struct {
-	stat          string
-	height, width int
+type staticOptionSettings struct {
+	nodes             int
+	storesPerNode     int
+	rwRatio           float64
+	rate              float64
+	minBlock          int
+	maxBlock          int
+	minKey            int64
+	maxKey            int64
+	skewedAccess      bool
+	ranges            int
+	keySpace          int
+	placementType     gen.PlacementType
+	replicationFactor int
+	bytes             int64
+	stat              string
+	height            int
+	width             int
 }
 
-func defaultPlotSettings() plotSettings {
-	return plotSettings{
-		stat:   defaultStat,
-		height: defaultHeight,
-		width:  defaultWidth,
+func getDefaultStaticOptionSettings() staticOptionSettings {
+	return staticOptionSettings{
+		nodes:             defaultNodes,
+		storesPerNode:     defaultStoresPerNode,
+		rwRatio:           defaultRwRatio,
+		rate:              defaultRate,
+		minBlock:          defaultMinBlock,
+		maxBlock:          defaultMaxBlock,
+		minKey:            defaultMinKey,
+		maxKey:            defaultMaxKey,
+		skewedAccess:      defaultSkewedAccess,
+		ranges:            defaultRanges,
+		keySpace:          defaultKeyspace,
+		placementType:     defaultPlacementType,
+		replicationFactor: defaultReplicationFactor,
+		bytes:             defaultBytes,
+		stat:              defaultStat,
+		height:            defaultHeight,
+		width:             defaultWidth,
+	}
+}
+
+func (f randTestingFramework) defaultBasicClusterGen() gen.BasicCluster {
+	return gen.BasicCluster{
+		Nodes:         f.defaultStaticSettings.nodes,
+		StoresPerNode: f.defaultStaticSettings.storesPerNode,
+	}
+}
+
+func (f randTestingFramework) defaultStaticSettingsGen() gen.StaticSettings {
+	return gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
+}
+
+func (f randTestingFramework) defaultStaticEventsGen() gen.StaticEvents {
+	return gen.NewStaticEventsWithNoEvents()
+}
+
+func (f randTestingFramework) defaultLoadGen() gen.BasicLoad {
+	return gen.BasicLoad{
+		RWRatio:      f.defaultStaticSettings.rwRatio,
+		Rate:         f.defaultStaticSettings.rate,
+		SkewedAccess: f.defaultStaticSettings.skewedAccess,
+		MinBlockSize: f.defaultStaticSettings.minBlock,
+		MaxBlockSize: f.defaultStaticSettings.maxBlock,
+		MinKey:       f.defaultStaticSettings.minKey,
+		MaxKey:       f.defaultStaticSettings.maxKey,
+	}
+}
+
+func (f randTestingFramework) defaultBasicRangesGen() gen.BasicRanges {
+	return gen.BasicRanges{
+		BaseRanges: gen.BaseRanges{
+			Ranges:            f.defaultStaticSettings.ranges,
+			KeySpace:          f.defaultStaticSettings.keySpace,
+			ReplicationFactor: f.defaultStaticSettings.replicationFactor,
+			Bytes:             f.defaultStaticSettings.bytes,
+		},
+		PlacementType: f.defaultStaticSettings.placementType,
+	}
+}
+
+func defaultAssertions() []assertion.SimulationAssertion {
+	return []assertion.SimulationAssertion{
+		assertion.ConformanceAssertion{
+			Underreplicated:           0,
+			Overreplicated:            0,
+			ViolatingConstraints:      0,
+			Unavailable:               0,
+			ViolatingLeasePreferences: 0,
+			LessPreferredLeases:       0,
+		},
 	}
 }

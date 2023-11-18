@@ -35,8 +35,10 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/schedulerlatency",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_pebble//:pebble",
@@ -61,7 +63,6 @@ go_test(
         "tokens_linear_model_test.go",
         "work_queue_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":admission"],
     deps = [

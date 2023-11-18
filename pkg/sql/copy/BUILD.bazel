@@ -2,24 +2,24 @@ load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
     name = "copy_test",
+    size = "large",
     srcs = [
         "copy_in_test.go",
         "copy_out_test.go",
         "copy_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
+    shard_count = 4,
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/cli/clisqlclient",
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverbase",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
-        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/desctestutils",

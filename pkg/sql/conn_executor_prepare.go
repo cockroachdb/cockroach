@@ -195,21 +195,6 @@ func (ex *connExecutor) prepare(
 		return prepared, nil
 	}
 
-	// Prohibit preparing of EXPLAIN ANALYZE since we won't be able to execute
-	// it anyway.
-	var isExplainAnalyze bool
-	switch s := stmt.AST.(type) {
-	case *tree.ExplainAnalyze:
-		isExplainAnalyze = true
-	case *tree.Prepare:
-		if _, ok := s.Statement.(*tree.ExplainAnalyze); ok {
-			isExplainAnalyze = true
-		}
-	}
-	if isExplainAnalyze {
-		return nil, pgerror.Newf(pgcode.Syntax, "EXPLAIN ANALYZE can only be used as a top-level statement")
-	}
-
 	origNumPlaceholders := stmt.NumPlaceholders
 	switch stmt.AST.(type) {
 	case *tree.Prepare, *tree.CopyTo:
@@ -292,7 +277,10 @@ func (ex *connExecutor) prepare(
 		if origin != PreparedStatementOriginSessionMigration {
 			return nil, err
 		} else {
-			log.Warningf(ctx, "could not prepare statement during session migration: %v", err)
+			f := tree.NewFmtCtx(tree.FmtMarkRedactionNode | tree.FmtSimple)
+			f.FormatNode(stmt.AST)
+			redactableStmt := f.CloseAndGetString()
+			log.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
 		}
 	}
 

@@ -36,6 +36,7 @@ message SpanStatsRequest {
 }
 
 message SpanStats {
+  // TotalStats are the logical MVCC stats for the requested span.
   cockroach.storage.enginepb.MVCCStats total_stats = 1 [(gogoproto.nullable) = false];
   // range_count measures the number of ranges that the request span falls within.
   // A SpanStatsResponse for a span that lies within a range, and whose start
@@ -46,15 +47,18 @@ message SpanStats {
   // ApproximateDiskBytes is the approximate size "on-disk" in all files of the
   // data in the span. NB; this *includes* files stored remotely, not just on
   // _local_ disk; see the RemoteFileBytes field below.
+  // It represents a physical value across all replicas.
   // NB: The explicit jsontag prevents 'omitempty` from being added by default.
   uint64 approximate_disk_bytes = 3 [(gogoproto.jsontag) = "approximate_disk_bytes"];
 
   // RemoteFileBytes is the subset of ApproximateDiskBytes which are stored in
-  // "remote" files (i.e. shared files and external files).
+  // "remote" files (i.e. shared files and external files). It represents a
+  // physical value across all replicas.
   uint64 remote_file_bytes = 5;
 
   // ExternalFileBytes is the subset of RemoteFileBytes that are in "external"
   // files (not written/owned by this cluster, such as in restored backups).
+  // It represents a physical value across all replicas.
   uint64 external_file_bytes = 6;
 
   // NEXT ID: 7.
@@ -67,5 +71,7 @@ message SpanStatsResponse {
 
   map<string, SpanStats> span_to_stats = 4;
 
-  // NEXT ID: 5.
+  repeated string errors = 5;
+
+  // NEXT ID: 6.
 }

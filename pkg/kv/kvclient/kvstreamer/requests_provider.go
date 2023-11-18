@@ -11,6 +11,7 @@
 package kvstreamer
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 
@@ -144,6 +145,40 @@ func (r singleRangeBatch) subPriority() int32 {
 	return r.subRequestIdx[0]
 }
 
+// String implements fmt.Stringer.
+//
+// Note that the implementation of this method doesn't include r.reqsKeys into
+// the output because that field is redundant with r.reqs and is likely to be
+// nil'ed out anyway.
+func (r singleRangeBatch) String() string {
+	// We try to limit the size based on the number of requests ourselves, so
+	// this is just a sane upper-bound.
+	maxBytes := 10 << 10 /* 10KiB */
+	if len(r.reqs) > 10 {
+		// To keep the size of this log message relatively small, if we have
+		// more than 10 requests, then we only include the information about the
+		// first 5 and the last 5 requests.
+		headEndIdx := 5
+		tailStartIdx := len(r.reqs) - 5
+		subIdx := "[]"
+		if len(r.subRequestIdx) > 0 {
+			subIdx = fmt.Sprintf("%v...%v", r.subRequestIdx[:headEndIdx], r.subRequestIdx[tailStartIdx:])
+		}
+		return fmt.Sprintf(
+			"{reqs:%v...%v pos:%v...%v subIdx:%s start:%v gets:%v reserved:%v overhead:%v minTarget:%v}",
+			kvpb.TruncatedRequestsString(r.reqs[:headEndIdx], maxBytes),
+			kvpb.TruncatedRequestsString(r.reqs[tailStartIdx:], maxBytes),
+			r.positions[:headEndIdx], r.positions[tailStartIdx:],
+			subIdx, r.isScanStarted, r.numGetsInReqs, r.reqsReservedBytes, r.overheadAccountedFor, r.minTargetBytes,
+		)
+	}
+	return fmt.Sprintf(
+		"{reqs:%v pos:%v subIdx:%v start:%v gets:%v reserved:%v overhead:%v minTarget:%v}",
+		kvpb.TruncatedRequestsString(r.reqs, maxBytes), r.positions, r.subRequestIdx,
+		r.isScanStarted, r.numGetsInReqs, r.reqsReservedBytes, r.overheadAccountedFor, r.minTargetBytes,
+	)
+}
+
 // requestsProvider encapsulates the logic of supplying the requests to serve in
 // the Streamer. The implementations are concurrency safe and have its own
 // mutex, separate from the Streamer's and the budget's ones, so the ordering of
@@ -192,6 +227,9 @@ type requestsProvider interface {
 	// emptyLocked returns true if there are no requests to serve at the moment.
 	// The lock of the provider must be already held.
 	emptyLocked() bool
+	// lengthLocked returns the number of requests that have yet to be served at
+	// the moment. The lock of the provider must be already held.
+	lengthLocked() int
 	// nextLocked returns the next request to serve. In OutOfOrder mode, the
 	// request is arbitrary, in InOrder mode, the request is the current
 	// head-of-the-line. The lock of the provider must be already held. Panics
@@ -234,6 +272,11 @@ func (b *requestsProviderBase) waitLocked() {
 func (b *requestsProviderBase) emptyLocked() bool {
 	b.Mutex.AssertHeld()
 	return len(b.requests) == 0
+}
+
+func (b *requestsProviderBase) lengthLocked() int {
+	b.Mutex.AssertHeld()
+	return len(b.requests)
 }
 
 func (b *requestsProviderBase) close() {

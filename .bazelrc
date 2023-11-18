@@ -17,6 +17,7 @@ build --flag_alias=crdb_test=//build/toolchains:crdb_test_flag
 build --flag_alias=crdb_test_off=//build/toolchains:crdb_test_off_flag
 build --flag_alias=cross=//build/toolchains:cross_flag
 build --flag_alias=dev=//build/toolchains:dev_flag
+build --flag_alias=bazel_code_coverage=//build/toolchains:bazel_code_coverage_flag
 build --flag_alias=force_build_cdeps=//build/toolchains:force_build_cdeps_flag
 build --flag_alias=lintonbuild=//build/toolchains:nogo_flag
 build --flag_alias=nolintonbuild=//build/toolchains:nonogo_explicit_flag
@@ -51,16 +52,17 @@ test:test --test_env=TZ=
 test:race --test_timeout=1200,6000,18000,72000
 
 # CI uses a custom timeout for enormous targets.
-test:use_ci_timeouts --test_timeout=60,300,900,900 --define=use_ci_timeouts=true
+test:use_ci_timeouts --test_timeout=60,300,900,900
 # CI should always run with `--config=ci`.
-build:ci --lintonbuild
+build:cibase --lintonbuild
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
-test:ci --test_env=GO_TEST_WRAP_TESTV=1
+test:cibase --test_env=GO_TEST_WRAP_TESTV=1
 # Dump all output for failed tests to the build log.
 test:ci --test_output=errors
 # Put all tmp artifacts in /artifacts/tmp.
-build:ci --test_tmpdir=/artifacts/tmp
+test:ci --test_tmpdir=/artifacts/tmp
+build:ci --config=cibase
 
 build:cross --stamp
 
@@ -78,7 +80,7 @@ build:crosslinuxfips '--workspace_status_command=./build/bazelutil/stamp.sh x86_
 build:crosslinuxfips --config=crosslinuxfipsbase
 build:crosslinuxfipsbase --platforms=//build/toolchains:cross_linux
 build:crosslinuxfipsbase --config=cross
-build:crosslinuxfipsbase --@io_bazel_rules_go//go/toolchain:sdk_version=1.19.10fips
+build:crosslinuxfipsbase --@io_bazel_rules_go//go/toolchain:sdk_version=1.21.3fips
 build:crosswindows '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32'
 build:crosswindows --config=crosswindowsbase
 build:crosswindowsbase --platforms=//build/toolchains:cross_windows
@@ -110,6 +112,31 @@ build:macos --host_action_env=PATH=/opt/homebrew/bin:/opt/local/bin:/usr/local/b
 # All `dev` builds will use this configuration; all `cross` builds will use a
 # more precise --workspace_status_command option.
 build:simplestamp --stamp --workspace_status_command=./build/bazelutil/stamp.sh
+
+build:engflowbase --define=EXECUTOR=remote
+build:engflowbase --disk_cache=
+build:engflowbase --experimental_inmemory_dotd_files
+build:engflowbase --experimental_inmemory_jdeps_files
+build:engflowbase --incompatible_strict_action_env=true
+build:engflowbase --remote_timeout=600
+build:engflowbase --nolegacy_important_outputs
+build:engflowbase --grpc_keepalive_time=30s
+build:engflowbase --experimental_remote_cache_compression=true
+build:engflowbase --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+build:engflowbase --extra_execution_platforms=//build/toolchains:cross_linux
+build:engflowbase --remote_upload_local_results=false
+build:engflowbase --remote_download_toplevel
+test:engflowbase --test_env=REMOTE_EXEC=1
+build:engflow --config=engflowbase
+build:engflow --remote_cache=grpcs://tanzanite.cluster.engflow.com
+build:engflow --remote_executor=grpcs://tanzanite.cluster.engflow.com
+build:engflow --bes_backend=grpcs://tanzanite.cluster.engflow.com
+build:engflow --bes_results_url=https://tanzanite.cluster.engflow.com/invocation/
+build:engflowpublic --config=engflowbase
+build:engflowpublic --remote_cache=grpcs://mesolite.cluster.engflow.com
+build:engflowpublic --remote_executor=grpcs://mesolite.cluster.engflow.com
+build:engflowpublic --bes_backend=grpcs://mesolite.cluster.engflow.com
+build:engflowpublic --bes_results_url=https://mesolite.cluster.engflow.com/invocation/
 
 try-import %workspace%/.bazelrc.user
 

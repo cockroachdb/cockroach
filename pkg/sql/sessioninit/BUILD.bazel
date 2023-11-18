@@ -32,7 +32,6 @@ go_test(
         "cache_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":sessioninit",
         "//pkg/base",
@@ -44,7 +43,6 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",

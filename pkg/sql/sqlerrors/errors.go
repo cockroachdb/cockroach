@@ -243,6 +243,20 @@ func NewDependentObjectErrorf(format string, args ...interface{}) error {
 	return pgerror.Newf(pgcode.DependentObjectsStillExist, format, args...)
 }
 
+// NewDependentBlocksOpError creates an error because dependingObjName (of type
+// dependingObjType) has a reference to objName (of objType) when someone attempts
+// to `op` on it.
+// E.g. DROP INDEX "idx" when a VIEW "v" depends on this index and thus will block
+// this drop index.
+func NewDependentBlocksOpError(op, objType, objName, dependentType, dependentName string) error {
+	return errors.WithHintf(
+		NewDependentObjectErrorf("cannot %s %s %q because %s %q depends on it",
+			op, objType, objName, dependentType, dependentName),
+		"consider dropping %q first.", dependentName)
+}
+
+const PrimaryIndexSwapDetail = `CRDB's implementation for "ADD COLUMN", "DROP COLUMN", and "ALTER PRIMARY KEY" will drop the old/current primary index and create a new one.`
+
 // NewColumnReferencedByPrimaryKeyError is returned when attempting to drop a
 // column which is a part of the table's primary key.
 //

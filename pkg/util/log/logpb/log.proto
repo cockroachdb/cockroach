@@ -148,6 +148,8 @@ enum Channel {
   //
   //   - Data access audit events (when table audit is enabled via
   //     [ALTER TABLE ... EXPERIMENTAL_AUDIT](alter-table.html#experimental_audit))
+  //   - Data access audit events (when role-based audit is enabled via
+  //     [`sql.log.user_audit` cluster setting](role-based-audit-logging.html#syntax-of-audit-settings))
   //   - SQL statements executed by users with the admin role
   //   - Operations that write to system tables
   //
@@ -159,7 +161,7 @@ enum Channel {
   // behalf of client connections:
   //
   //   - Logical SQL statement executions (when enabled via the
-  //     `sql.trace.log_statement_execute` [cluster setting](cluster-settings.html))
+  //     `sql.log.all_statements.enabled` [cluster setting](cluster-settings.html))
   //   - uncaught Go panic errors during the execution of a SQL statement.
   SQL_EXEC = 9;
 
@@ -266,6 +268,11 @@ message Entry {
   // log entry was not found to contain any tenant ID, we default to the system
   // tenant ID.
   string tenant_id = 14 [(gogoproto.customname) = "TenantID"];
+
+  // TenantName is the tenant name that the log entry originated from. NB: if a
+  // log entry was not found to contain any tenant name, we default to the empty
+  // string.
+  string tenant_name = 15 [(gogoproto.customname) = "TenantName"];
 }
 
 // A FileDetails holds all of the particulars that can be parsed by the name of

@@ -109,52 +109,70 @@ stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_b
 del: "r": found key false
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+9 gc_bytes_age=+2162
 >> put k=a v=a7 t=A
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=b v=b7 t=A
-stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+1767 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+1767 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=c v=c7 t=A
-stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-198 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {c id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-198 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> del k=d t=A
 del: "d": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5766 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+93
+del: lock acquisition = {d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5766 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=e t=A
 del: "e": found key true
-stats: key_bytes=+12 val_count=+1 val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+7533 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+93
+del: lock acquisition = {e id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+7533 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=f localTs=5.9 t=A
 del: "f": found key false
-stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6777 intent_count=+1 intent_bytes=+25 separated_intent_count=+1 intent_age=+93
+del: lock acquisition = {f id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6777 intent_count=+1 intent_bytes=+25 lock_count=+1 lock_age=+93
 >> put k=g v=g7 t=A
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {g id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=h v=h7 t=A
-stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-194 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {h id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-194 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=i v=i7 t=A
-stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-198 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {i id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-198 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> del k=j t=A
 del: "j": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5766 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+93
+del: lock acquisition = {j id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5766 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=k t=A
 del: "k": found key false
-stats: key_bytes=+12 val_count=+1 val_bytes=+48 gc_bytes_age=+5572 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+93
+del: lock acquisition = {k id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+48 gc_bytes_age=+5572 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=l localTs=5.9 t=A
 del: "l": found key false
-stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6777 intent_count=+1 intent_bytes=+25 separated_intent_count=+1 intent_age=+93
+del: lock acquisition = {l id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6777 intent_count=+1 intent_bytes=+25 lock_count=+1 lock_age=+93
 >> put k=m v=m7 t=A
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {m id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=n v=n7 t=A
-stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+1767 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {n id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_bytes=+48 gc_bytes_age=+1767 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> put k=o v=o7 t=A
-stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-188 intent_count=+1 intent_bytes=+19 separated_intent_count=+1 intent_age=+93
+put: lock acquisition = {o id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+55 live_count=+1 live_bytes=+69 gc_bytes_age=-188 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+93
 >> del k=p t=A
 del: "p": found key false
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5766 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+93
+del: lock acquisition = {p id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+48 gc_bytes_age=+5766 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=q t=A
 del: "q": found key true
-stats: key_bytes=+12 val_count=+1 val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+7533 intent_count=+1 intent_bytes=+12 separated_intent_count=+1 intent_age=+93
+del: lock acquisition = {q id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+7533 intent_count=+1 intent_bytes=+12 lock_count=+1 lock_age=+93
 >> del k=r localTs=5.9 t=A
 del: "r": found key false
-stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6787 intent_count=+1 intent_bytes=+25 separated_intent_count=+1 intent_age=+93
+del: lock acquisition = {r id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+61 gc_bytes_age=+6787 intent_count=+1 intent_bytes=+25 lock_count=+1 lock_age=+93
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
 rangekey: g{-gg}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {ggg-i}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {i-jjj}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -164,55 +182,55 @@ rangekey: {mmm-o}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/
 rangekey: {o-ppp}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {ppp-r}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {r-s}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-meta: "a"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/7.000000000,0 -> /BYTES/a7
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/7.000000000,0 -> /BYTES/b7
 data: "b"/1.000000000,0 -> /BYTES/b1
-meta: "c"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "c"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "c"/7.000000000,0 -> /BYTES/c7
 data: "c"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /<empty>
-meta: "e"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "e"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "e"/7.000000000,0 -> /<empty>
 data: "e"/1.000000000,0 -> /BYTES/e1
-meta: "f"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=13 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "f"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=13 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "f"/7.000000000,0 -> {localTs=5.000000009,0}/<empty>
 data: "f"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
-meta: "g"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "g"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "g"/7.000000000,0 -> /BYTES/g7
-meta: "h"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "h"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "h"/7.000000000,0 -> /BYTES/h7
 data: "h"/1.000000000,0 -> /BYTES/h1
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 data: "i"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
-meta: "j"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "j"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "j"/7.000000000,0 -> /<empty>
-meta: "k"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "k"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "k"/7.000000000,0 -> /<empty>
 data: "k"/1.000000000,0 -> /BYTES/k1
-meta: "l"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=13 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "l"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=13 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "l"/7.000000000,0 -> {localTs=5.000000009,0}/<empty>
 data: "l"/1.000000000,0 -> {localTs=0.000000009,0}/<empty>
-meta: "m"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "m"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "m"/7.000000000,0 -> /BYTES/m7
-meta: "n"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "n"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "n"/7.000000000,0 -> /BYTES/n7
 data: "n"/6.000000000,0 -> /BYTES/n6
-meta: "o"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "o"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "o"/7.000000000,0 -> /BYTES/o7
 data: "o"/6.000000000,0 -> {localTs=0.000000009,0}/<empty>
-meta: "p"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "p"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "p"/7.000000000,0 -> /<empty>
-meta: "q"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "q"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "q"/7.000000000,0 -> /<empty>
 data: "q"/6.000000000,0 -> /BYTES/q6
-meta: "r"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=13 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "r"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=true klen=12 vlen=13 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "r"/7.000000000,0 -> {localTs=5.000000009,0}/<empty>
 data: "r"/6.000000000,0 -> {localTs=0.000000009,0}/<empty>
-stats: key_count=18 key_bytes=396 val_count=30 val_bytes=1062 range_key_count=9 range_key_bytes=250 range_val_count=22 live_count=9 live_bytes=621 gc_bytes_age=102487 intent_count=18 intent_bytes=318 separated_intent_count=18 intent_age=1674
+stats: key_count=18 key_bytes=396 val_count=30 val_bytes=1062 range_key_count=9 range_key_bytes=250 range_val_count=22 live_count=9 live_bytes=621 gc_bytes_age=102487 intent_count=18 intent_bytes=318 lock_count=18 lock_age=1674
 
 run stats ok
 with t=A status=COMMITTED
@@ -237,43 +255,61 @@ with t=A status=COMMITTED
   resolve_intent k=r
 ----
 >> resolve_intent k=a t=A status=COMMITTED
-stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-93
+resolve_intent: "a" -> resolved key = true
+stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=b t=A status=COMMITTED
-stats: val_bytes=-35 live_bytes=-35 gc_bytes_age=-19 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-93
+resolve_intent: "b" -> resolved key = true
+stats: val_bytes=-35 live_bytes=-35 gc_bytes_age=-19 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=c t=A status=COMMITTED
-stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-93
+resolve_intent: "c" -> resolved key = true
+stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=d t=A status=COMMITTED
-stats: val_bytes=-35 gc_bytes_age=-3282 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-93
+resolve_intent: "d" -> resolved key = true
+stats: val_bytes=-35 gc_bytes_age=-3282 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=e t=A status=COMMITTED
-stats: val_bytes=-35 gc_bytes_age=-3301 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-93
+resolve_intent: "e" -> resolved key = true
+stats: val_bytes=-35 gc_bytes_age=-3301 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=f t=A status=COMMITTED
-stats: val_bytes=-48 gc_bytes_age=-4491 intent_count=-1 intent_bytes=-25 separated_intent_count=-1 intent_age=-93
+resolve_intent: "f" -> resolved key = true
+stats: val_bytes=-48 gc_bytes_age=-4491 intent_count=-1 intent_bytes=-25 lock_count=-1 lock_age=-93
 >> resolve_intent k=g t=A status=COMMITTED
-stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-93
+resolve_intent: "g" -> resolved key = true
+stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=h t=A status=COMMITTED
-stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-93
+resolve_intent: "h" -> resolved key = true
+stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=i t=A status=COMMITTED
-stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-93
+resolve_intent: "i" -> resolved key = true
+stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=j t=A status=COMMITTED
-stats: val_bytes=-35 gc_bytes_age=-3282 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-93
+resolve_intent: "j" -> resolved key = true
+stats: val_bytes=-35 gc_bytes_age=-3282 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=k t=A status=COMMITTED
-stats: val_bytes=-35 gc_bytes_age=-3282 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-93
+resolve_intent: "k" -> resolved key = true
+stats: val_bytes=-35 gc_bytes_age=-3282 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=l t=A status=COMMITTED
-stats: val_bytes=-48 gc_bytes_age=-4491 intent_count=-1 intent_bytes=-25 separated_intent_count=-1 intent_age=-93
+resolve_intent: "l" -> resolved key = true
+stats: val_bytes=-48 gc_bytes_age=-4491 intent_count=-1 intent_bytes=-25 lock_count=-1 lock_age=-93
 >> resolve_intent k=m t=A status=COMMITTED
-stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-93
+resolve_intent: "m" -> resolved key = true
+stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=n t=A status=COMMITTED
-stats: val_bytes=-35 live_bytes=-35 gc_bytes_age=-19 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-93
+resolve_intent: "n" -> resolved key = true
+stats: val_bytes=-35 live_bytes=-35 gc_bytes_age=-19 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=o t=A status=COMMITTED
-stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=-93
+resolve_intent: "o" -> resolved key = true
+stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 lock_count=-1 lock_age=-93
 >> resolve_intent k=p t=A status=COMMITTED
-stats: val_bytes=-35 gc_bytes_age=-3282 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-93
+resolve_intent: "p" -> resolved key = true
+stats: val_bytes=-35 gc_bytes_age=-3282 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=q t=A status=COMMITTED
-stats: val_bytes=-35 gc_bytes_age=-3301 intent_count=-1 intent_bytes=-12 separated_intent_count=-1 intent_age=-93
+resolve_intent: "q" -> resolved key = true
+stats: val_bytes=-35 gc_bytes_age=-3301 intent_count=-1 intent_bytes=-12 lock_count=-1 lock_age=-93
 >> resolve_intent k=r t=A status=COMMITTED
-stats: val_bytes=-48 gc_bytes_age=-4491 intent_count=-1 intent_bytes=-25 separated_intent_count=-1 intent_age=-93
+resolve_intent: "r" -> resolved key = true
+stats: val_bytes=-48 gc_bytes_age=-4491 intent_count=-1 intent_bytes=-25 lock_count=-1 lock_age=-93
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=8.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
 rangekey: g{-gg}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {ggg-i}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {i-jjj}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
@@ -328,19 +364,25 @@ with t=A status=COMMITTED
   resolve_intent k=j
 ----
 >> resolve_intent k=aaa t=A status=COMMITTED
+resolve_intent: "aaa" -> resolved key = false
 stats: no change
 >> resolve_intent k=a t=A status=COMMITTED
+resolve_intent: "a" -> resolved key = false
 stats: no change
 >> resolve_intent k=d t=A status=COMMITTED
+resolve_intent: "d" -> resolved key = false
 stats: no change
 >> resolve_intent k=ggg t=A status=COMMITTED
+resolve_intent: "ggg" -> resolved key = false
 stats: no change
 >> resolve_intent k=g t=A status=COMMITTED
+resolve_intent: "g" -> resolved key = false
 stats: no change
 >> resolve_intent k=j t=A status=COMMITTED
+resolve_intent: "j" -> resolved key = false
 stats: no change
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=9.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=9.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
 rangekey: g{-gg}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {ggg-i}/[5.000000000,0=/<empty> 4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {i-jjj}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]

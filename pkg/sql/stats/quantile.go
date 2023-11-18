@@ -105,7 +105,7 @@ var zeroQuantile = quantile{{p: 0, v: 0}, {p: 1, v: 0}}
 // If you are introducing a new histogram version, please check whether
 // makeQuantile and quantile.toHistogram need to change, and then increase the
 // hard-coded number here.
-const _ uint = 2 - uint(histVersion)
+const _ = 2 - uint(histVersion)
 
 // canMakeQuantile returns true if a quantile function can be created for a
 // histogram of the given type. Note that by not supporting BYTES we rule out
@@ -656,6 +656,8 @@ func (q quantile) integrateSquared() float64 {
 // This function fixes the negative slope pieces by "moving" p from the
 // overlapping places to where it should be. No p is lost in the making of these
 // calculations.
+//
+// fixMalformed should not be called without checking that isInvalid() is false.
 func (q quantile) fixMalformed() quantile {
 	// Check for the happy case where q is already well-formed.
 	if q.isWellFormed() {
@@ -803,6 +805,9 @@ func (q quantile) fixMalformed() quantile {
 		// "below" our horizontal line (<= v) and ends "above" our horizontal line
 		// (> v) and we always add two intersectionPs for "double roots" touching
 		// our line from above (one endpoint > v, one endpoint = v).
+		if len(intersectionPs) == 0 {
+			return q
+		}
 		lessEqP := intersectionPs[0]
 		for j := 1; j < len(intersectionPs); j += 2 {
 			lessEqP += intersectionPs[j+1] - intersectionPs[j]
@@ -819,6 +824,16 @@ func (q quantile) fixMalformed() quantile {
 		}
 	}
 	return fixed
+}
+
+// isInvalid returns true if q contains NaN or Inf values.
+func (q quantile) isInvalid() bool {
+	for i := range q {
+		if math.IsNaN(q[i].v) || math.IsInf(q[i].v, 0) {
+			return true
+		}
+	}
+	return false
 }
 
 // isWellFormed returns true if q is well-formed (i.e. is non-decreasing in v).

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -110,8 +111,8 @@ type DistSQLPlanner struct {
 	// gossip handle used to check node version compatibility.
 	gossip gossip.OptionalGossip
 
-	// podNodeDialer handles communication between SQL nodes/pods.
-	podNodeDialer *nodedialer.Dialer
+	// sqlInstanceDialer handles communication between SQL nodes/pods.
+	sqlInstanceDialer *nodedialer.Dialer
 
 	// nodeHealth encapsulates the various node health checks to avoid planning
 	// on unhealthy nodes.
@@ -182,7 +183,7 @@ func NewDistSQLPlanner(
 	stopper *stop.Stopper,
 	isAvailable func(base.SQLInstanceID) bool,
 	connHealthCheckerSystem func(roachpb.NodeID, rpc.ConnectionClass) error, // will only be used by the system tenant
-	podNodeDialer *nodedialer.Dialer,
+	sqlInstanceDialer *nodedialer.Dialer,
 	codec keys.SQLCodec,
 	sqlAddressResolver sqlinstance.AddressResolver,
 	clock *hlc.Clock,
@@ -194,7 +195,7 @@ func NewDistSQLPlanner(
 		stopper:              stopper,
 		distSQLSrv:           distSQLSrv,
 		gossip:               gw,
-		podNodeDialer:        podNodeDialer,
+		sqlInstanceDialer:    sqlInstanceDialer,
 		nodeHealth: distSQLNodeHealth{
 			gossip:      gw,
 			connHealth:  connHealthCheckerSystem,
@@ -463,6 +464,19 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 		return true
 	}
 	return false
+}
+
+func shouldWrapPlanNodeForExecStats(planCtx *PlanningCtx, node planNode) bool {
+	if !planCtx.collectExecStats {
+		// If execution stats aren't being collected, there is no point in
+		// having the overhead of wrappers.
+		return false
+	}
+	// Wrapping batchedPlanNodes breaks some assumptions (namely that Start is
+	// called on the processor-adapter) because it's executed in a special "fast
+	// path" way, so we exempt these from wrapping.
+	_, ok := node.(batchedPlanNode)
+	return !ok
 }
 
 // mustWrapValuesNode returns whether a valuesNode must be wrapped into the
@@ -819,7 +833,7 @@ type PlanningCtx struct {
 
 	// If set, the flows for the physical plan will be passed to this function.
 	// The flows are not safe for use past the lifetime of the saveFlows function.
-	saveFlows func(_ map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, vectorized bool) error
+	saveFlows func(_ map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, _ []execinfra.LocalProcessor, vectorized bool) error
 
 	// If set, we will record the mapping from planNode to tracing metadata to
 	// later allow associating statistics with the planNode.
@@ -891,19 +905,36 @@ func (p *PlanningCtx) getPortalPauseInfo() *portalPauseInfo {
 	return nil
 }
 
+// setUpForMainQuery updates the PlanningCtx for the main query path.
+func (p *PlanningCtx) setUpForMainQuery(
+	ctx context.Context, planner *planner, recv *DistSQLReceiver,
+) {
+	p.stmtType = recv.stmtType
+	// Skip the diagram generation since on this "main" query path we can get it
+	// via the statement bundle.
+	p.skipDistSQLDiagramGeneration = true
+	if planner.execCfg.TestingKnobs.TestingSaveFlows != nil {
+		p.saveFlows = planner.execCfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
+	} else if planner.instrumentation.ShouldSaveFlows() {
+		p.saveFlows = getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
+	}
+	p.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
+	p.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
+}
+
 // getDefaultSaveFlowsFunc returns the default function used to save physical
 // plans and their diagrams. The returned function is **not** concurrency-safe.
-func (p *PlanningCtx) getDefaultSaveFlowsFunc(
+func getDefaultSaveFlowsFunc(
 	ctx context.Context, planner *planner, typ planComponentType,
-) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error {
-	return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, vectorized bool) error {
+) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error {
+	return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, opChains execopnode.OpChains, localProcessors []execinfra.LocalProcessor, vectorized bool) error {
 		var diagram execinfrapb.FlowDiagram
 		if planner.instrumentation.shouldSaveDiagrams() {
 			diagramFlags := execinfrapb.DiagramFlags{
 				MakeDeterministic: planner.execCfg.TestingKnobs.DeterministicExplain,
 			}
 			var err error
-			diagram, err = p.flowSpecsToDiagram(ctx, flows, diagramFlags)
+			diagram, err = flowSpecsToDiagram(planner, flows, diagramFlags)
 			if err != nil {
 				return err
 			}
@@ -911,7 +942,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 		var explainVec []string
 		var explainVecVerbose []string
 		if planner.instrumentation.collectBundle && vectorized {
-			flowCtx, cleanup := newFlowCtxForExplainPurposes(ctx, p, planner)
+			flowCtx, cleanup := newFlowCtxForExplainPurposes(ctx, planner)
 			defer cleanup()
 			flowCtx.Local = !planner.curPlan.flags.IsDistributed()
 			getExplain := func(verbose bool) []string {
@@ -920,7 +951,7 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 				// stats.
 				const recordingStats = true
 				explain, err := colflow.ExplainVec(
-					ctx, flowCtx, flows, p.infra.LocalProcessors, opChains,
+					ctx, flowCtx, flows, localProcessors, opChains,
 					gatewaySQLInstanceID, verbose, recordingStats,
 				)
 				if err != nil {
@@ -951,15 +982,15 @@ func (p *PlanningCtx) getDefaultSaveFlowsFunc(
 }
 
 // flowSpecsToDiagram is a helper function used to convert flowSpecs into a
-// FlowDiagram using this PlanningCtx's information.
-func (p *PlanningCtx) flowSpecsToDiagram(
-	ctx context.Context,
+// FlowDiagram.
+func flowSpecsToDiagram(
+	p *planner,
 	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
 	diagramFlags execinfrapb.DiagramFlags,
 ) (execinfrapb.FlowDiagram, error) {
 	var stmtStr string
-	if p.planner != nil && p.planner.stmt.AST != nil {
-		stmtStr = p.planner.stmt.String()
+	if p != nil && p.stmt.AST != nil {
+		stmtStr = p.stmt.String()
 	}
 	diagram, err := execinfrapb.GeneratePlanDiagram(
 		stmtStr, flows, diagramFlags,
@@ -1041,6 +1072,77 @@ func identityMapInPlace(slice []int) []int {
 		slice[i] = i
 	}
 	return slice
+}
+
+// SpanPartitionReason is the reason why a span was assigned to a particular
+// node or SQL Instance ID.
+type SpanPartitionReason int32
+
+const (
+	// SpanPartitionReason_UNSPECIFIED is reported when the reason is unspecified.
+	SpanPartitionReason_UNSPECIFIED SpanPartitionReason = 0
+	// SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY is reported when the target
+	// node is unhealthy and so we default to the gateway node.
+	SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY SpanPartitionReason = 1
+	// SpanPartitionReason_GATEWAY_NO_HEALTHY_INSTANCES is reported when there are
+	// no healthy instances and so we default to the gateway node.
+	SpanPartitionReason_GATEWAY_NO_HEALTHY_INSTANCES SpanPartitionReason = 2
+	// SpanPartitionReason_GATEWAY_ON_ERROR is reported when there is an error and
+	// so we default to the gateway node.
+	SpanPartitionReason_GATEWAY_ON_ERROR SpanPartitionReason = 3
+	// SpanPartitionReason_TARGET_HEALTHY is reported when the target node is
+	// healthy.
+	SpanPartitionReason_TARGET_HEALTHY SpanPartitionReason = 4
+	// SpanPartitionReason_CLOSEST_LOCALITY_MATCH is reported when we picked an
+	// instance with the closest match to the provided locality filter.
+	SpanPartitionReason_CLOSEST_LOCALITY_MATCH SpanPartitionReason = 5
+	// SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH is reported when there is no
+	// match to the provided locality filter and so we default to the gateway.
+	SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH SpanPartitionReason = 6
+	// SpanPartitionReason_LOCALITY_AWARE_RANDOM is reported when there is no
+	// match to the provided locality filter and the gateway is not eligible. In
+	// this case we pick a random available instance.
+	SpanPartitionReason_LOCALITY_AWARE_RANDOM SpanPartitionReason = 7
+	// SpanPartitionReason_ROUND_ROBIN is reported when there is no locality info
+	// on any of the instances and so we default to a naive round-robin strategy.
+	SpanPartitionReason_ROUND_ROBIN SpanPartitionReason = 8
+
+	// SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY is reported when the
+	// target node retrieved via gossip is deemed unhealthy. In this case we
+	// default to the gateway node.
+	SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY SpanPartitionReason = 9
+	// SpanPartitionReason_GOSSIP_TARGET_HEALTHY is reported when the
+	// target node retrieved via gossip is deemed healthy.
+	SpanPartitionReason_GOSSIP_TARGET_HEALTHY SpanPartitionReason = 10
+)
+
+func (r SpanPartitionReason) String() string {
+	switch r {
+	case SpanPartitionReason_UNSPECIFIED:
+		return "unspecified"
+	case SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY:
+		return "gateway-target-unhealthy"
+	case SpanPartitionReason_GATEWAY_NO_HEALTHY_INSTANCES:
+		return "gateway-no-healthy-instances"
+	case SpanPartitionReason_GATEWAY_ON_ERROR:
+		return "gateway-on-error"
+	case SpanPartitionReason_TARGET_HEALTHY:
+		return "target-healthy"
+	case SpanPartitionReason_CLOSEST_LOCALITY_MATCH:
+		return "closest-locality-match"
+	case SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH:
+		return "gateway-no-locality-match"
+	case SpanPartitionReason_LOCALITY_AWARE_RANDOM:
+		return "locality-aware-random"
+	case SpanPartitionReason_ROUND_ROBIN:
+		return "round-robin"
+	case SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY:
+		return "gossip-gateway-target-unhealthy"
+	case SpanPartitionReason_GOSSIP_TARGET_HEALTHY:
+		return "gossip-target-healthy"
+	default:
+		return "unknown"
+	}
 }
 
 // SpanPartition associates a subset of spans with a specific SQL instance,
@@ -1205,7 +1307,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 	span roachpb.Span,
 	partitions []SpanPartition,
 	nodeMap map[base.SQLInstanceID]int,
-	getSQLInstanceIDForKVNodeID func(roachpb.NodeID) base.SQLInstanceID,
+	getSQLInstanceIDForKVNodeID func(roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason),
 	ignoreMisplannedRanges *bool,
 ) (_ []SpanPartition, lastPartitionIdx int, _ error) {
 	it := planCtx.spanIter
@@ -1247,7 +1349,7 @@ func (dsp *DistSQLPlanner) partitionSpan(
 			)
 		}
 
-		sqlInstanceID := getSQLInstanceIDForKVNodeID(replDesc.NodeID)
+		sqlInstanceID, reason := getSQLInstanceIDForKVNodeID(replDesc.NodeID)
 		partitionIdx, inNodeMap := nodeMap[sqlInstanceID]
 		if !inNodeMap {
 			partitionIdx = len(partitions)
@@ -1263,6 +1365,10 @@ func (dsp *DistSQLPlanner) partitionSpan(
 			// Thus, we include the span into partition.Spans without trying to
 			// merge it with the last span.
 			partition.Spans = append(partition.Spans, span)
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.VEventf(ctx, 2, "partition span: %s, instance ID: %d, reason: %s",
+					span, sqlInstanceID, reason)
+			}
 			break
 		}
 
@@ -1272,14 +1378,17 @@ func (dsp *DistSQLPlanner) partitionSpan(
 			endKey = rSpan.EndKey
 		}
 
+		partitionedSpan := roachpb.Span{Key: lastKey.AsRawKey(), EndKey: endKey.AsRawKey()}
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEventf(ctx, 2, "partition span: %s, instance ID: %d, reason: %s",
+				partitionedSpan.String(), sqlInstanceID, reason.String())
+		}
+
 		if lastSQLInstanceID == sqlInstanceID {
 			// Two consecutive ranges on the same node, merge the spans.
 			partition.Spans[len(partition.Spans)-1].EndKey = endKey.AsRawKey()
 		} else {
-			partition.Spans = append(partition.Spans, roachpb.Span{
-				Key:    lastKey.AsRawKey(),
-				EndKey: endKey.AsRawKey(),
-			})
+			partition.Spans = append(partition.Spans, partitionedSpan)
 		}
 
 		if !endKey.Less(rSpan.EndKey) {
@@ -1299,8 +1408,8 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
 	nodeMap := make(map[base.SQLInstanceID]int)
-	resolver := func(nodeID roachpb.NodeID) base.SQLInstanceID {
-		return dsp.deprecatedSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID)
+	resolver := func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
+		return dsp.deprecatedHealthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, nodeID)
 	}
 	for _, span := range spans {
 		var err error
@@ -1323,7 +1432,7 @@ func (dsp *DistSQLPlanner) deprecatedPartitionSpansSystem(
 func (dsp *DistSQLPlanner) partitionSpans(
 	ctx context.Context, planCtx *PlanningCtx, spans roachpb.Spans,
 ) (partitions []SpanPartition, ignoreMisplannedRanges bool, _ error) {
-	resolver, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
+	resolver, err := dsp.makeInstanceResolver(ctx, planCtx)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1355,55 +1464,108 @@ func (dsp *DistSQLPlanner) partitionSpans(
 	return partitions, ignoreMisplannedRanges, nil
 }
 
-// deprecatedSQLInstanceIDForKVNodeIDSystem returns the SQL instance that should
-// handle the range with the given node ID when planning is done on behalf of
-// the system tenant. It ensures that the chosen SQL instance is healthy and of
-// the compatible DistSQL version.
-func (dsp *DistSQLPlanner) deprecatedSQLInstanceIDForKVNodeIDSystem(
+// deprecatedHealthySQLInstanceIDForKVNodeIDSystem returns the SQL instance that
+// should handle the range with the given node ID when planning is done on
+// behalf of the system tenant. It ensures that the chosen SQL instance is
+// healthy and of the compatible DistSQL version.
+func (dsp *DistSQLPlanner) deprecatedHealthySQLInstanceIDForKVNodeIDSystem(
 	ctx context.Context, planCtx *PlanningCtx, nodeID roachpb.NodeID,
-) base.SQLInstanceID {
+) (base.SQLInstanceID, SpanPartitionReason) {
 	sqlInstanceID := base.SQLInstanceID(nodeID)
 	status := dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, sqlInstanceID)
 	// If the node is unhealthy or its DistSQL version is incompatible, use the
 	// gateway to process this span instead of the unhealthy host. An empty
 	// address indicates an unhealthy host.
+	reason := SpanPartitionReason_GOSSIP_TARGET_HEALTHY
 	if status != NodeOK {
-		log.Eventf(ctx, "not planning on node %d: %s", sqlInstanceID, status)
+		log.VEventf(ctx, 2, "not planning on node %d: %s", sqlInstanceID, status)
 		sqlInstanceID = dsp.gatewaySQLInstanceID
+		reason = SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY
 	}
-	return sqlInstanceID
+	return sqlInstanceID, reason
 }
 
-// instanceIDForKVNodeHostedInstance returns the SQL instance ID for an
-// instance that is hosted in the process of a KV node. Currently SQL
-// instances run in KV node processes have IDs fixed to be equal to the KV
-// nodes' IDs, and all of the SQL instances for a given tenant are _either_
-// run in this mixed mode or standalone, meaning if this server is in mixed
-// mode, we can safely assume every other server is as well, and thus has
-// IDs matching node IDs.
-func instanceIDForKVNodeHostedInstance(nodeID roachpb.NodeID) base.SQLInstanceID {
-	return base.SQLInstanceID(nodeID)
+// healthySQLInstanceIDForKVNodeHostedInstanceResolver returns the SQL instance
+// ID for an instance that is hosted in the process of a KV node. Currently SQL
+// instances that run in KV node processes have IDs fixed to be equal to the KV
+// nodes' IDs, and all of the SQL instances for a given tenant are _either_ run
+// in this mixed mode or standalone, meaning if this server is in mixed mode, we
+// can safely assume every other server is as well, and thus has IDs matching
+// node IDs.
+//
+// If the given node is not healthy, the gateway node is returned.
+func (dsp *DistSQLPlanner) healthySQLInstanceIDForKVNodeHostedInstanceResolver(
+	ctx context.Context,
+) func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
+	allHealthy, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
+	if err != nil {
+		log.Warningf(ctx, "could not get all instances: %v", err)
+		return dsp.alwaysUseGatewayWithReason(SpanPartitionReason_GATEWAY_ON_ERROR)
+	}
+
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "healthy SQL instances available for distributed planning: %v", allHealthy)
+	}
+
+	healthyNodes := make(map[base.SQLInstanceID]struct{}, len(allHealthy))
+	for _, n := range allHealthy {
+		healthyNodes[n.InstanceID] = struct{}{}
+	}
+
+	return func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
+		sqlInstance := base.SQLInstanceID(nodeID)
+		if _, ok := healthyNodes[sqlInstance]; ok {
+			return sqlInstance, SpanPartitionReason_TARGET_HEALTHY
+		}
+		log.Warningf(ctx, "not planning on node %d", sqlInstance)
+		return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY
+	}
 }
+
+func (dsp *DistSQLPlanner) alwaysUseGatewayWithReason(
+	reason SpanPartitionReason,
+) func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
+	return func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
+		return dsp.gatewaySQLInstanceID, reason
+	}
+}
+
+var noInstancesMatchingLocalityFilterErr = errors.New(
+	"no healthy sql instances available matching locality requirement",
+)
 
 // makeInstanceResolver returns a function that can choose the SQL instance ID
 // for a provided KV node ID.
 func (dsp *DistSQLPlanner) makeInstanceResolver(
-	ctx context.Context, locFilter roachpb.Locality,
-) (func(roachpb.NodeID) base.SQLInstanceID, error) {
+	ctx context.Context, planCtx *PlanningCtx,
+) (func(roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason), error) {
 	_, mixedProcessMode := dsp.distSQLSrv.NodeID.OptionalNodeID()
+	locFilter := planCtx.localityFilter
+
+	var mixedProcessSameNodeResolver func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason)
+	if mixedProcessMode {
+		mixedProcessSameNodeResolver = dsp.healthySQLInstanceIDForKVNodeHostedInstanceResolver(ctx)
+	}
 
 	if mixedProcessMode && locFilter.Empty() {
-		return instanceIDForKVNodeHostedInstance, nil
+		return mixedProcessSameNodeResolver, nil
 	}
 
 	// GetAllInstances only returns healthy instances.
-	// TODO(yuzefovich): confirm that all instances are of compatible version.
 	instances, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if len(instances) == 0 {
-		return nil, errors.New("no healthy sql instances available for planning")
+		// For whatever reason, we think that we don't have any healthy
+		// instances (one example is someone explicitly removing the rows from
+		// the sql_instances table), but we always have the gateway pod to
+		// execute on, so we'll use it (unless we have a locality filter).
+		if locFilter.NonEmpty() {
+			return nil, noInstancesMatchingLocalityFilterErr
+		}
+		log.Warningf(ctx, "no healthy sql instances available for planning, only using the gateway")
+		return dsp.alwaysUseGatewayWithReason(SpanPartitionReason_GATEWAY_NO_HEALTHY_INSTANCES), nil
 	}
 
 	rng, _ := randutil.NewPseudoRand()
@@ -1422,7 +1584,7 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 			}
 		}
 		if len(eligible) == 0 {
-			return nil, errors.New("no healthy sql instances available matching locality requirement")
+			return nil, noInstancesMatchingLocalityFilterErr
 		}
 		instances = eligible
 		instancesHaveLocality = true
@@ -1436,22 +1598,26 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 		gatewayIsEligible = true
 	}
 
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "healthy SQL instances available for distributed planning: %v", instances)
+	}
+
 	// If we were able to determine the locality information for at least some
 	// instances, use the locality-aware resolver.
 	if instancesHaveLocality {
-		resolver := func(nodeID roachpb.NodeID) base.SQLInstanceID {
+		resolver := func(nodeID roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
 			// Lookup the node localities to compare to the instance localities.
 			nodeDesc, err := dsp.nodeDescs.GetNodeDescriptor(nodeID)
 			if err != nil {
 				log.Eventf(ctx, "unable to get node descriptor for KV node %s", nodeID)
-				return dsp.gatewaySQLInstanceID
+				return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_ON_ERROR
 			}
 
 			// If we're in mixed-mode, check if the picked node already matches the
 			// locality filter in which case we can just use it.
 			if mixedProcessMode {
 				if ok, _ := nodeDesc.Locality.Matches(locFilter); ok {
-					return instanceIDForKVNodeHostedInstance(nodeID)
+					return mixedProcessSameNodeResolver(nodeID)
 				} else {
 					log.VEventf(ctx, 2,
 						"node %d locality %s does not match locality filter %s, finding alternative placement...",
@@ -1463,16 +1629,16 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 			// TODO(dt): Pre-compute / cache this result, e.g. in the instance reader.
 			if closest, _ := ClosestInstances(instances,
 				nodeDesc.Locality); len(closest) > 0 {
-				return closest[rng.Intn(len(closest))]
+				return closest[rng.Intn(len(closest))], SpanPartitionReason_CLOSEST_LOCALITY_MATCH
 			}
 
 			// No instances had any locality tiers in common with the node locality so
 			// just return the gateway if it is eligible. If it isn't, just pick a
 			// random instance from the eligible instances.
 			if gatewayIsEligible {
-				return dsp.gatewaySQLInstanceID
+				return dsp.gatewaySQLInstanceID, SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH
 			}
-			return instances[rng.Intn(len(instances))].InstanceID
+			return instances[rng.Intn(len(instances))].InstanceID, SpanPartitionReason_LOCALITY_AWARE_RANDOM
 		}
 		return resolver, nil
 	}
@@ -1485,10 +1651,10 @@ func (dsp *DistSQLPlanner) makeInstanceResolver(
 		instances[i], instances[j] = instances[j], instances[i]
 	})
 	var i int
-	resolver := func(roachpb.NodeID) base.SQLInstanceID {
+	resolver := func(roachpb.NodeID) (base.SQLInstanceID, SpanPartitionReason) {
 		id := instances[i%len(instances)].InstanceID
 		i++
-		return id
+		return id, SpanPartitionReason_ROUND_ROBIN
 	}
 	return resolver, nil
 }
@@ -1570,13 +1736,15 @@ func (dsp *DistSQLPlanner) getInstanceIDForScan(
 	}
 
 	if dsp.useGossipPlanning(ctx, planCtx) && planCtx.localityFilter.Empty() {
-		return dsp.deprecatedSQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID), nil
+		sqlInstanceID, _ := dsp.deprecatedHealthySQLInstanceIDForKVNodeIDSystem(ctx, planCtx, replDesc.NodeID)
+		return sqlInstanceID, nil
 	}
-	resolver, err := dsp.makeInstanceResolver(ctx, planCtx.localityFilter)
+	resolver, err := dsp.makeInstanceResolver(ctx, planCtx)
 	if err != nil {
 		return 0, err
 	}
-	return resolver(replDesc.NodeID), nil
+	sqlInstanceID, _ := resolver(replDesc.NodeID)
+	return sqlInstanceID, nil
 }
 
 func (dsp *DistSQLPlanner) useGossipPlanning(ctx context.Context, planCtx *PlanningCtx) bool {
@@ -1637,6 +1805,7 @@ func initTableReaderSpecTemplate(
 		TableDescriptorModificationTime: n.desc.GetModificationTime(),
 		LockingStrength:                 n.lockingStrength,
 		LockingWaitPolicy:               n.lockingWaitPolicy,
+		LockingDurability:               n.lockingDurability,
 	}
 	if err := rowenc.InitIndexFetchSpec(&s.FetchSpec, codec, n.desc, n.index, colIDs); err != nil {
 		return nil, execinfrapb.PostProcessSpec{}, err
@@ -1701,7 +1870,7 @@ const defaultLocalScansConcurrencyLimit = 1024
 // "additional" we mean having more processors than one in the same stage of the
 // physical plan.
 var localScansConcurrencyLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.local_scans.concurrency_limit",
 	"maximum number of additional goroutines for performing scans in local plans",
 	defaultLocalScansConcurrencyLimit,
@@ -1862,6 +2031,30 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		// kept the reference to it in TableReaderSpec (rather than allocating
 		// new slices in generateScanSpans and PartitionSpans).
 		tr.Spans = sp.Spans
+
+		// In some cases, sp.Spans might be an alias to scanNode.spans, and in
+		// order to protect the latter from modification (which we must do in
+		// case the query might need to be retried-as-local), we might need to
+		// perform a copy. In particular, we need to care about the scenario
+		// when the following conditions are met:
+		// - 1. the query might be distributed (if it's not distributed, then
+		//      retry-as-local mechanism won't kick in)
+		// - 2. this SpanPartition is assigned to the local node (for all remote
+		//      nodes the spans will be serialized and sent over the wire, so it
+		//      doesn't matter if the remote node modifies them - it'll have its
+		//      own copy).
+		//
+		// NB: not making a copy for local plans means that scanNode.spans might
+		// be modified during the execution. At the time of writing, this
+		// doesn't matter, so we choose the performance angle.
+		if !planCtx.isLocal && sp.SQLInstanceID == dsp.gatewaySQLInstanceID {
+			// Note that we might be copying the spans in more cases than
+			// strictly necessary (e.g. because we allocated a fresh slice in
+			// partitionSpansEx above), but we choose to be a bit conservative
+			// here.
+			tr.Spans = make(roachpb.Spans, len(sp.Spans))
+			copy(tr.Spans, sp.Spans)
+		}
 
 		tr.Parallelize = info.parallelize
 		if !tr.Parallelize {
@@ -2712,6 +2905,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		Type:              descpb.InnerJoin,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
+		LockingDurability: n.table.lockingDurability,
 		MaintainOrdering:  len(n.reqOrdering) > 0,
 		LimitHint:         n.limitHint,
 	}
@@ -2789,6 +2983,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		Type:              n.joinType,
 		LockingStrength:   n.table.lockingStrength,
 		LockingWaitPolicy: n.table.lockingWaitPolicy,
+		LockingDurability: n.table.lockingDurability,
 		// TODO(sumeer): specifying ordering here using isFirstJoinInPairedJoiner
 		// is late in the sense that the cost of this has not been taken into
 		// account. Make this decision earlier in CustomFuncs.GenerateLookupJoins.
@@ -2921,6 +3116,7 @@ func (dsp *DistSQLPlanner) createPlanForInvertedJoin(
 		OutputGroupContinuationForLeftRow: n.isFirstJoinInPairedJoiner,
 		LockingStrength:                   n.table.lockingStrength,
 		LockingWaitPolicy:                 n.table.lockingWaitPolicy,
+		LockingDurability:                 n.table.lockingDurability,
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(n.table.cols))
@@ -3017,6 +3213,7 @@ func (dsp *DistSQLPlanner) createPlanForZigzagJoin(
 			fixedValues:       valuesSpec,
 			lockingStrength:   side.scan.lockingStrength,
 			lockingWaitPolicy: side.scan.lockingWaitPolicy,
+			lockingDurability: side.scan.lockingDurability,
 		}
 	}
 
@@ -3036,6 +3233,7 @@ type zigzagPlanningSide struct {
 	fixedValues       *execinfrapb.ValuesCoreSpec
 	lockingStrength   descpb.ScanLockingStrength
 	lockingWaitPolicy descpb.ScanLockingWaitPolicy
+	lockingDurability descpb.ScanLockingDurability
 }
 
 type zigzagPlanningInfo struct {
@@ -3466,14 +3664,12 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *rowCountNode:
 		if in, ok := n.source.(*insertNode); ok {
-			var valNode planNode
-			// We support two cases, a render around a values and a straight values.
-			if r, ok := in.source.(*renderNode); ok {
-				valNode = r.source.plan
-			} else {
-				valNode = in.source
+			// Skip over any renderNodes.
+			nod := in.source
+			for r, ok := nod.(*renderNode); ok; r, ok = r.source.plan.(*renderNode) {
+				nod = r.source.plan
 			}
-			if v, ok := valNode.(*valuesNode); ok {
+			if v, ok := nod.(*valuesNode); ok {
 				if v.coldataBatch != nil {
 					planCtx.isVectorInsert = true
 				}
@@ -3602,9 +3798,15 @@ func (dsp *DistSQLPlanner) wrapPlan(
 			}
 			var err error
 			// Continue walking until we find a node that has a DistSQL
-			// representation - that's when we'll quit the wrapping process and hand
-			// control of planning back to the DistSQL physical planner.
-			if !dsp.mustWrapNode(planCtx, plan) {
+			// representation - that's when we'll quit the wrapping process and
+			// hand control of planning back to the DistSQL physical planner.
+			//
+			// However, if we're collecting execution stats, then we'll surround
+			// each planNode with a pair of planNodeToRowSource and
+			// rowSourceToPlanNode adapters so that the execution statistics
+			// are collected for each planNode independently. This should have
+			// low enough overhead.
+			if !dsp.mustWrapNode(planCtx, plan) || shouldWrapPlanNodeForExecStats(planCtx, plan) {
 				firstNotWrapped = plan
 				p, err = dsp.createPhysPlanForPlanNode(ctx, planCtx, plan)
 				if err != nil {
@@ -4767,4 +4969,8 @@ func (dsp *DistSQLPlanner) createPlanForInsert(
 		typs,
 		execinfrapb.Ordering{})
 	return plan, nil
+}
+
+func (dsp *DistSQLPlanner) NodeDescStore() kvcoord.NodeDescStore {
+	return dsp.nodeDescs
 }

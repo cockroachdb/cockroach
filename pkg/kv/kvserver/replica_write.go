@@ -207,8 +207,12 @@ func (r *Replica) executeWriteBatch(
 			// Semi-synchronously process any intents that need resolving here in
 			// order to apply back pressure on the client which generated them. The
 			// resolution is semi-synchronous in that there is a limited number of
-			// outstanding asynchronous resolution tasks allowed after which
-			// further calls will block.
+			// outstanding asynchronous resolution tasks allowed after which further
+			// calls will block. The limited number of asynchronous resolution tasks
+			// ensures that the number of goroutines doing intent resolution does
+			// not diverge from the number of workload goroutines (see
+			// https://github.com/cockroachdb/cockroach/issues/4925#issuecomment-193015586
+			// for an old problem predating such a limit).
 			if len(propResult.EndTxns) > 0 {
 				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
@@ -218,7 +222,7 @@ func (r *Replica) executeWriteBatch(
 			}
 			if len(propResult.EncounteredIntents) > 0 {
 				if err := r.store.intentResolver.CleanupIntentsAsync(
-					ctx, propResult.EncounteredIntents, true, /* allowSync */
+					ctx, ba.AdmissionHeader, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {
 					log.Warningf(ctx, "intent cleanup failed: %v", err)
 				}
@@ -499,9 +503,12 @@ func (r *Replica) evaluate1PC(
 	var batch storage.Batch
 	defer func() {
 		// Close the batch unless it's passed to the caller (when the evaluation
-		// succeeds).
+		// succeeds). Also increment metrics.
 		if onePCRes.success != onePCSucceeded {
 			batch.Close()
+			r.store.Metrics().OnePhaseCommitFailure.Inc(1)
+		} else {
+			r.store.Metrics().OnePhaseCommitSuccess.Inc(1)
 		}
 	}()
 
@@ -788,6 +795,7 @@ func (r *Replica) newBatchedEngine(
 //     condition is isolation level dependent.
 //  3. the transaction is not in its first epoch and the EndTxn request does
 //     not require one phase commit.
+//  4. the EndTxn request explicitly disables one phase commit.
 func isOnePhaseCommit(ba *kvpb.BatchRequest) bool {
 	if ba.Txn == nil {
 		return false
@@ -810,6 +818,9 @@ func isOnePhaseCommit(ba *kvpb.BatchRequest) bool {
 	}
 	arg, _ := ba.GetArg(kvpb.EndTxn)
 	etArg := arg.(*kvpb.EndTxnRequest)
+	if etArg.Disable1PC {
+		return false // explicitly disabled
+	}
 	if retry, _, _ := batcheval.IsEndTxnTriggeringRetryError(ba.Txn, etArg.Deadline); retry {
 		return false
 	}

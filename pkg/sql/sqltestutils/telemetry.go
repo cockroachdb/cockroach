@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
@@ -90,10 +89,6 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 		var test telemetryTest
 		test.Start(t, serverArgs)
 		defer test.Close()
-
-		if path == "testdata/telemetry/sql-stats" {
-			skip.WithIssue(t, 107593)
-		}
 
 		// Run test against physical CRDB cluster.
 		t.Run("server", func(t *testing.T) {
@@ -155,7 +150,7 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 		v.ExternalIODir = tempExternalIODir
 		mapServerArgs[i] = v
 	}
-	tt.cluster = serverutils.StartNewTestCluster(
+	tt.cluster = serverutils.StartCluster(
 		tt.t,
 		len(serverArgs),
 		base.TestClusterArgs{
@@ -304,7 +299,7 @@ func (tt *telemetryTest) prepareCluster(db *gosql.DB) {
 	runner := sqlutils.MakeSQLRunner(db)
 	// Disable automatic reporting so it doesn't interfere with the test.
 	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.enabled = false")
-	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false")
+	runner.Exec(tt.t, "SET CLUSTER SETTING diagnostics.reporting.send_crash_reports.enabled = false")
 	// Disable plan caching to get accurate counts if the same statement is
 	// issued multiple times.
 	runner.Exec(tt.t, "SET CLUSTER SETTING sql.query_cache.enabled = false")
@@ -366,7 +361,9 @@ func formatSQLStats(stats []appstatspb.CollectedStatementStatistics) string {
 	for i := range stats {
 		s := &stats[i]
 
-		if strings.HasPrefix(s.Key.App, catconstants.InternalAppNamePrefix) {
+		if strings.HasPrefix(s.Key.App,
+			catconstants.InternalAppNamePrefix) || strings.HasPrefix(s.Key.App,
+			catconstants.DelegatedAppNamePrefix) {
 			// Let's ignore all internal queries for this test.
 			continue
 		}

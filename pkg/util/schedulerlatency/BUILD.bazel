@@ -27,7 +27,6 @@ go_test(
         "histogram_test.go",
         "scheduler_latency_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":schedulerlatency"],
     deps = [
@@ -39,6 +38,7 @@ go_test(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

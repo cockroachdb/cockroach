@@ -24,6 +24,7 @@ func BenchmarkOverlapCoveringMerge(b *testing.B) {
 		name   string
 		inputs []Covering
 	}
+	//lint:ignore SA1019 deprecated
 	rand.Seed(0)
 
 	for _, numLayers := range []int{

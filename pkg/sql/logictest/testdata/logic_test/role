@@ -1554,7 +1554,7 @@ user testuser
 # Verify that testuser is not allowed to edit some other role that has ADMIN.
 # The error message is important for this test -- we want to make sure it fails
 # because of a missing ADMIN power, not because of a missing CREATEROLE option.
-statement error only users with the admin role are allowed to ALTER ROLE admin
+statement error only users with the admin role are allowed to alter another admin
 ALTER ROLE other_admin NOCREATEDB
 
 subtest pw_hashes
@@ -1664,3 +1664,192 @@ RESET CLUSTER SETTING server.user_login.password_encryption;
 
 statement ok
 RESET CLUSTER SETTING server.user_login.password_hashes.default_cost.scram_sha_256
+
+subtest end
+
+subtest create_role_priv
+
+user root
+
+# Revoke the CREATEROLE role option granted in an earlier subtest.
+statement ok
+ALTER ROLE testuser NOCREATEROLE
+
+user testuser
+
+statement error user testuser does not have CREATEROLE privilege
+CREATE ROLE u_create_role_priv
+
+user root
+
+statement ok
+GRANT SYSTEM CREATEROLE TO testuser
+
+user testuser
+
+statement ok
+CREATE ROLE u_create_role_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATEROLE FROM testuser
+
+user testuser
+
+statement error user testuser does not have CREATEROLE privilege
+DROP ROLE u_create_role_priv
+
+user root
+
+statement ok
+CREATE ROLE parent_with_createrole
+
+statement ok
+GRANT parent_with_createrole TO testuser
+
+statement ok
+GRANT SYSTEM CREATEROLE TO parent_with_createrole
+
+user testuser
+
+statement ok
+DROP ROLE u_create_role_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATEROLE FROM parent_with_createrole
+
+statement ok
+DROP ROLE parent_with_createrole
+
+subtest end
+
+subtest create_login_priv
+
+user root
+
+statement ok
+ALTER ROLE testuser CREATEROLE NOCREATELOGIN
+
+user testuser
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER u_create_login_priv WITH PASSWORD 'roacher4lyfe'
+
+user root
+
+statement ok
+GRANT SYSTEM CREATELOGIN TO testuser
+
+user testuser
+
+statement ok
+CREATE USER u_create_login_priv WITH PASSWORD 'roacher4lyfe'
+
+statement ok
+DROP USER u_create_login_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATELOGIN FROM testuser
+
+user testuser
+
+statement error user testuser does not have CREATELOGIN privilege
+CREATE USER u_create_login_priv WITH PASSWORD 'roacher4lyfe'
+
+user root
+
+statement ok
+CREATE ROLE creator_of_logins
+
+statement ok
+GRANT SYSTEM CREATELOGIN TO creator_of_logins
+
+statement ok
+GRANT creator_of_logins TO testuser
+
+user testuser
+
+statement ok
+CREATE USER u_create_login_priv WITH PASSWORD 'roacher4lyfe'
+
+statement ok
+DROP USER u_create_login_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATELOGIN FROM creator_of_logins
+
+statement ok
+DROP ROLE creator_of_logins
+
+statement ok
+ALTER ROLE testuser NOCREATEROLE
+
+subtest end
+
+subtest create_db_priv
+
+user root
+
+statement ok
+ALTER ROLE testuser NOCREATEDB
+
+user testuser
+
+statement error permission denied to create database
+CREATE DATABASE db_create_db_priv
+
+user root
+
+statement ok
+GRANT SYSTEM CREATEDB TO testuser
+
+user testuser
+
+statement ok
+CREATE DATABASE db_create_db_priv
+
+user root
+
+statement ok
+REVOKE SYSTEM CREATEDB FROM testuser
+
+user testuser
+
+statement error permission denied to rename database
+ALTER DATABASE db_create_db_priv RENAME TO renamed_db_create_db_priv
+
+user root
+
+statement ok
+CREATE ROLE creator_of_databases
+
+statement ok
+GRANT creator_of_databases TO testuser
+
+statement ok
+GRANT SYSTEM CREATEDB TO creator_of_databases
+
+user testuser
+
+statement ok
+ALTER DATABASE db_create_db_priv RENAME TO renamed_db_create_db_priv
+
+user root
+
+statement ok
+DROP DATABASE renamed_db_create_db_priv
+
+statement ok
+REVOKE SYSTEM CREATEDB FROM creator_of_databases
+
+statement ok
+DROP ROLE creator_of_databases
+
+subtest end

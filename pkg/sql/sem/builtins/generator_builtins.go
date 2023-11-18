@@ -23,16 +23,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/workloadindexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
@@ -56,17 +59,23 @@ var _ eval.ValueGenerator = &seriesValueGenerator{}
 var _ eval.ValueGenerator = &arrayValueGenerator{}
 
 func init() {
-	// Add all windows to the builtins map after a few sanity checks.
 	for k, v := range generators {
-		for _, g := range v.overloads {
-			if g.Class != tree.GeneratorClass {
-				panic(errors.AssertionFailedf("generator functions should be marked with the tree.GeneratorClass "+
-					"function class, found %v", v))
-			}
-		}
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.GeneratorClass, enforceClass)
 	}
 }
+
+const DefaultSpanStatsSpanLimit = 1000
+
+// SpanStatsBatchLimit registers the maximum number of spans allowed in a
+// span stats request payload.
+var SpanStatsBatchLimit = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"server.span_stats.span_batch_limit",
+	"the maximum number of spans allowed in a request payload for span statistics",
+	DefaultSpanStatsSpanLimit,
+	settings.PositiveInt,
+)
 
 func genProps() tree.FunctionProperties {
 	return tree.FunctionProperties{
@@ -303,7 +312,7 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
-				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
+				if len(args) == 0 || args[0].ResolvedType().Family() != types.ArrayFamily {
 					return tree.UnknownReturnType
 				}
 				return args[0].ResolvedType().ArrayContents()
@@ -323,7 +332,7 @@ var generators = map[string]builtinDefinition{
 				returnTypes := make([]*types.T, len(args))
 				labels := make([]string, len(args))
 				for i, arg := range args {
-					if arg.ResolvedType().Family() == types.UnknownFamily {
+					if arg.ResolvedType().Family() != types.ArrayFamily {
 						return tree.UnknownReturnType
 					}
 					returnTypes[i] = arg.ResolvedType().ArrayContents()
@@ -341,7 +350,7 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ParamTypes{{Name: "input", Typ: types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
-				if len(args) == 0 || args[0].ResolvedType().Family() == types.UnknownFamily {
+				if len(args) == 0 || args[0].ResolvedType().Family() != types.ArrayFamily {
 					return tree.UnknownReturnType
 				}
 				t := args[0].ResolvedType().ArrayContents()
@@ -2093,12 +2102,10 @@ var _ eval.ValueGenerator = &checkConsistencyGenerator{}
 func makeCheckConsistencyGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, pgerror.New(pgcode.InsufficientPrivilege, "crdb_internal.check_consistency requires admin privileges")
 	}
 
 	keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
@@ -2464,16 +2471,10 @@ type payloadsForSpanGenerator struct {
 func makePayloadsForSpanGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to use crdb_internal.payloads_for_span",
-		)
 	}
 	spanID := tracingpb.SpanID(*(args[0].(*tree.DInt)))
 	span := evalCtx.Tracer.GetActiveSpanByID(spanID)
@@ -2567,16 +2568,10 @@ type payloadsForTraceGenerator struct {
 func makePayloadsForTraceGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	// The user must be an admin to use this builtin.
-	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
-	if err != nil {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA,
+	); err != nil {
 		return nil, err
-	}
-	if !isAdmin {
-		return nil, pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"only users with the admin role are allowed to use crdb_internal.payloads_for_trace",
-		)
 	}
 	traceID := uint64(*(args[0].(*tree.DInt)))
 	return &payloadsForTraceGenerator{traceID: traceID, planner: evalCtx.Planner}, nil
@@ -3309,14 +3304,16 @@ type storageInternalKeysIterator struct {
 
 var storageInternalKeysGeneratorType = types.MakeLabeledTuple(
 	[]*types.T{types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int, types.Int,
-		types.Int, types.Int},
+		types.Int, types.Int, types.Int, types.Int},
 	[]string{
 		"level",
 		"node_id",
 		"store_id",
 		"snapshot_pinned_keys",
 		"snapshot_pinned_keys_bytes",
+		"point_key_delete_is_latest_count",
 		"point_key_delete_count",
+		"point_key_set_is_latest_count",
 		"point_key_set_count",
 		"range_delete_count",
 		"range_key_set_count",
@@ -3364,7 +3361,9 @@ func (s *storageInternalKeysIterator) Values() (tree.Datums, error) {
 		tree.NewDInt(tree.DInt(s.storeID)),
 		tree.NewDInt(tree.DInt(metricsInfo.SnapshotPinnedKeys)),
 		tree.NewDInt(tree.DInt(metricsInfo.SnapshotPinnedKeysBytes)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeyDeleteIsLatestCount)),
 		tree.NewDInt(tree.DInt(metricsInfo.PointKeyDeleteCount)),
+		tree.NewDInt(tree.DInt(metricsInfo.PointKeySetIsLatestCount)),
 		tree.NewDInt(tree.DInt(metricsInfo.PointKeySetCount)),
 		tree.NewDInt(tree.DInt(metricsInfo.RangeDeleteCount)),
 		tree.NewDInt(tree.DInt(metricsInfo.RangeKeySetCount)),
@@ -3414,7 +3413,7 @@ func makeTableSpanStatsGenerator(
 	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
 	// The user must have ADMIN role or VIEWACTIVITY/VIEWACTIVITYREDACTED permission to use this builtin.
-	hasViewActivity, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
+	hasViewActivity, _, err := evalCtx.SessionAccessor.HasViewActivityOrViewActivityRedactedRole(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3436,7 +3435,7 @@ func makeTableSpanStatsGenerator(
 		}
 	}
 
-	spanBatchLimit := roachpb.SpanStatsBatchLimit.Get(&evalCtx.Settings.SV)
+	spanBatchLimit := SpanStatsBatchLimit.Get(&evalCtx.Settings.SV)
 	return newTableSpanStatsIterator(evalCtx, dbId, tableId,
 		int(spanBatchLimit)), nil
 }

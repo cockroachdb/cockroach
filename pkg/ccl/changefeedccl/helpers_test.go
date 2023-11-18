@@ -29,8 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	// Imported to allow locality-related table mutations
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -382,6 +381,12 @@ SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING sql.defaults.vectorize=on;
+ALTER TENANT ALL SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
+ALTER TENANT ALL SET CLUSTER SETTING sql.defaults.vectorize=on;
+CREATE DATABASE d;
+`
+
+var tenantSetupStatements = `
 CREATE DATABASE d;
 `
 
@@ -400,7 +405,7 @@ func startTestFullServer(
 		Knobs: knobs,
 		// This test suite is already probabilistically running with
 		// tenants. No need for the test tenant.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		UseDatabase:       `d`,
 		ExternalIODir:     options.externalIODir,
 		Settings:          options.settings,
@@ -519,12 +524,12 @@ func startTestTenant(
 	tenantServer, tenantDB := serverutils.StartTenant(t, systemServer, tenantArgs)
 	// Re-run setup on the tenant as well
 	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
-	tenantRunner.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
+	tenantRunner.ExecMultiple(t, strings.Split(tenantSetupStatements, ";")...)
 
 	waitForTenantPodsActive(t, tenantServer, 1)
 	resetRetry := testingUseFastRetry()
 	return tenantID, tenantServer, tenantDB, func() {
-		tenantServer.Stopper().Stop(context.Background())
+		tenantServer.AppStopper().Stop(context.Background())
 		resetRetry()
 	}
 }
@@ -598,14 +603,6 @@ func (opts feedTestOptions) omitSinks(sinks ...string) feedTestOptions {
 // and not the sqlServer.
 func withArgsFn(fn updateArgsFn) feedTestOption {
 	return func(opts *feedTestOptions) { opts.argsFn = fn }
-}
-
-// withSettingsFn arranges for a feed option to set the settings for
-// both system and test tenant.
-func withSettings(st *cluster.Settings) feedTestOption {
-	return func(opts *feedTestOptions) {
-		opts.settings = st
-	}
 }
 
 // withKnobsFn is a feedTestOption that allows the caller to modify
@@ -884,9 +881,6 @@ func randomSinkTypeWithOptions(options feedTestOptions) string {
 		for _, sinkType := range options.disabledSinkTypes {
 			sinkWeights[sinkType] = 0
 		}
-	}
-	if weight, ok := sinkWeights["cloudstorage"]; ok && weight != 0 {
-		sinkWeights = map[string]int{"cloudstorage": 1}
 	}
 	weightTotal := 0
 	for _, weight := range sinkWeights {
@@ -1176,7 +1170,7 @@ var cmLogRe = regexp.MustCompile(`event_log\.go`)
 func checkStructuredLogs(t *testing.T, eventType string, startTime int64) []string {
 	var matchingEntries []string
 	testutils.SucceedsSoon(t, func() error {
-		log.Flush()
+		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(startTime,
 			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
 		if err != nil {

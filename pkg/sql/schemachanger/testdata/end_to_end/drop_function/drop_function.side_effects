@@ -60,7 +60,7 @@ upsert descriptor #101
      modificationTime: {}
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  version: "2"
   +  version: "3"
 upsert descriptor #104
@@ -117,7 +117,7 @@ upsert descriptor #106
      viewQuery: SELECT a FROM defaultdb.public.t
 upsert descriptor #107
   ...
-       version: 2
+       version: 3
      referencingDescriptorIds:
   -  - 109
      - 110
@@ -125,7 +125,7 @@ upsert descriptor #107
   +  version: "4"
 upsert descriptor #108
   ...
-       version: 2
+       version: 3
      referencingDescriptorIds:
   -  - 109
      - 110
@@ -164,7 +164,7 @@ upsert descriptor #101
      modificationTime: {}
   ...
          withGrantOption: "2"
-       version: 2
+       version: 3
   -  version: "2"
   +  version: "3"
 upsert descriptor #104
@@ -273,7 +273,7 @@ upsert descriptor #107
      enumMembers:
      - logicalRepresentation: Monday
   ...
-       version: 2
+       version: 3
      referencingDescriptorIds:
   -  - 109
      - 110
@@ -293,7 +293,7 @@ upsert descriptor #108
      id: 108
      kind: ALIAS
   ...
-       version: 2
+       version: 3
      referencingDescriptorIds:
   -  - 109
      - 110

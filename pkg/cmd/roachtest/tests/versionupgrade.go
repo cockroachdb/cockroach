@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"path/filepath"
 	"runtime"
 	"time"
 
@@ -101,7 +100,16 @@ DROP TABLE splitmerge.t;
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), mixedversion.AlwaysUseFixtures)
+	testOptions := []mixedversion.CustomOption{mixedversion.AlwaysUseFixtures}
+	if c.IsLocal() {
+		// Always use latest predecessors when running locally. This is
+		// primarily to avoid disruptive flakes in CI due to known bugs in
+		// older releases (e.g., #110702). We might eventually apply this
+		// option unconditionally if the test also starts flaking too much
+		// on the nightly build.
+		testOptions = append(testOptions, mixedversion.AlwaysUseLatestPredecessors)
+	}
+	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), testOptions...)
 	mvt.OnStartup(
 		"setup schema changer workload",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
@@ -136,6 +144,18 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			// We currently only stage the `workload` binary built off the
+			// SHA being tested; therefore, we skip testing the schemachange
+			// workload if this is not an upgrade or downgrade involving the
+			// current cockroach binary.
+			// TODO(renato): stage different workload binaries for the
+			// releases being used in the test and use the appropriate
+			// binary in this step.
+			if !h.Context.ToVersion.IsCurrent() {
+				l.Printf("skipping this step -- only supported when current version is involved")
+				return nil
+			}
+
 			l.Printf("running schema workload step")
 			runCmd := roachtestutil.NewCommand("./workload run schemachange").Flag("verbose", 1).Flag("max-ops", 10).Flag("concurrency", 2).Arg("{pgurl:1-%d}", len(c.All()))
 			randomNode := h.RandomNode(rng, c.All())
@@ -202,7 +222,7 @@ func uploadVersion(
 	t test.Test,
 	c cluster.Cluster,
 	nodes option.NodeListOption,
-	newVersion string,
+	newVersion *clusterupgrade.Version,
 ) string {
 	path, err := clusterupgrade.UploadVersion(ctx, t, t.L(), c, nodes, newVersion)
 	if err != nil {
@@ -221,7 +241,7 @@ func upgradeNodes(
 	c cluster.Cluster,
 	nodes option.NodeListOption,
 	startOpts option.StartOpts,
-	newVersion string,
+	newVersion *clusterupgrade.Version,
 ) {
 	if err := clusterupgrade.RestartNodesWithNewBinary(
 		ctx, t, t.L(), c, nodes, startOpts, newVersion,
@@ -245,29 +265,15 @@ func (u *versionUpgradeTest) binaryVersion(
 // versionStep is an isolated version migration on a running cluster.
 type versionStep func(ctx context.Context, t test.Test, u *versionUpgradeTest)
 
-func uploadAndStartFromCheckpointFixture(nodes option.NodeListOption, v string) versionStep {
+func uploadAndStartFromCheckpointFixture(
+	nodes option.NodeListOption, v *clusterupgrade.Version,
+) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := clusterupgrade.InstallFixtures(ctx, t.L(), u.c, nodes, v); err != nil {
 			t.Fatal(err)
 		}
 		binary := uploadVersion(ctx, t, u.c, nodes, v)
 		startOpts := option.DefaultStartOpts()
-		// NB: can't start sequentially since cluster already bootstrapped.
-		startOpts.RoachprodOpts.Sequential = false
-		if err := clusterupgrade.StartWithSettings(
-			ctx, t.L(), u.c, nodes, startOpts, install.BinaryOption(binary),
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
-
-func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		binary := uploadVersion(ctx, t, u.c, nodes, v)
-		startOpts := option.DefaultStartOpts()
-		// NB: can't start sequentially since cluster already bootstrapped.
-		startOpts.RoachprodOpts.Sequential = false
 		if err := clusterupgrade.StartWithSettings(
 			ctx, t.L(), u.c, nodes, startOpts, install.BinaryOption(binary),
 		); err != nil {
@@ -279,10 +285,12 @@ func uploadAndStart(nodes option.NodeListOption, v string) versionStep {
 // binaryUpgradeStep rolling-restarts the given nodes into the new binary
 // version. Note that this does *not* wait for the cluster version to upgrade.
 // Use a waitForUpgradeStep() for that.
-func binaryUpgradeStep(nodes option.NodeListOption, newVersion string) versionStep {
+func binaryUpgradeStep(
+	nodes option.NodeListOption, newVersion *clusterupgrade.Version,
+) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		if err := clusterupgrade.RestartNodesWithNewBinary(
-			ctx, t, t.L(), u.c, nodes, option.DefaultStartOpts(), newVersion,
+			ctx, t, t.L(), u.c, nodes, option.DefaultStartOptsNoBackups(), newVersion,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -336,13 +344,14 @@ func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 func makeVersionFixtureAndFatal(
 	ctx context.Context, t test.Test, c cluster.Cluster, makeFixtureVersion string,
 ) {
-	predecessorVersion, err := release.LatestPredecessor(version.MustParse(makeFixtureVersion))
+	predecessorVersionStr, err := release.LatestPredecessor(version.MustParse(makeFixtureVersion))
 	if err != nil {
 		t.Fatal(err)
 	}
+	predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 
 	t.L().Printf("making fixture for %s (starting at %s)", makeFixtureVersion, predecessorVersion)
-	fixtureVersion := makeFixtureVersion[1:] // drop the leading v
+	fixtureVersion := clusterupgrade.MustParseVersion(makeFixtureVersion)
 
 	newVersionUpgradeTest(c,
 		// Start the cluster from a fixture. That fixture's cluster version may
@@ -405,56 +414,6 @@ for i in 1 2 3 4; do
 done
 `)
 		}).run(ctx, t)
-}
-
-// importTPCCStep runs a TPCC import import on the first crdbNode (monitoring them all for
-// crashes during the import). If oldV is nil, this runs the import using the specified
-// version (for example "19.2.1", as provided by LatestPredecessor()) using the location
-// used by c.Stage(). An empty oldV uses the main cockroach binary.
-func importTPCCStep(
-	oldV string, headroomWarehouses int, crdbNodes option.NodeListOption,
-) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		// We need to use the predecessor binary to load into the
-		// predecessor cluster to avoid random breakage. For example, you
-		// can't use 21.1 to import into 20.2 due to some flag changes.
-		//
-		// TODO(tbg): also import a large dataset (for example 2TB bank)
-		// that will provide cold data that may need to be migrated.
-		var cmd string
-		if oldV == "" {
-			cmd = tpccImportCmd(headroomWarehouses)
-		} else {
-			cmd = tpccImportCmdWithCockroachBinary(filepath.Join("v"+oldV, "cockroach"), headroomWarehouses, "--checks=false")
-		}
-		// Use a monitor so that we fail cleanly if the cluster crashes
-		// during import.
-		m := u.c.NewMonitor(ctx, crdbNodes)
-		m.Go(func(ctx context.Context) error {
-			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), cmd)
-		})
-		m.Wait()
-	}
-}
-
-func importLargeBankStep(oldV string, rows int, crdbNodes option.NodeListOption) versionStep {
-	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		// Use the predecessor binary to load into the predecessor
-		// cluster to avoid random breakage due to flag changes, etc.
-		binary := "./cockroach"
-		if oldV != "" {
-			binary = filepath.Join("v"+oldV, "cockroach")
-		}
-
-		// Use a monitor so that we fail cleanly if the cluster crashes
-		// during import.
-		m := u.c.NewMonitor(ctx, crdbNodes)
-		m.Go(func(ctx context.Context) error {
-			return u.c.RunE(ctx, u.c.Node(crdbNodes[0]), binary, "workload", "fixtures", "import", "bank",
-				"--payload-bytes=10240", "--rows="+fmt.Sprint(rows), "--seed=4", "--db=bigbank")
-		})
-		m.Wait()
-	}
 }
 
 func sleepStep(d time.Duration) versionStep {

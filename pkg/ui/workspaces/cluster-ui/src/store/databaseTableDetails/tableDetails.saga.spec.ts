@@ -35,14 +35,14 @@ import {
   reducer,
 } from "./tableDetails.reducer";
 import moment from "moment";
-import { generateTableID } from "../../util";
+import { generateTableID, indexUnusedDuration } from "../../util";
 
 describe("TableDetails sagas", () => {
   const database = "test_db";
   const table = "test_table";
   const key = generateTableID(database, table);
   const requestAction: PayloadAction<TableDetailsReqParams> = {
-    payload: { database, table },
+    payload: { database, table, csIndexUnusedDuration: indexUnusedDuration },
     type: "request",
   };
   const tableDetailsResponse: SqlApiResponse<TableDetailsResponse> = {

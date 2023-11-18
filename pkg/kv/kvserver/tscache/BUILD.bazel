@@ -15,6 +15,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/util",
         "//pkg/util/cache",
+        "//pkg/util/container/list",
         "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",
@@ -36,7 +37,6 @@ go_test(
         "interval_skl_test.go",
         "tree_impl_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":tscache"],
     deps = [
         "//pkg/roachpb",

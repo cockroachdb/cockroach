@@ -18,14 +18,57 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	inner "github.com/bazelbuild/rules_go/go/tools/bazel"
 )
 
-// Return true iff this library was built with Bazel.
+// bazelTestEnvVar can be used to determine when running in the `bazel test`
+// environment.
+const bazelTestEnvVar = "BAZEL_TEST"
+
+// BuiltWithBazel returns true iff this library was built with Bazel.
 func BuiltWithBazel() bool {
 	return true
+}
+
+// InBazelTest returns true iff called from a test run by Bazel.
+func InBazelTest() bool {
+	if bazelTestEnv, ok := os.LookupEnv(bazelTestEnvVar); ok {
+		if bazelTest, err := strconv.ParseBool(bazelTestEnv); err == nil {
+			return bazelTest
+		}
+	}
+
+	return false
+}
+
+// InTestWrapper returns true iff called from Bazel's generated test wrapper.
+// When enabled and running under `bazel test`, the entire test runs using a
+// Bazel-generated wrapper. This wrapper imports the test module, so any
+// import-time code will be run twice: once under the wrapper, and once by the
+// test process itself. Hence, checking can be helpful for any module
+// import-time code, such as init() or any global variable initialization.
+// For more info, see:
+// https://github.com/bazelbuild/rules_go/blob/master/docs/go/core/rules.md#go_test
+//
+// Duplicates logic from rules_go's bzltestutil.ShouldWrap(), but does not
+// import in order to avoid a dependency (and its global initialization code).
+func InTestWrapper() bool {
+	if !InBazelTest() {
+		return false
+	}
+
+	if wrapEnv, ok := os.LookupEnv("GO_TEST_WRAP"); ok {
+		wrap, err := strconv.ParseBool(wrapEnv)
+		if err != nil {
+			return false
+		}
+		return wrap
+	}
+	_, ok := os.LookupEnv("XML_OUTPUT_FILE")
+	return ok
 }
 
 // FindBinary is a convenience wrapper around the rules_go variant.

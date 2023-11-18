@@ -43,7 +43,6 @@ go_test(
         "main_test.go",
         "watcher_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
         ":tenantcapabilitieswatcher",
@@ -63,9 +62,9 @@ go_test(
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
-        "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",

@@ -30,7 +30,6 @@ go_test(
         "main_test.go",
         "reconciler_test.go",
     ],
-    args = ["-test.timeout=55s"],
     deps = [
         ":ptreconcile",
         "//pkg/base",
@@ -47,8 +46,8 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",

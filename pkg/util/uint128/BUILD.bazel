@@ -12,6 +12,5 @@ go_test(
     name = "uint128_test",
     size = "small",
     srcs = ["uint128_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":uint128"],
 )

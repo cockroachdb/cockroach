@@ -4,7 +4,13 @@ go_library(
     name = "docs-issue-generation_lib",
     srcs = [
         "docs_issue_generation.go",
+        "extract.go",
+        "format.go",
+        "github.go",
+        "jira.go",
         "main.go",
+        "requests.go",
+        "structs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/docs-issue-generation",
     visibility = ["//visibility:private"],
@@ -24,7 +30,6 @@ go_test(
     name = "docs-issue-generation_test",
     size = "small",
     srcs = ["docs_issue_generation_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":docs-issue-generation_lib"],
     deps = [

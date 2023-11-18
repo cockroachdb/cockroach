@@ -46,6 +46,7 @@ export type formattedSeries = {
   key: string;
   area: boolean;
   fillOpacity: number;
+  color?: string;
 };
 
 export function formatMetricData(
@@ -68,6 +69,7 @@ export function formatMetricData(
         key: s.props.title || s.props.name,
         area: true,
         fillOpacity: 0.1,
+        color: s.props.color,
       });
     }
   });
@@ -88,13 +90,18 @@ export function configureUPlotLineChart(
   setMetricsFixedWindow: (startMillis: number, endMillis: number) => void,
   getLatestXAxisDomain: () => AxisDomain,
   getLatestYAxisDomain: () => AxisDomain,
+  legendAsTooltip: boolean,
 ): uPlot.Options {
   const formattedRaw = formatMetricData(metrics, data);
   // Copy palette over since we mutate it in the `series` function
   // below to cycle through the colors. This ensures that we always
   // start from the same color for each graph so a single-series
   // graph will always have the first color, etc.
-  const strokeColors = [...seriesPalette];
+  const strokeColors = _.without(
+    seriesPalette,
+    // Exclude custom colors provided in metrics from default list of colors.
+    ...formattedRaw.filter(r => !!r.color).map(r => r.color),
+  );
 
   const tooltipPlugin = () => {
     return {
@@ -178,8 +185,16 @@ export function configureUPlotLineChart(
       // Generate a series object for reach of our results
       // picking colors from our palette.
       ...formattedRaw.map(result => {
-        const color = strokeColors.shift();
-        strokeColors.push(color);
+        let color: string;
+        // Assign custom provided color, otherwise assign from
+        // the list of default colors.
+        if (result.color) {
+          color = result.color;
+        } else {
+          color = strokeColors.shift();
+          strokeColors.push(color);
+        }
+
         return {
           show: true,
           scale: "yAxis",
@@ -225,7 +240,7 @@ export function configureUPlotLineChart(
         range: () => getLatestYAxisDomain().extent,
       },
     },
-    plugins: [tooltipPlugin()],
+    plugins: legendAsTooltip ? [tooltipPlugin()] : null,
     hooks: {
       // setSelect is a hook that fires when a selection is made on the graph
       // by dragging a range to zoom.

@@ -11,8 +11,9 @@
 package tests
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
+	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -55,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/rand"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -73,6 +75,13 @@ const (
 	kafkaSink        sinkType = "kafka"
 	nullSink         sinkType = "null"
 )
+
+var envVars = []string{
+	// Setting COCKROACH_CHANGEFEED_TESTING_FAST_RETRY helps tests run quickly.
+	// NB: This is crucial for chaos tests as we expect changefeeds to see
+	// many retries.
+	"COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true",
+}
 
 type cdcTester struct {
 	ctx          context.Context
@@ -152,6 +161,7 @@ func (ct *cdcTester) startCRDBChaos() {
 		Timer:   Periodic{Period: 2 * time.Minute, DownTime: 20 * time.Second},
 		Target:  ct.crdbNodes.RandNode,
 		Stopper: chaosStopper,
+		Env:     envVars,
 	}
 	ct.mon.Go(ch.Runner(ct.cluster, ct.t, ct.mon))
 }
@@ -247,6 +257,17 @@ type tpccArgs struct {
 	warehouses     int
 	duration       string
 	tolerateErrors bool
+	conns          int
+	noWait         bool
+	cdcFeatureFlags
+}
+
+func (ct *cdcTester) lockSchema(targets []string) {
+	for _, target := range targets {
+		if _, err := ct.DB().Exec(fmt.Sprintf("ALTER TABLE %s SET (schema_locked=true)", target)); err != nil {
+			ct.t.Fatal(err)
+		}
+	}
 }
 
 func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
@@ -254,6 +275,8 @@ func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
 		sqlNodes:           ct.crdbNodes,
 		workloadNodes:      ct.workloadNode,
 		tpccWarehouseCount: args.warehouses,
+		conns:              args.conns,
+		noWait:             args.noWait,
 		// TolerateErrors if crdbChaos is true; otherwise, the workload will fail
 		// if it attempts to use the node which was brought down by chaos.
 		tolerateErrors: args.tolerateErrors,
@@ -262,6 +285,10 @@ func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
 	if !ct.t.SkipInit() {
 		ct.t.Status("installing TPCC workload")
 		tpcc.install(ct.ctx, ct.cluster)
+		if args.SchemaLockTables.enabled() {
+			ct.t.Status(fmt.Sprintf("Setting schema_locked for %s", allTpccTargets))
+			ct.lockSchema(allTpccTargets)
+		}
 	} else {
 		ct.t.Status("skipping TPCC installation")
 	}
@@ -365,6 +392,38 @@ var allLedgerTargets []string = []string{
 	`ledger.session`,
 }
 
+type featureFlag int
+
+const (
+	metamorphicFlag featureFlag = iota
+	featureDisabled
+	featureEnabled
+)
+
+func (f featureFlag) enabled() bool {
+	switch f {
+	case metamorphicFlag:
+		return rand.Int()%2 == 0
+	case featureEnabled:
+		return true
+	case featureDisabled:
+		return false
+	default:
+		panic("invalid feature flag value")
+	}
+}
+
+// cdcFeatureFlags describes various cdc feature flags.
+// zero value cdcFeatureFlags uses metamorphic settings for features.
+type cdcFeatureFlags struct {
+	MuxRangefeed     featureFlag
+	SchemaLockTables featureFlag
+}
+
+func makeDefaultFeatureFlags() cdcFeatureFlags {
+	return cdcFeatureFlags{}
+}
+
 type feedArgs struct {
 	sinkType        sinkType
 	targets         []string
@@ -373,6 +432,7 @@ type feedArgs struct {
 	assumeRole      string
 	tolerateErrors  bool
 	sinkURIOverride string
+	cdcFeatureFlags
 }
 
 // TODO: Maybe move away from feedArgs since its only 3 things
@@ -413,7 +473,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		args.sinkType, args.targets, feedOptions,
 	))
 	db := ct.DB()
-	jobID, err := newChangefeedCreator(db, targetsStr, sinkURI).
+	jobID, err := newChangefeedCreator(db, ct.logger, targetsStr, sinkURI, makeDefaultFeatureFlags()).
 		With(feedOptions).Create()
 	if err != nil {
 		ct.t.Fatalf("failed to create changefeed: %s", err.Error())
@@ -435,7 +495,15 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	return cj
 }
 
-func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTargets) {
+// runFeedLatencyVerifier runs a goroutine which polls the various latencies
+// for a changefeed job (initial scan latency, etc) and asserts that they
+// are below the specified targets.
+//
+// It returns a function which blocks until the job succeeds and verification
+// on the succeeded job completes.
+func (ct *cdcTester) runFeedLatencyVerifier(
+	cj changefeedJob, targets latencyTargets,
+) (waitForCompletion func()) {
 	info, err := getChangefeedInfo(ct.DB(), cj.jobID)
 	if err != nil {
 		ct.t.Fatalf("failed to get changefeed info: %s", err.Error())
@@ -452,8 +520,10 @@ func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTar
 	)
 	verifier.statementTime = info.statementTime
 
+	finished := make(chan struct{})
 	ct.mon.Go(func(ctx context.Context) error {
-		err := verifier.pollLatency(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
+		defer close(finished)
+		err := verifier.pollLatencyUntilJobSucceeds(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
 		if err != nil {
 			return err
 		}
@@ -462,6 +532,13 @@ func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTar
 		verifier.maybeLogLatencyHist()
 		return nil
 	})
+
+	return func() {
+		select {
+		case <-ct.ctx.Done():
+		case <-finished:
+		}
+	}
 }
 
 func (cj *changefeedJob) runFeedPoller(
@@ -532,30 +609,18 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	}
 	tester.logger = changefeedLogger
 
-	c.Put(ctx, t.Cockroach(), "./cockroach")
+	startOpts, settings := makeCDCBenchOptions()
 
-	settings := install.MakeClusterSettings()
-	settings.Env = append(settings.Env, "COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, tester.crdbNodes)
-
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
-
-	db := tester.DB()
 	// With a target_duration of 10s, we won't see slow span logs from changefeeds untils we are > 100s
 	// behind, which is well above the 60s targetSteadyLatency we have in some tests.
-	if _, err := db.Exec(
-		`SET CLUSTER SETTING changefeed.slow_span_log_threshold='30s'`,
-	); err != nil {
-		// We don't hard fail here because, not all versions support this setting
-		t.L().Printf("failed to set cluster setting: %s", err)
-	}
-	if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
-		t.L().Printf("failed to set cluster setting: %s", err)
-	}
-	if _, err := db.Exec("SET CLUSTER SETTING server.child_metrics.enabled = true"); err != nil {
-		t.L().Printf("failed to set cluster setting: %s", err)
-	}
+	settings.ClusterSettings["changefeed.slow_span_log_threshold"] = "30s"
+	settings.ClusterSettings["server.child_metrics.enabled"] = "true"
+	settings.ClusterSettings["changefeed.balance_range_distribution.enable"] = "true"
 
+	settings.Env = append(settings.Env, envVars...)
+
+	c.Start(ctx, t.L(), startOpts, settings, tester.crdbNodes)
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
 	tester.startGrafana()
 	return tester
 }
@@ -597,7 +662,6 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Run(ctx, c.All(), `mkdir -p logs`)
 
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
@@ -626,14 +690,14 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"min_checkpoint_frequency": "'2s'",
 		"diff":                     "",
 	}
-	_, err := newChangefeedCreator(db, "bank.bank", kafka.sinkURL(ctx)).
+	_, err := newChangefeedCreator(db, t.L(), "bank.bank", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
 		With(options).
 		Create()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	tc, err := kafka.consumer(ctx, "bank")
+	tc, err := kafka.newConsumer(ctx, "bank")
 	if err != nil {
 		t.Fatal(errors.Wrap(err, "could not create kafka consumer"))
 	}
@@ -766,7 +830,6 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 // compatibility within a topic).
 func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 	kafka := kafkaManager{
 		t:     t,
@@ -792,7 +855,7 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"diff":                      "",
 	}
 
-	_, err := newChangefeedCreator(db, "foo", kafka.sinkURL(ctx)).
+	_, err := newChangefeedCreator(db, t.L(), "foo", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
 		With(options).
 		Args(kafka.schemaRegistryURL(ctx)).
 		Create()
@@ -882,7 +945,6 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	crdbNodes, kafkaNode := c.Range(1, lastCrdbNode), c.Node(c.Spec().NodeCount)
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	kafka := kafkaManager{
@@ -932,32 +994,30 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 			"create changefeed with TLS transport and SASL/SCRAM-SHA-512",
 			fmt.Sprintf("%s?tls_enabled=true&ca_cert=%s&sasl_enabled=true&sasl_user=scram512&sasl_password=scram512-secret&sasl_mechanism=SCRAM-SHA-512", saslURL, caCert),
 		},
+		{
+			"create changefeed with confluent-cloud scheme",
+			fmt.Sprintf("%s&api_key=plain&api_secret=plain-secret", kafka.sinkURLAsConfluentCloudUrl(ctx)),
+		},
 	}
 
 	for _, f := range feeds {
 		t.Status(f.desc)
-		_, err := newChangefeedCreator(db, "auth_test_table", f.queryArg).Create()
+		_, err := newChangefeedCreator(db, t.L(), "auth_test_table", f.queryArg, makeDefaultFeatureFlags()).Create()
 		if err != nil {
 			t.Fatalf("%s: %s", f.desc, err.Error())
 		}
 	}
 }
 
-func skipLocalUnderArm64(cloud string) string {
-	if cloud == spec.Local && runtime.GOARCH == "arm64" {
-		// N.B. we also have to skip locally since amd64 emulation may not be available everywhere.
-		return "Skip under ARM64."
-	}
-	return ""
-}
-
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:            "cdc/initial-scan-only",
-		Owner:           registry.OwnerCDC,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
-		RequiresLicense: true,
+		Name:             "cdc/initial-scan-only",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		RequiresLicense:  true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -970,20 +1030,23 @@ func registerCDC(r registry.Registry) {
 				targets:  allTpccTargets,
 				opts:     map[string]string{"initial_scan": "'only'"},
 			})
-			ct.runFeedLatencyVerifier(feed, latencyTargets{
+			waitForCompletion := ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 30 * time.Minute,
 			})
-			feed.waitForCompletion()
+			waitForCompletion()
+
 			exportStatsFile()
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/tpcc-1000",
-		Owner:           registry.OwnerCDC,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/tpcc-1000",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		RequiresLicense:  true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1003,13 +1066,42 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/tpcc-1000/sink=null",
-		Owner:           registry.OwnerCDC,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		Tags:            registry.Tags("manual"),
-		RequiresLicense: true,
+		Name:             "cdc/initial-scan-only/parquet",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.Arch(vm.ArchAMD64)),
+		RequiresLicense:  true,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 200})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: cloudStorageSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'only'", "format": "'parquet'"},
+			})
+			waitForCompletion := ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+			})
+			waitForCompletion()
+
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:      "cdc/tpcc-1000/sink=null",
+		Owner:     registry.OwnerCDC,
+		Benchmark: true,
+		Cluster:   r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:    registry.MetamorphicLeases,
+		// TODO(radu): fix this.
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.ManualOnly,
+		Tags:             registry.Tags("manual"),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1029,12 +1121,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/initial-scan",
-		Owner:           registry.OwnerCDC,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/initial-scan",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1050,12 +1144,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/sink-chaos",
-		Owner:           `cdc`,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/sink-chaos",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1076,12 +1172,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/crdb-chaos",
-		Owner:           `cdc`,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/crdb-chaos",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1109,10 +1207,12 @@ func registerCDC(r registry.Registry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1140,12 +1240,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/cloud-sink-gcs/rangefeed=true",
-		Owner:           `cdc`,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/cloud-sink-gcs/rangefeed=true",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1168,12 +1270,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/pubsub-sink",
-		Owner:           `cdc`,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/pubsub-sink",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1205,12 +1309,14 @@ func registerCDC(r registry.Registry) {
 	// TODO(rui): Change to a shorter test as it just needs to validate
 	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
-		Name:            "cdc/pubsub-sink/assume-role",
-		Owner:           `cdc`,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/pubsub-sink/assume-role",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1239,12 +1345,14 @@ func registerCDC(r registry.Registry) {
 	// TODO(rui): Change to a shorter test as it just needs to validate
 	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
-		Name:            "cdc/cloud-sink-gcs/assume-role",
-		Owner:           `cdc`,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/cloud-sink-gcs/assume-role",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1264,12 +1372,14 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/webhook-sink",
-		Owner:           `cdc`,
-		Benchmark:       true,
-		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/webhook-sink",
+		Owner:            `cdc`,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1305,11 +1415,13 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/kafka-auth",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(1),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/kafka-auth",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
@@ -1319,11 +1431,18 @@ func registerCDC(r registry.Registry) {
 		Owner:     `cdc`,
 		Benchmark: true,
 		// Only Kafka 3 supports Arm64, but the broker setup for Oauth used only works with Kafka 2
-		Skip:            skipLocalUnderArm64(r.Cloud()),
-		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Cluster:          r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64)),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			if c.Cloud() == spec.Local && runtime.GOARCH == "arm64" {
+				// N.B. We have to skip locally since amd64 emulation may not be available everywhere.
+				t.L().PrintfCtx(ctx, "Skipping test under ARM64")
+				return
+			}
+
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
@@ -1357,22 +1476,26 @@ func registerCDC(r registry.Registry) {
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/bank",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(4),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
-		Timeout:         30 * time.Minute,
+		Name:             "cdc/bank",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(4),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCBank(ctx, t, c)
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:            "cdc/schemareg",
-		Owner:           `cdc`,
-		Cluster:         r.MakeClusterSpec(1),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+		Name:             "cdc/schemareg",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCSchemaRegistry(ctx, t, c)
 		},
@@ -1402,12 +1525,12 @@ func (t *testCerts) CACertBase64() string {
 }
 
 func makeTestCerts(sinkNodeIP string) (*testCerts, error) {
-	CAKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	CAKey, err := rsa.GenerateKey(cryptorand.Reader, keyLength)
 	if err != nil {
 		return nil, errors.Wrap(err, "CA private key")
 	}
 
-	SinkKey, err := rsa.GenerateKey(rand.Reader, keyLength)
+	SinkKey, err := rsa.GenerateKey(cryptorand.Reader, keyLength)
 	if err != nil {
 		return nil, errors.Wrap(err, "sink private key")
 	}
@@ -1479,7 +1602,7 @@ func generateSinkCert(
 		IPAddresses: []net.IP{ip},
 	}
 
-	return x509.CreateCertificate(rand.Reader, certSpec, CACert, &priv.PublicKey, CAKey)
+	return x509.CreateCertificate(cryptorand.Reader, certSpec, CACert, &priv.PublicKey, CAKey)
 }
 
 func generateCACert(priv *rsa.PrivateKey) ([]byte, *x509.Certificate, error) {
@@ -1503,7 +1626,7 @@ func generateCACert(priv *rsa.PrivateKey) ([]byte, *x509.Certificate, error) {
 		BasicConstraintsValid: true,
 		MaxPathLenZero:        true,
 	}
-	cert, err := x509.CreateCertificate(rand.Reader, certSpec, certSpec, &priv.PublicKey, priv)
+	cert, err := x509.CreateCertificate(cryptorand.Reader, certSpec, certSpec, &priv.PublicKey, priv)
 	return cert, certSpec, err
 }
 
@@ -1527,7 +1650,7 @@ func pemEncodeCert(cert []byte) (string, error) {
 
 func randomSerial() (*big.Int, error) {
 	limit := new(big.Int).Lsh(big.NewInt(1), 128)
-	ret, err := rand.Int(rand.Reader, limit)
+	ret, err := cryptorand.Int(cryptorand.Reader, limit)
 	if err != nil {
 		return nil, errors.Wrap(err, "generate random serial")
 	}
@@ -2181,6 +2304,20 @@ func (k kafkaManager) sinkURLSASL(ctx context.Context) string {
 	return `kafka://` + ips[0] + `:9094`
 }
 
+// sinkURLAsConfluentCloudUrl allows the test to connect to the kafka brokers
+// as if it was connecting to kafka hosted in confluent cloud.
+func (k kafkaManager) sinkURLAsConfluentCloudUrl(ctx context.Context) string {
+	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	// Confluent cloud does not use TLS 1.2 and instead uses PLAIN username/password
+	// authentication (see https://docs.confluent.io/platform/current/security/security_tutorial.html#overview).
+	// Because the kafka manager has certs configured, connecting without a ca_cert will raise an error.
+	// To connect without a cert, we set insecure_tls_skip_verify=true.
+	return `confluent-cloud://` + ips[0] + `:9094?insecure_tls_skip_verify=true`
+}
+
 func (k kafkaManager) sinkURLOAuth(ctx context.Context, creds clientcredentials.Config) string {
 	ips, err := k.c.InternalIP(ctx, k.t.L(), k.nodes)
 	if err != nil {
@@ -2234,7 +2371,7 @@ func (k kafkaManager) createTopic(ctx context.Context, topic string) error {
 	})
 }
 
-func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsumer, error) {
+func (k kafkaManager) newConsumer(ctx context.Context, topic string) (*topicConsumer, error) {
 	kafkaAddrs := []string{k.consumerURL(ctx)}
 	config := sarama.NewConfig()
 	// I was seeing "error processing FetchRequest: kafka: error decoding
@@ -2261,6 +2398,8 @@ type tpccWorkload struct {
 	sqlNodes           option.NodeListOption
 	tpccWarehouseCount int
 	tolerateErrors     bool
+	conns              int
+	noWait             bool
 }
 
 func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
@@ -2274,14 +2413,20 @@ func (tw *tpccWorkload) install(ctx context.Context, c cluster.Cluster) {
 }
 
 func (tw *tpccWorkload) run(ctx context.Context, c cluster.Cluster, workloadDuration string) {
-	tolerateErrors := ""
+	var cmd bytes.Buffer
+	fmt.Fprintf(&cmd, "./workload run tpcc --warehouses=%d --duration=%s ", tw.tpccWarehouseCount, workloadDuration)
 	if tw.tolerateErrors {
-		tolerateErrors = "--tolerate-errors"
+		cmd.WriteString("--tolerate-errors ")
 	}
-	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`./workload run tpcc --warehouses=%d --duration=%s %s {pgurl%s} `,
-		tw.tpccWarehouseCount, workloadDuration, tolerateErrors, tw.sqlNodes,
-	))
+	if tw.conns > 0 {
+		fmt.Fprintf(&cmd, " --conns=%d ", tw.conns)
+	}
+	if tw.noWait {
+		cmd.WriteString("--wait=0 ")
+	}
+	fmt.Fprintf(&cmd, "{pgurl%s}", tw.sqlNodes)
+
+	c.Run(ctx, tw.workloadNodes, cmd.String())
 }
 
 type ledgerWorkload struct {
@@ -2310,18 +2455,24 @@ func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDu
 // different options and sinks
 type changefeedCreator struct {
 	db        *gosql.DB
+	logger    *logger.Logger
 	targets   string
 	sinkURL   string
 	options   map[string]string
 	extraArgs []interface{}
+	useMux    bool
 }
 
-func newChangefeedCreator(db *gosql.DB, targets, sinkURL string) *changefeedCreator {
+func newChangefeedCreator(
+	db *gosql.DB, logger *logger.Logger, targets, sinkURL string, flags cdcFeatureFlags,
+) *changefeedCreator {
 	return &changefeedCreator{
 		db:      db,
+		logger:  logger,
 		targets: targets,
 		sinkURL: sinkURL,
 		options: make(map[string]string),
+		useMux:  flags.MuxRangefeed.enabled(),
 	}
 }
 
@@ -2329,8 +2480,8 @@ func newChangefeedCreator(db *gosql.DB, targets, sinkURL string) *changefeedCrea
 // `value` is passed in one of the options, the option will be passed
 // as {option}={value}.
 func (cfc *changefeedCreator) With(opts map[string]string) *changefeedCreator {
-	for option, value := range opts {
-		cfc.options[option] = value
+	for opt, value := range opts {
+		cfc.options[opt] = value
 	}
 	return cfc
 }
@@ -2350,6 +2501,11 @@ func (cfc *changefeedCreator) Args(args ...interface{}) *changefeedCreator {
 func (cfc *changefeedCreator) Create() (int, error) {
 	// kv.rangefeed.enabled is required for changefeeds to run
 	if _, err := cfc.db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		return -1, err
+	}
+
+	cfc.logger.Printf("Setting changefeed.mux_rangefeed.enabled to %t", cfc.useMux)
+	if _, err := cfc.db.Exec("SET CLUSTER SETTING changefeed.mux_rangefeed.enabled = $1", cfc.useMux); err != nil {
 		return -1, err
 	}
 

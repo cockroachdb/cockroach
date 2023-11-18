@@ -763,11 +763,6 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(jackson): It's unclear if this test can be refactor to omit the
-	// ReuseEnginesDeprecated option.
-	stickyVFSRegistry := server.NewStickyVFSRegistry(server.ReuseEnginesDeprecated)
-	defer stickyVFSRegistry.CloseAllEngines()
-
 	const numServers int = 5
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	var maintainStreamsForBehindFollowers atomic.Bool
@@ -779,6 +774,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	kvflowcontrol.Enabled.Override(ctx, &st.SV, true)
+	kvflowcontrol.Mode.Override(ctx, &st.SV, int64(kvflowcontrol.ApplyToAll))
 
 	for i := 0; i < numServers; i++ {
 		stickyServerArgs[i] = base.TestServerArgs{
@@ -796,7 +792,7 @@ func TestFlowControlRaftSnapshot(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: stickyVFSRegistry,
+					StickyVFSRegistry: server.NewStickyVFSRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					FlowControlTestingKnobs: &kvflowcontrol.TestingKnobs{
@@ -965,7 +961,7 @@ ORDER BY name ASC;
 	   FROM crdb_internal.kv_flow_control_handles
 	`, "range_id", "store_id", "total_tracked_tokens")
 
-	tc.WaitForValues(t, k, []int64{incAB, incA, incA, incAB, incAB})
+	tc.WaitForValues(t, k, []int64{incAB, 0 /* stopped */, 0 /* stopped */, incAB, incAB})
 
 	index := repl.GetLastIndex()
 	h.comment(`-- (Truncating raft log.)`)
@@ -2335,11 +2331,13 @@ func newFlowControlTestHelper(t *testing.T, tc *testcluster.TestCluster) *flowCo
 }
 
 func (h *flowControlTestHelper) init() {
-	if _, err := h.tc.Conns[0].Exec(`SET CLUSTER SETTING kvadmission.flow_control.enabled = true`); err != nil {
-		h.t.Fatal(err)
-	}
-	if _, err := h.tc.Conns[0].Exec(`SET CLUSTER SETTING kvadmission.flow_control.mode = 'apply_to_all'`); err != nil {
-		h.t.Fatal(err)
+	// Reach into each server's cluster setting and override. This causes any
+	// registered change callbacks to run immediately, which is important since
+	// running them with some lag (which happens when using SQL and `SET CLUSTER
+	// SETTING`) interferes with the later activities in these tests.
+	for _, s := range h.tc.Servers {
+		kvflowcontrol.Enabled.Override(context.Background(), &s.ClusterSettings().SV, true)
+		kvflowcontrol.Mode.Override(context.Background(), &s.ClusterSettings().SV, int64(kvflowcontrol.ApplyToAll))
 	}
 }
 

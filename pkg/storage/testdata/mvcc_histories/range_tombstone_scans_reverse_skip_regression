@@ -29,11 +29,12 @@ with t=A
   txn_begin k=b ts=3
   put k=b v=b3
 ----
+put: lock acquisition = {b id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 data: "a"/2.000000000,0 -> /BYTES/a2
-meta: "b"/0,0 -> txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/3.000000000,0 -> /BYTES/b3
 
 run ok
@@ -57,10 +58,11 @@ with t=A
   txn_begin k=b ts=3
   put k=b v=b3
 ----
+put: lock acquisition = {b id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
-meta: "b"/0,0 -> txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000002 key="b" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/3.000000000,0 -> /BYTES/b3
 
 run ok
@@ -92,11 +94,12 @@ with t=A
   txn_begin k=b ts=1
   put k=b v=b1
 ----
+put: lock acquisition = {b id=00000003 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000003 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
 data: "a"/3.000000000,0 -> /BYTES/a3
-meta: "b"/0,0 -> txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000003 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/1.000000000,0 -> /BYTES/b1
 
 run ok
@@ -143,11 +146,12 @@ with t=A
   txn_begin k=b ts=1
   put k=b v=b1
 ----
+put: lock acquisition = {b id=00000004 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000004 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
 rangekey: {a-b}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "a"/2.000000000,0 -> /BYTES/a2
-meta: "b"/0,0 -> txn={id=00000000 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000004 key="b" iso=Serializable pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/1.000000000,0 -> /BYTES/b1
 
 run ok

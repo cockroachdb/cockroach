@@ -7,7 +7,6 @@ go_test(
         "eval_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = ["//pkg/sql/sem/eval:testdata"],
     deps = [
         "//pkg/base",
@@ -33,6 +32,7 @@ go_test(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",

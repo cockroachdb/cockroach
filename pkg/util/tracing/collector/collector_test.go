@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -126,19 +125,22 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 2 /* nodes */, args)
 	defer tc.Stopper().Stop(ctx)
 
-	localTracer := tc.Server(0).TracerI().(*tracing.Tracer)
-	remoteTracer := tc.Server(1).TracerI().(*tracing.Tracer)
+	s0 := tc.Server(0).ApplicationLayer()
+	s1 := tc.Server(1).ApplicationLayer()
+
+	localTracer := s0.TracerI().(*tracing.Tracer)
+	remoteTracer := s1.TracerI().(*tracing.Tracer)
 
 	traceCollector := collector.New(
 		localTracer,
 		func(ctx context.Context) ([]sqlinstance.InstanceInfo, error) {
 			instanceIDs := make([]sqlinstance.InstanceInfo, len(tc.Servers))
 			for i := range tc.Servers {
-				instanceIDs[i].InstanceID = tc.Server(i).SQLInstanceID()
+				instanceIDs[i].InstanceID = tc.Server(i).ApplicationLayer().SQLInstanceID()
 			}
 			return instanceIDs, nil
 		},
-		tc.Server(0).NodeDialer().(*nodedialer.Dialer))
+		s0.NodeDialer().(*nodedialer.Dialer))
 	localTraceID, remoteTraceID, cleanup := setupTraces(localTracer, remoteTracer)
 	defer cleanup()
 
@@ -155,7 +157,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 
 	t.Run("fetch-local-recordings", func(t *testing.T) {
 		nodeRecordings := getSpansFromAllInstances(localTraceID)
-		node1Recordings := nodeRecordings[tc.Server(0).SQLInstanceID()]
+		node1Recordings := nodeRecordings[s0.SQLInstanceID()]
 		require.Equal(t, 1, len(node1Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node1Recordings[0], `
 				span: root
@@ -166,7 +168,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 						span: root.child.remotechilddone
 							tags: _verbose=1
 	`))
-		node2Recordings := nodeRecordings[tc.Server(1).SQLInstanceID()]
+		node2Recordings := nodeRecordings[s1.SQLInstanceID()]
 		require.Equal(t, 1, len(node2Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node2Recordings[0], `
 				span: root.child.remotechild
@@ -179,7 +181,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	// subtest will be passed back by node 2 over RPC.
 	t.Run("fetch-remote-recordings", func(t *testing.T) {
 		nodeRecordings := getSpansFromAllInstances(remoteTraceID)
-		node1Recordings := nodeRecordings[tc.Server(0).SQLInstanceID()]
+		node1Recordings := nodeRecordings[s0.SQLInstanceID()]
 		require.Equal(t, 2, len(node1Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node1Recordings[0], `
 				span: root2.child.remotechild
@@ -190,7 +192,7 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 					tags: _unfinished=1 _verbose=1
 	`))
 
-		node2Recordings := nodeRecordings[tc.Server(1).SQLInstanceID()]
+		node2Recordings := nodeRecordings[s1.SQLInstanceID()]
 		require.Equal(t, 1, len(node2Recordings))
 		require.NoError(t, tracing.CheckRecordedSpans(node2Recordings[0], `
 				span: root2
@@ -207,8 +209,6 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 func TestClusterInflightTraces(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	ccl.TestingEnableEnterprise() // We'll create tenants.
-	defer ccl.TestingDisableEnterprise()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -233,7 +233,7 @@ func TestClusterInflightTraces(t *testing.T) {
 			}
 			systemDBs := make([]*gosql.DB, len(tc.Servers))
 			for i, s := range tc.Servers {
-				systemDBs[i] = s.SQLConn(t, "")
+				systemDBs[i] = s.SQLConn(t)
 			}
 
 			type testCase struct {
@@ -256,7 +256,7 @@ func TestClusterInflightTraces(t *testing.T) {
 				tenants := make([]serverutils.ApplicationLayerInterface, len(tc.Servers))
 				dbs := make([]*gosql.DB, len(tc.Servers))
 				for i, s := range tc.Servers {
-					tenant, db, err := s.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{TenantName: "app"})
+					tenant, db, err := s.TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{TenantName: "app"})
 					require.NoError(t, err)
 					tenants[i] = tenant
 					dbs[i] = db
@@ -279,10 +279,10 @@ func TestClusterInflightTraces(t *testing.T) {
 				tenants := make([]serverutils.ApplicationLayerInterface, len(tc.Servers))
 				dbs := make([]*gosql.DB, len(tc.Servers))
 				for i := range tc.Servers {
-					tenant, err := tc.Servers[i].StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
+					tenant, err := tc.Servers[i].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: tenantID})
 					require.NoError(t, err)
 					tenants[i] = tenant
-					dbs[i] = tenant.SQLConn(t, "")
+					dbs[i] = tenant.SQLConn(t)
 				}
 				testCases = []testCase{
 					{

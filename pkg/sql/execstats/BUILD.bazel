@@ -32,11 +32,11 @@ go_test(
         "traceanalyzer_test.go",
         "utils_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":execstats"],
     deps = [
         "//pkg/base",
         "//pkg/kv/kvpb",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

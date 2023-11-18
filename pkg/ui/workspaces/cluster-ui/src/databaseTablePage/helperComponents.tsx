@@ -35,6 +35,7 @@ import { Search as IndexIcon } from "@cockroachlabs/icons";
 import { Breadcrumbs } from "../breadcrumbs";
 import { CaretRight } from "../icon/caretRight";
 import { CockroachCloudContext } from "../contexts";
+import { sqlApiErrorMessage } from "../api";
 const cx = classNames.bind(styles);
 
 export const NameCell = ({
@@ -186,7 +187,9 @@ export const ActionCell = ({
   const query = indexStat.indexRecommendations.map(recommendation => {
     switch (recommendation.type) {
       case "DROP_UNUSED":
-        return `DROP INDEX ${QuoteIdentifier(tableName)}@${QuoteIdentifier(
+        // Here, `tableName` is a fully qualified name whose identifiers have already been quoted.
+        // See the QuoteIdentifier unit tests for more details.
+        return `DROP INDEX ${tableName}@${QuoteIdentifier(
           indexStat.indexName,
         )};`;
     }
@@ -211,12 +214,25 @@ export const FormatMVCCInfo = ({
 }): JSX.Element => {
   return (
     <>
-      {format.Percentage(details.livePercentage, 1, 1)}
+      {format.Percentage(details.spanStats?.live_percentage, 1, 1)}
       {" ("}
-      <span className={cx("bold")}>{format.Bytes(details.liveBytes)}</span> live
-      data /{" "}
-      <span className={cx("bold")}>{format.Bytes(details.totalBytes)}</span>
+      <span className={cx("bold")}>
+        {format.Bytes(details.spanStats?.live_bytes)}
+      </span>{" "}
+      live data /{" "}
+      <span className={cx("bold")}>
+        {format.Bytes(details.spanStats?.total_bytes)}
+      </span>
       {" total)"}
     </>
   );
+};
+
+export const getCreateStmt = ({
+  createStatement,
+}: DatabaseTablePageDataDetails): string => {
+  return createStatement?.create_statement
+    ? createStatement?.create_statement
+    : "(unavailable)\n" +
+        sqlApiErrorMessage(createStatement?.error?.message || "");
 };

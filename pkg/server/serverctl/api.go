@@ -85,4 +85,7 @@ const (
 	// ShutdownReasonFatalError identifies an error that requires the server be
 	// terminated immediately.
 	ShutdownReasonFatalError
+	// ShutdownReasonGracefulStopRequestedByOrchestration is used when a graceful shutdown
+	// was requested by orchestration.
+	ShutdownReasonGracefulStopRequestedByOrchestration
 )

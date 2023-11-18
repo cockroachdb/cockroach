@@ -60,18 +60,6 @@ type peer struct {
 	// active - it is the heartbeat loop and manages `mu.c.` (including
 	// recreating it after the connection fails and has to be redialed).
 	//
-	// NB: at the time of writing, we don't use the breaking capabilities,
-	// i.e. we don't check the circuit breaker in `Connect`. We will do that
-	// once the circuit breaker is mature, and then retire the breakers
-	// returned by Context.getBreaker.
-	//
-	// Currently what will happen when a peer is down is that `c` will be
-	// recreated (blocking new callers to `Connect()`), a connection attempt
-	// will be made, and callers will see the failure to this attempt.
-	//
-	// With the breaker, callers would be turned away eagerly until there
-	// is a known-healthy connection.
-	//
 	// mu must *NOT* be held while operating on `b`. This is because the async
 	// probe will sometimes have to synchronously acquire mu before spawning off.
 	b                  *circuit.Breaker
@@ -300,9 +288,11 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 			return
 		}
 
-		p.mu.Lock()
-		p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
-		p.mu.Unlock()
+		func() {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
+		}()
 
 		if p.snap().deleteAfter != 0 {
 			// Peer is in inactive mode, and we just finished up a probe, so
@@ -372,7 +362,7 @@ func runSingleHeartbeat(
 	request := &PingRequest{
 		OriginAddr:      opts.AdvertiseAddr,
 		TargetNodeID:    k.NodeID,
-		ServerVersion:   opts.Settings.Version.BinaryVersion(),
+		ServerVersion:   opts.Settings.Version.LatestVersion(),
 		LocalityAddress: opts.LocalityAddresses,
 		ClusterID:       &clusterID,
 		OriginNodeID:    opts.NodeID.Get(),
@@ -805,14 +795,16 @@ func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration 
 }
 
 func touchOldPeers(peers *peerMap, now time.Time) {
-	var sigs []circuit.Signal
-	peers.mu.RLock()
-	for _, p := range peers.mu.m {
-		if p.snap().deletable(now) {
-			sigs = append(sigs, p.b.Signal())
+	sigs := func() (sigs []circuit.Signal) {
+		peers.mu.RLock()
+		defer peers.mu.RUnlock()
+		for _, p := range peers.mu.m {
+			if p.snap().deletable(now) {
+				sigs = append(sigs, p.b.Signal())
+			}
 		}
-	}
-	peers.mu.RUnlock()
+		return sigs
+	}()
 
 	// Now, outside of the lock, query all of the collected Signals which will tip
 	// off the respective probes, which will perform self-removal from the map. To

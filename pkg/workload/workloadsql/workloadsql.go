@@ -75,7 +75,7 @@ func Setup(
 func maybeDisableMergeQueue(db *gosql.DB) error {
 	var ok bool
 	if err := db.QueryRow(
-		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] AS _ (v) WHERE v = 'kv.range_merge.queue_enabled'`,
+		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] AS _ (v) WHERE v = 'kv.range_merge.queue.enabled'`,
 	).Scan(&ok); err != nil || !ok {
 		return err
 	}
@@ -92,7 +92,7 @@ func maybeDisableMergeQueue(db *gosql.DB) error {
 	if err == nil && (v.Major() > 19 || (v.Major() == 19 && v.Minor() >= 2)) {
 		return nil
 	}
-	_, err = db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+	_, err = db.Exec("SET CLUSTER SETTING kv.range_merge.queue.enabled = false")
 	return err
 }
 
@@ -108,7 +108,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 	_, err := db.Exec("SHOW RANGES FROM TABLE system.descriptor")
 	if err != nil {
 		if strings.Contains(err.Error(), "not fully contained in tenant") ||
-			strings.Contains(err.Error(), errorutil.UnsupportedWithMultiTenancyMessage) {
+			strings.Contains(err.Error(), errorutil.UnsupportedUnderClusterVirtualizationMessage) {
 			log.Infof(ctx, `skipping workload splits; can't split on tenants'`)
 			//nolint:returnerrcheck
 			return nil
@@ -122,7 +122,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 
 	// Test that we can actually perform a scatter.
 	if _, err := db.Exec("ALTER TABLE system.jobs SCATTER"); err != nil {
-		if strings.Contains(err.Error(), "tenant cluster setting sql.scatter.allow_for_secondary_tenant.enabled disabled") {
+		if strings.Contains(err.Error(), "operation is disabled within a virtual cluster") {
 			log.Infof(ctx, `skipping workload splits; can't scatter on tenants'`)
 			//nolint:returnerrcheck
 			return nil
@@ -171,9 +171,12 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 					// not) help you.
 					stmt := buf.String()
 					if _, err := db.Exec(stmt); err != nil {
-						if strings.Contains(err.Error(), errorutil.UnsupportedWithMultiTenancyMessage) {
+						if strings.Contains(err.Error(), errorutil.UnsupportedUnderClusterVirtualizationMessage) {
 							// We don't care about split errors if we're running a workload
-							// in multi-tenancy mode; we can't do them so we'll just continue
+							// with virtual clusters; we can't do them so we'll just continue.
+							//
+							// TODO(knz): This seems incorrect: this should be possible
+							// with the right capability. See: #109422.
 							break
 						}
 						return errors.Wrapf(err, "executing %s", stmt)

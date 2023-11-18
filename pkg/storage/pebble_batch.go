@@ -15,10 +15,10 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
@@ -53,11 +53,7 @@ type pebbleBatch struct {
 	writeOnly bool
 	closed    bool
 
-	wrappedIntentWriter intentDemuxWriter
-	// scratch space for wrappedIntentWriter.
-	scratch []byte
-
-	iterStatsReporter                iterStatsReporter
+	parent                           *Pebble
 	batchStatsReporter               batchStatsReporter
 	settings                         *cluster.Settings
 	mayWriteSizedDeletes             bool
@@ -83,7 +79,7 @@ func newPebbleBatch(
 	batch *pebble.Batch,
 	writeOnly bool,
 	settings *cluster.Settings,
-	iterStatsReporter iterStatsReporter,
+	parent *Pebble,
 	batchStatsReporter batchStatsReporter,
 ) *pebbleBatch {
 	pb := pebbleBatchPool.Get().(*pebbleBatch)
@@ -112,7 +108,7 @@ func newPebbleBatch(
 			reusable:      true,
 		},
 		writeOnly:          writeOnly,
-		iterStatsReporter:  iterStatsReporter,
+		parent:             parent,
 		batchStatsReporter: batchStatsReporter,
 		settings:           settings,
 		// NB: We do not use settings.Version.IsActive because we do not
@@ -123,8 +119,6 @@ func newPebbleBatch(
 		mayWriteSizedDeletes: settings.Version.ActiveVersionOrEmpty(context.TODO()).
 			IsActive(clusterversion.V23_2_UseSizedPebblePointTombstones),
 	}
-
-	pb.wrappedIntentWriter = wrapIntentWriter(pb)
 	return pb
 }
 
@@ -163,6 +157,7 @@ func (p *pebbleBatch) Closed() bool {
 
 // MVCCIterate implements the Batch interface.
 func (p *pebbleBatch) MVCCIterate(
+	ctx context.Context,
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
@@ -171,15 +166,17 @@ func (p *pebbleBatch) MVCCIterate(
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Batch interface.
-func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator {
+func (p *pebbleBatch) NewMVCCIterator(
+	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
+) (MVCCIterator, error) {
 	if p.writeOnly {
 		panic("write-only batch")
 	}
@@ -187,9 +184,12 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(ctx, iterKind, opts)
 		r.Free()
-		return maybeWrapInUnsafeIter(iter)
+		if err != nil {
+			return nil, err
+		}
+		return maybeWrapInUnsafeIter(iter), nil
 	}
 
 	iter := &p.normalIter
@@ -201,16 +201,19 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		handle = p.db
 	}
 	if iter.inuse {
-		return newPebbleIteratorByCloning(CloneContext{
-			rawIter:       p.iter,
-			statsReporter: p.iterStatsReporter,
-		}, opts, StandardDurability)
+		return newPebbleIteratorByCloning(ctx, CloneContext{
+			rawIter: p.iter,
+			engine:  p.parent,
+		}, opts, StandardDurability), nil
 	}
 
 	if iter.iter != nil {
-		iter.setOptions(opts, StandardDurability)
+		iter.setOptions(ctx, opts, StandardDurability)
 	} else {
-		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability, p.iterStatsReporter)
+		if err := iter.initReuseOrCreate(
+			ctx, handle, p.iter, p.iterUsed, opts, StandardDurability, p.parent); err != nil {
+			return nil, err
+		}
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -219,11 +222,13 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	}
 
 	iter.inuse = true
-	return maybeWrapInUnsafeIter(iter)
+	return maybeWrapInUnsafeIter(iter), nil
 }
 
 // NewEngineIterator implements the Batch interface.
-func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
+func (p *pebbleBatch) NewEngineIterator(
+	ctx context.Context, opts IterOptions,
+) (EngineIterator, error) {
 	if p.writeOnly {
 		panic("write-only batch")
 	}
@@ -237,16 +242,19 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		handle = p.db
 	}
 	if iter.inuse {
-		return newPebbleIteratorByCloning(CloneContext{
-			rawIter:       p.iter,
-			statsReporter: p.iterStatsReporter,
-		}, opts, StandardDurability)
+		return newPebbleIteratorByCloning(ctx, CloneContext{
+			rawIter: p.iter,
+			engine:  p.parent,
+		}, opts, StandardDurability), nil
 	}
 
 	if iter.iter != nil {
-		iter.setOptions(opts, StandardDurability)
+		iter.setOptions(ctx, opts, StandardDurability)
 	} else {
-		iter.initReuseOrCreate(handle, p.iter, p.iterUsed, opts, StandardDurability, p.iterStatsReporter)
+		if err := iter.initReuseOrCreate(
+			ctx, handle, p.iter, p.iterUsed, opts, StandardDurability, p.parent); err != nil {
+			return nil, err
+		}
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -255,7 +263,7 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	}
 
 	iter.inuse = true
-	return iter
+	return iter, nil
 }
 
 // ScanInternal implements the Reader interface.
@@ -282,12 +290,18 @@ func (p *pebbleBatch) ConsistentIterators() bool {
 
 // PinEngineStateForIterators implements the Batch interface.
 func (p *pebbleBatch) PinEngineStateForIterators() error {
+	var err error
 	if p.iter == nil {
+		var iter *pebble.Iterator
 		if p.batch.Indexed() {
-			p.iter = pebbleiter.MaybeWrap(p.batch.NewIter(nil))
+			iter, err = p.batch.NewIter(nil)
 		} else {
-			p.iter = pebbleiter.MaybeWrap(p.db.NewIter(nil))
+			iter, err = p.db.NewIter(nil)
 		}
+		if err != nil {
+			return err
+		}
+		p.iter = pebbleiter.MaybeWrap(iter)
 		// NB: p.iterUsed == false avoids cloning this in NewMVCCIterator(). We've
 		// just created it, so cloning it would just be overhead.
 	}
@@ -315,15 +329,6 @@ func (p *pebbleBatch) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 // ClearUnversioned implements the Batch interface.
 func (p *pebbleBatch) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
 	return p.clear(MVCCKey{Key: key}, opts)
-}
-
-// ClearIntent implements the Batch interface.
-func (p *pebbleBatch) ClearIntent(
-	key roachpb.Key, txnDidNotUpdateMeta bool, txnUUID uuid.UUID, opts ClearOptions,
-) error {
-	var err error
-	p.scratch, err = p.wrappedIntentWriter.ClearIntent(key, txnDidNotUpdateMeta, txnUUID, p.scratch, opts)
-	return err
 }
 
 // ClearEngineKey implements the Batch interface.
@@ -379,9 +384,17 @@ func (p *pebbleBatch) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys
 
 // ClearMVCCRange implements the Batch interface.
 func (p *pebbleBatch) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
-	var err error
-	p.scratch, err = p.wrappedIntentWriter.ClearMVCCRange(start, end, pointKeys, rangeKeys, p.scratch)
-	return err
+	if err := p.ClearRawRange(start, end, pointKeys, rangeKeys); err != nil {
+		return err
+	}
+	// The lock table only contains point keys, so only clear it when point keys
+	// are requested, and don't clear range keys in it.
+	if !pointKeys {
+		return nil
+	}
+	lstart, _ := keys.LockTableSingleKey(start, nil)
+	lend, _ := keys.LockTableSingleKey(end, nil)
+	return p.ClearRawRange(lstart, lend, true /* pointKeys */, false /* rangeKeys */)
 }
 
 // ClearMVCCVersions implements the Batch interface.
@@ -395,11 +408,14 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(
 	start, end roachpb.Key, pointKeys, rangeKeys bool,
 ) error {
 	clearPointKeys := func(start, end roachpb.Key) error {
-		iter := p.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		iter, err := p.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:   IterKeyTypePointsOnly,
 			LowerBound: start,
 			UpperBound: end,
 		})
+		if err != nil {
+			return err
+		}
 		defer iter.Close()
 		for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
 			if valid, err := iter.Valid(); err != nil {
@@ -423,11 +439,14 @@ func (p *pebbleBatch) ClearMVCCIteratorRange(
 	}
 
 	clearRangeKeys := func(start, end roachpb.Key) error {
-		iter := p.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		iter, err := p.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 			KeyTypes:   IterKeyTypeRangesOnly,
 			LowerBound: start,
 			UpperBound: end,
 		})
+		if err != nil {
+			return err
+		}
 		defer iter.Close()
 		for iter.SeekGE(MVCCKey{Key: start}); ; iter.Next() {
 			if valid, err := iter.Valid(); err != nil {
@@ -553,15 +572,6 @@ func (p *pebbleBatch) PutRawMVCC(key MVCCKey, value []byte) error {
 // PutUnversioned implements the Batch interface.
 func (p *pebbleBatch) PutUnversioned(key roachpb.Key, value []byte) error {
 	return p.put(MVCCKey{Key: key}, value)
-}
-
-// PutIntent implements the Batch interface.
-func (p *pebbleBatch) PutIntent(
-	ctx context.Context, key roachpb.Key, value []byte, txnUUID uuid.UUID,
-) error {
-	var err error
-	p.scratch, err = p.wrappedIntentWriter.PutIntent(ctx, key, value, txnUUID, p.scratch)
-	return err
 }
 
 // PutEngineKey implements the Batch interface.

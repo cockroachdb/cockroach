@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -249,7 +250,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	defer stopper.Stop(ctx)
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	s, err := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(ctx, rpcContext)
 	require.NoError(t, err)
 
 	// Test setting the cluster ID by setting it to nil then ensuring it's later
@@ -321,7 +322,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.NoError(t, err)
 	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
-	require.Regexp(t, "unable to look up descriptor for n3", err)
+	require.Regexp(t, "node descriptor with node ID 3 was not found", err)
 
 	// Test GetStoreDescriptor.
 	storeID1 := roachpb.StoreID(1)
@@ -340,7 +341,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.Equal(t, store2, storeDesc)
 	storeDesc, err = c.GetStoreDescriptor(3)
 	require.Nil(t, storeDesc)
-	require.Regexp(t, "unable to look up descriptor for store ID 3", err)
+	require.Regexp(t, "store descriptor with store ID 3 was not found", err)
 
 	// Return updated GossipSubscription response.
 	node1Up := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.2.3.4")}
@@ -408,7 +409,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 	defer stopper.Stop(ctx)
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	s, err := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(ctx, rpcContext)
 	require.NoError(t, err)
 
 	rangeLookupRespC := make(chan *kvpb.RangeLookupResponse, 1)
@@ -495,7 +496,7 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-	s, err := rpc.NewServer(rpcContext)
+	s, err := rpc.NewServer(ctx, rpcContext)
 	require.NoError(t, err)
 
 	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1.1.1.1")}
@@ -567,7 +568,8 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 	require.NoError(t, err)
 	desc, err = c.GetNodeDescriptor(3)
 	require.Nil(t, desc)
-	require.Regexp(t, "unable to look up descriptor for n3", err)
+	require.True(t, errors.HasType(err, &kvpb.DescNotFoundError{}))
+	require.Regexp(t, "node descriptor with node ID 3 was not found", err)
 }
 
 // TestConnectorRetriesError tests that connector iterates over each of
@@ -592,7 +594,7 @@ func TestConnectorRetriesError(t *testing.T) {
 		gossipSubFn func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error,
 		rangeLookupFn func(_ context.Context, req *kvpb.RangeLookupRequest) (*kvpb.RangeLookupResponse, error),
 	) string {
-		internalServer, err := rpc.NewServer(rpcContext)
+		internalServer, err := rpc.NewServer(ctx, rpcContext)
 		require.NoError(t, err)
 		kvpb.RegisterInternalServer(internalServer, &mockServer{rangeLookupFn: rangeLookupFn, gossipSubFn: gossipSubFn})
 		ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())

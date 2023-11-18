@@ -105,6 +105,13 @@ const (
 	// info regardless of whether we are actually scanning an invisible index.
 	ExprFmtHideNotVisibleIndexInfo
 
+	// ExprFmtHideFastPathChecks hides information about insert fast path unique
+	// check expressions. These expressions are not executed, but used to find
+	// constrained index scans which may be used to perform the check as a
+	// fast path check. Most of the time these expressions should not be displayed
+	// due to the fact that they are not actually executed.
+	ExprFmtHideFastPathChecks
+
 	// ExprFmtHideAll shows only the basic structure of the expression.
 	// Note: this flag should be used judiciously, as its meaning changes whenever
 	// we add more flags.
@@ -267,7 +274,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		f.Buffer.WriteByte(')')
 
 	case *ScanExpr, *PlaceholderScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
-		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *SequenceSelectExpr,
+		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *LockExpr, *SequenceSelectExpr,
 		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
 		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,
 		*AlterTableRelocateExpr, *AlterRangeRelocateExpr, *ControlJobsExpr, *CancelQueriesExpr,
@@ -690,6 +697,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
 
+	case *LockExpr:
+		f.formatLocking(tp, t.Locking)
+
 	case *WithExpr:
 		switch t.Mtr {
 		case tree.CTEMaterializeAlways:
@@ -957,11 +967,33 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 			}
 			n = tp.Child("body")
 			for i := range udf.Def.Body {
+				if i == 0 && udf.Def.CursorDeclaration != nil {
+					// The first statement is opening a cursor.
+					cur := n.Child("open-cursor")
+					f.formatExpr(udf.Def.Body[i], cur)
+					continue
+				}
 				f.formatExpr(udf.Def.Body[i], n)
 			}
 			delete(f.seenUDFs, udf.Def)
 		} else {
 			tp.Child("recursive-call")
+		}
+		if udf.Def.ExceptionBlock != nil {
+			n = tp.Child("exception-handler")
+			for i := range udf.Def.ExceptionBlock.Codes {
+				code := udf.Def.ExceptionBlock.Codes[i]
+				body := udf.Def.ExceptionBlock.Actions[i].Body
+				var branch treeprinter.Node
+				if code.String() == "OTHERS" {
+					branch = n.Child("OTHERS")
+				} else {
+					branch = n.Childf("SQLSTATE '%s'", code)
+				}
+				for j := range body {
+					f.formatExpr(body[j], branch)
+				}
+			}
 		}
 	}
 
@@ -971,9 +1003,9 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		f.Buffer.WriteString(": ")
 	}
 	switch scalar.Op() {
-	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp:
-		// Omit empty lists (except filters).
-		if scalar.ChildCount() == 0 {
+	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp, opt.FastPathUniqueChecksOp:
+		// Omit empty lists (except filters) and special-purpose fast path check expressions.
+		if scalar.ChildCount() == 0 || (scalar.Op() == opt.FastPathUniqueChecksOp && f.HasFlags(ExprFmtHideFastPathChecks)) {
 			return
 		}
 
@@ -1119,7 +1151,7 @@ func (f *ExprFmtCtx) scalarPropsStrings(scalar opt.ScalarExpr) []string {
 	typ := scalar.DataType()
 	if typ == nil {
 		if scalar.Op() == opt.UniqueChecksItemOp || scalar.Op() == opt.FKChecksItemOp ||
-			scalar.Op() == opt.KVOptionsItemOp {
+			scalar.Op() == opt.KVOptionsItemOp || scalar.Op() == opt.FastPathUniqueChecksItemOp {
 			// These are not true scalars and have no properties.
 			return nil
 		}
@@ -1219,6 +1251,19 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 
 	case *UniqueChecksItem:
 		tab := f.Memo.metadata.TableMeta(t.Table)
+		constraint := tab.Table.Unique(t.CheckOrdinal)
+		fmt.Fprintf(f.Buffer, ": %s(", tab.Alias.ObjectName)
+		for i := 0; i < constraint.ColumnCount(); i++ {
+			if i > 0 {
+				f.Buffer.WriteByte(',')
+			}
+			col := tab.Table.Column(constraint.ColumnOrdinal(tab.Table, i))
+			f.Buffer.WriteString(string(col.ColName()))
+		}
+		f.Buffer.WriteByte(')')
+
+	case *FastPathUniqueChecksItem:
+		tab := f.Memo.metadata.TableMeta(t.ReferencedTableID)
 		constraint := tab.Table.Unique(t.CheckOrdinal)
 		fmt.Fprintf(f.Buffer, ": %s(", tab.Alias.ObjectName)
 		for i := 0; i < constraint.ColumnCount(); i++ {
@@ -1569,6 +1614,14 @@ func (f *ExprFmtCtx) formatLockingWithPrefix(
 	default:
 		panic(errors.AssertionFailedf("unexpected wait policy"))
 	}
+	form := ""
+	switch locking.Form {
+	case tree.LockRecord:
+	case tree.LockPredicate:
+		form = ",predicate"
+	default:
+		panic(errors.AssertionFailedf("unexpected form"))
+	}
 	durability := ""
 	switch locking.Durability {
 	case tree.LockDurabilityBestEffort:
@@ -1577,7 +1630,7 @@ func (f *ExprFmtCtx) formatLockingWithPrefix(
 	default:
 		panic(errors.AssertionFailedf("unexpected durability"))
 	}
-	tp.Childf("%slocking: %s%s%s", labelPrefix, strength, wait, durability)
+	tp.Childf("%slocking: %s%s%s%s", labelPrefix, strength, wait, form, durability)
 }
 
 // formatDependencies adds a new treeprinter child for schema dependencies.
@@ -1648,6 +1701,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %s", seq.Name())
 
 	case *MutationPrivate:
+		f.formatIndex(t.Table, cat.PrimaryIndex, false /* reverse */)
+
+	case *LockPrivate:
 		f.formatIndex(t.Table, cat.PrimaryIndex, false /* reverse */)
 
 	case *OrdinalityPrivate:

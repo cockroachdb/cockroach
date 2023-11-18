@@ -24,16 +24,17 @@ with t=A k=a
   txn_begin ts=4,0
   put v=1
 ----
+put: lock acquisition = {a id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/4.000000000,0 -> /BYTES/1
 
 run error
 gc_points_clear_range k=a end=z ts=5
 ----
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} ts=4.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/4.000000000,0 -> /BYTES/1
 error: (*withstack.withStack:) attempt to GC intent "a" using clear range
 

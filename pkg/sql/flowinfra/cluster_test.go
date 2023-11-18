@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -98,6 +99,7 @@ func runTestClusterFlow(
 		now.ToTimestamp(),
 		0, // maxOffsetNs
 		int32(servers[0].SQLInstanceID()),
+		0,
 	)
 	txn := kv.NewTxnFromProto(ctx, kvDB, roachpb.NodeID(servers[0].SQLInstanceID()), now, kv.RootTxn, &txnProto)
 	leafInputState, err := txn.GetLeafTxnInputState(ctx)
@@ -259,7 +261,7 @@ func TestClusterFlow(t *testing.T) {
 	const numNodes = 3
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
-	tc := serverutils.StartNewTestCluster(t, numNodes, args)
+	tc := serverutils.StartCluster(t, numNodes, args)
 	defer tc.Stopper().Stop(context.Background())
 
 	servers := make([]serverutils.ApplicationLayerInterface, numNodes)
@@ -268,7 +270,7 @@ func TestClusterFlow(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		s := tc.Server(i).ApplicationLayer()
 		servers[i] = s
-		conns[i] = s.SQLConn(t, "")
+		conns[i] = s.SQLConn(t)
 		conn := s.RPCClientConn(t, username.RootUserName())
 		clients[i] = execinfrapb.NewDistSQLClient(conn)
 	}
@@ -285,7 +287,7 @@ func TestTenantClusterFlow(t *testing.T) {
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
 	args.ServerArgs.DefaultTestTenant = base.TestControlsTenantsExplicitly
-	tc := serverutils.StartNewTestCluster(t, 1, args)
+	tc := serverutils.StartCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
 	pods := make([]serverutils.ApplicationLayerInterface, numPods)
@@ -317,7 +319,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
 	// Set up the following network - a simplification of the one described in
@@ -410,6 +412,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		now.ToTimestamp(),
 		0, // maxOffsetNs
 		int32(tc.Server(0).SQLInstanceID()),
+		0,
 	)
 	txn := kv.NewTxnFromProto(
 		context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),
@@ -517,11 +520,12 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 	var expectedGateway roachpb.NodeID
 
 	var tableID atomic.Value
-	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
+	tc := serverutils.StartCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				UseDatabase: "test",
+				UseDatabase:       "test",
+				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109392),
 				Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 						TestingEvalFilter: func(filterArgs kvserverbase.FilterArgs) *kvpb.Error {
@@ -583,7 +587,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -591,6 +595,15 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 			},
 		})
 	defer tc.Stopper().Stop(ctx)
+
+	if srv := tc.Server(0); srv.TenantController().StartedDefaultTestTenant() {
+		systemSqlDB := srv.SystemLayer().SQLConn(t, serverutils.DBName("system"))
+		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanAdminRelocateRange: "true",
+		}, "")
+	}
 
 	db := tc.ServerConn(0)
 	sqlutils.CreateTable(t, db, "t",
@@ -640,7 +653,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
-	tc := serverutils.StartNewTestCluster(b, 3, args)
+	tc := serverutils.StartCluster(b, 3, args)
 	defer tc.Stopper().Stop(context.Background())
 
 	for _, numNodes := range []int{1, 3} {
@@ -705,6 +718,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						now.ToTimestamp(),
 						0, // maxOffsetNs
 						int32(tc.Server(0).SQLInstanceID()),
+						0,
 					)
 					txn := kv.NewTxnFromProto(
 						context.Background(), tc.Server(0).DB(), tc.Server(0).NodeID(),

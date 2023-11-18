@@ -328,7 +328,7 @@ export class NodeGraphs extends React.Component<
     const nodeSources = selectedNode !== "" ? [selectedNode] : null;
     const selectedTenant = isSystemTenant(currentTenant)
       ? getMatchParamByName(match, tenantNameAttr) || ""
-      : currentTenant;
+      : undefined;
     // When "all" is the selected source, some graphs display a line for every
     // node in the cluster using the nodeIDs collection. However, if a specific
     // node is already selected, these per-node graphs should only display data

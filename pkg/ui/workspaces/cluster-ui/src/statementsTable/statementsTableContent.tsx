@@ -30,7 +30,7 @@ import {
 } from "src/util";
 import styles from "./statementsTableContent.module.scss";
 import { EllipsisVertical } from "@cockroachlabs/icons";
-import { getBasePath } from "src/api/basePath";
+import { withBasePath } from "src/api/basePath";
 import { StatementDiagnosticsReport } from "src/api/statementDiagnosticsApi";
 import moment from "moment-timezone";
 
@@ -95,7 +95,10 @@ export const StatementTableCell = {
           {canActivateDiagnosticReport ? (
             <Button
               onClick={() =>
-                activateDiagnosticsRef?.current?.showModalFor(stmt.label)
+                activateDiagnosticsRef?.current?.showModalFor(
+                  stmt.label,
+                  stmt.stats.plan_gists,
+                )
               }
               type="secondary"
               size="small"
@@ -135,9 +138,9 @@ export const StatementTableCell = {
                       name: (
                         <a
                           className={cx("diagnostic-report-dropdown-option")}
-                          href={`${getBasePath()}/_admin/v1/stmtbundle/${
-                            dr.statement_diagnostics_id
-                          }`}
+                          href={withBasePath(
+                            `_admin/v1/stmtbundle/${dr.statement_diagnostics_id}`,
+                          )}
                         >
                           {`Download ${moment(dr.requested_at).format(
                             "MMM DD, YYYY [at] H:mm [(UTC)] [diagnostic]",

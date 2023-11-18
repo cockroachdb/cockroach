@@ -845,6 +845,13 @@ type RestrictedCommandResult interface {
 	// soon as AddBatch returns.
 	AddBatch(ctx context.Context, batch coldata.Batch) error
 
+	// BufferedResultsLen returns the length of the results buffer.
+	BufferedResultsLen() int
+
+	// TruncateBufferedResults clears any results that have been buffered after
+	// given index, and returns true iff any results were actually truncated.
+	TruncateBufferedResults(idx int) bool
+
 	// SupportsAddBatch returns whether this command result supports AddBatch
 	// method of adding the data. If false is returned, then the behavior of
 	// AddBatch is undefined.
@@ -1111,6 +1118,18 @@ func (r *streamingCommandResult) AddRow(ctx context.Context, row tree.Datums) er
 func (r *streamingCommandResult) AddBatch(context.Context, coldata.Batch) error {
 	// TODO(yuzefovich): implement this.
 	panic("unimplemented")
+}
+
+// BufferedResultsLen is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) BufferedResultsLen() int {
+	// Since this implementation is streaming, there is no sensible return
+	// value here.
+	panic("unimplemented")
+}
+
+// TruncateBufferedResults is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) TruncateBufferedResults(int) bool {
+	return false
 }
 
 // SupportsAddBatch is part of the RestrictedCommandResult interface.

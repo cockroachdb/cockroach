@@ -38,18 +38,19 @@ const SchemaTelemetryScheduleName = "sql-schema-telemetry"
 
 // SchemaTelemetryRecurrence is the cron-tab string specifying the recurrence
 // for schema telemetry job.
-var SchemaTelemetryRecurrence = settings.RegisterValidatedStringSetting(
-	settings.TenantReadOnly,
+var SchemaTelemetryRecurrence = settings.RegisterStringSetting(
+	settings.SystemVisible,
 	"sql.schema.telemetry.recurrence",
 	"cron-tab recurrence for SQL schema telemetry job",
 	"@weekly", /* defaultValue */
-	func(_ *settings.Values, s string) error {
+	settings.WithValidateString(func(_ *settings.Values, s string) error {
 		if _, err := cron.ParseStandard(s); err != nil {
 			return errors.Wrap(err, "invalid cron expression")
 		}
 		return nil
-	},
-).WithPublic()
+	}),
+	settings.WithPublic,
+)
 
 // ErrDuplicatedSchedules indicates that there is already a schedule for SQL
 // schema telemetry jobs existing in the system.scheduled_jobs table.
@@ -148,7 +149,7 @@ func updateSchedule(ctx context.Context, db isql.DB, st *cluster.Settings, clust
 					return err
 				}
 				if id == 0 {
-					sj, err = CreateSchemaTelemetrySchedule(ctx, txn, st)
+					sj, err = CreateSchemaTelemetrySchedule(ctx, txn, st, clusterID)
 				} else {
 					sj, err = jobs.ScheduledJobTxn(txn).Load(ctx, scheduledjobs.ProdJobSchedulerEnv, id)
 				}
@@ -210,7 +211,7 @@ func CreateSchemaTelemetryJobRecord(createdByName string, createdByID int64) job
 // the scheduled job subsystem so that the schema telemetry job can be run
 // periodically. This is done during the cluster startup upgrade.
 func CreateSchemaTelemetrySchedule(
-	ctx context.Context, txn isql.Txn, st *cluster.Settings,
+	ctx context.Context, txn isql.Txn, st *cluster.Settings, clusterID uuid.UUID,
 ) (*jobs.ScheduledJob, error) {
 	id, err := GetSchemaTelemetryScheduleID(ctx, txn)
 	if err != nil {
@@ -228,8 +229,10 @@ func CreateSchemaTelemetrySchedule(
 	}
 
 	scheduledJob.SetScheduleDetails(jobspb.ScheduleDetails{
-		Wait:    jobspb.ScheduleDetails_SKIP,
-		OnError: jobspb.ScheduleDetails_RETRY_SCHED,
+		Wait:                   jobspb.ScheduleDetails_SKIP,
+		OnError:                jobspb.ScheduleDetails_RETRY_SCHED,
+		ClusterID:              clusterID,
+		CreationClusterVersion: st.Version.ActiveVersion(ctx),
 	})
 
 	scheduledJob.SetScheduleLabel(SchemaTelemetryScheduleName)
@@ -254,7 +257,9 @@ func CreateSchemaTelemetrySchedule(
 
 // GetSchemaTelemetryScheduleID returns the ID of the schema telemetry schedule
 // if it exists, 0 if it does not exist yet.
-func GetSchemaTelemetryScheduleID(ctx context.Context, txn isql.Txn) (id int64, _ error) {
+func GetSchemaTelemetryScheduleID(
+	ctx context.Context, txn isql.Txn,
+) (id jobspb.ScheduleID, _ error) {
 	row, err := txn.QueryRowEx(
 		ctx,
 		"check-existing-schema-telemetry-schedule",
@@ -274,5 +279,5 @@ func GetSchemaTelemetryScheduleID(ctx context.Context, txn isql.Txn) (id int64, 
 	if !ok {
 		return 0, errors.AssertionFailedf("unexpectedly received non-integer value %v", row[0])
 	}
-	return int64(v), nil
+	return jobspb.ScheduleID(v), nil
 }

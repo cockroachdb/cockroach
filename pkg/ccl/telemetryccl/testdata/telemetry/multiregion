@@ -41,6 +41,10 @@ exec
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5ms';
 ----
 
+exec
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms';
+----
+
 feature-allowlist
 sql.plan.opt.locality-optimized-search
 ----

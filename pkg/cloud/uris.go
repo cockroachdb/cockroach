@@ -31,6 +31,8 @@ const (
 	// LocalityURLParam is the parameter name used when specifying a locality tag
 	// in a locality aware backup/restore.
 	LocalityURLParam = "COCKROACH_LOCALITY"
+
+	redactionMarker = "redacted"
 )
 
 // GetPrefixBeforeWildcard gets the prefix of a path that does not contain glob-
@@ -42,6 +44,46 @@ func GetPrefixBeforeWildcard(p string) string {
 		return p
 	}
 	return path.Dir(p[:globIndex])
+}
+
+// SanitizeExternalStorageURI returns the external storage URI with with some
+// secrets redacted, for use when showing these URIs in the UI, to provide some
+// protection from shoulder-surfing. The param is still present -- just
+// redacted -- to make it clearer that that value is indeed persisted interally.
+// extraParams which should be scrubbed -- for params beyond those that the
+// various cloud-storage URIs supported by this package know about -- can be
+// passed allowing this function to be used to scrub other URIs too (such as
+// non-cloudstorage changefeed sinks).n
+func SanitizeExternalStorageURI(path string, extraParams []string) (string, error) {
+	uri, err := url.Parse(path)
+	if err != nil {
+		return "", err
+	}
+	if uri.Scheme == "experimental-workload" || uri.Scheme == "workload" || uri.Scheme == "null" {
+		return path, nil
+	}
+
+	if uri.User != nil {
+		if _, passwordSet := uri.User.Password(); passwordSet {
+			uri.User = url.UserPassword(uri.User.Username(), redactionMarker)
+		}
+	}
+
+	params := uri.Query()
+	for param := range params {
+		if _, ok := redactedQueryParams[param]; ok {
+			params.Set(param, redactionMarker)
+		} else {
+			for _, p := range extraParams {
+				if param == p {
+					params.Set(param, redactionMarker)
+				}
+			}
+		}
+	}
+
+	uri.RawQuery = params.Encode()
+	return uri.String(), nil
 }
 
 // RedactKMSURI redacts the Master Key ID and the ExternalStorage secret

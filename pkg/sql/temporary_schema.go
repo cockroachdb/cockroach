@@ -47,20 +47,20 @@ import (
 // TempObjectCleanupInterval is a ClusterSetting controlling how often
 // temporary objects get cleaned up.
 var TempObjectCleanupInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.temp_object_cleaner.cleanup_interval",
 	"how often to clean up orphaned temporary objects",
 	30*time.Minute,
-).WithPublic()
+	settings.WithPublic)
 
 // TempObjectWaitInterval is a ClusterSetting controlling how long
 // after a creation a temporary object will be cleaned up.
 var TempObjectWaitInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.temp_object_cleaner.wait_interval",
 	"how long after creation a temporary object will be cleaned up",
 	30*time.Minute,
-).WithPublic()
+	settings.WithPublic)
 
 var (
 	temporaryObjectCleanerActiveCleanersMetric = metric.Metadata{

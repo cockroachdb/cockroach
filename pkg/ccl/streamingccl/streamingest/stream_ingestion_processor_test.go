@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -69,15 +70,8 @@ var _ streamclient.Client = &mockStreamClient{}
 
 // Create implements the Client interface.
 func (m *mockStreamClient) Create(
-	_ context.Context, _ roachpb.TenantName,
+	_ context.Context, _ roachpb.TenantName, _ streampb.ReplicationProducerRequest,
 ) (streampb.ReplicationProducerSpec, error) {
-	panic("unimplemented")
-}
-
-// SetupSpanConfigsStream implements the Client interface.
-func (m *mockStreamClient) SetupSpanConfigsStream(
-	ctx context.Context, tenant roachpb.TenantName,
-) (streampb.StreamID, streamclient.Topology, error) {
 	panic("unimplemented")
 }
 
@@ -193,7 +187,13 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	ctx := context.Background()
 
 	tc := testcluster.StartTestCluster(t, 1 /* nodes */, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TODOTestTenantDisabled},
+		ServerArgs: base.TestServerArgs{
+			// Perhaps it would be possible to make this
+			// run in a secondary tenant, but the test
+			// would need to be completely rewritten to be
+			// even further from real-world operation.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 	})
 	defer tc.Stopper().Stop(ctx)
 	db := tc.Server(0).InternalDB().(descs.DB)
@@ -502,6 +502,47 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	})
 }
 
+func TestFrontierForSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var (
+		spanAB = roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}
+		spanCD = roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}
+		spanEF = roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}
+		spanXZ = roachpb.Span{Key: roachpb.Key("x"), EndKey: roachpb.Key("z")}
+	)
+
+	t.Run("returns the lowest timestamp for the matched spans", func(t *testing.T) {
+		f, err := span.MakeFrontier(spanAB, spanCD, spanEF)
+		require.NoError(t, err)
+		_, err = f.Forward(spanAB, hlc.Timestamp{WallTime: 1})
+		require.NoError(t, err)
+		_, err = f.Forward(spanCD, hlc.Timestamp{WallTime: 2})
+		require.NoError(t, err)
+		_, err = f.Forward(spanEF, hlc.Timestamp{WallTime: 3})
+		require.NoError(t, err)
+		require.Equal(t, hlc.Timestamp{WallTime: 1}, frontierForSpans(f, spanAB, spanCD, spanEF))
+		require.Equal(t, hlc.Timestamp{WallTime: 2}, frontierForSpans(f, spanCD, spanEF))
+		require.Equal(t, hlc.Timestamp{WallTime: 3}, frontierForSpans(f, spanEF))
+		require.Equal(t, hlc.Timestamp{WallTime: 1}, frontierForSpans(f, spanAB, spanEF))
+	})
+	t.Run("returns zero if none of the spans overlap", func(t *testing.T) {
+		f, err := span.MakeFrontierAt(hlc.Timestamp{WallTime: 1}, spanAB, spanCD, spanEF)
+		require.NoError(t, err)
+		require.Equal(t, hlc.Timestamp{}, frontierForSpans(f, spanXZ))
+	})
+	t.Run("returns zero if one of the spans is zero", func(t *testing.T) {
+		f, err := span.MakeFrontier(spanAB, spanCD, spanEF)
+		require.NoError(t, err)
+		_, err = f.Forward(spanAB, hlc.Timestamp{WallTime: 1})
+		require.NoError(t, err)
+		// spanCD should still be at zero
+		_, err = f.Forward(spanEF, hlc.Timestamp{WallTime: 3})
+		require.NoError(t, err)
+		require.Equal(t, hlc.Timestamp{}, frontierForSpans(f, spanAB, spanCD, spanEF))
+	})
+}
+
 // getPartitionSpanToTableID maps a partiton's span to the tableID it covers in
 // the source keyspace. It assumes the source used a random_stream_client, which generates keys for
 // a single table span per partition.
@@ -542,12 +583,15 @@ func assertEqualKVs(
 		return foundKVs
 	}
 	// Iterate over the store.
-	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+	store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	require.NoError(t, err)
-	it := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+	it, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
 		LowerBound: targetSpan.Key,
 		UpperBound: targetSpan.EndKey,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer it.Close()
 	var prevKey roachpb.Key
 	var valueTimestampTuples []roachpb.KeyValue
@@ -624,9 +668,14 @@ func TestRandomClientGeneration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
 	defer srv.Stopper().Stop(ctx)
-	registry := srv.JobRegistry().(*jobs.Registry)
+
+	ts := srv.SystemLayer()
+
+	registry := ts.JobRegistry().(*jobs.Registry)
 
 	// TODO: Consider testing variations on these parameters.
 	tenantID := roachpb.MustMakeTenantID(20)
@@ -639,7 +688,7 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	randomStreamClient, ok := streamClient.(*streamclient.RandomStreamClient)
 	require.True(t, ok)
-	rps, err := randomStreamClient.Create(ctx, tenantName)
+	rps, err := randomStreamClient.Create(ctx, tenantName, streampb.ReplicationProducerRequest{})
 	require.NoError(t, err)
 
 	topo, err := randomStreamClient.Plan(ctx, rps.StreamID)
@@ -669,7 +718,7 @@ func TestRandomClientGeneration(t *testing.T) {
 	randomStreamClient.RegisterInterception(cancelAfterCheckpoints)
 	randomStreamClient.RegisterInterception(validateFnWithValidator(t, streamValidator))
 
-	out, err := runStreamIngestionProcessor(ctx, t, registry, srv.InternalDB().(descs.DB),
+	out, err := runStreamIngestionProcessor(ctx, t, registry, ts.InternalDB().(descs.DB),
 		topo, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey,
 		randomStreamClient, noCutover{}, nil /* streamingTestingKnobs*/)
 	require.NoError(t, err)

@@ -195,9 +195,7 @@ func maybeDropDependentViews(
 			if dropBehavior != tree.DropCascade {
 				// Get view name for the error message
 				_, _, ns := scpb.FindNamespace(b.QueryByID(ve.ViewID))
-				panic(errors.WithHintf(
-					sqlerrors.NewDependentObjectErrorf("cannot drop index %q because view %q depends on it",
-						toBeDroppedIndexName, ns.Name), "you can drop %q instead.", ns.Name))
+				panic(sqlerrors.NewDependentBlocksOpError("drop", "index", toBeDroppedIndexName, "view", ns.Name))
 			} else {
 				dropCascadeDescriptor(b, ve.ViewID)
 			}
@@ -222,9 +220,7 @@ func maybeDropDependentFunctions(
 			if dropBehavior != tree.DropCascade {
 				// Get view name for the error message
 				_, _, fnName := scpb.FindFunctionName(b.QueryByID(e.FunctionID))
-				panic(errors.WithHintf(
-					sqlerrors.NewDependentObjectErrorf("cannot drop index %q because function %q depends on it",
-						toBeDroppedIndexName, fnName.Name), "you can drop %q instead.", fnName.Name))
+				panic(sqlerrors.NewDependentBlocksOpError("drop", "index", toBeDroppedIndexName, "function", fnName.Name))
 			} else {
 				dropCascadeDescriptor(b, e.FunctionID)
 			}

@@ -13,6 +13,7 @@ package kvcoord
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // ClientTestingKnobs contains testing options that dictate the behavior
@@ -57,6 +58,10 @@ type ClientTestingKnobs struct {
 	// error which, if non-nil, becomes the result of the batch. Otherwise, execution
 	// continues.
 	OnRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
+
+	// TransactionRetryFilter allows transaction retry loops to inject retriable
+	// errors.
+	TransactionRetryFilter func(roachpb.Transaction) bool
 }
 
 var _ base.ModuleTestingKnobs = &ClientTestingKnobs{}

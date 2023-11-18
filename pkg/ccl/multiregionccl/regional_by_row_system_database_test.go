@@ -28,21 +28,16 @@ func TestRegionalByRowTablesInTheSystemDatabase(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{})
+	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{})
 	defer cleanup()
 	defer tc.Stopper().Stop(ctx)
 
-	// Allow the tenant to make itself multi-region.
-	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `
-ALTER TENANT ALL
-SET CLUSTER SETTING
-sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true;`)
 	tenant, tenantDB := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
 		TenantName:  "test",
 		TenantID:    serverutils.TestTenantID(),
 		UseDatabase: "defaultdb",
 	})
-	defer tenant.Stopper().Stop(ctx)
+	defer tenant.AppStopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(tenantDB)
 	tdb.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1";`)

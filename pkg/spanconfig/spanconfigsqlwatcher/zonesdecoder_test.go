@@ -17,35 +17,35 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 )
 
-// TestZoneDecoderDecodePrimaryKey verifies that we can decode the primary key
+// TestZonesDecoderDecodePrimaryKey verifies that we can decode the primary key
 // stored in a system.zones like table.
 func TestZonesDecoderDecodePrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SpanConfig: &spanconfig.TestingKnobs{
-					ManagerDisableJobCreation: true,
-				},
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				ManagerDisableJobCreation: true,
 			},
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	// Create a dummy table, like system.zones, to modify in this test. This lets
 	// us test things without bother with the prepoulated contents for
@@ -64,7 +64,7 @@ func TestZonesDecoderDecodePrimaryKey(t *testing.T) {
 		fmt.Sprintf("SELECT id FROM system.namespace WHERE name='%s'", dummyTableName),
 	).Scan(&dummyTableID)
 
-	k := keys.SystemSQLCodec.TablePrefix(dummyTableID)
+	k := s.Codec().TablePrefix(dummyTableID)
 
 	entries := []struct {
 		id    descpb.ID
@@ -96,12 +96,12 @@ func TestZonesDecoderDecodePrimaryKey(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
+	rows, err := kvDB.Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 	require.NoError(t, err)
 	require.Equal(t, len(entries), len(rows))
 
 	for i, row := range rows {
-		got, err := spanconfigsqlwatcher.TestingZonesDecoderDecodePrimaryKey(keys.SystemSQLCodec, row.Key)
+		got, err := spanconfigsqlwatcher.TestingZonesDecoderDecodePrimaryKey(s.Codec(), row.Key)
 		require.NoError(t, err)
 		require.Equal(t, entries[i].id, got)
 	}

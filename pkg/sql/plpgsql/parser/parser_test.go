@@ -11,8 +11,6 @@
 package parser_test
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
@@ -23,7 +21,7 @@ import (
 
 // TODO: Define(if possible) a data driven test framework so that sql and
 // plpgsql share a parse test
-func TestParseDataDriver(t *testing.T) {
+func TestParseDataDriven(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -31,11 +29,7 @@ func TestParseDataDriver(t *testing.T) {
 				// Check parse.
 				fn, err := parser.Parse(d.Input)
 				if err != nil {
-					if strings.Contains(err.Error(), "unimplemented") {
-						return fmt.Sprintf("expected parse error: %v", err)
-					}
-
-					d.Fatalf(t, "unexpected parse error: %v", err)
+					return err.Error()
 				}
 				// TODO(chengxiong): add pretty print round trip test.
 				return fn.String()

@@ -1100,6 +1100,7 @@ type LockingItem struct {
 	Strength   LockingStrength
 	Targets    TableNames
 	WaitPolicy LockingWaitPolicy
+	Form       LockingForm
 }
 
 // Format implements the NodeFormatter interface.
@@ -1110,6 +1111,7 @@ func (f *LockingItem) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&f.Targets)
 	}
 	ctx.FormatNode(f.WaitPolicy)
+	// Form and durability are not currently exposed through SQL.
 }
 
 // LockingStrength represents the possible row-level lock modes for a SELECT
@@ -1199,11 +1201,53 @@ func (p LockingWaitPolicy) Max(p2 LockingWaitPolicy) LockingWaitPolicy {
 	return LockingWaitPolicy(max(byte(p), byte(p2)))
 }
 
-// LockingDurability represents the durability of a lock. It is currently not
-// exposed through SQL, but is instead set according to statement type and
+// LockingForm represents the form of locking to use, record locking or
+// predicate locking. It is not currently exposed through SQL, but could be once
+// more fully supported.
+type LockingForm byte
+
+// The ordering of the variants is important, because the highest numerical
+// value takes precedence when row-level locking is specified multiple ways.
+const (
+	// LockRecord represents the default: lock existing rows within the specified
+	// span(s), which prevents modification of those rows but does not prevent
+	// insertion of new rows (phantoms) into the span(s).
+	LockRecord LockingForm = iota
+	// LockPredicate represents locking the logical predicate defined by the
+	// span(s), preventing modification of existing rows as well as insertion of
+	// new rows (phantoms). This is similar to the behavior of "next-key locks" in
+	// InnoDB, "key-range locks" in SQL Server, "phantom locks" in Sybase, etc.
+	// (Postgres also has predicate locks, which it uses under serializable
+	// isolation, but these are used to detect serializable violations rather than
+	// for mutual exclusion.)
+	//
+	// We currently only use predicate locks for uniqueness checks under snapshot
+	// and read committed isolation, and only support predicate locks on
+	// single-key spans.
+	LockPredicate
+)
+
+var lockingClassName = [...]string{
+	LockRecord:    "record",
+	LockPredicate: "predicate",
+}
+
+func (p LockingForm) String() string {
+	return lockingClassName[p]
+}
+
+// Max returns the maximum of the two locking forms.
+func (p LockingForm) Max(p2 LockingForm) LockingForm {
+	return LockingForm(max(byte(p), byte(p2)))
+}
+
+// LockingDurability represents the durability of a lock. It is not exposed
+// through SQL, but is instead set by the system according to statement type and
 // isolation level. It is included here for completeness.
 type LockingDurability byte
 
+// The ordering of the variants is important, because the highest numerical
+// value takes precedence when row-level locking is specified multiple ways.
 const (
 	// LockDurabilityBestEffort represents the default: make a best-effort attempt
 	// to hold the lock until commit while keeping it unreplicated and in-memory

@@ -44,8 +44,12 @@ const (
 	//  [mean - mean_tolerance, mean + mean_tolerance].
 	//
 	// The store rebalancer watches the replica CPU load and balances within
-	// +-10% of the mean. To reduce noise, add a buffer (5%) ontop.
-	meanCPUTolerance = 0.15
+	// +-10% of the mean (by default). To reduce noise, add a buffer (+10%)
+	// ontop.
+	// TODO(kvoli): Reduce the buffer once we attribute other CPU usage to a
+	// store via a node, such a SQL execution, stats collection and compactions.
+	// See #109768.
+	meanCPUTolerance = 0.20
 	// statSamplePeriod is the period at which timeseries stats are sampled.
 	statSamplePeriod = 10 * time.Second
 	// stableDuration is the duration which the cluster's load must remain
@@ -92,8 +96,9 @@ func registerRebalanceLoad(r registry.Registry) {
 			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		settings := install.MakeClusterSettings()
 		if mixedVersion {
-			predecessorVersion, err := release.LatestPredecessor(t.BuildVersion())
+			predecessorVersionStr, err := release.LatestPredecessor(t.BuildVersion())
 			require.NoError(t, err)
+			predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
 			settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
 			// Upgrade some (or all) of the first N-1 CRDB nodes. We ignore the last
 			// CRDB node (to leave at least one node on the older version), and the
@@ -102,9 +107,8 @@ func registerRebalanceLoad(r registry.Registry) {
 			t.L().Printf("upgrading %d nodes to the current cockroach binary", lastNodeToUpgrade)
 			nodesToUpgrade := c.Range(1, lastNodeToUpgrade)
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
-			upgradeNodes(ctx, t, c, nodesToUpgrade, startOpts, clusterupgrade.MainVersion)
+			upgradeNodes(ctx, t, c, nodesToUpgrade, startOpts, clusterupgrade.CurrentVersion())
 		} else {
-			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 		}
 
@@ -119,6 +123,19 @@ func registerRebalanceLoad(r registry.Registry) {
 		require.NoError(t, disableLoadBasedSplitting(ctx, db))
 		t.Status(fmt.Sprintf("setting rebalance mode to %s", rebalanceMode))
 		_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.allocator.load_based_rebalancing=$1::string`, rebalanceMode)
+		require.NoError(t, err)
+		// Enable collecting CPU profiles when the CPU utilization exceeds 90%.
+		// This helps debug failures which occur as a result of mismatches
+		// between allocation (QPS/replica CPU) and hardware signals e.g. see
+		// #111900.
+		//
+		// TODO(kvoli): Remove this setup once CPU profiling is enabled by default
+		// on perf roachtests #97699.
+		_, err = db.ExecContext(ctx, `SET CLUSTER SETTING server.cpu_profile.duration = '2s'`)
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, `SET CLUSTER SETTING server.cpu_profile.interval = '2m'`)
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, `SET CLUSTER SETTING server.cpu_profile.cpu_usage_combined_threshold = 90`)
 		require.NoError(t, err)
 
 		var m *errgroup.Group // see comment in version.go
@@ -195,10 +212,12 @@ func registerRebalanceLoad(r registry.Registry) {
 
 	r.Add(
 		registry.TestSpec{
-			Name:    `rebalance/by-load/leases`,
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
-			Leases:  registry.MetamorphicLeases,
+			Name:             `rebalance/by-load/leases`,
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(4), // the last node is just used to generate load
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					concurrency = 32
@@ -210,9 +229,11 @@ func registerRebalanceLoad(r registry.Registry) {
 	)
 	r.Add(
 		registry.TestSpec{
-			Name:    `rebalance/by-load/leases/mixed-version`,
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(4), // the last node is just used to generate load
+			Name:             `rebalance/by-load/leases/mixed-version`,
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(4), // the last node is just used to generate load
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					concurrency = 32
@@ -224,10 +245,12 @@ func registerRebalanceLoad(r registry.Registry) {
 	)
 	r.Add(
 		registry.TestSpec{
-			Name:    `rebalance/by-load/replicas`,
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
-			Leases:  registry.MetamorphicLeases,
+			Name:             `rebalance/by-load/replicas`,
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(7), // the last node is just used to generate load
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					concurrency = 32
@@ -241,9 +264,11 @@ func registerRebalanceLoad(r registry.Registry) {
 	)
 	r.Add(
 		registry.TestSpec{
-			Name:    `rebalance/by-load/replicas/mixed-version`,
-			Owner:   registry.OwnerKV,
-			Cluster: r.MakeClusterSpec(7), // the last node is just used to generate load
+			Name:             `rebalance/by-load/replicas/mixed-version`,
+			Owner:            registry.OwnerKV,
+			Cluster:          r.MakeClusterSpec(7), // the last node is just used to generate load
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					concurrency = 32
@@ -256,17 +281,14 @@ func registerRebalanceLoad(r registry.Registry) {
 		},
 	)
 	cSpec := r.MakeClusterSpec(7, spec.SSD(2)) // the last node is just used to generate load
-	var skip string
-	if cSpec.Cloud != spec.GCE {
-		skip = fmt.Sprintf("multi-store tests are not supported on cloud %s", cSpec.Cloud)
-	}
 	r.Add(
 		registry.TestSpec{
-			Skip:    skip,
-			Name:    `rebalance/by-load/replicas/ssds=2`,
-			Owner:   registry.OwnerKV,
-			Cluster: cSpec,
-			Leases:  registry.MetamorphicLeases,
+			Name:             `rebalance/by-load/replicas/ssds=2`,
+			Owner:            registry.OwnerKV,
+			Cluster:          cSpec,
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.IsLocal() {
 					t.Fatal("cannot run multi-store in local mode")

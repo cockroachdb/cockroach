@@ -1,0 +1,6 @@
+echo
+----
+db0.Put(ctx, tk(1), sv(1)) // @0.000000001,0 <nil>
+db0.GetSkipLocked(ctx, tk(1)) // @0.000000002,0 (v2, <nil>)
+/Table/100/"0000000000000001"/0.000000001,0 @ s1 v1
+committed get non-atomic timestamps: [r(skip-locked)]/Table/100/"0000000000000001":[0,0, 0,0)->v2

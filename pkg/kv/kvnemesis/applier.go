@@ -17,7 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
-	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -107,6 +109,14 @@ func exceptAmbiguous(err error) bool { // true if ambiguous result
 
 func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
 	return errors.Is(err, errDelRangeUsingTombstoneStraddlesRangeBoundary)
+}
+
+func exceptSharedLockPromotionError(err error) bool { // true if lock promotion error
+	return errors.Is(err, &concurrency.LockPromotionError{})
+}
+
+func exceptSkipLockedReplayError(err error) bool { // true if skip locked replay error
+	return errors.Is(err, &concurrency.SkipLockedReplayError{})
 }
 
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
@@ -231,12 +241,15 @@ type dbRunI interface {
 type clientI interface {
 	dbRunI
 	Get(context.Context, interface{}) (kv.KeyValue, error)
-	GetForUpdate(context.Context, interface{}) (kv.KeyValue, error)
+	GetForUpdate(context.Context, interface{}, kvpb.KeyLockingDurabilityType) (kv.KeyValue, error)
+	GetForShare(context.Context, interface{}, kvpb.KeyLockingDurabilityType) (kv.KeyValue, error)
 	Put(context.Context, interface{}, interface{}) error
 	Scan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
-	ScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
+	ScanForUpdate(context.Context, interface{}, interface{}, int64, kvpb.KeyLockingDurabilityType) ([]kv.KeyValue, error)
+	ScanForShare(context.Context, interface{}, interface{}, int64, kvpb.KeyLockingDurabilityType) ([]kv.KeyValue, error)
 	ReverseScan(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
-	ReverseScanForUpdate(context.Context, interface{}, interface{}, int64) ([]kv.KeyValue, error)
+	ReverseScanForUpdate(context.Context, interface{}, interface{}, int64, kvpb.KeyLockingDurabilityType) ([]kv.KeyValue, error)
+	ReverseScanForShare(context.Context, interface{}, interface{}, int64, kvpb.KeyLockingDurabilityType) ([]kv.KeyValue, error)
 	Del(context.Context, ...interface{}) ([]roachpb.Key, error)
 	DelRange(context.Context, interface{}, interface{}, bool) ([]roachpb.Key, error)
 }
@@ -271,12 +284,21 @@ func batchRun(
 func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation:
-		fn := (*kv.Batch).Get
-		if o.ForUpdate {
-			fn = (*kv.Batch).GetForUpdate
-		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
-			fn(b, o.Key)
+			if o.SkipLocked {
+				b.Header.WaitPolicy = lock.WaitPolicy_SkipLocked
+			}
+			dur := kvpb.BestEffort
+			if o.GuaranteedDurability {
+				dur = kvpb.GuaranteedDurability
+			}
+			if o.ForUpdate {
+				b.GetForUpdate(o.Key, dur)
+			} else if o.ForShare {
+				b.GetForShare(o.Key, dur)
+			} else {
+				b.Get(o.Key)
+			}
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -301,16 +323,31 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		}
 		o.Result.OptionalTimestamp = ts
 	case *ScanOperation:
-		fn := (*kv.Batch).Scan
-		if o.Reverse && o.ForUpdate {
-			fn = (*kv.Batch).ReverseScanForUpdate
-		} else if o.Reverse {
-			fn = (*kv.Batch).ReverseScan
-		} else if o.ForUpdate {
-			fn = (*kv.Batch).ScanForUpdate
-		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
-			fn(b, o.Key, o.EndKey)
+			if o.SkipLocked {
+				b.Header.WaitPolicy = lock.WaitPolicy_SkipLocked
+			}
+			dur := kvpb.BestEffort
+			if o.GuaranteedDurability {
+				dur = kvpb.GuaranteedDurability
+			}
+			if o.Reverse {
+				if o.ForUpdate {
+					b.ReverseScanForUpdate(o.Key, o.EndKey, dur)
+				} else if o.ForShare {
+					b.ReverseScanForShare(o.Key, o.EndKey, dur)
+				} else {
+					b.ReverseScan(o.Key, o.EndKey)
+				}
+			} else {
+				if o.ForUpdate {
+					b.ScanForUpdate(o.Key, o.EndKey, dur)
+				} else if o.ForShare {
+					b.ScanForShare(o.Key, o.EndKey, dur)
+				} else {
+					b.Scan(o.Key, o.EndKey)
+				}
+			}
 		})
 		o.Result = resultInit(ctx, err)
 		if err != nil {
@@ -415,8 +452,17 @@ func applyBatchOp(
 	for i := range o.Ops {
 		switch subO := o.Ops[i].GetValue().(type) {
 		case *GetOperation:
+			if subO.SkipLocked {
+				panic(errors.AssertionFailedf(`SkipLocked cannot be used in batches`))
+			}
+			dur := kvpb.BestEffort
+			if subO.GuaranteedDurability {
+				dur = kvpb.GuaranteedDurability
+			}
 			if subO.ForUpdate {
-				b.GetForUpdate(subO.Key)
+				b.GetForUpdate(subO.Key, dur)
+			} else if subO.ForShare {
+				b.GetForShare(subO.Key, dur)
 			} else {
 				b.Get(subO.Key)
 			}
@@ -424,14 +470,29 @@ func applyBatchOp(
 			b.Put(subO.Key, subO.Value())
 			setLastReqSeq(b, subO.Seq)
 		case *ScanOperation:
-			if subO.Reverse && subO.ForUpdate {
-				b.ReverseScanForUpdate(subO.Key, subO.EndKey)
-			} else if subO.Reverse {
-				b.ReverseScan(subO.Key, subO.EndKey)
-			} else if subO.ForUpdate {
-				b.ScanForUpdate(subO.Key, subO.EndKey)
+			if subO.SkipLocked {
+				panic(errors.AssertionFailedf(`SkipLocked cannot be used in batches`))
+			}
+			dur := kvpb.BestEffort
+			if subO.GuaranteedDurability {
+				dur = kvpb.GuaranteedDurability
+			}
+			if subO.Reverse {
+				if subO.ForUpdate {
+					b.ReverseScanForUpdate(subO.Key, subO.EndKey, dur)
+				} else if subO.ForShare {
+					b.ReverseScanForShare(subO.Key, subO.EndKey, dur)
+				} else {
+					b.ReverseScan(subO.Key, subO.EndKey)
+				}
 			} else {
-				b.Scan(subO.Key, subO.EndKey)
+				if subO.ForUpdate {
+					b.ScanForUpdate(subO.Key, subO.EndKey, dur)
+				} else if subO.ForShare {
+					b.ScanForShare(subO.Key, subO.EndKey, dur)
+				} else {
+					b.Scan(subO.Key, subO.EndKey)
+				}
 			}
 		case *DeleteOperation:
 			b.Del(subO.Key)

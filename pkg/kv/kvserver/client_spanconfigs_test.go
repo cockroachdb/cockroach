@@ -22,8 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -64,11 +62,6 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(context.Background())
 
-	_, err := s.InternalExecutor().(isql.Executor).ExecEx(ctx, "inline-exec", nil,
-		sessiondata.RootUserSessionDataOverride,
-		`SET CLUSTER SETTING spanconfig.store.enabled = true`)
-	require.NoError(t, err)
-
 	key, err := s.ScratchRange()
 	require.NoError(t, err)
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
@@ -94,7 +87,8 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	mockSubscriber.callback(ctx, span) // invoke the callback
 	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(keys.MustAddr(key))
-		gotConfig := repl.SpanConfig()
+		gotConfig, err := repl.LoadSpanConfig(ctx)
+		require.NoError(t, err)
 		if !gotConfig.Equal(conf) {
 			return errors.Newf("expected config=%s, got config=%s", conf.String(), gotConfig.String())
 		}
@@ -133,11 +127,6 @@ func TestFallbackSpanConfigOverride(t *testing.T) {
 	s := serverutils.StartServerOnly(t, args)
 	defer s.Stopper().Stop(context.Background())
 
-	_, err := s.InternalDB().(isql.DB).Executor().ExecEx(ctx, "inline-exec", nil,
-		sessiondata.RootUserSessionDataOverride,
-		`SET CLUSTER SETTING spanconfig.store.enabled = true`)
-	require.NoError(t, err)
-
 	key, err := s.ScratchRange()
 	require.NoError(t, err)
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
@@ -152,7 +141,8 @@ func TestFallbackSpanConfigOverride(t *testing.T) {
 	mockSubscriber.callback(ctx, span) // invoke the callback
 	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(keys.MustAddr(key))
-		gotConfig := repl.SpanConfig()
+		gotConfig, err := repl.LoadSpanConfig(ctx)
+		require.NoError(t, err)
 		if !gotConfig.Equal(conf) {
 			return errors.Newf("expected config=%s, got config=%s", conf.String(), gotConfig.String())
 		}

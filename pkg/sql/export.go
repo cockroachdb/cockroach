@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -95,11 +96,11 @@ var exportOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 
 // featureExportEnabled is used to enable and disable the EXPORT feature.
 var featureExportEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"feature.export.enabled",
 	"set to true to enable exports, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
-).WithPublic()
+	settings.WithPublic)
 
 // ConstructExport is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExport(
@@ -109,14 +110,16 @@ func (ef *execFactory) ConstructExport(
 	options []exec.KVOption,
 	notNullCols exec.NodeColumnOrdinalSet,
 ) (exec.Node, error) {
-	fileSuffix = strings.ToLower(fileSuffix)
-
+	ef.planner.BufferClientNotice(ef.ctx, pgnotice.Newf("EXPORT is not the recommended way to move data out "+
+		"of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: "+
+		"https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds"))
 	if !featureExportEnabled.Get(&ef.planner.ExecCfg().Settings.SV) {
 		return nil, pgerror.Newf(
 			pgcode.OperatorIntervention,
 			"feature EXPORT was disabled by the database administrator",
 		)
 	}
+	fileSuffix = strings.ToLower(fileSuffix)
 
 	if err := featureflag.CheckEnabled(
 		ef.ctx,

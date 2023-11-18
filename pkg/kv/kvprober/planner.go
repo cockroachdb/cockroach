@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -34,8 +35,6 @@ type Step struct {
 
 // planner abstracts deciding on ranges to probe. It is public to integration
 // test from kvprober_test.
-//
-// planner is NOT thread-safe.
 type planner interface {
 	// Next returns a Step for the prober to execute on. A Step is a decision on
 	// on what range to probe next. Executing on a series of Steps returned by
@@ -54,6 +53,14 @@ type planner interface {
 type meta2Planner struct {
 	db       *kv.DB
 	settings *cluster.Settings
+
+	// The production kvprober as of Sep 7th 2023 does not need this mutex, as
+	// there is one planner per probe loop we run. At the same time, making the
+	// planner thread-safe makes for easier testing in kvprober_integration_test.go.
+	// Given that in this context there is no meaningful performance cost to
+	// synchronizing with a mutex, it makes sense to do it for the test use case
+	// specifically.
+	mu syncutil.Mutex
 	// cursor points to a key in meta2 at which scanning should resume when new
 	// plans are needed.
 	cursor roachpb.Key
@@ -148,6 +155,10 @@ func newMeta2Planner(
 //     number, we pay a higher CPU cost less often; if it's set to a low number,
 //     we pay a smaller CPU cost more often.
 func (p *meta2Planner) next(ctx context.Context) (Step, error) {
+	// See comment where mu is defined.
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	if len(p.plan) == 0 {
 		// Protect CRDB from planning executing too often, due to either issues
 		// with CRDB (meta2 unavailability) or bugs in kvprober.

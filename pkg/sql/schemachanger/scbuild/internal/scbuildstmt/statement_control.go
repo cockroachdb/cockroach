@@ -19,45 +19,46 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// schemaStatementControl track if a statement tag is enabled or disabled
-// forcefully by the user.
-type schemaStatementControl map[string]bool
+// statementsForceControl track if a statement tag is enabled or disabled
+// forcefully by the user to use declarative schema changer.
+type statementsForceControl map[string]bool
 
-// schemaChangerDisabledStatements statements which are disabled
-// for the declarative schema changer. Users can specify statement
-// tags for each statement and a "!" symbol in front can have the opposite
-// effect to force enable fully unimplemented features.
-var schemaChangerDisabledStatements = func() *settings.StringSetting {
-	return settings.RegisterValidatedStringSetting(
-		settings.TenantWritable,
-		"sql.schema.force_declarative_statements",
-		"allows force enabling / disabling declarative schema changer for specific statements",
-		"",
-		func(values *settings.Values, s string) error {
-			if s == "" {
-				return nil
-			}
-			// First split the string into individual tags.
-			tags := strings.Split(s, ",")
-			for _, tag := range tags {
-				tag = strings.ToUpper(strings.TrimSpace(tag))
-				if len(tag) > 0 && (tag[0] == '+' || tag[0] == '!') {
-					tag = tag[1:]
-				} else {
-					return errors.Errorf("tag is not properly formatted, must start with '+' or '!' (%s)", tag)
-				}
-				if _, ok := supportedStatementTags[tag]; !ok {
-					return errors.Errorf("statement tag %q is not controlled by the declarative schema changer", tag)
-				}
-			}
+// forceDeclarativeStatements outlines statements which are forcefully enabled
+// and/or disabled with declarative schema changer, separated by comma.
+// Forcefully enabled statements are prefixed with "+";
+// Forcefully disabled statements are prefixed with "!";
+// E.g. `SET CLUSTER SETTING sql.schema.force_declarative_statements = "+ALTER TABLE,!CREATE SEQUENCE";`
+//
+// Note: We can only control statements implemented in declarative schema changer.
+var forceDeclarativeStatements = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"sql.schema.force_declarative_statements",
+	"forcefully enable or disable declarative schema changer for specific statements",
+	"",
+	settings.WithValidateString(func(values *settings.Values, s string) error {
+		if s == "" {
 			return nil
-		})
-}()
+		}
+		// First split the string into individual tags.
+		tags := strings.Split(s, ",")
+		for _, tag := range tags {
+			tag = strings.ToUpper(strings.TrimSpace(tag))
+			if len(tag) > 0 && (tag[0] == '+' || tag[0] == '!') {
+				tag = tag[1:]
+			} else {
+				return errors.Errorf("tag is not properly formatted, must start with '+' or '!' (%s)", tag)
+			}
+			if _, ok := supportedStatementTags[tag]; !ok {
+				return errors.Errorf("statement tag %q is not controlled by the declarative schema changer", tag)
+			}
+		}
+		return nil
+	}))
 
-// CheckStatementControl if a statement is forced to disabled or enabled. If a
-// statement is disabled then an not implemented error will be panicked. Otherwise,
-// a flag is returned indicating if this statement has been *forced* to be enabled.
-func (c schemaStatementControl) CheckStatementControl(n tree.Statement) (forceEnabled bool) {
+// CheckControl checks if a statement is forced to be enabled or disabled. If
+// `n` is forcefully disabled, then a "NotImplemented" error will be panicked.
+// Otherwise, return whether `n` is forcefully enabled.
+func (c statementsForceControl) CheckControl(n tree.Statement) (forceEnabled bool) {
 	// This map is only created *if* any force flags are set.
 	if c == nil {
 		return false
@@ -76,9 +77,9 @@ func (c schemaStatementControl) CheckStatementControl(n tree.Statement) (forceEn
 // GetSchemaChangerStatementControl returns a map of statements that
 // are explicitly disabled by administrators for the declarative schema
 // changer.
-func getSchemaChangerStatementControl(sv *settings.Values) schemaStatementControl {
-	statements := schemaChangerDisabledStatements.Get(sv)
-	var statementMap schemaStatementControl
+func getStatementsForceControl(sv *settings.Values) statementsForceControl {
+	statements := forceDeclarativeStatements.Get(sv)
+	var statementMap statementsForceControl
 	for _, tag := range strings.Split(statements, ",") {
 		tag = strings.ToUpper(strings.TrimSpace(tag))
 		if len(tag) == 0 {
@@ -92,7 +93,7 @@ func getSchemaChangerStatementControl(sv *settings.Values) schemaStatementContro
 			enabledOrDisabled = false
 		}
 		if statementMap == nil {
-			statementMap = make(schemaStatementControl)
+			statementMap = make(statementsForceControl)
 		}
 		statementMap[tag] = enabledOrDisabled
 	}

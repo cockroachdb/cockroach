@@ -857,7 +857,7 @@ func cookTag(
 		tag = strconv.AppendInt(tag, int64(rowsAffected), 10)
 
 	case tree.Rows:
-		if tagStr != "SHOW" {
+		if tagStr != "SHOW" && tagStr != "EXPLAIN" {
 			tag = append(tag, ' ')
 			tag = strconv.AppendUint(tag, uint64(rowsAffected), 10)
 		}
@@ -1345,7 +1345,14 @@ func (c *conn) CreateStatementResult(
 	implicitTxn bool,
 	portalPausability sql.PortalPausablity,
 ) sql.CommandResult {
-	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, limit, portalName, implicitTxn, portalPausability)
+	rowLimit := limit
+	if tree.ReturnsAtMostOneRow(stmt) {
+		// When a statement returns at most one row, the result row limit doesn't
+		// matter. We set it to 0 to fetch all rows, which allows us to clean up
+		// resources sooner if using a pausable portal.
+		rowLimit = 0
+	}
+	return c.newCommandResult(descOpt, pos, stmt, formatCodes, conv, location, rowLimit, portalName, implicitTxn, portalPausability)
 }
 
 // CreateSyncResult is part of the sql.ClientComm interface.

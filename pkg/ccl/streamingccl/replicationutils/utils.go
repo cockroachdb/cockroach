@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -133,7 +133,7 @@ func ScanSST(
 	return nil
 }
 
-func GetStreamIngestionStatsNoHeartbeat(
+func GetStreamIngestionStats(
 	ctx context.Context,
 	streamIngestionDetails jobspb.StreamIngestionDetails,
 	jobProgress jobspb.Progress,
@@ -175,9 +175,9 @@ func ReplicatedTimeFromProgress(p *jobspb.Progress) hlc.Timestamp {
 // LoadIngestionProgress loads the latest persisted stream ingestion progress.
 // The method returns nil if the progress does not exist yet.
 func LoadIngestionProgress(
-	ctx context.Context, db isql.DB, jobID jobspb.JobID,
+	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
 ) (*jobspb.StreamIngestionProgress, error) {
-	progress, err := jobs.LoadJobProgress(ctx, db, jobID)
+	progress, err := jobs.LoadJobProgress(ctx, db, jobID, cv)
 	if err != nil || progress == nil {
 		return nil, err
 	}
@@ -193,9 +193,9 @@ func LoadIngestionProgress(
 // LoadReplicationProgress loads the latest persisted stream replication progress.
 // The method returns nil if the progress does not exist yet.
 func LoadReplicationProgress(
-	ctx context.Context, db isql.DB, jobID jobspb.JobID,
+	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
 ) (*jobspb.StreamReplicationProgress, error) {
-	progress, err := jobs.LoadJobProgress(ctx, db, jobID)
+	progress, err := jobs.LoadJobProgress(ctx, db, jobID, cv)
 	if err != nil || progress == nil {
 		return nil, err
 	}
@@ -267,45 +267,6 @@ func fingerprintClustersByTable(
 	}
 	return fingerprintutils.CompareMultipleDatabaseFingerprints(srcFingerprints,
 		dstFingerprints)
-}
-
-func GetStreamIngestionStats(
-	ctx context.Context,
-	streamIngestionDetails jobspb.StreamIngestionDetails,
-	jobProgress jobspb.Progress,
-) (*streampb.StreamIngestionStats, error) {
-	stats, err := GetStreamIngestionStatsNoHeartbeat(ctx, streamIngestionDetails, jobProgress)
-	if err != nil {
-		return nil, err
-	}
-	client, err := streamclient.GetFirstActiveClient(ctx, stats.IngestionProgress.StreamAddresses)
-	if err != nil {
-		return nil, err
-	}
-	streamStatus, err := client.Heartbeat(ctx, streampb.StreamID(stats.IngestionDetails.StreamID), hlc.MaxTimestamp)
-	if err != nil {
-		stats.ProducerError = err.Error()
-	} else {
-		stats.ProducerStatus = &streamStatus
-	}
-	return stats, client.Close(ctx)
-}
-
-func TestingGetStreamIngestionStatsNoHeartbeatFromReplicationJob(
-	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
-) *streampb.StreamIngestionStats {
-	var payloadBytes []byte
-	var progressBytes []byte
-	var payload jobspb.Payload
-	var progress jobspb.Progress
-	stmt := fmt.Sprintf(`SELECT payload, progress FROM (%s)`, jobutils.InternalSystemJobsBaseQuery)
-	sqlRunner.QueryRow(t, stmt, ingestionJobID).Scan(&payloadBytes, &progressBytes)
-	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
-	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
-	details := payload.GetStreamIngestion()
-	stats, err := GetStreamIngestionStatsNoHeartbeat(ctx, *details, progress)
-	require.NoError(t, err)
-	return stats
 }
 
 func TestingGetStreamIngestionStatsFromReplicationJob(

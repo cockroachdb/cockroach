@@ -22,6 +22,7 @@ import {
   refreshDatabaseDetails,
   refreshNodes,
   refreshSettings,
+  refreshDatabaseDetailsSpanStats,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -30,6 +31,7 @@ import {
 } from "src/redux/nodes";
 import {
   selectAutomaticStatsCollectionEnabled,
+  selectDropUnusedIndexDuration,
   selectIndexRecommendationsEnabled,
 } from "src/redux/clusterSettings";
 
@@ -72,14 +74,17 @@ const searchLocalSetting = new LocalSetting(
 export const mapStateToProps = (state: AdminUIState): DatabasesPageData => {
   const dbListResp = state?.cachedData.databases.data;
   const databaseDetails = state?.cachedData.databaseDetails;
+  const spanStats = state?.cachedData.databaseDetailsSpanStats;
   const nodeRegions = nodeRegionsByIDSelector(state);
   return {
     loading: selectLoading(state),
     loaded: selectLoaded(state),
-    lastError: selectLastError(state),
+    requestError: selectLastError(state),
+    queryError: dbListResp?.error,
     databases: deriveDatabaseDetailsMemoized({
       dbListResp,
       databaseDetails,
+      spanStats,
       nodeRegions,
       isTenant,
     }),
@@ -92,13 +97,22 @@ export const mapStateToProps = (state: AdminUIState): DatabasesPageData => {
       selectAutomaticStatsCollectionEnabled(state),
     indexRecommendationsEnabled: selectIndexRecommendationsEnabled(state),
     showNodeRegionsColumn: selectIsMoreThanOneNode(state),
+    csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
   };
 };
 
 export const mapDispatchToProps = {
   refreshSettings,
   refreshDatabases,
-  refreshDatabaseDetails,
+  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
+    return refreshDatabaseDetails({
+      database,
+      csIndexUnusedDuration,
+    });
+  },
+  refreshDatabaseSpanStats: (database: string) => {
+    return refreshDatabaseDetailsSpanStats({ database });
+  },
   refreshNodes,
   onSortingChange: (
     _tableName: string,

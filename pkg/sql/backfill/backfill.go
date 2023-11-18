@@ -50,7 +50,7 @@ import (
 // not actually perform any checkpointing. The reason it has been moved here from
 // sql is to avoid any dependency cycles inside the declarative schema changer.
 var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.index_backfill.checkpoint_interval",
 	"the amount of time between index backfill checkpoint updates",
 	30*time.Second,
@@ -166,11 +166,12 @@ func (cb *ColumnBackfiller) init(
 	return cb.fetcher.Init(
 		ctx,
 		row.FetcherInitArgs{
-			Txn:        txn,
-			Alloc:      &cb.alloc,
-			MemMonitor: cb.mon,
-			Spec:       &spec,
-			TraceKV:    traceKV,
+			Txn:                        txn,
+			Alloc:                      &cb.alloc,
+			MemMonitor:                 cb.mon,
+			Spec:                       &spec,
+			TraceKV:                    traceKV,
+			ForceProductionKVBatchSize: cb.evalCtx.TestingKnobs.ForceProductionValues,
 		},
 	)
 }
@@ -235,6 +236,7 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 		// Set up a SemaContext to type check the default and computed expressions.
 		semaCtx := tree.MakeSemaContext()
 		semaCtx.TypeResolver = &resolver
+		semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(evalCtx.Settings.Version)
 		var err error
 		defaultExprs, err = schemaexpr.MakeDefaultExprs(
 			ctx, cb.added, &transform.ExprTransformContext{}, evalCtx, &semaCtx,
@@ -334,7 +336,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	// read or used
 	if err := cb.fetcher.StartScan(
 		ctx, []roachpb.Span{sp}, nil, /* spanIDs */
-		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
+		rowinfra.GetDefaultBatchBytesLimit(cb.evalCtx.TestingKnobs.ForceProductionValues),
 		chunkSize,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
@@ -669,6 +671,7 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 		// Set up a SemaContext to type check the default and computed expressions.
 		semaCtx := tree.MakeSemaContext()
 		semaCtx.TypeResolver = &resolver
+		semaCtx.UnsupportedTypeChecker = eval.NewUnsupportedTypeChecker(evalCtx.Settings.Version)
 		// Convert any partial index predicate strings into expressions.
 		predicates, colExprs, referencedColumns, err = constructExprs(
 			ctx, desc, ib.added, ib.cols, ib.addedCols, ib.computedCols, evalCtx, &semaCtx,
@@ -850,11 +853,12 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	if err := fetcher.Init(
 		ctx,
 		row.FetcherInitArgs{
-			Txn:        txn,
-			Alloc:      &ib.alloc,
-			MemMonitor: ib.mon,
-			Spec:       &spec,
-			TraceKV:    traceKV,
+			Txn:                        txn,
+			Alloc:                      &ib.alloc,
+			MemMonitor:                 ib.mon,
+			Spec:                       &spec,
+			TraceKV:                    traceKV,
+			ForceProductionKVBatchSize: ib.evalCtx.TestingKnobs.ForceProductionValues,
 		},
 	); err != nil {
 		return nil, nil, 0, err
@@ -862,7 +866,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	defer fetcher.Close(ctx)
 	if err := fetcher.StartScan(
 		ctx, []roachpb.Span{sp}, nil, /* spanIDs */
-		rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
+		rowinfra.GetDefaultBatchBytesLimit(ib.evalCtx.TestingKnobs.ForceProductionValues),
 		initBufferSize,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)

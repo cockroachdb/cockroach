@@ -36,10 +36,6 @@ func RunningJobExists(
 	cv clusterversion.Handle,
 	jobTypes ...jobspb.Type,
 ) (exists bool, retErr error) {
-	if !cv.IsActive(ctx, clusterversion.V23_1BackfillTypeColumnInJobsTable) {
-		return legacyRunningJobExists(ctx, ignoreJobID, txn, jobTypes...)
-	}
-
 	var typeStrs string
 	switch len(jobTypes) {
 	case 0:
@@ -58,15 +54,21 @@ func RunningJobExists(
 		typeStrs = s.String()
 	}
 
+	orderBy := " ORDER BY created"
+	if ignoreJobID == jobspb.InvalidJobID {
+		// There is no need to order by the created column if there is no job to
+		// ignore.
+		orderBy = ""
+	}
+
 	stmt := `
 SELECT
   id
 FROM
-  system.jobs
+  system.jobs@jobs_status_created_idx
 WHERE
 	job_type IN ` + typeStrs + ` AND
-  status IN ` + NonTerminalStatusTupleString + `
-ORDER BY created
+  status IN ` + NonTerminalStatusTupleString + orderBy + `
 LIMIT 1`
 	it, err := txn.QueryIterator(
 		ctx,
@@ -92,58 +94,6 @@ LIMIT 1`
 	return ok && jobspb.JobID(*it.Cur()[0].(*tree.DInt)) != ignoreJobID, nil
 }
 
-func legacyRunningJobExists(
-	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, jobTypes ...jobspb.Type,
-) (exists bool, retErr error) {
-	const stmt = `
-SELECT
-  id, payload
-FROM
-  crdb_internal.system_jobs
-WHERE
-  status IN ` + NonTerminalStatusTupleString + `
-ORDER BY created`
-
-	it, err := txn.QueryIterator(
-		ctx,
-		"get-jobs",
-		txn.KV(),
-		stmt,
-	)
-	if err != nil {
-		return false /* exists */, err
-	}
-	// We have to make sure to close the iterator since we might return from the
-	// for loop early (before Next() returns false).
-	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
-
-	var ok bool
-	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		row := it.Cur()
-		payload, err := UnmarshalPayload(row[1])
-		if err != nil {
-			return false /* exists */, err
-		}
-
-		isTyp := false
-		for _, typ := range jobTypes {
-			if payload.Type() == typ {
-				isTyp = true
-				break
-			}
-		}
-		if isTyp {
-			id := jobspb.JobID(*row[0].(*tree.DInt))
-			if id == jobID {
-				break
-			}
-
-			return true /* exists */, nil /* retErr */
-		}
-	}
-	return false /* exists */, err
-}
-
 // JobExists returns true if there is a row corresponding to jobID in the
 // system.jobs table.
 func JobExists(
@@ -154,6 +104,24 @@ func JobExists(
 		return false, err
 	}
 	return row != nil, nil
+}
+
+// JobCoordinatorID returns the coordinator node ID of the job.
+func JobCoordinatorID(
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, ex isql.Executor,
+) (int32, error) {
+	row, err := ex.QueryRow(ctx, "fetch-job-coordinator", txn, `SELECT claim_instance_id FROM system.jobs WHERE id = $1`, jobID)
+	if err != nil {
+		return 0, err
+	}
+	if row == nil {
+		return 0, errors.Errorf("coordinator not found for job %d", jobID)
+	}
+	coordinatorID, ok := tree.AsDInt(row[0])
+	if !ok {
+		return 0, errors.AssertionFailedf("expected coordinator ID to be an int, got %T", row[0])
+	}
+	return int32(coordinatorID), nil
 }
 
 // isJobTypeColumnDoesNotExistError returns true if the error is of the form
@@ -186,12 +154,18 @@ func isJobInfoTableDoesNotExistError(err error) bool {
 // txn is pushed to a higher timestamp at which the upgrade will have completed
 // and the table/column will be visible. The longer term fix is being tracked in
 // https://github.com/cockroachdb/cockroach/issues/106764.
-func MaybeGenerateForcedRetryableError(ctx context.Context, txn *kv.Txn, err error) error {
-	if err != nil && isJobTypeColumnDoesNotExistError(err) {
+func MaybeGenerateForcedRetryableError(
+	ctx context.Context, txn *kv.Txn, err error, cv clusterversion.Handle,
+) error {
+	if err == nil || !cv.IsActive(ctx, clusterversion.V23_1) {
+		return err
+	}
+
+	if isJobTypeColumnDoesNotExistError(err) {
 		return txn.GenerateForcedRetryableErr(ctx, "synthetic error "+
 			"to push timestamp to after the `job_type` upgrade has run")
 	}
-	if err != nil && isJobInfoTableDoesNotExistError(err) {
+	if isJobInfoTableDoesNotExistError(err) {
 		return txn.GenerateForcedRetryableErr(ctx, "synthetic error "+
 			"to push timestamp to after the `job_info` upgrade has run")
 	}

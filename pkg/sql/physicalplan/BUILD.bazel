@@ -49,12 +49,10 @@ go_test(
         "span_resolver_internal_test.go",
         "span_resolver_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":physicalplan"],
     shard_count = 16,
     deps = [
         "//pkg/base",
-        "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
@@ -88,5 +86,6 @@ go_test(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

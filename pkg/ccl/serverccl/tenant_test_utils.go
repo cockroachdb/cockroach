@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -143,7 +143,7 @@ func NewTestTenantHelper(
 ) TenantTestHelper {
 	t.Helper()
 
-	testCluster := serverutils.StartNewTestCluster(t, 1 /* numNodes */, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 1 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs:             knobs,
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
@@ -157,7 +157,7 @@ func NewTestTenantHelper(
 			t,
 			server,
 			tenantClusterSize,
-			security.EmbeddedTenantIDs()[0],
+			securitytest.EmbeddedTenantIDs()[0],
 			knobs,
 		),
 		// Spin up a small tenant cluster under a different tenant ID to test
@@ -166,7 +166,7 @@ func NewTestTenantHelper(
 			t,
 			server,
 			1, /* tenantClusterSize */
-			security.EmbeddedTenantIDs()[1],
+			securitytest.EmbeddedTenantIDs()[1],
 			knobs,
 		),
 	}

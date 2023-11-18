@@ -31,12 +31,12 @@ import (
 // ReconcileInterval is the interval between two reconciliations of protected
 // timestamp records.
 var ReconcileInterval = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"kv.protectedts.reconciliation.interval",
 	"the frequency for reconciling jobs with protected timestamp records",
 	5*time.Minute,
 	settings.NonNegativeDuration,
-).WithPublic()
+	settings.WithPublic)
 
 // StatusFunc is used to check on the status of a Record based on its Meta
 // field.

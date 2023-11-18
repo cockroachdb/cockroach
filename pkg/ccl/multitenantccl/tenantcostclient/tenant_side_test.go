@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantio"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
@@ -128,6 +129,7 @@ func (ts *testState) start(t *testing.T) {
 	// Fix settings so that the defaults can be changed without updating the test.
 	tenantcostclient.TargetPeriodSetting.Override(ctx, &ts.settings.SV, 10*time.Second)
 	tenantcostclient.CPUUsageAllowance.Override(ctx, &ts.settings.SV, 10*time.Millisecond)
+	tenantcostclient.InitialRequestSetting.Override(ctx, &ts.settings.SV, 10000)
 
 	ts.stopper = stop.NewStopper()
 	var err error
@@ -157,6 +159,12 @@ func (ts *testState) start(t *testing.T) {
 		ctx, ts.stopper, instanceID, sessionID, externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
 		t.Fatal(err)
+	}
+
+	// Wait for main loop to start in order to avoid race conditions where a test
+	// starts before the main loop has been initialized.
+	if !ts.eventWait.WaitForEvent(tenantcostclient.MainLoopStarted) {
+		t.Fatal("did not receive event MainLoopStarted")
 	}
 }
 
@@ -553,6 +561,7 @@ func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 	return fmt.Sprintf(""+
 		"RU:  %.2f\n"+
 		"KVRU:  %.2f\n"+
+		"CrossRegionNetworkRU:  %.2f\n"+
 		"Reads:  %d requests in %d batches (%d bytes)\n"+
 		"Writes:  %d requests in %d batches (%d bytes)\n"+
 		"SQL Pods CPU seconds:  %.2f\n"+
@@ -561,6 +570,7 @@ func (ts *testState) usage(*testing.T, *datadriven.TestData, cmdArgs) string {
 		"ExternalIO ingress: %d bytes\n",
 		c.RU,
 		c.KVRU,
+		c.CrossRegionNetworkRU,
 		c.ReadRequests,
 		c.ReadBatches,
 		c.ReadBytes,
@@ -768,10 +778,8 @@ func TestWaitingRU(t *testing.T) {
 
 	// Disable CPU consumption so that it doesn't interfere with test.
 	st := cluster.MakeTestingClusterSettings()
-	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, time.Second)
+	tenantcostclient.CPUUsageAllowance.Override(ctx, &st.SV, time.Second)
 
-	// Refill the token bucket at a fixed 100 RU/s so that we can limit
-	// non-determinism in the test.
 	testProvider := newTestProvider()
 	testProvider.configure(testProviderConfig{ProviderError: true})
 
@@ -782,9 +790,9 @@ func TestWaitingRU(t *testing.T) {
 		st, tenantID, testProvider, timeSource, eventWait)
 	require.NoError(t, err)
 
-	// Immediately consume the initial 10K RUs.
+	// Immediately consume the initial 5K RUs.
 	require.NoError(t, ctrl.OnResponseWait(ctx,
-		tenantcostmodel.TestingRequestInfo(1, 1, 10237952, 0), tenantcostmodel.ResponseInfo{}))
+		tenantcostmodel.TestingRequestInfo(1, 1, 5117952, 0), tenantcostmodel.ResponseInfo{}))
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -806,6 +814,8 @@ func TestWaitingRU(t *testing.T) {
 	resp := tenantcostmodel.TestingResponseInfo(false, 0, 0, 0)
 
 	testutils.SucceedsWithin(t, func() error {
+		// Refill the token bucket at a fixed 100 RU/s so that we can limit
+		// non-determinism in the test.
 		tenantcostclient.TestingSetRate(ctrl, fillRate)
 
 		var doneCount int64
@@ -1014,15 +1024,19 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
-	stats.UseStatisticsOnSystemTables.Override(ctx, &st.SV, false)
-	stats.AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
-	tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
+
+	makeSettings := func() *cluster.Settings {
+		st := cluster.MakeTestingClusterSettings()
+		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
+		stats.UseStatisticsOnSystemTables.Override(ctx, &st.SV, false)
+		stats.AutomaticStatisticsOnSystemTables.Override(ctx, &st.SV, false)
+		tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
+		return st
+	}
 
 	hostServer := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
-		Settings:          st,
+		Settings:          makeSettings(),
 	})
 	defer hostServer.Stopper().Stop(ctx)
 
@@ -1035,7 +1049,7 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	var tenantDB *gosql.DB
 	tenantServer, tenantDB = serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
-		Settings: st,
+		Settings: makeSettings(),
 		TestingKnobs: base.TestingKnobs{
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
 				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {
@@ -1107,17 +1121,19 @@ func TestConsumptionChangefeeds(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	hostServer, hostDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+	ctx := context.Background()
+
+	hostServer := serverutils.StartServerOnly(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
-	defer hostServer.Stopper().Stop(context.Background())
-	if _, err := hostDB.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
-		t.Fatalf("changefeed setup failed: %s", err.Error())
-	}
+	defer hostServer.Stopper().Stop(ctx)
+
+	kvserver.RangefeedEnabled.Override(ctx, &hostServer.ClusterSettings().SV, true)
 
 	st := cluster.MakeTestingClusterSettings()
-	tenantcostclient.TargetPeriodSetting.Override(context.Background(), &st.SV, time.Millisecond*20)
-	tenantcostclient.CPUUsageAllowance.Override(context.Background(), &st.SV, 0)
+	tenantcostclient.TargetPeriodSetting.Override(ctx, &st.SV, time.Millisecond*20)
+	tenantcostclient.CPUUsageAllowance.Override(ctx, &st.SV, 0)
+	kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
 
 	testProvider := newTestProvider()
 
@@ -1141,7 +1157,6 @@ func TestConsumptionChangefeeds(t *testing.T) {
 	r.Exec(t, "CREATE TABLE t (v STRING)")
 	r.Exec(t, "INSERT INTO t SELECT repeat('1234567890', 1024) FROM generate_series(1, 10) AS g(i)")
 	beforeChangefeed := testProvider.waitForConsumption(t)
-	r.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 	r.Exec(t, "CREATE CHANGEFEED FOR t INTO 'null://'")
 
 	// Make sure some external io usage is reported.
@@ -1301,11 +1316,7 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 	nullsink.NullRequiresExternalIOAccounting = true
 
 	setRUAccountingMode := func(b *testing.B, mode string) {
-		_, err := hostSQL.Exec(fmt.Sprintf("SET CLUSTER SETTING tenant_external_io_ru_accounting_mode = '%s'", mode))
-		require.NoError(b, err)
-
-		_, err = hostSQL.Exec(`UPSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES ($1, $2, $3, $4)`,
-			0, "tenant_external_io_ru_accounting_mode", mode, "s")
+		_, err := hostSQL.Exec(fmt.Sprintf("SET CLUSTER SETTING tenant_cost_control.external_io.ru_accounting_mode = '%s'", mode))
 		require.NoError(b, err)
 	}
 
@@ -1437,7 +1448,7 @@ func TestRUSettingsChanged(t *testing.T) {
 	tenant1, tenantDB1 := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: tenantID,
 	})
-	defer tenant1.Stopper().Stop(ctx)
+	defer tenant1.AppStopper().Stop(ctx)
 	defer tenantDB1.Close()
 
 	costClient, err := tenantcostclient.NewTenantSideCostController(tenant1.ClusterSettings(), tenantID, nil)
@@ -1459,7 +1470,7 @@ func TestRUSettingsChanged(t *testing.T) {
 		tenantcostmodel.ExternalIOIngressCostPerMiB,
 	}
 	for _, setting := range settings {
-		sysDB.Exec(t, fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING %s = $1", setting.Key()), setting.Default()*100)
+		sysDB.Exec(t, fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING %s = $1", setting.Name()), setting.Default()*100)
 	}
 
 	// Check to make sure the cost of the query increased. Use SucceedsSoon

@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -68,13 +67,4 @@ func TestingCreateAndStartJob(
 		return nil, err
 	}
 	return rj, nil
-}
-
-// TestingGetTraceDumpDir returns the directory in which jobs might dump their
-// traces after execution.
-func TestingGetTraceDumpDir(r *Registry) string {
-	if r.td == nil {
-		return ""
-	}
-	return tracedumper.TestingGetTraceDumpDir(r.td)
 }

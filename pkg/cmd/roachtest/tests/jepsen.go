@@ -81,7 +81,7 @@ const jepsenRepo = "https://github.com/cockroachdb/jepsen"
 const repoBranch = "tc-nightly"
 
 const gcpPath = "https://storage.googleapis.com/cockroach-jepsen"
-const binaryVersion = "0.1.0-21cbebe-standalone"
+const binaryVersion = "0.1.0-cdeef40-standalone"
 
 var jepsenNemeses = []struct {
 	name, config string
@@ -91,11 +91,9 @@ var jepsenNemeses = []struct {
 	{"start-kill-2", "--nemesis start-kill-2"},
 	{"start-stop-2", "--nemesis start-stop-2"},
 	{"strobe-skews", "--nemesis strobe-skews"},
-	// TODO(bdarnell): subcritical-skews nemesis is currently flaky due to ntp rate limiting.
-	// https://github.com/cockroachdb/cockroach/issues/35599
-	//{"subcritical-skews", "--nemesis subcritical-skews"},
-	//{"majority-ring-subcritical-skews", "--nemesis majority-ring --nemesis2 subcritical-skews"},
-	//{"subcritical-skews-start-kill-2", "--nemesis subcritical-skews --nemesis2 start-kill-2"},
+	{"subcritical-skews", "--nemesis subcritical-skews"},
+	{"majority-ring-subcritical-skews", "--nemesis majority-ring --nemesis2 subcritical-skews"},
+	{"subcritical-skews-start-kill-2", "--nemesis subcritical-skews --nemesis2 start-kill-2"},
 	{"majority-ring-start-kill-2", "--nemesis majority-ring --nemesis2 start-kill-2"},
 	{"parts-start-kill-2", "--nemesis parts --nemesis2 start-kill-2"},
 }
@@ -149,13 +147,10 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster, j jepsenCon
 	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y update > logs/apt-upgrade.log 2>&1"`)
 	c.Run(ctx, c.All(), "sh", "-c", `"sudo DEBIAN_FRONTEND=noninteractive apt-get -y upgrade -o Dpkg::Options::='--force-confold' -o DPkg::options::='--force-confdef' > logs/apt-upgrade.log 2>&1"`)
 
-	// Install the binary on all nodes and package it as jepsen expects.
 	// TODO(bdarnell): copying the raw binary and compressing it on the
 	// other side is silly, but this lets us avoid platform-specific
 	// quirks in tar. The --transform option is only available on gnu
 	// tar. To be able to run from a macOS host with BSD tar we'd need
-	// use the similar -s option on that platform.
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	// Jepsen expects a tarball that expands to cockroach/cockroach
 	// (which is not how our official builds are laid out).
 	c.Run(ctx, c.All(), "tar --transform s,^,cockroach/, -c -z -f cockroach.tgz cockroach")
@@ -490,8 +485,10 @@ func registerJepsen(r registry.Registry) {
 				// clusters because they have a lengthy setup step, but avoid doing it
 				// if they detect that the machines have already been properly
 				// initialized.
-				Cluster: r.MakeClusterSpec(6, spec.ReuseTagged("jepsen")),
-				Leases:  registry.MetamorphicLeases,
+				Cluster:          r.MakeClusterSpec(6, spec.ReuseTagged("jepsen")),
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
+				Leases:           registry.MetamorphicLeases,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runJepsen(ctx, t, c, testName, nemesis.config)
 				},

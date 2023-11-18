@@ -103,6 +103,8 @@ export const ConnectedStatementsPage = withRouter(
           state.adminUI?.statements?.data?.stmts_total_runtime_secs ?? 0,
         statementsResponse: state.adminUI.statements,
         statementDiagnostics: state.adminUI.statementDiagnostics?.data,
+        oldestDataAvailable:
+          state.adminUI?.statements?.data?.oldest_aggregated_ts_returned,
       },
       activePageProps: mapStateToActiveStatementsPageProps(state),
     }),

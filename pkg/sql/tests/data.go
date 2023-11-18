@@ -45,7 +45,7 @@ func CheckKeyCountIncludingTombstoned(
 	}
 }
 
-// CheckKeyCountE returns an error if the the number of keys in the
+// CheckKeyCountE returns an error if the number of keys in the
 // provided span does not match numKeys.
 func CheckKeyCountE(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) error {
 	t.Helper()
@@ -67,13 +67,17 @@ func CheckKeyCountIncludingTombstonedE(
 	}
 
 	keyCount := 0
-	it := engines[0].NewMVCCIterator(
+	it, err := engines[0].NewMVCCIterator(
+		context.Background(),
 		storage.MVCCKeyIterKind,
 		storage.IterOptions{
 			LowerBound: tableSpan.Key,
 			UpperBound: tableSpan.EndKey,
 		},
 	)
+	if err != nil {
+		return err
+	}
 
 	for it.SeekGE(storage.MVCCKey{Key: tableSpan.Key}); ; it.NextKey() {
 		ok, err := it.Valid()

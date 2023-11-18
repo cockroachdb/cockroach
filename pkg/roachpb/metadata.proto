@@ -463,7 +463,94 @@ message Version {
 message GCHint {
   option (gogoproto.equal) = true;
 
-  // LatestRangeDeleteTimestamp indicates timestamp at which all data was deleted
-  // in the range using a range tombstone. No such delete happened if empty.
+  // LatestRangeDeleteTimestamp is a timestamp at which the *entire* key span of
+  // the range was deleted using MVCC range tombstones. This hint is maintained
+  // with best effort, and may have false positives and negatives.
+  //
+  // It helps the cases when large key spans are deleted, e.g. table/index drops
+  // in SQL. In such cases it is likely that there will be no writes to the
+  // keyspace of this Range at timestamps above LatestRangeDeleteTimestamp. GC
+  // can then delete this data using the efficient ClearRange operation.
+  //
+  // Generally, we can't guarantee no writes above LatestRangeDeleteTimestamp,
+  // so we don't rely on this hint for correctness. When GC uses this hint, it
+  // double-checks while holding a latch that the range hasn't had any writes
+  // above this timestamp.
+  //
+  // Initially, when a large key span is deleted, this hint is accurate for all
+  // the affected ranges. As the time goes, more data can be written to these
+  // ranges, or they may be split/merged with other ranges. We do best effort to
+  // remove this hint as soon as we know the optimization won't be effective.
+  //
+  // For example, we don't propagate this hint when merging two ranges one of
+  // which doesn't carry this hint, because we know that the entire span is
+  // probably not covered by range tombstones.
+  //
+  // TODO(pavelkalinnikov): this is used for one other purpose, factor it out.
+  //
+  // When this hint is set, it is likely that adjacent ranges have it too,
+  // especially in bulk deletion situations. Once the GC queue sees this hint,
+  // it scans all the local leaseholder replicas to find the one with this hint
+  // too, and GC them with higher priority / lower delay. Ultimately, this
+  // reduces the cost of Pebble compactions that can be triggered by writing
+  // range tombstones.
   optional util.hlc.Timestamp latest_range_delete_timestamp = 1 [(gogoproto.nullable) = false];
+
+  // GCTimestamp is the lowest "pending" timestamp for which some data in the
+  // range must be garbage collected.
+  //
+  // Typically, this is left up to the MVCC GC job to decide when to delete
+  // data. Because of the way the GC scoring works, it may take a long time
+  // until such a decision is made. Some upper layer jobs require a more timely
+  // deletion. For example, when a SQL table/index is dropped, there is a schema
+  // change job waiting on the GC.
+  //
+  // We carry this hint to help expedite GC in such cases. Garbage collection is
+  // triggered shortly after the time is past GCTimestamp + TTL.
+  //
+  // It is possible that there are multiple timestamps for which some data must
+  // be deleted, e.g. if multiple SQL tables touching the same Range are
+  // dropped. We could carry all such timestamps in this GCHint for accuracy,
+  // but we would need extra measures to prevent uncontrollable growth of this
+  // list, and excessive number of GC runs it could cause.
+  //
+  // Instead, we compress this list of timestamps to a pair of GCTimestamp and
+  // GCTimestampNext, storing the min and max (if different from min) timestamp
+  // correspondingly.
+  //
+  // Since a GC run covers all timestamps <= threshold, preserving the max
+  // timestamp as a threshold guarantees that all pending timestamps <= max are
+  // covered. However, the max pending timestamp can always be bumped up by
+  // newer and newer writes, and never get below now() - TTL. To work around
+  // this race, we also preserve the min pending timestamp, and update it only
+  // when it has been garbage collected.
+  //
+  // With such a structure of the hint, we have a couple of guarantees:
+  //
+  //  1. The number of expedited GC runs on this range does not exceed 2 per TTL.
+  //
+  // Worst case: min < max < min+TTL = now. GC runs at time now = min+TTL, and
+  // maybe at max+TTL or later time. Since any new write is at timestamp >= now,
+  // the next GC run after these two is at least TTL away from now.
+  //
+  //  2. The max delay of expedited GC is close to one TTL, i.e. in the worst
+  //     case the GC will run at timestamp + 2*TTL.
+  //
+  // Worst case: now = max = min+TTL. GC runs at time now and clears the min
+  // timestamp. The only remaining timestamp (max) is min+TTL. The next possible
+  // expedited GC run is thus at min+2*TTL. We may have omitted some timestamps
+  // between min and max, and they are now <= 2*TTL away from the next GC run.
+  optional util.hlc.Timestamp gc_timestamp = 2 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "GCTimestamp"];
+  // GCTimestampNext is the largest "pending" timestamp for which some data in
+  // the range must be garbage collected. See GCTimestamp comment for more
+  // details.
+  //
+  // INVARIANT: if GCTimestamp is empty, then GCTimestampNext is empty.
+  // INVARIANT: if GCTimestampNext is set, it exceeds GCTimestamp.
+  //
+  // NB: if GCTimestamp is set and GCTimestampNext is empty, it means there is
+  // only one pending timestamp for garbage collection.
+  optional util.hlc.Timestamp gc_timestamp_next = 3 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "GCTimestampNext"];
 }

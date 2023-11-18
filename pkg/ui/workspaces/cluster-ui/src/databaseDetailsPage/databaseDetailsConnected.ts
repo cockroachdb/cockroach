@@ -14,7 +14,8 @@ import { Dispatch } from "redux";
 import { databaseNameCCAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import { AppState } from "../store";
-import { actions as databaseDetailsActions } from "../store/databaseDetails";
+import { databaseDetailsReducer } from "../store/databaseDetails";
+const databaseDetailsActions = databaseDetailsReducer.actions;
 import {
   actions as localStorageActions,
   LocalStorageKeys,
@@ -37,8 +38,11 @@ import {
   selectDatabaseDetailsTablesSortSetting,
   selectDatabaseDetailsViewModeSetting,
 } from "../store/databaseDetails/databaseDetails.selectors";
-import { combineLoadingErrors, deriveTableDetailsMemoized } from "../databases";
-import { selectIndexRecommendationsEnabled } from "../store/clusterSettings/clusterSettings.selectors";
+import { deriveTableDetailsMemoized } from "../databases";
+import {
+  selectDropUnusedIndexDuration,
+  selectIndexRecommendationsEnabled,
+} from "../store/clusterSettings/clusterSettings.selectors";
 
 const mapStateToProps = (
   state: AppState,
@@ -53,11 +57,8 @@ const mapStateToProps = (
   return {
     loading: !!databaseDetails[database]?.inFlight,
     loaded: !!databaseDetails[database]?.valid,
-    lastError: combineLoadingErrors(
-      databaseDetails[database]?.lastError,
-      databaseDetails[database]?.data?.maxSizeReached,
-      null,
-    ),
+    requestError: databaseDetails[database]?.lastError,
+    queryError: databaseDetails[database]?.data?.results?.error,
     name: database,
     showNodeRegionsColumn: Object.keys(nodeRegions).length > 1 && !isTenant,
     viewMode: selectDatabaseDetailsViewModeSetting(state),
@@ -75,17 +76,26 @@ const mapStateToProps = (
       isTenant,
     }),
     showIndexRecommendations: selectIndexRecommendationsEnabled(state),
+    csIndexUnusedDuration: selectDropUnusedIndexDuration(state),
   };
 };
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): DatabaseDetailsPageActions => ({
-  refreshDatabaseDetails: (database: string) => {
-    dispatch(databaseDetailsActions.refresh(database));
+  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
+    dispatch(
+      databaseDetailsActions.refresh({ database, csIndexUnusedDuration }),
+    );
   },
-  refreshTableDetails: (database: string, table: string) => {
-    dispatch(tableDetailsActions.refresh({ database, table }));
+  refreshTableDetails: (
+    database: string,
+    table: string,
+    csIndexUnusedDuration: string,
+  ) => {
+    dispatch(
+      tableDetailsActions.refresh({ database, table, csIndexUnusedDuration }),
+    );
   },
   onViewModeChange: (viewMode: ViewMode) => {
     dispatch(

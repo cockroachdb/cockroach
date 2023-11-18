@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -104,11 +105,11 @@ func (jpl *ChunkProgressLogger) Loop(ctx context.Context, chunkCh <-chan struct{
 			if !ok {
 				return nil
 			}
-			if err := jpl.chunkFinished(ctx); err != nil {
+			if err := jpl.chunkFinished(ctx); err != nil && !startup.IsRetryableReplicaError(err) {
 				return err
 			}
 			if jpl.completedChunks == jpl.expectedChunks {
-				if err := jpl.batcher.Done(ctx); err != nil {
+				if err := jpl.batcher.Done(ctx); err != nil && !startup.IsRetryableReplicaError(err) {
 					return err
 				}
 			}
@@ -139,18 +140,19 @@ type ProgressUpdateBatcher struct {
 // change in the completed progress (and enough time has passed) to report the
 // new progress amount.
 func (p *ProgressUpdateBatcher) Add(ctx context.Context, delta float32) error {
-	p.Lock()
-	p.completed += delta
-	completed := p.completed
-	shouldReport := p.completed-p.reported > progressFractionThreshold
-	shouldReport = shouldReport || (p.completed > p.reported && p.lastReported.Add(progressTimeThreshold).Before(timeutil.Now()))
-
-	if shouldReport {
-		p.reported = p.completed
-		p.lastReported = timeutil.Now()
-	}
-	p.Unlock()
-
+	shouldReport, completed := func() (bool, float32) {
+		p.Lock()
+		defer p.Unlock()
+		p.completed += delta
+		c := p.completed
+		sReport := p.completed-p.reported > progressFractionThreshold
+		sReport = sReport || (p.completed > p.reported && p.lastReported.Add(progressTimeThreshold).Before(timeutil.Now()))
+		if sReport {
+			p.reported = p.completed
+			p.lastReported = timeutil.Now()
+		}
+		return sReport, c
+	}()
 	if shouldReport {
 		return p.Report(ctx, completed)
 	}
@@ -164,7 +166,6 @@ func (p *ProgressUpdateBatcher) Done(ctx context.Context) error {
 	completed := p.completed
 	shouldReport := completed-p.reported > progressFractionThreshold
 	p.Unlock()
-
 	if shouldReport {
 		return p.Report(ctx, completed)
 	}

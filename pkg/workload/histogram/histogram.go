@@ -96,9 +96,9 @@ func (w *NamedHistogram) RecordValue(value int64) {
 	w.prometheusHistogram.Observe(float64(value))
 
 	w.mu.Lock()
+	defer w.mu.Unlock()
 	// This value may be outside the range, in which case it will be dropped.
 	_ = w.mu.current.RecordValue(value)
-	w.mu.Unlock()
 }
 
 // tick resets the current histogram to a new "period". The old one's data
@@ -293,13 +293,15 @@ type Histograms struct {
 // if necessary. The result is cached, so no need to cache it in the workload.
 func (w *Histograms) Get(name string) *NamedHistogram {
 	// Fast path for existing histograms, which is the common case by far.
-	w.mu.RLock()
-	hist, ok := w.mu.hists[name]
+	hist, ok := func() (*NamedHistogram, bool) {
+		w.mu.RLock()
+		defer w.mu.RUnlock()
+		h, ok := w.mu.hists[name]
+		return h, ok
+	}()
 	if ok {
-		w.mu.RUnlock()
 		return hist
 	}
-	w.mu.RUnlock()
 
 	w.mu.Lock()
 	defer w.mu.Unlock()

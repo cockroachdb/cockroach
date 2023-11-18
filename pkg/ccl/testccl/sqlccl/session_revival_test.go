@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -32,8 +33,9 @@ import (
 
 func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	s, mainDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
@@ -42,7 +44,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 	tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
 	})
-	defer tenant.Stopper().Stop(ctx)
+	defer tenant.AppStopper().Stop(ctx)
 	defer tenantDB.Close()
 
 	_, err := tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
@@ -51,7 +53,7 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 
 	var token string
 	t.Run("generate token", func(t *testing.T) {
-		conn := tenant.SQLConnForUser(t, username.TestUser, "")
+		conn := tenant.SQLConn(t, serverutils.User(username.TestUser))
 		err := conn.QueryRowContext(ctx, "SELECT encode(crdb_internal.create_session_revival_token(), 'base64')").Scan(&token)
 		require.NoError(t, err)
 	})

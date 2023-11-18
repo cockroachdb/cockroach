@@ -142,7 +142,7 @@ func insertData(
 	t *testing.T, testCluster serverutils.TestClusterInterface,
 ) (*sqlutils.SQLRunner, *persistedsqlstats.PersistedSQLStats, map[string]int64) {
 	server1 := testCluster.Server(0 /* idx */)
-	sqlConn := sqlutils.MakeSQLRunner(server1.SQLConn(t, ""))
+	sqlConn := sqlutils.MakeSQLRunner(server1.SQLConn(t))
 	sqlStats := server1.SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
 
 	sqlConn.Exec(t, `SET application_name = 'TestPersistedSQLStatsRead'`)
@@ -164,7 +164,7 @@ func createCluster(t *testing.T) (serverutils.TestClusterInterface, context.Cont
 
 	knobs := sqlstats.CreateTestingKnobs()
 	knobs.StubTimeNow = fakeTime.Now
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: knobs,
@@ -191,7 +191,7 @@ func TestSQLStatsWithMultipleIdxRec(t *testing.T) {
 
 	knobs := sqlstats.CreateTestingKnobs()
 	knobs.StubTimeNow = fakeTime.Now
-	testCluster := serverutils.StartNewTestCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLStatsKnobs: knobs,

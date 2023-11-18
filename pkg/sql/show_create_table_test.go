@@ -69,7 +69,7 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 					`\n\tx INT8 NULL,`+
 					`\n\ty INT8 NULL,`+
 					`\n\tcrdb_internal_y_shard_16 INT8 NOT VISIBLE NOT NULL AS (`+
-					`mod(fnv32(crdb_internal.datums_to_bytes(y)), 16:::INT8)) VIRTUAL,`+
+					`mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 16:::INT8)) VIRTUAL,`+
 					`\n\trowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),`+
 					`\n\tCONSTRAINT table_pkey PRIMARY KEY (rowid ASC),`+
 					`\n\tINDEX table_y_idx (y ASC) USING HASH WITH (bucket_count=16)`+
@@ -104,7 +104,7 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 				`e'CREATE TABLE schema."table" (`+
 					`\n\tx INT8 NULL,`+
 					`\n\ty INT8 NULL,`+
-					`\n\tcrdb_internal_y_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 16:::INT8)) VIRTUAL,`+
+					`\n\tcrdb_internal_y_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(y))), 16:::INT8)) VIRTUAL,`+
 					`\n\trowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),`+
 					`\n\tCONSTRAINT table_pkey PRIMARY KEY (rowid ASC),`+
 					`\n\tINDEX table_y_idx (y ASC) USING HASH WITH (bucket_count=16),`+

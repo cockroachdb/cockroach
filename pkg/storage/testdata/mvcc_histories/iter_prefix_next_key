@@ -37,15 +37,17 @@ with t=A
   put k=b v=b7
   put k=d v=d7
 ----
+put: lock acquisition = {b id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
 rangekey: {c-e}/[6.000000000,0=/<empty>]
 data: "a"/5.000000000,0 -> /BYTES/a5
 data: "a"/4.000000000,0 -> /BYTES/a4
 data: "a"/3.000000000,0 -> /BYTES/a3
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "a"/1.000000000,0 -> /BYTES/a1
-meta: "b"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "b"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "b"/7.000000000,0 -> /BYTES/b7
 data: "b"/5.000000000,0 -> /BYTES/b5
 data: "b"/4.000000000,0 -> /BYTES/b4
@@ -57,7 +59,7 @@ data: "c"/4.000000000,0 -> /BYTES/c4
 data: "c"/3.000000000,0 -> /BYTES/c3
 data: "c"/2.000000000,0 -> /BYTES/c2
 data: "c"/1.000000000,0 -> /BYTES/c1
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/5.000000000,0 -> /BYTES/d5
 data: "d"/4.000000000,0 -> /BYTES/d4
@@ -124,7 +126,7 @@ iter_seek_ge: "a"/3.000000000,0=/BYTES/a3
 iter_next_key: .
 iter_seek_ge: "a"/1.000000000,0=/BYTES/a1
 iter_next_key: .
-iter_seek_ge: "b"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "b"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_next_key: .
 iter_seek_ge: "b"/3.000000000,0=/BYTES/b3
 iter_next_key: .
@@ -136,7 +138,7 @@ iter_seek_ge: "c"/3.000000000,0=/BYTES/c3 c{-\x00}/[6.000000000,0=/<empty>] !
 iter_next_key: .
 iter_seek_ge: "c"/1.000000000,0=/BYTES/c1 c{-\x00}/[6.000000000,0=/<empty>] !
 iter_next_key: .
-iter_seek_ge: "d"/0,0=txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true d{-\x00}/[6.000000000,0=/<empty>] !
+iter_seek_ge: "d"/0,0=txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true d{-\x00}/[6.000000000,0=/<empty>] !
 iter_next_key: .
 iter_seek_ge: "d"/3.000000000,0=/BYTES/d3 d{-\x00}/[6.000000000,0=/<empty>] !
 iter_next_key: .

@@ -46,6 +46,7 @@ type SQLStatusServer interface {
 	LogFile(context.Context, *LogFileRequest) (*LogEntriesResponse, error)
 	Logs(context.Context, *LogsRequest) (*LogEntriesResponse, error)
 	NodesUI(context.Context, *NodesRequest) (*NodesResponseExternal, error)
+	RequestJobProfilerExecutionDetails(context.Context, *RequestJobProfilerExecutionDetailsRequest) (*RequestJobProfilerExecutionDetailsResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
@@ -91,10 +92,8 @@ type TenantStatusServer interface {
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is
 // available. If it is not, an error referring to the optionally supplied issues
 // is returned.
-func (s *OptionalNodesStatusServer) OptionalNodesStatusServer(
-	issue int,
-) (NodesStatusServer, error) {
-	v, err := s.w.OptionalErr(issue)
+func (s *OptionalNodesStatusServer) OptionalNodesStatusServer() (NodesStatusServer, error) {
+	v, err := s.w.OptionalErr(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
 	if err != nil {
 		return nil, err
 	}

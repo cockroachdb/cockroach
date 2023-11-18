@@ -19,43 +19,43 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=1
-  intent txn=txn2 key=a
-  intent txn=txn2 key=b
-  intent txn=txn2 key=c
-  intent txn=txn2 key=d
-  intent txn=txn2 key=e
-  intent txn=txn2 key=f
-  intent txn=txn2 key=g
-  intent txn=txn2 key=h
-  intent txn=txn2 key=i
-  intent txn=txn2 key=j
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn2 key=a
+  lock txn=txn2 key=b
+  lock txn=txn2 key=c
+  lock txn=txn2 key=d
+  lock txn=txn2 key=e
+  lock txn=txn2 key=f
+  lock txn=txn2 key=g
+  lock txn=txn2 key=h
+  lock txn=txn2 key=i
+  lock txn=txn2 key=j
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, ‹"c"›, ‹"d"›, ‹"e"›, ‹"f"›, ‹"g"›, ‹"h"›, ‹"i"›, ‹"j"›, released latches
 
 debug-lock-table
 ----
 num=10
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "d"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "e"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "f"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "i"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "j"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 sequence req=req1
 ----
@@ -63,8 +63,8 @@ sequence req=req1
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: waiting in lock wait-queues
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedWriters: 0, queuedReaders: 1)
-[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -72,28 +72,28 @@ debug-lock-table
 ----
 num=10
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
    waiting readers:
     req: 1, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 1
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "d"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "e"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "f"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "g"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "h"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "i"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "j"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 debug-advance-clock ts=123
 ----
@@ -155,18 +155,18 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=1
-  intent txn=txn2 key=a
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn2 key=a
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"a"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, released latches
 
 debug-lock-table
 ----
 num=1
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 sequence req=req1
 ----
@@ -174,8 +174,8 @@ sequence req=req1
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: waiting in lock wait-queues
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedWriters: 1, queuedReaders: 0)
-[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req1: pushing txn 00000002 to abort
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -192,21 +192,21 @@ on-txn-updated txn=txn2 status=committed
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=1
-  intent txn=txn2 key=b
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn2 key=b
 ----
-[4] handle write intent error req1: handled conflicting intents on ‹"b"›, released latches
+[4] handle lock conflict error req1: handled conflicting locks on ‹"b"›, released latches
 
 debug-lock-table
 ----
 num=2
  lock: "a"
-   queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [holder finalized: committed]
-   queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent] [holder finalized: committed]
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 sequence req=req1
 ----
@@ -221,24 +221,24 @@ sequence req=req1
 [5] sequence req1: scanning lock table for conflicting locks
 [5] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=1
-  intent txn=txn2 key=c
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn2 key=c
 ----
-[6] handle write intent error req1: handled conflicting intents on ‹"c"›, released latches
+[6] handle lock conflict error req1: handled conflicting locks on ‹"c"›, released latches
 
 debug-lock-table
 ----
 num=3
  lock: "a"
-   queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "b"
-   queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "c"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [holder finalized: committed]
-   queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent] [holder finalized: committed]
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 sequence req=req1
 ----
@@ -257,14 +257,14 @@ debug-lock-table
 ----
 num=3
  lock: "a"
-   queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "b"
-   queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "c"
-   queued writers:
-    active: false req: 2, txn: 00000001-0000-0000-0000-000000000000
+   queued locking requests:
+    active: false req: 2, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 finish req=req1
 ----
@@ -296,19 +296,19 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-handle-write-intent-error req=req1 lease-seq=1
-  intent txn=txn2 key=a
-  intent txn=txn2 key=b
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn2 key=a
+  lock txn=txn2 key=b
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"a"›, ‹"b"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"a"›, ‹"b"›, released latches
 
 debug-lock-table
 ----
 num=2
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
 
 new-request name=req2 txn=txn2 ts=10,1
   put key=g value=v1
@@ -338,9 +338,9 @@ debug-lock-table
 ----
 num=4
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "g"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "h"
@@ -352,8 +352,8 @@ sequence req=req1
 [4] sequence req1: acquiring latches
 [4] sequence req1: scanning lock table for conflicting locks
 [4] sequence req1: waiting in lock wait-queues
-[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedWriters: 0, queuedReaders: 1)
-[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[4] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[4] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [4] sequence req1: pushing timestamp of txn 00000002 above 10.000000000,1
 [4] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -361,12 +361,12 @@ debug-lock-table
 ----
 num=4
  lock: "a"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
    waiting readers:
     req: 3, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 3
  lock: "b"
-  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
+  holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
  lock: "g"
   holder: txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "h"
@@ -434,32 +434,32 @@ sequence req=req1
 [1] sequence req1: scanning lock table for conflicting locks
 [1] sequence req1: sequencing complete, returned guard
 
-# Normally req1 will not discover write intents for c, d, e in one shot, since
-# it consists of multiple requests, and we only discover intents a request at
-# a time (though a single request can discover multiple intents), but we do
-# this for shortening the test.
-handle-write-intent-error req=req1 lease-seq=1
-  intent txn=txn3 key=c
-  intent txn=txn3 key=d
-  intent txn=txn5 key=e
+# Normally req1 will not discover locks for c, d, e in one shot, since it
+# consists of multiple requests, and we only discover locks a request at a time
+# (though a single request can discover multiple locks), but we do this for
+# shortening the test.
+handle-lock-conflict-error req=req1 lease-seq=1
+  lock txn=txn3 key=c
+  lock txn=txn3 key=d
+  lock txn=txn5 key=e
 ----
-[2] handle write intent error req1: handled conflicting intents on ‹"c"›, ‹"d"›, ‹"e"›, released latches
+[2] handle lock conflict error req1: handled conflicting locks on ‹"c"›, ‹"d"›, ‹"e"›, released latches
 
 debug-lock-table
 ----
 num=3
  lock: "c"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 sequence req=req1
 ----
@@ -467,8 +467,8 @@ sequence req=req1
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: waiting in lock wait-queues
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"c"› (queuedWriters: 1, queuedReaders: 0)
-[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"c"› (queuedLockingRequests: 1, queuedReaders: 0)
+[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req1: pushing txn 00000003 to abort
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -476,18 +476,18 @@ debug-lock-table
 ----
 num=3
  lock: "c"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 new-request name=req3 txn=txn3 ts=10,1
   put key=a value=v3
@@ -535,18 +535,18 @@ num=5
  lock: "b"
   holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 new-request name=req2 txn=txn2 ts=11,1
   scan key=a endkey=c
@@ -559,8 +559,8 @@ sequence req=req2
 [6] sequence req2: acquiring latches
 [6] sequence req2: scanning lock table for conflicting locks
 [6] sequence req2: waiting in lock wait-queues
-[6] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"a"› (queuedWriters: 0, queuedReaders: 1)
-[6] sequence req2: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[6] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"a"› (queuedLockingRequests: 0, queuedReaders: 1)
+[6] sequence req2: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [6] sequence req2: pushing timestamp of txn 00000003 above 11.000000000,1
 [6] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -575,18 +575,18 @@ num=5
  lock: "b"
   holder: txn: 00000004-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 0)]
  lock: "c"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
 
 debug-advance-clock ts=123
 ----
@@ -597,15 +597,15 @@ on-txn-updated txn=txn3 status=aborted
 ----
 [-] update txn: aborting txn3
 [3] sequence req1: resolving intent ‹"c"› for txn 00000003 with ABORTED status
-[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000005 holding lock @ key ‹"e"› (queuedWriters: 1, queuedReaders: 0)
+[3] sequence req1: lock wait-queue event: wait for (distinguished) txn 00000005 holding lock @ key ‹"e"› (queuedLockingRequests: 1, queuedReaders: 0)
 [3] sequence req1: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"c"› for 123.000s
-[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[3] sequence req1: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [3] sequence req1: pushing txn 00000005 to abort
 [3] sequence req1: blocked on select in concurrency_test.(*cluster).PushTransaction
 [6] sequence req2: resolving intent ‹"a"› for txn 00000003 with ABORTED status
-[6] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"b"› (queuedWriters: 0, queuedReaders: 1)
+[6] sequence req2: lock wait-queue event: wait for (distinguished) txn 00000004 holding lock @ key ‹"b"› (queuedLockingRequests: 0, queuedReaders: 1)
 [6] sequence req2: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 123.000s
-[6] sequence req2: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[6] sequence req2: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [6] sequence req2: pushing timestamp of txn 00000004 above 11.000000000,1
 [6] sequence req2: blocked on select in concurrency_test.(*cluster).PushTransaction
 
@@ -618,16 +618,16 @@ num=4
     req: 8, txn: 00000002-0000-0000-0000-000000000000
    distinguished req: 8
  lock: "c"
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "d"
-  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [holder finalized: aborted]
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent] [holder finalized: aborted]
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
 
 debug-advance-clock ts=123
@@ -651,15 +651,15 @@ debug-lock-table
 ----
 num=3
  lock: "c"
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "d"
-   queued writers:
-    active: false req: 5, txn: 00000001-0000-0000-0000-000000000000
+   queued locking requests:
+    active: false req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
  lock: "e"
-  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl
-   queued writers:
-    active: true req: 5, txn: 00000001-0000-0000-0000-000000000000
+  holder: txn: 00000005-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent]
+   queued locking requests:
+    active: true req: 5, strength: Intent, txn: 00000001-0000-0000-0000-000000000000
    distinguished req: 5
 
 finish req=req2

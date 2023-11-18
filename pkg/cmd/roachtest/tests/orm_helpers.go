@@ -53,7 +53,6 @@ func alterZoneConfigAndClusterSettings(
 		`ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
 
 		`SET CLUSTER SETTING kv.range_merge.queue_interval = '50ms'`,
-		`SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = 'true'`,
 		`SET CLUSTER SETTING jobs.registry.interval.cancel = '180s';`,
 		`SET CLUSTER SETTING jobs.registry.interval.gc = '30s';`,
 		`SET CLUSTER SETTING jobs.retention_time = '15s';`,
@@ -63,8 +62,9 @@ func alterZoneConfigAndClusterSettings(
 		// Test with SCRAM password authentication.
 		`SET CLUSTER SETTING server.user_login.password_encryption = 'scram-sha-256';`,
 
-		// Enable experimental features.
+		// Enable experimental/preview features.
 		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,
+		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = 'true';`,
 	} {
 		if _, err := db.ExecContext(ctx, cmd); err != nil {
 			return err

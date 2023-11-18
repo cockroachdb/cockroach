@@ -6,7 +6,6 @@ go_test(
         "jobs_protected_ts_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     tags = ["ccl_test"],
     deps = [
         "//pkg/base",
@@ -15,6 +14,7 @@ go_test(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprotectedts",
+        "//pkg/jobs/jobstest",
         "//pkg/keys",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",

@@ -308,16 +308,6 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			}
 			rpcAddrReadyChs[i] = rpcAddrReady
 		}
-
-		// Ensure we close all sticky stores we've created when the stopper
-		// instructs the entire cluster to stop. We do this only here
-		// because we want this closer to be registered after all the
-		// individual servers' Stop() methods have been registered
-		// via createAndAddNode() above.
-		c.stopper.AddCloser(stop.CloserFn(func() {
-			c.stickyVFSRegistry.CloseAllEngines()
-		}))
-
 		// Start the remaining nodes asynchronously.
 		for i := 1; i < c.demoCtx.NumNodes; i++ {
 			if err := c.startNodeAsync(ctx, i, errCh, timeoutCh); err != nil {
@@ -435,31 +425,49 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			c.adminPassword = demoPassword
 		}
 
-		if c.demoCtx.Multitenant && !c.demoCtx.Insecure {
-			// Also create the user/password for the secondary tenant.
-			ts := c.tenantServers[0]
-			tctx := ts.AnnotateCtx(ctx)
-			ieTenant := ts.InternalExecutor().(isql.Executor)
-			_, err = ieTenant.Exec(tctx, "tenant-password", nil,
-				fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", demoUsername, demoPassword))
-			if err != nil {
-				return err
+		if c.demoCtx.Multitenant {
+			if !c.demoCtx.Insecure {
+				// Also create the user/password for the secondary tenant.
+				ts := c.tenantServers[0]
+				tctx := ts.AnnotateCtx(ctx)
+				ieTenant := ts.InternalExecutor().(isql.Executor)
+				_, err = ieTenant.Exec(tctx, "tenant-password", nil,
+					fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", demoUsername, demoPassword))
+				if err != nil {
+					return err
+				}
+				_, err = ieTenant.Exec(tctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
+				if err != nil {
+					return err
+				}
 			}
-			_, err = ieTenant.Exec(tctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
-			if err != nil {
-				return err
-			}
-		}
 
-		if c.demoCtx.Multitenant && !c.demoCtx.DisableServerController {
-			// Select the default tenant.
 			ie := c.firstServer.InternalExecutor().(isql.Executor)
-			// Choose the tenant to use when no tenant is specified on a
-			// connection or web URL.
-			if _, err := ie.Exec(ctx, "default-tenant", nil,
-				`SET CLUSTER SETTING `+multitenant.DefaultTenantSelectSettingName+` = $1`,
-				demoTenantName); err != nil {
+
+			// Grant full capabilities.
+			_, err = ie.Exec(ctx, "tenant-grant-capabilities", nil, fmt.Sprintf("ALTER VIRTUAL CLUSTER %s GRANT ALL CAPABILITIES", demoTenantName))
+			if err != nil {
 				return err
+			}
+
+			if !c.demoCtx.DisableServerController {
+				// Select the default tenant.
+				// Choose the tenant to use when no tenant is specified on a
+				// connection or web URL.
+				if _, err := ie.Exec(ctx, "default-tenant", nil,
+					`SET CLUSTER SETTING `+multitenant.DefaultClusterSelectSettingName+` = $1`,
+					demoTenantName); err != nil {
+					return err
+				}
+			}
+
+			for _, s := range []string{
+				string(sql.RestrictAccessToSystemInterface.Name()),
+				string(sql.TipUserAboutSystemInterface.Name()),
+			} {
+				if _, err := ie.Exec(ctx, "restrict-system-interface", nil, fmt.Sprintf(`SET CLUSTER SETTING %s = true`, s)); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -544,7 +552,7 @@ func (c *transientCluster) startTenantService(
 		}
 
 		var err error
-		ts, err = c.servers[serverIdx].StartTenant(ctx, args)
+		ts, err = c.servers[serverIdx].TenantController().StartTenant(ctx, args)
 		if err != nil {
 			return err
 		}
@@ -557,7 +565,7 @@ func (c *transientCluster) startTenantService(
 		}))
 	} else {
 		var err error
-		ts, _, err = c.servers[serverIdx].StartSharedProcessTenant(ctx,
+		ts, _, err = c.servers[serverIdx].TenantController().StartSharedProcessTenant(ctx,
 			base.TestSharedProcessTenantArgs{
 				TenantID:   roachpb.MustMakeTenantID(secondaryTenantID),
 				TenantName: demoTenantName,
@@ -654,7 +662,7 @@ func (c *transientCluster) createAndAddNode(
 	if err != nil {
 		return nil, err
 	}
-	s := srv.(serverutils.TestServerInterface)
+	s := &wrap{srv.(serverutils.TestServerInterfaceRaw)}
 
 	// Ensure that this server gets stopped when the top level demo
 	// stopper instructs the cluster to stop.
@@ -711,7 +719,6 @@ func (c *transientCluster) startNodeAsync(
 
 				// Don't block if we are shutting down.
 			case <-ctx.Done():
-			case <-s.Stopper().ShouldQuiesce():
 			case <-c.stopper.ShouldQuiesce():
 			case <-timeoutCh:
 			}
@@ -746,7 +753,12 @@ func (c *transientCluster) waitForRPCAddrReadinessOrError(
 	case <-ctx.Done():
 		return errors.CombineErrors(ctx.Err(), errors.Newf("server %d startup aborted due to context cancellation", idx))
 	case <-c.servers[idx].Stopper().ShouldQuiesce():
-		return errors.Newf("server %d stopped prematurely", idx)
+		select {
+		case err := <-errCh:
+			return err
+		case <-time.After(30 * time.Second):
+		}
+		return errors.Newf("server %d stopped prematurely without returning error", idx)
 	case <-c.stopper.ShouldQuiesce():
 		return errors.Newf("demo cluster stopped prematurely while starting server %d", idx)
 	}
@@ -812,7 +824,7 @@ func (c *transientCluster) waitForSQLReadiness(
 		case <-ctx.Done():
 			return errors.CombineErrors(errors.Newf("context cancellation while waiting for server %d to become ready", idx), ctx.Err())
 		case <-c.servers[idx].Stopper().ShouldQuiesce():
-			return errors.Newf("server %s shut down prematurely", idx)
+			return errors.Newf("server %d shut down prematurely", idx)
 		case <-c.stopper.ShouldQuiesce():
 			return errors.Newf("demo cluster shut down prematurely while waiting for server %d to become ready", idx)
 		default:
@@ -939,12 +951,15 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.Addr = fmt.Sprintf("127.0.0.1:%d", rpcPort)
 		args.SQLAddr = fmt.Sprintf("127.0.0.1:%d", sqlPort)
 		if !demoCtx.DisableServerController {
-			// The code in NewDemoCluster put the KV ports higher
-			// so we need to subtract the number of nodes to get
-			// back to the "good" ports.
-			// We reduce NumNodes by 1 because the server controller
-			// uses 1-based indexing for servers.
-			args.SecondaryTenantPortOffset = -(demoCtx.NumNodes + 1)
+			// The code in NewDemoCluster put the KV ports higher so
+			// we need to subtract the number of nodes to get back
+			// to the "good" ports.
+			//
+			// We reduce lower bound of the port range by 1 because
+			// the server controller uses 1-based indexing for
+			// servers.
+			args.ApplicationInternalRPCPortMin = rpcPort - (demoCtx.NumNodes + 1)
+			args.ApplicationInternalRPCPortMax = args.ApplicationInternalRPCPortMin + 1024
 		}
 	}
 	if httpPort := demoCtx.httpPort(serverIdx, forSystemTenant); httpPort != 0 {
@@ -1051,6 +1066,13 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	if err := c.drainAndShutdown(ctx, c.servers[serverIdx].adminClient); err != nil {
 		return err
 	}
+
+	select {
+	case <-c.servers[serverIdx].Stopper().IsStopped():
+	case <-time.After(10 * time.Second):
+		return errors.Errorf("server stopper not stopped after 10 seconds")
+	}
+
 	c.servers[serverIdx].TestServerInterface = nil
 	c.servers[serverIdx].adminClient = nil
 	if c.demoCtx.Multitenant {
@@ -1169,7 +1191,7 @@ func (c *transientCluster) startServerInternal(
 	if err != nil {
 		return 0, err
 	}
-	s := srv.(serverutils.TestServerInterface)
+	s := &wrap{srv.(serverutils.TestServerInterfaceRaw)}
 
 	// We want to only return after the server is ready.
 	readyCh := make(chan struct{})
@@ -1832,7 +1854,12 @@ func (c *transientCluster) runWorkload(
 
 // EnableEnterprise enables enterprise features if available in this build.
 func (c *transientCluster) EnableEnterprise(ctx context.Context) (func(), error) {
-	db, err := gosql.Open("postgres", c.connURL)
+	purl, err := c.getNetworkURLForServer(ctx, 0, true /* includeAppName */, forSystemTenant)
+	if err != nil {
+		return nil, err
+	}
+	connURL := purl.ToPQ().String()
+	db, err := gosql.Open("postgres", connURL)
 	if err != nil {
 		return nil, err
 	}
@@ -2153,3 +2180,16 @@ func (c *transientCluster) TenantName() string {
 	}
 	return catconstants.SystemTenantName
 }
+
+type wrap struct {
+	serverutils.TestServerInterfaceRaw
+}
+
+var _ serverutils.TestServerInterface = (*wrap)(nil)
+
+func (w *wrap) ApplicationLayer() serverutils.ApplicationLayerInterface {
+	return w.TestServerInterfaceRaw
+}
+func (w *wrap) SystemLayer() serverutils.ApplicationLayerInterface   { return w.TestServerInterfaceRaw }
+func (w *wrap) TenantController() serverutils.TenantControlInterface { return w.TestServerInterfaceRaw }
+func (w *wrap) StorageLayer() serverutils.StorageLayerInterface      { return w.TestServerInterfaceRaw }

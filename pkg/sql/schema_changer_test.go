@@ -604,7 +604,7 @@ func TestRaceWithBackfill(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -790,7 +790,7 @@ func TestDropWhileBackfill(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -897,7 +897,7 @@ func TestBackfillErrors(t *testing.T) {
 		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -2257,8 +2257,8 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	y INT8 NOT NULL,
 	z INT8 NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (y ASC),
-	UNIQUE INDEX test_x_key (x ASC),
-	INDEX i (z ASC)
+	INDEX i (z ASC),
+	UNIQUE INDEX test_x_key (x ASC)
 )`
 	if create != expected {
 		t.Fatalf("expected %s, found %s", expected, create)
@@ -3521,7 +3521,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -3829,7 +3829,7 @@ func TestSchemaChangeEvalContext(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -4185,7 +4185,7 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
-	tc = serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	tc = serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(context.Background())
 	db := tc.ServerConn(0)
 	kvDB := tc.Server(0).DB()
@@ -4242,7 +4242,7 @@ func TestAddComputedColumn(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(context.Background())
 	db = tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -4270,7 +4270,7 @@ func TestNoBackfillForVirtualColumn(t *testing.T) {
 			},
 		},
 	}
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(context.Background())
 	db := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -4604,7 +4604,7 @@ func TestSchemaChangeRetryError(t *testing.T) {
 
 	params, _ := createTestServerParams()
 
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -5510,7 +5510,7 @@ func TestIntentRaceWithIndexBackfill(t *testing.T) {
 		},
 	}
 
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs:      params,
@@ -6941,7 +6941,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 	expire_at TIMESTAMPTZ NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_job_cron = '@hourly')`
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL)`
 
 		createTTLExpirationExpressionTable = `CREATE DATABASE t;
 CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at');`
@@ -6949,7 +6949,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 	id STRING NOT NULL,
 	expire_at TIMESTAMPTZ NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at', ttl_job_cron = '@hourly')`
+) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at')`
 
 		createTTLExpireAfterTTLExpirationExpressionTable = `CREATE DATABASE t;
 CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expire_after = '10 hours', ttl_expiration_expression = 'crdb_internal_expiration');`
@@ -6958,7 +6958,7 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expir
 	expire_at TIMESTAMPTZ NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration', ttl_job_cron = '@hourly')`
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration')`
 	)
 
 	testCases := []struct {
@@ -7418,9 +7418,9 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 				},
 			},
 		}
-		s, sqlDB, _ := serverutils.StartServer(t, params)
+		srv, sqlDB, _ := serverutils.StartServer(t, params)
+		defer srv.Stopper().Stop(ctx)
 		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
-		defer s.Stopper().Stop(ctx)
 
 		sqlRunner.Exec(t, tc.setupSQL)
 		atomic.StoreInt32(&shouldCount, 1)
@@ -7433,7 +7433,7 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 			count     int32 // accessed atomically
 			shouldRun int32 // accessed atomically
 
-			s     serverutils.ApplicationLayerInterface
+			srv   serverutils.TestServerInterface
 			sqlDB *gosql.DB
 			kvDB  *kv.DB
 		)
@@ -7455,8 +7455,8 @@ func TestOperationAtRandomStateTransition(t *testing.T) {
 				},
 			},
 		}
-		s, sqlDB, kvDB = serverutils.StartServer(t, params)
-		defer s.Stopper().Stop(ctx)
+		srv, sqlDB, kvDB = serverutils.StartServer(t, params)
+		defer srv.Stopper().Stop(ctx)
 		_, err := sqlDB.Exec(tc.setupSQL)
 		require.NoError(t, err)
 		atomic.StoreInt32(&shouldRun, 1)

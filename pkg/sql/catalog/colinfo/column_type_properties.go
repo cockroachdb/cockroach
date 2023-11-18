@@ -83,6 +83,7 @@ func CanHaveCompositeKeyEncoding(typ *types.T) bool {
 		types.EnumFamily,
 		types.Box2DFamily,
 		types.PGLSNFamily,
+		types.RefCursorFamily,
 		types.VoidFamily,
 		types.EncodedKeyFamily,
 		types.TSQueryFamily,

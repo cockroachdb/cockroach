@@ -11,6 +11,7 @@
 package storageutils
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -87,11 +88,15 @@ func ScanIter(t *testing.T, iter storage.SimpleMVCCIterator) KVs {
 func ScanKeySpan(t *testing.T, r storage.Reader, start, end roachpb.Key) KVs {
 	t.Helper()
 
-	iter := r.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypePointsAndRanges,
-		LowerBound: start,
-		UpperBound: end,
-	})
+	iter, err := r.NewMVCCIterator(
+		context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+			KeyTypes:   storage.IterKeyTypePointsAndRanges,
+			LowerBound: start,
+			UpperBound: end,
+		})
+	if err != nil {
+		panic(err)
+	}
 	defer iter.Close()
 	return ScanIter(t, iter)
 }

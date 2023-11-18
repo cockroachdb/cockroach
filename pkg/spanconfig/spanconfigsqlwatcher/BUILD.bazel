@@ -47,7 +47,6 @@ go_test(
         "protectedtsdecoder_test.go",
         "zonesdecoder_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":spanconfigsqlwatcher"],
     deps = [
         "//pkg/base",
@@ -68,9 +67,9 @@ go_test(
         "//pkg/sql/isql",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
-        "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/uuid",
         "@com_github_gogo_protobuf//proto",

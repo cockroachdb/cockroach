@@ -2,10 +2,10 @@
 CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, k INT, FAMILY "primary" (i, j, k));
 
 /* test */
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT DEFAULT 30;
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT DEFAULT 30, ADD COLUMN q INT, DROP COLUMN q;
 EXPLAIN (DDL) rollback at post-commit stage 27 of 31;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›;
+Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›, ADD COLUMN ‹q› INT8, DROP COLUMN ‹q›;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 4 elements transitioning toward PUBLIC
@@ -37,7 +37,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 9, ConstraintID: 9, SourceIndexID: 6 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 9}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 9}
-      │    │    ├── BACKFILL_ONLY         → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 8 (t_pkey-)}
+      │    │    ├── BACKFILL_ONLY         → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_i_key-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 8 (t_pkey-), RecreateSourceIndexID: 0}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 8 (t_pkey-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (t_i_key-)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3}

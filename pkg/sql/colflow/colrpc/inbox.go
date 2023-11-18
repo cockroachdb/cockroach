@@ -347,12 +347,14 @@ func (i *Inbox) Next() coldata.Batch {
 			// Regardless of the cause we want to propagate such an error as
 			// expected one in all cases so that the caller could decide on how
 			// to handle it.
+			log.VEventf(i.Ctx, 2, "Inbox communication error: %v", err)
 			err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "inbox communication error")
 			i.errCh <- err
 			ungracefulStreamTermination = true
 			colexecerror.ExpectedError(err)
 		}
 		if len(m.Data.Metadata) != 0 {
+			log.VEvent(i.Ctx, 2, "Inbox received metadata")
 			// If an error was encountered, it needs to be propagated
 			// immediately. All other metadata will simply be buffered and
 			// returned in DrainMeta.
@@ -385,6 +387,7 @@ func (i *Inbox) Next() coldata.Batch {
 			// Continue until we get the next batch or EOF.
 			continue
 		}
+		log.VEvent(i.Ctx, 2, "Inbox received batch")
 		if len(m.Data.RawBytes) == 0 {
 			// Protect against Deserialization panics by skipping empty messages.
 			continue
@@ -477,11 +480,14 @@ func (i *Inbox) DrainMeta() []execinfrapb.ProducerMetadata {
 			if err == io.EOF {
 				break
 			}
-			if log.V(1) {
-				log.Warningf(i.Ctx, "Inbox Recv connection error while draining metadata: %+v", err)
-			}
+			log.VEventf(i.Ctx, 1, "Inbox communication error while draining metadata: %v", err)
 			return allMeta
 		}
+		if len(msg.Data.Metadata) == 0 {
+			log.VEvent(i.Ctx, 2, "Inbox received batch while draining metadata, ignoring")
+			continue
+		}
+		log.VEvent(i.Ctx, 2, "Inbox received metadata while draining metadata")
 		for _, remoteMeta := range msg.Data.Metadata {
 			meta, ok := execinfrapb.RemoteProducerMetaToLocalMeta(i.Ctx, remoteMeta)
 			if !ok {

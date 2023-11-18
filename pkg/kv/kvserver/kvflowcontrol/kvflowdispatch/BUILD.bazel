@@ -24,7 +24,6 @@ go_library(
 go_test(
     name = "kvflowdispatch_test",
     srcs = ["kvflowdispatch_test.go"],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":kvflowdispatch"],
     deps = [
@@ -37,6 +36,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/protoutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],

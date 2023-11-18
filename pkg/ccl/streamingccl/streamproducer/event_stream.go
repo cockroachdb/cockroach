@@ -11,10 +11,14 @@ package streamproducer
 import (
 	"context"
 	"fmt"
+	"runtime/pprof"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -22,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -35,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 type eventStream struct {
@@ -43,7 +50,6 @@ type eventStream struct {
 	spec            streampb.StreamPartitionSpec
 	subscribedSpans roachpb.SpanGroup
 	mon             *mon.BytesMonitor
-	acc             mon.BoundAccount
 
 	data tree.Datums // Data to send to the consumer
 
@@ -55,6 +61,7 @@ type eventStream struct {
 	errCh       chan error                    // Signaled when error occurs in rangefeed.
 	streamCh    chan tree.Datums              // Channel signaled to forward datums to consumer.
 	sp          *tracing.Span                 // Span representing the lifetime of the eventStream.
+	acc         mon.BoundAccount
 }
 
 var _ eval.ValueGenerator = (*eventStream)(nil)
@@ -79,6 +86,14 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		return errors.AssertionFailedf("expected to be started once")
 	}
 
+	sourceTenantID, err := s.validateProducerJobAndSpec(ctx)
+	if err != nil {
+		return err
+	}
+
+	log.Infof(ctx, "starting physical replication event stream: tenant=%s initial_scan_timestamp=%s previous_replicated_time=%s",
+		sourceTenantID, s.spec.InitialScanTimestamp, s.spec.PreviousReplicatedTimestamp)
+
 	s.acc = s.mon.MakeBoundAccount()
 
 	// errCh is buffered to ensure the sender can send an error to
@@ -94,8 +109,11 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	s.doneChan = make(chan struct{})
 
+	useMux := streamingccl.StreamProducerMuxRangefeeds.Get(&s.execCfg.Settings.SV)
+
 	// Common rangefeed options.
 	opts := []rangefeed.Option{
+		rangefeed.WithPProfLabel("job", fmt.Sprintf("id=%d", s.streamID)),
 		rangefeed.WithOnCheckpoint(s.onCheckpoint),
 
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) {
@@ -105,7 +123,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 		rangefeed.WithMemoryMonitor(s.mon),
 
 		rangefeed.WithOnSSTable(s.onSSTable),
-
+		rangefeed.WithMuxRangefeed(useMux),
 		rangefeed.WithOnDeleteRange(s.onDeleteRange),
 	}
 
@@ -116,6 +134,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 
 	initialTimestamp := s.spec.InitialScanTimestamp
 	if s.spec.PreviousReplicatedTimestamp.IsEmpty() {
+		log.Infof(ctx, "starting event stream with initial scan at %s", initialTimestamp)
 		opts = append(opts,
 			rangefeed.WithInitialScan(func(ctx context.Context) {}),
 			rangefeed.WithScanRetryBehavior(rangefeed.ScanRetryRemaining),
@@ -134,6 +153,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) error {
 	} else {
 		initialTimestamp = s.spec.PreviousReplicatedTimestamp
 		// When resuming from cursor, advance frontier to the cursor position.
+		log.Infof(ctx, "resuming event stream (no initial scan) from %s", initialTimestamp)
 		for _, sp := range s.spec.Spans {
 			if _, err := frontier.Forward(sp, s.spec.PreviousReplicatedTimestamp); err != nil {
 				return err
@@ -176,6 +196,14 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 	// withErrCapture wraps fn to capture and report error to the error channel.
 	withErrCapture := func(fn ctxGroupFn) ctxGroupFn {
 		return func(ctx context.Context) error {
+			// Attach the streamID as a job ID so that the job-specific
+			// CPU profile on the Job's advanced debug page includes
+			// stacks from these streams.
+			defer pprof.SetGoroutineLabels(ctx)
+			ctx = logtags.AddTag(ctx, "job", s.streamID)
+			ctx = pprof.WithLabels(ctx, pprof.Labels("job", fmt.Sprintf("id=%d", s.streamID)))
+			pprof.SetGoroutineLabels(ctx)
+
 			err := fn(ctx)
 			if err != nil {
 				// Signal ValueGenerator that this stream is terminating due to an error
@@ -198,7 +226,6 @@ func (s *eventStream) startStreamProcessor(ctx context.Context, frontier *span.F
 	}))
 
 	// TODO(yevgeniy): Add go routine to monitor stream job liveness.
-	// TODO(yevgeniy): Add validation that partition spans are a subset of stream spans.
 }
 
 // Next implements tree.ValueGenerator interface.
@@ -220,15 +247,20 @@ func (s *eventStream) Values() (tree.Datums, error) {
 
 // Close implements tree.ValueGenerator interface.
 func (s *eventStream) Close(ctx context.Context) {
-	s.rf.Close()
+	if s.rf != nil {
+		s.rf.Close()
+	}
 	s.acc.Close(ctx)
-
-	close(s.doneChan)
+	if s.doneChan != nil {
+		close(s.doneChan)
+	}
 	if err := s.streamGroup.Wait(); err != nil {
 		// Note: error in close is normal; we expect to be terminated with context canceled.
 		log.Errorf(ctx, "partition stream %d terminated with error %v", s.streamID, err)
 	}
-	s.sp.Finish()
+	if s.sp != nil {
+		s.sp.Finish()
+	}
 }
 
 func (s *eventStream) onValue(ctx context.Context, value *kvpb.RangeFeedValue) {
@@ -473,10 +505,44 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 	}
 }
 
+func (s *eventStream) validateProducerJobAndSpec(ctx context.Context) (roachpb.TenantID, error) {
+	producerJobID := jobspb.JobID(s.streamID)
+	job, err := s.execCfg.JobRegistry.LoadJob(ctx, producerJobID)
+	if err != nil {
+		return roachpb.TenantID{}, err
+	}
+	payload := job.Payload()
+	sp, ok := payload.GetDetails().(*jobspb.Payload_StreamReplication)
+	if !ok {
+		return roachpb.TenantID{}, notAReplicationJobError(producerJobID)
+	}
+	if sp.StreamReplication == nil {
+		return roachpb.TenantID{}, errors.AssertionFailedf("unexpected nil StreamReplication in producer job %d payload", producerJobID)
+	}
+	if job.Status() != jobs.StatusRunning {
+		return roachpb.TenantID{}, jobIsNotRunningError(producerJobID, job.Status(), "stream events")
+	}
+
+	// Validate that the requested spans are a subset of the
+	// source tenant's keyspace.
+	sourceTenantID := sp.StreamReplication.TenantID
+	sourceTenantSpans := keys.MakeTenantSpan(sourceTenantID)
+	for _, sp := range s.spec.Spans {
+		if !sourceTenantSpans.Contains(sp) {
+			err := pgerror.Newf(pgcode.InvalidParameterValue, "requested span %s is not contained within the keyspace of source tenant %d",
+				sp,
+				sourceTenantID)
+			return roachpb.TenantID{}, err
+		}
+	}
+	return sourceTenantID, nil
+}
+
+const defaultBatchSize = 1 << 20
+
 func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
 	const defaultInitialScanParallelism = 16
 	const defaultMinCheckpointFrequency = 10 * time.Second
-	const defaultBatchSize = 1 << 20
 
 	if cfg.InitialScanParallelism <= 0 {
 		cfg.InitialScanParallelism = defaultInitialScanParallelism
@@ -494,19 +560,16 @@ func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
 func streamPartition(
 	evalCtx *eval.Context, streamID streampb.StreamID, opaqueSpec []byte,
 ) (eval.ValueGenerator, error) {
-	if !evalCtx.SessionData().AvoidBuffering {
-		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
-	}
-
 	var spec streampb.StreamPartitionSpec
 	if err := protoutil.Unmarshal(opaqueSpec, &spec); err != nil {
 		return nil, errors.Wrapf(err, "invalid partition spec for stream %d", streamID)
 	}
-
+	if !evalCtx.SessionData().AvoidBuffering {
+		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
+	}
 	if len(spec.Spans) == 0 {
 		return nil, errors.AssertionFailedf("expected at least one span, got none")
 	}
-
 	setConfigDefaults(&spec.Config)
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)

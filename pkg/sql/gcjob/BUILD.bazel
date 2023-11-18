@@ -39,7 +39,6 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sqlerrors",
-        "//pkg/storage",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -57,7 +56,6 @@ go_test(
         "main_test.go",
         "table_garbage_collection_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":gcjob"],
     deps = [
         "//pkg/base",
@@ -76,6 +74,7 @@ go_test(
         "//pkg/sql",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

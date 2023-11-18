@@ -247,9 +247,9 @@ func TestDebugMergeLogs(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Run the test for each possible log format.
-	format := []interface{}{"crdb-v2", "crdb-v1"}
-	testutils.RunValues(t, "format", format, func(t *testing.T, format interface{}) {
-		cases := getCases(format.(string))
+	format := []string{"crdb-v2", "crdb-v1"}
+	testutils.RunValues(t, "format", format, func(t *testing.T, format string) {
+		cases := getCases(format)
 		for _, c := range cases {
 			t.Run(c.name, c.run)
 		}

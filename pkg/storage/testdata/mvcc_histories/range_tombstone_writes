@@ -29,20 +29,22 @@ with t=A
 ----
 del: "a": found key true
 del: "g": found key true
+put: lock acquisition = {d id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
+put: lock acquisition = {i id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0 Replicated Intent []}
 >> at end:
-txn: "A" meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+txn: "A" meta={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
 rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 
 # Writing invalid range tombstones should error.
@@ -54,14 +56,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*withstack.withStack:) invalid range key {z-x}/3.000000000,0: start key "z" is at or after end key "x"
 
@@ -73,14 +75,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*withstack.withStack:) invalid range key {x-z}: no timestamp
 
@@ -92,14 +94,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*withstack.withStack:) invalid range key x{-}/3.000000000,0: start key "x" is at or after end key "x"
 
@@ -113,14 +115,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
 
@@ -132,14 +134,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 4.000000000,0 too old; must write at or above 4.000000000,1
 
@@ -151,14 +153,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "f" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
 
@@ -172,14 +174,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
 
@@ -191,14 +193,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 4.000000000,0 too old; must write at or above 4.000000000,1
 
@@ -210,14 +212,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
 
@@ -229,14 +231,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "o" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
 
@@ -248,14 +250,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
 
@@ -267,18 +269,18 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; must write at or above 4.000000000,1
 
-# Writing below intents should return a WriteIntentError, both when above and
+# Writing below intents should return a LockConflictError, both when above and
 # below the intent timestamp and any existing values.
 run error
 del_range_ts k=d end=e ts=3
@@ -288,16 +290,16 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*kvpb.WriteIntentError:) conflicting intents on "d"
+error: (*kvpb.LockConflictError:) conflicting locks on "d"
 
 run error
 del_range_ts k=d end=e ts=5
@@ -307,16 +309,16 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*kvpb.WriteIntentError:) conflicting intents on "d"
+error: (*kvpb.LockConflictError:) conflicting locks on "d"
 
 run error
 del_range_ts k=i end=j ts=5
@@ -326,16 +328,16 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*kvpb.WriteIntentError:) conflicting intents on "i"
+error: (*kvpb.LockConflictError:) conflicting locks on "i"
 
 run error
 del_range_ts k=i end=j ts=7
@@ -345,16 +347,16 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*kvpb.WriteIntentError:) conflicting intents on "i"
+error: (*kvpb.LockConflictError:) conflicting locks on "i"
 
 run error
 del_range_ts k=i end=j ts=10
@@ -364,16 +366,16 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
-error: (*kvpb.WriteIntentError:) conflicting intents on "i"
+error: (*kvpb.LockConflictError:) conflicting locks on "i"
 
 # Writing above an inline value should error. We disable passing covered MVCC
 # stats in metamorphic tests because it changes the error message.
@@ -385,14 +387,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*withstack.withStack:) can't write range tombstone across inline key "h"/0,0
 
@@ -408,14 +410,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 
 # Writing across the local keyspace should error, as should writing from \x00.
@@ -429,14 +431,14 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*assert.withAssertionFailure:) can't write MVCC range tombstone across local keyspan /Local/Range/"{a"-b"}/1.000000000,0
 
@@ -450,13 +452,13 @@ rangekey: {k-p}/[4.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/3.000000000,0 -> /BYTES/b3
-meta: "d"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "d"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "d"/7.000000000,0 -> /BYTES/d7
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
-meta: "i"/0,0 -> txn={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/7.000000000,0 -> /BYTES/i7
 error: (*assert.withAssertionFailure:) can't write MVCC range tombstone across local keyspan {\x00-z}/1.000000000,0

@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -44,10 +43,6 @@ func TestStatementReuses(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	tenantSettings := s.ApplicationLayer().ClusterSettings()
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &tenantSettings.SV, true)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tenantSettings.SV, true)
 
 	initStmts := []string{
 		`CREATE DATABASE d`,
@@ -240,6 +235,7 @@ func TestPrepareExplain(t *testing.T) {
 		"EXPLAIN (TYPES) SELECT * FROM abc WHERE c=1",
 		"EXPLAIN (DISTSQL) SELECT * FROM abc WHERE c=1",
 		"EXPLAIN (VEC) SELECT * FROM abc WHERE c=1",
+		"EXPLAIN ANALYZE SELECT * FROM abc WHERE c=1",
 	}
 
 	for _, sql := range statements {
@@ -520,9 +516,8 @@ func TestExplainRedact(t *testing.T) {
 	t.Log("seed:", seed)
 
 	params, _ := createTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
-	defer sqlDB.Close()
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
 
 	query := func(sql string) (*gosql.Rows, error) {
 		return sqlDB.QueryContext(ctx, sql)

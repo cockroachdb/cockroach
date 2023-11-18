@@ -16,11 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	ast "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -116,13 +115,18 @@ type plpgsqlBuilder struct {
 	params []tree.ParamType
 
 	// decls is the set of variable declarations for a PL/pgSQL function.
-	decls []plpgsqltree.PLpgSQLDecl
+	decls []ast.Declaration
 
 	// varTypes maps from the name of each variable to its type.
 	varTypes map[tree.Name]*types.T
 
 	// constants tracks the variables that were declared as constant.
 	constants map[tree.Name]struct{}
+
+	// cursors is the set of cursor declarations for a PL/pgSQL routine. It is set
+	// for bound cursor declarations, which allow a query to be associated with a
+	// cursor before it is opened.
+	cursors map[tree.Name]ast.CursorDeclaration
 
 	// returnType is the return type of the PL/pgSQL function.
 	returnType *types.T
@@ -139,22 +143,33 @@ type plpgsqlBuilder struct {
 	// statements that follow the loop.
 	exitContinuations []continuation
 
-	identCounter int
+	// blockState is shared state for all routines that make up a PLpgSQL block,
+	// including the implicit block that surrounds the body statements.
+	blockState *tree.BlockState
+
+	hasExceptionBlock bool
+	identCounter      int
 }
 
 func (b *plpgsqlBuilder) init(
-	ob *Builder,
-	colRefs *opt.ColSet,
-	params []tree.ParamType,
-	block *plpgsqltree.PLpgSQLStmtBlock,
-	returnType *types.T,
+	ob *Builder, colRefs *opt.ColSet, params []tree.ParamType, block *ast.Block, returnType *types.T,
 ) {
 	b.ob = ob
 	b.colRefs = colRefs
 	b.params = params
-	b.decls = block.Decls
 	b.returnType = returnType
 	b.varTypes = make(map[tree.Name]*types.T)
+	b.cursors = make(map[tree.Name]ast.CursorDeclaration)
+	for i := range block.Decls {
+		switch dec := block.Decls[i].(type) {
+		case *ast.Declaration:
+			b.decls = append(b.decls, *dec)
+		case *ast.CursorDeclaration:
+			// Declaration of a bound cursor declares a variable of type refcursor.
+			b.decls = append(b.decls, ast.Declaration{Var: dec.Name, Typ: types.RefCursor})
+			b.cursors[dec.Name] = *dec
+		}
+	}
 	for _, dec := range b.decls {
 		typ, err := tree.ResolveType(b.ob.ctx, dec.Typ, b.ob.semaCtx.TypeResolver)
 		if err != nil {
@@ -178,7 +193,7 @@ func (b *plpgsqlBuilder) init(
 
 // build constructs an expression that returns the result of executing a
 // PL/pgSQL function. See buildPLpgSQLStatements for more details.
-func (b *plpgsqlBuilder) build(block *plpgsqltree.PLpgSQLStmtBlock, s *scope) *scope {
+func (b *plpgsqlBuilder) build(block *ast.Block, s *scope) *scope {
 	s = s.push()
 	b.ensureScopeHasExpr(s)
 
@@ -197,22 +212,22 @@ func (b *plpgsqlBuilder) build(block *plpgsqltree.PLpgSQLStmtBlock, s *scope) *s
 			b.constants[dec.Var] = struct{}{}
 		}
 	}
-	if s = b.buildPLpgSQLStatements(block.Body, s); s != nil {
-		return s
+	if exceptions := b.buildExceptions(block); exceptions != nil {
+		// There is an implicit block around the body statements, with an optional
+		// exception handler. Note that the variable declarations are not in block
+		// scope, and exceptions thrown during variable declaration are not caught.
+		//
+		// The routine is volatile to prevent inlining. Only the block and
+		// variable-assignment routines need to be volatile; see the buildExceptions
+		// comment for details.
+		b.blockState = &tree.BlockState{}
+		blockCon := b.makeContinuation("exception_block")
+		blockCon.def.ExceptionBlock = exceptions
+		blockCon.def.Volatility = volatility.Volatile
+		b.appendPlpgSQLStmts(&blockCon, block.Body)
+		return b.callContinuation(&blockCon, s)
 	}
-	// At least one path in the control flow does not terminate with a RETURN
-	// statement.
-	//
-	// Postgres throws this error at runtime, so it's possible to define a
-	// function that runs correctly for some inputs, but returns this error for
-	// others. We are compiling rather than interpreting, so it seems better to
-	// eagerly return the error if there is an execution path with no RETURN.
-	// TODO(drewk): consider using RAISE (when it is implemented) to throw the
-	// error at runtime instead.
-	panic(pgerror.New(
-		pgcode.RoutineExceptionFunctionExecutedNoReturnStatement,
-		"control reached end of function without RETURN",
-	))
+	return b.buildPLpgSQLStatements(block.Body, s)
 }
 
 // buildPLpgSQLStatements performs the majority of the work building a PL/pgSQL
@@ -223,26 +238,40 @@ func (b *plpgsqlBuilder) build(block *plpgsqltree.PLpgSQLStmtBlock, s *scope) *s
 //
 // buildPLpgSQLStatements returns nil if one or more branches in the given
 // statements do not eventually terminate with a RETURN statement.
-func (b *plpgsqlBuilder) buildPLpgSQLStatements(
-	stmts []plpgsqltree.PLpgSQLStatement, s *scope,
-) *scope {
+func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope) *scope {
 	b.ensureScopeHasExpr(s)
 	for i, stmt := range stmts {
 		switch t := stmt.(type) {
-		case *plpgsqltree.PLpgSQLStmtReturn:
+		case *ast.Return:
 			// RETURN is handled by projecting a single column with the expression
 			// that is being returned.
 			returnScalar := b.buildPLpgSQLExpr(t.Expr, b.returnType, s)
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_return"))
 			returnScope := s.push()
+			b.ensureScopeHasExpr(returnScope)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, returnScalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
-		case *plpgsqltree.PLpgSQLStmtAssign:
+
+		case *ast.Assignment:
 			// Assignment (:=) is handled by projecting a new column with the same
 			// name as the variable being assigned.
 			s = b.addPLpgSQLAssign(s, t.Var, t.Value)
-		case *plpgsqltree.PLpgSQLStmtIf:
+			if b.hasExceptionBlock {
+				// If exception handling is required, we have to start a new
+				// continuation after each variable assignment. This ensures that in the
+				// event of an error, the arguments of the currently executing routine
+				// will be the correct values for the variables, and can be passed to
+				// the exception handler routines. Set the volatility to Volatile in
+				// order to ensure that the routine is not inlined. See the
+				// handleException comment for details on why this is necessary.
+				catchCon := b.makeContinuation("assign_exception_block")
+				catchCon.def.Volatility = volatility.Volatile
+				b.appendPlpgSQLStmts(&catchCon, stmts[i+1:])
+				return b.callContinuation(&catchCon, s)
+			}
+
+		case *ast.If:
 			// IF statement control flow is handled by calling a "continuation"
 			// function in each branch that executes all the statements that logically
 			// follow the IF statement block.
@@ -254,7 +283,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			//   IF (...) THEN ... END IF;
 			//   RETURN (...); <-- This is used to build the continuation function.
 			con := b.makeContinuation("stmt_if")
-			b.finishContinuation(stmts[i+1:], &con, false /* recursive */)
+			b.appendPlpgSQLStmts(&con, stmts[i+1:])
 			b.pushContinuation(con)
 			// Build each branch of the IF statement, calling the continuation
 			// function at the end of construction in order to resume execution after
@@ -298,10 +327,12 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			// Return a single column that projects the result of the CASE statement.
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_if"))
 			returnScope := s.push()
+			b.ensureScopeHasExpr(returnScope)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, scalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
-		case *plpgsqltree.PLpgSQLStmtSimpleLoop:
+
+		case *ast.Loop:
 			if t.Label != "" {
 				panic(unimplemented.New(
 					"LOOP label",
@@ -319,20 +350,55 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			// statement, the exit continuation is called to model returning control
 			// flow to the statements outside the loop.
 			exitCon := b.makeContinuation("loop_exit")
-			b.finishContinuation(stmts[i+1:], &exitCon, false /* recursive */)
+			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
 			b.pushExitContinuation(exitCon)
-			loopContinuation := b.makeContinuation("stmt_loop")
-			loopContinuation.isLoopContinuation = true
+			loopContinuation := b.makeRecursiveContinuation("stmt_loop")
 			b.pushContinuation(loopContinuation)
-			b.finishContinuation(t.Body, &loopContinuation, true /* recursive */)
+			b.appendPlpgSQLStmts(&loopContinuation, t.Body)
 			b.popContinuation()
 			b.popExitContinuation()
 			return b.callContinuation(&loopContinuation, s)
-		case *plpgsqltree.PLpgSQLStmtExit:
+
+		case *ast.While:
+			// A WHILE LOOP is syntactic sugar for a LOOP with a conditional
+			// EXIT, so it is handled by a simple rewrite:
+			//
+			//   WHILE [cond] LOOP
+			//     [body];
+			//   END LOOP;
+			//   =>
+			//   LOOP
+			//     IF [cond] THEN
+			//       [body];
+			//     ELSE
+			//       EXIT;
+			//     END IF;
+			//   END LOOP;
+			//
+			loop := &ast.Loop{
+				Label: t.Label,
+				Body: []ast.Statement{&ast.If{
+					Condition: t.Condition,
+					ThenBody:  t.Body,
+					ElseBody:  []ast.Statement{&ast.Exit{}},
+				}},
+			}
+			newStmts := make([]ast.Statement, 0, len(stmts))
+			newStmts = append(newStmts, loop)
+			newStmts = append(newStmts, stmts[i+1:]...)
+			return b.buildPLpgSQLStatements(newStmts, s)
+
+		case *ast.Exit:
 			if t.Label != "" {
 				panic(unimplemented.New(
 					"EXIT label",
 					"EXIT statement labels are not yet supported",
+				))
+			}
+			if t.Condition != nil {
+				panic(unimplemented.New(
+					"EXIT WHEN",
+					"conditional EXIT statements are not yet supported",
 				))
 			}
 			// EXIT statements are handled by calling the function that executes the
@@ -345,11 +411,18 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 					"EXIT cannot be used outside a loop, unless it has a label",
 				))
 			}
-		case *plpgsqltree.PLpgSQLStmtContinue:
+
+		case *ast.Continue:
 			if t.Label != "" {
 				panic(unimplemented.New(
 					"CONTINUE label",
 					"CONTINUE statement labels are not yet supported",
+				))
+			}
+			if t.Condition != nil {
+				panic(unimplemented.New(
+					"CONTINUE WHEN",
+					"conditional CONTINUE statements are not yet supported",
 				))
 			}
 			// CONTINUE statements are handled by calling the function that executes
@@ -359,7 +432,8 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			} else {
 				panic(pgerror.New(pgcode.Syntax, "CONTINUE cannot be used outside a loop"))
 			}
-		case *plpgsqltree.PLpgSQLStmtRaise:
+
+		case *ast.Raise:
 			// RAISE statements allow the PLpgSQL function to send an error or a
 			// notice to the client. We handle these side effects by building them
 			// into a separate body statement that is only executed for its side
@@ -367,32 +441,232 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 			// statement, which returns the actual result of evaluation.
 			//
 			// The synchronous notice sending behavior is implemented in the
-			// crdb_internal.plpgsql_raise builtin function. The side-effecting body
-			// statement just makes a call into crdb_internal.plpgsql_raise using the
-			// RAISE statement options as parameters.
+			// crdb_internal.plpgsql_raise builtin function.
 			con := b.makeContinuation("_stmt_raise")
-			const raiseFnName = "crdb_internal.plpgsql_raise"
-			props, overloads := builtinsregistry.GetBuiltinProperties(raiseFnName)
-			if len(overloads) != 1 {
-				panic(errors.AssertionFailedf("expected one overload for %s", raiseFnName))
+			con.def.Volatility = volatility.Volatile
+			b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, b.getRaiseArgs(con.s, t)))
+			b.appendPlpgSQLStmts(&con, stmts[i+1:])
+			return b.callContinuation(&con, s)
+
+		case *ast.Execute:
+			if t.Strict {
+				panic(unimplemented.NewWithIssuef(107854,
+					"INTO STRICT statements are not yet implemented",
+				))
 			}
-			raiseCall := b.ob.factory.ConstructFunction(
-				b.getRaiseArgs(con.s, t),
+			// Create a new continuation routine to handle executing a SQL statement.
+			execCon := b.makeContinuation("_stmt_exec")
+			stmtScope := b.ob.buildStmtAtRootWithScope(t.SqlStmt, nil /* desiredTypes */, execCon.s)
+			if t.Target == nil {
+				// When there is not INTO target, build the SQL statement into a body
+				// statement that is only executed for its side effects.
+				b.appendBodyStmt(&execCon, stmtScope)
+				b.appendPlpgSQLStmts(&execCon, stmts[i+1:])
+				return b.callContinuation(&execCon, s)
+			}
+			// This statement has an INTO target. Unlike the above case, we need the
+			// result of executing the SQL statement, since its result is assigned to
+			// the target variables. We handle this using the following steps:
+			//   1. Build the PLpgSQL statements following this one into a
+			//      continuation routine.
+			//   2. Build the INTO statement into a continuation routine that calls
+			//      the continuation from Step 1 using its output as parameters.
+			//   3. Call the INTO continuation from the parent scope.
+			//
+			// Step 1: build a continuation for the remaining PLpgSQL statements.
+			retCon := b.makeContinuation("_stmt_exec_ret")
+			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
+
+			// We only need the first row from the SQL statement.
+			stmtScope.expr = b.ob.factory.ConstructLimit(
+				stmtScope.expr,
+				b.ob.factory.ConstructConst(tree.NewDInt(tree.DInt(1)), types.Int),
+				stmtScope.makeOrderingChoice(),
+			)
+
+			// Step 2: build the INTO statement into a continuation routine that calls
+			// the previously built continuation.
+			//
+			// For each target variable, project an output column that aliases the
+			// corresponding column from the SQL statement. Previous values for the
+			// variables will naturally be "overwritten" by the projection, since
+			// input columns are always considered before outer columns when resolving
+			// a column reference.
+			intoScope := stmtScope.push()
+			for j := range t.Target {
+				typ := b.resolveVariableForAssign(t.Target[j])
+				colName := scopeColName(t.Target[j])
+				var scalar opt.ScalarExpr
+				if j < len(stmtScope.cols) {
+					scalar = b.ob.factory.ConstructVariable(stmtScope.cols[j].id)
+				} else {
+					// If there are less output columns than target variables, NULL is
+					// assigned to any remaining targets.
+					scalar = b.ob.factory.ConstructConstVal(tree.DNull, typ)
+				}
+				for i := range intoScope.cols {
+					if intoScope.cols[i].name.MatchesReferenceName(t.Target[j]) {
+						panic(unimplemented.New(
+							"duplicate INTO target",
+							"assigning to a variable more than once in the same INTO statement is not supported",
+						))
+					}
+				}
+				b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+			}
+			b.ob.constructProjectForScope(stmtScope, intoScope)
+			intoScope = b.callContinuation(&retCon, intoScope)
+
+			// Step 3: call the INTO continuation from the parent scope.
+			b.appendBodyStmt(&execCon, intoScope)
+			return b.callContinuation(&execCon, s)
+
+		case *ast.Open:
+			// OPEN statements are used to create a CURSOR for the current session.
+			// This is handled by calling the plpgsql_open_cursor internal builtin
+			// function in a separate body statement that returns no results, similar
+			// to the RAISE implementation.
+			if t.Scroll == tree.Scroll {
+				panic(unimplemented.NewWithIssue(77102, "DECLARE SCROLL CURSOR"))
+			}
+			openCon := b.makeContinuation("_stmt_open")
+			openCon.def.Volatility = volatility.Volatile
+			_, source, _, err := openCon.s.FindSourceProvidingColumn(b.ob.ctx, t.CurVar)
+			if err != nil {
+				if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+					panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", t.CurVar))
+				}
+				panic(err)
+			}
+			if !source.(*scopeColumn).typ.Identical(types.RefCursor) {
+				panic(pgerror.Newf(pgcode.DatatypeMismatch,
+					"variable \"%s\" must be of type cursor or refcursor", t.CurVar,
+				))
+			}
+			// Initialize the routine with the information needed to pipe the first
+			// body statement into a cursor.
+			query := b.resolveOpenQuery(t)
+			fmtCtx := b.ob.evalCtx.FmtCtx(tree.FmtSimple)
+			fmtCtx.FormatNode(query)
+			openCon.def.CursorDeclaration = &tree.RoutineOpenCursor{
+				NameArgIdx: source.(*scopeColumn).getParamOrd(),
+				Scroll:     t.Scroll,
+				CursorSQL:  fmtCtx.CloseAndGetString(),
+			}
+			openScope := b.ob.buildStmtAtRootWithScope(query, nil /* desiredTypes */, openCon.s)
+			if openScope.expr.Relational().CanMutate {
+				// Cursors with mutations are invalid.
+				panic(pgerror.Newf(pgcode.FeatureNotSupported,
+					"DECLARE CURSOR must not contain data-modifying statements in WITH",
+				))
+			}
+			b.appendBodyStmt(&openCon, openScope)
+			b.appendPlpgSQLStmts(&openCon, stmts[i+1:])
+
+			// Build a statement to generate a unique name for the cursor if one
+			// was not supplied. Add this to its own volatile routine to ensure that
+			// the name generation isn't reordered with other operations. Use the
+			// resulting projected column as input to the OPEN continuation.
+			nameCon := b.makeContinuation("_gen_cursor_name")
+			nameCon.def.Volatility = volatility.Volatile
+			nameScope := b.buildCursorNameGen(&nameCon, t.CurVar)
+			b.appendBodyStmt(&nameCon, b.callContinuation(&openCon, nameScope))
+			return b.callContinuation(&nameCon, s)
+
+		case *ast.Close:
+			// CLOSE statements close the cursor with the name supplied by a PLpgSQL
+			// variable. The crdb_internal.plpgsql_close builtin function handles
+			// closing the cursor. Build a volatile (non-inlinable) continuation
+			// that calls the builtin function.
+			closeCon := b.makeContinuation("_stmt_close")
+			closeCon.def.Volatility = volatility.Volatile
+			const closeFnName = "crdb_internal.plpgsql_close"
+			props, overloads := builtinsregistry.GetBuiltinProperties(closeFnName)
+			if len(overloads) != 1 {
+				panic(errors.AssertionFailedf("expected one overload for %s", closeFnName))
+			}
+			_, source, _, err := closeCon.s.FindSourceProvidingColumn(b.ob.ctx, t.CurVar)
+			if err != nil {
+				if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+					panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", t.CurVar))
+				}
+				panic(err)
+			}
+			if !source.(*scopeColumn).typ.Identical(types.RefCursor) {
+				panic(pgerror.Newf(pgcode.DatatypeMismatch,
+					"variable \"%s\" must be of type cursor or refcursor", t.CurVar,
+				))
+			}
+			closeCall := b.ob.factory.ConstructFunction(
+				memo.ScalarListExpr{b.ob.factory.ConstructVariable(source.(*scopeColumn).id)},
 				&memo.FunctionPrivate{
-					Name:       raiseFnName,
+					Name:       closeFnName,
 					Typ:        types.Int,
 					Properties: props,
 					Overload:   &overloads[0],
 				},
 			)
-			raiseColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_raise"))
-			raiseScope := con.s.push()
-			b.ob.synthesizeColumn(raiseScope, raiseColName, types.Int, nil /* expr */, raiseCall)
-			b.ob.constructProjectForScope(con.s, raiseScope)
-			con.def.Body = []memo.RelExpr{raiseScope.expr}
-			con.def.BodyProps = []*physical.Required{raiseScope.makePhysicalProps()}
-			b.finishContinuation(stmts[i+1:], &con, false /* recursive */)
-			return b.callContinuation(&con, s)
+			closeColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_close"))
+			closeScope := closeCon.s.push()
+			b.ensureScopeHasExpr(closeScope)
+			b.ob.synthesizeColumn(closeScope, closeColName, types.Int, nil /* expr */, closeCall)
+			b.ob.constructProjectForScope(closeCon.s, closeScope)
+			b.appendBodyStmt(&closeCon, closeScope)
+			b.appendPlpgSQLStmts(&closeCon, stmts[i+1:])
+			return b.callContinuation(&closeCon, s)
+
+		case *ast.Fetch:
+			// FETCH and MOVE statements are used to shift the position of a SQL
+			// cursor and (for FETCH statements) retrieve a row from the cursor and
+			// assign it to one or more PLpgSQL variables. MOVE statements have no
+			// result, only side effects, so they are built into a separate body
+			// statement. FETCH statements can mutate PLpgSQL variables, so they are
+			// handled similarly to SELECT ... INTO statements - see above.
+			//
+			// All cursor interactions are handled by the crdb_internal.plpgsql_fetch
+			// builtin function.
+			if !t.IsMove {
+				if t.Cursor.FetchType == tree.FetchAll || t.Cursor.FetchType == tree.FetchBackwardAll {
+					panic(pgerror.New(
+						pgcode.FeatureNotSupported, "FETCH statement cannot return multiple rows",
+					))
+				}
+			}
+			fetchCon := b.makeContinuation("_stmt_fetch")
+			fetchCon.def.Volatility = volatility.Volatile
+			fetchScope := b.buildFetch(fetchCon.s, t)
+			if t.IsMove {
+				b.appendBodyStmt(&fetchCon, fetchScope)
+				b.appendPlpgSQLStmts(&fetchCon, stmts[i+1:])
+				return b.callContinuation(&fetchCon, s)
+			}
+			// crdb_internal.plpgsql_fetch will return a tuple with the results of the
+			// FETCH call. Project each element as a PLpgSQL variable. The number of
+			// elements returned is equal to the length of the target list
+			// (padded with NULLs), so we can assume each target variable has a
+			// corresponding element.
+			fetchCol := fetchScope.cols[0].id
+			intoScope := fetchScope.push()
+			for j := range t.Target {
+				typ := b.resolveVariableForAssign(t.Target[j])
+				colName := scopeColName(t.Target[j])
+				scalar := b.ob.factory.ConstructColumnAccess(
+					b.ob.factory.ConstructVariable(fetchCol),
+					memo.TupleOrdinal(j),
+				)
+				b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+			}
+			b.ob.constructProjectForScope(fetchScope, intoScope)
+
+			// Call a continuation for the remaining PLpgSQL statements from the newly
+			// built statement that has updated variables. Then, call the fetch
+			// continuation from the parent scope.
+			retCon := b.makeContinuation("_stmt_exec_ret")
+			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
+			intoScope = b.callContinuation(&retCon, intoScope)
+			b.appendBodyStmt(&fetchCon, intoScope)
+			return b.callContinuation(&fetchCon, s)
+
 		default:
 			panic(unimplemented.New(
 				"unimplemented PL/pgSQL statement",
@@ -404,23 +678,78 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(
 	return b.callContinuation(b.getContinuation(), s)
 }
 
+// resolveOpenQuery finds and validates the query that is bound to cursor for
+// the given OPEN statement.
+func (b *plpgsqlBuilder) resolveOpenQuery(open *ast.Open) tree.Statement {
+	var boundStmt tree.Statement
+	for name := range b.cursors {
+		if open.CurVar == name {
+			boundStmt = b.cursors[name].Query
+			break
+		}
+	}
+	stmt := open.Query
+	if stmt != nil && boundStmt != nil {
+		// A bound cursor cannot be opened with "OPEN FOR" syntax.
+		panic(errors.WithHintf(
+			pgerror.New(pgcode.Syntax, "syntax error at or near \"FOR\""),
+			"cannot specify a query during OPEN for bound cursor \"%s\"", open.CurVar,
+		))
+	}
+	if stmt == nil && boundStmt == nil {
+		// The query was not specified either during cursor declaration or in the
+		// open statement.
+		panic(errors.WithHintf(
+			pgerror.New(pgcode.Syntax, "expected \"FOR\" at or near \"OPEN\""),
+			"no query was specified for cursor \"%s\"", open.CurVar,
+		))
+	}
+	if stmt == nil {
+		// This is a bound cursor.
+		stmt = boundStmt
+	}
+	if _, ok := stmt.(*tree.Select); !ok {
+		panic(pgerror.Newf(
+			pgcode.InvalidCursorDefinition, "cannot open %s query as cursor", stmt.StatementTag(),
+		))
+	}
+	return stmt
+}
+
+// buildCursorNameGen builds a statement that generates a unique name for the
+// cursor if the variable containing the name is unset. The unique name
+// generation is implemented by the crdb_internal.plpgsql_gen_cursor_name
+// builtin function.
+func (b *plpgsqlBuilder) buildCursorNameGen(nameCon *continuation, nameVar ast.Variable) *scope {
+	_, source, _, _ := nameCon.s.FindSourceProvidingColumn(b.ob.ctx, nameVar)
+	const nameFnName = "crdb_internal.plpgsql_gen_cursor_name"
+	props, overloads := builtinsregistry.GetBuiltinProperties(nameFnName)
+	if len(overloads) != 1 {
+		panic(errors.AssertionFailedf("expected one overload for %s", nameFnName))
+	}
+	nameCall := b.ob.factory.ConstructFunction(
+		memo.ScalarListExpr{b.ob.factory.ConstructVariable(source.(*scopeColumn).id)},
+		&memo.FunctionPrivate{
+			Name:       nameFnName,
+			Typ:        types.RefCursor,
+			Properties: props,
+			Overload:   &overloads[0],
+		},
+	)
+	nameScope := nameCon.s.push()
+	b.ob.synthesizeColumn(nameScope, scopeColName(nameVar), types.RefCursor, nil /* expr */, nameCall)
+	b.ob.constructProjectForScope(nameCon.s, nameScope)
+	return nameScope
+}
+
 // addPLpgSQLAssign adds a PL/pgSQL assignment to the current scope as a
 // new column with the variable name that projects the assigned expression.
 // If there is a column with the same name in the previous scope, it will be
 // replaced. This allows the plpgsqlBuilder to model variable mutations.
-func (b *plpgsqlBuilder) addPLpgSQLAssign(
-	inScope *scope, ident plpgsqltree.PLpgSQLVariable, val plpgsqltree.PLpgSQLExpr,
-) *scope {
-	if b.constants != nil {
-		if _, ok := b.constants[ident]; ok {
-			panic(pgerror.Newf(pgcode.ErrorInAssignment, "variable \"%s\" is declared CONSTANT", ident))
-		}
-	}
-	typ, ok := b.varTypes[ident]
-	if !ok {
-		panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", ident))
-	}
+func (b *plpgsqlBuilder) addPLpgSQLAssign(inScope *scope, ident ast.Variable, val ast.Expr) *scope {
+	typ := b.resolveVariableForAssign(ident)
 	assignScope := inScope.push()
+	b.ensureScopeHasExpr(assignScope)
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
 		if col.name.ReferenceName() == ident {
@@ -439,12 +768,35 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 	return assignScope
 }
 
+// buildPLpgSQLRaise builds a call to the crdb_internal.plpgsql_raise builtin
+// function, which implements the notice-sending behavior of RAISE statements.
+func (b *plpgsqlBuilder) buildPLpgSQLRaise(inScope *scope, args memo.ScalarListExpr) *scope {
+	const raiseFnName = "crdb_internal.plpgsql_raise"
+	props, overloads := builtinsregistry.GetBuiltinProperties(raiseFnName)
+	if len(overloads) != 1 {
+		panic(errors.AssertionFailedf("expected one overload for %s", raiseFnName))
+	}
+	raiseCall := b.ob.factory.ConstructFunction(
+		args,
+		&memo.FunctionPrivate{
+			Name:       raiseFnName,
+			Typ:        types.Int,
+			Properties: props,
+			Overload:   &overloads[0],
+		},
+	)
+	raiseColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_raise"))
+	raiseScope := inScope.push()
+	b.ensureScopeHasExpr(raiseScope)
+	b.ob.synthesizeColumn(raiseScope, raiseColName, types.Int, nil /* expr */, raiseCall)
+	b.ob.constructProjectForScope(inScope, raiseScope)
+	return raiseScope
+}
+
 // getRaiseArgs validates the options attached to the given PLpgSQL RAISE
 // statement and returns the arguments to be used for a call to the
 // crdb_internal.plpgsql_raise builtin function.
-func (b *plpgsqlBuilder) getRaiseArgs(
-	s *scope, raise *plpgsqltree.PLpgSQLStmtRaise,
-) memo.ScalarListExpr {
+func (b *plpgsqlBuilder) getRaiseArgs(s *scope, raise *ast.Raise) memo.ScalarListExpr {
 	var severity, message, detail, hint, code opt.ScalarExpr
 	makeConstStr := func(str string) opt.ScalarExpr {
 		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
@@ -472,12 +824,20 @@ func (b *plpgsqlBuilder) getRaiseArgs(
 		message = b.makeRaiseFormatMessage(s, raise.Message, raise.Params)
 	}
 	if raise.Code != "" {
+		if !pgcode.IsValidPGCode(raise.Code) {
+			panic(pgerror.Newf(pgcode.Syntax, "invalid SQLSTATE code '%s'", raise.Code))
+		}
 		code = makeConstStr(raise.Code)
 	} else if raise.CodeName != "" {
+		if _, ok := pgcode.PLpgSQLConditionNameToCode[raise.CodeName]; !ok {
+			panic(pgerror.Newf(
+				pgcode.UndefinedObject, "unrecognized exception condition \"%s\"", raise.CodeName,
+			))
+		}
 		code = makeConstStr(raise.CodeName)
 	}
 	// Retrieve the RAISE options, if any.
-	buildOptionExpr := func(name string, expr plpgsqltree.PLpgSQLExpr, isDup bool) opt.ScalarExpr {
+	buildOptionExpr := func(name string, expr ast.Expr, isDup bool) opt.ScalarExpr {
 		if isDup {
 			panic(pgerror.Newf(pgcode.Syntax, "RAISE option already specified: %s", name))
 		}
@@ -526,7 +886,7 @@ func (b *plpgsqlBuilder) getRaiseArgs(
 // is specified by doubling it: '%%'. The formatting arguments can be arbitrary
 // SQL expressions.
 func (b *plpgsqlBuilder) makeRaiseFormatMessage(
-	s *scope, format string, args []plpgsqltree.PLpgSQLExpr,
+	s *scope, format string, args []ast.Expr,
 ) (result opt.ScalarExpr) {
 	makeConstStr := func(str string) opt.ScalarExpr {
 		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
@@ -569,7 +929,221 @@ func (b *plpgsqlBuilder) makeRaiseFormatMessage(
 	return result
 }
 
-// makeContinuation allocates a new continuation function with an uninitialized
+// buildExceptions builds the ExceptionBlock for a PLpgSQL routine as a list of
+// matchable error codes and routine definitions that handle each matched error.
+// The exception handler is set for the top-level block routine. All child
+// sub-routines of the block routine will use the same exception handler through
+// the shared BlockState.
+//
+// Note that the variable declarations are not within the body of the block
+// routine; this is because the declaration block is not within the scope of the
+// exception block.
+//
+// The exception handler must observe up-to-date values for the PLpgSQL
+// variables, so a new continuation routine must be created for all body
+// statements following an assignment statement. This works because if an error
+// occurs before the assignment continuation is called, it must have happened
+// logically during or before the assignment statement completed. Therefore, the
+// assignment did not succeed and the previous values for the variables should
+// be used. If the error occurs after the assignment continuation is called, the
+// continuation will have access to the updated value from the assignment, and
+// can supply it to the exception handler. Consider the following example:
+//
+//		 CREATE TABLE t (x INT PRIMARY KEY);
+//
+//		 CREATE FUNCTION f() RETURNS INT AS $$
+//			  DECLARE
+//			    i INT = 0;
+//			  BEGIN
+//			    INSERT INTO t VALUES (i); --Insert 1
+//			    i := 1;
+//			    INSERT INTO t VALUES (i); --Insert 2
+//	        i := 2;
+//			    RETURN -1;
+//			  EXCEPTION WHEN unique_violation THEN
+//			    RETURN i;
+//		    END
+//		 $$ LANGUAGE PLpgSQL;
+//
+// We'll build the following continuations to handle the assignment statements:
+//
+//		 Continuation 1 (called by initial scope):
+//		   --Initial: i = 0
+//			 INSERT INTO t VALUES (i); --Insert 1
+//		   i := 1;
+//		 Continuation 2 (called by continuation 1):
+//		   --Initial: i = 1
+//			 INSERT INTO t VALUES (i); --Insert 2
+//	     i := 2;
+//		 Continuation 3 (called by continuation 2):
+//		   --Initial: i = 2
+//			 RETURN -1;
+//
+// Consider what happens if Insert 1 fails with a uniqueness violation. The body
+// of Continuation 1 will result in the error, and Continuation 1 will match
+// that error against the exception handler. It will then invoke the handler
+// *with its own arguments* - in this case, i=0. The handler will then return
+// 0 as the result of the routine.
+//
+// If Insert 1 succeeds and Insert 2 fails, Continuation 1 will successfully
+// evaluate and call into Continuation 2 with the updated value of i=1. When
+// Continuation 2 calls the exception handler, once again it will use its own
+// argument i=1.
+//
+// If Insert 2 succeeds as well, it will project the new value i=2 and pass it
+// to Continuation 3. However, Continuation 3 does not use the variable i and
+// cannot throw an exception, and so the "i := 2" assignment will never become
+// visible.
+//
+// The block and assignment continuations must be volatile to prevent inlining.
+// The presence of an exception handler does not impose restrictions on inlining
+// for other continuations.
+func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock {
+	if len(block.Exceptions) == 0 {
+		return nil
+	}
+	codes := make([]pgcode.Code, 0, len(block.Exceptions))
+	handlers := make([]*memo.UDFDefinition, 0, len(block.Exceptions))
+	addHandler := func(codeStr string, handler *memo.UDFDefinition) {
+		code := pgcode.MakeCode(strings.ToUpper(codeStr))
+		switch code {
+		case pgcode.TransactionRollback, pgcode.TransactionIntegrityConstraintViolation,
+			pgcode.SerializationFailure, pgcode.StatementCompletionUnknown,
+			pgcode.DeadlockDetected:
+			panic(unimplemented.NewWithIssue(111446,
+				"catching a Transaction Retry error in a PLpgSQL EXCEPTION block is not yet implemented",
+			))
+		}
+		codes = append(codes, code)
+		handlers = append(handlers, handler)
+	}
+	for _, e := range block.Exceptions {
+		handlerCon := b.makeContinuation("exception_handler")
+		b.appendPlpgSQLStmts(&handlerCon, e.Action)
+		handlerCon.def.Volatility = volatility.Volatile
+		for _, cond := range e.Conditions {
+			if cond.SqlErrState != "" {
+				if !pgcode.IsValidPGCode(cond.SqlErrState) {
+					panic(pgerror.Newf(pgcode.Syntax, "invalid SQLSTATE code '%s'", cond.SqlErrState))
+				}
+				addHandler(cond.SqlErrState, handlerCon.def)
+				continue
+			}
+			// The match condition was supplied by name instead of code.
+			if strings.ToUpper(cond.SqlErrName) == "OTHERS" {
+				// The special "OTHERS" condition matches (almost) any error code.
+				addHandler("OTHERS" /* codeStr */, handlerCon.def)
+				continue
+			}
+			branchCodes, ok := pgcode.PLpgSQLConditionNameToCode[cond.SqlErrName]
+			if !ok {
+				panic(pgerror.Newf(
+					pgcode.UndefinedObject, "unrecognized exception condition \"%s\"", cond.SqlErrName,
+				))
+			}
+			for i := range branchCodes {
+				addHandler(branchCodes[i], handlerCon.def)
+			}
+		}
+	}
+	b.hasExceptionBlock = true
+	return &memo.ExceptionBlock{
+		Codes:   codes,
+		Actions: handlers,
+	}
+}
+
+// buildEndOfFunctionRaise builds a RAISE statement that throws an error when
+// control reaches the end of a PLpgSQL routine without reaching a RETURN
+// statement.
+func (b *plpgsqlBuilder) buildEndOfFunctionRaise(inScope *scope) *scope {
+	makeConstStr := func(str string) opt.ScalarExpr {
+		return b.ob.factory.ConstructConstVal(tree.NewDString(str), types.String)
+	}
+	args := memo.ScalarListExpr{
+		makeConstStr("ERROR"), /* severity */
+		makeConstStr("control reached end of function without RETURN"), /* message */
+		makeConstStr(""), /* detail */
+		makeConstStr(""), /* hint */
+		makeConstStr(pgcode.RoutineExceptionFunctionExecutedNoReturnStatement.String()), /* code */
+	}
+	con := b.makeContinuation("_end_of_function")
+	con.def.Volatility = volatility.Volatile
+	b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, args))
+	// Build a dummy statement that returns NULL. It won't be executed, but
+	// ensures that the continuation routine's return type is correct.
+	eofColName := scopeColName("").WithMetadataName(b.makeIdentifier("end_of_function"))
+	eofScope := inScope.push()
+	b.ob.synthesizeColumn(eofScope, eofColName, b.returnType, nil /* expr */, memo.NullSingleton)
+	b.ob.constructProjectForScope(inScope, eofScope)
+	return b.callContinuation(&con, inScope)
+}
+
+// buildFetch projects a call to the crdb_internal.plpgsql_fetch builtin
+// function, which handles cursors for the PLpgSQL FETCH and MOVE statements.
+func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
+	const fetchFnName = "crdb_internal.plpgsql_fetch"
+	props, overloads := builtinsregistry.GetBuiltinProperties(fetchFnName)
+	if len(overloads) != 1 {
+		panic(errors.AssertionFailedf("expected one overload for %s", fetchFnName))
+	}
+	_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, fetch.Cursor.Name)
+	if err != nil {
+		if pgerror.GetPGCode(err) == pgcode.UndefinedColumn {
+			panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", fetch.Cursor.Name))
+		}
+		panic(err)
+	}
+	if !source.(*scopeColumn).typ.Identical(types.RefCursor) {
+		panic(pgerror.Newf(pgcode.DatatypeMismatch,
+			"variable \"%s\" must be of type cursor or refcursor", fetch.Cursor.Name,
+		))
+	}
+	makeConst := func(val tree.Datum, typ *types.T) opt.ScalarExpr {
+		return b.ob.factory.ConstructConstVal(val, typ)
+	}
+	// For a FETCH statement, we have to pass the expected result types.
+	var typs []*types.T
+	var elems []opt.ScalarExpr
+	if !fetch.IsMove {
+		typs = make([]*types.T, len(fetch.Target))
+		elems = make([]opt.ScalarExpr, len(fetch.Target))
+		for i := range fetch.Target {
+			typ := b.resolveVariableForAssign(fetch.Target[i])
+			typs[i] = typ
+			elems[i] = b.ob.factory.ConstructConstVal(tree.DNull, typ)
+		}
+	}
+	returnType := types.MakeTuple(typs)
+
+	// The arguments are:
+	//   1. The name of the cursor (resolved at runtime).
+	//   2. The direction of the cursor (FIRST, RELATIVE).
+	//   3. The count of the cursor direction (FORWARD 1, RELATIVE 5).
+	//   4. The types of the columns to return (can be empty).
+	// The result of the fetch will be cast to strings and returned as an array.
+	fetchCall := b.ob.factory.ConstructFunction(
+		memo.ScalarListExpr{
+			b.ob.factory.ConstructVariable(source.(*scopeColumn).id),
+			makeConst(tree.NewDInt(tree.DInt(fetch.Cursor.FetchType)), types.Int),
+			makeConst(tree.NewDInt(tree.DInt(fetch.Cursor.Count)), types.Int),
+			b.ob.factory.ConstructTuple(elems, returnType),
+		},
+		&memo.FunctionPrivate{
+			Name:       fetchFnName,
+			Typ:        returnType,
+			Properties: props,
+			Overload:   &overloads[0],
+		},
+	)
+	fetchColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_fetch"))
+	fetchScope := s.push()
+	b.ob.synthesizeColumn(fetchScope, fetchColName, returnType, nil /* expr */, fetchCall)
+	b.ob.constructProjectForScope(s, fetchScope)
+	return fetchScope
+}
+
+// makeContinuation allocates a new continuation routine with an uninitialized
 // definition.
 func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
 	s := b.ob.allocScope()
@@ -595,65 +1169,61 @@ func (b *plpgsqlBuilder) makeContinuation(name string) continuation {
 			Name:              b.makeIdentifier(name),
 			Typ:               b.returnType,
 			CalledOnNullInput: true,
+			BlockState:        b.blockState,
 		},
 		s: s,
 	}
 }
 
-// finishContinuation adds the final body statement to the definition of a
-// continuation function. This statement returns the result of executing the
-// given PLpgSQL statements. There may be other statements that are executed
-// before this final statement for their side effects (e.g. RAISE statement).
+// makeRecursiveContinuation allocates a new continuation routine that can
+// recursively invoke itself.
+func (b *plpgsqlBuilder) makeRecursiveContinuation(name string) continuation {
+	con := b.makeContinuation(name)
+	con.def.IsRecursive = true
+	return con
+}
+
+// appendBodyStmt adds a body statement to the definition of a continuation
+// function. Only the last body statement will return results; all others will
+// only be executed for their side effects (e.g. RAISE statement).
 //
-// finishContinuation is separate from makeContinuation to allow recursive
-// function definitions, which need to push the continuation before it is
-// finished.
-func (b *plpgsqlBuilder) finishContinuation(
-	stmts []plpgsqltree.PLpgSQLStatement, con *continuation, recursive bool,
-) {
+// appendBodyStmt is separate from makeContinuation to allow recursive routine
+// definitions, which need to push the continuation before it is finished. The
+// separation also allows for appending multiple body statements.
+func (b *plpgsqlBuilder) appendBodyStmt(con *continuation, bodyScope *scope) {
+	// Set the volatility of the continuation routine to the least restrictive
+	// volatility level in the Relational properties of the body statements.
+	vol := bodyScope.expr.Relational().VolatilitySet.ToVolatility()
+	if con.def.Volatility < vol {
+		con.def.Volatility = vol
+	}
+	con.def.Body = append(con.def.Body, bodyScope.expr)
+	con.def.BodyProps = append(con.def.BodyProps, bodyScope.makePhysicalProps())
+}
+
+// appendPlpgSQLStmts builds the given PLpgSQL statements into a relational
+// expression and appends it to the given continuation routine's body statements
+// list.
+func (b *plpgsqlBuilder) appendPlpgSQLStmts(con *continuation, stmts []ast.Statement) {
 	// Make sure to push s before constructing the continuation scope to ensure
 	// that the parameter columns are not projected.
 	continuationScope := b.buildPLpgSQLStatements(stmts, con.s.push())
-	if continuationScope == nil {
-		// One or more branches did not terminate with a RETURN statement.
-		con.reachedEndOfFunction = true
-		return
-	}
-	// Append to the body statements because some PLpgSQL statements will make a
-	// continuation routine with more than one body statement in order to handle
-	// side effects (see the RAISE case in buildPLpgSQLStatements).
-	con.def.Body = append(con.def.Body, continuationScope.expr)
-	con.def.BodyProps = append(con.def.BodyProps, continuationScope.makePhysicalProps())
-	con.def.IsRecursive = recursive
-	// Set the volatility of the continuation routine to the least restrictive
-	// volatility level in the expression's Relational properties.
-	vol := continuationScope.expr.Relational().VolatilitySet
-	if vol.HasVolatile() {
-		con.def.Volatility = volatility.Volatile
-	} else if vol.HasStable() {
-		con.def.Volatility = volatility.Stable
-	} else if vol.IsLeakproof() {
-		con.def.Volatility = volatility.Leakproof
-	} else {
-		con.def.Volatility = volatility.Immutable
-	}
+	b.appendBodyStmt(con, continuationScope)
 }
 
 // callContinuation adds a column that projects the result of calling the
 // given continuation function.
 func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
-	if con == nil || con.reachedEndOfFunction {
-		// Return nil to signify "control reached end of function without RETURN".
-		return nil
+	if con == nil {
+		return b.buildEndOfFunctionRaise(s)
 	}
 	args := make(memo.ScalarListExpr, 0, len(b.decls)+len(b.params))
 	addArg := func(name tree.Name, typ *types.T) {
-		_, source, _, _ := s.FindSourceProvidingColumn(b.ob.ctx, name)
-		if source != nil {
-			args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
-		} else {
-			args = append(args, b.ob.factory.ConstructNull(typ))
+		_, source, _, err := s.FindSourceProvidingColumn(b.ob.ctx, name)
+		if err != nil {
+			panic(err)
 		}
+		args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
 	}
 	for _, dec := range b.decls {
 		addArg(dec.Var, b.varTypes[dec.Var])
@@ -666,6 +1236,7 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 
 	returnColName := scopeColName("").WithMetadataName(con.def.Name)
 	returnScope := s.push()
+	b.ensureScopeHasExpr(returnScope)
 	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, call)
 	b.ob.constructProjectForScope(s, returnScope)
 	return returnScope
@@ -673,15 +1244,28 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 
 // buildPLpgSQLExpr parses and builds the given SQL expression into a ScalarExpr
 // within the given scope.
-func (b *plpgsqlBuilder) buildPLpgSQLExpr(
-	expr plpgsqltree.PLpgSQLExpr, typ *types.T, s *scope,
-) opt.ScalarExpr {
+func (b *plpgsqlBuilder) buildPLpgSQLExpr(expr ast.Expr, typ *types.T, s *scope) opt.ScalarExpr {
 	expr, _ = tree.WalkExpr(s, expr)
 	typedExpr, err := expr.TypeCheck(b.ob.ctx, b.ob.semaCtx, typ)
 	if err != nil {
 		panic(err)
 	}
 	return b.ob.buildScalar(typedExpr, s, nil, nil, b.colRefs)
+}
+
+// resolveVariableForAssign attempts to retrieve the type of the variable with
+// the given name, throwing an error if no such variable exists.
+func (b *plpgsqlBuilder) resolveVariableForAssign(name tree.Name) *types.T {
+	typ, ok := b.varTypes[name]
+	if !ok {
+		panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", name))
+	}
+	if b.constants != nil {
+		if _, ok := b.constants[name]; ok {
+			panic(pgerror.Newf(pgcode.ErrorInAssignment, "variable \"%s\" is declared CONSTANT", name))
+		}
+	}
+	return typ
 }
 
 func (b *plpgsqlBuilder) ensureScopeHasExpr(s *scope) {
@@ -708,16 +1292,6 @@ type continuation struct {
 	// s is a scope initialized with the parameters of the routine. It should be
 	// used to construct the routine body statement.
 	s *scope
-
-	// isLoopContinuation indicates that this continuation was constructed for the
-	// body statements of a loop.
-	isLoopContinuation bool
-
-	// reachedEndOfFunction indicates that the statements used to define this
-	// continuation did not return from at least one path in the control flow.
-	// If this continuation is reachable from the root, we return a
-	// "control reached end of function without RETURN" error.
-	reachedEndOfFunction bool
 }
 
 func (b *plpgsqlBuilder) pushContinuation(con continuation) {
@@ -756,7 +1330,7 @@ func (b *plpgsqlBuilder) getExitContinuation() *continuation {
 
 func (b *plpgsqlBuilder) getLoopContinuation() *continuation {
 	for i := len(b.continuations) - 1; i >= 0; i-- {
-		if b.continuations[i].isLoopContinuation {
+		if b.continuations[i].def.IsRecursive {
 			return &b.continuations[i]
 		}
 	}

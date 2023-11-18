@@ -82,7 +82,6 @@ go_test(
         "table_desc_test.go",
         "validate_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":tabledesc"],
     deps = [
         "//pkg/base",
@@ -119,6 +118,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",

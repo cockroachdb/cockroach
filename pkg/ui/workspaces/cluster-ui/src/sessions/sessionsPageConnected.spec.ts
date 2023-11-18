@@ -50,7 +50,7 @@ describe("SessionsPage Connections", () => {
       await driver.cancelQuery({ node_id: "1" });
       assert.deepStrictEqual(
         fetchMock.mock.calls[0][0],
-        "/_status/cancel_query/1",
+        "_status/cancel_query/1",
       );
     });
   });
@@ -62,7 +62,7 @@ describe("SessionsPage Connections", () => {
       await driver.cancelSession({ node_id: "1" });
       assert.deepStrictEqual(
         fetchMock.mock.calls[0][0],
-        "/_status/cancel_session/1",
+        "_status/cancel_session/1",
       );
     });
   });

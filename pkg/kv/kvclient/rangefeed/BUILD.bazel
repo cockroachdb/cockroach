@@ -61,7 +61,6 @@ go_test(
         "rangefeed_mock_test.go",
         ":mock_rangefeed",  # keep
     ],
-    args = ["-test.timeout=295s"],
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",
@@ -70,6 +69,7 @@ go_test(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/closedts",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
@@ -89,6 +89,7 @@ go_test(
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/retry",
         "//pkg/util/stop",

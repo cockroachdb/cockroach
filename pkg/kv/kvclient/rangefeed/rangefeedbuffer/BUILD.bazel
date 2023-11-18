@@ -24,7 +24,6 @@ go_test(
         "buffer_test.go",
         "kvs_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":rangefeedbuffer"],
     deps = [
         "//pkg/keys",

@@ -28,12 +28,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
 func (p *planner) getVirtualTabler() VirtualTabler {
 	return p.extendedEvalCtx.VirtualSchemas
+}
+
+func (p *planner) checkDDLAtomicity() error {
+	if (!p.ExtendedEvalContext().TxnImplicit || !p.ExtendedEvalContext().TxnIsSingleStmt) &&
+		p.SessionData().StrictDDLAtomicity {
+		return errors.WithHint(unimplemented.NewWithIssue(42061,
+			"cannot run this DDL statement inside a multi-statement transaction as its atomicity cannot be guaranteed"),
+			"You can set the session variable 'strict_ddl_atomicity' to false if you are willing to accept atomicity violations.")
+	}
+	return nil
 }
 
 // createDropDatabaseJob queues a job for dropping a database.
@@ -45,7 +56,11 @@ func (p *planner) createDropDatabaseJob(
 	typesToDrop []*typedesc.Mutable,
 	functionsToDrop []*funcdesc.Mutable,
 	jobDesc string,
-) {
+) error {
+	if err := p.checkDDLAtomicity(); err != nil {
+		return err
+	}
+
 	// TODO (lucy): This should probably be deleting the queued jobs for all the
 	// tables being dropped, so that we don't have duplicate schema changers.
 	tableIDs := make([]descpb.ID, 0, len(tableDropDetails))
@@ -78,6 +93,7 @@ func (p *planner) createDropDatabaseJob(
 	}
 	jobID := p.extendedEvalCtx.QueueJob(jobRecord)
 	log.Infof(ctx, "queued new drop database job %d for database %d", jobID, databaseID)
+	return nil
 }
 
 // CreateNonDropDatabaseChangeJob covers all database descriptor updates other
@@ -86,7 +102,11 @@ func (p *planner) createDropDatabaseJob(
 // don't queue multiple jobs for the same database.
 func (p *planner) createNonDropDatabaseChangeJob(
 	ctx context.Context, databaseID descpb.ID, jobDesc string,
-) {
+) error {
+	if err := p.checkDDLAtomicity(); err != nil {
+		return err
+	}
+
 	jobRecord := &jobs.Record{
 		Description: jobDesc,
 		Username:    p.User(),
@@ -100,6 +120,7 @@ func (p *planner) createNonDropDatabaseChangeJob(
 	}
 	jobID := p.extendedEvalCtx.QueueJob(jobRecord)
 	log.Infof(ctx, "queued new database schema change job %d for database %d", jobID, databaseID)
+	return nil
 }
 
 // createOrUpdateSchemaChangeJob queues a new job for the schema change if there
@@ -108,6 +129,10 @@ func (p *planner) createNonDropDatabaseChangeJob(
 func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context, tableDesc *tabledesc.Mutable, jobDesc string, mutationID descpb.MutationID,
 ) error {
+	if err := p.checkDDLAtomicity(); err != nil {
+		return err
+	}
+
 	// If there is a concurrent schema change using the declarative schema
 	// changer, then we must fail and wait for that schema change to conclude.
 	// The error here will be dealt with in

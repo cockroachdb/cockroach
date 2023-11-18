@@ -20,14 +20,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
 func TestShowTransferState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
 	s, mainDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
@@ -35,7 +37,7 @@ func TestShowTransferState(t *testing.T) {
 	tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
 	})
-	defer tenant.Stopper().Stop(ctx)
+	defer tenant.AppStopper().Stop(ctx)
 
 	_, err := tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
 	require.NoError(t, err)
@@ -50,7 +52,7 @@ func TestShowTransferState(t *testing.T) {
 	_, err = tenantDB.Exec("GRANT SELECT ON tab TO testuser")
 	require.NoError(t, err)
 
-	testUserConn := tenant.SQLConnForUser(t, username.TestUser, "")
+	testUserConn := tenant.SQLConn(t, serverutils.User(username.TestUser))
 
 	t.Run("without_transfer_key", func(t *testing.T) {
 		conn := testUserConn

@@ -67,6 +67,10 @@
   &--primary {
     fill: $colors--primary-text;
   }
+
+    &--warning {
+      fill: $colors--functional-orange-3;
+    }
 }
 
 .index-recommendations-icon {

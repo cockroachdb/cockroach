@@ -28,6 +28,7 @@ type Option interface {
 type config struct {
 	scanConfig
 	retryOptions       retry.Options
+	useMuxRangefeed    bool
 	onInitialScanDone  OnInitialScanDone
 	withInitialScan    bool
 	onInitialScanError OnInitialScanError
@@ -224,6 +225,7 @@ func WithOnFrontierAdvance(f OnFrontierAdvance) Option {
 
 func initConfig(c *config, options []Option) {
 	*c = config{} // the default config is its zero value
+	c.useMuxRangefeed = useMuxRangeFeed
 	for _, o := range options {
 		o.set(c)
 	}
@@ -301,5 +303,11 @@ func WithPProfLabel(key, value string) Option {
 func WithSystemTablePriority() Option {
 	return optionFunc(func(c *config) {
 		c.overSystemTable = true
+	})
+}
+
+func WithMuxRangefeed(enabled bool) Option {
+	return optionFunc(func(c *config) {
+		c.useMuxRangefeed = enabled
 	})
 }

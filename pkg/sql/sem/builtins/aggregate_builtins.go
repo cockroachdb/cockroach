@@ -22,11 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -38,33 +40,30 @@ import (
 )
 
 func init() {
-	// Add all aggregates to the builtins map after a few sanity checks.
 	for k, v := range aggregates {
-		for _, a := range v.overloads {
-			if a.Class != tree.AggregateClass {
-				panic(errors.AssertionFailedf("%s: aggregate functions should be marked with the tree.AggregateClass "+
-					"function class, found %v", k, v))
-			}
-			if a.AggregateFunc == nil {
-				panic(errors.AssertionFailedf("%s: aggregate functions should have eval.AggregateFunc constructors, "+
-					"found %v", k, a))
-			}
-			if a.WindowFunc == nil {
-				panic(errors.AssertionFailedf("%s: aggregate functions should have tree.WindowFunc constructors, "+
-					"found %v", k, a))
-			}
-		}
-
-		registerBuiltin(k, v)
+		const enforceClass = true
+		registerBuiltin(k, v, tree.AggregateClass, enforceClass)
 	}
 }
 
-// allMaxMinAggregateTypes contains extra types that aren't in
-// types.Scalar that the max/min aggregate functions are defined on.
-var allMaxMinAggregateTypes = append(
-	[]*types.T{types.AnyCollatedString, types.AnyEnum},
-	types.Scalar...,
-)
+// allMaxMinAggregateTypes contains extra types that aren't in types.Scalar that
+// the max/min aggregate functions are defined on. It also excludes REFCURSOR,
+// which isn't supported for max/min.
+var allMaxMinAggregateTypes = getAllMaxMinAggregateTypes()
+
+func getAllMaxMinAggregateTypes() []*types.T {
+	allTypes := make([]*types.T, 0, len(types.Scalar)+1)
+	allTypes = append(allTypes, types.AnyCollatedString)
+	allTypes = append(allTypes, types.AnyEnum)
+	for _, typ := range types.Scalar {
+		if typ.Family() == types.RefCursorFamily {
+			// REFCURSOR does not support max/min aggregates.
+			continue
+		}
+		allTypes = append(allTypes, typ)
+	}
+	return allTypes
+}
 
 // aggregates are a special class of builtin functions that are wrapped
 // at execution in a bucketing layer to combine (aggregate) the result
@@ -258,6 +257,30 @@ var aggregates = map[string]builtinDefinition{
 			"Calculates the sum of squared differences from the mean of the selected values in final stage.",
 		),
 	)),
+
+	"merge_stats_metadata": makeBuiltin(tree.FunctionProperties{
+		Undocumented: true,
+	},
+		makeAggOverload([]*types.T{types.Jsonb}, types.Jsonb, newAggStatementMetadata,
+			"Merges the meta data of the statistics.", volatility.Stable, true, /* calledOnNullInput */
+		),
+	),
+
+	"merge_statement_stats": makeBuiltin(tree.FunctionProperties{
+		Undocumented: true,
+	},
+		makeAggOverload([]*types.T{types.Jsonb}, types.Jsonb, newAggStatementStatistics,
+			"Merges the statistics data of the statement_statistics table.", volatility.Stable, true, /* calledOnNullInput */
+		),
+	),
+
+	"merge_transaction_stats": makeBuiltin(tree.FunctionProperties{
+		Undocumented: true,
+	},
+		makeAggOverload([]*types.T{types.Jsonb}, types.Jsonb, newAggTransactionStatistics,
+			"Merges the statistics data of the transaction_statistics table.", volatility.Stable, true, /* calledOnNullInput */
+		),
+	),
 
 	"transition_regression_aggregate": makePrivate(makeTransitionRegressionAggregateBuiltin()),
 
@@ -712,8 +735,6 @@ func makeAggOverloadWithReturnType(
 	}
 
 	return tree.Overload{
-		// See the comment about aggregate functions in the definitions
-		// of the Builtins array above.
 		Types:         paramTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
@@ -875,12 +896,22 @@ func (agg *stMakeLineAgg) Add(
 	}
 	switch g.(type) {
 	case *geom.Point, *geom.LineString, *geom.MultiPoint:
-		if err := agg.acc.Grow(ctx, int64(len(g.FlatCoords())*8)); err != nil {
-			return err
-		}
-		agg.flatCoords = append(agg.flatCoords, g.FlatCoords()...)
+		return agg.appendFlatCoords(ctx, g)
+	default:
+		return nil
 	}
-	return nil
+}
+
+const floatSize = int64(unsafe.Sizeof(float64(0)))
+
+func (agg *stMakeLineAgg) appendFlatCoords(ctx context.Context, g geom.T) error {
+	capBefore := int64(cap(agg.flatCoords))
+	agg.flatCoords = append(agg.flatCoords, g.FlatCoords()...)
+	capAfter := int64(cap(agg.flatCoords))
+	if capAfter == capBefore {
+		return nil
+	}
+	return agg.acc.Grow(ctx, (capAfter-capBefore)*floatSize)
 }
 
 // Result implements the AggregateFunc interface.
@@ -888,21 +919,37 @@ func (agg *stMakeLineAgg) Result() (tree.Datum, error) {
 	if len(agg.flatCoords) == 0 {
 		return tree.DNull, nil
 	}
+	// TODO(yuzefovich): plumb proper context as the function argument.
+	ctx := context.Background()
+	// Making the geometry from the accumulated flat coordinates requires
+	// marshalling the new line string object, which roughly uses the same
+	// amount of memory as the geom.T object itself, so we double the memory
+	// usage.
+	usedMem := agg.acc.Used()
+	if err := agg.acc.Grow(ctx, usedMem); err != nil {
+		return nil, err
+	}
 	g, err := geo.MakeGeometryFromGeomT(geom.NewLineStringFlat(agg.layout, agg.flatCoords))
 	if err != nil {
 		return nil, err
 	}
+	// It is the caller's responsibility to account for the returned DGeometry,
+	// so we can now shrink the memory account back.
+	agg.acc.Shrink(ctx, usedMem)
 	return tree.NewDGeometry(g), nil
 }
 
 // Reset implements the AggregateFunc interface.
-func (agg *stMakeLineAgg) Reset(ctx context.Context) {
+func (agg *stMakeLineAgg) Reset(context.Context) {
+	// Note that since we're keeping the reference to the flat coordinates, we
+	// need to keep the memory accounting unchanged (flatCoords is the only
+	// memory usage tracked against the account).
 	agg.flatCoords = agg.flatCoords[:0]
-	agg.acc.Empty(ctx)
 }
 
 // Close implements the AggregateFunc interface.
 func (agg *stMakeLineAgg) Close(ctx context.Context) {
+	agg.flatCoords = nil
 	agg.acc.Close(ctx)
 }
 
@@ -1001,13 +1048,23 @@ func (agg *stCollectAgg) Add(
 	if firstArg == tree.DNull {
 		return nil
 	}
-	if err := agg.acc.Grow(ctx, int64(firstArg.Size())); err != nil {
+	// We will keep the reference to the argument as geom.T object, so estimate
+	// its memory usage upfront.
+	estimate := int64(firstArg.Size())
+	if err := agg.acc.Grow(ctx, estimate); err != nil {
 		return err
 	}
 	geomArg := tree.MustBeDGeometry(firstArg)
 	t, err := geomArg.AsGeomT()
 	if err != nil {
 		return err
+	}
+	// Now that we have the actual geom.T object we're going to store, get its
+	// actual memory usage and reconcile the memory account.
+	if actual := geo.GeomTSize(t); actual != estimate {
+		if err = agg.acc.Resize(ctx, estimate, actual); err != nil {
+			return err
+		}
 	}
 	if agg.coll != nil && agg.coll.SRID() != t.SRID() {
 		c, err := geo.MakeGeometryFromGeomT(agg.coll)
@@ -1019,7 +1076,7 @@ func (agg *stCollectAgg) Add(
 
 	// Fast path for geometry collections
 	if gc, ok := agg.coll.(*geom.GeometryCollection); ok {
-		return gc.Push(t)
+		return agg.geometryCollectionPush(ctx, gc, t)
 	}
 
 	// Try to append to a multitype, if possible.
@@ -1055,7 +1112,7 @@ func (agg *stCollectAgg) Add(
 		if err := agg.acc.Grow(ctx, usedMem); err != nil {
 			return err
 		}
-		gc, err = agg.multiToCollection(agg.coll)
+		gc, err = agg.multiToCollection(ctx, agg.coll)
 		if err != nil {
 			return err
 		}
@@ -1065,27 +1122,49 @@ func (agg *stCollectAgg) Add(
 		gc = geom.NewGeometryCollection().SetSRID(t.SRID())
 	}
 	agg.coll = gc
-	return gc.Push(t)
+	return agg.geometryCollectionPush(ctx, gc, t)
 }
 
-func (agg *stCollectAgg) multiToCollection(multi geom.T) (*geom.GeometryCollection, error) {
+const geomTSize = int64(unsafe.Sizeof(geom.T(nil)))
+
+// geometryCollectionPush is a helper method that calls gc.Push(t) as well as
+// performs some additional memory accounting.
+func (agg *stCollectAgg) geometryCollectionPush(
+	ctx context.Context, gc *geom.GeometryCollection, t geom.T,
+) error {
+	// geom.GeometryCollection.geoms can have non-trivial overhead, so we
+	// account for that.
+	capBefore := int64(cap(gc.Geoms()))
+	if err := gc.Push(t); err != nil {
+		return err
+	}
+	capAfter := int64(cap(gc.Geoms()))
+	if capAfter == capBefore {
+		return nil
+	}
+	return agg.acc.Grow(ctx, (capAfter-capBefore)*geomTSize)
+}
+
+func (agg *stCollectAgg) multiToCollection(
+	ctx context.Context, multi geom.T,
+) (*geom.GeometryCollection, error) {
 	gc := geom.NewGeometryCollection().SetSRID(multi.SRID())
 	switch t := multi.(type) {
 	case *geom.MultiPoint:
 		for i := 0; i < t.NumPoints(); i++ {
-			if err := gc.Push(t.Point(i)); err != nil {
+			if err := agg.geometryCollectionPush(ctx, gc, t.Point(i)); err != nil {
 				return nil, err
 			}
 		}
 	case *geom.MultiLineString:
 		for i := 0; i < t.NumLineStrings(); i++ {
-			if err := gc.Push(t.LineString(i)); err != nil {
+			if err := agg.geometryCollectionPush(ctx, gc, t.LineString(i)); err != nil {
 				return nil, err
 			}
 		}
 	case *geom.MultiPolygon:
 		for i := 0; i < t.NumPolygons(); i++ {
-			if err := gc.Push(t.Polygon(i)); err != nil {
+			if err := agg.geometryCollectionPush(ctx, gc, t.Polygon(i)); err != nil {
 				return nil, err
 			}
 		}
@@ -1100,10 +1179,25 @@ func (agg *stCollectAgg) Result() (tree.Datum, error) {
 	if agg.coll == nil {
 		return tree.DNull, nil
 	}
+	// TODO(yuzefovich): plumb proper context as the function argument.
+	ctx := context.Background()
+	// Making the geometry from the accumulated geom.T object requires
+	// marshalling that object which roughly uses the same amount of memory as
+	// the geom.T object itself (at least in case of the GeometryCollection), so
+	// we double the memory usage.
+	usedMem := agg.acc.Used()
+	if err := agg.acc.Grow(ctx, usedMem); err != nil {
+		return nil, err
+	}
 	g, err := geo.MakeGeometryFromGeomT(agg.coll)
 	if err != nil {
 		return nil, err
 	}
+	// We no longer need to hold on the accumulated geom.T object, so we can nil
+	// it out. Additionally, it is the caller's responsibility to account for
+	// the returned DGeometry, so we can also clear the memory account. Both of
+	// these things are done in Reset.
+	agg.Reset(ctx)
 	return tree.NewDGeometry(g), nil
 }
 
@@ -1284,6 +1378,9 @@ const sizeOfSTMakeLineAggregate = int64(unsafe.Sizeof(stMakeLineAgg{}))
 const sizeOfSTUnionAggregate = int64(unsafe.Sizeof(stUnionAgg{}))
 const sizeOfSTCollectAggregate = int64(unsafe.Sizeof(stCollectAgg{}))
 const sizeOfSTExtentAggregate = int64(unsafe.Sizeof(stExtentAgg{}))
+const sizeOfStatementStatistics = int64(unsafe.Sizeof(aggStatementStatistics{}))
+const sizeOfAggregatedStatementMetadata = int64(unsafe.Sizeof(aggStatementMetadata{}))
+const sizeOfTransactionStatistics = int64(unsafe.Sizeof(aggTransactionStatistics{}))
 
 // aggregateWithIntermediateResult is a common interface for aggregate functions
 // which can return a result without loss of precision. This is useful when an
@@ -1522,6 +1619,246 @@ func (a *arrayAggregate) Close(ctx context.Context) {
 // Size is part of the eval.AggregateFunc interface.
 func (a *arrayAggregate) Size() int64 {
 	return sizeOfArrayAggregate
+}
+
+type aggStatementStatistics struct {
+	singleDatumAggregateBase
+
+	stats appstatspb.StatementStatistics
+}
+
+func newAggStatementStatistics(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &aggStatementStatistics{
+		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+	}
+}
+
+// Add the statistics information into a single object.
+func (a *aggStatementStatistics) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	if datum == nil || datum == tree.DNull {
+		return nil
+	}
+
+	// Rather than try to figure out how the size of a.stats object changes with
+	// each addition, we'll approximate its final memory usage as equal to the
+	// size of the last datum.
+	datumSize := int64(datum.Size())
+	if err := a.updateMemoryUsage(ctx, datumSize); err != nil {
+		return err
+	}
+
+	return mergeStatementStatsHelper(&a.stats, datum)
+}
+
+// Result returns a copy of aggregated JSON object.
+func (a *aggStatementStatistics) Result() (tree.Datum, error) {
+	aggregatedJSON, err := sqlstatsutil.BuildStmtStatisticsJSON(&a.stats)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDJSON(aggregatedJSON), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *aggStatementStatistics) Reset(ctx context.Context) {
+	a.reset(ctx)
+	a.stats.Reset()
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *aggStatementStatistics) Close(ctx context.Context) {
+	a.close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *aggStatementStatistics) Size() int64 {
+	return sizeOfStatementStatistics
+}
+
+type aggStatementMetadata struct {
+	singleDatumAggregateBase
+
+	stats appstatspb.AggregatedStatementMetadata
+}
+
+func newAggStatementMetadata(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &aggStatementMetadata{
+		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		stats:                    appstatspb.AggregatedStatementMetadata{},
+	}
+}
+
+// Add the statistics and metadata to a single object.
+func (a *aggStatementMetadata) Add(ctx context.Context, datum tree.Datum, _ ...tree.Datum) error {
+	if datum == nil || datum == tree.DNull {
+		return nil
+	}
+
+	// Rather than try to figure out how the size of a.stats object changes with
+	// each addition, we'll approximate its final memory usage as equal to the
+	// size of the last datum.
+	datumSize := int64(datum.Size())
+	if err := a.updateMemoryUsage(ctx, datumSize); err != nil {
+		return err
+	}
+
+	return mergeStatsMetadataHelper(&a.stats, datum)
+}
+
+// Result returns a copy of the aggregated json object.
+func (a *aggStatementMetadata) Result() (tree.Datum, error) {
+	aggregatedJSON, err := sqlstatsutil.BuildStmtDetailsMetadataJSON(&a.stats)
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDJSON(aggregatedJSON), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *aggStatementMetadata) Reset(ctx context.Context) {
+	a.stats.Reset()
+	a.reset(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *aggStatementMetadata) Close(ctx context.Context) {
+	a.close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *aggStatementMetadata) Size() int64 {
+	return sizeOfAggregatedStatementMetadata
+}
+
+type aggTransactionStatistics struct {
+	stats appstatspb.TransactionStatistics
+}
+
+func newAggTransactionStatistics(
+	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
+) eval.AggregateFunc {
+	return &aggTransactionStatistics{}
+}
+
+// Add the statistics to a single aggregated object.
+func (a *aggTransactionStatistics) Add(
+	ctx context.Context, datum tree.Datum, _ ...tree.Datum,
+) error {
+	if datum == nil || datum == tree.DNull {
+		return nil
+	}
+
+	return mergeTransactionStatsHelper(&a.stats, datum)
+}
+
+// Result returns a copy of aggregated JSON object.
+func (a *aggTransactionStatistics) Result() (tree.Datum, error) {
+	aggregatedJSON, err := sqlstatsutil.BuildTxnStatisticsJSON(
+		&appstatspb.CollectedTransactionStatistics{
+			Stats: a.stats,
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewDJSON(aggregatedJSON), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (a *aggTransactionStatistics) Reset(ctx context.Context) {
+	a.stats.Reset()
+}
+
+// Close allows the aggregate to release the memory it requested during
+// operation.
+func (a *aggTransactionStatistics) Close(ctx context.Context) {
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (a *aggTransactionStatistics) Size() int64 {
+	return sizeOfTransactionStatistics
+}
+
+func mergeStatsMetadataHelper(
+	metadata *appstatspb.AggregatedStatementMetadata, metadataDatum tree.Datum,
+) error {
+	if metadataDatum == tree.DNull {
+		return nil
+	}
+
+	metadataJSON, ok := tree.AsDJSON(metadataDatum)
+	if !ok {
+		return nil
+	}
+
+	var statistics appstatspb.CollectedStatementStatistics
+
+	// Only decode and set the query info if it was not previously set. Avoid the
+	// overhead of parsing the query string which can be large.
+	if metadata.Query == "" || metadata.QuerySummary == "" {
+		err := sqlstatsutil.DecodeStmtStatsMetadataJSON(metadataJSON.JSON, &statistics)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := sqlstatsutil.DecodeStmtStatsMetadataFlagsOnlyJSON(metadataJSON.JSON, &statistics)
+		if err != nil {
+			return err
+		}
+	}
+
+	metadata.Add(&statistics)
+	return nil
+}
+
+func mergeStatementStatsHelper(
+	aggregatedStats *appstatspb.StatementStatistics, statsDatum tree.Datum,
+) error {
+	if statsDatum == tree.DNull {
+		return nil
+	}
+
+	statsJSON, ok := tree.AsDJSON(statsDatum)
+	if !ok {
+		return nil
+	}
+
+	var stats appstatspb.StatementStatistics
+	if err := sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON.JSON, &stats); err != nil {
+		return err
+	}
+
+	aggregatedStats.Add(&stats)
+	return nil
+}
+
+func mergeTransactionStatsHelper(
+	aggregatedStats *appstatspb.TransactionStatistics, statsDatum tree.Datum,
+) error {
+	if statsDatum == tree.DNull {
+		return nil
+	}
+
+	statsJSON, ok := tree.AsDJSON(statsDatum)
+	if !ok {
+		return nil
+	}
+
+	var stats appstatspb.TransactionStatistics
+	if err := sqlstatsutil.DecodeTxnStatsStatisticsJSON(statsJSON.JSON, &stats); err != nil {
+		return err
+	}
+
+	aggregatedStats.Add(&stats)
+	return nil
 }
 
 type arrayCatAggregate struct {
@@ -3854,7 +4191,7 @@ func (a *floatSumSqrDiffsAggregate) Add(
 	// considering that we are losing 11 bits on a 52+-bit operation and
 	// that users dealing with floating points should be aware
 	// of floating-point imprecision.
-	a.sqrDiff += sqrDiff + delta*delta*float64(count)*float64(a.count)/float64(totalCount)
+	a.sqrDiff += sqrDiff + float64(count)*float64(a.count)*(delta/float64(totalCount))*delta
 	a.count = totalCount
 	a.mean += delta * float64(count) / float64(a.count)
 	return nil

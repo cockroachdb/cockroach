@@ -30,7 +30,7 @@ import (
 // configuration profile can be applied successfully on a new cluster.
 func TestProfilesValidSQL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer ccl.TestingEnableEnterprise()()
+	defer ccl.TestingEnableEnterprise()() // allow usage of cluster replication
 
 	for profileName, tasks := range configprofiles.TestingGetProfiles() {
 		t.Run(profileName, func(t *testing.T) {

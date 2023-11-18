@@ -54,16 +54,13 @@ const (
 // which the processing of a queue may time out. It is an escape hatch to raise
 // the timeout for queues.
 var queueGuaranteedProcessingTimeBudget = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.queue.process.guaranteed_time_budget",
 	"the guaranteed duration before which the processing of a queue may "+
 		"time out",
 	defaultProcessTimeout,
+	settings.WithVisibility(settings.Reserved),
 )
-
-func init() {
-	queueGuaranteedProcessingTimeBudget.SetVisibility(settings.Reserved)
-}
 
 func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Duration {
 	return queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
@@ -336,6 +333,10 @@ type queueConfig struct {
 	successes *metric.Counter
 	// failures is a counter of replicas which failed processing.
 	failures *metric.Counter
+	// storeFailures is a counter of replicas that failed processing due to a
+	// StoreBenignError. These errors must be counted independently of the above
+	// failures metric.
+	storeFailures *metric.Counter
 	// pending is a gauge measuring current replica count pending.
 	pending *metric.Gauge
 	// processingNanos is a counter measuring total nanoseconds spent processing
@@ -658,11 +659,22 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.
 	}
 
 	bq.mu.Lock()
-	stopped := bq.mu.stopped || bq.mu.disabled
+	stopped := bq.mu.stopped
+	disabled := bq.mu.disabled
 	bq.mu.Unlock()
 
 	if stopped {
 		return
+	}
+
+	if disabled {
+		// The disabled queue bypass is used in tests which enable manual
+		// replication, however still require specific range(s) to be processed
+		// through the queue.
+		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
+		if bypassDisabled == nil || !bypassDisabled(repl.GetRangeID()) {
+			return
+		}
 	}
 
 	if !repl.IsInitialized() {
@@ -732,10 +744,16 @@ func (bq *baseQueue) addInternal(
 	}
 
 	if bq.mu.disabled {
-		if log.V(3) {
-			log.Infof(ctx, "queue disabled")
+		// The disabled queue bypass is used in tests which enable manual
+		// replication, however still require specific range(s) to be processed
+		// through the queue.
+		bypassDisabled := bq.store.TestingKnobs().BaseQueueDisabledBypassFilter
+		if bypassDisabled == nil || !bypassDisabled(desc.RangeID) {
+			if log.V(3) {
+				log.Infof(ctx, "queue disabled")
+			}
+			return false, errQueueDisabled
 		}
-		return false, errQueueDisabled
 	}
 
 	// If the replica is currently in purgatory, don't re-add it.
@@ -1114,12 +1132,17 @@ func (bq *baseQueue) finishProcessingReplica(
 	// Handle failures.
 	if err != nil {
 		benign := benignerror.IsBenign(err)
+		storeBenign := benignerror.IsStoreBenign(err)
 
 		// Increment failures metric.
 		//
 		// TODO(tschottdorf): once we start asserting zero failures in tests
 		// (and production), move benign failures into a dedicated category.
 		bq.failures.Inc(1)
+		if storeBenign {
+			bq.storeFailures.Inc(1)
+			requeue = true
+		}
 
 		// Determine whether a failure is a purgatory error. If it is, add
 		// the failing replica to purgatory. Note that even if the item was

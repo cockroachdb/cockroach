@@ -2380,12 +2380,17 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) []string {
 			escapedTTLExpirationExpression := lexbase.EscapeSQLString(string(ttl.ExpirationExpr))
 			appendStorageParam(`ttl_expiration_expression`, escapedTTLExpirationExpression)
 		}
-		appendStorageParam(`ttl_job_cron`, fmt.Sprintf(`'%s'`, ttl.DeletionCronOrDefault()))
+		if ttl.DeletionCron != "" {
+			appendStorageParam(`ttl_job_cron`, fmt.Sprintf(`'%s'`, ttl.DeletionCronOrDefault()))
+		}
 		if bs := ttl.SelectBatchSize; bs != 0 {
 			appendStorageParam(`ttl_select_batch_size`, fmt.Sprintf(`%d`, bs))
 		}
 		if bs := ttl.DeleteBatchSize; bs != 0 {
 			appendStorageParam(`ttl_delete_batch_size`, fmt.Sprintf(`%d`, bs))
+		}
+		if rl := ttl.SelectRateLimit; rl != 0 {
+			appendStorageParam(`ttl_select_rate_limit`, fmt.Sprintf(`%d`, rl))
 		}
 		if rl := ttl.DeleteRateLimit; rl != 0 {
 			appendStorageParam(`ttl_delete_rate_limit`, fmt.Sprintf(`%d`, rl))

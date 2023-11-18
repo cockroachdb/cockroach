@@ -10,7 +10,7 @@ statement ok
 INSERT INTO ab VALUES (1, 1), (1, 3), (2, 2)
 
 statement ok
-SET CLUSTER SETTING kv.range_merge.queue_enabled = false
+SET CLUSTER SETTING kv.range_merge.queue.enabled = false
 
 statement ok
 ALTER TABLE ab SPLIT AT VALUES (2)
@@ -23,7 +23,7 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM TABLE a
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/2         {1}       1
+<before:/Table/65>  …/1/2         {1}       1
 …/1/2               <after:/Max>  {2}       2
 
 query T

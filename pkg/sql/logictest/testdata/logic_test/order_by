@@ -166,7 +166,7 @@ query I
 query error pgcode 42601 multiple ORDER BY clauses not allowed
 ((SELECT a FROM t ORDER BY a)) ORDER BY a
 
-query error expected c to be of type int, found type bool
+query error expected b to be of type bool, found type int
 SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
 
 query error pgcode 42P10 ORDER BY position 0 is not in select list

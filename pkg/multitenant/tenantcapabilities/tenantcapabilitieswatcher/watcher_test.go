@@ -27,10 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
@@ -74,12 +75,15 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		ctx := context.Background()
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-		defer tc.Stopper().Stop(ctx)
+		defer log.Scope(t).Close(t)
 
-		ts := tc.Server(0)
-		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		ctx := context.Background()
+		ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		})
+		defer ts.Stopper().Stop(ctx)
+
+		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 

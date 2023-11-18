@@ -10,4 +10,4 @@ BEGIN
   RETURN s;
 END
 ----
-expected parse error: at or near "x": syntax error: unimplemented: this syntax
+at or near "x": syntax error: unimplemented: this syntax

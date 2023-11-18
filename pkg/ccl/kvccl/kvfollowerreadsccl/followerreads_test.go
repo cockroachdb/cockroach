@@ -19,18 +19,20 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	// Blank import kvtenantccl so that we can create a tenant.
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
@@ -40,11 +42,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -98,7 +100,7 @@ func TestCanSendToFollower(t *testing.T) {
 	future := clock.Now().Add(2*clock.MaxOffset().Nanoseconds(), 0)
 
 	txn := func(ts hlc.Timestamp) *roachpb.Transaction {
-		txn := roachpb.MakeTransaction("txn", nil, 0, 0, ts, 0, 1)
+		txn := roachpb.MakeTransaction("txn", nil, 0, 0, ts, 0, 1, 0)
 		return &txn
 	}
 	withWriteTimestamp := func(txn *roachpb.Transaction, ts hlc.Timestamp) *roachpb.Transaction {
@@ -208,7 +210,7 @@ func TestCanSendToFollower(t *testing.T) {
 		},
 		{
 			name: "stale locking read",
-			ba:   batch(txn(stale), &kvpb.GetRequest{KeyLocking: lock.Exclusive}),
+			ba:   batch(txn(stale), &kvpb.GetRequest{KeyLockingStrength: lock.Exclusive}),
 			exp:  false,
 		},
 		{
@@ -345,7 +347,7 @@ func TestCanSendToFollower(t *testing.T) {
 		},
 		{
 			name:     "stale locking read, global reads policy",
-			ba:       batch(txn(stale), &kvpb.GetRequest{KeyLocking: lock.Exclusive}),
+			ba:       batch(txn(stale), &kvpb.GetRequest{KeyLockingStrength: lock.Exclusive}),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
 			exp:      false,
 		},
@@ -497,7 +499,7 @@ func (s mockNodeStore) GetNodeDescriptor(id roachpb.NodeID) (*roachpb.NodeDescri
 			return desc, nil
 		}
 	}
-	return nil, errorutil.NewNodeNotFoundError(id)
+	return nil, kvpb.NewNodeDescNotFoundError(id)
 }
 
 func (s mockNodeStore) GetNodeDescriptorCount() int {
@@ -505,7 +507,7 @@ func (s mockNodeStore) GetNodeDescriptorCount() int {
 }
 
 func (s mockNodeStore) GetStoreDescriptor(id roachpb.StoreID) (*roachpb.StoreDescriptor, error) {
-	return nil, errorutil.NewStoreNotFoundError(id)
+	return nil, kvpb.NewStoreDescNotFoundError(id)
 }
 
 // TestOracle tests the Oracle exposed by this package.
@@ -677,6 +679,7 @@ func TestOracle(t *testing.T) {
 				Settings:   st,
 				RPCContext: rpcContext,
 				Clock:      clock,
+				HealthFunc: func(roachpb.NodeID) bool { return true },
 			})
 
 			res, _, err := o.ChoosePreferredReplica(ctx, c.txn, desc, c.lh, c.ctPolicy, replicaoracle.QueryState{})
@@ -873,198 +876,397 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 }
 
 // TestSecondaryTenantFollowerReadsRouting ensures that secondary tenants route
-// their requests to the nearest replica. The test runs two versions -- one
-// where accurate latency information between nodes is available and another
-// where it needs to be estimated using node localities.
+// their requests to the nearest replica. The test exercises three
+// configurations:
+//   - shared-process multi-tenancy
+//   - separate-process multi-tenancy, with accurate latency information between
+//     nodes available
+//   - separate-process multi-tenancy, with accurate latency information between
+//     nodes unavailable which requires the fallback to estimates using node
+//     localities.
+//
+// For the shared-process multi-tenancy we set up a single region cluster so
+// that locality information didn't come into play when choosing the replica. We
+// use n2 as the gateway for the query and expect that its replica will serve
+// the follower read.
+//
+// For the separate-process multi-tenancy we set up a three region cluster where
+// n2 and n4 are in the same region, and we use n4 as the gateway and expect
+// that n2 serves the follower read.
 func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
 
 	skip.UnderStressRace(t, "times out")
 
-	testutils.RunTrueAndFalse(t, "valid-latency-func", func(t *testing.T, validLatencyFunc bool) {
-		const numNodes = 4
-
-		serverArgs := make(map[int]base.TestServerArgs)
-		localities := make(map[int]roachpb.Locality)
-		for i := 0; i < numNodes; i++ {
-			regionName := fmt.Sprintf("region_%d", i)
-			if i == 3 {
-				// Make it such that n4 and n2 are in the same region. Below, we'll
-				// expect a follower read from n4 to be served by n2 because they're
-				// in the same locality (when validLatencyFunc is false).
-				regionName = fmt.Sprintf("region_%d", 1)
-			}
-			locality := roachpb.Locality{
-				Tiers: []roachpb.Tier{{Key: "region", Value: regionName}},
-			}
-			localities[i] = locality
-			serverArgs[i] = base.TestServerArgs{
-				Locality: localities[i],
-			}
+	for _, testCase := range []struct {
+		name             string
+		sharedProcess    bool
+		validLatencyFunc bool
+	}{
+		{name: "shared-process", sharedProcess: true},
+		{name: "latency-based", sharedProcess: false, validLatencyFunc: true},
+		{name: "locality-based", sharedProcess: false, validLatencyFunc: false},
+	} {
+		if syncutil.DeadlockEnabled && testCase.sharedProcess {
+			// TODO(yuzefovich): unskipping shared-process config under deadlock
+			// is tracked by #113555.
+			continue
 		}
-		tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: serverArgs,
-			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TODOTestTenantDisabled, // we'll create one ourselves below.
-			},
-		})
-		ctx := context.Background()
-		defer tc.Stopper().Stop(ctx)
+		t.Run(testCase.name, func(t *testing.T) {
+			const numNodes = 4
+			gatewayNode := 3
+			if testCase.sharedProcess {
+				gatewayNode = 1
+			}
 
-		historicalQuery := `SELECT * FROM t.test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
-		recCh := make(chan tracingpb.Recording, 1)
-
-		var tenants [numNodes]serverutils.ApplicationLayerInterface
-		for i := 0; i < numNodes; i++ {
-			knobs := base.TestingKnobs{}
-			if i == 3 { // n4
-				knobs = base.TestingKnobs{
-					KVClient: &kvcoord.ClientTestingKnobs{
-						DontConsiderConnHealth: true,
-						// For the validLatencyFunc=true version of the test, the client
-						// pretends to have a low latency connection to n2. As a result, we
-						// expect n2 to be used for follower reads originating from n4.
-						//
-						// For the variant where no latency information is available, we
-						// expect n2 to serve follower reads as well, but because it
-						// is in the same locality as the client.
-						LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
-							if !validLatencyFunc {
-								return 0, false
-							}
-							if id == 2 {
-								return time.Millisecond, true
-							}
-							return 100 * time.Millisecond, true
-						},
-					},
-					SQLExecutor: &sql.ExecutorTestingKnobs{
-						WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
-							if stmt == historicalQuery {
-								recCh <- trace
-							}
-						},
-					},
+			serverArgs := make(map[int]base.TestServerArgs)
+			localities := make(map[int]roachpb.Locality)
+			for i := 0; i < numNodes; i++ {
+				regionName := fmt.Sprintf("region_%d", i)
+				if i == gatewayNode {
+					// Make it such that n4 and n2 are in the same region.
+					// Below, we'll expect a follower read from n4 to be served
+					// by n2 because they're in the same locality (when
+					// validLatencyFunc is false).
+					regionName = fmt.Sprintf("region_%d", 1)
+				}
+				if testCase.sharedProcess {
+					// In shared-process config we want all nodes to be in the
+					// same region so that other considerations (like latency
+					// function and locality matching don't come into play).
+					regionName = "test_region"
+				}
+				locality := roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: regionName}},
+				}
+				localities[i] = locality
+				serverArgs[i] = base.TestServerArgs{
+					Locality: localities[i],
 				}
 			}
-			tt, err := tc.Server(i).StartTenant(ctx, base.TestTenantArgs{
-				TenantID:     serverutils.TestTenantID(),
-				Locality:     localities[i],
-				TestingKnobs: knobs,
+			tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+				ReplicationMode:   base.ReplicationManual,
+				ServerArgsPerNode: serverArgs,
+				ServerArgs: base.TestServerArgs{
+					DefaultTestTenant: base.TestControlsTenantsExplicitly,
+				},
 			})
-			require.NoError(t, err)
-			tenants[i] = tt
-		}
+			ctx := context.Background()
+			defer tc.Stopper().Stop(ctx)
 
-		// Speed up closing of timestamps in order to sleep less below before we can
-		// use follower_read_timestamp(). Note that we need to override the setting
-		// for the tenant as well, because the builtin is run in the tenant's sql pod.
-		systemSQL := sqlutils.MakeSQLRunner(tc.Conns[0])
-		systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
-		systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
-		systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.1s'`)
-		systemSQL.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
-		systemSQL.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
-		systemSQL.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.1s'`)
-		// We're making assertions on traces collected by the tenant using log lines
-		// in KV so we must ensure they're not redacted.
-		systemSQL.Exec(t, `SET CLUSTER SETTING server.secondary_tenants.redact_trace.enabled = 'false'`)
+			// Speed up closing of timestamps in order to sleep less below
+			// before we can use follower_read_timestamp(). Note that we need to
+			// override the setting for the tenant as well, because the builtin
+			// is run in the tenant's sql pod.
+			systemSQL := sqlutils.MakeSQLRunner(tc.Conns[0])
+			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
+			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
+			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.1s'`)
+			// We're making assertions on traces collected by the tenant using
+			// log lines in KV so we must ensure they're not redacted.
+			systemSQL.Exec(t, `SET CLUSTER SETTING trace.redact_at_virtual_cluster_boundary.enabled = 'false'`)
 
-		dbs := make([]*gosql.DB, numNodes)
-		for i := 0; i < numNodes; i++ {
-			dbs[i] = tenants[i].SQLConn(t, "")
-		}
+			historicalQuery := `SELECT * FROM t.test AS OF SYSTEM TIME follower_read_timestamp() WHERE k=2`
+			recCh := make(chan tracingpb.Recording, 1)
 
-		// Wait until all tenant servers are aware of the setting override.
-		testutils.SucceedsSoon(t, func() error {
-			settingNames := []string{
-				"kv.closed_timestamp.target_duration", "kv.closed_timestamp.side_transport_interval", "kv.closed_timestamp.propagation_slack",
+			var tenants [numNodes]serverutils.ApplicationLayerInterface
+			dbs := make([]*gosql.DB, numNodes)
+			// In shared-process multi-tenancy we must initialize the tenant
+			// server on the gateway first in order to guarantee that the knobs
+			// are used (otherwise we have a race between the tenant server
+			// being started by the server controller and us explicitly starting
+			// the shared-process tenant server).
+			initOrder := []int{gatewayNode}
+			for i := 0; i < numNodes; i++ {
+				if i != gatewayNode {
+					initOrder = append(initOrder, i)
+				}
 			}
-			for _, settingName := range settingNames {
-				for i := 0; i < numNodes; i++ {
-					db := dbs[i]
+			for _, i := range initOrder {
+				knobs := base.TestingKnobs{}
+				if i == gatewayNode {
+					knobs = base.TestingKnobs{
+						KVClient: &kvcoord.ClientTestingKnobs{
+							DontConsiderConnHealth: true,
+							// For the validLatencyFunc=true version of the
+							// test, the client pretends to have a low latency
+							// connection to n2. As a result, we expect n2 to be
+							// used for follower reads originating from n4.
+							//
+							// For the variant where no latency information is
+							// available, we expect n2 to serve follower reads
+							// as well, but because it is in the same locality
+							// as the client.
+							//
+							// Note that this latency func doesn't matter in the
+							// shared-process config.
+							LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+								if !testCase.validLatencyFunc {
+									return 0, false
+								}
+								if id == 2 {
+									return time.Millisecond, true
+								}
+								return 100 * time.Millisecond, true
+							},
+						},
+						SQLExecutor: &sql.ExecutorTestingKnobs{
+							WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
+								if stmt == historicalQuery {
+									recCh <- trace
+								}
+							},
+						},
+					}
+				}
+				var err error
+				if testCase.sharedProcess {
+					tenants[i], dbs[i], err = tc.Server(i).TenantController().StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
+						TenantName: "test",
+						TenantID:   serverutils.TestTenantID(),
+						Knobs:      knobs,
+					})
+				} else {
+					tenants[i], err = tc.Server(i).TenantController().StartTenant(ctx, base.TestTenantArgs{
+						TenantID:     serverutils.TestTenantID(),
+						Locality:     localities[i],
+						TestingKnobs: knobs,
+					})
+					dbs[i] = tenants[i].SQLConn(t)
+				}
+				require.NoError(t, err)
+			}
 
-					var val string
-					err := db.QueryRow(
-						fmt.Sprintf("SHOW CLUSTER SETTING %s", settingName),
-					).Scan(&val)
-					require.NoError(t, err)
-					if val != "00:00:00.1" {
-						return errors.Errorf("tenant server %d is still waiting for %s update: currently %s",
-							i,
-							settingName,
-							val,
-						)
+			// Wait until all tenant servers are aware of the setting override.
+			testutils.SucceedsSoon(t, func() error {
+				settingNames := []string{
+					"kv.closed_timestamp.target_duration", "kv.closed_timestamp.side_transport_interval", "kv.closed_timestamp.propagation_slack",
+				}
+				for _, settingName := range settingNames {
+					for i := 0; i < numNodes; i++ {
+						db := dbs[i]
+
+						var val string
+						err := db.QueryRow(
+							fmt.Sprintf("SHOW CLUSTER SETTING %s", settingName),
+						).Scan(&val)
+						require.NoError(t, err)
+						if val != "00:00:00.1" {
+							return errors.Errorf("tenant server %d is still waiting for %s update: currently %s",
+								i,
+								settingName,
+								val,
+							)
+						}
+					}
+				}
+				return nil
+			})
+
+			tenantSQLDB := dbs[gatewayNode]
+			tenantSQL := sqlutils.MakeSQLRunner(tenantSQLDB)
+
+			tenantSQL.Exec(t, `CREATE DATABASE t`)
+			tenantSQL.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY)`)
+
+			codec := tenants[gatewayNode].Codec()
+			startKey := codec.TenantPrefix()
+			tc.AddVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
+			tc.WaitForVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
+			desc := tc.LookupRangeOrFatal(t, startKey)
+			require.Equal(t, []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			}, desc.Replicas().Descriptors())
+
+			// Sleep so that we can perform follower reads. The read timestamp
+			// needs to be above the timestamp when the table was created.
+			log.Infof(ctx, "test sleeping for the follower read timestamps to pass the table creation timestamp...")
+			time.Sleep(500 * time.Millisecond)
+			log.Infof(ctx, "test sleeping... done")
+
+			// Check that the cache was indeed populated.
+			tenantSQL.Exec(t, `SELECT * FROM t.test WHERE k = 1`)
+			tablePrefix := keys.MustAddr(codec.TenantPrefix())
+			cache := tenants[gatewayNode].DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
+			entry := cache.GetCached(ctx, tablePrefix, false /* inverted */)
+			require.NotNil(t, entry)
+			require.False(t, entry.Lease().Empty())
+			require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
+			require.Equal(t, []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1, ReplicaID: 1},
+				{NodeID: 2, StoreID: 2, ReplicaID: 2},
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			}, entry.Desc().Replicas().Descriptors())
+
+			tenantSQL.Exec(t, historicalQuery)
+			rec := <-recCh
+
+			// Look at the trace and check that the follower read was served by
+			// n2.
+			var numFRs, numN2FRs int
+			for _, sp := range rec {
+				for _, l := range sp.Logs {
+					if msg := l.Message.StripMarkers(); strings.Contains(msg, kvbase.FollowerReadServingMsg) {
+						numFRs++
+						if strings.Contains(msg, "n2") {
+							numN2FRs++
+						}
 					}
 				}
 			}
-			return nil
+			require.Equal(t, numFRs, 1, "query wasn't served through follower reads: %s", rec)
+			require.Equal(t, numN2FRs, 1, "follower read wasn't served by n2: %s", rec)
 		})
+	}
+}
 
-		tenantSQLDB := dbs[3]
-		tenantSQL := sqlutils.MakeSQLRunner(tenantSQLDB)
+// Test draining a node stops any follower reads to that node. This is important
+// because a drained node is about to shut down and a follower read prior to a
+// shutdown may need to wait for a gRPC timeout.
+func TestDrainStopsFollowerReads(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer utilccl.TestingEnableEnterprise()()
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	sv := &settings.SV
+	// TODO(baptist): Remove this if we make this the default.
+	kvcoord.FollowerReadsUnhealthy.Override(context.Background(), sv, false)
 
-		tenantSQL.Exec(t, `CREATE DATABASE t`)
-		tenantSQL.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY)`)
+	// Turn down these durations to allow follower reads to happen faster.
+	closeTime := 10 * time.Millisecond
+	closedts.TargetDuration.Override(ctx, sv, closeTime)
+	closedts.SideTransportCloseInterval.Override(ctx, sv, closeTime)
+	ClosedTimestampPropagationSlack.Override(ctx, sv, closeTime)
 
-		startKey := keys.MakeSQLCodec(serverutils.TestTenantID()).TenantPrefix()
-		tc.AddVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
-		tc.WaitForVotersOrFatal(t, startKey, tc.Target(1), tc.Target(2))
-		desc := tc.LookupRangeOrFatal(t, startKey)
-		require.Equal(t, []roachpb.ReplicaDescriptor{
-			{NodeID: 1, StoreID: 1, ReplicaID: 1},
-			{NodeID: 2, StoreID: 2, ReplicaID: 2},
-			{NodeID: 3, StoreID: 3, ReplicaID: 3},
-		}, desc.Replicas().Descriptors())
-
-		// Sleep so that we can perform follower reads. The read timestamp needs to be
-		// above the timestamp when the table was created.
-		log.Infof(ctx, "test sleeping for the follower read timestamps to pass the table creation timestamp...")
-		time.Sleep(500 * time.Millisecond)
-		log.Infof(ctx, "test sleeping... done")
-
-		getFollowerReadCounts := func() [numNodes]int64 {
-			var counts [numNodes]int64
-			for i := range tc.Servers {
-				err := tc.Servers[i].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
-					counts[i] = s.Metrics().FollowerReadsCount.Count()
-					return nil
-				})
-				require.NoError(t, err)
-			}
-			return counts
+	// Configure localities so n3 and n4 are in the same locality.
+	// SQL runs on n4 (west).
+	// Drain n3 (west).
+	numNodes := 4
+	locality := func(region string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: region},
+			},
 		}
+	}
+	localities := []roachpb.Locality{
+		locality("us-east"),
+		locality("us-east"),
+		locality("us-west"),
+		locality("us-west"),
+	}
+	manualClock := hlc.NewHybridManualClock()
 
-		// Check that the cache was indeed populated.
-		tenantSQL.Exec(t, `SELECT * FROM t.test WHERE k = 1`)
-		tablePrefix := keys.MustAddr(keys.MakeSQLCodec(serverutils.TestTenantID()).TenantPrefix())
-		cache := tenants[3].DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-		entry := cache.GetCached(ctx, tablePrefix, false /* inverted */)
-		require.NotNil(t, entry)
-		require.False(t, entry.Lease().Empty())
-		require.Equal(t, roachpb.StoreID(1), entry.Lease().Replica.StoreID)
-		require.Equal(t, []roachpb.ReplicaDescriptor{
-			{NodeID: 1, StoreID: 1, ReplicaID: 1},
-			{NodeID: 2, StoreID: 2, ReplicaID: 2},
-			{NodeID: 3, StoreID: 3, ReplicaID: 3},
-		}, entry.Desc().Replicas().Descriptors())
-
-		followerReadCountsBefore := getFollowerReadCounts()
-		tenantSQL.Exec(t, historicalQuery)
-		followerReadsCountsAfter := getFollowerReadCounts()
-
-		rec := <-recCh
-		// Look at the trace and check that we've served a follower read.
-		require.True(t, kv.OnlyFollowerReads(rec), "query was served through follower reads: %s", rec)
-
-		for i := 0; i < numNodes; i++ {
-			if i == 1 { // n2
-				require.Greater(t, followerReadsCountsAfter[i], followerReadCountsBefore[i])
-				continue
-			}
-			require.Equal(t, followerReadsCountsAfter[i], followerReadCountsBefore[i])
+	// Record which store processed the read request for our key.
+	var lastReader atomic.Int32
+	recordDestStore := func(args kvserverbase.FilterArgs) *kvpb.Error {
+		getArg, ok := args.Req.(*kvpb.GetRequest)
+		if !ok || !keys.ScratchRangeMin.Equal(getArg.Key) {
+			return nil
 		}
+		lastReader.Store(int32(args.Sid))
+		return nil
+	}
+
+	// Set up the nodes in different locality and use the LatencyFunc to
+	// simulate latency.
+	serverArgs := make(map[int]base.TestServerArgs)
+	for i := 0; i < numNodes; i++ {
+		i := i
+		serverArgs[i] = base.TestServerArgs{
+			Settings: settings,
+			Locality: localities[i],
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingEvalFilter: recordDestStore,
+					},
+				},
+				// Currently we use latency as the "primary" signal and use
+				// locality only if the latency is unavailable. Simulate
+				// locality based on whether the nodes are in the same locality.
+				// TODO(baptist): Remove this if we sort replicas by region (#112993).
+				KVClient: &kvcoord.ClientTestingKnobs{
+					LatencyFunc: func(id roachpb.NodeID) (time.Duration, bool) {
+						if localities[id-1].Equal(localities[i]) {
+							return time.Millisecond, true
+						}
+						return 100 * time.Millisecond, true
+					},
+				},
+			},
+		}
+	}
+
+	// Set ReplicationManual as we don't want any leases to move around and affect
+	// the results of this test.
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						WallClock: manualClock,
+					},
+				},
+			},
+			ServerArgsPerNode: serverArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	// Put the scratch range on nodes 1, 2, 3 and leave the lease on 1.
+	// We want all follower read request to come from 4 and go to node 3 due to
+	// the way latency and localities are set up.
+	scratchKey := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, scratchKey, tc.Targets(1, 2)...)
+	server := tc.Server(3).ApplicationLayer()
+	db := server.DB()
+
+	// Keep the read time the same as a time in the recent past. Once the
+	// readTime is closed, we expect all future reads to go to n3.
+	readTime := server.Clock().Now()
+
+	testutils.SucceedsSoon(t, func() error {
+		sendFollowerRead(t, db, scratchKey, readTime)
+		reader := lastReader.Load()
+		if reader != 3 {
+			return errors.Newf("expected read to n3 not n%d", reader)
+		}
+		return nil
 	})
+
+	// Send a drain request to n3 and wait until the drain is completed. Other
+	// nodes find out about the drain asynchronously through gossip.
+	req := serverpb.DrainRequest{Shutdown: false, DoDrain: true, NodeId: "3"}
+	drainStream, err := tc.Server(0).GetAdminClient(t).Drain(ctx, &req)
+	require.NoError(t, err)
+	// When we get a response the drain is complete.
+	drainResp, err := drainStream.Recv()
+	require.NoError(t, err)
+	require.True(t, drainResp.IsDraining)
+
+	// Follower reads should stop going to n3 once other nodes notice it
+	// draining.
+	testutils.SucceedsSoon(t, func() error {
+		sendFollowerRead(t, db, scratchKey, readTime)
+		reader := lastReader.Load()
+		if reader == 3 {
+			return errors.New("expected to not read from n3")
+		}
+		return nil
+	})
+}
+
+func sendFollowerRead(t *testing.T, db *kv.DB, scratchKey roachpb.Key, readTime hlc.Timestamp) {
+	// Manually construct the BatchRequest to set the Timestamp.
+	b := db.NewBatch()
+	b.Get(scratchKey)
+	b.Header.Timestamp = readTime
+	require.NoError(t, db.Run(context.Background(), b))
 }

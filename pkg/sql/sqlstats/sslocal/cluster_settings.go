@@ -19,7 +19,7 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 // higher-cardinality data in the system.statement_statistics table than
 // the cleanup job is able to keep up with. See #78338.
 var AssociateStmtWithTxnFingerprint = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.stats.associate_stmt_with_txn_fingerprint.enabled",
 	"whether to segment per-statement query statistics by transaction fingerprint",
 	true,

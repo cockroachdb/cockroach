@@ -148,6 +148,7 @@ func TestColdStartLatency(t *testing.T) {
 	// Shorten the closed timestamp target duration so that span configs
 	// propagate more rapidly.
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '200ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '200ms'`)
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.load_based_rebalancing = off")
 	tdb.Exec(t, "SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '10ms'")
 	// Lengthen the lead time for the global tables to prevent overload from
@@ -164,8 +165,6 @@ func TestColdStartLatency(t *testing.T) {
 		var stmts []string
 		if !isTenant {
 			stmts = []string{
-				"ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true",
-				"ALTER TENANT ALL SET CLUSTER SETTING sql.multi_region.allow_abstractions_for_secondary_tenants.enabled = true",
 				`alter range meta configure zone using constraints = '{"+region=us-east1": 1, "+region=us-west1": 1, "+region=europe-west1": 1}';`,
 			}
 		} else {
@@ -285,7 +284,7 @@ COMMIT;`}
 SELECT checkpoint > extract(epoch from after)
   FROM checkpoint, after`,
 			[][]string{{"true"}})
-		tenant.Stopper().Stop(ctx)
+		tenant.AppStopper().Stop(ctx)
 	}
 
 	// Wait for the configs to be applied.
@@ -317,7 +316,7 @@ SELECT checkpoint > extract(epoch from after)
 		defer r.Release()
 		start := timeutil.Now()
 		sn := tenantServerKnobs(i)
-		tenant, err := tc.Server(i).StartTenant(ctx, base.TestTenantArgs{
+		tenant, err := tc.Server(i).TenantController().StartTenant(ctx, base.TestTenantArgs{
 			TenantID:            serverutils.TestTenantID(),
 			DisableCreateTenant: true,
 			SkipTenantCheck:     true,
@@ -327,7 +326,7 @@ SELECT checkpoint > extract(epoch from after)
 			Locality: localities[i],
 		})
 		require.NoError(t, err)
-		defer tenant.Stopper().Stop(ctx)
+		defer tenant.AppStopper().Stop(ctx)
 		pgURL, cleanup, err := sqlutils.PGUrlWithOptionalClientCertsE(
 			tenant.AdvSQLAddr(), "tenantdata", url.UserPassword("foo", password),
 			false, // withClientCerts

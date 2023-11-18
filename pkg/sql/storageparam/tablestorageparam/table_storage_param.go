@@ -17,7 +17,6 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -326,6 +325,26 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`ttl_select_rate_limit`: {
+		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
+			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLRateLimit(key, val); err != nil {
+				return err
+			}
+			rowLevelTTL := po.getOrCreateRowLevelTTL()
+			rowLevelTTL.SelectRateLimit = val
+			return nil
+		},
+		onReset: func(_ context.Context, po *Setter, evalCtx *eval.Context, key string) error {
+			if po.hasRowLevelTTL() {
+				po.UpdatedRowLevelTTL.SelectRateLimit = 0
+			}
+			return nil
+		},
+	},
 	`ttl_delete_rate_limit`: {
 		onSet: func(ctx context.Context, po *Setter, semaCtx *tree.SemaContext, evalCtx *eval.Context, key string, datum tree.Datum) error {
 			val, err := paramparse.DatumAsInt(ctx, evalCtx, key, datum)
@@ -459,11 +478,21 @@ var tableParams = map[string]tableParam{
 		onReset: autoStatsTableSettingResetFunc,
 	},
 	catpb.AutoStatsMinStaleTableSettingName: {
-		onSet:   autoStatsMinStaleRowsSettingFunc(settings.NonNegativeInt),
+		onSet: autoStatsMinStaleRowsSettingFunc(func(intVal int64) error {
+			if intVal < 0 {
+				return errors.Newf("cannot be set to a negative value: %d", intVal)
+			}
+			return nil
+		}),
 		onReset: autoStatsTableSettingResetFunc,
 	},
 	catpb.AutoStatsFractionStaleTableSettingName: {
-		onSet:   autoStatsFractionStaleRowsSettingFunc(settings.NonNegativeFloat),
+		onSet: autoStatsFractionStaleRowsSettingFunc(func(floatVal float64) error {
+			if floatVal < 0 {
+				return errors.Newf("cannot set to a negative value: %f", floatVal)
+			}
+			return nil
+		}),
 		onReset: autoStatsTableSettingResetFunc,
 	},
 	`sql_stats_forecasts_enabled`: {
@@ -490,7 +519,7 @@ var tableParams = map[string]tableParam{
 			if err != nil {
 				return err
 			}
-			if err = settings.NonNegativeIntWithMaximum(math.MaxUint32)(intVal); err != nil {
+			if err := nonNegativeIntWithMaximum(math.MaxUint32)(intVal); err != nil {
 				return errors.Wrapf(err, "invalid integer value for %s", key)
 			}
 			uint32Val := uint32(intVal)
@@ -510,7 +539,7 @@ var tableParams = map[string]tableParam{
 			if err != nil {
 				return err
 			}
-			if err = settings.NonNegativeIntWithMaximum(math.MaxUint32)(intVal); err != nil {
+			if err = nonNegativeIntWithMaximum(math.MaxUint32)(intVal); err != nil {
 				return errors.Wrapf(err, "invalid integer value for %s", key)
 			}
 			uint32Val := uint32(intVal)
@@ -536,6 +565,18 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+}
+
+func nonNegativeIntWithMaximum(max int64) func(int64) error {
+	return func(intVal int64) error {
+		if intVal < 0 {
+			return errors.Newf("cannot be set to a negative integer: %d", intVal)
+		}
+		if intVal > max {
+			return errors.Newf("cannot be set to an integer larger than %d", max)
+		}
+		return nil
+	}
 }
 
 func init() {

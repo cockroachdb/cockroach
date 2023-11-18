@@ -886,8 +886,8 @@ func TestLearnerSnapshotFailsRollback(t *testing.T) {
 			log.Fatalf(ctx, "unexpected replicaType: %s", replicaType)
 		}
 
-		if !testutils.IsError(err, `remote couldn't accept INITIAL snapshot`) {
-			t.Fatalf(`expected "remote couldn't accept INITIAL snapshot" error got: %+v`, err)
+		if !testutils.IsError(err, `remote couldn't accept snapshot`) {
+			t.Fatalf(`expected "remote couldn't accept snapshot" error got: %+v`, err)
 		}
 		// Make sure we cleaned up after ourselves (by removing the learner/non-voter).
 		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -1005,7 +1005,7 @@ func testRaftSnapshotsToNonVoters(t *testing.T, drainReceivingNode bool) {
 		if err != nil {
 			return err
 		}
-		matched, err := regexp.MatchString("streamed VIA_SNAPSHOT_QUEUE snapshot.*to.*NON_VOTER", recording.String())
+		matched, err := regexp.MatchString("streamed snapshot.*to.*NON_VOTER", recording.String())
 		if err != nil {
 			return err
 		}
@@ -1651,7 +1651,8 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s'`,
 		testingTargetDuration))
 	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '%s'`, testingSideTransportInterval))
-	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true`)
+	db.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '%s'`, testingRangeFeedInterval))
+	db.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.follower_reads.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 	var scratchDesc roachpb.RangeDescriptor
@@ -1661,7 +1662,7 @@ func TestLearnerAndVoterOutgoingFollowerRead(t *testing.T) {
 
 	check := func() {
 		ts := tc.Server(0).Clock().Now()
-		txn := roachpb.MakeTransaction("txn", nil, 0, 0, ts, 0, int32(tc.Server(0).SQLInstanceID()))
+		txn := roachpb.MakeTransaction("txn", nil, 0, 0, ts, 0, int32(tc.Server(0).SQLInstanceID()), 0)
 		req := &kvpb.BatchRequest{Header: kvpb.Header{
 			RangeID:   scratchDesc.RangeID,
 			Timestamp: ts,
@@ -2039,7 +2040,7 @@ func TestMergeQueueDoesNotInterruptReplicationChange(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	// TestCluster currently overrides this when used with ReplicationManual.
-	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
+	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue.enabled = true`)
 
 	// While this replication change is stalled, we'll trigger a merge and
 	// ensure that the merge correctly notices that there is a snapshot in
@@ -2068,7 +2069,7 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	// TestCluster currently overrides this when used with ReplicationManual.
-	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = true`)
+	db.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue.enabled = true`)
 
 	scratchStartKey := tc.ScratchRange(t)
 	origDesc := tc.LookupRangeOrFatal(t, scratchStartKey)
@@ -2222,7 +2223,7 @@ func getExpectedSnapshotSizeBytes(
 	originRepl *kvserver.Replica,
 	snapType kvserverpb.SnapshotRequest_Type,
 ) (int64, error) {
-	snap, err := originRepl.GetSnapshot(ctx, snapType, uuid.MakeV4())
+	snap, err := originRepl.GetSnapshot(ctx, uuid.MakeV4())
 	if err != nil {
 		return 0, err
 	}
@@ -2231,7 +2232,8 @@ func getExpectedSnapshotSizeBytes(
 	b := originStore.TODOEngine().NewWriteBatch()
 	defer b.Close()
 
-	err = rditer.IterateReplicaKeySpans(snap.State.Desc, snap.EngineSnap, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
+	err = rditer.IterateReplicaKeySpans(
+		ctx, snap.State.Desc, snap.EngineSnap, true /* replicatedOnly */, rditer.ReplicatedSpansAll,
 		func(iter storage.EngineIterator, _ roachpb.Span, keyType storage.IterKeyType) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {

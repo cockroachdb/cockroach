@@ -124,12 +124,6 @@ func TestCounterFloat64(t *testing.T) {
 	}
 }
 
-func setNow(d time.Duration) {
-	now = func() time.Time {
-		return time.Time{}.Add(d)
-	}
-}
-
 func TestHistogram(t *testing.T) {
 	u := func(v int) *uint64 {
 		n := uint64(v)
@@ -194,6 +188,27 @@ func TestHistogram(t *testing.T) {
 	require.Equal(t, 17.5, h.ValueAtQuantileWindowed(50))
 	require.Equal(t, 75.0, h.ValueAtQuantileWindowed(80))
 	require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99.99))
+
+	// Assert that native histogram schema is not defined
+	require.Nil(t, h.ToPrometheusMetric().Histogram.Schema)
+}
+
+func TestNativeHistogram(t *testing.T) {
+	defer func(enabled bool) {
+		nativeHistogramsEnabled = enabled
+	}(nativeHistogramsEnabled)
+	nativeHistogramsEnabled = true
+	h := NewHistogram(HistogramOptions{
+		Mode:     HistogramModePrometheus,
+		Metadata: Metadata{},
+		Duration: time.Hour,
+		BucketConfig: staticBucketConfig{
+			distribution: Exponential,
+		},
+	})
+
+	// Assert that native histogram schema is defined
+	require.NotNil(t, h.ToPrometheusMetric().Histogram.Schema)
 }
 
 func TestManualWindowHistogram(t *testing.T) {
@@ -269,8 +284,10 @@ func TestManualWindowHistogram(t *testing.T) {
 }
 
 func TestNewHistogramRotate(t *testing.T) {
-	defer TestingSetNow(nil)()
-	setNow(0)
+	now := time.UnixMicro(1699565116)
+	defer TestingSetNow(func() time.Time {
+		return now
+	})()
 
 	h := NewHistogram(HistogramOptions{
 		Mode:     HistogramModePrometheus,
@@ -293,14 +310,16 @@ func TestNewHistogramRotate(t *testing.T) {
 			require.Equal(t, wSum, f)
 		}
 		// Tick. This rotates the histogram.
-		setNow(time.Duration(i+1) * 10 * time.Second)
+		now = now.Add(time.Duration(i+1) * 10 * time.Second)
 		// Go to beginning.
 	}
 }
 
 func TestHistogramWindowed(t *testing.T) {
-	defer TestingSetNow(nil)()
-	setNow(0)
+	now := time.UnixMicro(1699565116)
+	defer TestingSetNow(func() time.Time {
+		return now
+	})()
 
 	duration := 10 * time.Second
 
@@ -394,7 +413,7 @@ func TestHistogramWindowed(t *testing.T) {
 		})
 
 		// Increment Now time to trigger tick on the following iteration.
-		setNow(time.Duration(i+1) * (duration / 2))
+		now = now.Add(time.Duration(i+1) * (duration / 2))
 	}
 }
 

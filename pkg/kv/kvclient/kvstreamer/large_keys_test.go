@@ -78,8 +78,7 @@ func TestLargeKeys(t *testing.T) {
 			},
 		},
 	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(context.Background())
 
 	// We will lower the distsql_workmem limit so that we can operate with
 	// smaller blobs.

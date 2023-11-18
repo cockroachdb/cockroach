@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -60,25 +59,63 @@ var errReadOlderVersion = errors.New("read older descriptor version from store")
 
 // LeaseDuration controls the duration of sql descriptor leases.
 var LeaseDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_duration",
 	"mean duration of sql descriptor leases, this actual duration is jitterred",
 	base.DefaultDescriptorLeaseDuration)
 
-func between0and1inclusive(f float64) error {
-	if f < 0 || f > 1 {
-		return errors.Errorf("value %f must be between 0 and 1", f)
-	}
-	return nil
-}
-
 // LeaseJitterFraction controls the percent jitter around sql lease durations
 var LeaseJitterFraction = settings.RegisterFloatSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_jitter_fraction",
 	"mean duration of sql descriptor leases, this actual duration is jitterred",
 	base.DefaultDescriptorLeaseJitterFraction,
-	between0and1inclusive)
+	settings.Fraction)
+
+//go:generate stringer -type=SessionBasedLeasingMode
+
+type SessionBasedLeasingMode int64
+
+const (
+	// SessionBasedLeasingOff expiry based leasing is being used.
+	SessionBasedLeasingOff SessionBasedLeasingMode = iota
+	// SessionBasedDualWrite expiry based and session based leasing are
+	// active concurrently, and both tables must be consulted schema changes.
+	SessionBasedDualWrite
+	// SessionBasedDrain expiry based leases will not be granted or renewed.
+	// Valid pre-existing leases that are expiry based will still be respected.
+	SessionBasedDrain
+	// SessionBasedOnly session based leases are only active, and schema
+	// changes only need to consult this table.
+	SessionBasedOnly
+)
+
+// LeaseEnableSessionBasedLeasing used to enable / disable support for
+// session based leasing.
+var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
+	settings.ApplicationLevel,
+	"sql.catalog.experimental_use_session_based_leasing",
+	"enables session based leasing for internal testing.",
+	"off",
+	map[int64]string{
+		int64(SessionBasedLeasingOff): "off",
+		int64(SessionBasedDualWrite):  "dual_write",
+		int64(SessionBasedDrain):      "drain",
+		int64(SessionBasedOnly):       "session",
+	},
+	settings.WithReportable(false),
+)
+
+// sessionBasedLeasingModeActive determines if the current mode at least meets
+// the required minimum.
+func (m *Manager) isSessionBasedLeasingModeActive(minimumMode SessionBasedLeasingMode) bool {
+	return m.getSessionBasedLeasingMode() >= minimumMode
+}
+
+// getSessionBasedLeasingMode returns the current session based leasing mode.
+func (m *Manager) getSessionBasedLeasingMode() SessionBasedLeasingMode {
+	return SessionBasedLeasingMode(LeaseEnableSessionBasedLeasing.Get(&m.settings.SV))
+}
 
 // WaitForNoVersion returns once there are no unexpired leases left
 // for any version of the descriptor.
@@ -543,6 +580,9 @@ func acquireNodeLease(
 				return nil, err
 			}
 			t := m.findDescriptorState(id, false /* create */)
+			if t == nil {
+				return nil, errors.AssertionFailedf("could not find descriptor state for id %d", id)
+			}
 			t.mu.Lock()
 			t.mu.takenOffline = false
 			defer t.mu.Unlock()
@@ -763,10 +803,10 @@ func NewLeaseManager(
 	}
 	lm.storage.regionPrefix = &atomic.Value{}
 	lm.storage.regionPrefix.Store(enum.One)
+	lm.storage.sessionBasedLeasingMode = lm
 	lm.stopper.AddCloser(lm.sem.Closer("stopper"))
 	lm.mu.descriptors = make(map[descpb.ID]*descriptorState)
 	lm.mu.updatesResolvedTimestamp = clock.Now()
-
 	lm.draining.Store(false)
 	return lm
 }
@@ -847,10 +887,9 @@ func (m *Manager) AcquireByName(
 		return desc, nil
 	}
 	// Check if we have cached an ID for this name.
-	descVersion := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
+	descVersion, expiration := m.names.get(ctx, parentID, parentSchemaID, name, timestamp)
 	if descVersion != nil {
 		if descVersion.GetModificationTime().LessEq(timestamp) {
-			expiration := descVersion.getExpiration()
 			// If this lease is nearly expired, ensure a renewal is queued.
 			durationUntilExpiry := time.Duration(expiration.WallTime - timestamp.WallTime)
 			if durationUntilExpiry < m.storage.leaseRenewalTimeout() {
@@ -1231,7 +1270,7 @@ func (m *Manager) watchForUpdates(ctx context.Context, descUpdateCh chan<- catal
 // leaseRefreshLimit is the upper-limit on the number of descriptor leases
 // that will continuously have their lease refreshed.
 var leaseRefreshLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.tablecache.lease.refresh_limit",
 	"maximum number of descriptors to periodically refresh leases for",
 	500,
@@ -1363,18 +1402,9 @@ func (m *Manager) DeleteOrphanedLeases(ctx context.Context, timeThreshold int64)
 		// doesn't implement AS OF SYSTEM TIME.
 
 		// Read orphaned leases.
-		const (
-			queryWithRegion = `
+		query := `
 SELECT "descID", version, expiration, crdb_region FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
 `
-			queryWithoutRegion = `
-SELECT "descID", version, expiration FROM system.public.lease AS OF SYSTEM TIME %d WHERE "nodeID" = %d
-`
-		)
-		query := queryWithRegion
-		if !m.settings.Version.IsActive(ctx, clusterversion.V23_1_SystemRbrReadNew) {
-			query = queryWithoutRegion
-		}
 		sqlQuery := fmt.Sprintf(query, timeThreshold, instanceID)
 		var rows []tree.Datums
 		retryOptions := base.DefaultRetryOptions()

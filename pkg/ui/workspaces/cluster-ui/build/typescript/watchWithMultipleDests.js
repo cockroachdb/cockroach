@@ -20,15 +20,16 @@ const { cleanDestinationPaths, tildeify } = require("../util");
  * A minimal wrapper around tsc --watch, implemented using the typescript JS API
  * to support writing emitted files to multiple directories.
  * This function never returns, as it hosts a filesystem 'watcher'.
- * @params {Object} options - a bag of options
- * @params {string[]} options.destinations - an array of directories to emit declarations to.
- *                                           The default from tsconfig.json will be automatically
- *                                           prepended to this list.
+ * @param {Object} opts - a bag of options
+ * @param {boolean} opts.interactive - whether to show compiler errors as they occur.
+ * @param {string[]} opts.destinations - an array of directories to emit declarations to.
+ *                                       The default from tsconfig.json will be automatically
+ *                                       prepended to this list.
  * @returns never
  * @see https://github.com/microsoft/TypeScript/wiki/Using-the-Compiler-API/167d197d290bec04b626b91b6f453123ef309e58#writing-an-incremental-program-watcher
  */
-function watch(options) {
-  const destinations = options.destinations;
+function watch(opts) {
+  const destinations = opts.destinations;
 
   // Find a tsconfig.json.
   const configPath = ts.findConfigFile(
@@ -58,6 +59,10 @@ function watch(options) {
     }
   }
 
+  const reportWatchStatus = opts.interactive
+    ? undefined // default output
+    : () => {}; // nop output
+
   // Create a watching compiler host that we'll pass to ts.createWatchProgram
   // later.
   const host = ts.createWatchCompilerHost(
@@ -65,29 +70,37 @@ function watch(options) {
     /* optionsToExtend */ {},
     {
       ...ts.sys,
+      // Never clear the screen, to simulate tsc --watch --preserveWatchOutput.
+      clearScreen: undefined,
       writeFile,
     },
     ts.createEmitAndSemanticDiagnosticsBuilderProgram,
+    // Use the default diagnostic reporter.
+    /* reportDiagnostic */ undefined,
+    reportWatchStatus,
   );
 
   // Create a wrapper around the default createProgram hook (called whenever a
-  // compilation pass starts) to log a helpful message. Note that in TS 4.2,
-  // there's no way to suppress typescript's default terminal-clearing behavior
-  // when a program is created. To keep anyone from forgetting, print this
-  // message every time.
+  // compilation pass starts) to log a helpful message every time in interactive
+  // mode and just once otherwise.
   const origCreateProgram = host.createProgram;
+  let createProgramHasRun = false;
   host.createProgram = (rootNames, options, host, oldProgram, configFileParsingDiagnostics, projectReferences) => {
-    const compilerOptions = options || {};
-    const currentDir = host.getCurrentDirectory();
-    // Compute the declaration directory relative to the project root.
-    const relDeclarationDir = path.relative(
-      currentDir,
-      compilerOptions.declarationDir || compilerOptions.outDir || ""
-    );
+    if (opts.interactive || !createProgramHasRun) {
+      createProgramHasRun = true;
 
-    console.log("Declarations will be written to:")
-    for (const dst of ["./"].concat(destinations)) {
-      console.log(`  ${tildeify(path.join(dst, relDeclarationDir))}`);
+      const compilerOptions = options || {};
+      const currentDir = host.getCurrentDirectory();
+      // Compute the declaration directory relative to the project root.
+      const relDeclarationDir = path.relative(
+        currentDir,
+        compilerOptions.declarationDir || compilerOptions.outDir || ""
+      );
+
+      console.log("TypeScript declarations will be silently written to:")
+      for (const dst of ["./"].concat(destinations)) {
+        console.log(`  ${tildeify(path.join(dst, relDeclarationDir))}`);
+      }
     }
 
     return origCreateProgram(rootNames, options, host, oldProgram, configFileParsingDiagnostics, projectReferences);
@@ -101,17 +114,19 @@ function watch(options) {
 const isHelp = argv.h || argv.help;
 const hasPositionalArgs = argv._.length !== 0;
 if (isHelp || hasPositionalArgs) {
-  const argv1 = path.relative(path.join(__dirname, "../../"), argv[1]);
+  const argv1 = path.relative(path.join(__dirname, "../../"), process.argv[1]);
   const help = `
 ${argv1} - a minimal replacement for 'tsc --watch' that copies generated files to extra directories.
 
 Usage:
-  ${argv1} [--copy-to DIR]...
+  ${argv1} [--no-interactive] [--copy-to DIR]...
 
 Flags:
-  --copy-to DIR path to copy emitted files to, in addition to the default in
-                tsconfig.json. Can be specified multiple times.
-  -h, --help    prints this message
+  --no-interactive print TS compiler errors if they occur and clear the terminal
+                   between compilations.
+  --copy-to DIR    path to copy emitted files to, in addition to the default in
+                   tsconfig.json. Can be specified multiple times.
+  -h, --help       prints this message
   `;
 
   if (hasPositionalArgs) {
@@ -128,5 +143,6 @@ const destinations = typeof copyToArgs === "string"
   : (copyToArgs || []);
 
 watch({
+  interactive: argv.interactive ?? true,
   destinations: cleanDestinationPaths(destinations),
 });

@@ -1,0 +1,2 @@
+repartition from=../partition/single_col_list_partitioning_default to=../partition/unpartitioned
+----

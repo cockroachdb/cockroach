@@ -199,8 +199,8 @@ func makeIndexDescriptor(
 		return nil, err
 	}
 
-	if !activeVersion.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-		n.Invisibility > 0.0 && n.Invisibility < 1.0 {
+	if !activeVersion.IsActive(clusterversion.V23_2) &&
+		n.Invisibility.Value > 0.0 && n.Invisibility.Value < 1.0 {
 		return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 	}
 	indexDesc := descpb.IndexDescriptor{
@@ -209,8 +209,8 @@ func makeIndexDescriptor(
 		StoreColumnNames:  n.Storing.ToStrings(),
 		CreatedExplicitly: true,
 		CreatedAtNanos:    params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
-		NotVisible:        n.Invisibility != 0.0,
-		Invisibility:      n.Invisibility,
+		NotVisible:        n.Invisibility.Value != 0.0,
+		Invisibility:      n.Invisibility.Value,
 	}
 
 	if n.Inverted {

@@ -25,8 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -35,15 +36,16 @@ import (
 // system.protected_ts_records.
 func TestProtectedTimestampDecoder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s0 := srv.ApplicationLayer()
 
-	s0 := tc.Server(0)
 	ptp := s0.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
 	jr := s0.JobRegistry().(*jobs.Registry)
-	k := keys.SystemSQLCodec.TablePrefix(keys.ProtectedTimestampsRecordsTableID)
+	k := s0.Codec().TablePrefix(keys.ProtectedTimestampsRecordsTableID)
 
 	for _, testCase := range []struct {
 		name   string
@@ -75,7 +77,7 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 			)
 			require.NoError(t, pts.Protect(ctx, rec))
 
-			rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
+			rows, err := kvDB.Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 			require.NoError(t, err)
 			require.Equal(t, 1, len(rows))
 

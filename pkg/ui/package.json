@@ -381,6 +381,19 @@
           "tmp": "0.0.33",
           "uglify-js": "^2.8.29"
         }
+      },
+      "// @protobufjs/inquire hacks": [
+        "@protobufjs/inquire (used by protobufjs@6) uses eval() to require",
+        "packages while hiding them from bundlers. Since inquire is a separate",
+        "package from protobufjs and doesn't declare all of protobufjs'",
+        "direct dependencies, any call to inquire() for packages not provided",
+        "by the node stdlib is a 'phantom' dependency. Currently only 'long'",
+        "fits into this category."
+      ],
+      "@protobufjs/inquire@1.x": {
+        "dependencies": {
+          "long": "4.0.0"
+        }
       }
     },
     "overrides": {

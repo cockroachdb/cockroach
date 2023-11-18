@@ -74,9 +74,9 @@ func TestOutbox(t *testing.T) {
 		Mon:     evalCtx.TestingMon,
 		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
-			Settings:      st,
-			Stopper:       stopper,
-			PodNodeDialer: dialer,
+			Settings:          st,
+			Stopper:           stopper,
+			SQLInstanceDialer: dialer,
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -240,9 +240,9 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 		Mon:     evalCtx.TestingMon,
 		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
-			Settings:      st,
-			Stopper:       stopper,
-			PodNodeDialer: dialer,
+			Settings:          st,
+			Stopper:           stopper,
+			SQLInstanceDialer: dialer,
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -313,9 +313,9 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				Mon:     evalCtx.TestingMon,
 				ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 				Cfg: &execinfra.ServerConfig{
-					Settings:      st,
-					Stopper:       stopper,
-					PodNodeDialer: dialer,
+					Settings:          st,
+					Stopper:           stopper,
+					SQLInstanceDialer: dialer,
 				},
 				NodeID: base.TestingIDContainer,
 			}
@@ -391,9 +391,9 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 		Mon:     evalCtx.TestingMon,
 		ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 		Cfg: &execinfra.ServerConfig{
-			Settings:      st,
-			Stopper:       stopper,
-			PodNodeDialer: dialer,
+			Settings:          st,
+			Stopper:           stopper,
+			SQLInstanceDialer: dialer,
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -449,8 +449,8 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 			Stopper:  stopper,
-			// a nil PodNodeDialer will always fail to connect.
-			PodNodeDialer: nil,
+			// a nil SQLInstanceDialer will always fail to connect.
+			SQLInstanceDialer: nil,
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -523,9 +523,9 @@ func BenchmarkOutbox(b *testing.B) {
 				Mon:     evalCtx.TestingMon,
 				ID:      execinfrapb.FlowID{UUID: uuid.MakeV4()},
 				Cfg: &execinfra.ServerConfig{
-					Settings:      st,
-					Stopper:       stopper,
-					PodNodeDialer: dialer,
+					Settings:          st,
+					Stopper:           stopper,
+					SQLInstanceDialer: dialer,
 				},
 				NodeID: base.TestingIDContainer,
 			}

@@ -20,13 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -40,15 +40,10 @@ type TenantDeps struct {
 	LeaseManager *lease.Manager
 	JobRegistry  *jobs.Registry
 	SessionData  *sessiondata.SessionData
+	ClusterID    uuid.UUID
 
 	// TODO(ajwerner): Remove this in favor of the descs.DB above.
 	InternalExecutor isql.Executor
-
-	SpanConfig struct { // deps for span config upgrades; can be removed accordingly
-		spanconfig.KVAccessor
-		spanconfig.Splitter
-		Default roachpb.SpanConfig
-	}
 
 	TestingKnobs              *upgradebase.TestingKnobs
 	SchemaResolverConstructor func( // A constructor that returns a schema resolver for `descriptors` in `currDb`.
@@ -92,13 +87,18 @@ var NoPrecondition PreconditionFunc = nil
 
 // NewTenantUpgrade constructs a TenantUpgrade.
 func NewTenantUpgrade(
-	description string, v roachpb.Version, precondition PreconditionFunc, fn TenantUpgradeFunc,
+	description string,
+	v roachpb.Version,
+	precondition PreconditionFunc,
+	fn TenantUpgradeFunc,
+	restore RestoreBehavior,
 ) *TenantUpgrade {
 	m := &TenantUpgrade{
 		upgrade: upgrade{
 			description: description,
 			v:           v,
 			permanent:   false,
+			restore:     restore,
 		},
 		fn:           fn,
 		precondition: precondition,
@@ -110,7 +110,11 @@ func NewTenantUpgrade(
 // an upgrade that will run regardless of the cluster's bootstrap version.
 // Note however that the upgrade will still run at most once.
 func NewPermanentTenantUpgrade(
-	description string, v roachpb.Version, fn TenantUpgradeFunc, v22_2StartupMigrationName string,
+	description string,
+	v roachpb.Version,
+	fn TenantUpgradeFunc,
+	v22_2StartupMigrationName string,
+	restore RestoreBehavior,
 ) *TenantUpgrade {
 	m := &TenantUpgrade{
 		upgrade: upgrade{
@@ -118,6 +122,7 @@ func NewPermanentTenantUpgrade(
 			v:                         v,
 			permanent:                 true,
 			v22_2StartupMigrationName: v22_2StartupMigrationName,
+			restore:                   restore,
 		},
 		fn:           fn,
 		precondition: nil,

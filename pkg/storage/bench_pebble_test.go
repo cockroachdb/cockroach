@@ -62,7 +62,7 @@ func setupMVCCInMemPebbleWithSeparatedIntents(b testing.TB) Engine {
 func setupPebbleInMemPebbleForLatestRelease(b testing.TB, _ string) Engine {
 	ctx := context.Background()
 	s := cluster.MakeClusterSettings()
-	if err := clusterversion.Initialize(ctx, clusterversion.TestingBinaryVersion,
+	if err := clusterversion.Initialize(ctx, clusterversion.Latest.Version(),
 		&s.SV); err != nil {
 		b.Fatalf("failed to set current cluster version: %+v", err)
 	}
@@ -361,10 +361,10 @@ func BenchmarkMVCCPutDelete_Pebble(b *testing.B) {
 		key := encoding.EncodeVarintAscending(nil, blockID)
 		key = encoding.EncodeVarintAscending(key, blockNum)
 
-		if err := MVCCPut(ctx, db, key, hlc.Timestamp{}, value, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCPut(ctx, db, key, hlc.Timestamp{}, value, MVCCWriteOptions{}); err != nil {
 			b.Fatal(err)
 		}
-		if _, err := MVCCDelete(ctx, db, key, hlc.Timestamp{}, MVCCWriteOptions{}); err != nil {
+		if _, _, err := MVCCDelete(ctx, db, key, hlc.Timestamp{}, MVCCWriteOptions{}); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -442,6 +442,31 @@ func BenchmarkMVCCDeleteRangeUsingTombstone_Pebble(b *testing.B) {
 							runMVCCDeleteRangeUsingTombstone(ctx, b, numKeys, valueSize, entireRange)
 						})
 					}
+				})
+			}
+		})
+	}
+}
+
+// BenchmarkMVCCDeleteRangeWithPredicate_Pebble benchmarks predicate based
+// delete range under certain configs. A lower streak bound simulates sequential
+// imports with more interspersed keys, leading to fewer range tombstones and
+// more point tombstones.
+func BenchmarkMVCCDeleteRangeWithPredicate_Pebble(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	for _, streakBound := range []int{10, 100, 200, 500} {
+		b.Run(fmt.Sprintf("streakBound=%d", streakBound), func(b *testing.B) {
+			for _, rangeKeyThreshold := range []int64{64} {
+				b.Run(fmt.Sprintf("rangeKeyThreshold=%d", rangeKeyThreshold), func(b *testing.B) {
+					config := mvccImportedData{
+						streakBound: streakBound,
+						keyCount:    2000,
+						valueBytes:  64,
+						layers:      2,
+					}
+					runMVCCDeleteRangeWithPredicate(ctx, b, config, 0, rangeKeyThreshold)
 				})
 			}
 		})

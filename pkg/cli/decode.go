@@ -138,13 +138,17 @@ func streamMap(out io.Writer, in io.Reader, fn func(string) (bool, string, error
 // - Go (or C) quoted string
 func interpretString(s string) ([]byte, bool) {
 	// Try hex.
-	bytes, err := gohex.DecodeString(s)
-	if err == nil {
+	if bytes, err := gohex.DecodeString(s); err == nil {
 		return bytes, true
 	}
+	// Support PG \xDEADBEEF format (ie bytea_output default).
+	if strings.HasPrefix(s, "\\x") {
+		if bytes, err := gohex.DecodeString(s[2:]); err == nil {
+			return bytes, true
+		}
+	}
 	// Try base64.
-	bytes, err = base64.StdEncoding.DecodeString(s)
-	if err == nil {
+	if bytes, err := base64.StdEncoding.DecodeString(s); err == nil {
 		return bytes, true
 	}
 	// Try quoted string.

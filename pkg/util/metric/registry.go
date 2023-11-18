@@ -112,7 +112,7 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 		}
 
 		switch vfield.Kind() {
-		case reflect.Array:
+		case reflect.Array, reflect.Slice:
 			for i := 0; i < vfield.Len(); i++ {
 				velem := vfield.Index(i)
 				telemName := fmt.Sprintf("%s[%d]", tname, i)
@@ -253,12 +253,7 @@ func checkFieldCanBeSkipped(
 	}
 
 	switch fieldType.Kind() {
-	case reflect.Slice:
-		if isMetricType(fieldType.Elem()) {
-			panicHandler(context.Background(),
-				"expected array, found slice instead for field %s (%s)", qualifiedFieldName, fieldType)
-		}
-	case reflect.Array:
+	case reflect.Array, reflect.Slice:
 		checkFieldCanBeSkipped(skipReason, fieldName, fieldType.Elem(), parentType)
 	case reflect.Struct:
 		containsMetrics := false

@@ -1,0 +1,410 @@
+# Ambiguous replay protection is only valid on transactional writes.
+
+run error
+del   k=a ambiguousReplay
+----
+>> at end:
+<no data>
+error: (*withstack.withStack:) cannot enable replay protection without a transaction
+
+# Idempotent replays should normally be allowed, even if they move the timestamp.
+
+run stats ok
+with t=A k=a
+  txn_begin ts=11
+  # Lay down an intent.
+  put v=first
+----
+>> put v=first t=A k=a
+put: lock acquisition = {a id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+61 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+22 lock_count=+1 lock_age=+89
+>> at end:
+txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/11.000000000,0 -> /BYTES/first
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 lock_count=1 lock_age=89
+
+run stats ok
+with t=A k=a
+  # Perform an idempotent replay, but at a higher ts.
+  txn_advance ts=12
+  put v=first
+----
+>> put v=first t=A k=a
+stats: no change
+>> at end:
+txn: "A" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/11.000000000,0 -> /BYTES/first
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 lock_count=1 lock_age=89
+
+run ok
+with t=A k=a
+  resolve_intent
+  txn_remove
+----
+resolve_intent: "a" -> resolved key = true
+>> at end:
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+
+# Ambiguous replay protection should allow initial writes.
+
+run stats ok
+with t=B k=k
+  txn_begin ts=0,1
+  initput k=k ts=0,1 v=k1 ambiguousReplay
+----
+>> initput k=k ts=0,1 v=k1 ambiguousReplay t=B k=k
+initput: lock acquisition = {k id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+50 live_count=+1 live_bytes=+64 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+100
+>> at end:
+txn: "B" meta={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} lock=true stat=PENDING rts=0,1 wto=false gul=0,0
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000002 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,1 min=0,0 seq=0} ts=0,1 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=73 live_count=2 live_bytes=101 intent_count=1 intent_bytes=19 lock_count=1 lock_age=100
+
+run ok
+with t=B k=k
+  resolve_intent
+  txn_remove
+----
+resolve_intent: "k" -> resolved key = true
+>> at end:
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+data: "k"/0,1 -> /BYTES/k1
+
+# Ambiguous replay protection should not affect identically evaluating cputs.
+
+run stats ok
+with t=C k=k
+  txn_begin ts=0,2
+  cput v=k2 cond=k1
+----
+>> cput v=k2 cond=k1 t=C k=k
+cput: lock acquisition = {k id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+50 live_bytes=+43 gc_bytes_age=+1900 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+100
+>> at end:
+txn: "C" meta={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} lock=true stat=PENDING rts=0,2 wto=false gul=0,0
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} ts=0,2 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=40 val_count=3 val_bytes=80 live_count=2 live_bytes=101 gc_bytes_age=1900 intent_count=1 intent_bytes=19 lock_count=1 lock_age=100
+
+run stats ok
+with t=C k=k
+  cput v=k2 cond=k1 ambiguousReplay
+----
+>> cput v=k2 cond=k1 ambiguousReplay t=C k=k
+stats: no change
+>> at end:
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000003 key="k" iso=Serializable pri=0.00000000 epo=0 ts=0,2 min=0,0 seq=0} ts=0,2 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=40 val_count=3 val_bytes=80 live_count=2 live_bytes=101 gc_bytes_age=1900 intent_count=1 intent_bytes=19 lock_count=1 lock_age=100
+
+run ok
+with t=C k=k
+  resolve_intent
+  txn_remove
+----
+resolve_intent: "k" -> resolved key = true
+>> at end:
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+
+# Ambiguous replay protection should prevent a replay from evaluating at a higher timestamp.
+
+run stats ok
+with t=D k=k
+  txn_begin ts=3,0
+  put v=k3
+----
+>> put v=k3 t=D k=k
+put: lock acquisition = {k id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_bytes=+51 gc_bytes_age=+1843 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+97
+>> at end:
+txn: "D" meta={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=52 val_count=4 val_bytes=95 live_count=2 live_bytes=109 gc_bytes_age=3743 intent_count=1 intent_bytes=19 lock_count=1 lock_age=97
+
+run stats error
+with t=D k=k
+  txn_advance ts=3,1
+  put v=k3 ambiguousReplay
+----
+>> put v=k3 ambiguousReplay t=D k=k
+stats: no change
+>> at end:
+txn: "D" meta={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,1 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000004 key="k" iso=Serializable pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=52 val_count=4 val_bytes=95 live_count=2 live_bytes=109 gc_bytes_age=3743 intent_count=1 intent_bytes=19 lock_count=1 lock_age=97
+error: (*withstack.withStack:) transaction 00000004-0000-0000-0000-000000000000 with sequence 0 prevented from changing write timestamp from 3.000000000,0 to 3.000000000,1 due to ambiguous replay protection
+
+run ok
+with t=D k=k
+  # Commit at the original timestamp (i.e. if committed by a recovery operation).
+  txn_advance ts=3,0
+  resolve_intent
+  txn_remove
+----
+resolve_intent: "k" -> resolved key = true
+>> at end:
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+
+# Ambiguous replay protection still results in WriteTooOld errors after intent cleanup.
+
+run stats ok
+with t=E k=k
+  txn_begin ts=4,0
+  del resolve
+----
+>> del resolve t=E k=k
+del: "k": found key true
+del: lock acquisition = {k id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0 Replicated Intent []}
+resolve_intent: "k" -> resolved key = true
+stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+3168
+>> at end:
+txn: "E" meta={id=00000005 key="k" iso=Serializable pri=0.00000000 epo=0 ts=4.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=4.000000000,0 wto=false gul=0,0
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=64 val_count=5 val_bytes=44 live_count=1 live_bytes=37 gc_bytes_age=6911
+
+run stats error
+with t=E k=k
+  del ambiguousReplay
+----
+>> del ambiguousReplay t=E k=k
+del: "k": found key false
+stats: no change
+>> at end:
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=64 val_count=5 val_bytes=44 live_count=1 live_bytes=37 gc_bytes_age=6911
+error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 4.000000000,0 too old; must write at or above 4.000000000,1
+
+run ok
+txn_remove t=E
+----
+>> at end:
+
+# Ambiguous replay protects against timestamp change on point delete.
+
+run stats ok
+with t=F k=k
+  txn_begin ts=5,0
+  # Write an initial value at the first sequence number.
+  put v=k5
+----
+>> put v=k5 t=F k=k
+put: lock acquisition = {k id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+58 live_count=+1 live_bytes=+72 gc_bytes_age=-192 intent_count=+1 intent_bytes=+19 lock_count=+1 lock_age=+95
+>> at end:
+txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} ts=5.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/5.000000000,0 -> /BYTES/k5
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=76 val_count=6 val_bytes=102 live_count=2 live_bytes=109 gc_bytes_age=6719 intent_count=1 intent_bytes=19 lock_count=1 lock_age=95
+
+run stats ok
+with t=F k=k
+  txn_step
+  # Let's assume we had an RPC error prior to the first successful operation.
+  del ambiguousReplay
+----
+>> del ambiguousReplay t=F k=k
+del: "k": found key true
+del: lock acquisition = {k id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1 Replicated Intent []}
+stats: val_bytes=+6 live_count=-1 live_bytes=-72 gc_bytes_age=+7410 intent_bytes=-7
+>> at end:
+txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1} ts=5.000000000,0 del=true klen=12 vlen=0 ih={{0 /BYTES/k5}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/5.000000000,0 -> /<empty>
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=76 val_count=6 val_bytes=108 live_count=1 live_bytes=37 gc_bytes_age=14129 intent_count=1 intent_bytes=12 lock_count=1 lock_age=95
+
+run stats ok
+with t=F k=k
+  txn_step n=-1
+  # A replay of a lower sequence number with the same timestamp should be allowed.
+  put v=k5 ambiguousReplay
+----
+>> put v=k5 ambiguousReplay t=F k=k
+stats: no change
+>> at end:
+txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1} ts=5.000000000,0 del=true klen=12 vlen=0 ih={{0 /BYTES/k5}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/5.000000000,0 -> /<empty>
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=76 val_count=6 val_bytes=108 live_count=1 live_bytes=37 gc_bytes_age=14129 intent_count=1 intent_bytes=12 lock_count=1 lock_age=95
+
+run stats error
+with t=F k=k
+  txn_step
+  txn_advance ts=5,1
+  del ambiguousReplay
+----
+>> del ambiguousReplay t=F k=k
+stats: no change
+>> at end:
+txn: "F" meta={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,1 min=0,0 seq=1} lock=true stat=PENDING rts=5.000000000,0 wto=false gul=0,0
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000006 key="k" iso=Serializable pri=0.00000000 epo=0 ts=5.000000000,0 min=0,0 seq=1} ts=5.000000000,0 del=true klen=12 vlen=0 ih={{0 /BYTES/k5}} mergeTs=<nil> txnDidNotUpdateMeta=false
+data: "k"/5.000000000,0 -> /<empty>
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=76 val_count=6 val_bytes=108 live_count=1 live_bytes=37 gc_bytes_age=14129 intent_count=1 intent_bytes=12 lock_count=1 lock_age=95
+error: (*withstack.withStack:) transaction 00000006-0000-0000-0000-000000000000 with sequence 1 prevented from changing write timestamp from 5.000000000,0 to 5.000000000,1 due to ambiguous replay protection
+
+run ok
+with t=F k=k
+  resolve_intent status=ABORTED
+  txn_remove
+----
+resolve_intent: "k" -> resolved key = true
+>> at end:
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+
+# Ambiguous replay protection prevents timestamp change on transactional DeleteRange.
+
+run ok
+put k=k v=k6 ts=6,0
+----
+>> at end:
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+data: "k"/6.000000000,0 -> /BYTES/k6
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+
+run stats ok
+with t=G k=k
+  txn_begin ts=12,1
+  del_range k=a end=z returnKeys
+----
+>> del_range k=a end=z returnKeys t=G k=k
+del_range: lock acquisitions = [{a id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0 Replicated Intent []} {k id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0 Replicated Intent []}]
+del_range: "a"-"z" -> deleted 2 key(s)
+del_range: returned "a"
+del_range: returned "k"
+stats: key_bytes=+24 val_count=+2 val_bytes=+106 live_count=-2 live_bytes=-58 gc_bytes_age=+16544 intent_count=+2 intent_bytes=+24 lock_count=+2 lock_age=+176
+>> at end:
+txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/12.000000000,1 -> /<empty>
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/12.000000000,1 -> /<empty>
+data: "k"/6.000000000,0 -> /BYTES/k6
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 lock_count=2 lock_age=176
+
+run stats ok
+with t=G k=k
+  # First attempt a standard idempotent replay at a higher timestamp.
+  txn_advance ts=12,2
+  del_range k=a end=z returnKeys
+----
+>> del_range k=a end=z returnKeys t=G k=k
+del_range: "a"-"z" -> deleted 2 key(s)
+del_range: returned "a"
+del_range: returned "k"
+stats: no change
+>> at end:
+txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,2 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/12.000000000,1 -> /<empty>
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/12.000000000,1 -> /<empty>
+data: "k"/6.000000000,0 -> /BYTES/k6
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 lock_count=2 lock_age=176
+
+run stats error
+with t=G k=k
+  txn_advance ts=12,3
+  # However with ambiguous replay protection, a timestamp change should error.
+  del_range k=a end=z ambiguousReplay returnKeys
+----
+>> del_range k=a end=z ambiguousReplay returnKeys t=G k=k
+stats: no change
+>> at end:
+txn: "G" meta={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,3 min=0,0 seq=0} lock=true stat=PENDING rts=12.000000000,1 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/12.000000000,1 -> /<empty>
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+meta: "k"/0,0 -> txn={id=00000007 key="k" iso=Serializable pri=0.00000000 epo=0 ts=12.000000000,1 min=0,0 seq=0} ts=12.000000000,1 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "k"/12.000000000,1 -> /<empty>
+data: "k"/6.000000000,0 -> /BYTES/k6
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1
+stats: key_count=2 key_bytes=100 val_count=8 val_bytes=157 gc_bytes_age=23263 intent_count=2 intent_bytes=24 lock_count=2 lock_age=176
+error: (*withstack.withStack:) transaction 00000007-0000-0000-0000-000000000000 with sequence 0 prevented from changing write timestamp from 12.000000000,1 to 12.000000000,3 due to ambiguous replay protection
+
+run ok
+with t=G
+  # Commit at the last "correct" timestamp.
+  txn_advance ts=12,2
+  resolve_intent k=a
+  resolve_intent k=k
+  txn_remove
+----
+resolve_intent: "a" -> resolved key = true
+resolve_intent: "k" -> resolved key = true
+>> at end:
+data: "a"/12.000000000,2 -> {localTs=12.000000000,1}/<empty>
+data: "a"/12.000000000,0 -> {localTs=11.000000000,0}/BYTES/first
+data: "k"/12.000000000,2 -> {localTs=12.000000000,1}/<empty>
+data: "k"/6.000000000,0 -> /BYTES/k6
+data: "k"/4.000000000,0 -> /<empty>
+data: "k"/3.000000000,0 -> /BYTES/k3
+data: "k"/0,2 -> /BYTES/k2
+data: "k"/0,1 -> /BYTES/k1

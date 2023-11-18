@@ -29,7 +29,6 @@ go_test(
         "cache_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":ptcache",
         "//pkg/base",
@@ -44,6 +43,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/isql",
@@ -52,6 +52,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",

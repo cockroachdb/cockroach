@@ -19,11 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 )
 
 func TestBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	tests := []struct {
 		rows           int
@@ -40,8 +42,9 @@ func TestBank(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
+	defer srv.Stopper().Stop(ctx)
+
 	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
 
 	for _, test := range tests {

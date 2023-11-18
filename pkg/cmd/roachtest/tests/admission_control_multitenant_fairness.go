@@ -40,6 +40,10 @@ import (
 // [1]: Co-locating the SQL pod and the workload generator is a bit funky, but
 // it works fine enough as written and saves us from using another 4 nodes
 // per test.
+//
+// TODO(sumeer): Now that we are counting actual CPU for inter-tenant
+// fairness, alter the read-heavy workloads to perform different sized work,
+// and evaluate fairness.
 func registerMultiTenantFairness(r registry.Registry) {
 	specs := []multiTenantFairnessSpec{
 		{
@@ -92,6 +96,8 @@ func registerMultiTenantFairness(r registry.Registry) {
 			Owner:             registry.OwnerAdmissionControl,
 			Benchmark:         true,
 			Leases:            registry.MetamorphicLeases,
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Weekly),
 			Tags:              registry.Tags(`weekly`),
 			NonReleaseBlocker: false,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -138,7 +144,6 @@ func runMultiTenantFairness(
 	}
 
 	t.L().Printf("starting cockroach securely (<%s)", time.Minute)
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(),
 		option.DefaultStartOptsNoBackups(),
 		install.MakeClusterSettings(install.SecureOption(true)),

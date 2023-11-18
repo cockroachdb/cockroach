@@ -192,7 +192,7 @@ func DatumToEncDatum(ctyp *types.T, d tree.Datum) EncDatum {
 
 	dTyp := d.ResolvedType()
 	if d != tree.DNull && !ctyp.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
-		panic(errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp, ctyp))
+		panic(errors.AssertionFailedf("invalid datum type given: %s, expected %s", dTyp.SQLStringForError(), ctyp.SQLStringForError()))
 	}
 	return EncDatum{Datum: d}
 }
@@ -422,7 +422,8 @@ type EncDatumRow []EncDatum
 
 func (r EncDatumRow) stringToBuf(types []*types.T, a *tree.DatumAlloc, b *bytes.Buffer) {
 	if len(types) != len(r) {
-		panic(errors.AssertionFailedf("mismatched types (%v) and row (%v)", types, r))
+		b.WriteString(fmt.Sprintf("mismatched types (%v) and row (%v)", types, r))
+		return
 	}
 	b.WriteString("[")
 	for i := range r {

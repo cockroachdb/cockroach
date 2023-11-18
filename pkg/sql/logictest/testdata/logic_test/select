@@ -862,3 +862,79 @@ SELECT -488 OF FROM t;
 ----
 of
 -488
+
+subtest push_ordinality_into_select
+
+statement ok
+CREATE TABLE trm (
+    id UUID NOT NULL,
+    trid UUID NOT NULL,
+    ts12 TIMESTAMP NOT NULL
+);
+INSERT INTO trm VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9882',
+                       '5ebfedee-0dcf-41e6-a315-5fa0b51b9882',
+                       '1999-12-31 23:59:59');
+INSERT INTO trm VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9883',
+                       '5ebfedee-0dcf-41e6-a315-5fa0b51b9883',
+                       '1999-12-31 23:59:58');
+INSERT INTO trm VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9882',
+                       '5ebfedee-0dcf-41e6-a315-5fa0b51b9882',
+                       '1999-11-30 23:59:59');
+INSERT INTO trm VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9883',
+                       '5ebfedee-0dcf-41e6-a315-5fa0b51b9883',
+                       '1999-11-30 23:59:58');
+INSERT INTO trm VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9884',
+                       '5ebfedee-0dcf-41e6-a315-5fa0b51b9884',
+                       '1999-11-30 23:59:57');
+
+statement ok
+CREATE TABLE trrec (
+    id UUID NOT NULL,
+    trid STRING NOT NULL,
+    ts12 TIMESTAMP NOT NULL,
+    str16 STRING NULL,
+    INDEX trrec_idx5 (str16 ASC)
+);
+INSERT INTO trrec VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9882', '1', '1999-12-31 23:59:59', '12345');
+INSERT INTO trrec VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9883', '2', '1999-12-31 23:59:58', '12345');
+INSERT INTO trrec VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9884', '3', '1999-12-31 23:59:57', '123456');
+
+statement ok
+CREATE TABLE trtab4 (
+    id UUID NOT NULL,
+    trid UUID NOT NULL,
+    dec1 DECIMAL(19,2) NOT NULL
+);
+INSERT INTO trtab4 VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9882', '5ebfedee-0dcf-41e6-a315-5fa0b51b9882', 1.0);
+INSERT INTO trtab4 VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9883', '5ebfedee-0dcf-41e6-a315-5fa0b51b9883', 2.0);
+INSERT INTO trtab4 VALUES('5ebfedee-0dcf-41e6-a315-5fa0b51b9884', '5ebfedee-0dcf-41e6-a315-5fa0b51b9884', 3.0);
+
+query TTT
+WITH
+  with2
+    AS (
+      SELECT
+        tq.trid, tq.dec1
+      FROM
+        trrec AS r INNER JOIN trtab4 AS tq ON r.id = tq.trid AND r.str16 = '12345'
+    )
+SELECT tr.id, tr.trid, val3.ts12
+FROM
+  trrec AS tr
+  INNER JOIN LATERAL (
+      SELECT  q.dec1 FROM with2 AS q WHERE tr.id = q.trid
+    ) AS q ON true
+  INNER JOIN LATERAL (
+      SELECT
+        m.ts12
+      FROM trm AS m WHERE tr.id = m.trid
+      ORDER BY m.ts12 ASC
+      LIMIT 1
+    ) AS val3 ON true
+WHERE
+  tr.str16 = '12345'
+ORDER BY 1 DESC
+;
+----
+5ebfedee-0dcf-41e6-a315-5fa0b51b9883  2  1999-11-30 23:59:58 +0000 +0000
+5ebfedee-0dcf-41e6-a315-5fa0b51b9882  1  1999-11-30 23:59:59 +0000 +0000

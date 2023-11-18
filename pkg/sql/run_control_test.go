@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -60,7 +59,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	var queryLatency *time.Duration
 	sem := make(chan struct{}, 1)
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-	tc := serverutils.StartNewTestCluster(t, 2, /* numNodes */
+	tc := serverutils.StartCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -167,7 +166,7 @@ func TestCancelSessionPermissions(t *testing.T) {
 
 	ctx := context.Background()
 	numNodes := 2
-	testCluster := serverutils.StartNewTestCluster(t, numNodes,
+	testCluster := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -280,7 +279,7 @@ func TestCancelQueryPermissions(t *testing.T) {
 
 	ctx := context.Background()
 	numNodes := 2
-	testCluster := serverutils.StartNewTestCluster(t, numNodes,
+	testCluster := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
@@ -384,7 +383,7 @@ func TestCancelIfExists(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := serverutils.StartNewTestCluster(t, 1, /* numNodes */
+	tc := serverutils.StartCluster(t, 1, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -423,7 +422,7 @@ func TestIdleInSessionTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -497,7 +496,7 @@ func TestIdleInTransactionSessionTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -568,7 +567,7 @@ func TestTransactionTimeout(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -649,7 +648,7 @@ func TestIdleInTransactionSessionTimeoutAbortedState(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -708,7 +707,7 @@ func TestIdleInTransactionSessionTimeoutCommitWaitState(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -770,7 +769,7 @@ func TestStatementTimeoutRetryableErrors(t *testing.T) {
 	ctx := context.Background()
 
 	numNodes := 1
-	tc := serverutils.StartNewTestCluster(t, numNodes,
+	tc := serverutils.StartCluster(t, numNodes,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
@@ -839,7 +838,6 @@ func getUserConn(t *testing.T, username string, server serverutils.TestServerInt
 func TestTenantStatementTimeoutAdmissionQueueCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	skip.UnderStress(t, "times out under stress")
 
@@ -936,7 +934,7 @@ func TestTenantStatementTimeoutAdmissionQueueCancellation(t *testing.T) {
 	require.Equal(t, tableID, int(id))
 
 	makeTenantConn := func() *sqlutils.SQLRunner {
-		return sqlutils.MakeSQLRunner(tt.SQLConn(t, ""))
+		return sqlutils.MakeSQLRunner(tt.SQLConn(t))
 	}
 
 	blockers := make([]*sqlutils.SQLRunner, numBlockers)

@@ -63,6 +63,10 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 	defer c.Cleanup()
 
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
 			1: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-2"}}},
@@ -88,7 +92,7 @@ func TestCollectInfoFromMultipleStores(t *testing.T) {
 		stores[r.StoreID] = struct{}{}
 	}
 	require.Equal(t, 2, len(stores), "collected replicas from stores")
-	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+	require.Equal(t, clusterversion.Latest.Version(), replicas.Version,
 		"collected version info from stores")
 }
 
@@ -112,6 +116,8 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			StoreSpecs: []base.StoreSpec{{InMemory: true}},
 			Insecure:   true,
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		},
 	})
 	tc.Start(t)
@@ -151,7 +157,7 @@ func TestCollectInfoFromOnlineCluster(t *testing.T) {
 	require.Equal(t, totalRanges*2, totalReplicas, "number of collected replicas")
 	require.Equal(t, totalRanges, len(replicas.Descriptors),
 		"number of collected descriptors from metadata")
-	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), replicas.Version,
+	require.Equal(t, clusterversion.Latest.Version(), replicas.Version,
 		"collected version info from stores")
 }
 
@@ -180,13 +186,17 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	// mark on replicas on node 1 as designated survivors. After that, starting
 	// single node should succeed.
 	tcBefore := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
 		},
 	})
 	tcBefore.Start(t)
 	s := sqlutils.MakeSQLRunner(tcBefore.Conns[0])
-	s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
+	s.Exec(t, "SET CLUSTER SETTING cluster.organization = 'remove dead replicas test'")
 	defer tcBefore.Stopper().Stop(ctx)
 
 	// We use scratch range to test special case for pending update on the
@@ -242,6 +252,10 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		"apply plan was not executed on requested node")
 
 	tcAfter := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {StoreSpecs: []base.StoreSpec{{Path: dir + "/store-1"}}},
@@ -328,8 +342,15 @@ func TestStageVersionCheck(t *testing.T) {
 	})
 	defer c.Cleanup()
 
+	listenerReg := listenerutil.NewListenerRegistry()
+	defer listenerReg.Close()
+
 	storeReg := server.NewStickyVFSRegistry()
 	tc := testcluster.NewTestCluster(t, 4, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReplicationMode: base.ReplicationManual,
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
@@ -343,13 +364,14 @@ func TestStageVersionCheck(t *testing.T) {
 				},
 			},
 		},
+		ReusableListenerReg: listenerReg,
 	})
 	tc.Start(t)
 	defer tc.Stopper().Stop(ctx)
 	tc.StopServer(3)
 
 	adminClient := tc.Server(0).GetAdminClient(t)
-	v := clusterversion.ByKey(clusterversion.BinaryVersionKey)
+	v := clusterversion.Latest.Version()
 	v.Internal++
 	// To avoid crafting real replicas we use StaleLeaseholderNodeIDs to force
 	// node to stage plan for verification.
@@ -377,13 +399,11 @@ func TestStageVersionCheck(t *testing.T) {
 	})
 	require.NoError(t, err, "force local must fix incorrect version")
 	// Check that stored plan has version matching cluster version.
-	fs, err := storeReg.Get(base.StoreSpec{InMemory: true, StickyVFSID: "1"})
-	require.NoError(t, err, "failed to get shared store fs")
-	ps := loqrecovery.NewPlanStore("", fs)
+	ps := loqrecovery.NewPlanStore("", storeReg.Get("1"))
 	p, ok, err := ps.LoadPlan()
 	require.NoError(t, err, "failed to read node 0 plan")
 	require.True(t, ok, "plan was not staged")
-	require.Equal(t, clusterversion.ByKey(clusterversion.BinaryVersionKey), p.Version,
+	require.Equal(t, clusterversion.Latest.Version(), p.Version,
 		"plan version was not updated")
 }
 
@@ -459,12 +479,16 @@ func TestHalfOnlineLossOfQuorumRecovery(t *testing.T) {
 		}
 	}
 	tc := testcluster.NewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			// This logic is specific to the storage layer.
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
 		ReusableListenerReg: listenerReg,
 		ServerArgsPerNode:   sa,
 	})
 	tc.Start(t)
 	s := sqlutils.MakeSQLRunner(tc.Conns[0])
-	s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
+	s.Exec(t, "SET CLUSTER SETTING cluster.organization = 'remove dead replicas test'")
 	defer tc.Stopper().Stop(ctx)
 
 	// We use scratch range to test special case for pending update on the

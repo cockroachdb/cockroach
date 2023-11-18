@@ -13,6 +13,7 @@ package main
 import (
 	"fmt"
 	htmltemplate "html/template"
+	"log"
 	"net/smtp"
 	"net/textproto"
 	"path/filepath"
@@ -215,7 +216,7 @@ func sendMailPickSHA(args messageDataPickSHA, opts sendOpts) error {
 	return sendmail(msg, opts)
 }
 
-func sendMailUpdateVersions(args messageDataUpdateVersions, opts sendOpts, dryRun bool) error {
+func sendMailUpdateVersions(args messageDataUpdateVersions, opts sendOpts) error {
 	template := messageTemplates{
 		SubjectPrefix: templatePrefixUpdateVersions,
 		BodyPrefixes:  []string{templatePrefixUpdateVersions},
@@ -224,14 +225,8 @@ func sendMailUpdateVersions(args messageDataUpdateVersions, opts sendOpts, dryRu
 	if err != nil {
 		return fmt.Errorf("newMessage: %w", err)
 	}
-
-	if dryRun {
-		email := fmt.Sprintf("Subject: %s\n\n%s\n", msg.Subject, msg.TextBody)
-		fmt.Printf("dry-run: sendMailUpdateVersions:\n%s", email)
-		// We proceed to actually sending the mail in dry-runs because the
-		// TeamCity script sets the destination email address to the
-		// release-dev team's email.
-	}
+	log.Printf("dry-run: sendMailUpdateVersions:\n")
+	log.Printf("Subject: %s\n\n%s\n", msg.Subject, msg.TextBody)
 	return sendmail(msg, opts)
 }
 
@@ -239,7 +234,6 @@ func sendMailUpdateVersions(args messageDataUpdateVersions, opts sendOpts, dryRu
 // sendmail is specified as a function closure to allow for testing
 // of sendMail* methods.
 var sendmail = func(content *message, smtpOpts sendOpts) error {
-
 	e := &email.Email{
 		To:      smtpOpts.to,
 		From:    smtpOpts.from,

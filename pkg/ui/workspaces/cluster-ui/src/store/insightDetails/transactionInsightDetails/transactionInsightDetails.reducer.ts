@@ -12,12 +12,12 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "src/store/utils";
 import moment, { Moment } from "moment-timezone";
 import { ErrorWithKey } from "src/api/statementsApi";
+import { TxnInsightDetails } from "src/insights";
+import { SqlApiResponse, TxnInsightDetailsReqErrs } from "src/api";
 import {
   TxnInsightDetailsRequest,
   TxnInsightDetailsResponse,
-} from "src/api/txnInsightsApi";
-import { TxnInsightDetails } from "src/insights";
-import { SqlApiResponse, TxnInsightDetailsReqErrs } from "src/api";
+} from "../../../api/txnInsightDetailsApi";
 
 export type TxnInsightDetailsState = {
   data: TxnInsightDetails | null;

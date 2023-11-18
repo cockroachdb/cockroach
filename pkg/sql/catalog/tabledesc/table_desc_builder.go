@@ -134,7 +134,7 @@ func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() (err error) {
 	// Set the ModificationTime field before doing anything else.
 	// Other changes may depend on it.
 	mustSetModTime, err := descpb.MustSetModificationTime(
-		tdb.original.ModificationTime, tdb.mvccTimestamp, tdb.original.Version,
+		tdb.original.ModificationTime, tdb.mvccTimestamp, tdb.original.Version, tdb.original.State,
 	)
 	if err != nil {
 		return err
@@ -241,13 +241,6 @@ func (tdb *tableDescriptorBuilder) StripDanglingBackReferences(
 		}
 		if sliceIdx < len(tbl.MutationJobs) {
 			tbl.MutationJobs = tbl.MutationJobs[:sliceIdx]
-			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
-		}
-	}
-	// ... in the row_level_ttl field,
-	if ttl := tbl.RowLevelTTL; ttl != nil {
-		if id := jobspb.JobID(ttl.ScheduleID); id != jobspb.InvalidJobID && !nonTerminalJobIDMightExist(id) {
-			tbl.RowLevelTTL = nil
 			tdb.changes.Add(catalog.StrippedDanglingBackReferences)
 		}
 	}

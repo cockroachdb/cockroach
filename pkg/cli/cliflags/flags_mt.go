@@ -18,6 +18,14 @@ var (
 		Description: `The tenant ID under which to start the SQL server.`,
 	}
 
+	TenantIDFile = FlagInfo{
+		Name: "tenant-id-file",
+		Description: `Allows sourcing the tenant id from a file. The tenant id
+will be expected to be by itself on the first line of the file. If the file does
+not exist, or if the tenant id is incomplete, the tenant server will block, and
+wait for the tenant id to be fully written to the file (with a newline character).`,
+	}
+
 	KVAddrs = FlagInfo{
 		Name:        "kv-addrs",
 		EnvVar:      "COCKROACH_KV_ADDRS",

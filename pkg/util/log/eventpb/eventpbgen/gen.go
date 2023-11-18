@@ -595,7 +595,8 @@ func (m *{{.GoType}}) AppendJSONFields(printComma bool, b redact.RedactableBytes
    if m.{{.FieldName}} {
    {{- end }}
      if printComma { b = append(b, ',')}; printComma = true
-     b = append(b, "\"{{.FieldName}}\":true"...)
+     b = append(b, "\"{{.FieldName}}\":"...)
+     b = strconv.AppendBool(b, m.{{.FieldName}})
    {{ if not .AllowZeroValue -}}
    }
    {{- end }}

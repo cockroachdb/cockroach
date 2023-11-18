@@ -8,8 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Moment } from "moment-timezone";
+import moment, { Moment } from "moment-timezone";
 import { Filters } from "../queryFilter";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+const ContentionTypeEnum = cockroach.sql.contentionpb.ContentionType;
+
+export type ContentionTypeKey = {
+  [K in keyof typeof ContentionTypeEnum]: K;
+}[keyof typeof ContentionTypeEnum];
 
 // This enum corresponds to the string enum for `problems` in `cluster_execution_insights`
 export enum InsightNameEnum {
@@ -59,6 +66,7 @@ export type InsightEventBase = {
   transactionFingerprintID: string;
   username: string;
   errorCode: string;
+  errorMsg: string;
 };
 
 export type TxnInsightEvent = InsightEventBase & {
@@ -82,8 +90,10 @@ export type ContentionDetails = {
   tableName: string;
   indexName: string;
   contentionTimeMs: number;
+  contentionType: ContentionTypeKey;
 };
 
+// The return type of getTxnInsightsContentionDetailsApi.
 export type TxnContentionInsightDetails = {
   transactionExecutionID: string;
   application: string;
@@ -100,7 +110,6 @@ export type TxnInsightDetails = {
   txnDetails?: TxnInsightEvent;
   blockingContentionDetails?: ContentionDetails[];
   statements?: StmtInsightEvent[];
-  execType?: InsightExecEnum;
 };
 
 // Shown on the stmt insights overview page.
@@ -114,6 +123,7 @@ export type StmtInsightEvent = InsightEventBase & {
   databaseName: string;
   execType?: InsightExecEnum;
   status: StatementStatus;
+  errorMsg?: string;
 };
 
 export type Insight = {
@@ -344,10 +354,15 @@ export interface ExecutionDetails {
   transactionExecutionID?: string;
   execType?: InsightExecEnum;
   errorCode?: string;
+  errorMsg?: string;
   status?: string;
 }
 
 export interface insightDetails {
   duration?: number;
   description: string;
+}
+
+export enum StmtFailureCodesStr {
+  RETRY_SERIALIZABLE = "40001",
 }

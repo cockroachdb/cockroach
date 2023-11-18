@@ -298,8 +298,8 @@ type ElementReferences interface {
 	// references in the given element. This includes the current element.
 	ForwardReferences(e scpb.Element) ElementResultSet
 
-	// BackReferences returns the set of elements to which we have back-references
-	// in the descriptor backing the given element. Back-references also include
+	// BackReferences finds all descriptors with a back-reference to descriptor `id`
+	// and return all elements that belong to them. Back-references also include
 	// children, in the case of databases and schemas.
 	BackReferences(id catid.DescID) ElementResultSet
 }
@@ -362,7 +362,7 @@ type NameResolver interface {
 	ResolveIndex(relationID catid.DescID, indexName tree.Name, p ResolveParams) ElementResultSet
 
 	// ResolveUDF retrieves a user defined function and returns its elements.
-	ResolveUDF(fnObj *tree.FuncObj, p ResolveParams) ElementResultSet
+	ResolveRoutine(routineObj *tree.RoutineObj, p ResolveParams, routineType tree.RoutineType) ElementResultSet
 
 	// ResolveIndexByName retrieves a table which contains the target
 	// index and returns its elements. Name of database, schema or table may be

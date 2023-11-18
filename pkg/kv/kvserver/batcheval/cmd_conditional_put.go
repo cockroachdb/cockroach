@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -33,12 +34,12 @@ func declareKeysConditionalPut(
 	latchSpans *spanset.SpanSet,
 	lockSpans *lockspanset.LockSpanSet,
 	maxOffset time.Duration,
-) {
+) error {
 	args := req.(*kvpb.ConditionalPutRequest)
 	if args.Inline {
-		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		return DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	} else {
-		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
+		return DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	}
 }
 
@@ -59,21 +60,24 @@ func ConditionalPut(
 	handleMissing := storage.CPutMissingBehavior(args.AllowIfDoesNotExist)
 
 	opts := storage.MVCCWriteOptions{
-		Txn:            h.Txn,
-		LocalTimestamp: cArgs.Now,
-		Stats:          cArgs.Stats,
+		Txn:                            h.Txn,
+		LocalTimestamp:                 cArgs.Now,
+		Stats:                          cArgs.Stats,
+		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 	}
 
 	var err error
+	var acq roachpb.LockAcquisition
 	if args.Blind {
-		err = storage.MVCCBlindConditionalPut(
+		acq, err = storage.MVCCBlindConditionalPut(
 			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, opts)
 	} else {
-		err = storage.MVCCConditionalPut(
+		acq, err = storage.MVCCConditionalPut(
 			ctx, readWriter, args.Key, ts, args.Value, args.ExpBytes, handleMissing, opts)
 	}
 	if err != nil {
 		return result.Result{}, err
 	}
-	return result.FromAcquiredLocks(h.Txn, args.Key), nil
+	return result.WithAcquiredLocks(acq), nil
 }

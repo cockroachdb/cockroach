@@ -2,9 +2,9 @@
 CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL, k INT, FAMILY "primary" (i, j, k));
 
 /* test */
-EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT DEFAULT 30;
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j), DROP COLUMN k, ADD COLUMN p INT DEFAULT 30, ADD COLUMN q INT, DROP COLUMN q;
 ----
-Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›;
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›), DROP COLUMN ‹k›, ADD COLUMN ‹p› INT8 DEFAULT ‹30›, ADD COLUMN ‹q› INT8, DROP COLUMN ‹q›;
  ├── execute 2 system table mutations transactions
  ├── backfill using primary index t_pkey- in relation t
  │    └── into t_pkey~ (i; p+, j, k-)

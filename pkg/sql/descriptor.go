@@ -63,12 +63,12 @@ var (
 // whether the CREATE privilege is given to the `public` role on the `public`
 // schema at the time the schema is created.
 var PublicSchemaCreatePrivilegeEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.auth.public_schema_create_privilege.enabled",
 	"determines whether to grant all users the CREATE privileges on the public "+
 		"schema when it is created",
 	true,
-).WithPublic()
+	settings.WithPublic)
 
 // createDatabase takes Database descriptor and creates it if needed,
 // incrementing the descriptor counter. Returns true if the descriptor
@@ -215,12 +215,24 @@ func (p *planner) createDatabase(
 
 	}
 
+	// TODO(jeffswenson): delete once region_livess is implemented (#107966)
+	if err := p.maybeUpdateSystemDBSurvivalGoal(ctx); err != nil {
+		return nil, false, err
+	}
+
 	return db, true, nil
 }
 
 func (p *planner) createDescriptor(
 	ctx context.Context, descriptor catalog.MutableDescriptor, jobDesc string,
 ) error {
+	if err := p.shouldRestrictAccessToSystemInterface(ctx,
+		"DDL execution",   /* operation */
+		"running the DDL", /* alternate action */
+	); err != nil {
+		return err
+	}
+
 	if !descriptor.IsNew() {
 		return errors.AssertionFailedf(
 			"expected new descriptor, not a modification of version %d",
@@ -342,16 +354,16 @@ const DefaultPrimaryRegionClusterSettingName = "sql.defaults.primary_region"
 
 // DefaultPrimaryRegion is a cluster setting that contains the default primary region.
 var DefaultPrimaryRegion = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	DefaultPrimaryRegionClusterSettingName,
 	`if not empty, all databases created without a PRIMARY REGION will `+
 		`implicitly have the given PRIMARY REGION`,
 	"",
-).WithPublic()
+	settings.WithPublic)
 
 // SecondaryTenantsMultiRegionAbstractionsEnabledSettingName is the name of the
 // cluster setting that governs secondary tenant multi-region abstraction usage.
-const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
+const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.virtual_cluster.feature_access.multiregion.enabled"
 
 // SecondaryTenantsMultiRegionAbstractionsEnabled controls if secondary tenants
 // are allowed to use multi-region abstractions. In particular, it controls if
@@ -362,10 +374,11 @@ const SecondaryTenantsMultiRegionAbstractionsEnabledSettingName = "sql.multi_reg
 // already been configured. It only affects regions being added to new
 // databases.
 var SecondaryTenantsMultiRegionAbstractionsEnabled = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
-	SecondaryTenantsMultiRegionAbstractionsEnabledSettingName,
-	"allow secondary tenants to use multi-region abstractions",
+	settings.SystemVisible,
+	"sql.multi_region.allow_abstractions_for_secondary_tenants.enabled", // internal key, name defined above
+	"allow the use of multi-region abstractions and syntax in virtual clusters",
 	false,
+	settings.WithName(SecondaryTenantsMultiRegionAbstractionsEnabledSettingName),
 )
 
 // maybeInitializeMultiRegionMetadata initializes multi-region metadata if a

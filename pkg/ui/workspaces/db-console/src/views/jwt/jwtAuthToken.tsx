@@ -25,7 +25,7 @@ import {
 import ErrorCircle from "assets/error-circle.svg";
 import "./jwtAuthToken.styl";
 
-const OIDC_LOGIN_PATH_WITH_JWT = "/oidc/v1/login?jwt";
+const OIDC_LOGIN_PATH_WITH_JWT = "oidc/v1/login?jwt";
 
 type Params = {
   oidc: string;
@@ -159,7 +159,7 @@ export const JwtAuthTokenPage = () => {
   useEffect(() => {
     const { State, Code } = JSON.parse(atob(oidc));
 
-    fetch(`/oidc/v1/jwt?state=${State}&code=${Code}`).then(
+    fetch(`oidc/v1/jwt?state=${State}&code=${Code}`).then(
       (response: Response) => {
         setLoading(false);
         if (response.ok) {

@@ -205,6 +205,8 @@ type ProducerMetadata struct {
 	Metrics *RemoteProducerMetadata_Metrics
 	// Changefeed contains information about changefeed.
 	Changefeed *ChangefeedMeta
+	// AggregatorEvents contains information from a tracing aggregator.
+	AggregatorEvents *TracingAggregatorEvents
 }
 
 var (
@@ -275,6 +277,8 @@ func RemoteProducerMetaToLocalMeta(
 		meta.Metrics = v.Metrics
 	case *RemoteProducerMetadata_Changefeed:
 		meta.Changefeed = v.Changefeed
+	case *RemoteProducerMetadata_TracingAggregatorEvents:
+		meta.AggregatorEvents = v.TracingAggregatorEvents
 	default:
 		return *meta, false
 	}
@@ -326,6 +330,10 @@ func LocalMetaToRemoteProducerMeta(
 	} else if meta.Changefeed != nil {
 		rpm.Value = &RemoteProducerMetadata_Changefeed{
 			Changefeed: meta.Changefeed,
+		}
+	} else if meta.AggregatorEvents != nil {
+		rpm.Value = &RemoteProducerMetadata_TracingAggregatorEvents{
+			TracingAggregatorEvents: meta.AggregatorEvents,
 		}
 	} else if buildutil.CrdbTestBuild {
 		panic("unhandled field in local meta or all fields are nil")

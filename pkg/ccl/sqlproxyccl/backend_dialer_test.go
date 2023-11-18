@@ -97,11 +97,11 @@ func TestBackendDialTLS(t *testing.T) {
 
 	tenant10 := roachpb.MustMakeTenantID(10)
 	sql10, _ := serverutils.StartTenant(t, storageServer, base.TestTenantArgs{TenantID: tenant10})
-	defer sql10.Stopper().Stop(ctx)
+	defer sql10.AppStopper().Stop(ctx)
 
 	tenant11 := roachpb.MustMakeTenantID(11)
 	sql11, _ := serverutils.StartTenant(t, storageServer, base.TestTenantArgs{TenantID: tenant11})
-	defer sql11.Stopper().Stop(ctx)
+	defer sql11.AppStopper().Stop(ctx)
 
 	tests := []struct {
 		name     string
@@ -120,22 +120,22 @@ func TestBackendDialTLS(t *testing.T) {
 		name:     "tenant10To11",
 		addr:     sql11.SQLAddr(),
 		tenantID: 10,
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}, {
 		name:     "tenant11To10",
 		addr:     sql10.SQLAddr(),
 		tenantID: 11,
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}, {
 		name:     "tenant10ToStorage",
 		addr:     storageServer.SystemLayer().AdvSQLAddr(),
 		tenantID: 10,
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}, {
 		name:     "tenantWithNodeIDToStoage",
 		addr:     storageServer.SystemLayer().AdvSQLAddr(),
 		tenantID: uint64(storageServer.NodeID()),
-		errCode:  codeBackendDown,
+		errCode:  codeBackendDialFailed,
 	}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

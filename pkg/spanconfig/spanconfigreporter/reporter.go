@@ -14,7 +14,6 @@ package spanconfigreporter
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -33,12 +32,7 @@ var rangeDescPageSize = settings.RegisterIntSetting(
 	"spanconfig.reporter.range_desc_page_size",
 	"pa",
 	100,
-	func(i int64) error {
-		if i < 5 || i > 25000 {
-			return fmt.Errorf("expected range_desc_page_size to be in range [5, 25000], got %d", i)
-		}
-		return nil
-	},
+	settings.IntInRange(5, 25000),
 )
 
 var conformanceReportRateLimit = settings.RegisterFloatSetting(
@@ -46,12 +40,7 @@ var conformanceReportRateLimit = settings.RegisterFloatSetting(
 	"spanconfig.reporter.report_rate_limit",
 	"the number of calls per second allowed to SpanConfigConformance",
 	1.0,
-	func(f float64) error {
-		if f < 0 || f > 1e9 {
-			return fmt.Errorf("expected report_rate_limit to be in range [0, 1e9], got %f", f)
-		}
-		return nil
-	},
+	settings.FloatInRange(0, 1e9),
 )
 
 // Reporter is used to figure out whether ranges backing specific spans conform

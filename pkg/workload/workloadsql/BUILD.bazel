@@ -31,7 +31,6 @@ go_test(
         "sliceslice_test.go",
         "workloadsql_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":workloadsql"],
     deps = [
         "//pkg/base",
@@ -43,6 +42,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/uuid",
         "//pkg/workload",

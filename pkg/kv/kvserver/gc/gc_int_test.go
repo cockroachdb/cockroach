@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,7 +55,6 @@ func init() {
 
 func TestEndToEndGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer ccl.TestingEnableEnterprise()()
 
 	for _, d := range []struct {
 		// Using range tombstones to remove data will promote full range deletions
@@ -105,7 +103,7 @@ func TestEndToEndGC(t *testing.T) {
 				defer s.Stopper().Stop(ctx)
 
 				statusServer := s.SystemLayer().StatusServer().(serverpb.StatusServer)
-				systemSqlDb := s.SystemLayer().SQLConn(t, "system")
+				systemSqlDb := s.SystemLayer().SQLConn(t, serverutils.DBName("system"))
 
 				execOrFatal := func(t *testing.T, db *gosql.DB, stmt string, args ...interface{}) {
 					t.Helper()
@@ -224,8 +222,8 @@ WHERE 'kv' IN (
 				execOrFatal(t, appSqlDb, `SET CLUSTER SETTING kv.protectedts.poll_interval = '5s'`)
 
 				// Ensure that each table gets its own range.
-				execOrFatal(t, systemSqlDb, `SET CLUSTER SETTING spanconfig.tenant_coalesce_adjacent.enabled = 'false'`)
-				execOrFatal(t, systemSqlDb, `SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = 'false'`)
+				execOrFatal(t, systemSqlDb, `SET CLUSTER SETTING spanconfig.range_coalescing.application.enabled = 'false'`)
+				execOrFatal(t, systemSqlDb, `SET CLUSTER SETTING spanconfig.range_coalescing.system.enabled = 'false'`)
 
 				if d.clearRange {
 					execOrFatal(t, systemSqlDb, `SET CLUSTER SETTING kv.gc.clear_range_min_keys = 5`)

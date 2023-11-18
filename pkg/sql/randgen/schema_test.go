@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
@@ -31,13 +32,14 @@ import (
 // at least one of those tables will be successfully populated.
 func TestPopulateTableWithRandData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	s, dbConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
 	rng, _ := randutil.NewTestRand()
-	defer ccl.TestingEnableEnterprise()()
+	defer ccl.TestingEnableEnterprise()() // allow usage of partitions
 
 	sqlDB := sqlutils.MakeSQLRunner(dbConn)
 	sqlDB.Exec(t, "CREATE DATABASE rand")

@@ -1,0 +1,20 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT, m INT);
+CREATE TABLE k (i INT PRIMARY KEY, j INT, m INT);
+CREATE UNIQUE INDEX idx ON t(j, i) USING HASH;
+CREATE UNIQUE INDEX idx2 ON k(j, i) USING HASH;
+INSERT INTO t VALUES (-1, -1), (-2, -2), (-3, -3);
+INSERT INTO k VALUES (-1, -1), (-2, -2), (-3, -3);
+CREATE TABLE t_ref(i INT PRIMARY KEY,
+                   j INT,
+                   CONSTRAINT "j_t_fk" FOREIGN KEY (j, i) REFERENCES
+                          t(j, i),
+                   CONSTRAINT "j_k_fk" FOREIGN KEY (j, i) REFERENCES
+                                                    k(j, i)
+                   );
+
+/* test */
+EXPLAIN (DDL, SHAPE) DROP INDEX idx CASCADE;
+----
+Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE;
+ └── execute 3 system table mutations transactions

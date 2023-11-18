@@ -28,6 +28,17 @@ func init() {
 						IsSecondaryIndex: this.IsUsingSecondaryEncoding,
 					}
 				}),
+				emit(func(this *scpb.TemporaryIndex) *scop.SetAddedIndexPartialPredicate {
+					if this.Expr == nil {
+						return nil
+					}
+					return &scop.SetAddedIndexPartialPredicate{
+						TableID: this.TableID,
+						IndexID: this.IndexID,
+						Expr:    this.Expr.Expr,
+					}
+				}),
+
 				emit(func(this *scpb.TemporaryIndex, md *opGenContext) *scop.MaybeAddSplitForIndex {
 					// Avoid adding splits for tables without any data (i.e. newly created ones).
 					if checkIfDescriptorIsWithoutData(this.TableID, md) {

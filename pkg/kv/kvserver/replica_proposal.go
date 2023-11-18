@@ -200,6 +200,23 @@ type ProposalData struct {
 	// application is). This flag makes sure that the proposal buffer won't
 	// accidentally reinsert a finished proposal into the map.
 	v2SeenDuringApplication bool
+
+	// seedProposal points at the seed proposal in the chain of (re-)proposals, if
+	// this ProposalData is a reproposal. The field is nil for the seed proposal.
+	seedProposal *ProposalData
+	// lastReproposal is the last proposal that superseded the seed proposal.
+	// Superseding proposals form a chain starting from the seed proposal. This
+	// field is set only on the seed proposal, and is updated every time a new
+	// reproposal is cast.
+	//
+	// See Replica.mu.proposals comment for more details.
+	//
+	// TODO(pavelkalinnikov): We are referencing only the last reproposal in the
+	// chain, so that the intermediate ones can be GCed in case the chain is very
+	// long. This chain reasoning is subtle, we should decompose ProposalData in
+	// such a way that the "common" parts of the (re-)proposals are shared and
+	// chaining isn't necessary.
+	lastReproposal *ProposalData
 }
 
 // useReplicationAdmissionControl indicates whether this raft command should
@@ -526,14 +543,14 @@ func (r *Replica) leasePostApplyLocked(
 	// lease is valid and owned by the replica before processing.
 	if iAmTheLeaseHolder && leaseChangingHands &&
 		LeaseCheckPreferencesOnAcquisitionEnabled.Get(&r.store.cfg.Settings.SV) {
-		preferenceStatus := checkStoreAgainstLeasePreferences(r.store.StoreID(), r.store.Attrs(),
+		preferenceStatus := CheckStoreAgainstLeasePreferences(r.store.StoreID(), r.store.Attrs(),
 			r.store.nodeDesc.Attrs, r.store.nodeDesc.Locality, r.mu.conf.LeasePreferences)
 		switch preferenceStatus {
-		case leasePreferencesOK, leasePreferencesLessPreferred:
+		case LeasePreferencesOK, LeasePreferencesLessPreferred:
 			// We could also enqueue the lease when we are a less preferred
 			// leaseholder, however the replicate queue will eventually get to it and
 			// we already satisfy _some_ preference.
-		case leasePreferencesViolating:
+		case LeasePreferencesViolating:
 			log.VEventf(ctx, 2,
 				"acquired lease violates lease preferences, enqueuing for transfer [lease=%v preferences=%v]",
 				newLease, r.mu.conf.LeasePreferences)
@@ -638,6 +655,10 @@ func addSSTablePreApply(
 			Size:            sst.BackingFileSize,
 			SmallestUserKey: start.Encode(),
 			LargestUserKey:  end.Encode(),
+
+			// TODO(msbutler): I guess we need to figure out if the backing external
+			// file has point or range keys in the target span.
+			HasPointKey: true,
 		}
 		tBegin := timeutil.Now()
 		defer func() {

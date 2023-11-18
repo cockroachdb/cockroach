@@ -13,9 +13,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
@@ -27,156 +27,68 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
-
-// applyCutoverTime modifies the consumer job record with a cutover time and
-// unpauses the job if necessary.
-func applyCutoverTime(
-	ctx context.Context,
-	jobRegistry *jobs.Registry,
-	txn isql.Txn,
-	ingestionJobID jobspb.JobID,
-	cutoverTimestamp hlc.Timestamp,
-) error {
-	log.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
-	if err := jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false,
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			progress := md.Progress.GetStreamIngest()
-			details := md.Payload.GetStreamIngestion()
-			if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
-				return errors.Newf("job %d already started cutting over to timestamp %s",
-					ingestionJobID, progress.CutoverTime)
-			}
-
-			progress.ReplicationStatus = jobspb.ReplicationPendingCutover
-			// Update the sentinel being polled by the stream ingestion job to
-			// check if a complete has been signaled.
-			progress.CutoverTime = cutoverTimestamp
-			progress.RemainingCutoverSpans = roachpb.Spans{details.Span}
-			ju.UpdateProgress(md.Progress)
-			return nil
-		}); err != nil {
-		return err
-	}
-	// Unpause the job if it is paused.
-	return jobRegistry.Unpause(ctx, txn, ingestionJobID)
-}
-
-func getReplicationStatsAndStatus(
-	ctx context.Context, jobRegistry *jobs.Registry, txn isql.Txn, ingestionJobID jobspb.JobID,
-) (*streampb.StreamIngestionStats, string, error) {
-	job, err := jobRegistry.LoadJobWithTxn(ctx, ingestionJobID, txn)
-	if err != nil {
-		return nil, jobspb.ReplicationError.String(), err
-	}
-	details, ok := job.Details().(jobspb.StreamIngestionDetails)
-	if !ok {
-		return nil, jobspb.ReplicationError.String(),
-			errors.Newf("job with id %d is not a stream ingestion job", job.ID())
-	}
-
-	details.StreamAddress, err = redactSourceURI(details.StreamAddress)
-	if err != nil {
-		return nil, jobspb.ReplicationError.String(), err
-	}
-
-	stats, err := replicationutils.GetStreamIngestionStatsNoHeartbeat(ctx, details, job.Progress())
-	if err != nil {
-		return nil, jobspb.ReplicationError.String(), err
-	}
-	if job.Status() == jobs.StatusPaused {
-		return stats, jobspb.ReplicationPaused.String(), nil
-	}
-	return stats, stats.IngestionProgress.ReplicationStatus.String(), nil
-}
 
 type streamIngestionResumer struct {
 	job *jobs.Job
+
+	mu struct {
+		syncutil.Mutex
+		// perNodeAggregatorStats is a per component running aggregate of trace
+		// driven AggregatorStats pushed backed to the resumer from all the
+		// processors running the backup.
+		perNodeAggregatorStats bulkutil.ComponentAggregatorStats
+	}
 }
 
-func connectToActiveClient(
-	ctx context.Context, ingestionJob *jobs.Job, db isql.DB,
-) (streamclient.Client, error) {
+func getStreamAddresses(ctx context.Context, ingestionJob *jobs.Job) []string {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	progress := ingestionJob.Progress()
 	streamAddresses := progress.GetStreamIngest().StreamAddresses
 
 	if len(streamAddresses) > 0 {
-		log.Infof(ctx, "ingestion job %d attempting to connect to existing stream addresses", ingestionJob.ID())
-		client, err := streamclient.GetFirstActiveClient(ctx, streamAddresses)
-		if err == nil {
-			return client, err
-		}
-
-		// fall through to streamAddress, as even though it is likely part of the
-		// topology it may have been changed to a new valid address via an ALTER
-		// statement
+		return streamAddresses
 	}
-	// Without a list of addresses from existing progress we use the stream
-	// address from the creation statement
-	streamAddress := streamingccl.StreamAddress(details.StreamAddress)
-	client, err := streamclient.NewStreamClient(ctx, streamAddress, db)
-
-	return client, errors.Wrapf(err, "ingestion job %d failed to connect to stream address or existing topology for planning", ingestionJob.ID())
+	// Without a list of addresses from existing progress, we use the stream
+	// address from the creation statement. This could happen if no progress has
+	// been reported.
+	log.Infof(ctx, "no stream addresses in progress. using stream address found during planning")
+	return []string{details.StreamAddress}
 }
 
-// Ping the producer job and waits until it is active/running, returns nil when
-// the job is active.
-func waitUntilProducerActive(
-	ctx context.Context,
-	client streamclient.Client,
-	streamID streampb.StreamID,
-	heartbeatTimestamp hlc.Timestamp,
-	ingestionJobID jobspb.JobID,
-) error {
-	ro := retry.Options{
-		InitialBackoff: 1 * time.Second,
-		Multiplier:     2,
-		MaxBackoff:     5 * time.Second,
-		MaxRetries:     4,
-	}
-	// Make sure the producer job is active before start the stream replication.
-	var status streampb.StreamReplicationStatus
-	var err error
-	for r := retry.Start(ro); r.Next(); {
-		status, err = client.Heartbeat(ctx, streamID, heartbeatTimestamp)
-		if err != nil {
-			return errors.Wrapf(err, "failed to resume ingestion job %d due to producer job %d error",
-				ingestionJobID, streamID)
-		}
-		if status.StreamStatus != streampb.StreamReplicationStatus_UNKNOWN_STREAM_STATUS_RETRY {
-			break
-		}
-		log.Warningf(ctx, "producer job %d has status %s, retrying", streamID, status.StreamStatus)
-	}
-	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
-		return jobs.MarkAsPermanentJobError(errors.Errorf("failed to resume ingestion job %d "+
-			"as the producer job %d is not active and in status %s", ingestionJobID,
-			streamID, status.StreamStatus))
-	}
-	return nil
+func connectToActiveClient(
+	ctx context.Context, ingestionJob *jobs.Job, db isql.DB, opts ...streamclient.Option,
+) (streamclient.Client, error) {
+	streamAddresses := getStreamAddresses(ctx, ingestionJob)
+	client, err := streamclient.GetFirstActiveClient(ctx, streamAddresses, db, opts...)
+	return client, errors.Wrapf(err, "ingestion job %d failed to connect to stream address or existing topology for planning", ingestionJob.ID())
 }
 
 func updateRunningStatus(
 	ctx context.Context,
 	ingestionJob *jobs.Job,
 	status jobspb.ReplicationStatus,
-	runningStatus string,
+	runningStatus redact.RedactableString,
 ) {
 	err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		updateRunningStatusInternal(md, ju, status, runningStatus)
+		updateRunningStatusInternal(md, ju, status, string(runningStatus.Redact()))
 		return nil
 	})
 	if err != nil {
 		log.Warningf(ctx, "error when updating job running status: %s", err)
+	} else if status == jobspb.ReplicationError {
+		log.Warningf(ctx, "%s", runningStatus)
 	} else {
 		log.Infof(ctx, "%s", runningStatus)
 	}
@@ -191,18 +103,20 @@ func updateRunningStatusInternal(
 }
 
 func completeIngestion(
-	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	ingestionJob *jobs.Job,
+	cutoverTimestamp hlc.Timestamp,
 ) error {
 	details := ingestionJob.Details().(jobspb.StreamIngestionDetails)
 	log.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
-	if err := activateTenant(ctx, execCtx, details.DestinationTenantID); err != nil {
+	if err := activateTenant(ctx, execCtx, details, cutoverTimestamp); err != nil {
 		return err
 	}
 
-	streamID := details.StreamID
-	log.Infof(ctx, "completing the producer job %d", streamID)
-	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver,
-		"completing the producer job in the source cluster")
+	msg := redact.Sprintf("completing the producer job %d in the source cluster",
+		details.StreamID)
+	updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationCuttingOver, msg)
 	completeProducerJob(ctx, ingestionJob, execCtx.ExecCfg().InternalDB, true)
 
 	// Now that we have completed the cutover we can release the protected
@@ -229,36 +143,35 @@ func completeIngestion(
 func completeProducerJob(
 	ctx context.Context, ingestionJob *jobs.Job, internalDB *sql.InternalDB, successfulIngestion bool,
 ) {
-	streamID := ingestionJob.Details().(jobspb.StreamIngestionDetails).StreamID
+	streamID := streampb.StreamID(ingestionJob.Details().(jobspb.StreamIngestionDetails).StreamID)
 	if err := timeutil.RunWithTimeout(ctx, "complete producer job", 30*time.Second,
 		func(ctx context.Context) error {
-			client, err := connectToActiveClient(ctx, ingestionJob, internalDB)
+			client, err := connectToActiveClient(ctx, ingestionJob, internalDB,
+				streamclient.WithStreamID(streamID))
 			if err != nil {
 				return err
 			}
-			defer func() {
-				if err := client.Close(ctx); err != nil {
-					log.Warningf(ctx, "error encountered when closing stream client: %s",
-						err.Error())
-				}
-			}()
-			return client.Complete(ctx, streampb.StreamID(streamID), successfulIngestion)
+			defer closeAndLog(ctx, client)
+			return client.Complete(ctx, streamID, successfulIngestion)
 		},
 	); err != nil {
 		log.Warningf(ctx, `encountered error when completing the source cluster producer job %d: %s`, streamID, err.Error())
 	}
 }
 
-func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job) error {
+func ingest(
+	ctx context.Context, execCtx sql.JobExecContext, resumer *streamIngestionResumer,
+) error {
+	ingestionJob := resumer.job
 	// Cutover should be the *first* thing checked upon resumption as it is the
 	// most critical task in disaster recovery.
-	reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
+	cutoverTimestamp, reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
 	if err != nil {
 		return err
 	}
 	if reverted {
 		log.Infof(ctx, "job completed cutover on resume")
-		return completeIngestion(ctx, execCtx, ingestionJob)
+		return completeIngestion(ctx, execCtx, ingestionJob, cutoverTimestamp)
 	}
 	if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.BeforeIngestionStart != nil {
 		if err := knobs.BeforeIngestionStart(ctx); err != nil {
@@ -269,13 +182,15 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	// processors shut down gracefully, i.e stopped ingesting any additional
 	// events from the replication stream. At this point it is safe to revert to
 	// the cutoff time to leave the cluster in a consistent state.
-	if err = startDistIngestion(ctx, execCtx, ingestionJob); err != nil {
+	if err := startDistIngestion(ctx, execCtx, resumer); err != nil {
 		return err
 	}
-	if err := revertToCutoverTimestamp(ctx, execCtx, ingestionJob); err != nil {
+
+	cutoverTimestamp, err = revertToCutoverTimestamp(ctx, execCtx, ingestionJob)
+	if err != nil {
 		return err
 	}
-	return completeIngestion(ctx, execCtx, ingestionJob)
+	return completeIngestion(ctx, execCtx, ingestionJob, cutoverTimestamp)
 }
 
 func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
@@ -290,13 +205,14 @@ func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
 }
 
 func ingestWithRetries(
-	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
+	ctx context.Context, execCtx sql.JobExecContext, resumer *streamIngestionResumer,
 ) error {
+	ingestionJob := resumer.job
 	ro := getRetryPolicy(execCtx.ExecCfg().StreamingTestingKnobs)
 	var err error
 	var lastReplicatedTime hlc.Timestamp
 	for r := retry.Start(ro); r.Next(); {
-		err = ingest(ctx, execCtx, ingestionJob)
+		err = ingest(ctx, execCtx, resumer)
 		if err == nil {
 			break
 		}
@@ -307,11 +223,9 @@ func ingestWithRetries(
 		if jobs.IsPermanentJobError(err) || errors.Is(err, context.Canceled) {
 			break
 		}
-		const msgFmt = "waiting before retrying error: %s"
-		log.Warningf(ctx, msgFmt, err)
-		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError,
-			fmt.Sprintf(msgFmt, err))
-		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
+		status := redact.Sprintf("waiting before retrying error: %s", err)
+		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError, status)
+		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob, execCtx.ExecCfg().Settings.Version)
 		if lastReplicatedTime.Less(newReplicatedTime) {
 			r.Reset()
 			lastReplicatedTime = newReplicatedTime
@@ -328,8 +242,10 @@ func ingestWithRetries(
 	return nil
 }
 
-func loadReplicatedTime(ctx context.Context, db isql.DB, ingestionJob *jobs.Job) hlc.Timestamp {
-	latestProgress, err := replicationutils.LoadIngestionProgress(ctx, db, ingestionJob.ID())
+func loadReplicatedTime(
+	ctx context.Context, db isql.DB, ingestionJob *jobs.Job, cv clusterversion.Handle,
+) hlc.Timestamp {
+	latestProgress, err := replicationutils.LoadIngestionProgress(ctx, db, ingestionJob.ID(), cv)
 	if err != nil {
 		log.Warningf(ctx, "error loading job progress: %s", err)
 		return hlc.Timestamp{}
@@ -345,9 +261,8 @@ func loadReplicatedTime(ctx context.Context, db isql.DB, ingestionJob *jobs.Job)
 func (s *streamIngestionResumer) handleResumeError(
 	ctx context.Context, execCtx sql.JobExecContext, err error,
 ) error {
-	const errorFmt = "ingestion job failed (%s) but is being paused"
-	log.Warningf(ctx, errorFmt, err)
-	updateRunningStatus(ctx, s.job, jobspb.ReplicationError, fmt.Sprintf(errorFmt, err))
+	msg := redact.Sprintf("ingestion job failed (%s) but is being paused", err)
+	updateRunningStatus(ctx, s.job, jobspb.ReplicationError, msg)
 	// The ingestion job is paused but the producer job will keep
 	// running until it times out. Users can still resume ingestion before
 	// the producer job times out.
@@ -359,13 +274,13 @@ func (s *streamIngestionResumer) handleResumeError(
 func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// Protect the destination tenant's keyspan from garbage collection.
 	jobExecCtx := execCtx.(sql.JobExecContext)
-	err := s.protectDestinationTenant(ctx, execCtx)
+	err := s.protectDestinationTenant(ctx, jobExecCtx)
 	if err != nil {
 		return s.handleResumeError(ctx, jobExecCtx, err)
 	}
 
 	// Start ingesting KVs from the replication stream.
-	err = ingestWithRetries(ctx, jobExecCtx, s.job)
+	err = ingestWithRetries(ctx, jobExecCtx, s)
 	if err != nil {
 		return s.handleResumeError(ctx, jobExecCtx, err)
 	}
@@ -393,7 +308,7 @@ func releaseDestinationTenantProtectedTimestamp(
 // The method persists the ID of the protected timestamp record in the
 // replication job's Payload.
 func (s *streamIngestionResumer) protectDestinationTenant(
-	ctx context.Context, execCtx interface{},
+	ctx context.Context, execCtx sql.JobExecContext,
 ) error {
 	oldDetails := s.job.Details().(jobspb.StreamIngestionDetails)
 
@@ -403,7 +318,7 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 		return nil
 	}
 
-	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
+	execCfg := execCtx.ExecCfg()
 	target := ptpb.MakeTenantsTarget([]roachpb.TenantID{oldDetails.DestinationTenantID})
 	ptsID := uuid.MakeV4()
 
@@ -440,16 +355,16 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 // executed.
 func revertToCutoverTimestamp(
 	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
-) error {
-	reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
+) (hlc.Timestamp, error) {
+	cutoverTimestamp, reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
 	if err != nil {
-		return err
+		return hlc.Timestamp{}, err
 	}
 	if !reverted {
-		return errors.Errorf("required cutover was not completed")
+		return hlc.Timestamp{}, errors.Errorf("required cutover was not completed")
 	}
 
-	return nil
+	return cutoverTimestamp, nil
 }
 
 func cutoverTimeIsEligibleForCutover(
@@ -476,7 +391,7 @@ func cutoverTimeIsEligibleForCutover(
 // to a consistent state.
 func maybeRevertToCutoverTimestamp(
 	ctx context.Context, p sql.JobExecContext, ingestionJob *jobs.Job,
-) (bool, error) {
+) (hlc.Timestamp, bool, error) {
 
 	ctx, span := tracing.ChildSpan(ctx, "streamingest.revertToCutoverTimestamp")
 	defer span.Finish()
@@ -522,14 +437,12 @@ func maybeRevertToCutoverTimestamp(
 			}
 			return nil
 		}); err != nil {
-		return false, err
+		return cutoverTimestamp, false, err
 	}
 	if !shouldRevertToCutover {
-		return false, nil
+		return cutoverTimestamp, false, nil
 	}
-	log.Infof(ctx,
-		"reverting to cutover timestamp %s for stream ingestion job %d",
-		cutoverTimestamp, ingestionJob.ID())
+	log.Infof(ctx, "reverting to cutover timestamp %s", cutoverTimestamp)
 	if p.ExecCfg().StreamingTestingKnobs != nil && p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted != nil {
 		p.ExecCfg().StreamingTestingKnobs.AfterCutoverStarted()
 	}
@@ -539,7 +452,7 @@ func maybeRevertToCutoverTimestamp(
 	progUpdater, err := newCutoverProgressTracker(ctx, p, originalSpanToRevert, remainingSpansToRevert, ingestionJob,
 		progMetric, minProgressUpdateInterval)
 	if err != nil {
-		return false, err
+		return cutoverTimestamp, false, err
 	}
 
 	batchSize := int64(sql.RevertTableDefaultBatchSize)
@@ -556,25 +469,37 @@ func maybeRevertToCutoverTimestamp(
 		false, /* ignoreGCThreshold */
 		batchSize,
 		progUpdater.onCompletedCallback); err != nil {
-		return false, err
+		return cutoverTimestamp, false, err
 	}
-	return true, nil
+
+	return cutoverTimestamp, true, nil
 }
 
-func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachpb.TenantID) error {
-	p := execCtx.(sql.JobExecContext)
-	execCfg := p.ExecCfg()
+func activateTenant(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	details jobspb.StreamIngestionDetails,
+	cutoverTimestamp hlc.Timestamp,
+) error {
+	execCfg := execCtx.ExecCfg()
+
 	return execCfg.InternalDB.Txn(ctx, func(
 		ctx context.Context, txn isql.Txn,
 	) error {
-		info, err := sql.GetTenantRecordByID(ctx, txn, newTenantID, execCfg.Settings)
+		info, err := sql.GetTenantRecordByID(ctx, txn, details.DestinationTenantID, execCfg.Settings)
 		if err != nil {
 			return err
 		}
 
 		info.DataState = mtinfopb.DataStateReady
-		info.TenantReplicationJobID = 0
-		return sql.UpdateTenantRecord(ctx, p.ExecCfg().Settings, txn, info)
+		info.PhysicalReplicationConsumerJobID = 0
+		info.PreviousSourceTenant = &mtinfopb.PreviousSourceTenant{
+			TenantID:         details.SourceTenantID,
+			ClusterID:        details.SourceClusterID,
+			CutoverTimestamp: cutoverTimestamp,
+		}
+
+		return sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, info)
 	})
 }
 
@@ -603,7 +528,7 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 			return errors.Wrap(err, "fetch tenant info")
 		}
 
-		tenInfo.TenantReplicationJobID = 0
+		tenInfo.PhysicalReplicationConsumerJobID = 0
 		if err := sql.UpdateTenantRecord(ctx, execCfg.Settings, txn, tenInfo); err != nil {
 			return errors.Wrap(err, "update tenant record")
 		}
@@ -619,6 +544,36 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 
 		return nil
 	})
+}
+
+// CollectProfile implements the jobs.Resumer interface.
+func (s *streamIngestionResumer) CollectProfile(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(sql.JobExecContext)
+
+	var aggStatsCopy bulkutil.ComponentAggregatorStats
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		aggStatsCopy = s.mu.perNodeAggregatorStats.DeepCopy()
+	}()
+
+	var combinedErr error
+	if err := bulkutil.FlushTracingAggregatorStats(ctx, s.job.ID(),
+		p.ExecCfg().InternalDB, aggStatsCopy, p.ExecCfg().Settings.Version); err != nil {
+		combinedErr = errors.CombineErrors(combinedErr, errors.Wrap(err, "failed to flush aggregator stats"))
+	}
+	if err := generateSpanFrontierExecutionDetailFile(ctx, p.ExecCfg(),
+		s.job.ID(), false /* skipBehindBy */, p.ExecCfg().Settings.Version); err != nil {
+		combinedErr = errors.CombineErrors(combinedErr, errors.Wrap(err, "failed to generate span frontier execution details"))
+	}
+
+	return combinedErr
+}
+
+func closeAndLog(ctx context.Context, d streamclient.Dialer) {
+	if err := d.Close(ctx); err != nil {
+		log.Warningf(ctx, "error closing stream client: %s", err.Error())
+	}
 }
 
 // cutoverProgressTracker updates the job progress and the given
@@ -746,10 +701,12 @@ var _ jobs.Resumer = &streamIngestionResumer{}
 
 func init() {
 	jobs.RegisterConstructor(
-		jobspb.TypeStreamIngestion,
+		jobspb.TypeReplicationStreamIngestion,
 		func(job *jobs.Job,
 			settings *cluster.Settings) jobs.Resumer {
-			return &streamIngestionResumer{job: job}
+			s := &streamIngestionResumer{job: job}
+			s.mu.perNodeAggregatorStats = make(bulkutil.ComponentAggregatorStats)
+			return s
 		},
 		jobs.UsesTenantCostControl,
 	)

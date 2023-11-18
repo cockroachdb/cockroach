@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"math/big"
+	"net"
 	"net/url"
 	"os"
 	"time"
@@ -146,12 +147,12 @@ var (
 	// both a network roundtrip and a TCP retransmit, but we don't need to
 	// tolerate more than 1 retransmit per connection attempt, so
 	// 2 * NetworkTimeout is sufficient.
-	DialTimeout = 2 * NetworkTimeout
+	DialTimeout = envutil.EnvOrDefaultDuration("COCKROACH_RPC_DIAL_TIMEOUT", 2*NetworkTimeout)
 
-	// PingInterval is the interval between network heartbeat pings. It is used
-	// both for RPC heartbeat intervals and gRPC server keepalive pings. It is
-	// set to 1 second in order to fail fast, but with large default timeouts
-	// to tolerate high-latency multiregion clusters.
+	// PingInterval is the interval between RPC heartbeat pings. It is set to 1
+	// second in order to fail fast, but with large default timeouts to tolerate
+	// high-latency multiregion clusters. The gRPC server keepalive interval is
+	// also affected by this.
 	PingInterval = envutil.EnvOrDefaultDuration("COCKROACH_PING_INTERVAL", time.Second)
 
 	// defaultRangeLeaseDuration specifies the default range lease duration.
@@ -212,7 +213,8 @@ var (
 	// heartbeats and reduce this to NetworkTimeout (plus DialTimeout for the
 	// initial heartbeat), see:
 	// https://github.com/cockroachdb/cockroach/issues/93397.
-	DefaultRPCHeartbeatTimeout = 3 * NetworkTimeout
+	DefaultRPCHeartbeatTimeout = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RPC_HEARTBEAT_TIMEOUT", 3*NetworkTimeout)
 
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
 	defaultRaftTickInterval = envutil.EnvOrDefaultDuration(
@@ -370,6 +372,14 @@ type Config struct {
 	// This is used if SplitListenSQL is set to true.
 	SQLAddr string
 
+	// SQLAddrListener will only be considered if SplitListenSQL is set and
+	// DisableSQLListener is not. Under these conditions, if not nil, it will be
+	// used as a listener for incoming SQL connection requests. This allows
+	// creating a listener early in the server initialization process and not
+	// rejecting incoming connection requests that may come before the server is
+	// fully ready.
+	SQLAddrListener net.Listener
+
 	// SQLAdvertiseAddrH contains the advertised SQL address.
 	// This is computed from SQLAddr if specified otherwise Addr.
 	//
@@ -403,14 +413,12 @@ type Config struct {
 	// RPCHearbeatTimeout is the timeout for Ping requests.
 	RPCHeartbeatTimeout time.Duration
 
-	// SecondaryTenantPortOffset is the increment to add to the various
-	// addresses to generate the network configuration for the in-memory
-	// secondary tenant. If set to zero (the default), ports are
-	// auto-allocated randomly.
-	// TODO(knz): Remove this mechanism altogether in favor of a single
-	// network listener with protocol routing.
-	// See: https://github.com/cockroachdb/cockroach/issues/84585
-	SecondaryTenantPortOffset int
+	// ApplicationInternalRPCPortMin/PortMax define the range of TCP ports
+	// used to start the internal RPC service for application-level
+	// servers. This service is used for node-to-node RPC traffic and to
+	// serve data for 'debug zip'.
+	ApplicationInternalRPCPortMin int
+	ApplicationInternalRPCPortMax int
 
 	// Enables the use of an PTP hardware clock user space API for HLC current time.
 	// This contains the path to the device to be used (i.e. /dev/ptp0)
@@ -484,7 +492,8 @@ func (cfg *Config) InitDefaults() {
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
 	cfg.AcceptSQLWithoutTLS = false
-	cfg.SecondaryTenantPortOffset = 0
+	cfg.ApplicationInternalRPCPortMin = 0
+	cfg.ApplicationInternalRPCPortMax = 0
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of

@@ -39,11 +39,10 @@ type runControlTestCase struct {
 func makeRunControlTestCases(t *testing.T) ([]runControlTestCase, func()) {
 	t.Helper()
 	testCases := make([]runControlTestCase, 2)
-	tc := serverutils.StartNewTestCluster(
+	tc := serverutils.StartCluster(
 		t, 2 /* numNodes */, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				// Disable the implicit default test tenant so that we can start our own.
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			},
 			ReplicationMode: base.ReplicationManual,
 		},

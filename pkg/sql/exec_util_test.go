@@ -59,3 +59,42 @@ func TestHideNonVirtualTableNameFunc(t *testing.T) {
 		require.Equal(t, test.expected, actual)
 	}
 }
+
+func TestMaybeHashAppName(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	secret := "secret"
+
+	for _, tc := range []struct {
+		name     string
+		appName  string
+		expected string
+	}{
+		{
+			"basic app name is hashed",
+			"my_app",
+			"a4bc27b7",
+		},
+		{
+			"internal app name is not hashed",
+			"$ internal_app",
+			"$ internal_app",
+		},
+		{
+			"delegated app name is hashed",
+			"$$ my_app",
+			"$$ 9a7e689f",
+		},
+		{
+			"delegated and reportable app name is not hashed",
+			"$$ $ internal_app",
+			"$$ $ internal_app",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := MaybeHashAppName(tc.appName, secret)
+			require.Equal(t, tc.expected, out)
+		})
+	}
+}

@@ -174,9 +174,7 @@ func (m *Outbox) flush(ctx context.Context) error {
 	}
 	msg := m.encoder.FormMessage(ctx)
 
-	if log.V(3) {
-		log.Infof(ctx, "flushing outbox")
-	}
+	log.VEvent(ctx, 2, "Outbox flushing")
 	sendErr := m.stream.Send(msg)
 	if m.statsCollectionEnabled {
 		m.streamStats.NetTx.BytesSent.Add(int64(msg.Size()))
@@ -191,11 +189,9 @@ func (m *Outbox) flush(ctx context.Context) error {
 		HandleStreamErr(ctx, "flushing", sendErr, m.flowCtxCancel, m.outboxCtxCancel)
 		// Make sure the stream is not used any more.
 		m.stream = nil
-		if log.V(1) {
-			log.Errorf(ctx, "outbox flush error: %s", sendErr)
-		}
-	} else if log.V(3) {
-		log.Infof(ctx, "outbox flushed")
+		log.VErrEventf(ctx, 1, "Outbox flush error: %s", sendErr)
+	} else {
+		log.VEvent(ctx, 2, "Outbox flushed")
 	}
 	if sendErr != nil {
 		return sendErr
@@ -241,7 +237,7 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 
 	if err := func() error {
 		conn, err := execinfra.GetConnForOutbox(
-			ctx, m.flowCtx.Cfg.PodNodeDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
+			ctx, m.flowCtx.Cfg.SQLInstanceDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
 		)
 		if err != nil {
 			// Log any Dial errors. This does not have a verbosity check due to being

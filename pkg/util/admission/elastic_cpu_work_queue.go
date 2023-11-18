@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
@@ -52,6 +53,7 @@ type elasticCPUInternalWorkQueue interface {
 	requester
 	Admit(ctx context.Context, info WorkInfo) (enabled bool, err error)
 	SetTenantWeights(tenantWeights map[uint64]uint32)
+	adjustTenantUsed(tenantID roachpb.TenantID, additionalUsed int64)
 }
 
 func makeElasticCPUWorkQueue(
@@ -90,7 +92,7 @@ func (e *ElasticCPUWorkQueue) Admit(
 		return nil, nil
 	}
 	e.metrics.AcquiredNanos.Inc(duration.Nanoseconds())
-	return newElasticCPUWorkHandle(duration), nil
+	return newElasticCPUWorkHandle(info.TenantID, duration), nil
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has
@@ -102,6 +104,7 @@ func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
 
 	e.metrics.PreWorkNanos.Inc(h.preWork.Nanoseconds())
 	_, difference := h.OverLimit()
+	e.workQueue.adjustTenantUsed(h.tenantID, difference.Nanoseconds())
 	if difference > 0 {
 		// We've used up our allotted slice, which we've already deducted tokens
 		// for. But we've gone over by difference, which we now need to deduct

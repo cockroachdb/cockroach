@@ -116,15 +116,14 @@ func enumValuesToDesc(enumValues map[int64]string) string {
 	return buffer.String()
 }
 
-// WithPublic sets public visibility and can be chained.
-func (e *EnumSetting) WithPublic() *EnumSetting {
-	e.SetVisibility(Public)
-	return e
-}
-
 // RegisterEnumSetting defines a new setting with type int.
 func RegisterEnumSetting(
-	class Class, key, desc string, defaultValue string, enumValues map[int64]string,
+	class Class,
+	key InternalKey,
+	desc string,
+	defaultValue string,
+	enumValues map[int64]string,
+	opts ...SettingOption,
 ) *EnumSetting {
 	enumValuesLower := make(map[int64]string)
 	var i int64
@@ -147,5 +146,6 @@ func RegisterEnumSetting(
 	}
 
 	register(class, key, fmt.Sprintf("%s %s", desc, enumValuesToDesc(enumValues)), setting)
+	setting.apply(opts)
 	return setting
 }

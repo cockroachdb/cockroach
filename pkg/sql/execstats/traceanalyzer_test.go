@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -53,17 +54,19 @@ func TestTraceAnalyzer(t *testing.T) {
 
 	ctx := context.Background()
 	analyzerChan := make(chan *execstats.TraceAnalyzer, 1)
-	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+	tc := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{
 			UseDatabase: "test",
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					TestingSaveFlows: func(stmt string) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error {
+					TestingSaveFlows: func(stmt string) func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error {
 						if stmt != testStmt {
-							return func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, bool) error { return nil }
+							return func(map[base.SQLInstanceID]*execinfrapb.FlowSpec, execopnode.OpChains, []execinfra.LocalProcessor, bool) error {
+								return nil
+							}
 						}
-						return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, _ bool) error {
+						return func(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec, _ execopnode.OpChains, _ []execinfra.LocalProcessor, _ bool) error {
 							flowsMetadata := execstats.NewFlowsMetadata(flows)
 							analyzer := execstats.NewTraceAnalyzer(flowsMetadata)
 							analyzerChan <- analyzer
@@ -79,7 +82,16 @@ func TestTraceAnalyzer(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	const gatewayNode = 0
-	db := tc.ServerConn(gatewayNode)
+	srv, s := tc.Server(gatewayNode), tc.ApplicationLayer(gatewayNode)
+	if srv.TenantController().StartedDefaultTestTenant() {
+		systemSqlDB := srv.SystemLayer().SQLConn(t, serverutils.DBName("system"))
+		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+		require.NoError(t, err)
+		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
+			tenantcapabilities.CanAdminRelocateRange: "true",
+		}, "")
+	}
+	db := s.SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlutils.CreateTable(
@@ -99,7 +111,7 @@ func TestTraceAnalyzer(t *testing.T) {
 		),
 	)
 
-	execCfg := tc.Server(gatewayNode).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	var (
 		rowexecTraceAnalyzer *execstats.TraceAnalyzer

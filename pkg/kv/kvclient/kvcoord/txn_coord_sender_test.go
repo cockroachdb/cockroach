@@ -338,9 +338,9 @@ func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 	// can read the error.
 	pErr := tc.GetRetryableErr(ctx)
 	require.NotNil(t, pErr)
-	require.Equal(t, txn.ID(), pErr.TxnID)
+	require.Equal(t, txn.ID(), pErr.PrevTxnID)
 	// The transaction was aborted, therefore we should have a new transaction ID.
-	require.NotEqual(t, pErr.TxnID, pErr.Transaction.ID)
+	require.NotEqual(t, pErr.PrevTxnID, pErr.NextTransaction.ID)
 }
 
 // getTxn fetches the requested key and returns the transaction info.
@@ -661,8 +661,8 @@ func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
 	}
 
 	// Restart the transaction with a new epoch.
-	require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, s.Clock.Now(), "force retry"))
-	txn.Sender().ClearRetryableErr(ctx)
+	require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, s.Clock.Now(), true /* mustRestart */, "force retry"))
+	require.NoError(t, txn.Sender().ClearRetryableErr(ctx))
 
 	// Now immediately commit.
 	require.NoError(t, txn.Commit(ctx))
@@ -727,6 +727,10 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	isolation.RunEachLevel(t, testTxnCoordSenderTxnUpdatedOnError)
+}
+
+func testTxnCoordSenderTxnUpdatedOnError(t *testing.T, isoLevel isolation.Level) {
 	ctx := context.Background()
 	origTS := makeTS(123, 0)
 	plus10 := origTS.Add(10, 10).WithSynthetic(false)
@@ -753,8 +757,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			expReadTS:  origTS,
 		},
 		{
-			// On uncertainty error, new epoch begins. Timestamp moves ahead of
-			// the existing write and LocalUncertaintyLimit, if one exists.
+			// On uncertainty error, the read timestamp moves ahead of the existing
+			// write and LocalUncertaintyLimit, if one exists. Also, a new epoch
+			// begins for isolation levels that cannot move their read timestamp
+			// between operations.
 			name: "ReadWithinUncertaintyIntervalError without LocalUncertaintyLimit",
 			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				pErr := kvpb.NewErrorWithTxn(
@@ -768,14 +774,21 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					txn)
 				return pErr
 			},
-			expEpoch:   1,
+			expEpoch: func() enginepb.TxnEpoch {
+				if isoLevel == isolation.ReadCommitted {
+					return 0 // PerStatementReadSnapshot
+				}
+				return 1
+			}(),
 			expPri:     1,
 			expWriteTS: plus10.Next(),
 			expReadTS:  plus10.Next(),
 		},
 		{
-			// On uncertainty error, new epoch begins. Timestamp moves ahead of
-			// the existing write and LocalUncertaintyLimit, if one exists.
+			// On uncertainty error, the read timestamp moves ahead of the existing
+			// write and LocalUncertaintyLimit, if one exists. Also, a new epoch
+			// begins for isolation levels that cannot move their read timestamp
+			// between operations.
 			name: "ReadWithinUncertaintyIntervalError with LocalUncertaintyLimit",
 			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				pErr := kvpb.NewErrorWithTxn(
@@ -789,7 +802,12 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					txn)
 				return pErr
 			},
-			expEpoch:   1,
+			expEpoch: func() enginepb.TxnEpoch {
+				if isoLevel == isolation.ReadCommitted {
+					return 0 // PerStatementReadSnapshot
+				}
+				return 1
+			}(),
 			expPri:     1,
 			expWriteTS: plus20,
 			expReadTS:  plus20,
@@ -823,8 +841,10 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			expReadTS:           plus20,
 		},
 		{
-			// On failed push, new epoch begins just past the pushed timestamp.
-			// Additionally, priority ratchets up to just below the pusher's.
+			// On failed push, read timestamp advances just past the pushed timestamp.
+			// Additionally, priority ratchets up to just below the pusher's. Finally,
+			// a new epoch begins for isolation levels that cannot move their read
+			// timestamp between operations.
 			name: "TransactionPushError",
 			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				return kvpb.NewErrorWithTxn(&kvpb.TransactionPushError{
@@ -833,23 +853,53 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 					},
 				}, txn)
 			},
-			expEpoch:   1,
+			expEpoch: func() enginepb.TxnEpoch {
+				if isoLevel == isolation.ReadCommitted {
+					return 0
+				}
+				return 1
+			}(),
 			expPri:     9,
 			expWriteTS: plus10,
 			expReadTS:  plus10,
 		},
 		{
-			// On retry, restart with new epoch, timestamp and priority.
+			// On retry, advance timestamp and priority. Also, restart with new epoch
+			// for isolation levels that cannot move their read timestamp between
+			// operations.
 			name: "TransactionRetryError",
 			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
 				txn.WriteTimestamp = plus10
 				txn.Priority = 10
 				return kvpb.NewErrorWithTxn(&kvpb.TransactionRetryError{}, txn)
 			},
-			expEpoch:   1,
+			expEpoch: func() enginepb.TxnEpoch {
+				if isoLevel == isolation.ReadCommitted {
+					return 0
+				}
+				return 1
+			}(),
 			expPri:     10,
 			expWriteTS: plus10,
 			expReadTS:  plus10,
+		},
+		{
+			// On retry, advance timestamp and priority. Also, restart with new epoch,
+			// even for isolation levels that can move their read timestamp between
+			// operations. This is because PrepareForRetry is called instead of
+			// PrepareForPartialRetry, indicating that the client wants to promote
+			// what could be a partial retry to a full retry.
+			name: "TransactionRetryError with PrepareForRetry",
+			pErrGen: func(txn *roachpb.Transaction) *kvpb.Error {
+				txn.WriteTimestamp = plus10
+				txn.Priority = 10
+				return kvpb.NewErrorWithTxn(&kvpb.TransactionRetryError{}, txn)
+			},
+			expEpoch:            1,
+			callPrepareForRetry: true,
+			expPri:              10,
+			expWriteTS:          plus10,
+			expReadTS:           plus10,
 		},
 	}
 
@@ -887,15 +937,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			db := kv.NewDB(ambient, tsf, clock, stopper)
 			key := roachpb.Key("test-key")
 			now := clock.NowAsClockTimestamp()
-			origTxnProto := roachpb.MakeTransaction(
-				"test txn",
-				key,
-				isolation.Serializable,
-				roachpb.UserPriority(0),
-				now.ToTimestamp(),
-				clock.MaxOffset().Nanoseconds(),
-				0, /* coordinatorNodeID */
-			)
+			origTxnProto := roachpb.MakeTransaction("test txn", key, isoLevel, roachpb.UserPriority(0), now.ToTimestamp(), clock.MaxOffset().Nanoseconds(), 0, 0)
 			// TODO(andrei): I've monkeyed with the priorities on this initial
 			// Transaction to keep the test happy from a previous version in which the
 			// Transaction was not initialized before use (which became insufficient
@@ -907,6 +949,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			origTxnProto.Priority = 1
 			txn := kv.NewTxnFromProto(ctx, db, 0 /* gatewayNodeID */, now, kv.RootTxn, &origTxnProto)
 			txn.TestingSetPriority(1)
+			// Enable stepping so that Read Committed transactions don't advance their
+			// read timestamp on each operation.
+			txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 
 			err := txn.Put(ctx, key, []byte("value"))
 			stopper.Stop(ctx)
@@ -1094,7 +1139,9 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	// Acquire locks on a-b, c, m, u-w before the final batch.
-	_, pErr := txn.ReverseScanForUpdate(ctx, roachpb.Key("a"), roachpb.Key("b"), 0)
+	_, pErr := txn.ScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("b"), 0, kvpb.GuaranteedDurability,
+	)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1102,7 +1149,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	_, pErr = txn.GetForUpdate(ctx, roachpb.Key("m"))
+	_, pErr = txn.GetForUpdate(ctx, roachpb.Key("m"), kvpb.GuaranteedDurability)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -1116,8 +1163,8 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 	b.Put(roachpb.Key("b"), []byte("value"))
 	b.Put(roachpb.Key("c"), []byte("value"))
 	b.Put(roachpb.Key("d"), []byte("value"))
-	b.GetForUpdate(roachpb.Key("n"))
-	b.ReverseScanForUpdate(roachpb.Key("v"), roachpb.Key("z"))
+	b.GetForUpdate(roachpb.Key("n"), kvpb.GuaranteedDurability)
+	b.ReverseScanForShare(roachpb.Key("v"), roachpb.Key("z"), kvpb.GuaranteedDurability)
 
 	// The expected locks are a-b, c, m, n, and u-z.
 	expectedLockSpans = []roachpb.Span{
@@ -1827,7 +1874,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 	}
 	b := txn.NewBatch()
 	b.Put(keyA, "test value")
-	b.ScanForUpdate(keyB, keyC)
+	b.ScanForUpdate(keyB, keyC, kvpb.BestEffort)
 	if err := txn.CommitInBatch(ctx, b); !testutils.IsError(err, "injected err") {
 		t.Fatal(err)
 	}
@@ -2105,7 +2152,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 					if write {
 						err = txn.Put(ctx, "consider", "phlebas")
 					} else /* locking read */ {
-						_, err = txn.ScanForUpdate(ctx, "a", "b", 0)
+						_, err = txn.ScanForUpdate(ctx, "a", "b", 0, kvpb.BestEffort)
 					}
 					if err == nil {
 						t.Fatal("missing injected retriable error")
@@ -2773,16 +2820,16 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 			before: func(t *testing.T, txn *kv.Txn) {
 				_, err := txn.Get(ctx, "k")
 				require.NoError(t, err)
-				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), "force retry"))
-				txn.Sender().ClearRetryableErr(ctx)
+				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), true /* mustRestart */, "force retry"))
+				require.NoError(t, txn.Sender().ClearRetryableErr(ctx))
 			},
 		},
 		{
 			name: "write before, in prior epoch",
 			before: func(t *testing.T, txn *kv.Txn) {
 				require.NoError(t, txn.Put(ctx, "k", "v"))
-				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), "force retry"))
-				txn.Sender().ClearRetryableErr(ctx)
+				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), true /* mustRestart */, "force retry"))
+				require.NoError(t, txn.Sender().ClearRetryableErr(ctx))
 			},
 		},
 		{
@@ -2791,8 +2838,8 @@ func TestTxnCoordSenderSetFixedTimestamp(t *testing.T) {
 				_, err := txn.Get(ctx, "k")
 				require.NoError(t, err)
 				require.NoError(t, txn.Put(ctx, "k", "v"))
-				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), "force retry"))
-				txn.Sender().ClearRetryableErr(ctx)
+				require.Error(t, txn.Sender().GenerateForcedRetryableErr(ctx, txn.ReadTimestamp().Next(), true /* mustRestart */, "force retry"))
+				require.NoError(t, txn.Sender().ClearRetryableErr(ctx))
 			},
 		},
 	} {
@@ -2832,21 +2879,79 @@ func TestTxnTypeCompatibleWithBatchRequest(t *testing.T) {
 	require.NoError(t, err)
 	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState)
 
-	// a LeafTxn is not compatible with a locking request
-	_, err = leafTxn.GetForUpdate(ctx, roachpb.Key("a"))
+	// A LeafTxn is not compatible with locking requests.
+	// 1. Locking Get requests.
+	_, err = leafTxn.GetForUpdate(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
 	require.Error(t, err)
 	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	_, err = leafTxn.GetForShare(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	// 2. Locking Scan requests.
+	_, err = leafTxn.ScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	_, err = leafTxn.ScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	// 3. Locking ReverseScan requests.
+	_, err = leafTxn.ReverseScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	_, err = leafTxn.ReverseScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.Error(t, err)
+	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
+	// 4. Writes.
 	err = leafTxn.Put(ctx, roachpb.Key("a"), []byte("b"))
 	require.Error(t, err)
 	require.Regexp(t, "LeafTxn .* incompatible with locking request .*", err)
-	// a LeafTxn is compatible with a non-locking request
+	// A LeafTxn is compatible with non-locking requests.
 	_, err = leafTxn.Get(ctx, roachpb.Key("a"))
 	require.NoError(t, err)
+	_, err = leafTxn.Scan(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	require.NoError(t, err)
+	_, err = leafTxn.ReverseScan(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	require.NoError(t, err)
 
-	// a RootTxn is compatible with all requests
-	_, err = rootTxn.GetForUpdate(ctx, roachpb.Key("a"))
+	// A RootTxn is compatible with all requests.
+	// 1. All types of Get requests.
+	_, err = rootTxn.GetForUpdate(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
+	require.NoError(t, err)
+	_, err = rootTxn.GetForShare(ctx, roachpb.Key("a"), kvpb.GuaranteedDurability)
 	require.NoError(t, err)
 	_, err = rootTxn.Get(ctx, roachpb.Key("a"))
+	require.NoError(t, err)
+	// 2. All types of Scan requests.
+	_, err = rootTxn.ScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.NoError(t, err)
+	_, err = rootTxn.ScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.NoError(t, err)
+	_, err = rootTxn.Scan(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	require.NoError(t, err)
+	// 3. All types of ReverseScan requests.
+	_, err = rootTxn.ReverseScanForUpdate(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.NoError(t, err)
+	_, err = rootTxn.ReverseScanForShare(
+		ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */, kvpb.GuaranteedDurability,
+	)
+	require.NoError(t, err)
+	_, err = rootTxn.ReverseScan(ctx, roachpb.Key("a"), roachpb.Key("d"), 0 /* maxRows */)
+	require.NoError(t, err)
+	// 4. And writes.
 	require.NoError(t, err)
 	err = rootTxn.Put(ctx, roachpb.Key("a"), []byte("b"))
 	require.NoError(t, err)

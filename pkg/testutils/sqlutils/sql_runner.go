@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
@@ -74,12 +75,27 @@ type Fataler interface {
 	Fatalf(string, ...interface{})
 }
 
+func fmtMessage(message string) string {
+	if message != "" {
+		message = "[" + message + "] "
+	}
+	return message
+}
+
 // Exec is a wrapper around gosql.Exec that kills the test on error.
 func (sr *SQLRunner) Exec(t Fataler, query string, args ...interface{}) gosql.Result {
+	return sr.ExecWithMessage(t, "", query, args...)
+}
+
+// ExecWithMessage works similarly to Exec, but allows the caller to add
+// additional context to the error message.
+func (sr *SQLRunner) ExecWithMessage(
+	t Fataler, message string, query string, args ...interface{},
+) gosql.Result {
 	helperOrNoop(t)()
 	r, err := sr.DB.ExecContext(context.Background(), query, args...)
 	if err != nil {
-		t.Fatalf("error executing '%s': %s", query, err)
+		t.Fatalf("%serror executing query=%q args=%q: %s", fmtMessage(message), query, args, err)
 	}
 	return r
 }
@@ -132,14 +148,22 @@ func (sr *SQLRunner) ExecSucceedsSoon(t Fataler, query string, args ...interface
 func (sr *SQLRunner) ExecRowsAffected(
 	t Fataler, expRowsAffected int, query string, args ...interface{},
 ) {
+	sr.ExecRowsAffectedWithMessage(t, expRowsAffected, "", query, args...)
+}
+
+// ExecRowsAffectedWithMessage works similarly to ExecRowsAffected, but allows
+// the caller to add additional context to the error message.
+func (sr *SQLRunner) ExecRowsAffectedWithMessage(
+	t Fataler, expRowsAffected int, message string, query string, args ...interface{},
+) {
 	helperOrNoop(t)()
-	r := sr.Exec(t, query, args...)
+	r := sr.ExecWithMessage(t, message, query, args...)
 	numRows, err := r.RowsAffected()
 	if err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("%s%v", fmtMessage(message), err)
 	}
 	if numRows != int64(expRowsAffected) {
-		t.Fatalf("expected %d affected rows, got %d on '%s'", expRowsAffected, numRows, query)
+		t.Fatalf("%sexpected %d affected rows, got %d on query=%q args=%q", fmtMessage(message), expRowsAffected, numRows, query, args)
 	}
 }
 
@@ -149,6 +173,15 @@ func (sr *SQLRunner) ExpectErr(t Fataler, errRE string, query string, args ...in
 	helperOrNoop(t)()
 	_, err := sr.DB.ExecContext(context.Background(), query, args...)
 	sr.expectErr(t, query, err, errRE)
+}
+
+// ExpectNonNilErr runs the given statement and verifies that it returns an error.
+func (sr *SQLRunner) ExpectNonNilErr(t Fataler, query string, args ...interface{}) {
+	helperOrNoop(t)()
+	_, err := sr.DB.ExecContext(context.Background(), query, args...)
+	if err == nil {
+		t.Fatalf("expected query '%s' to return a non-nil error", query)
+	}
 }
 
 func (sr *SQLRunner) expectErr(t Fataler, query string, err error, errRE string) {
@@ -189,6 +222,24 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 	helperOrNoop(t)()
 	sr.succeedsWithin(t, func() error {
 		_, err := sr.DB.ExecContext(context.Background(), query, args...)
+		if !testutils.IsError(err, errRE) {
+			return errors.Newf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
+		}
+		return nil
+	})
+}
+
+// ExpectErrWithTimeout wraps ExpectErr with a timeout..
+func (sr *SQLRunner) ExpectErrWithTimeout(
+	t Fataler, errRE string, query string, args ...interface{},
+) {
+	helperOrNoop(t)()
+	d := sr.SucceedsSoonDuration
+	if d == 0 {
+		d = testutils.DefaultSucceedsSoonDuration
+	}
+	_ = timeutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
+		_, err := sr.DB.ExecContext(ctx, query, args...)
 		if !testutils.IsError(err, errRE) {
 			return errors.Newf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
 		}

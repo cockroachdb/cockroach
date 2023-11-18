@@ -39,7 +39,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 50)
+var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 100)
 
 func (cfg kvnemesisTestCfg) testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 	storeKnobs := &kvserver.StoreTestingKnobs{
@@ -102,7 +102,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(tr *SeqTracker) base.TestClusterArgs
 		}
 	}
 
-	if p := cfg.injectReproposalErrorProb; p > 0 {
+	if p := cfg.invalidLeaseAppliedIndexProb; p > 0 {
 		var mu syncutil.Mutex
 		seen := map[string]int{}
 		storeKnobs.LeaseIndexFilter = func(pd *kvserver.ProposalData) kvpb.LeaseAppliedIndex {
@@ -235,8 +235,8 @@ func TestKVNemesisSingleNode(t *testing.T) {
 		numSteps:                     defaultNumSteps,
 		concurrency:                  5,
 		seedOverride:                 0,
-		invalidLeaseAppliedIndexProb: 0.1,
-		injectReproposalErrorProb:    0.1,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
 	})
 }
 
@@ -263,8 +263,8 @@ func TestKVNemesisMultiNode(t *testing.T) {
 		numSteps:                     defaultNumSteps,
 		concurrency:                  5,
 		seedOverride:                 0,
-		invalidLeaseAppliedIndexProb: 0.1,
-		injectReproposalErrorProb:    0.1,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
 	})
 }
 
@@ -295,7 +295,7 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	// Turn net/trace on, which results in real trace spans created throughout.
 	// This gives kvnemesis a chance to hit NPEs related to tracing.
-	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug.enable = true`)
+	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug_http_endpoint.enabled = true`)
 
 	config := NewDefaultConfig()
 	config.NumNodes = cfg.numNodes
@@ -306,6 +306,16 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	logger := newTBridge(t)
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, dbs...)
+
+	for i := 0; i < cfg.numNodes; i++ {
+		t.Logf("[%d] proposed: %d", i,
+			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsProposed.Count())
+		t.Logf("[%d] reproposed unchanged: %d", i,
+			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsReproposed.Count())
+		t.Logf("[%d] reproposed with new LAI: %d", i,
+			tc.GetFirstStoreFromServer(t, i).Metrics().RaftCommandsReproposedLAI.Count())
+	}
+
 	require.NoError(t, err, `%+v`, err)
 	require.Zero(t, len(failures), "kvnemesis detected failures") // they've been logged already
 }

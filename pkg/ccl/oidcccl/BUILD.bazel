@@ -15,6 +15,7 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/roachpb",
         "//pkg/security/username",
+        "//pkg/server",
         "//pkg/server/authserver",
         "//pkg/server/serverpb",
         "//pkg/server/telemetry",
@@ -41,7 +42,6 @@ go_test(
         "main_test.go",
         "settings_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":oidcccl"],
     tags = ["ccl_test"],
     deps = [
@@ -52,6 +52,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/security/username",
         "//pkg/server",
+        "//pkg/server/authserver",
         "//pkg/server/serverpb",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
@@ -59,6 +60,8 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "@com_github_coreos_go_oidc//:go-oidc",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_oauth2//:oauth2",
     ],
 )

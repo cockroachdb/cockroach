@@ -15,15 +15,20 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
+
+// RunFirstUpgradePrecondition short-circuits FirstUpgradeFromReleasePrecondition if set to false.
+var RunFirstUpgradePrecondition = envutil.EnvOrDefaultBool("COCKROACH_RUN_FIRST_UPGRADE_PRECONDITION", true)
 
 // FirstUpgradeFromRelease implements the tenant upgrade step for all
 // V[0-9]+_[0-9]+Start cluster versions, which is every first internal version
@@ -39,6 +44,9 @@ import (
 func FirstUpgradeFromRelease(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
+	if !RunFirstUpgradePrecondition {
+		return nil
+	}
 	var all nstree.Catalog
 	if err := d.DB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
 		all, err = txn.Descriptors().GetAll(ctx, txn.KV())
@@ -49,7 +57,8 @@ func FirstUpgradeFromRelease(
 	var batch catalog.DescriptorIDSet
 	const batchSize = 1000
 	if err := all.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if !desc.GetPostDeserializationChanges().HasChanges() {
+		changes := desc.GetPostDeserializationChanges()
+		if !changes.HasChanges() || (changes.Len() == 1 && changes.Contains(catalog.SetModTimeToMVCCTimestamp)) {
 			return nil
 		}
 		batch.Add(desc.GetID())
@@ -81,9 +90,6 @@ func upgradeDescriptors(
 		}
 		b := txn.KV().NewBatch()
 		for _, mut := range muts {
-			if !mut.GetPostDeserializationChanges().HasChanges() {
-				continue
-			}
 			key := catalogkeys.MakeDescMetadataKey(d.Codec, mut.GetID())
 			b.CPut(key, mut.DescriptorProto(), mut.GetRawBytesInStorage())
 		}
@@ -194,4 +200,23 @@ WHERE
 		return nil
 	}
 	return errors.AssertionFailedf("\"\".crdb_internal.invalid_objects is not empty")
+}
+
+// newFirstUpgrade creates a TenantUpgrade that corresponds to the first
+// (Vxy_zStart) internal version of a release.
+func newFirstUpgrade(v roachpb.Version) *upgrade.TenantUpgrade {
+	if v.Internal != 2 {
+		panic("not the first internal release")
+	}
+	return upgrade.NewTenantUpgrade(
+		firstUpgradeDescription(v),
+		v,
+		FirstUpgradeFromReleasePrecondition,
+		FirstUpgradeFromRelease,
+		upgrade.RestoreActionNotRequired("first upgrade is a persists nothing"),
+	)
+}
+
+func firstUpgradeDescription(v roachpb.Version) string {
+	return fmt.Sprintf("prepare upgrade to v%d.%d release", v.Major, v.Minor)
 }

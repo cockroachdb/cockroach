@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -25,8 +26,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const WorkloadReplaySetupName = "workload-replay"
+
 func registerCostFuzz(r registry.Registry) {
-	for _, setupName := range []string{"workload-replay", sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+	for _, setupName := range []string{WorkloadReplaySetupName, sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
 		setupName := setupName
 		redactResults := false
 		timeOut := time.Hour * 1
@@ -34,7 +37,7 @@ func registerCostFuzz(r registry.Registry) {
 		switch setupName {
 		case sqlsmith.SeedMultiRegionSetupName:
 			clusterSpec = r.MakeClusterSpec(9, spec.Geo(), spec.GatherCores())
-		case "workload-replay":
+		case WorkloadReplaySetupName:
 			clusterSpec = r.MakeClusterSpec(1)
 			timeOut = time.Hour * 2
 			redactResults = true
@@ -42,20 +45,29 @@ func registerCostFuzz(r registry.Registry) {
 			clusterSpec = r.MakeClusterSpec(1)
 		}
 		r.Add(registry.TestSpec{
-			Name:            fmt.Sprintf("costfuzz/%s", setupName),
-			Owner:           registry.OwnerSQLQueries,
-			Timeout:         timeOut,
-			RedactResults:   redactResults,
-			RequiresLicense: true,
-			Tags:            nil,
-			Cluster:         clusterSpec,
-			Leases:          registry.MetamorphicLeases,
-			NativeLibs:      registry.LibGEOS,
+			Name:             fmt.Sprintf("costfuzz/%s", setupName),
+			Owner:            registry.OwnerSQLQueries,
+			Timeout:          timeOut,
+			RedactResults:    redactResults,
+			RequiresLicense:  true,
+			Tags:             nil,
+			Cluster:          clusterSpec,
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
+			Leases:           registry.MetamorphicLeases,
+			NativeLibs:       registry.LibGEOS,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				// When running in CI, only allow running workload-replay in the private roachtest,
+				// which has the required credentials.
+				if setupName == WorkloadReplaySetupName && os.Getenv("TC_BUILD_ID") != "" && os.Getenv("ROACHTEST_PRIVATE") != "1" {
+					t.Skipf("runs in private roachtest only")
+					return
+				}
 				runQueryComparison(ctx, t, c, &queryComparisonTest{
 					name: "costfuzz", setupName: setupName, run: runCostFuzzQuery,
 				})
 			},
+			ExtraLabels: []string{"O-rsg"},
 		})
 	}
 }

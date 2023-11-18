@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/assert"
 )
@@ -43,7 +44,9 @@ type initFetcherArgs struct {
 	columns   []int
 }
 
-func makeIndexFetchSpec(t *testing.T, entry initFetcherArgs) fetchpb.IndexFetchSpec {
+func makeIndexFetchSpec(
+	t *testing.T, codec keys.SQLCodec, entry initFetcherArgs,
+) fetchpb.IndexFetchSpec {
 	index := entry.tableDesc.ActiveIndexes()[entry.indexIdx]
 	colIDs := entry.tableDesc.PublicColumnIDs()
 	if entry.columns != nil {
@@ -54,7 +57,7 @@ func makeIndexFetchSpec(t *testing.T, entry initFetcherArgs) fetchpb.IndexFetchS
 		}
 	}
 	var spec fetchpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, entry.tableDesc, index, colIDs); err != nil {
+	if err := rowenc.InitIndexFetchSpec(&spec, codec, entry.tableDesc, index, colIDs); err != nil {
 		t.Fatal(err)
 	}
 	return spec
@@ -62,6 +65,7 @@ func makeIndexFetchSpec(t *testing.T, entry initFetcherArgs) fetchpb.IndexFetchS
 
 func initFetcher(
 	t *testing.T,
+	codec keys.SQLCodec,
 	txn *kv.Txn,
 	entry initFetcherArgs,
 	reverseScan bool,
@@ -70,7 +74,7 @@ func initFetcher(
 ) *Fetcher {
 	fetcher := &Fetcher{}
 
-	spec := makeIndexFetchSpec(t, entry)
+	spec := makeIndexFetchSpec(t, codec, entry)
 
 	if err := fetcher.Init(
 		context.Background(),
@@ -99,10 +103,12 @@ type fetcherEntryArgs struct {
 
 func TestNextRowSingle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
 
 	tables := map[string]fetcherEntryArgs{
 		"t1": {
@@ -142,7 +148,7 @@ func TestNextRowSingle(t *testing.T) {
 	// We try to read rows from each table.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, sqlutils.TestDB, tableName)
 
 			args := initFetcherArgs{
 				tableDesc: tableDesc,
@@ -150,11 +156,11 @@ func TestNextRowSingle(t *testing.T) {
 			}
 
 			txn := kv.NewTxn(ctx, kvDB, 0)
-			rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, nil /* memMon */)
+			rf := initFetcher(t, codec, txn, args, false /*reverseScan*/, alloc, nil /* memMon */)
 
 			if err := rf.StartScan(
-				context.Background(),
-				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
+				ctx,
+				roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID())},
 				nil, /* spanIDs */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
@@ -166,7 +172,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, err := rf.NextRowDecoded(context.Background())
+				datums, err := rf.NextRowDecoded(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -202,10 +208,12 @@ func TestNextRowSingle(t *testing.T) {
 
 func TestNextRowBatchLimiting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
 
 	tables := map[string]fetcherEntryArgs{
 		"t1": {
@@ -245,7 +253,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 	// We try to read rows from each table.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, sqlutils.TestDB, tableName)
 
 			args := initFetcherArgs{
 				tableDesc: tableDesc,
@@ -253,11 +261,11 @@ func TestNextRowBatchLimiting(t *testing.T) {
 			}
 
 			txn := kv.NewTxn(ctx, kvDB, 0)
-			rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
+			rf := initFetcher(t, codec, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
 
 			if err := rf.StartScan(
-				context.Background(),
-				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
+				ctx,
+				roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID())},
 				nil, /* spanIDs */
 				rowinfra.GetDefaultBatchBytesLimit(false /* forceProductionValue */),
 				10, /*limitHint*/
@@ -269,7 +277,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 			expectedVals := [2]int64{1, 1}
 			for {
-				datums, err := rf.NextRowDecoded(context.Background())
+				datums, err := rf.NextRowDecoded(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -305,15 +313,17 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 func TestRowFetcherMemoryLimits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
 	oneMegString := make([]byte, 1<<20)
 	for i := range oneMegString {
 		oneMegString[i] = '!'
 	}
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
 
 	tableName := "wide_table"
 	sqlutils.CreateTable(
@@ -327,7 +337,7 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 			}
 		})
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, sqlutils.TestDB, tableName)
 
 	args := initFetcherArgs{
 		tableDesc: tableDesc,
@@ -345,12 +355,12 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 	memMon.Start(ctx, nil, mon.NewStandaloneBudget(1<<20))
 	defer memMon.Stop(ctx)
 	txn := kv.NewTxn(ctx, kvDB, 0)
-	rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, memMon)
+	rf := initFetcher(t, codec, txn, args, false /*reverseScan*/, alloc, memMon)
 	defer rf.Close(ctx)
 
 	err := rf.StartScan(
-		context.Background(),
-		roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
+		ctx,
+		roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID())},
 		nil, /* spanIDs */
 		rowinfra.NoBytesLimit,
 		rowinfra.NoRowLimit,
@@ -364,10 +374,12 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 // row with not-null columns.
 func TestNextRowPartialColumnFamily(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
 
 	tableName := "t1"
 	table := fetcherEntryArgs{
@@ -396,7 +408,7 @@ INDEX(c)
 
 	alloc := &tree.DatumAlloc{}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, sqlutils.TestDB, tableName)
 
 	args := initFetcherArgs{
 		tableDesc: tableDesc,
@@ -404,7 +416,7 @@ INDEX(c)
 	}
 
 	txn := kv.NewTxn(ctx, kvDB, 0)
-	rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
+	rf := initFetcher(t, codec, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
 
 	// Start a scan that has multiple input spans, to tickle the codepath that
 	// sees an "empty batch". When we have multiple input spans, the kv server
@@ -417,13 +429,13 @@ INDEX(c)
 	// We'll make the first span go to some random key in the middle of the
 	// key space (by appending a number to the index's start key) and the
 	// second span go from that key to the end of the index.
-	indexSpan := tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())
+	indexSpan := tableDesc.IndexSpan(codec, tableDesc.GetPrimaryIndexID())
 	endKey := indexSpan.EndKey
 	midKey := encoding.EncodeUvarintAscending(indexSpan.Key, uint64(100))
 	indexSpan.EndKey = midKey
 
 	if err := rf.StartScan(
-		context.Background(),
+		ctx,
 		roachpb.Spans{indexSpan,
 			roachpb.Span{Key: midKey, EndKey: endKey},
 		},
@@ -440,7 +452,7 @@ INDEX(c)
 	for {
 		// Just try to grab the row - we don't need to validate the contents
 		// in this test.
-		datums, err := rf.NextRowDecoded(context.Background())
+		datums, err := rf.NextRowDecoded(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -459,10 +471,12 @@ INDEX(c)
 // as well as STORING columns).
 func TestNextRowSecondaryIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
 
 	// Modulo to use for s1, s2 storing columns.
 	storingMods := [2]int{7, 13}
@@ -566,7 +580,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 	// We try to read rows from each index.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, sqlutils.TestDB, tableName)
 
 			args := initFetcherArgs{
 				tableDesc: tableDesc,
@@ -579,11 +593,11 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			}
 
 			txn := kv.NewTxn(ctx, kvDB, 0)
-			rf := initFetcher(t, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
+			rf := initFetcher(t, codec, txn, args, false /*reverseScan*/, alloc, nil /*memMon*/)
 
 			if err := rf.StartScan(
-				context.Background(),
-				roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.PublicNonPrimaryIndexes()[0].GetID())},
+				ctx,
+				roachpb.Spans{tableDesc.IndexSpan(codec, tableDesc.PublicNonPrimaryIndexes()[0].GetID())},
 				nil, /* spanIDs */
 				rowinfra.NoBytesLimit,
 				rowinfra.NoRowLimit,
@@ -595,7 +609,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 			nullCount := 0
 			var prevIdxVal int64
 			for {
-				datums, err := rf.NextRowDecoded(context.Background())
+				datums, err := rf.NextRowDecoded(ctx)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -672,10 +686,11 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 func TestRowFetcherReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
+	defer log.Scope(t).Close(t)
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	ctx := context.Background()
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
 	sqlutils.CreateTable(
 		t, sqlDB, "foo",
 		"k INT PRIMARY KEY, v INT",
@@ -683,7 +698,8 @@ func TestRowFetcherReset(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(1)),
 	)
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "foo")
+	codec := srv.ApplicationLayer().Codec()
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, sqlutils.TestDB, "foo")
 
 	var txn *kv.Txn
 	args := initFetcherArgs{
@@ -691,16 +707,16 @@ func TestRowFetcherReset(t *testing.T) {
 		indexIdx:  0,
 	}
 	da := tree.DatumAlloc{}
-	fetcher := initFetcher(t, txn, args, false, &da, nil /*memMon*/)
+	fetcher := initFetcher(t, codec, txn, args, false, &da, nil /*memMon*/)
 
-	resetFetcher := initFetcher(t, txn, args, false /*reverseScan*/, &da, nil /*memMon*/)
+	resetFetcher := initFetcher(t, codec, txn, args, false /*reverseScan*/, &da, nil /*memMon*/)
 
 	resetFetcher.Reset()
 
 	// Now re-init the reset fetcher and make sure its the same as the fetcher we
 	// didn't reset.
 
-	spec := makeIndexFetchSpec(t, args)
+	spec := makeIndexFetchSpec(t, codec, args)
 	if err := resetFetcher.Init(
 		ctx,
 		FetcherInitArgs{

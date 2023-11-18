@@ -48,7 +48,6 @@ go_test(
         "liveness_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":liveness"],
     deps = [
         "//pkg/base",
@@ -76,6 +75,7 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_kr_pretty//:pretty",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

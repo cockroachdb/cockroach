@@ -69,6 +69,22 @@ func TestSelect(t *testing.T) {
 			filter: ReplicatedSpansUserOnly,
 		},
 		{
+			name: "r2_excludelocks",
+			sp: roachpb.RSpan{
+				Key:    roachpb.RKey("a"),
+				EndKey: roachpb.RKey("c"),
+			},
+			filter: ReplicatedSpansExcludeLocks,
+		},
+		{
+			name: "r2_locksonly",
+			sp: roachpb.RSpan{
+				Key:    roachpb.RKey("a"),
+				EndKey: roachpb.RKey("c"),
+			},
+			filter: ReplicatedSpansLocksOnly,
+		},
+		{
 			name: "r3",
 			sp: roachpb.RSpan{
 				Key:    roachpb.RKey("a"),

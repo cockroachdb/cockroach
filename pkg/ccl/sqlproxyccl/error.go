@@ -50,13 +50,9 @@ const (
 	// on the client's session parameters.
 	codeParamsRoutingFailed
 
-	// codeBackendDown indicates an error establishing or maintaining a connection
-	// to the backend SQL server.
-	codeBackendDown
-
-	// codeBackendRefusedTLS indicates that the backend SQL server refused a TLS-
-	// enabled SQL connection.
-	codeBackendRefusedTLS
+	// codeBackendDialFailed indicates an error establishing a connection
+	// between the proxy and the backend SQL server.
+	codeBackendDialFailed
 
 	// codeBackendDisconnected indicates that the backend disconnected (with a
 	// connection error) while serving client traffic.

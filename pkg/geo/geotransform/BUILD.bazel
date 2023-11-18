@@ -20,7 +20,6 @@ go_test(
     name = "geotransform_test",
     size = "small",
     srcs = ["geotransform_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":geotransform"],
     deps = [
         "//pkg/geo/geopb",

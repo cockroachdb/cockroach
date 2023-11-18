@@ -43,9 +43,9 @@ sudo tar -C /usr --strip-components=1 -zxf /tmp/cmake.tgz && rm /tmp/cmake.tgz
 
 # Install Go.
 trap 'rm -f /tmp/go.tgz' EXIT
-curl -fsSL https://dl.google.com/go/go1.19.10.linux-amd64.tar.gz > /tmp/go.tgz
+curl -fsSL https://dl.google.com/go/go1.21.3.linux-amd64.tar.gz > /tmp/go.tgz
 sha256sum -c - <<EOF
-8b045a483d3895c6edba2e90a9189262876190dbbd21756870cdd63821810677  /tmp/go.tgz
+1241381b2843fae5a9707eec1f8fb2ef94d827990582c7c7c32f5bdfbfd420c8  /tmp/go.tgz
 EOF
 sudo tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
 
@@ -61,7 +61,6 @@ curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/baze
 echo '4cb534c52cdd47a6223d4596d530e7c9c785438ab3b0a49ff347e991c210b2cd /tmp/bazelisk' | sha256sum -c -
 chmod +x /tmp/bazelisk
 sudo mv /tmp/bazelisk /usr/bin/bazel
-echo "build --config=dev" > ~/.bazelrc
 
 # Install the Unison file-syncer.
 . bootstrap/bootstrap-unison.sh

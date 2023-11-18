@@ -12,7 +12,7 @@ RUN bazel build --config=crosslinux //pkg/cmd/roachprod:roachprod
 # Copy the roachprod binary to a stable location
 RUN cp $(bazel info bazel-bin --config=crosslinux)/pkg/cmd/roachprod/roachprod_/roachprod ./
 
-FROM golang:1.19
+FROM golang:1.21
 COPY entrypoint.sh build.sh /build/
 RUN ["/build/build.sh"]
 COPY --from=builder /build/roachprod /usr/local/bin/roachprod

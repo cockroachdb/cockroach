@@ -12,7 +12,7 @@
     "mocha": "4.0.1"
   },
   "dependencies": {
-    "pg": "7.3.0",
+    "pg": "8.11.3",
     "pg-error-codes": "1.0.0",
     "sequelize": "^4.37.1",
     "sequelize-cockroachdb": "^1.0.2"

@@ -148,10 +148,18 @@ func (m *MockTransactionalSender) RequiredFrontier() hlc.Timestamp {
 
 // GenerateForcedRetryableErr is part of the TxnSender interface.
 func (m *MockTransactionalSender) GenerateForcedRetryableErr(
-	ctx context.Context, ts hlc.Timestamp, msg redact.RedactableString,
+	ctx context.Context, ts hlc.Timestamp, mustRestart bool, msg redact.RedactableString,
 ) error {
-	m.txn.Restart(m.pri, 0 /* upgradePriority */, ts)
-	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, m.txn.ID, m.txn)
+	prevTxn := m.txn
+	nextTxn := m.txn.Clone()
+	nextTxn.WriteTimestamp.Forward(ts)
+	if !nextTxn.IsoLevel.PerStatementReadSnapshot() || mustRestart {
+		nextTxn.Restart(m.pri, 0 /* upgradePriority */, nextTxn.WriteTimestamp)
+	} else {
+		nextTxn.BumpReadTimestamp(nextTxn.WriteTimestamp)
+	}
+	m.txn.Update(nextTxn)
+	return kvpb.NewTransactionRetryWithProtoRefreshError(msg, prevTxn.ID, prevTxn.Epoch, *nextTxn)
 }
 
 // UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.
@@ -169,7 +177,8 @@ func (m *MockTransactionalSender) GetRetryableErr(
 }
 
 // ClearRetryableErr is part of the TxnSender interface.
-func (m *MockTransactionalSender) ClearRetryableErr(ctx context.Context) {
+func (m *MockTransactionalSender) ClearRetryableErr(ctx context.Context) error {
+	return nil
 }
 
 // IsSerializablePushAndRefreshNotPossible is part of the TxnSender interface.
@@ -189,6 +198,11 @@ func (m *MockTransactionalSender) RollbackToSavepoint(context.Context, Savepoint
 
 // ReleaseSavepoint is part of the kv.TxnSender interface.
 func (m *MockTransactionalSender) ReleaseSavepoint(context.Context, SavepointToken) error {
+	panic("unimplemented")
+}
+
+// CanUseSavepoint is part of the kv.TxnSender interface.
+func (m *MockTransactionalSender) CanUseSavepoint(context.Context, SavepointToken) bool {
 	panic("unimplemented")
 }
 
@@ -212,7 +226,7 @@ func (m *MockTransactionalSender) Active() bool {
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
 
 // Step is part of the TxnSender interface.
-func (m *MockTransactionalSender) Step(_ context.Context) error {
+func (m *MockTransactionalSender) Step(context.Context, bool) error {
 	// At least one test (e.g sql/TestPortalsDestroyedOnTxnFinish) requires
 	// the ability to run simple statements that do not access storage,
 	// and that requires a non-panicky Step().
@@ -249,6 +263,11 @@ func (m *MockTransactionalSender) HasPerformedReads() bool {
 // HasPerformedWrites is part of TxnSenderFactory.
 func (m *MockTransactionalSender) HasPerformedWrites() bool {
 	panic("unimplemented")
+}
+
+// TestingShouldRetry is part of TxnSenderFactory.
+func (m *MockTransactionalSender) TestingShouldRetry() bool {
+	return false
 }
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.

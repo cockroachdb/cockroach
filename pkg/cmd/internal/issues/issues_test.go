@@ -37,17 +37,30 @@ func TestPost(t *testing.T) {
 		issueNumber = 30      // issue # returned in select test cases
 	)
 
-	opts := Options{
-		Token:       "intentionally-unset",
-		Org:         "cockroachdb",
-		Repo:        "cockroach",
-		SHA:         "abcd123",
-		BuildTypeID: "nightly123",
-		BuildID:     "8008135",
-		ServerURL:   "https://teamcity.example.com",
-		Branch:      "release-0.1",
-		Tags:        "deadlock",
-		Goflags:     "race",
+	tcOpts := &Options{
+		Token:  "intentionally-unset",
+		Org:    "cockroachdb",
+		Repo:   "cockroach",
+		Branch: "release-0.1",
+		SHA:    "abcd123",
+		TeamCityOptions: &TeamCityOptions{
+			BuildTypeID: "nightly123",
+			BuildID:     "8008135",
+			ServerURL:   "https://teamcity.example.com",
+			Tags:        "deadlock",
+			Goflags:     "race",
+		},
+	}
+	engflowOpts := &Options{
+		Token:  "intentionally-unset",
+		Org:    "cockroachdb",
+		Repo:   "cockroach",
+		Branch: "release-0.1",
+		SHA:    "abcd123",
+		EngFlowOptions: &EngFlowOptions{
+			ServerURL:    "https://fake.cluster.engflow.com",
+			InvocationID: "fake-invocation-id",
+		},
 	}
 
 	type testCase struct {
@@ -57,6 +70,7 @@ func TestPost(t *testing.T) {
 		message              string
 		artifacts            string
 		reproCmd             string
+		skipTestFailure      bool
 		reproTitle, reproURL string
 	}
 
@@ -150,6 +164,13 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 			message:     "boom",
 			reproURL:    "https://github.com/cockroachdb/cockroach",
 			reproTitle:  "FooBar README",
+		},
+		{
+			name:            "infrastructure-flake",
+			packageName:     "roachtest",
+			testName:        "TestCDC",
+			message:         "Something went wrong",
+			skipTestFailure: true,
 		},
 	}
 
@@ -257,7 +278,12 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 	re := regexp.MustCompile(`^(.+?)-(` + strings.Join(sKeys, "|") + `)\.txt$`)
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "post"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			var engflowTestCase bool
 			basename := filepath.Base(path)
+			if strings.Contains(basename, "-engflow") {
+				engflowTestCase = true
+				basename = strings.ReplaceAll(basename, "-engflow", "")
+			}
 			sl := re.FindStringSubmatch(basename)
 			require.Len(t, sl, 3, "%s couldn't be interpreted as a test case", basename)
 			name, foundIssue := sl[1], sl[2]
@@ -266,8 +292,13 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 			require.True(t, ok, "missing issue scenario %s", foundIssue)
 
 			var buf strings.Builder
-			opts := opts // play it safe since we're mutating it below
-			opts.getBinaryVersion = func() string {
+			var opts Options
+			if engflowTestCase {
+				opts = *engflowOpts
+			} else {
+				opts = *tcOpts
+			}
+			opts.GetBinaryVersion = func() string {
 				const v = "v3.3.0"
 				_, _ = fmt.Fprintf(&buf, "getBinaryVersion: result %s\n", v)
 				return v
@@ -353,14 +384,15 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 				repro = HelpCommandAsLink(c.reproTitle, c.reproURL)
 			}
 			req := PostRequest{
-				PackageName:     c.packageName,
-				TestName:        c.testName,
-				Message:         c.message,
-				Artifacts:       c.artifacts,
-				MentionOnCreate: []string{"@cockroachdb/idonotexistbecausethisisatest"},
-				HelpCommand:     repro,
-				ExtraLabels:     []string{"release-blocker"},
-				ExtraParams:     map[string]string{"ROACHTEST_cloud": "gce"},
+				PackageName:          c.packageName,
+				TestName:             c.testName,
+				Message:              c.message,
+				SkipLabelTestFailure: c.skipTestFailure,
+				Artifacts:            c.artifacts,
+				MentionOnCreate:      []string{"@cockroachdb/idonotexistbecausethisisatest"},
+				HelpCommand:          repro,
+				ExtraLabels:          []string{"release-blocker"},
+				ExtraParams:          map[string]string{"ROACHTEST_cloud": "gce"},
 			}
 			require.NoError(t, p.post(context.Background(), UnitTestFormatter, req))
 
@@ -402,6 +434,8 @@ func TestPostEndToEnd(t *testing.T) {
 	unset := setEnv(env)
 	defer unset()
 
+	opts := DefaultOptionsFromEnv()
+
 	params := map[string]string{
 		"GOFLAGS":         "-race_test",
 		"ROACHTEST_cloud": "test",
@@ -417,7 +451,7 @@ func TestPostEndToEnd(t *testing.T) {
 		HelpCommand: UnitTestHelpCommand(""),
 	}
 
-	require.NoError(t, Post(context.Background(), log.Default(), UnitTestFormatter, req))
+	require.NoError(t, Post(context.Background(), log.Default(), UnitTestFormatter, req, opts))
 }
 
 // setEnv overrides the env variables corresponding to the input map. The

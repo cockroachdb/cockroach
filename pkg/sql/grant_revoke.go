@@ -304,7 +304,7 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 					ctx,
 					pgnotice.Newf(
 						"some privileges have no effect on sequences: %s",
-						sequencePrivilegesNoOp.SortedNames(),
+						sequencePrivilegesNoOp.SortedDisplayNames(),
 					),
 				)
 			}
@@ -333,9 +333,9 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 
 		eventDetails := eventpb.CommonSQLPrivilegeEventDetails{}
 		if n.isGrant {
-			eventDetails.GrantedPrivileges = n.desiredprivs.SortedNames()
+			eventDetails.GrantedPrivileges = n.desiredprivs.SortedDisplayNames()
 		} else {
-			eventDetails.RevokedPrivileges = n.desiredprivs.SortedNames()
+			eventDetails.RevokedPrivileges = n.desiredprivs.SortedDisplayNames()
 		}
 
 		switch d := descriptor.(type) {
@@ -343,7 +343,9 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 			if err := p.writeDatabaseChangeToBatch(ctx, d, b); err != nil {
 				return err
 			}
-			p.createNonDropDatabaseChangeJob(ctx, d.ID, fmt.Sprintf("updating privileges for database %d", d.ID))
+			if err := p.createNonDropDatabaseChangeJob(ctx, d.ID, fmt.Sprintf("updating privileges for database %d", d.ID)); err != nil {
+				return err
+			}
 			for _, grantee := range n.grantees {
 				privs := eventDetails // copy the granted/revoked privilege list.
 				privs.Grantee = grantee.Normalized()
@@ -478,7 +480,10 @@ func (p *planner) getGrantOnObject(
 		return privilege.Table, nil
 	case targets.AllFunctionsInSchema:
 		incIAMFunc(sqltelemetry.OnAllFunctionsInSchema)
-		return privilege.Function, nil
+		return privilege.Routine, nil
+	case targets.AllProceduresInSchema:
+		incIAMFunc(sqltelemetry.OnAllProceduresInSchema)
+		return privilege.Routine, nil
 	case targets.Schemas != nil:
 		incIAMFunc(sqltelemetry.OnSchema)
 		return privilege.Schema, nil
@@ -487,7 +492,10 @@ func (p *planner) getGrantOnObject(
 		return privilege.Type, nil
 	case targets.Functions != nil:
 		incIAMFunc(sqltelemetry.OnFunction)
-		return privilege.Function, nil
+		return privilege.Routine, nil
+	case targets.Procedures != nil:
+		incIAMFunc(sqltelemetry.OnProcedure)
+		return privilege.Routine, nil
 	case targets.System:
 		incIAMFunc(sqltelemetry.OnSystem)
 		return privilege.Global, nil

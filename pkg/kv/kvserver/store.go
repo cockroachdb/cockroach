@@ -179,13 +179,36 @@ var logStoreTelemetryTicks = envutil.EnvOrDefaultInt(
 	6*60,
 )
 
+// defaultRangefeedSchedulerConcurrency specifies how many workers rangefeed
+// scheduler will use to perform rangefeed work. This number will be divided
+// between stores of the node.
+var defaultRangefeedSchedulerConcurrency = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_WORKERS", min(4*runtime.GOMAXPROCS(0), 64))
+
+// defaultRangefeedSchedulerShardSize specifies the default maximum number of
+// scheduler worker goroutines per mutex shard. By default, we spin up 4 workers
+// per CPU core, capped at 64, so 8 is equivalent to 2 CPUs per shard, or a
+// maximum of 8 shards. Since rangefeed processing is generally cheap, this
+// significantly relieves contention, while also avoiding starvation by
+// excessive sharding.
+var defaultRangefeedSchedulerShardSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_SHARD_SIZE", 8)
+
+// defaultRangefeedSchedulerPriorityShardSize specifies the default size of the
+// rangefeed scheduler priority shard, used for certain system ranges. This
+// shard is always fully populated with workers that don't count towards the
+// concurrency limit, and is thus effectively the number of priority workers per
+// store.
+var defaultRangefeedSchedulerPriorityShardSize = envutil.EnvOrDefaultInt(
+	"COCKROACH_RANGEFEED_SCHEDULER_PRIORITY_SHARD_SIZE", 2)
+
 // bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.max_rate",
 	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
 	1<<40, // 1 TiB
-).WithPublic()
+	settings.WithPublic)
 
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
 var addSSTableRequestLimit = settings.RegisterIntSetting(
@@ -239,28 +262,18 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// leaseTransferWait is the timeout for a single iteration of draining range leases.
-var leaseTransferWait = func() *settings.DurationSetting {
-	s := settings.RegisterDurationSetting(
-		settings.SystemOnly,
-		leaseTransferWaitSettingName,
-		"the timeout for a single iteration of the range lease transfer phase of draining "+
-			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
-			"after changing this setting)",
-		5*time.Second,
-		func(v time.Duration) error {
-			if v < 0 {
-				return errors.Errorf("cannot set %s to a negative duration: %s",
-					leaseTransferWaitSettingName, v)
-			}
-			return nil
-		},
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
-
-const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
+// LeaseTransferPerIterationTimeout is the timeout for a single iteration of draining range leases.
+var LeaseTransferPerIterationTimeout = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	"server.shutdown.lease_transfer_wait",
+	"the timeout for a single iteration of the range lease transfer phase of draining "+
+		"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
+		"after changing this setting)",
+	5*time.Second,
+	settings.WithName("server.shutdown.lease_transfer_iteration.timeout"),
+	settings.NonNegativeDuration,
+	settings.WithPublic,
+)
 
 // ExportRequestsLimit is the number of Export requests that can run at once.
 // Each extracts data from Pebble to an in-memory SST and returns it to the
@@ -270,7 +283,7 @@ const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 // here since we check it in the caller to limit generated requests as well
 // to prevent excessive queuing.
 var ExportRequestsLimit = settings.RegisterIntSetting(
-	settings.SystemOnly,
+	settings.SystemVisible, // used in backup processor
 	"kv.bulk_io_write.concurrent_export_requests",
 	"number of export requests a store will handle concurrently before queuing",
 	3,
@@ -285,7 +298,12 @@ var raftStepDownOnRemoval = util.ConstantWithMetamorphicTestBool("raft-step-down
 
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
-	return testStoreConfig(clock, clusterversion.TestingBinaryVersion)
+	return testStoreConfig(clock, clusterversion.Latest.Version())
+}
+
+// TestStoreConfigWithVersion is the same as TestStoreConfig but allows to pass a cluster version.
+func TestStoreConfigWithVersion(clock *hlc.Clock, version roachpb.Version) StoreConfig {
+	return testStoreConfig(clock, version)
 }
 
 func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
@@ -1015,8 +1033,12 @@ type Store struct {
 	// The subset of replicas with active rangefeeds.
 	rangefeedReplicas struct {
 		syncutil.Mutex
-		m map[roachpb.RangeID]struct{}
+		// m contains mapping from rangeID that could be used to retrieve replicas
+		// with associated rangefeed processor scheduler IDs that allow enqueueing
+		// periodic events directly.
+		m map[roachpb.RangeID]int64
 	}
+	rangefeedScheduler *rangefeed.Scheduler
 
 	// raftRecvQueues is a map of per-Replica incoming request queues. These
 	// queues might more naturally belong in Replica, but are kept separate to
@@ -1192,12 +1214,15 @@ type StoreConfig struct {
 	// SpanConfigsDisabled determines whether we're able to use the span configs
 	// infrastructure or not.
 	//
-	// TODO(irfansharif): We can remove this.
+	// TODO(baptist): Don't add any future uses of this. Will be removed soon.
 	SpanConfigsDisabled bool
+
 	// Used to subscribe to span configuration changes, keeping up-to-date a
-	// data structure useful for retrieving span configs. Only available if
-	// SpanConfigsDisabled is unset.
+	// data structure useful for retrieving span configs.
 	SpanConfigSubscriber spanconfig.KVSubscriber
+	// SharedStorageEnabled stores whether this store is configured with a
+	// shared.Storage instance and can accept shared snapshots.
+	SharedStorageEnabled bool
 
 	// KVAdmissionController is used for admission control.
 	KVAdmissionController kvadmission.Controller
@@ -1223,24 +1248,33 @@ type StoreConfig struct {
 
 	// RangeLogWriter is used to write entries to the system.rangelog table.
 	RangeLogWriter RangeLogWriter
+
+	// RangeFeedSchedulerConcurrency specifies number of rangefeed scheduler
+	// workers for the store.
+	RangeFeedSchedulerConcurrency int
+
+	// RangeFeedSchedulerConcurrentPriority specifies the number of rangefeed
+	// scheduler workers for this store's dedicated priority shard. Values < 1
+	// imply 1.
+	RangeFeedSchedulerConcurrencyPriority int
+
+	// RangeFeedSchedulerShardSize specifies the maximum number of workers per
+	// scheduler shard.
+	RangeFeedSchedulerShardSize int
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
 // (e.g., split, merge, add/remove voter/non-voter) into the system.rangelog
 // table and node join and restart events into system.eventolog table.
 // Decommissioning events are not controlled by this setting.
-var logRangeAndNodeEventsEnabled = func() *settings.BoolSetting {
-	s := settings.RegisterBoolSetting(
-		settings.SystemOnly,
-		"kv.log_range_and_node_events.enabled",
-		"set to true to transactionally log range events"+
-			" (e.g., split, merge, add/remove voter/non-voter) into system.rangelog"+
-			"and node join and restart events into system.eventolog",
-		true,
-	)
-	s.SetVisibility(settings.Public)
-	return s
-}()
+var logRangeAndNodeEventsEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.log_range_and_node_events.enabled",
+	"set to true to transactionally log range events"+
+		" (e.g., split, merge, add/remove voter/non-voter) into system.rangelog"+
+		"and node join and restart events into system.eventolog",
+	true,
+	settings.WithPublic)
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
 // behavior of the consistency checker for tests.
@@ -1260,7 +1294,8 @@ func (sc *StoreConfig) Valid() bool {
 		sc.RaftTickInterval != 0 && sc.RaftHeartbeatIntervalTicks > 0 &&
 		sc.RaftElectionTimeoutTicks > 0 && sc.RaftReproposalTimeoutTicks > 0 &&
 		sc.RaftSchedulerConcurrency > 0 && sc.RaftSchedulerConcurrencyPriority > 0 &&
-		sc.RaftSchedulerShardSize > 0 && sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil
+		sc.RaftSchedulerShardSize > 0 && sc.ScanInterval >= 0 && sc.AmbientCtx.Tracer != nil &&
+		sc.RangeFeedSchedulerConcurrency > 0 && sc.RangeFeedSchedulerShardSize > 0
 }
 
 // SetDefaults initializes unset fields in StoreConfig to values
@@ -1296,9 +1331,31 @@ func (sc *StoreConfig) SetDefaults(numStores int) {
 	if raftDisableLeaderFollowsLeaseholder {
 		sc.TestingKnobs.DisableLeaderFollowsLeaseholder = true
 		sc.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader = true // otherwise lease requests fail
+		// The allocator must skip snapshot checks, since these only work when the
+		// leader and leaseholder are colocated.
+		if sc.TestingKnobs.AllocatorKnobs == nil {
+			sc.TestingKnobs.AllocatorKnobs = &allocator.TestingKnobs{}
+		}
+		sc.TestingKnobs.AllocatorKnobs.AllowLeaseTransfersToReplicasNeedingSnapshots = true
+		sc.TestingKnobs.ReplicaPlannerKnobs.AllowVoterRemovalWhenNotLeader = true // downreplication
 	}
 	if raftDisableQuiescence {
 		sc.TestingKnobs.DisableQuiescence = true
+	}
+	if sc.RangeFeedSchedulerConcurrency == 0 {
+		sc.RangeFeedSchedulerConcurrency = defaultRangefeedSchedulerConcurrency
+		if numStores > 1 && sc.RangeFeedSchedulerConcurrency > 1 {
+			// We want at least two workers per store to avoid any blocking.
+			sc.RangeFeedSchedulerConcurrency = min(
+				(sc.RangeFeedSchedulerConcurrency-1)/numStores+1, // ceil division
+				2)
+		}
+	}
+	if sc.RangeFeedSchedulerShardSize == 0 {
+		sc.RangeFeedSchedulerShardSize = defaultRangefeedSchedulerShardSize
+	}
+	if sc.RangeFeedSchedulerConcurrencyPriority == 0 {
+		sc.RangeFeedSchedulerConcurrencyPriority = defaultRangefeedSchedulerPriorityShardSize
 	}
 }
 
@@ -1448,7 +1505,7 @@ func NewStore(
 	s.unquiescedReplicas.Unlock()
 
 	s.rangefeedReplicas.Lock()
-	s.rangefeedReplicas.m = map[roachpb.RangeID]struct{}{}
+	s.rangefeedReplicas.m = map[roachpb.RangeID]int64{}
 	s.rangefeedReplicas.Unlock()
 
 	s.tsCache = tscache.New(cfg.Clock)
@@ -1723,7 +1780,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 					case <-transferCtx.Done():
 						// Context canceled: the timeout loop has decided we've
 						// done enough draining
-						// (server.shutdown.lease_transfer_wait).
+						// (server.shutdown.lease_transfer_iteration.timeout).
 						//
 						// We need this check here because each call of
 						// transferAllAway() traverses all stores/replicas without
@@ -1882,7 +1939,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 
 	// We've seen all the replicas once. Now we're going to iterate
 	// until they're all gone, up to the configured timeout.
-	transferTimeout := leaseTransferWait.Get(&s.cfg.Settings.SV)
+	transferTimeout := LeaseTransferPerIterationTimeout.Get(&s.cfg.Settings.SV)
 
 	drainLeasesOp := "transfer range leases"
 	if err := timeutil.RunWithTimeout(ctx, drainLeasesOp, transferTimeout,
@@ -1922,7 +1979,7 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 			// same time. If we see it on healthy ones, there's likely something to fix.
 			log.Warningf(ctx, "unable to drain cleanly within %s (cluster setting %s), "+
 				"service might briefly deteriorate if the node is terminated: %s",
-				transferTimeout, leaseTransferWaitSettingName, tErr.Cause())
+				transferTimeout, LeaseTransferPerIterationTimeout.Name(), tErr.Cause())
 		} else {
 			log.Warningf(ctx, "drain error: %+v", err)
 		}
@@ -1956,6 +2013,21 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// TODO(sep-raft-log): do for both engines.
 	if err := s.TODOEngine().SetStoreID(ctx, int32(s.StoreID())); err != nil {
 		return err
+	}
+
+	{
+		m := rangefeed.NewSchedulerMetrics(s.cfg.HistogramWindowInterval)
+		rfs := rangefeed.NewScheduler(rangefeed.SchedulerConfig{
+			Workers:         s.cfg.RangeFeedSchedulerConcurrency,
+			PriorityWorkers: s.cfg.RangeFeedSchedulerConcurrencyPriority,
+			ShardSize:       s.cfg.RangeFeedSchedulerShardSize,
+			Metrics:         m,
+		})
+		s.Registry().AddMetricStruct(m)
+		if err = rfs.Start(ctx, s.stopper); err != nil {
+			return err
+		}
+		s.rangefeedScheduler = rfs
 	}
 
 	// Add the store ID to the scanner's AmbientContext before starting it, since
@@ -2005,6 +2077,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		Clock:                s.cfg.Clock,
 		DB:                   s.db,
 		Stopper:              stopper,
+		Settings:             s.cfg.Settings,
 		TaskLimit:            s.cfg.IntentResolverTaskLimit,
 		AmbientCtx:           s.cfg.AmbientCtx,
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
@@ -2101,11 +2174,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		}
 	}
 
-	// Start Raft processing goroutines.
-	s.cfg.Transport.ListenIncomingRaftMessages(s.StoreID(), s)
-	s.cfg.Transport.ListenOutgoingMessage(s.StoreID(), s)
-	s.processRaft(ctx)
-
 	// Register a callback to unquiesce any ranges with replicas on a
 	// node transitioning from non-live to live.
 	if s.cfg.NodeLiveness != nil {
@@ -2158,28 +2226,21 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.onSpanConfigUpdate(ctx, update)
 		})
 
-		// When toggling between the system config span and the span
-		// configs infrastructure, we want to re-apply configs on all
-		// replicas from whatever the new source is.
-		spanconfigstore.EnabledSetting.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-			enabled := spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV)
-			if enabled {
-				s.applyAllFromSpanConfigStore(ctx)
-			} else if scp := s.cfg.SystemConfigProvider; scp != nil {
-				if sc := scp.GetSystemConfig(); sc != nil {
-					s.systemGossipUpdate(sc)
-				}
-			}
-		})
-
 		// We also want to do it when the fallback config setting is changed.
 		spanconfigstore.FallbackConfigOverride.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
 			s.applyAllFromSpanConfigStore(ctx)
 		})
 	}
 
+	// Start Raft processing goroutines.
+	s.cfg.Transport.ListenIncomingRaftMessages(s.StoreID(), s)
+	s.cfg.Transport.ListenOutgoingMessage(s.StoreID(), s)
+	s.processRaft(ctx)
+
 	// Connect rangefeeds to closed timestamp updates.
 	s.startRangefeedUpdater(ctx)
+
+	s.startRangefeedTxnPushNotifier(ctx)
 
 	if s.replicateQueue != nil {
 		s.storeRebalancer = NewStoreRebalancer(
@@ -2210,10 +2271,7 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return s.cfg.TestingKnobs.ConfReaderInterceptor(), nil
 	}
 
-	if s.cfg.SpanConfigsDisabled ||
-		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
-		s.TestingKnobs().UseSystemConfigSpanForQueues {
-
+	if s.cfg.SpanConfigsDisabled || s.TestingKnobs().UseSystemConfigSpanForQueues {
 		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 		if sysCfg == nil {
 			return nil, errSpanConfigsUnavailable
@@ -2358,9 +2416,52 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 	})
 }
 
-func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID) {
+// startRangefeedTxnPushNotifier starts a worker that would periodically
+// enqueue txn push event for rangefeed processors to let them push lagging
+// transactions.
+// Note that this is only affecting scheduler based rangefeeds.
+func (s *Store) startRangefeedTxnPushNotifier(ctx context.Context) {
+	_ /* err */ = s.stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName: "transaction-rangefeed-push-notifier",
+		SpanOpt:  stop.SterileRootSpan,
+	}, func(ctx context.Context) {
+		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
+		makeSchedulerBatch := func() *rangefeed.SchedulerBatch {
+			batch := s.rangefeedScheduler.NewEnqueueBatch()
+			s.rangefeedReplicas.Lock()
+			for _, id := range s.rangefeedReplicas.m {
+				if id != 0 {
+					// Only process ranges that use scheduler.
+					batch.Add(id)
+				}
+			}
+			s.rangefeedReplicas.Unlock()
+			return batch
+		}
+
+		ticker := time.NewTicker(rangefeed.DefaultPushTxnsInterval)
+		for {
+			select {
+			case <-ticker.C:
+				if !rangefeed.PushTxnsEnabled.Get(&s.ClusterSettings().SV) {
+					continue
+				}
+				batch := makeSchedulerBatch()
+				s.rangefeedScheduler.EnqueueBatch(batch, rangefeed.PushTxnQueued)
+				batch.Close()
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			}
+		}
+	})
+}
+
+func (s *Store) addReplicaWithRangefeed(rangeID roachpb.RangeID, schedulerID int64) {
 	s.rangefeedReplicas.Lock()
-	s.rangefeedReplicas.m[rangeID] = struct{}{}
+	s.rangefeedReplicas.m[rangeID] = schedulerID
 	s.rangefeedReplicas.Unlock()
 }
 
@@ -2373,10 +2474,6 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
 func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
-	if !spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) {
-		return
-	}
-
 	sp, err := keys.SpanAddr(updated)
 	if err != nil {
 		log.Errorf(ctx, "skipped applying update (%s), unexpected error resolving span address: %v",
@@ -2397,6 +2494,7 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 
 			replCtx := repl.AnnotateCtx(ctx)
 			startKey := repl.Desc().StartKey
+			changed := true
 			if sp.ContainsKey(startKey) {
 				// It's possible that the update we're receiving here implies a split.
 				// If the update corresponds to what would be the config for the
@@ -2412,41 +2510,16 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 				// adjacent table. This results in a single update, corresponding to the
 				// new table's span, which forms the right-hand side post split.
 
-				// TODO(irfansharif): It's possible for a config to be applied over an
-				// entire range when it only pertains to the first half of the range.
-				// This will be corrected shortly -- we enqueue the range for a split
-				// below where we then apply the right config on each half. But still,
-				// it's surprising behavior and gets in the way of a desirable
-				// consistency guarantee: a key's config at any point in time is one
-				// that was explicitly declared over it, or the default config.
-				//
-				// We can do better, we can skip applying the config entirely and
-				// enqueue the split, then relying on the split trigger to install
-				// the right configs on each half. The current structure is as it is
-				// to maintain parity with the system config span variant.
-
 				conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
 				if err != nil {
-					log.Errorf(ctx, "skipped applying update, unexpected error reading from subscriber: %v", err)
+					log.Errorf(replCtx, "skipped applying update, unexpected error reading from subscriber: %v", err)
 					return err
 				}
-				repl.SetSpanConfig(conf)
+				changed = repl.SetSpanConfig(conf)
 			}
-
-			// TODO(irfansharif): For symmetry with the system config span variant,
-			// we queue blindly; we could instead only queue it if we knew the
-			// range's keyspans has a split in there somewhere, or was now part of a
-			// larger range and eligible for a merge, or the span config implied a
-			// need for {up,down}replication.
-			s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-			s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
-			s.replicateQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-				h.MaybeAdd(ctx, repl, now)
-			})
+			if changed {
+				repl.MaybeQueue(ctx, now)
+			}
 			return nil // more
 		},
 	); err != nil {
@@ -2468,13 +2541,10 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 			return true // more
 		}
 
-		repl.SetSpanConfig(conf)
-		s.splitQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
-		s.mergeQueue.Async(replCtx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
-			h.MaybeAdd(ctx, repl, now)
-		})
+		changed := repl.SetSpanConfig(conf)
+		if changed {
+			repl.MaybeQueue(replCtx, now)
+		}
 		return true // more
 	})
 }
@@ -3410,12 +3480,16 @@ func (s *Store) ReplicateQueueDryRun(
 		s.cfg.AmbientCtx.Tracer, "replicate queue dry run",
 	)
 	defer collectAndFinish()
-	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf roachpb.SpanConfig) bool {
+	canTransferLease := func(ctx context.Context, repl plan.LeaseCheckReplica, conf *roachpb.SpanConfig) bool {
 		return true
 	}
 	desc := repl.Desc()
-	conf := repl.SpanConfig()
-	_, err := s.replicateQueue.processOneChange(
+	conf, err := repl.LoadSpanConfig(ctx)
+	if err != nil {
+		log.Eventf(ctx, "error simulating allocator unable to load span config %s: %s", repl, err)
+		return collectAndFinish(), nil
+	}
+	_, err = s.replicateQueue.processOneChange(
 		ctx, repl, desc, conf, canTransferLease, false /* scatter */, true, /* dryRun */
 	)
 	if err != nil {
@@ -3474,7 +3548,7 @@ func (s *Store) AllocatorCheckRange(
 		storePool = s.cfg.StorePool
 	}
 
-	action, _ := s.allocator.ComputeAction(ctx, storePool, conf, desc)
+	action, _ := s.allocator.ComputeAction(ctx, storePool, &conf, desc)
 
 	// In the case that the action does not require a target, return immediately.
 	if !(action.Add() || action.Replace()) {
@@ -3488,7 +3562,7 @@ func (s *Store) AllocatorCheckRange(
 		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
-	target, _, err := s.allocator.AllocateTarget(ctx, storePool, conf,
+	target, _, err := s.allocator.AllocateTarget(ctx, storePool, &conf,
 		filteredVoters, filteredNonVoters, replacing, action.ReplicaStatus(), action.TargetReplicaType(),
 	)
 	if err == nil {
@@ -3499,7 +3573,7 @@ func (s *Store) AllocatorCheckRange(
 		fragileQuorumErr := s.allocator.CheckAvoidsFragileQuorum(
 			ctx,
 			storePool,
-			conf,
+			&conf,
 			desc.Replicas().VoterDescriptors(),
 			filteredVoters,
 			action.ReplicaStatus(),
@@ -3707,6 +3781,10 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
+}
+
+func (s *Store) getRangefeedScheduler() *rangefeed.Scheduler {
+	return s.rangefeedScheduler
 }
 
 // Implementation of the storeForTruncator interface.

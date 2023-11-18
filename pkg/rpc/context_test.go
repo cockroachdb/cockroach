@@ -443,7 +443,7 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_ /* server */, serverInterceptors, err := NewServerEx(serverCtx)
+	_ /* server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(t, err)
 
 	// Pile on one more interceptor to make sure it's called.
@@ -543,7 +543,7 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_ /* server */, serverInterceptors, err := NewServerEx(serverCtx)
+	_ /* server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(t, err)
 
 	testutils.RunTrueAndFalse(t, "use_mux_rangefeed", func(t *testing.T, useMux bool) {
@@ -618,7 +618,7 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_ /* server */, serverInterceptors, err := NewServerEx(serverCtx)
+	_ /* server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(t, err)
 
 	testutils.RunTrueAndFalse(t, "use_mux_rangefeed", func(t *testing.T, useMux bool) {
@@ -772,7 +772,7 @@ func BenchmarkInternalClientAdapter(b *testing.B) {
 	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_, interceptors, err := NewServerEx(serverCtx)
+	_, interceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(b, err)
 
 	internal := &internalServer{}
@@ -1409,7 +1409,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 
 	// Perform an initial request-response round trip.
 	log.Infof(ctx, "first ping")
-	request := PingRequest{ServerVersion: clientCtx.Settings.Version.BinaryVersion()}
+	request := PingRequest{ServerVersion: clientCtx.Settings.Version.LatestVersion()}
 	if err := heartbeatClient.Send(&request); err != nil {
 		return err
 	}
@@ -1793,7 +1793,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 
 	ctx := context.Background()
 	v1 := roachpb.Version{Major: 1}
-	v2 := clusterversion.TestingBinaryVersion
+	v2 := clusterversion.Latest.Version()
 
 	testData := []struct {
 		name          string
@@ -2059,7 +2059,7 @@ func TestRejectDialOnQuiesce(t *testing.T) {
 		defer srvStopper.Stop(ctx)
 		serverCtx := newTestContext(clusID, clock, maxOffset, srvStopper)
 		serverCtx.NodeID.Set(ctx, serverNodeID)
-		s, err := NewServer(serverCtx)
+		s, err := NewServer(ctx, serverCtx)
 		require.NoError(t, err)
 		ln, err := netutil.ListenAndServeGRPC(srvStopper, s, util.TestAddr)
 		require.NoError(t, err)

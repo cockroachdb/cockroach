@@ -161,7 +161,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"contention",
 			"index_recommendations",
 			"retries",
-			"last_retry_reason",
+			"error_code",
+			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
 	},
 	"crdb_internal.cluster_locks": {
@@ -270,7 +271,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"txn_fingerprint_id",
 			"query",
 			"implicit_txn",
-			"session_id,",
+			"session_id",
 			"start_time",
 			"end_time",
 			"user_name",
@@ -283,6 +284,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"problems",
 			"causes",
 			"stmt_execution_ids",
+			"last_error_code",
+			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
 	},
 	`"".crdb_internal.create_function_statements`: {
@@ -292,6 +295,16 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"schema_id",
 			"function_id",
 			"function_name",
+			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
+		},
+	},
+	`"".crdb_internal.create_procedure_statements`: {
+		nonSensitiveCols: NonSensitiveColumns{
+			"database_id",
+			"database_name",
+			"schema_id",
+			"procedure_id",
+			"procedure_name",
 			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
 		},
 	},
@@ -396,9 +409,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	"crdb_internal.system_jobs": {
 		// `payload` column may contain customer info, such as URI params
 		// containing access keys, encryption salts, etc.
-		customQueryUnredacted: `SELECT *, 
-			to_hex(payload) AS hex_payload, 
-			to_hex(progress) AS hex_progress 
+		customQueryUnredacted: `SELECT *
 			FROM crdb_internal.system_jobs`,
 		customQueryRedacted: `SELECT 
 			"id",
@@ -411,9 +422,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"claim_session_id",
 			"claim_instance_id",
 			"num_runs",
-			"last_run", 
-			'<redacted>' AS "hex_payload", 
-			to_hex(progress) AS "hex_progress"
+			"last_run"
 			FROM crdb_internal.system_jobs`,
 	},
 	"crdb_internal.kv_system_privileges": {
@@ -533,6 +542,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			// Internal meta may contain sensitive data such as usernames.
 			// "internal_meta",
 			"num_ranges",
+			"last_updated",
 		},
 	},
 	"crdb_internal.table_indexes": {
@@ -562,6 +572,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"waiting_txn_fingerprint_id",
 			"contention_duration",
 			"IF(crdb_internal.is_system_table_key(contending_key), crdb_internal.pretty_key(contending_key, 0) ,'redacted') as contending_pretty_key",
+			"contention_type",
 		},
 	},
 	"crdb_internal.zones": {
@@ -598,6 +609,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"range_end",
 			"resolved",
 			"last_event_utc",
+			"catchup",
 		},
 	},
 	"crdb_internal.feature_usage": {
@@ -696,6 +708,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"priority",
 			"retries",
 			"exec_node_ids",
+			"error_code",
+			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
 	},
 	"crdb_internal.node_inflight_trace_spans": {
@@ -932,7 +946,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"txn_fingerprint_id",
 			"query",
 			"implicit_txn",
-			"session_id,",
+			"session_id",
 			"start_time",
 			"end_time",
 			"user_name",
@@ -945,6 +959,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"problems",
 			"causes",
 			"stmt_execution_ids",
+			"last_error_code",
+			"crdb_internal.redact(last_error_redactable) as last_error_redactable",
 		},
 	},
 	"crdb_internal.node_txn_stats": {
@@ -996,13 +1012,11 @@ var zipSystemTables = DebugZipTableRegistry{
 	"system.descriptor": {
 		customQueryUnredacted: `SELECT
 				id,
-				descriptor,
-				to_hex(descriptor) AS hex_descriptor
+				descriptor
 			FROM system.descriptor`,
 		customQueryRedacted: `SELECT
 				id,
-				crdb_internal.redact_descriptor(descriptor) AS descriptor,
-				to_hex(crdb_internal.redact_descriptor(descriptor)) AS hex_descriptor
+				crdb_internal.redact_descriptor(descriptor) AS descriptor
 			FROM system.descriptor`,
 	},
 	"system.eventlog": {
@@ -1027,9 +1041,7 @@ var zipSystemTables = DebugZipTableRegistry{
 	"system.jobs": {
 		// NB: `payload` column may contain customer info, such as URI params
 		// containing access keys, encryption salts, etc.
-		customQueryUnredacted: `SELECT *, 
-			to_hex(payload) AS hex_payload, 
-			to_hex(progress) AS hex_progress 
+		customQueryUnredacted: `SELECT * 
 			FROM system.jobs`,
 		customQueryRedacted: `SELECT id,
 			status,
@@ -1041,16 +1053,13 @@ var zipSystemTables = DebugZipTableRegistry{
 			claim_session_id,
 			claim_instance_id,
 			num_runs,
-			last_run,
-			'<redacted>' AS hex_payload,
-			to_hex(progress) AS hex_progress
+			last_run
 			FROM system.jobs`,
 	},
 	"system.job_info": {
 		// `value` column may contain customer info, such as URI params
 		// containing access keys, encryption salts, etc.
-		customQueryUnredacted: `SELECT *,
-			to_hex(value) AS hex_value
+		customQueryUnredacted: `SELECT *
 			FROM system.job_info`,
 		customQueryRedacted: `SELECT job_id,
 			info_key,
@@ -1205,16 +1214,15 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.settings": {
-		customQueryUnredacted: `SELECT *, to_hex(value) as hex_value FROM system.settings`,
+		customQueryUnredacted: `SELECT * FROM system.settings`,
 		customQueryRedacted: `SELECT * FROM (
-    		SELECT *, to_hex(value) as hex_value
+    		SELECT *
     		FROM system.settings
 			WHERE "valueType" <> 's'
     	) UNION (
 			SELECT name, '<redacted>' as value,
 			"lastUpdated",
-			"valueType",
-			to_hex('redacted') as hex_value
+			"valueType"
 			FROM system.settings
 			WHERE "valueType"  = 's'
     	)`,
@@ -1265,6 +1273,79 @@ var zipSystemTables = DebugZipTableRegistry{
 			"plan_gist",
 			"anti_plan_gist",
 		},
+	},
+	// statement_statistics can have over 100k rows in just the last hour.
+	// Select all the statements that are part of a transaction where one of
+	// the statements is in the 100 by cpu usage, and all the transaction
+	// fingerprints from the transaction_contention_events table to keep the
+	// number of rows limited.
+	"system.statement_statistics_limit_5000": {
+		customQueryRedacted: `SELECT max(ss.aggregated_ts),
+       ss.fingerprint_id,
+       ss.transaction_fingerprint_id,
+       ss.plan_hash,
+       ss.app_name,
+       ss.agg_interval,
+       crdb_internal.merge_stats_metadata(array_agg(ss.metadata))    AS metadata,
+       crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+       ss.plan,
+       ss.index_recommendations
+     FROM system.public.statement_statistics ss
+     WHERE aggregated_ts > (now() - INTERVAL '1 hour') AND
+ ( transaction_fingerprint_id in (SELECT DISTINCT(blocking_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      union
+                                      SELECT DISTINCT(waiting_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      )
+    OR transaction_fingerprint_id in (SELECT ss_cpu.transaction_fingerprint_id
+                                      FROM system.public.statement_statistics ss_cpu
+                                      group by ss_cpu.transaction_fingerprint_id, ss_cpu.cpu_sql_nanos
+                                      ORDER BY ss_cpu.cpu_sql_nanos desc limit 100))
+GROUP BY ss.aggregated_ts,
+         ss.app_name,
+         ss.fingerprint_id,
+         ss.transaction_fingerprint_id,
+         ss.plan_hash,
+         ss.agg_interval,
+         ss.plan,
+         ss.index_recommendations
+limit 5000;`,
+		customQueryUnredacted: `SELECT max(ss.aggregated_ts),
+       ss.fingerprint_id,
+       ss.transaction_fingerprint_id,
+       ss.plan_hash,
+       ss.app_name,
+       ss.agg_interval,
+       crdb_internal.merge_stats_metadata(array_agg(ss.metadata))    AS metadata,
+       crdb_internal.merge_statement_stats(array_agg(ss.statistics)) AS statistics,
+       ss.plan,
+       ss.index_recommendations
+     FROM system.public.statement_statistics ss
+     WHERE aggregated_ts > (now() - INTERVAL '1 hour') AND
+ ( transaction_fingerprint_id in (SELECT DISTINCT(blocking_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      union
+                                      SELECT DISTINCT(waiting_txn_fingerprint_id)
+                                      FROM crdb_internal.transaction_contention_events
+                                      WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
+                                      )
+    OR transaction_fingerprint_id in (SELECT ss_cpu.transaction_fingerprint_id
+                                      FROM system.public.statement_statistics ss_cpu
+                                      group by ss_cpu.transaction_fingerprint_id, ss_cpu.cpu_sql_nanos
+                                      ORDER BY ss_cpu.cpu_sql_nanos desc limit 100))
+GROUP BY ss.aggregated_ts,
+         ss.app_name,
+         ss.fingerprint_id,
+         ss.transaction_fingerprint_id,
+         ss.plan_hash,
+         ss.agg_interval,
+         ss.plan,
+         ss.index_recommendations
+limit 5000;`,
 	},
 	"system.table_statistics": {
 		// `histogram` may contain sensitive information, such as keys and non-key column data.

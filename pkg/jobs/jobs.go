@@ -71,6 +71,16 @@ type CreatedByInfo struct {
 	ID   int64
 }
 
+// ScheduleID return ID as a [jobspb.ScheduleID] iff Name is
+// [CreatedByScheduledJobs]. Otherwise it returns [jobspb.InvalidScheduleID],
+// the zero value.
+func (i *CreatedByInfo) ScheduleID() jobspb.ScheduleID {
+	if i.Name == CreatedByScheduledJobs {
+		return jobspb.ScheduleID(i.ID)
+	}
+	return jobspb.InvalidScheduleID
+}
+
 // Record bundles together the user-managed fields in jobspb.Payload.
 type Record struct {
 	JobID         jobspb.JobID
@@ -731,64 +741,28 @@ func (j *Job) loadJobPayloadAndProgress(
 
 	payload := &jobspb.Payload{}
 	progress := &jobspb.Progress{}
-	if st.Version.IsActive(ctx, clusterversion.V23_1JobInfoTableIsBackfilled) {
-		infoStorage := j.InfoStorage(txn)
+	infoStorage := j.InfoStorage(txn)
 
-		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
-		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to get payload for job %d", j.ID())
-		}
-		if !exists {
-			return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job payload not found in system.job_info")
-		}
-		if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
-			return nil, nil, err
-		}
-
-		progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
-		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to get progress for job %d", j.ID())
-		}
-		if !exists {
-			return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job progress not found in system.job_info")
-		}
-		if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
-			return nil, nil, &JobNotFoundError{jobID: j.ID()}
-		}
-
-		return payload, progress, nil
-	}
-
-	// If V23_1JobInfoTableIsBackfilled is not active we should read the payload
-	// and progress from the system.jobs table.
-	const (
-		queryNoSessionID   = "SELECT payload, progress FROM system.jobs WHERE id = $1"
-		queryWithSessionID = queryNoSessionID + " AND claim_session_id = $2"
-	)
-	sess := sessiondata.RootUserSessionDataOverride
-
-	var err error
-	var row tree.Datums
-	if j.session == nil {
-		row, err = txn.QueryRowEx(ctx, "load-job-payload-progress-query", txn.KV(), sess,
-			queryNoSessionID, j.ID())
-	} else {
-		row, err = txn.QueryRowEx(ctx, "load-job-payload-progress-query", txn.KV(), sess,
-			queryWithSessionID, j.ID(), j.session.ID().UnsafeBytes())
-	}
+	payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
 	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to get payload for job %d", j.ID())
+	}
+	if !exists {
+		return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job payload not found in system.job_info")
+	}
+	if err := protoutil.Unmarshal(payloadBytes, payload); err != nil {
 		return nil, nil, err
 	}
-	if row == nil {
+
+	progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "failed to get progress for job %d", j.ID())
+	}
+	if !exists {
+		return nil, nil, errors.Wrap(&JobNotFoundError{jobID: j.ID()}, "job progress not found in system.job_info")
+	}
+	if err := protoutil.Unmarshal(progressBytes, progress); err != nil {
 		return nil, nil, &JobNotFoundError{jobID: j.ID()}
-	}
-	payload, err = UnmarshalPayload(row[0])
-	if err != nil {
-		return nil, nil, err
-	}
-	progress, err = UnmarshalProgress(row[1])
-	if err != nil {
-		return nil, nil, err
 	}
 
 	return payload, progress, nil
@@ -1124,10 +1098,12 @@ func FormatRetriableExecutionErrorLogToStringArray(
 }
 
 // GetJobTraceID returns the current trace ID of the job from the job progress.
-func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracingpb.TraceID, error) {
+func GetJobTraceID(
+	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
+) (tracingpb.TraceID, error) {
 	var traceID tracingpb.TraceID
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		jobInfo := InfoStorageForJob(txn, jobID)
+		jobInfo := InfoStorageForJob(txn, jobID, cv)
 		progressBytes, exists, err := jobInfo.GetLegacyProgress(ctx)
 		if err != nil {
 			return err
@@ -1151,14 +1127,14 @@ func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracing
 // LoadJobProgress returns the job progress from the info table. Note that the
 // progress can be nil if none is recorded.
 func LoadJobProgress(
-	ctx context.Context, db isql.DB, jobID jobspb.JobID,
+	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
 ) (*jobspb.Progress, error) {
 	var (
 		progressBytes []byte
 		exists        bool
 	)
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		infoStorage := InfoStorageForJob(txn, jobID)
+		infoStorage := InfoStorageForJob(txn, jobID, cv)
 		var err error
 		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
 		return err

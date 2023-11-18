@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -421,7 +422,7 @@ func TestTxnReadCommittedPerStatementReadSnapshot(t *testing.T) {
 			incrementKey()
 
 			if step {
-				require.NoError(t, txn1.Step(ctx))
+				require.NoError(t, txn1.Step(ctx, true /* allowReadTimestampStep */))
 			}
 
 			// Read the key twice in the same batch, to demonstrate that regardless of
@@ -1044,7 +1045,7 @@ func TestTxnContinueAfterCputError(t *testing.T) {
 
 // Test that a transaction can be used after a locking request returns a
 // WriteIntentError. This is not generally allowed for other errors, but
-// WriteIntentError is special.
+// a WriteIntentError is special.
 func TestTxnContinueAfterWriteIntentError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1118,13 +1119,17 @@ func TestTxnWaitPolicies(t *testing.T) {
 			errorC <- s.DB.Run(ctx, &b)
 		}()
 
-		// Should return error immediately, without blocking.
-		// Priority does not matter.
-		err := <-errorC
-		require.NotNil(t, err)
-		wiErr := new(kvpb.WriteIntentError)
-		require.True(t, errors.As(err, &wiErr))
-		require.Equal(t, kvpb.WriteIntentError_REASON_WAIT_POLICY, wiErr.Reason)
+		if highPriority {
+			// Should push txn and not block.
+			require.NoError(t, <-errorC)
+		} else {
+			// Should return error immediately, without blocking.
+			err := <-errorC
+			require.NotNil(t, err)
+			lcErr := new(kvpb.WriteIntentError)
+			require.True(t, errors.As(err, &lcErr))
+			require.Equal(t, kvpb.WriteIntentError_REASON_WAIT_POLICY, lcErr.Reason)
+		}
 
 		// SkipLocked wait policy.
 		type skipRes struct {
@@ -1158,6 +1163,54 @@ func TestTxnWaitPolicies(t *testing.T) {
 	})
 }
 
+// TestTxnErrorWaitPolicyWithOldVersionPushTouch verifies the PUSH_TOUCH
+// behavior before version V23_2_RemoveLockTableWaiterTouchPush. The logic gated
+// by this version is in lock_table_waiter and determines whether to use a
+// PUSH_TOUCH type for requests with WaitPolicy_Error. This test ensures
+// that such requests return an error and don't block.
+// TODO(mira): Remove test after V23_2_RemoveLockTableWaiterTouchPush is removed.
+func TestTxnErrorWaitPolicyWithOldVersionPushTouch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	cv := clusterversion.ByKey(clusterversion.V23_2_RemoveLockTableWaiterTouchPush - 1)
+	s := createTestDBWithKnobs(t, &kvserver.StoreTestingKnobs{
+		InitialReplicaVersionOverride: &cv,
+	})
+	defer s.Stop()
+
+	testutils.RunTrueAndFalse(t, "highPriority", func(t *testing.T, highPriority bool) {
+		key := []byte("b")
+		require.NoError(t, s.DB.Put(ctx, key, "old value"))
+
+		txn := s.DB.NewTxn(ctx, "test txn")
+		require.NoError(t, txn.Put(ctx, key, "new value"))
+
+		pri := roachpb.NormalUserPriority
+		if highPriority {
+			pri = roachpb.MaxUserPriority
+		}
+
+		errorC := make(chan error)
+		go func() {
+			var b kv.Batch
+			b.Header.UserPriority = pri
+			b.Header.WaitPolicy = lock.WaitPolicy_Error
+			b.Get(key)
+			errorC <- s.DB.Run(ctx, &b)
+		}()
+
+		// Should return error immediately, without blocking, regardless of priority.
+		err := <-errorC
+		require.NotNil(t, err)
+		lcErr := new(kvpb.WriteIntentError)
+		require.True(t, errors.As(err, &lcErr))
+		require.Equal(t, kvpb.WriteIntentError_REASON_WAIT_POLICY, lcErr.Reason)
+
+		require.NoError(t, txn.Commit(ctx))
+	})
+}
+
 func TestTxnLockTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1174,9 +1227,9 @@ func TestTxnLockTimeout(t *testing.T) {
 	b.Get(key)
 	err := s.DB.Run(ctx, &b)
 	require.NotNil(t, err)
-	wiErr := new(kvpb.WriteIntentError)
-	require.True(t, errors.As(err, &wiErr))
-	require.Equal(t, kvpb.WriteIntentError_REASON_LOCK_TIMEOUT, wiErr.Reason)
+	lcErr := new(kvpb.WriteIntentError)
+	require.True(t, errors.As(err, &lcErr))
+	require.Equal(t, kvpb.WriteIntentError_REASON_LOCK_TIMEOUT, lcErr.Reason)
 }
 
 // TestTxnReturnsWriteTooOldErrorOnConflictingDeleteRange tests that if two

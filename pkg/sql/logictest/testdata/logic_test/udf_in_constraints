@@ -1,5 +1,3 @@
-# LogicTest: !local-mixed-22.2-23.1
-
 statement ok
 CREATE FUNCTION f1(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + 1 $$;
 
@@ -436,3 +434,60 @@ CREATE FUNCTION f_circle() RETURNS INT LANGUAGE SQL AS $$ SELECT a FROM t_circle
 # TODO(107369): This does not appear to error in postgres.
 statement error .*cannot add dependency from descriptor \d+ to function f_circle \(\d+\) because there will be a dependency cycle
 ALTER TABLE t_circle ADD CONSTRAINT ckb CHECK (b + f_circle() > 1);
+
+# Reproduction/regression test for https://github.com/cockroachdb/cockroach/issues/109414
+# Adding a check constraint with alter table doesn't appropriately update back references.
+subtest issue-109414-minimal
+
+statement ok
+CREATE FUNCTION true_is_true() RETURNS BOOL LANGUAGE SQL AS $$ SELECT true = true $$;
+
+statement ok
+BEGIN;
+CREATE TABLE alter_add_check_constraint();
+ALTER TABLE alter_add_check_constraint ADD CONSTRAINT noop CHECK (true_is_true());
+COMMIT;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE alter_add_check_constraint];
+----
+CREATE TABLE public.alter_add_check_constraint (
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT alter_add_check_constraint_pkey PRIMARY KEY (rowid ASC),
+  CONSTRAINT noop CHECK (public.true_is_true())
+)
+
+# This is the original Reproduction of #109414. It's quite interesting in and
+# of itself, so it's been included as it may catch other regressions that the
+# minimal case wouldn't.
+subtest issue-109414-full
+
+statement ok
+CREATE TABLE accounts_a (id UUID NOT NULL, FAMILY "primary" (id, rowid));
+CREATE TABLE accounts_b (id UUID NOT NULL, FAMILY "primary" (id, rowid));
+CREATE FUNCTION is_a_or_b(account_id UUID, account_type TEXT) RETURNS BOOL LANGUAGE SQL AS $$ SELECT (CASE
+        WHEN account_type = 'type_a' THEN (SELECT EXISTS(SELECT * FROM accounts_a WHERE id = account_id))
+        WHEN account_type = 'type_b' THEN (SELECT EXISTS(SELECT * FROM accounts_b WHERE id = account_id))
+        ELSE false
+END) $$;
+
+statement ok
+BEGIN;
+CREATE TABLE a (
+  account_id UUID NOT NULL,
+  account_type TEXT NOT NULL,
+  FAMILY "primary" (account_id, account_type, rowid)
+);
+ALTER TABLE a ADD CONSTRAINT is_a_or_b CHECK (is_a_or_b(account_id, account_type));
+COMMIT;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE a];
+----
+CREATE TABLE public.a (
+	account_id UUID NOT NULL,
+	account_type STRING NOT NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
+	CONSTRAINT is_a_or_b CHECK (public.is_a_or_b(account_id, account_type))
+)

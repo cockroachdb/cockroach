@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/lib/pq/oid"
@@ -708,7 +709,7 @@ func addUniqueWithoutIndexTableDef(
 			"partitioned unique constraints without an index are not supported",
 		)
 	}
-	if d.Invisibility != 0.0 {
+	if d.Invisibility.Value != 0.0 {
 		// Theoretically, this should never happen because this is not supported by
 		// the parser. This is just a safe check.
 		return pgerror.Newf(pgcode.FeatureNotSupported,
@@ -1828,16 +1829,16 @@ func NewTableDesc(
 			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
 				return nil, err
 			}
-			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-				d.Invisibility > 0.0 && d.Invisibility < 1.0 {
+			if !version.IsActive(clusterversion.V23_2) &&
+				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
 			idx := descpb.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				NotVisible:       d.Invisibility != 0.0,
-				Invisibility:     d.Invisibility,
+				NotVisible:       d.Invisibility.Value != 0.0,
+				Invisibility:     d.Invisibility.Value,
 			}
 			if d.Inverted {
 				idx.Type = descpb.IndexDescriptor_INVERTED
@@ -1944,8 +1945,11 @@ func NewTableDesc(
 			); err != nil {
 				return nil, err
 			}
-			if !version.IsActive(clusterversion.V23_2_PartiallyVisibleIndexes) &&
-				d.Invisibility > 0.0 && d.Invisibility < 1.0 {
+			if err := checkIndexColumns(&desc, d.Columns, d.Storing, d.Inverted, version); err != nil {
+				return nil, err
+			}
+			if !version.IsActive(clusterversion.V23_2) &&
+				d.Invisibility.Value > 0.0 && d.Invisibility.Value < 1.0 {
 				return nil, unimplemented.New("partially visible indexes", "partially visible indexes are not yet supported")
 			}
 			idx := descpb.IndexDescriptor{
@@ -1953,8 +1957,8 @@ func NewTableDesc(
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
 				Version:          indexEncodingVersion,
-				NotVisible:       d.Invisibility != 0.0,
-				Invisibility:     d.Invisibility,
+				NotVisible:       d.Invisibility.Value != 0.0,
+				Invisibility:     d.Invisibility.Value,
 			}
 			columns := d.Columns
 			if d.Sharded != nil {
@@ -2418,6 +2422,8 @@ func newTableDesc(
 			jobs.ScheduledJobTxn(params.p.InternalSQLTxn()),
 			params.p.User(),
 			ret,
+			params.p.extendedEvalCtx.ClusterID,
+			params.p.execCfg.Settings.Version.ActiveVersion(params.ctx),
 		)
 		if err != nil {
 			return nil, err
@@ -2431,7 +2437,11 @@ func newTableDesc(
 // for a given table. newRowLevelTTLScheduledJob assumes that
 // tblDesc.RowLevelTTL is not nil.
 func newRowLevelTTLScheduledJob(
-	env scheduledjobs.JobSchedulerEnv, owner username.SQLUsername, tblDesc *tabledesc.Mutable,
+	env scheduledjobs.JobSchedulerEnv,
+	owner username.SQLUsername,
+	tblDesc *tabledesc.Mutable,
+	clusterID uuid.UUID,
+	clusterVersion clusterversion.ClusterVersion,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(ttlbase.BuildScheduleLabel(tblDesc))
@@ -2439,7 +2449,9 @@ func newRowLevelTTLScheduledJob(
 	sj.SetScheduleDetails(jobspb.ScheduleDetails{
 		Wait: jobspb.ScheduleDetails_WAIT,
 		// If a job fails, try again at the allocated cron time.
-		OnError: jobspb.ScheduleDetails_RETRY_SCHED,
+		OnError:                jobspb.ScheduleDetails_RETRY_SCHED,
+		ClusterID:              clusterID,
+		CreationClusterVersion: clusterVersion,
 	})
 
 	if err := sj.SetSchedule(tblDesc.RowLevelTTL.DeletionCronOrDefault()); err != nil {
@@ -2466,6 +2478,8 @@ func CreateRowLevelTTLScheduledJob(
 	s jobs.ScheduledJobStorage,
 	owner username.SQLUsername,
 	tblDesc *tabledesc.Mutable,
+	clusterID uuid.UUID,
+	version clusterversion.ClusterVersion,
 ) (*jobs.ScheduledJob, error) {
 	if !tblDesc.HasRowLevelTTL() {
 		return nil, errors.AssertionFailedf("CreateRowLevelTTLScheduledJob called with no .RowLevelTTL: %#v", tblDesc)
@@ -2473,7 +2487,7 @@ func CreateRowLevelTTLScheduledJob(
 
 	telemetry.Inc(sqltelemetry.RowLevelTTLCreated)
 	env := JobSchedulerEnv(knobs)
-	j, err := newRowLevelTTLScheduledJob(env, owner, tblDesc)
+	j, err := newRowLevelTTLScheduledJob(env, owner, tblDesc, clusterID, version)
 	if err != nil {
 		return nil, err
 	}
@@ -2657,7 +2671,7 @@ func replaceLikeTableOpts(n *tree.CreateTable, params runParams) (tree.TableDefs
 					Inverted:     idx.GetType() == descpb.IndexDescriptor_INVERTED,
 					Storing:      make(tree.NameList, 0, idx.NumSecondaryStoredColumns()),
 					Columns:      make(tree.IndexElemList, 0, idx.NumKeyColumns()),
-					Invisibility: idx.GetInvisibility(),
+					Invisibility: tree.IndexInvisibility{Value: idx.GetInvisibility()},
 				}
 				numColumns := idx.NumKeyColumns()
 				if idx.IsSharded() {

@@ -257,10 +257,6 @@ type StoreTestingKnobs struct {
 	DisableProcessRaft func(roachpb.StoreID) bool
 	// DisableLastProcessedCheck disables checking on replica queue last processed times.
 	DisableLastProcessedCheck bool
-	// ReplicateQueueAcceptsUnsplit allows the replication queue to
-	// process ranges that need to be split, for use in tests that use
-	// the replication queue but disable the split queue.
-	ReplicateQueueAcceptsUnsplit bool
 	// SplitQueuePurgatoryChan allows a test to control the channel used to
 	// trigger split queue purgatory processing.
 	SplitQueuePurgatoryChan <-chan time.Time
@@ -271,12 +267,12 @@ type StoreTestingKnobs struct {
 	SystemLogsGCPeriod time.Duration
 	// SystemLogsGCGCDone is used to notify when system logs GC is done.
 	SystemLogsGCGCDone chan<- struct{}
-	// DontPushOnWriteIntentError will propagate a write intent error immediately
-	// instead of utilizing the intent resolver to try to push the corresponding
-	// transaction.
+	// DontPushOnLockConflictError will propagate a lock conflict error
+	// immediately instead of utilizing the intent resolver to try to push the
+	// corresponding transaction.
 	// TODO(nvanbenschoten): can we replace this knob with usage of the Error
 	// WaitPolicy on BatchRequests?
-	DontPushOnWriteIntentError bool
+	DontPushOnLockConflictError bool
 	// DontRetryPushTxnFailures will propagate a push txn failure immediately
 	// instead of utilizing the txn wait queue to wait for the transaction to
 	// finish or be pushed by a higher priority contender.
@@ -341,7 +337,7 @@ type StoreTestingKnobs struct {
 	BeforeRemovingDemotedLearner func()
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
-	BeforeSnapshotSSTIngestion func(IncomingSnapshot, kvserverpb.SnapshotRequest_Type, []string) error
+	BeforeSnapshotSSTIngestion func(IncomingSnapshot, []string) error
 	// OnRelocatedOne intercepts the return values of s.relocateOne after they
 	// have successfully been put into effect.
 	OnRelocatedOne func(_ []kvpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget)
@@ -492,6 +488,10 @@ type StoreTestingKnobs struct {
 	// it can be easily extended to validate other properties of baseQueue if
 	// required.
 	BaseQueueInterceptor func(ctx context.Context, bq *baseQueue)
+
+	// BaseQueueDisabledBypassFilter checks whether the replica for the given
+	// rangeID should ignore the queue being disabled, and be processed anyway.
+	BaseQueueDisabledBypassFilter func(rangeID roachpb.RangeID) bool
 
 	// InjectReproposalError injects an error in tryReproposeWithNewLeaseIndex.
 	// If nil is returned, reproposal will be attempted.

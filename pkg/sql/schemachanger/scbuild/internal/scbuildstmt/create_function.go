@@ -41,8 +41,8 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 
 	validateParameters(n)
 
-	existingFn := b.ResolveUDF(
-		&tree.FuncObj{
+	existingFn := b.ResolveRoutine(
+		&tree.RoutineObj{
 			FuncName: n.Name,
 			Params:   n.Params,
 		},
@@ -50,6 +50,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 			IsExistenceOptional: true,
 			RequireOwnership:    true,
 		},
+		tree.UDFRoutine|tree.ProcedureRoutine,
 	)
 	if existingFn != nil {
 		panic(pgerror.Newf(
@@ -61,9 +62,10 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 
 	fnID := b.GenerateUniqueDescID()
 	fn := scpb.Function{
-		FunctionID: fnID,
-		ReturnSet:  n.ReturnType.IsSet,
-		ReturnType: b.ResolveTypeRef(n.ReturnType.Type),
+		FunctionID:  fnID,
+		ReturnSet:   n.ReturnType.SetOf,
+		ReturnType:  b.ResolveTypeRef(n.ReturnType.Type),
+		IsProcedure: n.IsProcedure,
 	}
 	fn.Params = make([]scpb.Function_Parameter, len(n.Params))
 	for i, param := range n.Params {
@@ -136,7 +138,7 @@ func CreateFunction(b BuildCtx, n *tree.CreateRoutine) {
 		db,
 		sc,
 		fnID,
-		privilege.Functions,
+		privilege.Routines,
 		b.CurrentUser(),
 	)
 	b.Add(owner)

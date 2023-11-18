@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -58,10 +59,40 @@ const goTestStr = `func (Test[^a-z]\w*)\(.*\*testing\.TB?\) {$`
 const bazelStressTarget = "@com_github_cockroachdb_stress//:stress"
 
 var currentGoTestRE = regexp.MustCompile(`.*` + goTestStr)
-var newGoTestRE = regexp.MustCompile(`^\+\s*` + goTestStr)
+var dontStressTests = []*regexp.Regexp{
+	regexp.MustCompile("^TestDataDriven$"),
+	regexp.MustCompile("^TestLogic_"),
+}
 
 type pkg struct {
-	tests []string
+	tests map[string]struct{}
+}
+
+func makePkg(tests []string) pkg {
+	newPkg := pkg{
+		tests: map[string]struct{}{},
+	}
+	for _, test := range tests {
+		newPkg.maybeAddTest(test)
+	}
+	return newPkg
+}
+
+func (p *pkg) maybeAddTest(testName string) {
+	if len(p.tests) == 0 {
+		p.tests = map[string]struct{}{}
+	}
+	if _, ok := p.tests[testName]; !ok {
+		p.tests[testName] = struct{}{}
+	}
+}
+
+func (p *pkg) export() []string {
+	tests := make([]string, 0, len(p.tests))
+	for test := range p.tests {
+		tests = append(tests, test)
+	}
+	return tests
 }
 
 func pkgsForSHA(ctx context.Context, sha string) (map[string]pkg, error) {
@@ -77,19 +108,23 @@ func pkgsForSHA(ctx context.Context, sha string) (map[string]pkg, error) {
 // to tests added in those directories in the given diff.
 func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 	const newFilePrefix = "+++ b/"
+	const goFileSuffix = ".go"
 	const replacement = "$1"
 
 	pkgs := make(map[string]pkg)
 
 	var curPkgName string
-	var curTestName string
 	var inPrefix bool
+
+	// We only stress tests in go test files.
+	var isGoPackage bool
+
 	for reader := bufio.NewReader(r); ; {
 		line, isPrefix, err := reader.ReadLine()
 		switch {
 		case err == nil:
 		case err == io.EOF:
-			return pkgs, nil
+			return chooseFiveTestsPerPackage(pkgs), nil
 		default:
 			return nil, err
 		}
@@ -105,23 +140,55 @@ func pkgsFromDiff(r io.Reader) (map[string]pkg, error) {
 		switch {
 		case bytes.HasPrefix(line, []byte(newFilePrefix)):
 			curPkgName = filepath.Dir(string(bytes.TrimPrefix(line, []byte(newFilePrefix))))
-		case newGoTestRE.Match(line):
-			curPkg := pkgs[curPkgName]
-			curPkg.tests = append(curPkg.tests, string(newGoTestRE.ReplaceAll(line, []byte(replacement))))
-			pkgs[curPkgName] = curPkg
-		case currentGoTestRE.Match(line):
-			curTestName = ""
+			isGoPackage = bytes.HasSuffix(line, []byte(goFileSuffix))
+		case currentGoTestRE.Match(line) && isGoPackage:
+			curTestName := ""
 			if !bytes.HasPrefix(line, []byte{'-'}) {
 				curTestName = string(currentGoTestRE.ReplaceAll(line, []byte(replacement)))
 			}
-		case bytes.HasPrefix(line, []byte{'-'}) && (bytes.Contains(line, []byte(".Skip")) || bytes.Contains(line, []byte("skip."))):
-			if curPkgName != "" && len(curTestName) > 0 {
+			if curPkgName != "" && len(curTestName) > 0 && okToStress(curTestName) {
 				curPkg := pkgs[curPkgName]
-				curPkg.tests = append(curPkg.tests, curTestName)
+				curPkg.maybeAddTest(curTestName)
 				pkgs[curPkgName] = curPkg
 			}
 		}
 	}
+}
+
+func chooseFiveTestsPerPackage(pkgs map[string]pkg) map[string]pkg {
+
+	scrambleTestOrder := func(pkgTestNames pkg) []string {
+		testNames := make([]string, 0, len(pkgTestNames.tests))
+
+		for testName := range pkgTestNames.tests {
+			testNames = append(testNames, testName)
+		}
+
+		for i := range testNames {
+			j := rand.Intn(i + 1)
+			testNames[i], testNames[j] = testNames[j], testNames[i]
+		}
+		return testNames
+	}
+	croppedPkgs := make(map[string]pkg)
+	for pkgName, tests := range pkgs {
+		randomOrderTests := scrambleTestOrder(tests)
+		cropIdx := 4
+		if len(randomOrderTests) < cropIdx {
+			cropIdx = len(randomOrderTests)
+		}
+		croppedPkgs[pkgName] = makePkg(randomOrderTests[:cropIdx])
+	}
+	return croppedPkgs
+}
+
+func okToStress(testName string) bool {
+	for _, dontStress := range dontStressTests {
+		if dontStress.MatchString(testName) {
+			return false
+		}
+	}
+	return true
 }
 
 func getDiff(ctx context.Context, sha string) (string, error) {
@@ -131,7 +198,7 @@ func getDiff(ctx context.Context, sha string) (string, error) {
 		return "", err
 	}
 	baseSha := strings.TrimSpace(string(baseShaBytes))
-	cmd = exec.CommandContext(ctx, "git", "diff", "--no-ext-diff", baseSha, sha, "--")
+	cmd = exec.CommandContext(ctx, "git", "diff", "--no-ext-diff", baseSha, sha, "--", ":!pkg/acceptance/compose/**")
 	outputBytes, err := cmd.Output()
 	if err != nil {
 		return "", err
@@ -151,9 +218,7 @@ func parsePackagesFromEnvironment(input string) (map[string]pkg, error) {
 		}
 		pkgName := ptsParts[0]
 		tests := ptsParts[1]
-		pkgs[pkgName] = pkg{
-			tests: strings.Split(tests, ","),
-		}
+		pkgs[pkgName] = makePkg(strings.Split(tests, ","))
 	}
 	return pkgs, nil
 }
@@ -211,14 +276,20 @@ func main() {
 		for name, pkg := range pkgs {
 			// 20 minutes total seems OK, but at least 2 minutes per test.
 			// This should be reduced. See #46941.
-			duration := (20 * time.Minute) / time.Duration(len(pkgs))
+			target, ok := os.LookupEnv(targetEnv)
+			var duration time.Duration
+			if ok && target == "stressrace" {
+				duration = (30 * time.Minute) / time.Duration(len(pkgs))
+			} else {
+				duration = (20 * time.Minute) / time.Duration(len(pkgs))
+			}
 			minDuration := (2 * time.Minute) * time.Duration(len(pkg.tests))
 			if duration < minDuration {
 				duration = minDuration
 			}
 			// Use a timeout shorter than the duration so that hanging tests don't
 			// get a free pass.
-			timeout := (3 * duration) / 4
+			timeout := (9 * duration) / 10
 
 			// The stress -p flag defaults to the number of CPUs, which is too
 			// aggressive on big machines and can cause tests to fail. Under nightly
@@ -278,17 +349,17 @@ func main() {
 					args = append(args, "--test_sharding_strategy=disabled")
 				}
 				var filters []string
-				for _, test := range pkg.tests {
+				for test := range pkg.tests {
 					filters = append(filters, "^"+test+"$")
 				}
 				args = append(args, fmt.Sprintf("--test_filter=%s", strings.Join(filters, "|")))
 				args = append(args, "--test_env=COCKROACH_NIGHTLY_STRESS=true")
-				args = append(args, "--test_arg=-test.timeout", fmt.Sprintf("--test_arg=%s", timeout))
 				// Give the entire test 1 more minute than the duration to wrap up.
 				args = append(args, fmt.Sprintf("--test_timeout=%d", int((duration+1*time.Minute).Seconds())))
 				args = append(args, "--test_output", "streamed")
 
 				args = append(args, "--run_under", fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' -stderr -maxfails 1 -maxtime %s -p %d", bazelStressTarget, bazciPath, duration, parallelism))
+				args = append(args, "--test_arg", "-test.timeout", "--test_arg", timeout.String())
 				cmd := exec.Command("bazci", args...)
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
@@ -299,7 +370,7 @@ func main() {
 			} else {
 				tests := "-"
 				if len(pkg.tests) > 0 {
-					tests = "(" + strings.Join(pkg.tests, "$$|") + "$$)"
+					tests = "(" + strings.Join(pkg.export(), "$$|") + "$$)"
 				}
 
 				args = append(

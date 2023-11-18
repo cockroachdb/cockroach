@@ -7,14 +7,15 @@ with t=a k=a
   put v=first
 ----
 >> put v=first t=a k=a
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+61 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+22 separated_intent_count=+1 intent_age=+89
+put: lock acquisition = {a id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+61 live_count=+1 live_bytes=+75 intent_count=+1 intent_bytes=+22 lock_count=+1 lock_age=+89
 >> put v=first t=a k=a
 stats: no change
 >> at end:
-txn: "a" meta={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
+txn: "a" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/11.000000000,0 -> /BYTES/first
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 separated_intent_count=1 intent_age=89
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=61 live_count=1 live_bytes=75 intent_count=1 intent_bytes=22 lock_count=1 lock_age=89
 
 # Lay down an intent without increasing the sequence but with a different value.
 # Expect an error.
@@ -23,9 +24,9 @@ with t=a k=a
   put v=second
 ----
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=0} ts=11.000000000,0 del=false klen=12 vlen=10 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "a"/11.000000000,0 -> /BYTES/first
-error: (*assert.withAssertionFailure:) transaction 00000000-0000-0000-0000-000000000001 with sequence 0 has a different value [0 0 0 0 3 115 101 99 111 110 100] after recomputing from what was written: [0 0 0 0 3 102 105 114 115 116]
+error: (*assert.withAssertionFailure:) transaction 00000001-0000-0000-0000-000000000000 with sequence 0 has a different value [0 0 0 0 3 115 101 99 111 110 100] after recomputing from what was written: [0 0 0 0 3 102 105 114 115 116]
 
 run stats ok
 with t=a k=a
@@ -40,15 +41,16 @@ with t=a k=a
   check_intent
 ----
 >> put v=second t=a k=a
+put: lock acquisition = {a id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1 Replicated Intent []}
 stats: val_bytes=+17 live_bytes=+17 intent_bytes=+1
 >> put v=first t=a k=a
 stats: no change
-meta: "a" -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "a" -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 >> at end:
-txn: "a" meta={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "a" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=78 live_count=1 live_bytes=92 intent_count=1 intent_bytes=23 separated_intent_count=1 intent_age=89
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=78 live_count=1 live_bytes=92 intent_count=1 intent_bytes=23 lock_count=1 lock_age=89
 
 run error
 with t=a k=a
@@ -57,10 +59,10 @@ with t=a k=a
   put v=second
 ----
 >> at end:
-txn: "a" meta={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=-1} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "a" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=-1} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-error: (*issuelink.withIssueLink:) transaction 00000000-0000-0000-0000-000000000001 with sequence 1 missing an intent with lower sequence -1
+error: (*issuelink.withIssueLink:) transaction 00000001-0000-0000-0000-000000000000 with sequence 1 missing an intent with lower sequence -1
 
 run stats ok
 with t=a k=i
@@ -74,7 +76,8 @@ with t=a k=i
 ----
 >> increment t=a k=i
 inc: current value = 1
-stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+59 live_count=+1 live_bytes=+73 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+89
+inc: lock acquisition = {i id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2 Replicated Intent []}
+stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+59 live_count=+1 live_bytes=+73 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+89
 >> increment t=a k=i
 inc: current value = 1
 stats: no change
@@ -85,12 +88,12 @@ stats: no change
 inc: current value = 1
 stats: no change
 >> at end:
-txn: "a" meta={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "a" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-meta: "i"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2} ts=11.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2} ts=11.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i"/11.000000000,0 -> /INT/1
-stats: key_count=2 key_bytes=28 val_count=2 val_bytes=137 live_count=2 live_bytes=165 intent_count=2 intent_bytes=41 separated_intent_count=2 intent_age=178
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=137 live_count=2 live_bytes=165 intent_count=2 intent_bytes=41 lock_count=2 lock_age=178
 
 run stats ok
 with t=a k=i
@@ -108,6 +111,7 @@ with t=a k=i
 ----
 >> increment t=a k=i
 inc: current value = 2
+inc: lock acquisition = {i id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3 Replicated Intent []}
 stats: val_bytes=+10 live_bytes=+10
 >> increment t=a k=i
 inc: current value = 2
@@ -125,12 +129,12 @@ stats: no change
 inc: current value = 1
 stats: no change
 >> at end:
-txn: "a" meta={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "a" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=2} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-meta: "i"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "i"/11.000000000,0 -> /INT/2
-stats: key_count=2 key_bytes=28 val_count=2 val_bytes=147 live_count=2 live_bytes=175 intent_count=2 intent_bytes=41 separated_intent_count=2 intent_age=178
+stats: key_count=2 key_bytes=28 val_count=2 val_bytes=147 live_count=2 live_bytes=175 intent_count=2 intent_bytes=41 lock_count=2 lock_age=178
 
 # Write a key outside of the transaction.
 run stats ok
@@ -140,12 +144,12 @@ increment k=i2 ts=10
 inc: current value = 1
 stats: key_count=+1 key_bytes=+15 val_count=+1 val_bytes=+6 live_count=+1 live_bytes=+21
 >> at end:
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-meta: "i"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "i"/11.000000000,0 -> /INT/2
 data: "i2"/10.000000000,0 -> /INT/1
-stats: key_count=3 key_bytes=43 val_count=3 val_bytes=153 live_count=3 live_bytes=196 intent_count=2 intent_bytes=41 separated_intent_count=2 intent_age=178
+stats: key_count=3 key_bytes=43 val_count=3 val_bytes=153 live_count=3 live_bytes=196 intent_count=2 intent_bytes=41 lock_count=2 lock_age=178
 
 run stats ok
 with t=a k=i2
@@ -159,7 +163,8 @@ with t=a k=i2
 ----
 >> increment t=a k=i2
 inc: current value = 2
-stats: key_bytes=+12 val_count=+1 val_bytes=+59 live_bytes=+53 gc_bytes_age=+1602 intent_count=+1 intent_bytes=+18 separated_intent_count=+1 intent_age=+89
+inc: lock acquisition = {i2 id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4 Replicated Intent []}
+stats: key_bytes=+12 val_count=+1 val_bytes=+59 live_bytes=+53 gc_bytes_age=+1602 intent_count=+1 intent_bytes=+18 lock_count=+1 lock_age=+89
 >> increment t=a k=i2
 inc: current value = 2
 stats: no change
@@ -170,15 +175,15 @@ stats: no change
 inc: current value = 2
 stats: no change
 >> at end:
-txn: "a" meta={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "a" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-meta: "i"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "i"/11.000000000,0 -> /INT/2
-meta: "i2"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4} ts=11.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
+meta: "i2"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4} ts=11.000000000,0 del=false klen=12 vlen=6 mergeTs=<nil> txnDidNotUpdateMeta=true
 data: "i2"/11.000000000,0 -> /INT/2
 data: "i2"/10.000000000,0 -> /INT/1
-stats: key_count=3 key_bytes=55 val_count=4 val_bytes=212 live_count=3 live_bytes=249 gc_bytes_age=1602 intent_count=3 intent_bytes=59 separated_intent_count=3 intent_age=267
+stats: key_count=3 key_bytes=55 val_count=4 val_bytes=212 live_count=3 live_bytes=249 gc_bytes_age=1602 intent_count=3 intent_bytes=59 lock_count=3 lock_age=267
 
 run stats ok
 with t=a k=i2
@@ -196,6 +201,7 @@ with t=a k=i2
 ----
 >> increment t=a k=i2
 inc: current value = 3
+inc: lock acquisition = {i2 id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=5 Replicated Intent []}
 stats: val_bytes=+10 live_bytes=+10
 >> increment t=a k=i2
 inc: current value = 3
@@ -213,12 +219,12 @@ stats: no change
 inc: current value = 2
 stats: no change
 >> at end:
-txn: "a" meta={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
-meta: "a"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
+txn: "a" meta={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=4} lock=true stat=PENDING rts=11.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=1} ts=11.000000000,0 del=false klen=12 vlen=11 ih={{0 /BYTES/first}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "a"/11.000000000,0 -> /BYTES/second
-meta: "i"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=3} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{2 /INT/1}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "i"/11.000000000,0 -> /INT/2
-meta: "i2"/0,0 -> txn={id=00000000 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=5} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{4 /INT/2}} mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i2"/0,0 -> txn={id=00000001 key="a" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=5} ts=11.000000000,0 del=false klen=12 vlen=6 ih={{4 /INT/2}} mergeTs=<nil> txnDidNotUpdateMeta=false
 data: "i2"/11.000000000,0 -> /INT/3
 data: "i2"/10.000000000,0 -> /INT/1
-stats: key_count=3 key_bytes=55 val_count=4 val_bytes=222 live_count=3 live_bytes=259 gc_bytes_age=1602 intent_count=3 intent_bytes=59 separated_intent_count=3 intent_age=267
+stats: key_count=3 key_bytes=55 val_count=4 val_bytes=222 live_count=3 live_bytes=259 gc_bytes_age=1602 intent_count=3 intent_bytes=59 lock_count=3 lock_age=267

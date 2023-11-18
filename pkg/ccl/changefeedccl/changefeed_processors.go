@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
@@ -51,17 +52,20 @@ type changeAggregator struct {
 	spec    execinfrapb.ChangeAggregatorSpec
 	memAcc  mon.BoundAccount
 
-	// cancel shuts down the processor, both the `Next()` flow and the kvfeed.
+	// cancel cancels the context passed to all resources created while starting
+	// this aggregator.
 	cancel func()
 	// errCh contains the return values of the kvfeed.
 	errCh chan error
 	// kvFeedDoneCh is closed when the kvfeed exits.
 	kvFeedDoneCh chan struct{}
-	kvFeedMemMon *mon.BytesMonitor
 
-	// drainWatchCh is signaled if the registry on this node is being drained.
+	// drainWatchCh is signaled if the job registry on this node is being
+	// drained, which is a proxy for the node being drained. If a drain occurs,
+	// it will be blocked until we allow it to proceed by calling drainDone().
+	// This gives the aggregator time to checkpoint before shutting down.
 	drainWatchCh <-chan struct{}
-	drainDone    func() // Cleanup function for drain watch.
+	drainDone    func()
 
 	// sink is the Sink to write rows to. Resolved timestamps are never written
 	// by changeAggregator.
@@ -88,7 +92,7 @@ type changeAggregator struct {
 	// eventConsumer consumes the event.
 	eventConsumer eventConsumer
 
-	lastHighWaterFlush time.Time     // last time high watermark was checkpointed.
+	nextHighWaterFlush time.Time     // next time high watermark may be flushed.
 	flushFrequency     time.Duration // how often high watermark can be checkpointed.
 	lastSpanFlush      time.Time     // last time expensive, span based checkpoint was written.
 
@@ -98,6 +102,7 @@ type changeAggregator struct {
 
 	metrics                *Metrics
 	sliMetrics             *sliMetrics
+	sliMetricsID           int64
 	closeTelemetryRecorder func()
 	knobs                  TestingKnobs
 }
@@ -249,17 +254,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.knobs = *cfKnobs
 	}
 
-	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
-	// for all changefeeds to control memory allocated to all changefeeds.
-	pool := ca.flowCtx.Cfg.BackfillerMonitor
-	if ca.knobs.MemMonitor != nil {
-		pool = ca.knobs.MemMonitor
-	}
-	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
-	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", limit, pool)
-	kvFeedMemMon.StartNoReserved(ctx, pool)
-	ca.kvFeedMemMon = kvFeedMemMon
-
 	// The job registry has a set of metrics used to monitor the various jobs it
 	// runs. They're all stored as the `metric.Struct` interface because of
 	// dependency cycles.
@@ -271,6 +265,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
+	ca.sliMetricsID = ca.sliMetrics.claimId()
 
 	// TODO(jayant): add support for sinkless changefeeds using UUID
 	recorder := metricsRecorder(ca.sliMetrics)
@@ -287,7 +282,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.spec.User(), ca.spec.JobID, recorder)
 	if err != nil {
 		err = changefeedbase.MarkRetryableError(err)
-		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
 		ca.cancel()
 		return
@@ -310,9 +304,15 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		kvFeedHighWater = ca.spec.Feed.StatementTime
 	}
 
-	ca.eventProducer, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, feed)
+	// TODO(yevgeniy): Introduce separate changefeed monitor that's a parent
+	// for all changefeeds to control memory allocated to all changefeeds.
+	pool := ca.flowCtx.Cfg.BackfillerMonitor
+	if ca.knobs.MemMonitor != nil {
+		pool = ca.knobs.MemMonitor
+	}
+	limit := changefeedbase.PerChangefeedMemLimit.Get(&ca.flowCtx.Cfg.Settings.SV)
+	ca.eventProducer, ca.kvFeedDoneCh, ca.errCh, err = ca.startKVFeed(ctx, spans, kvFeedHighWater, needsInitialScan, feed, pool, limit, opts)
 	if err != nil {
-		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
 		ca.cancel()
 		return
@@ -321,9 +321,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
 		ctx, ca.flowCtx.Cfg, ca.spec, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
 		ca.sink, ca.metrics, ca.sliMetrics, ca.knobs)
-
 	if err != nil {
-		// Early abort in the case that there is an error setting up the consumption.
 		ca.MoveToDraining(err)
 		ca.cancel()
 		return
@@ -334,6 +332,26 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 
 	// Generate expensive checkpoint only after we ran for a while.
 	ca.lastSpanFlush = timeutil.Now()
+
+	if ca.knobs.OnDrain != nil {
+		ca.drainWatchCh = ca.knobs.OnDrain()
+	} else {
+		ca.drainWatchCh, ca.drainDone = ca.flowCtx.Cfg.JobRegistry.OnDrain()
+	}
+}
+
+// checkForNodeDrain returns an error if the node is draining.
+func (ca *changeAggregator) checkForNodeDrain() error {
+	if ca.drainWatchCh == nil {
+		return errors.AssertionFailedf("cannot check for node drain if" +
+			" watch channel is nil")
+	}
+	select {
+	case <-ca.drainWatchCh:
+		return changefeedbase.ErrNodeDraining
+	default:
+		return nil
+	}
 }
 
 func (ca *changeAggregator) startKVFeed(
@@ -342,54 +360,52 @@ func (ca *changeAggregator) startKVFeed(
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
 	config ChangefeedConfig,
-) (kvevent.Reader, error) {
+	parentMemMon *mon.BytesMonitor,
+	memLimit int64,
+	opts changefeedbase.StatementOptions,
+) (kvevent.Reader, chan struct{}, chan error, error) {
 	cfg := ca.flowCtx.Cfg
+	kvFeedMemMon := mon.NewMonitorInheritWithLimit("kvFeed", memLimit, parentMemMon)
+	kvFeedMemMon.StartNoReserved(ctx, parentMemMon)
 	buf := kvevent.NewThrottlingBuffer(
-		kvevent.NewMemBuffer(ca.kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
+		kvevent.NewMemBuffer(kvFeedMemMon.MakeBoundAccount(), &cfg.Settings.SV, &ca.metrics.KVFeedMetrics),
 		cdcutils.NodeLevelThrottler(&cfg.Settings.SV, &ca.metrics.ThrottleMetrics))
 
 	// KVFeed takes ownership of the kvevent.Writer portion of the buffer, while
 	// we return the kvevent.Reader part to the caller.
-	kvfeedCfg, err := ca.makeKVFeedCfg(ctx, config, spans, buf, initialHighWater, needsInitialScan)
+	kvfeedCfg, err := ca.makeKVFeedCfg(ctx, config, spans, buf, initialHighWater, needsInitialScan, kvFeedMemMon, opts)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	ca.drainWatchCh, ca.drainDone = ca.flowCtx.Cfg.JobRegistry.OnDrain()
-	// Arrange for kvFeed to terminate if the job registry is being drained.
-	kvfeedCfg.FeedWatcher = func(ctx context.Context) error {
-		if ca.knobs.OnDrain != nil {
-			ca.drainWatchCh = ca.knobs.OnDrain()
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ca.drainWatchCh:
-			return changefeedbase.ErrNodeDraining
-		}
-	}
-
-	// Give errCh enough buffer both possible errors from supporting goroutines,
-	// but only the first one is ever used.
-	ca.errCh = make(chan error, 2)
-	ca.kvFeedDoneCh = make(chan struct{})
+	errCh := make(chan error, 1)
+	doneCh := make(chan struct{})
+	// If RunAsyncTask immediately returns an error, the kvfeed was not run and
+	// will not run.
 	if err := ca.flowCtx.Stopper().RunAsyncTask(ctx, "changefeed-poller", func(ctx context.Context) {
-		defer close(ca.kvFeedDoneCh)
-		// Trying to call MoveToDraining here is racy (`MoveToDraining called in
-		// state stateTrailingMeta`), so return the error via a channel.
-		ca.errCh <- kvfeed.Run(ctx, kvfeedCfg)
+		defer close(doneCh)
+		defer kvFeedMemMon.Stop(ctx)
+		errCh <- kvfeed.Run(ctx, kvfeedCfg)
 	}); err != nil {
-		// If err != nil then the RunAsyncTask closure never ran, which means we
-		// need to manually close ca.kvFeedDoneCh so `(*changeAggregator).close`
-		// doesn't hang.
-		close(ca.kvFeedDoneCh)
-		ca.errCh <- err
-		ca.cancel()
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	return buf, nil
+	return buf, doneCh, errCh, nil
+}
+
+func (ca *changeAggregator) waitForKVFeedDone() {
+	if ca.kvFeedDoneCh != nil {
+		<-ca.kvFeedDoneCh
+	}
+}
+
+func (ca *changeAggregator) checkKVFeedErr() error {
+	select {
+	case err := <-ca.errCh:
+		return err
+	default:
+		return nil
+	}
 }
 
 func (ca *changeAggregator) makeKVFeedCfg(
@@ -399,6 +415,8 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	buf kvevent.Writer,
 	initialHighWater hlc.Timestamp,
 	needsInitialScan bool,
+	memMon *mon.BytesMonitor,
+	opts changefeedbase.StatementOptions,
 ) (kvfeed.Config, error) {
 	schemaChange, err := config.Opts.GetSchemaChangeHandlingOptions()
 	if err != nil {
@@ -417,29 +435,53 @@ func (ca *changeAggregator) makeKVFeedCfg(
 			initialHighWater, &ca.metrics.SchemaFeedMetrics, config.Opts.GetCanHandle())
 	}
 
+	monitoringCfg, err := makeKVFeedMonitoringCfg(ctx, ca.sliMetrics, opts, ca.flowCtx.Cfg.Settings)
+	if err != nil {
+		return kvfeed.Config{}, err
+	}
+
 	return kvfeed.Config{
-		Writer:                  buf,
-		Settings:                cfg.Settings,
-		DB:                      cfg.DB.KV(),
-		Codec:                   cfg.Codec,
-		Clock:                   cfg.DB.KV().Clock(),
-		Spans:                   spans,
-		CheckpointSpans:         ca.spec.Checkpoint.Spans,
-		CheckpointTimestamp:     ca.spec.Checkpoint.Timestamp,
-		Targets:                 AllTargets(ca.spec.Feed),
-		Metrics:                 &ca.metrics.KVFeedMetrics,
-		OnBackfillCallback:      ca.sliMetrics.getBackfillCallback(),
-		OnBackfillRangeCallback: ca.sliMetrics.getBackfillRangeCallback(),
-		MM:                      ca.kvFeedMemMon,
-		InitialHighWater:        initialHighWater,
-		EndTime:                 config.EndTime,
-		WithDiff:                filters.WithDiff,
-		NeedsInitialScan:        needsInitialScan,
-		SchemaChangeEvents:      schemaChange.EventClass,
-		SchemaChangePolicy:      schemaChange.Policy,
-		SchemaFeed:              sf,
-		Knobs:                   ca.knobs.FeedKnobs,
-		UseMux:                  changefeedbase.UseMuxRangeFeed.Get(&cfg.Settings.SV),
+		Writer:              buf,
+		Settings:            cfg.Settings,
+		DB:                  cfg.DB.KV(),
+		Codec:               cfg.Codec,
+		Clock:               cfg.DB.KV().Clock(),
+		Spans:               spans,
+		CheckpointSpans:     ca.spec.Checkpoint.Spans,
+		CheckpointTimestamp: ca.spec.Checkpoint.Timestamp,
+		Targets:             AllTargets(ca.spec.Feed),
+		Metrics:             &ca.metrics.KVFeedMetrics,
+		MM:                  memMon,
+		InitialHighWater:    initialHighWater,
+		EndTime:             config.EndTime,
+		WithDiff:            filters.WithDiff,
+		NeedsInitialScan:    needsInitialScan,
+		SchemaChangeEvents:  schemaChange.EventClass,
+		SchemaChangePolicy:  schemaChange.Policy,
+		SchemaFeed:          sf,
+		Knobs:               ca.knobs.FeedKnobs,
+		UseMux:              changefeedbase.UseMuxRangeFeed.Get(&cfg.Settings.SV),
+		MonitoringCfg:       monitoringCfg,
+	}, nil
+}
+
+func makeKVFeedMonitoringCfg(
+	ctx context.Context,
+	sliMetrics *sliMetrics,
+	opts changefeedbase.StatementOptions,
+	settings *cluster.Settings,
+) (kvfeed.MonitoringConfig, error) {
+	laggingRangesThreshold, laggingRangesInterval, err := opts.GetLaggingRangesConfig(ctx, settings)
+	if err != nil {
+		return kvfeed.MonitoringConfig{}, err
+	}
+	return kvfeed.MonitoringConfig{
+		LaggingRangesCallback:        sliMetrics.getLaggingRangesCallback(),
+		LaggingRangesThreshold:       laggingRangesThreshold,
+		LaggingRangesPollingInterval: laggingRangesInterval,
+
+		OnBackfillCallback:      sliMetrics.getBackfillCallback(),
+		OnBackfillRangeCallback: sliMetrics.getBackfillRangeCallback(),
 	}, nil
 }
 
@@ -494,18 +536,25 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 
 // close has two purposes: to synchronize on the completion of the helper
 // goroutines created by the Start method, and to clean up any resources used by
-// the processor. Due to the fact that this method may be called even if the
-// processor did not finish completion, there is an excessive amount of nil
-// checking.
+// the processor.
+//
+// Due to the fact that this method may be called even if the processor did not
+// finish completion, there is an excessive amount of nil checking. For example,
+// (*changeAggregator) Start() may encounter an error and move the processor to
+// draining before one of the fields below (ex. ca.drainDone) is set.
 func (ca *changeAggregator) close() {
 	if ca.Closed {
 		return
 	}
+	if ca.cancel == nil {
+		// consumer close may be called even before Start is called.
+		// If that's the case, cancel is not initialized.
+		return
+	}
 	ca.cancel()
 	// Wait for the poller to finish shutting down.
-	if ca.kvFeedDoneCh != nil {
-		<-ca.kvFeedDoneCh
-	}
+	ca.waitForKVFeedDone()
+
 	if ca.drainDone != nil {
 		ca.drainDone()
 	}
@@ -520,22 +569,40 @@ func (ca *changeAggregator) close() {
 		// Best effort: context is often cancel by now, so we expect to see an error
 		_ = ca.sink.Close()
 	}
+
+	ca.closeMetrics()
+
 	ca.memAcc.Close(ca.Ctx())
-	if ca.kvFeedMemMon != nil {
-		ca.kvFeedMemMon.Stop(ca.Ctx())
-	}
+
 	ca.MemMonitor.Stop(ca.Ctx())
 	ca.InternalClose()
 }
 
 var aggregatorHeartbeatFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.aggregator.heartbeat",
 	"changefeed aggregator will emit a heartbeat message to the coordinator with this frequency; 0 disables. "+
-		"The setting value should be <=1/2 of server.shutdown.jobs_wait period",
+		"The setting value should be <=1/2 of server.shutdown.jobs.timeout period",
 	4*time.Second,
 	settings.NonNegativeDuration,
 )
+
+var aggregatorFlushJitter = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"changefeed.aggregator.flush_jitter",
+	"jitter aggregator flushes as a fraction of min_checkpoint_frequency",
+	0.1, /* 10% */
+	settings.NonNegativeFloat,
+	settings.WithPublic,
+)
+
+func nextFlushWithJitter(s timeutil.TimeSource, d time.Duration, j float64) time.Time {
+	if j == 0 {
+		return s.Now().Add(d)
+	}
+	nextFlush := d + time.Duration(rand.Int63n(int64(j*float64(d))))
+	return s.Now().Add(nextFlush)
+}
 
 // Next is part of the RowSource interface.
 func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
@@ -575,32 +642,37 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 			}
 		}
 
+		// As the last gasp before shutdown, transmit an up-to-date frontier
+		// information to the coordinator. We expect to get this signal via the
+		// polling below before the drain actually occurs and starts tearing
+		// things down.
+		if err := ca.checkForNodeDrain(); err != nil {
+			nodeID, _ := ca.FlowCtx.Cfg.NodeID.OptionalNodeID()
+			meta := &execinfrapb.ChangefeedMeta{
+				DrainInfo:  &execinfrapb.ChangefeedMeta_DrainInfo{NodeID: nodeID},
+				Checkpoint: getFrontierSpans(),
+			}
+
+			ca.AppendTrailingMeta(execinfrapb.ProducerMetadata{Changefeed: meta})
+			ca.shutdownCheckpointEmitted = true
+			ca.cancel()
+			ca.MoveToDraining(err)
+			break
+		}
+
 		if err := ca.tick(); err != nil {
 			var e kvevent.ErrBufferClosed
-			if errors.Is(err, changefeedbase.ErrNodeDraining) {
-				err = changefeedbase.ErrNodeDraining
-				// As the last gasp before shutdown, transmit an up-to-date frontier
-				// information to the coordinator.
-				nodeID, _ := ca.FlowCtx.Cfg.NodeID.OptionalNodeID()
-				meta := &execinfrapb.ChangefeedMeta{
-					DrainInfo:  &execinfrapb.ChangefeedMeta_DrainInfo{NodeID: nodeID},
-					Checkpoint: getFrontierSpans(),
-				}
-
-				ca.AppendTrailingMeta(execinfrapb.ProducerMetadata{Changefeed: meta})
-				ca.shutdownCheckpointEmitted = true
-			} else if errors.As(err, &e) {
+			if errors.As(err, &e) {
 				// ErrBufferClosed is a signal that our kvfeed has exited expectedly.
 				err = e.Unwrap()
 				if errors.Is(err, kvevent.ErrNormalRestartReason) {
 					err = nil
 				}
 			} else {
-				select {
 				// If the poller errored first, that's the
 				// interesting one, so overwrite `err`.
-				case err = <-ca.errCh:
-				default:
+				if kvFeedErr := ca.checkKVFeedErr(); kvFeedErr != nil {
+					err = kvFeedErr
 				}
 			}
 			// Shut down the poller if it wasn't already.
@@ -686,14 +758,27 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 		return err
 	}
 
+	// The resolved sliMetric data backs the aggregator_progress metric
+	if advanced {
+		ca.sliMetrics.setResolved(ca.sliMetricsID, ca.frontier.Frontier())
+	}
+
 	forceFlush := resolved.BoundaryType != jobspb.ResolvedSpan_NONE
 
+	// NB: if we miss flush window, and the flush frequency is fairly high (minutes),
+	// it might be a while before frontier advances again (particularly if
+	// the number of ranges and closed timestamp settings are high).
+	// TODO(yevgeniy): Consider doing something similar to how job checkpointing
+	//  works in the frontier where if we missed the window to checkpoint, we will attempt
+	//  the checkpoint at the next opportune moment.
 	checkpointFrontier := advanced &&
-		(forceFlush || timeutil.Since(ca.lastHighWaterFlush) > ca.flushFrequency)
+		(forceFlush || timeutil.Now().After(ca.nextHighWaterFlush))
 
+	sv := &ca.flowCtx.Cfg.Settings.SV
 	if checkpointFrontier {
 		defer func() {
-			ca.lastHighWaterFlush = timeutil.Now()
+			ca.nextHighWaterFlush = nextFlushWithJitter(
+				timeutil.DefaultTimeSource{}, ca.flushFrequency, aggregatorFlushJitter.Get(sv))
 		}()
 		return ca.flushFrontier()
 	}
@@ -702,8 +787,8 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) error
 	// either in backfills or if the highwater mark is excessively lagging behind
 	checkpointSpans := ca.spec.JobID != 0 && /* enterprise changefeed */
 		(resolved.Timestamp.Equal(ca.frontier.BackfillTS()) ||
-			ca.frontier.hasLaggingSpans(ca.spec.Feed.StatementTime, &ca.flowCtx.Cfg.Settings.SV)) &&
-		canCheckpointSpans(&ca.flowCtx.Cfg.Settings.SV, ca.lastSpanFlush)
+			ca.frontier.hasLaggingSpans(ca.spec.Feed.StatementTime, sv)) &&
+		canCheckpointSpans(sv, ca.lastSpanFlush)
 
 	if checkpointSpans {
 		defer func() {
@@ -765,6 +850,12 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 
 	ca.recentKVCount = 0
 	return nil
+}
+
+// closeMetrics de-registers the aggregator from the sliMetrics registry so that
+// it's no longer considered by the aggregator_progress gauge
+func (ca *changeAggregator) closeMetrics() {
+	ca.sliMetrics.closeId(ca.sliMetricsID)
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -838,9 +929,12 @@ type changeFrontier struct {
 	// metrics are monitoring counters shared between all changefeeds.
 	metrics    *Metrics
 	sliMetrics *sliMetrics
-	// metricsID is used as the unique id of this changefeed in the
-	// metrics.MaxBehindNanos map.
-	metricsID int
+
+	// sliMetricsID and metricsID uniquely identify the changefeed in the metrics's
+	// map (a shared struct across all changefeeds on the node) and the sliMetrics's
+	// map (shared structure between all feeds within the same scope on the node).
+	metricsID    int
+	sliMetricsID int64
 
 	knobs TestingKnobs
 }
@@ -1146,11 +1240,16 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		}
 	}
 
-	cf.metrics.mu.Lock()
-	cf.metricsID = cf.metrics.mu.id
-	cf.metrics.mu.id++
-	sli.RunningCount.Inc(1)
-	cf.metrics.mu.Unlock()
+	func() {
+		cf.metrics.mu.Lock()
+		defer cf.metrics.mu.Unlock()
+		cf.metricsID = cf.metrics.mu.id
+		cf.metrics.mu.id++
+		sli.RunningCount.Inc(1)
+	}()
+
+	cf.sliMetricsID = cf.sliMetrics.claimId()
+
 	// TODO(dan): It's very important that we de-register from the metric because
 	// if we orphan an entry in there, our monitoring will lie (say the changefeed
 	// is behind when it may not be). We call this in `close` but that doesn't
@@ -1183,13 +1282,17 @@ func (cf *changeFrontier) close() {
 func (cf *changeFrontier) closeMetrics() {
 	// Delete this feed from the MaxBehindNanos metric so it's no longer
 	// considered by the gauge.
-	cf.metrics.mu.Lock()
-	if cf.metricsID > 0 {
-		cf.sliMetrics.RunningCount.Dec(1)
-	}
-	delete(cf.metrics.mu.resolved, cf.metricsID)
-	cf.metricsID = -1
-	cf.metrics.mu.Unlock()
+	func() {
+		cf.metrics.mu.Lock()
+		defer cf.metrics.mu.Unlock()
+		if cf.metricsID > 0 {
+			cf.sliMetrics.RunningCount.Dec(1)
+		}
+		delete(cf.metrics.mu.resolved, cf.metricsID)
+		cf.metricsID = -1
+	}()
+
+	cf.sliMetrics.closeId(cf.sliMetricsID)
 }
 
 // Next is part of the RowSource interface.
@@ -1328,11 +1431,20 @@ func (cf *changeFrontier) forwardFrontier(resolved jobspb.ResolvedSpan) error {
 		// Keeping this after the checkpointJobProgress call will avoid
 		// some duplicates if a restart happens.
 		newResolved := cf.frontier.Frontier()
-		cf.metrics.mu.Lock()
-		if cf.metricsID != -1 {
-			cf.metrics.mu.resolved[cf.metricsID] = newResolved
-		}
-		cf.metrics.mu.Unlock()
+
+		// The feed's checkpoint is tracked in a map which is used to inform the
+		// checkpoint_progress metric which will return the lowest timestamp across
+		// all feeds in the scope.
+		cf.sliMetrics.setCheckpoint(cf.sliMetricsID, newResolved)
+
+		// This backs max_behind_nanos which is deprecated in favor of checkpoint_progress
+		func() {
+			cf.metrics.mu.Lock()
+			defer cf.metrics.mu.Unlock()
+			if cf.metricsID != -1 {
+				cf.metrics.mu.resolved[cf.metricsID] = newResolved
+			}
+		}()
 
 		return cf.maybeEmitResolved(newResolved)
 	}
@@ -1405,6 +1517,13 @@ func (cf *changeFrontier) maybeCheckpointJob(
 func (cf *changeFrontier) checkpointJobProgress(
 	frontier hlc.Timestamp, checkpoint jobspb.ChangefeedProgress_Checkpoint,
 ) (bool, error) {
+	if cf.knobs.RaiseRetryableError != nil {
+		if err := cf.knobs.RaiseRetryableError(); err != nil {
+			return false, changefeedbase.MarkRetryableError(
+				errors.New("cf.knobs.RaiseRetryableError"))
+		}
+	}
+
 	updateRunStatus := timeutil.Since(cf.js.lastRunStatusUpdate) > runStatusUpdateFrequency
 	if updateRunStatus {
 		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
@@ -1454,13 +1573,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 	cf.localState.SetHighwater(frontier)
 	cf.localState.SetCheckpoint(checkpoint.Spans, checkpoint.Timestamp)
-
-	if cf.knobs.RaiseRetryableError != nil {
-		if err := cf.knobs.RaiseRetryableError(); err != nil {
-			return false, changefeedbase.MarkRetryableError(
-				errors.New("cf.knobs.RaiseRetryableError"))
-		}
-	}
 
 	return true, nil
 }

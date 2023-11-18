@@ -57,9 +57,7 @@ go_test(
         "reporter_test.go",
         "update_checker_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":diagnostics"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/build",

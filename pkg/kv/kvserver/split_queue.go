@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -123,6 +123,7 @@ func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.SplitQueueSuccesses,
 			failures:             store.metrics.SplitQueueFailures,
+			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.SplitQueuePending,
 			processingNanos:      store.metrics.SplitQueueProcessingNanos,
 			purgatory:            store.metrics.SplitQueuePurgatory,
@@ -185,7 +186,7 @@ func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQ bool, priority float64) {
 	shouldQ, priority = shouldSplitRange(ctx, repl.Desc(), repl.GetMVCCStats(),
-		repl.GetMaxBytes(), repl.shouldBackpressureWrites(), confReader)
+		repl.GetMaxBytes(ctx), repl.shouldBackpressureWrites(), confReader)
 
 	if !shouldQ && repl.SplitByLoadEnabled() {
 		if splitKey := repl.loadSplitKey(ctx, repl.Clock().PhysicalTime()); splitKey != nil {
@@ -257,14 +258,19 @@ func (sq *splitQueue) processAttempt(
 	// size-based splitting if maxBytes is 0 (happens in certain test
 	// situations).
 	size := r.GetMVCCStats().Total()
-	maxBytes := r.GetMaxBytes()
+	maxBytes := r.GetMaxBytes(ctx)
 	if maxBytes > 0 && size > maxBytes {
+		reason := redact.Sprintf(
+			"%s above threshold size %s",
+			humanizeutil.IBytes(size),
+			humanizeutil.IBytes(maxBytes),
+		)
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,
 			kvpb.AdminSplitRequest{},
 			desc,
 			false, /* delayable */
-			fmt.Sprintf("%s above threshold size %s", humanizeutil.IBytes(size), humanizeutil.IBytes(maxBytes)),
+			reason,
 			false, /* findFirstSafeSplitKey */
 		); err != nil {
 			return false, err
@@ -281,7 +287,7 @@ func (sq *splitQueue) processAttempt(
 		lbSplitSnap := r.loadBasedSplitter.Snapshot(ctx, now)
 		splitObj := lbSplitSnap.SplitObjective
 
-		reason := fmt.Sprintf(
+		reason := redact.Sprintf(
 			"load at key %s (%s %s, %.2f batches/sec, %.2f raft mutations/sec)",
 			splitByLoadKey,
 			splitObj,

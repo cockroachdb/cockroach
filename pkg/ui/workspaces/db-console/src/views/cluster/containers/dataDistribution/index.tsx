@@ -57,6 +57,18 @@ const ZONE_CONFIG_TEXT = (
   </span>
 );
 
+const RANGE_COALESCING_ADVICE = (
+  <div>
+    <pre>
+      SET CLUSTER SETTING spanconfig.range_coalescing.system.enabled = false;
+    </pre>
+    <pre>
+      SET CLUSTER SETTING spanconfig.range_coalescing.application.enabled =
+      false;
+    </pre>
+  </div>
+);
+
 interface DataDistributionProps {
   dataDistribution: CachedDataReducerState<DataDistributionResponse>;
   localityTree: LocalityTree;
@@ -187,10 +199,7 @@ export class DataDistributionPage extends React.Component<
             ranges. To disable coalesced ranges (would increase range count),
             run the following SQL statement:
           </p>
-          <pre>
-            SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled =
-            false;
-          </pre>
+          {RANGE_COALESCING_ADVICE}
         </section>
         <section className="section">
           <Loading

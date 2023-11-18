@@ -637,7 +637,7 @@ func (s indexSpec) SourceIndexID() catid.IndexID {
 // makeIndexSpec constructs an indexSpec based on an existing index element.
 func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s indexSpec) {
 	tableElts := b.QueryByID(tableID)
-	idxElts := tableElts.Filter(hasIndexIDAttrFilter(indexID)).Filter(validTargetFilter)
+	idxElts := tableElts.Filter(hasIndexIDAttrFilter(indexID)).Filter(validTargetFilter).Filter(notFilter(ghostElementFilter))
 	var constraintID catid.ConstraintID
 	var n int
 	_, _, s.primary = scpb.FindPrimaryIndex(idxElts)
@@ -684,18 +684,21 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 	}
 	newTempSpec := src.clone()
 	var srcIdx scpb.Index
+	var expr *scpb.Expression
 	isSecondary := false
 	if src.primary != nil {
 		srcIdx = newTempSpec.primary.Index
 	}
 	if src.secondary != nil {
 		srcIdx = newTempSpec.secondary.Index
+		expr = newTempSpec.secondary.EmbeddedExpr
 		isSecondary = true
 	}
 	tempID := srcIdx.TemporaryIndexID
 	newTempSpec.temporary = &scpb.TemporaryIndex{
 		Index:                    srcIdx,
 		IsUsingSecondaryEncoding: isSecondary,
+		Expr:                     expr,
 	}
 	newTempSpec.temporary.TemporaryIndexID = 0
 	newTempSpec.temporary.IndexID = tempID
@@ -1341,7 +1344,7 @@ func (pic *primaryIndexChain) inflate(b BuildCtx) {
 // 7. (old != inter1 && inter1 != inter2 && inter2 == final), drop inter2
 // 8. (old != inter1 && inter1 != inter2 && inter2 != final), do nothing
 func (pic *primaryIndexChain) deflate(b BuildCtx) {
-	if !pic.isInflated() {
+	if !pic.isFullyInflated() {
 		return
 	}
 	tableID := pic.oldSpec.primary.TableID
@@ -1449,9 +1452,14 @@ func nonNilPrimaryIndexSpecSelector(spec *indexSpec) bool {
 	return spec.primary != nil
 }
 
-// isInflated return true if all new primary indexes are non-nil.
-func (pic *primaryIndexChain) isInflated() bool {
+// isFullyInflated return true if all new primary indexes are non-nil.
+func (pic *primaryIndexChain) isFullyInflated() bool {
 	return pic.inter1Spec.primary != nil && pic.inter2Spec.primary != nil && pic.finalSpec.primary != nil
+}
+
+// isInflatedAtAll return true if any new primary index is non-nil.
+func (pic *primaryIndexChain) isInflatedAtAll() bool {
+	return pic.inter1Spec.primary != nil || pic.inter2Spec.primary != nil || pic.finalSpec.primary != nil
 }
 
 // chainType returns the type of the chain.
@@ -1501,7 +1509,7 @@ const (
 // A set of five pre-defined acceptable types for primary index chains:
 // 1). noNewPrimaryIndex: "old, nil, nil, nil" (e.g. no add/drop column nor alter PK)
 // 2). oneNewPrimaryIndex: "old, nil, nil, final" (e.g. add column(s), or drop columns(s), or alter PK without rowid)
-// 3). twoNewPrimaryIndexesWithAlteredPK: "old, nil, inter2, final" (e.g. alter PK with rowid)
+// 3). twoNewPrimaryIndexesWithAlteredPK: "old, nil, inter2, final" (e.g. alter PK with rowid, or alter PK + drop column(s))
 // 4). twoNewPrimaryIndexesWithAddAndDropColumns: "old, inter1, nil, final" (e.g. add & drop column(s))
 // 5). threeNewPrimaryIndexes: "old, inter1, inter2, final" (e.g. add/drop column + alter PK)
 type chainType int

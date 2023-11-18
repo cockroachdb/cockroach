@@ -18,7 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -138,7 +137,7 @@ func newRaftTransportTestContext(t testing.TB, st *cluster.Settings) *raftTransp
 	// we can't enforce some of the RPC check validation.
 	rttc.nodeRPCContext.TestingAllowNamedRPCToAnonymousServer = true
 
-	rttc.gossip = gossip.NewTest(1, rttc.stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	rttc.gossip = gossip.NewTest(1, rttc.stopper, metric.NewRegistry())
 
 	return rttc
 }
@@ -174,7 +173,7 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	disconnectListener kvserver.RaftTransportDisconnectListener,
 	knobs *kvserver.RaftTransportTestingKnobs,
 ) (*kvserver.RaftTransport, net.Addr) {
-	grpcServer, err := rpc.NewServer(rttc.nodeRPCContext)
+	grpcServer, err := rpc.NewServer(context.Background(), rttc.nodeRPCContext)
 	require.NoError(rttc.t, err)
 	ctwWithTracer := log.MakeTestingAmbientCtxWithNewTracer()
 	transport := kvserver.NewRaftTransport(

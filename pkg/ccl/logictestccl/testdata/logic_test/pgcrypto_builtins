@@ -1,0 +1,136 @@
+subtest encrypt_decrypt_aes_128
+
+query T
+SELECT encrypt('abc', '16_byte_long_key', 'aes')::STRING
+----
+\x0026cd6206cfd92140883b75c098d613
+
+query T
+SELECT decrypt('\x0026cd6206cfd92140883b75c098d613', '16_byte_long_key', 'aes')
+----
+abc
+
+subtest end
+
+subtest encrypt_decrypt_aes_192
+
+query T
+SELECT encrypt('abc', '24_byte_looooooooong_key', 'aes')::STRING
+----
+\x6c42e2269a65d605ecd98b2aeb8eb4e9
+
+query T
+SELECT decrypt('\x6c42e2269a65d605ecd98b2aeb8eb4e9', '24_byte_looooooooong_key', 'aes')
+----
+abc
+
+subtest end
+
+subtest encrypt_decrypt_aes_256
+
+query T
+SELECT encrypt('abc', '32_byte_looooooooooooooooong_key', 'aes')::STRING
+----
+\xb368f7d6adcd73633dc37696b068cfda
+
+query T
+SELECT decrypt('\xb368f7d6adcd73633dc37696b068cfda', '32_byte_looooooooooooooooong_key', 'aes')
+----
+abc
+
+subtest end
+
+subtest encrypt_decrypt_aes_multi_block_data
+
+query T
+SELECT encrypt('abcdefghijklmnopqrstuvwxyz', 'key', 'aes')::STRING
+----
+\x4649e8618af65b2b50aa73ec9cfc102c95fcbbaf04cb8a82333e493dc97060f3
+
+query T
+SELECT decrypt('\x4649e8618af65b2b50aa73ec9cfc102c95fcbbaf04cb8a82333e493dc97060f3', 'key', 'aes')
+----
+abcdefghijklmnopqrstuvwxyz
+
+subtest end
+
+subtest encrypt_decrypt_aes_no_padding
+
+query T
+SELECT encrypt('16byte_long_data', 'key', 'aes/pad:none')::STRING
+----
+\x043db9c657e2a2cd693b4239a3d8a1cb
+
+query T
+SELECT decrypt('\x043db9c657e2a2cd693b4239a3d8a1cb', 'key', 'aes/pad:none')
+----
+16byte_long_data
+
+subtest end
+
+subtest encrypt_decrypt_iv_aes
+
+query T
+SELECT encrypt_iv('abc', 'key', '123', 'aes')::STRING
+----
+\x91b4ef63852013c8da53829da662b871
+
+query T
+SELECT decrypt_iv('\x91b4ef63852013c8da53829da662b871', 'key', '123', 'aes')
+----
+abc
+
+subtest end
+
+subtest encrypt_error
+
+query error pgcode 0A000 Blowfish is insecure and not supported
+SELECT encrypt('abc', 'key', 'bf')
+
+query error pgcode 0A000 ECB mode is insecure and not supported
+SELECT encrypt('abc', 'key', 'aes-ecb')
+
+query error pgcode 22023 cipher method has wrong format: "aes/pad=pkcs"
+SELECT encrypt('abc', 'key', 'aes/pad=pkcs')
+
+query error pgcode 22023 cipher method has invalid algorithm: "fakealgo"
+SELECT encrypt('abc', 'key', 'fakealgo')
+
+query error pgcode 22023 cipher method has invalid mode: "ctr"
+SELECT encrypt('abc', 'key', 'aes-ctr')
+
+query error pgcode 22023 cipher method has invalid padding: "zero"
+SELECT encrypt('abc', 'key', 'aes/pad:zero')
+
+query error pgcode 22023 data has length 3, which is not a multiple of block size 16
+SELECT encrypt('abc', 'key', 'aes/pad:none')
+
+subtest end
+
+subtest decrypt_error
+
+query error pgcode 0A000 Blowfish is insecure and not supported
+SELECT decrypt('abc', 'key', 'bf')
+
+query error pgcode 0A000 ECB mode is insecure and not supported
+SELECT decrypt('abc', 'key', 'aes-ecb')
+
+query error pgcode 22023 cipher method has wrong format: "aes/pad=pkcs"
+SELECT decrypt('abc', 'key', 'aes/pad=pkcs')
+
+query error pgcode 22023 cipher method has invalid algorithm: "fakealgo"
+SELECT decrypt('abc', 'key', 'fakealgo')
+
+query error pgcode 22023 cipher method has invalid mode: "ctr"
+SELECT decrypt('abc', 'key', 'aes-ctr')
+
+query error pgcode 22023 cipher method has invalid padding: "zero"
+SELECT decrypt('abc', 'key', 'aes/pad:zero')
+
+query error pgcode 22023 data has length 3, which is not a multiple of block size 16
+SELECT decrypt('abc', 'key', 'aes')
+
+query error pgcode 22023 data has length 3, which is not a multiple of block size 16
+SELECT decrypt('abc', 'key', 'aes/pad:none')
+
+subtest end

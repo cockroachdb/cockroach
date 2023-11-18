@@ -74,20 +74,20 @@ print
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
-   queued writers:
-    active: true req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
-    active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
+   queued locking requests:
+    active: true req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 2
 
 release txn=txn1 span=a
 ----
 num=1
  lock: "a"
-   queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
-    active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
+   queued locking requests:
+    active: false req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
 
 guard-state r=req2
@@ -106,10 +106,10 @@ print
 ----
 num=1
  lock: "a"
-   queued writers:
-    active: false req: 2, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
-    active: true req: 4, txn: 00000000-0000-0000-0000-000000000002
+   queued locking requests:
+    active: false req: 2, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
+    active: true req: 4, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
    distinguished req: 3
 
 # Stays in waitSelf state if scans again.
@@ -131,8 +131,8 @@ acquire r=req2 k=a durability=u strength=exclusive
 num=1
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 0)]
-   queued writers:
-    active: true req: 3, txn: 00000000-0000-0000-0000-000000000003
+   queued locking requests:
+    active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 3
 
 guard-state r=req3

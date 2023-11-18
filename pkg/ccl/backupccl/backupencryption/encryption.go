@@ -185,10 +185,7 @@ func ValidateKMSURIsAgainstFullBackup(
 
 		// Depending on the KMS specific implementation, this may or may not contact
 		// the remote KMS.
-		id, err := kms.MasterKeyID()
-		if err != nil {
-			return nil, err
-		}
+		id := kms.MasterKeyID()
 
 		encryptedDataKey, err := kmsMasterKeyIDToDataKey.getEncryptedDataKey(PlaintextMasterKeyID(id))
 		if err != nil {
@@ -277,17 +274,11 @@ func GetEncryptedDataKeyFromURI(
 	}
 	encryptedDataKey, err := kms.Encrypt(ctx, plaintextDataKey)
 	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to encrypt data key for KMS scheme %s",
-			kmsURL.Scheme)
+		return "", nil, cloud.KMSInaccessible(errors.Wrapf(err, "failed to encrypt data key for KMS scheme %s",
+			kmsURL.Scheme))
 	}
 
-	masterKeyID, err := kms.MasterKeyID()
-	if err != nil {
-		return "", nil, errors.Wrapf(err, "failed to get master key ID for KMS scheme %s",
-			kmsURL.Scheme)
-	}
-
-	return masterKeyID, encryptedDataKey, nil
+	return kms.MasterKeyID(), encryptedDataKey, nil
 }
 
 // GetEncryptedDataKeyByKMSMasterKeyID constructs a mapping {MasterKeyID :

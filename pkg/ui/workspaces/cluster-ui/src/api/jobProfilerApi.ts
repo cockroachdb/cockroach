@@ -10,7 +10,14 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { fetchData } from "./fetchData";
-import { SqlExecutionRequest, executeInternalSql } from "./sqlApi";
+import {
+  SqlExecutionRequest,
+  executeInternalSql,
+  LONG_TIMEOUT,
+} from "./sqlApi";
+import { propsToQueryString } from "../util";
+
+const JOB_PROFILER_PATH = "_status/job_profiler_execution_details";
 
 export type ListJobProfilerExecutionDetailsRequest =
   cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest;
@@ -27,7 +34,7 @@ export const listExecutionDetailFiles = (
 ): Promise<cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse> => {
   return fetchData(
     cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse,
-    `/_status/list_job_profiler_execution_details/${req.job_id}`,
+    `_status/list_job_profiler_execution_details/${req.job_id}`,
     null,
     null,
     "30M",
@@ -37,9 +44,14 @@ export const listExecutionDetailFiles = (
 export const getExecutionDetailFile = (
   req: GetJobProfilerExecutionDetailRequest,
 ): Promise<cockroach.server.serverpb.GetJobProfilerExecutionDetailResponse> => {
+  let jobProfilerPath = `${JOB_PROFILER_PATH}/${req.job_id}`;
+  const queryStr = propsToQueryString({
+    filename: req.filename,
+  });
+  jobProfilerPath = jobProfilerPath.concat(`?${queryStr}`);
   return fetchData(
     cockroach.server.serverpb.GetJobProfilerExecutionDetailResponse,
-    `/_status/job_profiler_execution_details/${req.job_id}/${req.filename}`,
+    jobProfilerPath,
     null,
     null,
     "30M",
@@ -67,6 +79,7 @@ export function collectExecutionDetails({
   const req: SqlExecutionRequest = {
     execute: true,
     statements: [collectExecutionDetails],
+    timeout: LONG_TIMEOUT,
   };
 
   return executeInternalSql<CollectExecutionDetailsResponse>(req).then(res => {

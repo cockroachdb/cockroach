@@ -41,9 +41,9 @@ go_test(
         "scalars_test.go",
         "walk_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":screl"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/rel",

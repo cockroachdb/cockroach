@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -199,11 +200,6 @@ type BaseConfig struct {
 	// instantiate stores.
 	StorageEngine enginepb.EngineType
 
-	// SpanConfigsDisabled disables the use of the span configs infrastructure.
-	//
-	// Environment Variable: COCKROACH_DISABLE_SPAN_CONFIGS
-	SpanConfigsDisabled bool
-
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
@@ -235,6 +231,10 @@ type BaseConfig struct {
 	SharedStorage string
 	*cloud.ExternalStorageAccessor
 
+	// SecondaryCache is the size of the secondary cache used for each store, to
+	// store blocks from disaggregated shared storage. For use with SharedStorage.
+	SecondaryCache base.SizeSpec
+
 	// StartDiagnosticsReporting starts the asynchronous goroutine that
 	// checks for CockroachDB upgrades and periodically reports
 	// diagnostics to Cockroach Labs.
@@ -246,6 +246,12 @@ type BaseConfig struct {
 	// other service (typically, the serverController) will accept and
 	// route requests instead.
 	DisableHTTPListener bool
+
+	// DisableSQLServer disables starting the SQL service for the given test. This
+	// also disables all upgrades as they rely on SQL and typically reduces test
+	// start time significantly. This flag can only be used in tests that don't
+	// issue any SQL commands.
+	DisableSQLServer bool
 
 	// DisableSQLListener prevents this server from starting a TCP
 	// listener for the SQL service. Instead, it is expected that some
@@ -261,6 +267,12 @@ type BaseConfig struct {
 	// AutoConfigProvider provides auto-configuration tasks to apply on
 	// the cluster during server initialization.
 	AutoConfigProvider acprovider.Provider
+
+	// RPCListenerFactory provides an alternate implementation of
+	// ListenAndUpdateAddrs for use when creating gPRC
+	// listeners. This is set by in-memory tenants if the user has
+	// specified port range preferences.
+	RPCListenerFactory RPCListenerFactory
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -284,8 +296,9 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.Tracer = tr
 	cfg.Settings = st
 	idsProvider := &idProvider{
-		clusterID: &base.ClusterIDContainer{},
-		serverID:  &base.NodeIDContainer{},
+		clusterID:  &base.ClusterIDContainer{},
+		serverID:   &base.NodeIDContainer{},
+		tenantName: roachpb.NewTenantNameContainer(""),
 	}
 	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
 	cfg.idProvider = idsProvider
@@ -483,6 +496,9 @@ type SQLConfig struct {
 	// The tenant that the SQL server runs on the behalf of.
 	TenantID roachpb.TenantID
 
+	// If set, will to be called at server startup to obtain the tenant id.
+	DelayedSetTenantID func(context.Context) (roachpb.TenantID, error)
+
 	// TempStorageConfig is used to configure temp storage, which stores
 	// ephemeral data when processing large queries.
 	TempStorageConfig base.TempStorageConfig
@@ -645,9 +661,6 @@ func (cfg *Config) String() string {
 	if cfg.Linearizable {
 		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
 	}
-	if !cfg.SpanConfigsDisabled {
-		fmt.Fprintln(w, "span configs enabled\t", !cfg.SpanConfigsDisabled)
-	}
 	_ = w.Flush()
 
 	return buf.String()
@@ -744,28 +757,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 
-		if spec.InMemory && spec.StickyVFSID != "" {
-			if cfg.TestingKnobs.Server == nil {
-				return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
-					"engine no server knobs available to get a registry. " +
-					"Please use Knobs.Server.StickyVFSRegistry to provide one.")
-			}
-			knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
-			if knobs.StickyVFSRegistry == nil {
-				return Engines{}, errors.Errorf("Could not create a sticky " +
-					"engine no registry available. Please use " +
-					"Knobs.Server.StickyVFSRegistry to provide one.")
-			}
-			eng, err := knobs.StickyVFSRegistry.Open(ctx, cfg, spec)
-			if err != nil {
-				return Engines{}, err
-			}
-			detail(redact.Sprintf("store %d: %+v", i, eng.Properties()))
-			engines = append(engines, eng)
-			continue
-		}
-
-		var location storage.Location
 		storageConfigOpts := []storage.ConfigOption{
 			storage.Attributes(spec.Attributes),
 			storage.EncryptionAtRest(spec.EncryptionOptions),
@@ -778,8 +769,25 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storageConfigOpts = append(storageConfigOpts, opt)
 		}
 
+		var location storage.Location
 		if spec.InMemory {
-			location = storage.InMemory()
+			if spec.StickyVFSID == "" {
+				location = storage.InMemory()
+			} else {
+				if cfg.TestingKnobs.Server == nil {
+					return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
+						"engine no server knobs available to get a registry. " +
+						"Please use Knobs.Server.StickyVFSRegistry to provide one.")
+				}
+				knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
+				if knobs.StickyVFSRegistry == nil {
+					return Engines{}, errors.Errorf("Could not create a sticky " +
+						"engine no registry available. Please use " +
+						"Knobs.Server.StickyVFSRegistry to provide one.")
+				}
+				location = storage.MakeLocation("", knobs.StickyVFSRegistry.Get(spec.StickyVFSID))
+			}
+
 			var sizeInBytes = spec.Size.InBytes
 			if spec.Size.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)
@@ -794,6 +802,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 			addCfgOpt(storage.MaxSize(sizeInBytes))
 			addCfgOpt(storage.CacheSize(cfg.CacheSize))
+			addCfgOpt(storage.RemoteStorageFactory(cfg.ExternalStorageAccessor))
 
 			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
 		} else {
@@ -826,6 +835,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if sharedStorage != nil {
 				addCfgOpt(storage.SharedStorage(sharedStorage))
 			}
+			addCfgOpt(storage.SecondaryCache(storage.SecondaryCacheBytes(cfg.SecondaryCache, du)))
 			// If the spec contains Pebble options, set those too.
 			if spec.PebbleOptions != "" {
 				addCfgOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
@@ -896,7 +906,8 @@ func (cfg *Config) InitNode(ctx context.Context) error {
 		cfg.GossipBootstrapAddresses = addresses
 	}
 
-	cfg.BaseConfig.idProvider.SetTenant(roachpb.SystemTenantID)
+	cfg.BaseConfig.idProvider.SetTenantID(roachpb.SystemTenantID)
+	cfg.BaseConfig.idProvider.SetTenantName(catconstants.SystemTenantName)
 
 	return nil
 }
@@ -933,7 +944,6 @@ func (cfg *BaseConfig) InsecureWebAccess() bool {
 }
 
 func (cfg *Config) readSQLEnvironmentVariables() {
-	cfg.SpanConfigsDisabled = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_SPAN_CONFIGS", cfg.SpanConfigsDisabled)
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
 }
 
@@ -1022,6 +1032,9 @@ type idProvider struct {
 	// tenantStr is the memoized representation of tenantID.
 	tenantStr atomic.Value
 
+	// tenantName is the tenant name container for this server.
+	tenantName *roachpb.TenantNameContainer
+
 	// serverID contains the node ID for KV nodes (when tenantID.IsSet() ==
 	// false), or the SQL instance ID for SQL-only servers (when
 	// tenantID.IsSet() == true).
@@ -1031,11 +1044,6 @@ type idProvider struct {
 }
 
 var _ serverident.ServerIdentificationPayload = (*idProvider)(nil)
-
-// TenantID is part of the serverident.ServerIdentificationPayload interface.
-func (s *idProvider) TenantID() interface{} {
-	return s.tenantID
-}
 
 // ServerIdentityString implements the serverident.ServerIdentificationPayload interface.
 func (s *idProvider) ServerIdentityString(key serverident.ServerIdentificationKey) string {
@@ -1053,16 +1061,7 @@ func (s *idProvider) ServerIdentityString(key serverident.ServerIdentificationKe
 		return cs
 
 	case serverident.IdentifyTenantID:
-		t := s.tenantStr.Load()
-		ts, ok := t.(string)
-		if !ok {
-			tid := s.tenantID
-			if tid.IsSet() {
-				ts = strconv.FormatUint(tid.ToUint64(), 10)
-				s.tenantStr.Store(ts)
-			}
-		}
-		return ts
+		return s.maybeMemoizeTenantID()
 
 	case serverident.IdentifyInstanceID:
 		// If tenantID is not set, this is a KV node and it has no SQL
@@ -1079,6 +1078,9 @@ func (s *idProvider) ServerIdentityString(key serverident.ServerIdentificationKe
 			return ""
 		}
 		return s.maybeMemoizeServerID()
+
+	case serverident.IdentifyTenantName:
+		return string(s.tenantName.Get())
 	}
 
 	return ""
@@ -1090,7 +1092,7 @@ func (s *idProvider) ServerIdentityString(key serverident.ServerIdentificationKe
 // Note: this should not be called concurrently with logging which may
 // invoke the method from the serverident.ServerIdentificationPayload
 // interface.
-func (s *idProvider) SetTenant(tenantID roachpb.TenantID) {
+func (s *idProvider) SetTenantID(tenantID roachpb.TenantID) {
 	if !tenantID.IsSet() {
 		panic("programming error: invalid tenant ID")
 	}
@@ -1098,6 +1100,13 @@ func (s *idProvider) SetTenant(tenantID roachpb.TenantID) {
 		panic("programming error: provider already set for tenant server")
 	}
 	s.tenantID = tenantID
+}
+
+func (s *idProvider) SetTenantName(tenantName roachpb.TenantName) {
+	if s.tenantName.Get() != "" {
+		panic("programming error: tenant name already set")
+	}
+	s.tenantName.Set(tenantName)
 }
 
 // maybeMemoizeServerID saves the representation of serverID to
@@ -1113,4 +1122,19 @@ func (s *idProvider) maybeMemoizeServerID() string {
 		}
 	}
 	return sis
+}
+
+// maybeMemoizeTenantID saves the representation of tenantID to
+// tenantStr if the former is initialized.
+func (s *idProvider) maybeMemoizeTenantID() string {
+	t := s.tenantStr.Load()
+	ts, ok := t.(string)
+	if !ok {
+		tid := s.tenantID
+		if tid.IsSet() {
+			ts = strconv.FormatUint(tid.ToUint64(), 10)
+			s.tenantStr.Store(ts)
+		}
+	}
+	return ts
 }

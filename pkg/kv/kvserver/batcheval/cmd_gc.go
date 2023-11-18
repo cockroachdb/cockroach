@@ -38,7 +38,7 @@ func declareKeysGC(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	gcr := req.(*kvpb.GCRequest)
 	if gcr.RangeKeys != nil {
 		// When GC-ing MVCC range key tombstones, we need to serialize with
@@ -112,6 +112,7 @@ func declareKeysGC(
 	// Needed for updating optional GC hint.
 	latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeGCHintKey(rs.GetRangeID())})
 	latchSpans.DisableUndeclaredAccessAssertions()
+	return nil
 }
 
 // Create latches and merge adjacent.
@@ -277,15 +278,15 @@ func GC(
 		if err != nil {
 			return result.Result{}, err
 		}
-		if !hint.IsEmpty() {
-			if hint.LatestRangeDeleteTimestamp.LessEq(gcThreshold) {
-				hint.ResetLatestRangeDeleteTimestamp()
-				res.Replicated.State = &kvserverpb.ReplicaState{
-					GCHint: hint,
-				}
-				if _, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
-					return result.Result{}, err
-				}
+		if hint.UpdateAfterGC(gcThreshold) {
+			// NB: Replicated.State can already contain GCThreshold from above. Make
+			// sure we don't accidentally remove it.
+			if res.Replicated.State == nil {
+				res.Replicated.State = &kvserverpb.ReplicaState{}
+			}
+			res.Replicated.State.GCHint = hint
+			if err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint); err != nil {
+				return result.Result{}, err
 			}
 		}
 	}

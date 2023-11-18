@@ -101,7 +101,7 @@ func makeMockTxnPipeliner(iter condensableSpanSetRangeIterator) (txnPipeliner, *
 
 func makeTxnProto() roachpb.Transaction {
 	return roachpb.MakeTransaction("test", []byte("key"), isolation.Serializable, 0,
-		hlc.Timestamp{WallTime: 10}, 0 /* maxOffsetNs */, 0 /* coordinatorNodeID */)
+		hlc.Timestamp{WallTime: 10}, 0 /* maxOffsetNs */, 0 /* coordinatorNodeID */, 0)
 }
 
 // TestTxnPipeliner1PCTransaction tests that the writes performed by 1PC
@@ -122,8 +122,8 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
 	scanArgs := kvpb.ScanRequest{
-		RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB},
-		KeyLocking:    lock.Exclusive,
+		RequestHeader:      kvpb.RequestHeader{Key: keyA, EndKey: keyB},
+		KeyLockingStrength: lock.Exclusive,
 	}
 	ba.Add(&scanArgs)
 	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
@@ -1256,7 +1256,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 }
 
 // TestTxnPipelinerMaxBatchSize tests that batches that contain more requests
-// than allowed by the kv.transaction.write_pipelining_max_batch_size setting
+// than allowed by the kv.transaction.write_pipelining.max_batch_size setting
 // will not be pipelined.
 func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1353,7 +1353,7 @@ func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, EndKey: keyB.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	mockPErr := kvpb.NewErrorf("boom")
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -1382,7 +1382,7 @@ func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 	ba.Requests = nil
 	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyD}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyE, EndKey: keyE.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
@@ -1450,7 +1450,7 @@ func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, EndKey: keyB.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	condFailedErr := kvpb.NewError(&kvpb.ConditionFailedError{})
 	condFailedErr.SetErrorIndex(0)
@@ -1474,13 +1474,13 @@ func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
 	expLocks = append(expLocks, roachpb.Span{Key: keyC, EndKey: keyC.Next()})
 	require.Equal(t, expLocks, tp.lockFootprint.asSlice())
 
-	// Return a WriteIntentError for a Scan. The lock spans correspond to the Scan
-	// are not added to the lock footprint, but the lock spans for all other
-	// requests in the batch are.
+	// Return a WriteIntentError for a Scan. The lock spans correspond to the
+	// Scan are not added to the lock footprint, but the lock spans for all
+	// other requests in the batch are.
 	ba.Requests = nil
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyD}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyE, EndKey: keyE.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	writeIntentErr := kvpb.NewError(&kvpb.WriteIntentError{})
 	writeIntentErr.SetErrorIndex(2)

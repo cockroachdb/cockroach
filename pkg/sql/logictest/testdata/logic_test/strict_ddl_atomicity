@@ -35,3 +35,22 @@ query I
 SELECT * FROM unrelated
 ----
 1
+
+statement ok
+DELETE FROM testing WHERE k = 5
+
+# Now try again with the strict setting
+statement ok
+SET strict_ddl_atomicity = true
+
+statement ok
+BEGIN
+
+statement error unimplemented: cannot run this DDL statement inside a multi-statement transaction as its atomicity cannot be guaranteed.*\n.*\n.*issue-v/42061
+ALTER TABLE testing ADD CONSTRAINT "unique_values" UNIQUE(v)
+
+statement ok
+ROLLBACK
+
+statement error unimplemented: cannot run this DDL statement inside a multi-statement transaction as its atomicity cannot be guaranteed.*\n.*\n.*issue-v/42061
+SELECT 1; ALTER TABLE testing ADD CONSTRAINT "unique_values" UNIQUE(v)

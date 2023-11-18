@@ -13,8 +13,8 @@ package jobs
 import (
 	"bytes"
 	"context"
-	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -24,26 +24,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // InfoStorage can be used to read and write rows to system.job_info table. All
-// operations are scoped under the txn and are are executed on behalf of Job j.
+// operations are scoped under the txn and are executed on behalf of Job j.
 type InfoStorage struct {
 	j   *Job
 	txn isql.Txn
+	cv  clusterversion.Handle
 }
 
 // InfoStorage returns a new InfoStorage with the passed in job and txn.
 func (j *Job) InfoStorage(txn isql.Txn) InfoStorage {
-	return InfoStorage{j: j, txn: txn}
+	return InfoStorage{j: j, txn: txn, cv: j.registry.settings.Version}
 }
 
 // InfoStorageForJob returns a new InfoStorage with the passed in
 // job ID and txn. It avoids loading the job record. The resulting
 // job_info writes will not check the job session ID.
-func InfoStorageForJob(txn isql.Txn, jobID jobspb.JobID) InfoStorage {
-	return InfoStorage{j: &Job{id: jobID}, txn: txn}
+func InfoStorageForJob(txn isql.Txn, jobID jobspb.JobID, cv clusterversion.Handle) InfoStorage {
+	return InfoStorage{j: &Job{id: jobID}, txn: txn, cv: cv}
 }
 
 func (i InfoStorage) checkClaimSession(ctx context.Context) error {
@@ -238,7 +238,7 @@ func (i InfoStorage) Write(ctx context.Context, infoKey string, value []byte) er
 		return errors.AssertionFailedf("missing value (infoKey %q)", infoKey)
 	}
 	if err := i.write(ctx, infoKey, value); err != nil {
-		return MaybeGenerateForcedRetryableError(ctx, i.txn.KV(), err)
+		return MaybeGenerateForcedRetryableError(ctx, i.txn.KV(), err, i.cv)
 	}
 	return nil
 }
@@ -319,39 +319,4 @@ func (i InfoStorage) GetLegacyProgress(ctx context.Context) ([]byte, bool, error
 // WriteLegacyProgress writes the job's Progress to the system.job_info table.
 func (i InfoStorage) WriteLegacyProgress(ctx context.Context, progress []byte) error {
 	return i.Write(ctx, LegacyProgressKey, progress)
-}
-
-// BackfillLegacyPayload copies a legacy payload from system.jobs. #104798.
-func (i InfoStorage) BackfillLegacyPayload(ctx context.Context) ([]byte, error) {
-	return i.backfillMissing(ctx, "payload")
-}
-
-// BackfillLegacyProgress copies a legacy progress from system.jobs. #104798.
-func (i InfoStorage) BackfillLegacyProgress(ctx context.Context) ([]byte, error) {
-	return i.backfillMissing(ctx, "progress")
-}
-
-func (i InfoStorage) backfillMissing(ctx context.Context, kind string) ([]byte, error) {
-	row, err := i.txn.QueryRowEx(
-		ctx, fmt.Sprintf("job-info-fix-%s", kind), i.txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
-		`INSERT INTO system.job_info (job_id, info_key, value) 
-			SELECT id, 'legacy_`+kind+`', `+kind+` FROM system.jobs WHERE id = $1 AND `+kind+` IS NOT NULL
-			RETURNING value`,
-		i.j.ID(),
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if row == nil {
-		return nil, errors.Wrapf(&JobNotFoundError{jobID: i.j.ID()}, "job %s not found in system.jobs", redact.SafeString(kind))
-	}
-
-	value, ok := row[0].(*tree.DBytes)
-	if !ok {
-		return nil, errors.AssertionFailedf("job info: expected value to be DBytes (was %T)", row[0])
-	}
-	return []byte(*value), nil
 }

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -147,7 +146,7 @@ func (t *truncateNode) Close(context.Context)        {}
 // split points that we re-create on a table after a truncate. It's scaled by
 // the number of nodes in the cluster.
 var PreservedSplitCountMultiple = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.truncate.preserved_split_count_multiple",
 	"set to non-zero to cause TRUNCATE to preserve range splits from the "+
 		"table's indexes. The multiple given will be multiplied with the number of "+
@@ -254,10 +253,7 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		Indexes:  droppedIndexes,
 		ParentID: tableDesc.ID,
 	}
-	record := CreateGCJobRecord(
-		jobDesc, p.User(), details,
-		!storage.CanUseMVCCRangeTombstones(ctx, p.execCfg.Settings),
-	)
+	record := CreateGCJobRecord(jobDesc, p.User(), details)
 	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
 		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.InternalSQLTxn(),
 	); err != nil {

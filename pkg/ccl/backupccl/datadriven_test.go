@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -79,8 +81,8 @@ var localityCfgs = map[string]roachpb.Locality{
 }
 
 var clusterVersionKeys = map[string]clusterversion.Key{
-	"23_1_Start":          clusterversion.V23_1Start,
-	"23_1_MVCCTombstones": clusterversion.V23_1_MVCCRangeTombstonesUnconditionallyEnabled,
+	"23_2_Start": clusterversion.V23_2Start,
+	"23_2":       clusterversion.V23_2,
 }
 
 type sqlDBKey struct {
@@ -142,6 +144,7 @@ type clusterCfg struct {
 	beforeVersion     string
 	testingKnobCfg    string
 	defaultTestTenant base.DefaultTestTenantOptions
+	randomTxnRetries  bool
 }
 
 func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
@@ -149,12 +152,19 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
 
 	params.ServerArgs.DefaultTestTenant = cfg.defaultTestTenant
+	var transactionRetryFilter func(roachpb.Transaction) bool
+	if cfg.randomTxnRetries {
+		transactionRetryFilter = kvclientutils.RandomTransactionRetryFilter()
+	}
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		TenantTestingKnobs: &sql.TenantTestingKnobs{
 			// The tests in this package are particular about the tenant IDs
 			// they get in CREATE TENANT.
 			EnableTenantIDReuse: true,
+		},
+		KVClient: &kvcoord.ClientTestingKnobs{
+			TransactionRetryFilter: transactionRetryFilter,
 		},
 	}
 
@@ -169,12 +179,12 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 		params.ServerArgs.Knobs.Server = &server.TestingKnobs{
 			BinaryVersionOverride:          clusterversion.ByKey(beforeKey),
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BootstrapVersionKeyOverride:    clusterversion.BinaryMinSupportedVersionKey,
 		}
 	}
 
 	closedts.TargetDuration.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	closedts.SideTransportCloseInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
+	kvserver.RangeFeedRefreshInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Millisecond)
 	params.ServerArgs.Settings = settings
 
@@ -230,8 +240,10 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *
 	if db, ok := d.sqlDBs[key]; ok {
 		return db
 	}
-	addr := d.firstNode[name].ApplicationLayer().AdvSQLAddr()
-	pgURL, cleanup := sqlutils.PGUrl(t, addr, "TestBackupRestoreDataDriven", url.User(user))
+	s := d.firstNode[name].ApplicationLayer()
+	pgURL, cleanup := s.PGUrl(
+		t, serverutils.CertsDirPrefix("TestBackupRestoreDataDriven"), serverutils.User(user),
+	)
 	d.cleanupFns = append(d.cleanupFns, cleanup)
 
 	base, err := pq.NewConnector(pgURL.String())
@@ -400,20 +412,31 @@ func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *
 //lint:ignore U1000 unused
 func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 	// This test uses this mock HTTP server to pass the backup files between tenants.
-	//lint:ignore SA4006 unused
 	httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 	defer httpServerCleanup()
 
-	//lint:ignore SA4006 unused
 	ctx := context.Background()
-	path, err := bazel.Runfile(testFilePathFromWorkspace)
-	require.NoError(t, err)
+	var path string
+	// Runfile can't be generally implemented outside of Bazel - for testdata scripts, they will always
+	// be relative to the test binary.
+	if bazel.BuiltWithBazel() {
+		var err error
+		path, err = bazel.Runfile(testFilePathFromWorkspace)
+		require.NoError(t, err)
+	} else {
+		idx := strings.Index(testFilePathFromWorkspace, "testdata")
+		if idx == -1 {
+			t.Fatalf("%q doesn't contain 'testdata' - can't run outside of Bazel", testFilePathFromWorkspace)
+		}
+		path = testFilePathFromWorkspace[idx:]
+	}
 
 	var lastCreatedCluster string
 	ds := newDatadrivenTestState()
 	defer ds.cleanup(ctx, t)
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 		execWithTagAndPausePoint := func(jobType jobspb.Type) string {
+			ds.noticeBuffer = nil
 			const user = "root"
 			sqlDB := ds.getSQLDB(t, lastCreatedCluster, user)
 			// First, run the schema change.
@@ -513,6 +536,9 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				defaultTestTenant = base.TODOTestTenantDisabled
 			}
 
+			// TODO(ssd): Once TestServer starts up reliably enough:
+			// randomTxnRetries := !d.HasArg("disable-txn-retries")
+			randomTxnRetries := false
 			lastCreatedCluster = name
 			cfg := clusterCfg{
 				name:              name,
@@ -524,6 +550,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 				beforeVersion:     beforeVersion,
 				testingKnobCfg:    testingKnobCfg,
 				defaultTestTenant: defaultTestTenant,
+				randomTxnRetries:  randomTxnRetries,
 			}
 			err := ds.addCluster(t, cfg)
 			if err != nil {
@@ -811,12 +838,9 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			return ""
 
 		case "create-dummy-system-table":
-			db := ds.firstNode[lastCreatedCluster].DB()
-			execCfg := ds.firstNode[lastCreatedCluster].ExecutorConfig().(sql.ExecutorConfig)
-			testTenants := ds.firstNode[lastCreatedCluster].TestTenants()
-			if len(testTenants) > 0 {
-				execCfg = testTenants[0].ExecutorConfig().(sql.ExecutorConfig)
-			}
+			al := ds.firstNode[lastCreatedCluster].ApplicationLayer()
+			db := al.DB()
+			execCfg := al.ExecutorConfig().(sql.ExecutorConfig)
 			codec := execCfg.Codec
 			dummyTable := systemschema.SettingsTable
 			err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -895,7 +919,7 @@ func handleKVRequest(
 			},
 			UseRangeTombstone: true,
 		}
-		if _, err := kv.SendWrapped(ctx, ds.firstNode[cluster].DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
+		if _, err := kv.SendWrapped(ctx, ds.firstNode[cluster].SystemLayer().DistSenderI().(*kvcoord.DistSender), &dr); err != nil {
 			t.Fatal(err)
 		}
 	} else {

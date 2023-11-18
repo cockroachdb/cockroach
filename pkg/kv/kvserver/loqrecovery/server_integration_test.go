@@ -99,7 +99,7 @@ func TestReplicaCollection(t *testing.T) {
 		}
 		require.NotEqual(t, replicas.ClusterID, uuid.UUID{}.String(), "cluster UUID must not be empty")
 		require.Equal(t, replicas.Version,
-			clusterversion.ByKey(clusterversion.BinaryVersionKey),
+			clusterversion.Latest.Version(),
 			"replica info version must match current binary version")
 	}
 
@@ -305,7 +305,7 @@ func TestStageBadVersions(t *testing.T) {
 	plan.Updates = []loqrecoverypb.ReplicaUpdate{
 		createRecoveryForRange(t, tc, sk, 1),
 	}
-	plan.Version = clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	plan.Version = clusterversion.MinSupported.Version()
 	plan.Version.Major -= 1
 
 	_, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
@@ -485,7 +485,8 @@ func TestRetrieveRangeStatus(t *testing.T) {
 
 	// Use scratch range to ensure we have a range that loses quorum.
 	sk := tc.ScratchRange(t)
-	require.NoError(t, tc.WaitForFullReplication(), "failed to wait for full replication")
+	require.NoError(t, tc.WaitFor5NodeReplication(),
+		"failed to wait for full replication of 5 node cluster")
 	tc.ToggleReplicateQueues(false)
 	tc.SplitRangeOrFatal(t, testutils.MakeKey(sk, []byte{255}))
 
@@ -706,9 +707,7 @@ func prepInMemPlanStores(
 	pss := make(map[int]loqrecovery.PlanStore)
 	for id, args := range serverArgs {
 		reg := args.Knobs.Server.(*server.TestingKnobs).StickyVFSRegistry
-		store, err := reg.Get(args.StoreSpecs[0])
-		require.NoError(t, err, "can't create loq recovery plan store")
-		pss[id] = loqrecovery.NewPlanStore(".", store)
+		pss[id] = loqrecovery.NewPlanStore(".", reg.Get(args.StoreSpecs[0].StickyVFSID))
 	}
 	return pss
 }
@@ -739,6 +738,6 @@ func makeTestRecoveryPlan(
 	return loqrecoverypb.ReplicaUpdatePlan{
 		PlanID:    uuid.MakeV4(),
 		ClusterID: cr.ClusterID,
-		Version:   clusterversion.ByKey(clusterversion.BinaryVersionKey),
+		Version:   clusterversion.Latest.Version(),
 	}
 }

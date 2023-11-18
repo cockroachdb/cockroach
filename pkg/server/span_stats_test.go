@@ -14,12 +14,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -35,7 +37,7 @@ func TestSpanStatsMetaScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 	s := testCluster.Server(0)
 
@@ -141,12 +143,12 @@ func TestSpanStatsFanOut(t *testing.T) {
 	}
 
 	testCases := []testCase{
-		{spans[0], 4, int64(numNodes * 6)},
-		{spans[1], 1, int64(numNodes * 3)},
-		{spans[2], 2, int64(numNodes * 5)},
-		{spans[3], 2, int64(numNodes * 1)},
-		{spans[4], 2, int64(numNodes * 3)},
-		{spans[5], 1, int64(numNodes * 2)},
+		{spans[0], 4, int64(6)},
+		{spans[1], 1, int64(3)},
+		{spans[2], 2, int64(5)},
+		{spans[3], 2, int64(1)},
+		{spans[4], 2, int64(3)},
+		{spans[5], 1, int64(2)},
 	}
 
 	testutils.SucceedsSoon(t, func() error {
@@ -191,13 +193,142 @@ func TestSpanStatsFanOut(t *testing.T) {
 
 }
 
+func TestSpanStatsFanOutFaultTolerance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressWithIssue(t, 108534)
+	ctx := context.Background()
+	const numNodes = 5
+
+	type testCase struct {
+		name         string
+		dialCallback func(nodeID roachpb.NodeID) error
+		nodeCallback func(ctx context.Context, nodeID roachpb.NodeID) error
+		assertions   func(res *roachpb.SpanStatsResponse)
+	}
+
+	containsError := func(errors []string, testString string) bool {
+		for _, e := range errors {
+			if strings.Contains(e, testString) {
+				return true
+			}
+		}
+		return false
+	}
+
+	testCases := []testCase{
+		{
+			// In a complete failure, no node is able to service requests successfully.
+			name: "complete-fanout-failure",
+			dialCallback: func(nodeID roachpb.NodeID) error {
+				// On the 1st and 2nd node, simulate a connection error.
+				if nodeID == 1 || nodeID == 2 {
+					return errors.Newf("error dialing node %d", nodeID)
+				}
+				return nil
+			},
+			nodeCallback: func(ctx context.Context, nodeID roachpb.NodeID) error {
+				// On the 3rd node, simulate some sort of KV error.
+				if nodeID == 3 {
+					return errors.Newf("kv error on node %d", nodeID)
+				}
+
+				// On the 4th and 5th node, simulate a request that takes a very long time.
+				// In this case, nodeFn will block until the context is cancelled
+				// i.e. if iterateNodes respects the timeout cluster setting.
+				if nodeID == 4 || nodeID == 5 {
+					<-ctx.Done()
+					// Return an error that mimics the error returned
+					// when a rpc's context is cancelled:
+					return errors.Newf("node %d timed out", nodeID)
+				}
+				return nil
+			},
+			assertions: func(res *roachpb.SpanStatsResponse) {
+				// Expect to still be able to access SpanToStats for keys.EverythingSpan
+				// without panicking, even though there was a failure on every node.
+				require.Equal(t, int64(0), res.SpanToStats[keys.EverythingSpan.String()].TotalStats.LiveCount)
+				require.Equal(t, 5, len(res.Errors))
+
+				require.Equal(t, true, containsError(res.Errors, "error dialing node 1"))
+				require.Equal(t, true, containsError(res.Errors, "error dialing node 2"))
+				require.Equal(t, true, containsError(res.Errors, "kv error on node 3"))
+				require.Equal(t, true, containsError(res.Errors, "node 4 timed out"))
+				require.Equal(t, true, containsError(res.Errors, "node 5 timed out"))
+			},
+		},
+		{
+			// In a partial failure, nodes 1, 3, and 4 fail, and nodes 2 and 5 succeed.
+			name: "partial-fanout-failure",
+			dialCallback: func(nodeID roachpb.NodeID) error {
+				if nodeID == 1 {
+					return errors.Newf("error dialing node %d", nodeID)
+				}
+				return nil
+			},
+			nodeCallback: func(ctx context.Context, nodeID roachpb.NodeID) error {
+				if nodeID == 3 {
+					return errors.Newf("kv error on node %d", nodeID)
+				}
+
+				if nodeID == 4 {
+					<-ctx.Done()
+					// Return an error that mimics the error returned
+					// when a rpc's context is cancelled:
+					return errors.Newf("node %d timed out", nodeID)
+				}
+				return nil
+			},
+			assertions: func(res *roachpb.SpanStatsResponse) {
+				require.Greater(t, res.SpanToStats[keys.EverythingSpan.String()].TotalStats.LiveCount, int64(0))
+				// 3 nodes could not service their requests.
+				require.Equal(t, 3, len(res.Errors))
+
+				require.Equal(t, true, containsError(res.Errors, "error dialing node 1"))
+				require.Equal(t, true, containsError(res.Errors, "kv error on node 3"))
+				require.Equal(t, true, containsError(res.Errors, "node 4 timed out"))
+
+				// There should not be any errors for node 2 or node 5.
+				require.Equal(t, false, containsError(res.Errors, "error dialing node 2"))
+				require.Equal(t, false, containsError(res.Errors, "node 5 timed out"))
+			},
+		},
+	}
+
+	for _, tCase := range testCases {
+		tCase := tCase
+		t.Run(tCase.name, func(t *testing.T) {
+			serverArgs := base.TestServerArgs{}
+			serverArgs.Knobs.Server = &server.TestingKnobs{
+				IterateNodesDialCallback: tCase.dialCallback,
+				IterateNodesNodeCallback: tCase.nodeCallback,
+			}
+
+			tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{ServerArgs: serverArgs})
+			defer tc.Stopper().Stop(ctx)
+
+			sqlDB := tc.Server(0).SQLConn(t, serverutils.DBName("defaultdb"))
+			_, err := sqlDB.Exec("SET CLUSTER SETTING server.span_stats.node.timeout = '3s'")
+			require.NoError(t, err)
+
+			res, err := tc.GetStatusClient(t, 0).SpanStats(ctx, &roachpb.SpanStatsRequest{
+				NodeID: "0", // Indicates we want a fan-out.
+				Spans:  []roachpb.Span{keys.EverythingSpan},
+			})
+
+			require.NoError(t, err)
+			tCase.assertions(res)
+		})
+	}
+}
+
 // BenchmarkSpanStats measures the cost of collecting span statistics.
 func BenchmarkSpanStats(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
 
 	createCluster := func(numNodes int) serverutils.TestClusterInterface {
-		return serverutils.StartNewTestCluster(b, numNodes,
+		return serverutils.StartCluster(b, numNodes,
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationAuto,
 			})

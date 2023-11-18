@@ -10,7 +10,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/config/zonepb",
         "//pkg/gossip",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/load",
@@ -37,7 +36,6 @@ go_test(
         "override_store_pool_test.go",
         "store_pool_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":storepool"],
     deps = [
         "//pkg/kv/kvserver/liveness",

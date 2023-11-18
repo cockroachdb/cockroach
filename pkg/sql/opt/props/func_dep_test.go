@@ -795,6 +795,17 @@ func TestFuncDeps_AddFrom(t *testing.T) {
 	abcde.AddStrictKey(c(2, 3), c(1, 2, 3, 4, 5))
 	verifyFD(t, abcde, "key(2,3); (1)-->(2-5), (2,3)-->(1,4,5)")
 	testColsAreStrictKey(t, abcde, c(1), true)
+
+	// Add a single-column strict dependency to a multi-column strict
+	// dependency.
+	m := &props.FuncDepSet{}
+	m.AddStrictKey(c(1, 2), c(1, 2))
+	verifyFD(t, m, "key(1,2)")
+	s := &props.FuncDepSet{}
+	s.AddStrictKey(c(1), c(1, 2))
+	verifyFD(t, s, "key(1); (1)-->(2)")
+	m.AddFrom(s)
+	verifyFD(t, m, "key(1); (1)-->(2)")
 }
 
 func TestFuncDeps_AddEquivFrom(t *testing.T) {
@@ -815,6 +826,16 @@ func TestFuncDeps_AddEquivFrom(t *testing.T) {
 	equiv.ProjectCols(opt.ColSet{})
 	equiv.AddEquivFrom(product)
 	verifyFD(t, &equiv, "(1)==(10), (10)==(1), (2)==(11), (11)==(2)")
+
+	// Add an equivalency to a multi-column strict dependency.
+	m := &props.FuncDepSet{}
+	m.AddStrictKey(c(1, 2), c(1, 2))
+	verifyFD(t, m, "key(1,2)")
+	s := &props.FuncDepSet{}
+	s.AddEquivalency(1, 2)
+	verifyFD(t, s, "(1)==(2), (2)==(1)")
+	m.AddEquivFrom(s)
+	verifyFD(t, m, "key(2); (1)==(2), (2)==(1)")
 }
 
 func TestFuncDeps_MakeProduct(t *testing.T) {

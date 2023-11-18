@@ -18,7 +18,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv",
-        "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql/catalog/catenumpb",
@@ -66,9 +65,7 @@ go_test(
         "stream_data_test.go",
         "utils_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":flowinfra"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/ccl/kvccl/kvtenantccl",
@@ -78,6 +75,7 @@ go_test(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

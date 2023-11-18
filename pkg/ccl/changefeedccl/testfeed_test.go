@@ -351,6 +351,11 @@ func (r *reportErrorResumer) OnFailOrCancel(
 	return r.wrapped.OnFailOrCancel(ctx, execCtx, jobErr)
 }
 
+// CollectProfile implements jobs.Resumer.
+func (r *reportErrorResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 type wrapSinkFn func(sink Sink) Sink
 
 // jobFeed indicates that the feed is an "enterprise feed" -- that is,
@@ -1928,6 +1933,35 @@ func (k *kafkaFeed) Close() error {
 	return errors.CombineErrors(k.jobFeed.Close(), k.tg.wait())
 }
 
+// DiscardMessages spins up a goroutine to discard messages produced into the
+// sink. Returns cleanup function.
+func DiscardMessages(f cdctest.TestFeed) func() {
+	switch t := f.(type) {
+	case *kafkaFeed:
+		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.shutdown:
+					return
+				case <-t.source:
+				}
+			}
+		}()
+		return func() {
+			cancel()
+			wg.Wait()
+		}
+	default:
+		return func() {}
+	}
+}
+
 type webhookFeedFactory struct {
 	enterpriseFeedFactory
 	useSecureServer bool
@@ -2181,6 +2215,8 @@ func (f *webhookFeed) Close() error {
 
 type mockPubsubMessage struct {
 	data string
+	// NB: the topic may be empty.
+	topic string
 }
 
 type deprecatedMockPubsubMessageBuffer struct {
@@ -2285,7 +2321,7 @@ func (ps *fakePubsubServer) React(req interface{}) (handled bool, ret interface{
 		ps.mu.Lock()
 		defer ps.mu.Unlock()
 		for _, msg := range publishReq.Messages {
-			ps.mu.buffer = append(ps.mu.buffer, mockPubsubMessage{data: string(msg.Data)})
+			ps.mu.buffer = append(ps.mu.buffer, mockPubsubMessage{data: string(msg.Data), topic: publishReq.Topic})
 		}
 		if ps.mu.notify != nil {
 			notifyCh := ps.mu.notify
@@ -2462,8 +2498,10 @@ func extractJSONMessagePubsub(wrapped []byte) (value []byte, key []byte, topic s
 // Next implements TestFeed
 func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
+		deprecatedMessage := false
 		msg := p.mockServer.Pop()
 		if msg == nil {
+			deprecatedMessage = true
 			msg = p.deprecatedClient.buffer.pop()
 		}
 		if msg != nil {
@@ -2482,6 +2520,9 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 				msgBytes := []byte(msg.data)
 				if resolved {
 					m.Resolved = msgBytes
+					if !deprecatedMessage {
+						m.Topic = msg.topic
+					}
 				} else {
 					m.Value, m.Key, m.Topic, err = extractJSONMessagePubsub(msgBytes)
 					if err != nil {

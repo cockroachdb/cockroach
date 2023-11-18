@@ -12,6 +12,7 @@ package cloud
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"regexp"
 	"sort"
@@ -154,13 +155,18 @@ func (c *Cluster) PrintDetails(logger *logger.Logger) {
 		logger.Printf("(no expiration)")
 	}
 	for _, vm := range c.VMs {
-		logger.Printf("  %s\t%s\t%s\t%s", vm.Name, vm.DNS, vm.PrivateIP, vm.PublicIP)
+		logger.Printf("  %s\t%s\t%s\t%s\t%s\t%s\t%s", vm.Name, vm.DNS, vm.PrivateIP, vm.PublicIP, vm.MachineType, vm.CPUArch, vm.CPUFamily)
 	}
 }
 
 // IsLocal returns true if c is a local cluster.
 func (c *Cluster) IsLocal() bool {
 	return config.IsLocalClusterName(c.Name)
+}
+
+// IsEmptyCluster returns true if a cluster has no resources.
+func (c *Cluster) IsEmptyCluster() bool {
+	return c.VMs[0].EmptyCluster
 }
 
 // ListCloud returns information about all instances (across all available
@@ -180,12 +186,15 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 		g.Go(func() error {
 			var err error
 			providerVMs[index], err = provider.List(l, options)
-			return err
+			return errors.Wrapf(err, "provider %s", provider.Name())
 		})
 	}
 
 	if err := g.Wait(); err != nil {
-		return nil, err
+		// We continue despite the error as we don't want to fail for all providers if only one
+		// has an issue. The function that calls ListCloud may not even use the erring provider.
+		// If it does, it will fail later when it doesn't find the specified cluster.
+		l.Printf("WARNING: Error listing VMs, continuing but list may be incomplete. %s \n", err.Error())
 	}
 
 	for _, vms := range providerVMs {
@@ -201,8 +210,9 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 			}
 
 			// Anything with an error gets tossed into the BadInstances slice, and we'll correct
-			// the problem later on.
-			if len(v.Errors) > 0 {
+			// the problem later on. Ignore empty clusters since BadInstances will be destroyed on
+			// the VM level. GC will destroy them instead.
+			if len(v.Errors) > 0 && !v.EmptyCluster {
 				cloud.BadInstances = append(cloud.BadInstances, v)
 				continue
 			}
@@ -231,7 +241,11 @@ func ListCloud(l *logger.Logger, options vm.ListOptions) (*Cloud, error) {
 	}
 
 	// Sort VMs for each cluster. We want to make sure we always have the same order.
+	// Also assert that no cluster can be empty.
 	for _, c := range cloud.Clusters {
+		if len(c.VMs) == 0 {
+			return nil, errors.Errorf("found no VMs in cluster %s", c.Name)
+		}
 		sort.Sort(c.VMs)
 	}
 
@@ -267,13 +281,20 @@ func CreateCluster(
 
 // DestroyCluster TODO(peter): document
 func DestroyCluster(l *logger.Logger, c *Cluster) error {
-	return vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
+	// DNS entries are destroyed first to ensure that the GC job will not try
+	// and clean-up entries prematurely.
+	dnsErr := vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
+		return p.DeleteRecordsBySubdomain(context.Background(), c.Name)
+	})
+	// Allow both DNS and VM operations to run before returning any errors.
+	clusterErr := vm.FanOut(c.VMs, func(p vm.Provider, vms vm.List) error {
 		// Enable a fast-path for providers that can destroy a cluster in one shot.
 		if x, ok := p.(vm.DeleteCluster); ok {
 			return x.DeleteCluster(l, c.Name)
 		}
 		return p.Delete(l, vms)
 	})
+	return errors.CombineErrors(dnsErr, clusterErr)
 }
 
 // ExtendCluster TODO(peter): document

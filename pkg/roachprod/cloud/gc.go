@@ -11,6 +11,7 @@
 package cloud
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"hash/fnv"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/slack-go/slack"
+	"golang.org/x/exp/maps"
 )
 
 var errNoSlackClient = fmt.Errorf("no Slack client")
@@ -40,7 +42,16 @@ type status struct {
 
 func (s *status) add(c *Cluster, now time.Time) {
 	exp := c.ExpiresAt()
-	if exp.After(now) {
+	// Clusters without VMs shouldn't exist and are likely dangling resources.
+	if c.IsEmptyCluster() {
+		// Give a one-hour grace period to avoid any race conditions where a cluster
+		// was created but the VMs are still initializing.
+		if now.After(c.CreatedAt.Add(time.Hour)) {
+			s.destroy = append(s.destroy, c)
+		} else {
+			s.good = append(s.good, c)
+		}
+	} else if exp.After(now) {
 		if exp.Before(now.Add(2 * time.Hour)) {
 			s.warn = append(s.warn, c)
 		} else {
@@ -303,8 +314,8 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 	// Compile list of "bad vms" and destroy them.
 	var badVMs vm.List
 	for _, vm := range cloud.BadInstances {
-		// We only delete "bad vms" if they were created more than 1h ago.
-		if now.Sub(vm.CreatedAt) >= time.Hour {
+		// We skip fake VMs and only delete "bad vms" if they were created more than 1h ago.
+		if now.Sub(vm.CreatedAt) >= time.Hour && !vm.EmptyCluster {
 			badVMs = append(badVMs, vm)
 		}
 	}
@@ -339,6 +350,56 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 		for _, c := range s.destroy {
 			if err := DestroyCluster(l, c); err != nil {
 				postError(l, client, channel, err)
+			}
+		}
+	}
+	return nil
+}
+
+// GCDNS deletes dangling DNS records for clusters that have been destroyed.
+// This is inferred when a DNS record name contains a cluster name that is no
+// longer present. The cluster list is traversed and the DNS records for each
+// provider are listed. If a DNS record is found that does not have a
+// corresponding cluster, it is deleted.
+func GCDNS(l *logger.Logger, cloud *Cloud, dryrun bool) error {
+	// Gather cluster names.
+	clusterNames := make(map[string]struct{})
+	for _, cluster := range cloud.Clusters {
+		clusterNames[cluster.Name] = struct{}{}
+	}
+	// Ensure all DNS providers do not have records for clusters that are no
+	// longer present.
+	ctx := context.Background()
+	for _, provider := range vm.Providers {
+		p, ok := provider.(vm.DNSProvider)
+		if !ok {
+			continue
+		}
+		records, err := p.ListRecords(ctx)
+		if err != nil {
+			return err
+		}
+		danglingRecordNames := make(map[string]struct{})
+		for _, record := range records {
+			nameParts := strings.Split(record.Name, ".")
+			// Only consider DNS records that contain a cluster name.
+			if len(nameParts) < 3 {
+				continue
+			}
+			dnsClusterName := nameParts[2]
+			if _, exists := clusterNames[dnsClusterName]; !exists {
+				danglingRecordNames[record.Name] = struct{}{}
+			}
+		}
+		if !dryrun {
+			keys := maps.Keys(danglingRecordNames)
+			if err := p.DeleteRecordsByName(ctx, keys...); err != nil {
+				return err
+			}
+		} else {
+			// Log dangling DNS records that would be deleted in a non-dryrun.
+			for danglingRecordName := range danglingRecordNames {
+				l.Printf("deleting dangling DNS record %s", danglingRecordName)
 			}
 		}
 	}

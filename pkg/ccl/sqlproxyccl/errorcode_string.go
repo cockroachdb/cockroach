@@ -17,13 +17,12 @@ func _() {
 	_ = x[codeUnexpectedInsecureStartupMessage-6]
 	_ = x[codeUnexpectedStartupMessage-7]
 	_ = x[codeParamsRoutingFailed-8]
-	_ = x[codeBackendDown-9]
-	_ = x[codeBackendRefusedTLS-10]
-	_ = x[codeBackendDisconnected-11]
-	_ = x[codeClientDisconnected-12]
-	_ = x[codeProxyRefusedConnection-13]
-	_ = x[codeExpiredClientConnection-14]
-	_ = x[codeUnavailable-15]
+	_ = x[codeBackendDialFailed-9]
+	_ = x[codeBackendDisconnected-10]
+	_ = x[codeClientDisconnected-11]
+	_ = x[codeProxyRefusedConnection-12]
+	_ = x[codeExpiredClientConnection-13]
+	_ = x[codeUnavailable-14]
 }
 
 func (i errorCode) String() string {
@@ -46,10 +45,8 @@ func (i errorCode) String() string {
 		return "codeUnexpectedStartupMessage"
 	case codeParamsRoutingFailed:
 		return "codeParamsRoutingFailed"
-	case codeBackendDown:
-		return "codeBackendDown"
-	case codeBackendRefusedTLS:
-		return "codeBackendRefusedTLS"
+	case codeBackendDialFailed:
+		return "codeBackendDialFailed"
 	case codeBackendDisconnected:
 		return "codeBackendDisconnected"
 	case codeClientDisconnected:

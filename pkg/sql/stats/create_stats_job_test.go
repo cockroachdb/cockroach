@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // TestCreateStatsControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
@@ -67,7 +70,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
 	var tID descpb.ID
@@ -122,7 +125,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 	})
 }
 
-func TestAtMostOneRunningCreateStats(t *testing.T) {
+func TestCreateStatisticsCanBeCancelled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -130,17 +133,79 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 
 	var serverArgs base.TestServerArgs
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
-	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	serverArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	serverArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: filter,
+	}
+
+	ctx := context.Background()
+	tc, conn, _ := serverutils.StartServer(t, serverArgs)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)  WITH (sql_stats_automatic_collection_enabled = false)`)
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
+	var tID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
+	setTableID(tID)
+
+	// Run CREATE STATISTICS and wait for it to create the job.
+	allowRequest = make(chan struct{})
+	errCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS s1 FROM d.t`)
+		errCh <- err
+	}()
+	allowRequest <- struct{}{}
+	setTableID(descpb.InvalidID)
+	testutils.SucceedsSoon(t, func() error {
+		row := conn.QueryRow("SELECT query_id FROM [SHOW CLUSTER STATEMENTS] WHERE query LIKE 'CREATE STATISTICS%';")
+		var queryID string
+		if err := row.Scan(&queryID); err != nil {
+			return err
+		}
+		_, err := conn.Exec("CANCEL QUERIES VALUES ((SELECT query_id FROM [SHOW CLUSTER STATEMENTS] WHERE query LIKE 'CREATE STATISTICS%'));")
+		return err
+	})
+	// Allow the filter to pass everything until an error is received.
+	var err error
+	testutils.SucceedsSoon(t, func() error {
+		// Assume something will fail.
+		err = errors.AssertionFailedf("failed for create stats to cancel")
+		for {
+			select {
+			case err = <-errCh:
+				return nil
+			case allowRequest <- struct{}{}:
+			default:
+				return err
+			}
+		}
+	})
+	close(allowRequest)
+	require.ErrorContains(t, err, "pq: query execution canceled")
+}
+
+func TestAtMostOneRunningCreateStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var allowRequest chan struct{}
+
+	filter, setTableID := createStatsRequestFilter(&allowRequest)
+	var params base.TestClusterArgs
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: filter,
 	}
+	params.ServerArgs.DefaultTestTenant = base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109379)
 
 	ctx := context.Background()
 	const nodes = 1
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ApplicationLayer(0).SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
@@ -162,7 +227,6 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	case err := <-errCh:
 		t.Fatal(err)
 	}
-
 	autoStatsRunShouldFail := func() {
 		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
 		expected := "another CREATE STATISTICS job is already running"
@@ -174,7 +238,7 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	// Attempt to start an automatic stats run. It should fail.
 	autoStatsRunShouldFail()
 
-	// PAUSE JOB does not bloack until the job is paused but only requests it.
+	// PAUSE JOB does not block until the job is paused but only requests it.
 	// Wait until the job is set to paused.
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
@@ -235,7 +299,7 @@ func TestDeleteFailedJob(t *testing.T) {
 	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: serverArgs})
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	conn := tc.ApplicationLayer(0).SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
@@ -309,7 +373,8 @@ func TestCreateStatsProgress(t *testing.T) {
 	const nodes = 1
 	tc := testcluster.StartTestCluster(t, nodes, params)
 	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	s := tc.ApplicationLayer(0)
+	conn := s.SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
@@ -387,7 +452,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	// Invalidate the stats cache so that we can be sure to get the latest stats.
 	var tableID descpb.ID
 	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
-	tc.Servers[0].ExecutorConfig().(sql.ExecutorConfig).TableStatsCache.InvalidateTableStats(
+	s.ExecutorConfig().(sql.ExecutorConfig).TableStatsCache.InvalidateTableStats(
 		ctx, tableID,
 	)
 
@@ -448,7 +513,7 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 	ctx := context.Background()
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
 
@@ -473,16 +538,28 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 // Create a blocking request filter for the actions related
 // to CREATE STATISTICS, i.e. Scanning a user table. See discussion
 // on jobutils.RunJob for where this might be useful.
+//
+// Note that it only supports system tenants as well as the secondary tenant
+// with serverutils.TestTenantID() tenant ID.
 func createStatsRequestFilter(
 	allowProgressIota *chan struct{},
 ) (kvserverbase.ReplicaRequestFilter, func(descpb.ID)) {
 	var tableToBlock atomic.Value
 	tableToBlock.Store(descpb.InvalidID)
+	// We must create this request filter before we start the server, so we
+	// don't know whether we're running against the test tenant or not. Thus, we
+	// will always try the codec for the first test tenant ID, and if it doesn't
+	// work, we fallback to the system tenant codec.
+	possibleCodec := keys.MakeSQLCodec(serverutils.TestTenantID())
 	return func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 		if req, ok := ba.GetArg(kvpb.Scan); ok {
-			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*kvpb.ScanRequest).Key)
+			key := req.(*kvpb.ScanRequest).Key
+			if strippedKey, err := possibleCodec.StripTenantPrefix(key); err == nil {
+				key = strippedKey
+			}
+			_, tableID, _ := encoding.DecodeUvarintAscending(key)
 			// Ensure that the tableID is what we expect it to be.
-			if tableID > 0 && descpb.ID(tableID) == tableToBlock.Load().(descpb.ID) {
+			if tableID > 0 && descpb.ID(tableID) == tableToBlock.Load() {
 				// Read from the channel twice to allow jobutils.RunJob to complete
 				// even though there is only one ScanRequest.
 				<-*allowProgressIota

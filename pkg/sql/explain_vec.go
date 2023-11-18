@@ -62,7 +62,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 
 	finalizePlanWithRowCount(params.ctx, planCtx, physPlan, n.plan.mainRowCount)
 	flows := physPlan.GenerateFlowSpecs()
-	flowCtx, cleanup := newFlowCtxForExplainPurposes(params.ctx, planCtx, params.p)
+	flowCtx, cleanup := newFlowCtxForExplainPurposes(params.ctx, params.p)
 	defer cleanup()
 
 	// We want to get the vectorized plan which would be executed with the
@@ -91,7 +91,7 @@ func (n *explainVecNode) startExec(params runParams) error {
 }
 
 func newFlowCtxForExplainPurposes(
-	ctx context.Context, planCtx *PlanningCtx, p *planner,
+	ctx context.Context, p *planner,
 ) (_ *execinfra.FlowCtx, cleanup func()) {
 	monitor := mon.NewMonitor(
 		"explain", /* name */
@@ -107,15 +107,15 @@ func newFlowCtxForExplainPurposes(
 		monitor.Stop(ctx)
 	}
 	return &execinfra.FlowCtx{
-		NodeID:  planCtx.EvalContext().NodeID,
-		EvalCtx: planCtx.EvalContext(),
+		NodeID:  p.EvalContext().NodeID,
+		EvalCtx: p.EvalContext(),
 		Mon:     monitor,
 		Txn:     p.txn,
 		Cfg: &execinfra.ServerConfig{
-			Settings:         p.execCfg.Settings,
-			LogicalClusterID: p.DistSQLPlanner().distSQLSrv.ServerConfig.LogicalClusterID,
-			VecFDSemaphore:   p.execCfg.DistSQLSrv.VecFDSemaphore,
-			PodNodeDialer:    p.DistSQLPlanner().podNodeDialer,
+			Settings:          p.execCfg.Settings,
+			LogicalClusterID:  p.DistSQLPlanner().distSQLSrv.ServerConfig.LogicalClusterID,
+			VecFDSemaphore:    p.execCfg.DistSQLSrv.VecFDSemaphore,
+			SQLInstanceDialer: p.DistSQLPlanner().sqlInstanceDialer,
 		},
 		Descriptors: p.Descriptors(),
 		DiskMonitor: &mon.BytesMonitor{},

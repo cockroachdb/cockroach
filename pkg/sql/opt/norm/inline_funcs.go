@@ -441,6 +441,9 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 // UDFs used as data sources return multiple columns. Other UDFs returning a
 // single column can be inlined since subqueries can only return a single
 // column.
+//
+// Note: Routines with an exception block or cursor declaration are volatile, so
+// there is no need to check those cases.
 func (c *CustomFuncs) IsInlinableUDF(args memo.ScalarListExpr, udfp *memo.UDFCallPrivate) bool {
 	if udfp.Def == nil {
 		panic(errors.AssertionFailedf("expected non-nil UDF definition"))

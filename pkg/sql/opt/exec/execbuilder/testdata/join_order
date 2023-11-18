@@ -30,10 +30,10 @@ CREATE TABLE abc (
 statement ok
 SET reorder_joins_limit = 0
 
-statement error cannot set sql.defaults.reorder_joins_limit to a value less than 0 or greater than 63
+statement error expected value in range \[0, 63\]
 SET CLUSTER SETTING sql.defaults.reorder_joins_limit = -1
 
-statement error cannot set sql.defaults.reorder_joins_limit to a value less than 0 or greater than 63
+statement error expected value in range \[0, 63\]
 SET CLUSTER SETTING sql.defaults.reorder_joins_limit = 65
 
 query T

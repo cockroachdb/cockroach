@@ -1,10 +1,11 @@
 # LogicTest: multiregion-9node-3region-3azs-tenant
+# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.multiregion.enabled=false
 
-statement error pq: setting sql.multi_region.allow_abstractions_for_secondary_tenants.enabled disallows use of multi-region abstractions
+statement error pq: setting sql.virtual_cluster.feature_access.multiregion.enabled disallows use of multi-region abstractions
 CREATE DATABASE db PRIMARY REGION "us-east1"
 
 statement ok
 CREATE DATABASE db
 
-statement error pq: setting sql.multi_region.allow_abstractions_for_secondary_tenants.enabled disallows use of multi-region abstractions
+statement error pq: setting sql.virtual_cluster.feature_access.multiregion.enabled disallows use of multi-region abstractions
 ALTER DATABASE db SET PRIMARY REGION "us-east-1"
