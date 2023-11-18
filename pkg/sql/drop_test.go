@@ -676,6 +676,14 @@ func TestDropTableDeleteData(t *testing.T) {
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 
+	allowGC := make(chan struct{})
+	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
+		RunBeforePerformGC: func(jobID jobspb.JobID) error {
+			<-allowGC
+			return nil
+		},
+	}
+
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
@@ -736,7 +744,12 @@ func TestDropTableDeleteData(t *testing.T) {
 		}
 		tableSpan := descs[i].TableSpan(keys.SystemSQLCodec)
 		tests.CheckKeyCountIncludingTombstoned(t, s, tableSpan, numKeys)
+	}
 
+	close(allowGC)
+
+	// Now verify that the GC job has run.
+	for i := 0; i < numTables; i++ {
 		if err := jobutils.VerifySystemJob(t, sqlRun, numTables+i,
 			jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
 				Username:    username.RootUserName(),
