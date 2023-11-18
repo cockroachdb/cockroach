@@ -165,7 +165,8 @@ func (ex *connExecutor) addPreparedStmt(
 	return prepared, nil
 }
 
-// prepare prepares the given statement.
+// prepare prepares the given statement. This is used to create the plan in the
+// "extended" pgwire protocol.
 //
 // placeholderHints may contain partial type information for placeholders.
 // prepare will populate the missing types. It can be nil.
@@ -220,6 +221,10 @@ func (ex *connExecutor) prepare(
 			// the planner here would break the assumptions of the instrumentation.
 			ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime())
+		}
+
+		if err := ex.maybeUpgradeToSerializable(ctx, stmt); err != nil {
+			return err
 		}
 
 		if placeholderHints == nil {
