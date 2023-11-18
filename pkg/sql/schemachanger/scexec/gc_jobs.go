@@ -233,7 +233,6 @@ func createGCJobRecord(
 			descriptorIDs = append(descriptorIDs, details.ParentID)
 		}
 	}
-	runningStatus := jobs.RunningStatus("waiting for MVCC GC")
 	return jobs.Record{
 		JobID:         id,
 		Description:   "GC for " + description,
@@ -241,7 +240,6 @@ func createGCJobRecord(
 		DescriptorIDs: descriptorIDs,
 		Details:       details,
 		Progress:      jobspb.SchemaChangeGCProgress{},
-		RunningStatus: runningStatus,
 		NonCancelable: true,
 	}
 }
