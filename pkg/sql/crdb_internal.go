@@ -7929,10 +7929,10 @@ func genClusterLocksGenerator(
 			if curLock == nil || fErr != nil {
 				return nil, fErr
 			}
-
-			strengthDatum := tree.DNull
 			txnIDDatum := tree.DNull
 			tsDatum := tree.DNull
+			isolationLevelDatum := tree.DNull
+			strengthDatum := tree.DNull
 			durationDatum := tree.DNull
 			granted := false
 			// Utilize -1 to indicate that the row represents the lock holder.
@@ -7940,6 +7940,7 @@ func genClusterLocksGenerator(
 				if curLock.LockHolder != nil {
 					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: curLock.LockHolder.ID})
 					tsDatum = eval.TimestampToInexactDTimestamp(curLock.LockHolder.WriteTimestamp)
+					isolationLevelDatum = tree.NewDString(tree.IsolationLevelFromKVTxnIsolationLevel(curLock.LockHolder.IsoLevel).String())
 					strengthDatum = tree.NewDString(lock.Exclusive.String())
 					durationDatum = tree.NewDInterval(
 						duration.MakeDuration(curLock.HoldDuration.Nanoseconds(), 0 /* days */, 0 /* months */),
@@ -7952,6 +7953,7 @@ func genClusterLocksGenerator(
 				if waiter.WaitingTxn != nil {
 					txnIDDatum = tree.NewDUuid(tree.DUuid{UUID: waiter.WaitingTxn.ID})
 					tsDatum = eval.TimestampToInexactDTimestamp(waiter.WaitingTxn.WriteTimestamp)
+					isolationLevelDatum = tree.NewDString(tree.IsolationLevelFromKVTxnIsolationLevel(waiter.WaitingTxn.IsoLevel).String())
 				}
 				strengthDatum = tree.NewDString(waiter.Strength.String())
 				durationDatum = tree.NewDInterval(
@@ -7990,7 +7992,7 @@ func genClusterLocksGenerator(
 				tree.MakeDBool(tree.DBool(granted)),          /* granted */
 				tree.MakeDBool(len(curLock.Waiters) > 0),     /* contended */
 				durationDatum,                                /* duration */
-				tree.NewDString(tree.IsolationLevelFromKVTxnIsolationLevel(curLock.LockHolder.IsoLevel).String()), /* isolation_level */
+				isolationLevelDatum,                          /* isolation_level */
 			}, nil
 
 		}, nil, nil
