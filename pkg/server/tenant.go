@@ -341,7 +341,8 @@ func newTenantServer(
 
 	// Instantiate the cache of closed SQL sessions.
 	closedSessionCache := sql.NewClosedSessionCache(
-		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
+		ctx, baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now,
+	)
 	args.closedSessionCache = closedSessionCache
 
 	// Instantiate the serverIterator to provide fanout to SQL instances. The

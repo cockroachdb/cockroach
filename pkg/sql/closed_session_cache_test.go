@@ -60,7 +60,7 @@ func TestSessionCacheBasic(t *testing.T) {
 					math.MaxInt64,
 					st,
 				)
-				cache = NewClosedSessionCache(st, monitor, time.Now)
+				cache = NewClosedSessionCache(ctx, st, monitor, time.Now)
 
 				ClosedSessionCacheCapacity.Override(ctx, &st.SV, int64(capacity))
 				ClosedSessionCacheTimeToLive.Override(ctx, &st.SV, int64(timeToLive))

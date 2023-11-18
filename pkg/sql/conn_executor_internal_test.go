@@ -308,7 +308,7 @@ func startConnExecutor(
 			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
 		),
 		SessionRegistry:    NewSessionRegistry(),
-		ClosedSessionCache: NewClosedSessionCache(st, pool, time.Now),
+		ClosedSessionCache: NewClosedSessionCache(ctx, st, pool, time.Now),
 		NodeInfo: NodeInfo{
 			NodeID:           nodeID,
 			LogicalClusterID: func() uuid.UUID { return uuid.UUID{} },

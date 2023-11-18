@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type timeSource func() time.Time
@@ -55,15 +55,15 @@ type ClosedSessionCache struct {
 		acc  mon.BoundAccount
 		data *cache.UnorderedCache
 	}
-
-	mon *mon.BytesMonitor
 }
 
 // NewClosedSessionCache returns a new ClosedSessionCache.
 func NewClosedSessionCache(
-	st *cluster.Settings, parentMon *mon.BytesMonitor, timeSrc timeSource,
+	ctx context.Context, st *cluster.Settings, parentMon *mon.BytesMonitor, timeSrc timeSource,
 ) *ClosedSessionCache {
-	monitor := mon.NewMonitorInheritWithLimit("closed-session-cache", 0 /* limit*/, parentMon)
+	// No need to keep a reference to this monitor since it's closed when the
+	// server exits.
+	monitor := execinfra.NewMonitor(ctx, parentMon, "closed-session-cache")
 
 	c := &ClosedSessionCache{st: st, timeSrc: timeSrc}
 	c.mu.data = cache.NewUnorderedCache(cache.Config{
@@ -75,13 +75,12 @@ func NewClosedSessionCache(
 		OnEvictedEntry: func(entry *cache.Entry) {
 			node := entry.Value.(*sessionNode)
 			size := int64(node.size())
+			c.mu.Lock()
+			defer c.mu.Unlock()
 			c.mu.acc.Shrink(context.Background(), size)
 		},
 	})
-
 	c.mu.acc = monitor.MakeBoundAccount()
-	c.mon = monitor
-	c.mon.StartNoReserved(context.Background(), parentMon)
 	return c
 }
 
@@ -89,13 +88,13 @@ func NewClosedSessionCache(
 func (c *ClosedSessionCache) add(
 	ctx context.Context, id clusterunique.ID, session serverpb.Session,
 ) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	end := timeutil.Now()
+	end := c.timeSrc()
 	session.End = &end
 	session.Status = serverpb.Session_CLOSED
 	node := &sessionNode{id: id, data: session, timestamp: c.timeSrc()}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	if err := c.mu.acc.Grow(ctx, int64(node.size())); err != nil {
 		return err
@@ -177,10 +176,9 @@ func (n *sessionNode) getAgeString(now timeSource) string {
 	return n.getAge(now).Round(time.Second).String()
 }
 
+const idSize = int(unsafe.Sizeof(clusterunique.ID{}))
+const timeSize = int(unsafe.Sizeof(time.Time{}))
+
 func (n *sessionNode) size() int {
-	size := 0
-	size += int(unsafe.Sizeof(clusterunique.ID{}))
-	size += n.data.Size()
-	size += int(unsafe.Sizeof(time.Time{}))
-	return size
+	return idSize + n.data.Size() + timeSize
 }
