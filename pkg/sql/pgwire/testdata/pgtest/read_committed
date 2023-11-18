@@ -1,0 +1,77 @@
+only crdb
+----
+
+send
+Query {"String": "SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = 'true'"}
+Query {"String": "SET default_transaction_isolation = 'read committed'"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET CLUSTER SETTING"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE t1 (a int)"}
+----
+
+until
+ReadyForQuery
+----
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_exec.go","Line":0,"Routine":"maybeUpgradeToSerializable","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "CREATE TABLE t2 (a int primary key)"}
+Bind
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_exec.go","Line":0,"Routine":"maybeUpgradeToSerializable","UnknownFields":null}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE t3 (a int); CREATE TABLE t4 (a int);"}
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_exec.go","Line":0,"Routine":"maybeUpgradeToSerializable","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"multi-statement transaction involving a schema change needs to be SERIALIZABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "CREATE TABLE t3 (a int primary key)"}
+Bind
+Execute
+Parse {"Query": "CREATE TABLE t4 (a int primary key)"}
+Bind
+Execute
+Sync
+----
+
+until keepErrMessage
+ErrorResponse
+ReadyForQuery
+----
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting transaction isolation level to SERIALIZABLE due to schema change","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"conn_executor_exec.go","Line":0,"Routine":"maybeUpgradeToSerializable","UnknownFields":null}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"multi-statement transaction involving a schema change needs to be SERIALIZABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
