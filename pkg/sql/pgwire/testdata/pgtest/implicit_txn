@@ -50,7 +50,7 @@ until noncrdb_only
 ReadyForQuery
 ----
 {"Type":"BindComplete"}
-{"Severity":"WARNING","SeverityUnlocalized":"WARNING","Code":"25001","Message":"there is already a transaction in progress","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"xact.c","Line":3689,"Routine":"BeginTransactionBlock","UnknownFields":null}
+{"Severity":"WARNING","SeverityUnlocalized":"WARNING","Code":"25001","Message":"there is already a transaction in progress","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"xact.c","Line":0,"Routine":"BeginTransactionBlock","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
