@@ -50,6 +50,10 @@ const (
 	// EncFirstFreeFlagBit needs to remain unused; it is used as base
 	// bit offset for tree.FmtFlags.
 	EncFirstFreeFlagBit
+
+	// EncNoDoubleEscape indicates that not escape backslashes used
+	// as escapes.
+	EncNoDoubleEscape
 )
 
 // EncodeRestrictedSQLIdent writes the identifier in s to buf. The
@@ -115,6 +119,27 @@ var mustQuoteMap = map[byte]bool{
 	'}': true,
 }
 
+var escapedMap = map[byte]bool {
+	'b': true,
+	'f': true,
+	'n': true,
+	'r': true,
+	't': true,
+	'\\': true,
+	'\'': true,
+	'"': true,
+
+	// Octal byte value
+	'0': true,
+	'1': true,
+	'2': true,
+	'3': true,
+	'4': true,
+	'5': true,
+	'6': true,
+	'7': true,
+}
+
 // EncodeSQLString writes a string literal to buf. All unicode and
 // non-printable characters are escaped.
 func EncodeSQLString(buf *bytes.Buffer, in string) {
@@ -140,12 +165,48 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	start := 0
 	escapedString := false
 	bareStrings := flags.HasFlags(EncBareStrings)
+	noDoubleEscape := flags.HasFlags(EncNoDoubleEscape)
+	alreadyEscaped := -1
 	// Loop through each unicode code point.
 	for i, r := range in {
-		if i < start {
+		if i < start || i <= alreadyEscaped {
 			continue
 		}
 		ch := byte(r)
+		if noDoubleEscape && ch == '\\' && i + 1 < len(in)  {
+			nextCh := in[i + 1]
+			// Hexadecimal Unicode character value.
+			if (nextCh == 'u' || nextCh == 'U') && i + 5 < len(in) {
+				unicode := true
+				for j := 0; j < 4; j++ {
+					nextCh = in[i + 2 + j]
+					if !((nextCh >= '0' && nextCh <= '9') ||
+					     (nextCh >= 'A' && nextCh <= 'F')) {
+						unicode = false
+						break
+					}
+				}
+				if unicode {
+					alreadyEscaped = i + 5
+					continue
+				}
+			}
+			// Hexadecimal byte value.
+			if nextCh == 'x' && i + 2 < len(in) {
+				nextCh = in[i + 2]
+				if ((nextCh >= '0' && nextCh <= '9') ||
+				    (nextCh >= 'A' && nextCh <= 'F')) {
+					alreadyEscaped = i + 2
+					continue
+				}
+			}
+			// Octal byte value and other escaped sequences.
+			if escapedMap[ch] {
+				alreadyEscaped = i + 1
+				continue
+			}
+		}
+
 		if r >= 0x20 && r < 0x7F {
 			if mustQuoteMap[ch] {
 				// We have to quote this string - ignore bareStrings setting
