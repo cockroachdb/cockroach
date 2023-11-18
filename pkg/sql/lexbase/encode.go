@@ -47,6 +47,10 @@ const (
 	// without wrapping quotes.
 	EncBareIdentifiers
 
+	// EncNoDoubleEscape indicates that not escape backslashes used
+	// as escapes.
+	EncNoDoubleEscape
+
 	// EncFirstFreeFlagBit needs to remain unused; it is used as base
 	// bit offset for tree.FmtFlags.
 	EncFirstFreeFlagBit
@@ -140,12 +144,52 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	start := 0
 	escapedString := false
 	bareStrings := flags.HasFlags(EncBareStrings)
+	noDoubleEscape := flags.HasFlags(EncNoDoubleEscape)
+	alreadyEscaped := -1
 	// Loop through each unicode code point.
 	for i, r := range in {
-		if i < start {
+		if i < start || i <= alreadyEscaped {
 			continue
 		}
 		ch := byte(r)
+		if noDoubleEscape && ch == '\\' && i + 1 < len(in)  {
+			nextCh := in[i + 1]
+			switch nextCh {
+			case 'u', 'U': // Hexadecimal Unicode.
+				if i >= len(in) - 5 {
+					break
+				}
+				unicode := true
+				for j := 0; j < 4; j++ {
+					nextCh = in[i + 2 + j]
+					if !((nextCh >= '0' && nextCh <= '9') ||
+					     (nextCh >= 'A' && nextCh <= 'F')) {
+						unicode = false
+						break
+					}
+				}
+				if unicode {
+					alreadyEscaped = i + 5
+					continue
+				}
+			case 'x': // Hexadecimal byte.
+				if i >= len(in) - 2 {
+					break
+				}
+				nextCh = in[i + 2]
+				if ((nextCh >= '0' && nextCh <= '9') ||
+				    (nextCh >= 'A' && nextCh <= 'F')) {
+					alreadyEscaped = i + 2
+					continue
+				}
+			case '0', '1', '2', '3', '4', '5', '6', '7', // Octal byte.
+			     'b', 'f', 'n', 'r', 't', // String constants.
+			     '\\', '\'', '"': // Others.
+				alreadyEscaped = i + 1
+				continue
+			}
+		}
+
 		if r >= 0x20 && r < 0x7F {
 			if mustQuoteMap[ch] {
 				// We have to quote this string - ignore bareStrings setting
@@ -168,6 +212,12 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 			start = i + ln
 		}
 		stringencoding.EncodeEscapedChar(buf, in, r, ch, i, '\'')
+	}
+
+	if noDoubleEscape && !escapedString && alreadyEscaped >= 0 {
+		// Nothing was escaped, but already-escaped characters were found.
+		buf.WriteString("e'") // begin e'xxx' string
+		escapedString = true
 	}
 
 	quote := !escapedString && !bareStrings

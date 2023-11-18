@@ -117,6 +117,56 @@ func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, str
 	return stmt
 }
 
+func TestEncodeSQLStringWithNoDoubleEscape(t *testing.T) {
+	// See http://www.postgresql.org/docs/9.4/static/sql-syntax-lexical.html
+	testCases := []struct {
+		input  string
+		output string
+	}{
+		// Hexadecimal Unicode character value.
+		{`\u007F`, `e'\u007F'`},
+		{`\u007F24AB`, `e'\u007F24AB'`},
+		{`\U007F`, `e'\U007F'`},
+
+		// Invalid hexadecimal unicode character value.
+		{`\U007f`, `e'\\U007f'`},
+		{`\U07f`, `e'\\U07f'`},
+
+		// Hexadecimal byte value.
+		{`\x1`, `e'\x1'`},
+		{`\xA`, `e'\xA'`},
+		{`\x1A`, `e'\x1A'`},
+
+		// Invalid hexadecimal byte value (lower case).
+		{`\xa`, `e'\\xa'`},
+
+		// Octal byte values
+		{`\0\1\2\3\4\5\6\7`, `e'\0\1\2\3\4\5\6\7'`},
+		{`\01`, `e'\01'`},
+		{`\012`, `e'\012'`},
+
+		// Invalid octal byte value.
+		{`\8\9`, `e'\\8\\9'`},
+
+		// Other escape sequences
+		{`\b\f\n\r\t\\\'\"`, `e'\b\f\n\r\t\\\'\"'`},
+
+		// Complex cases (see GH issue #107518)
+		{`{"a": "b\u0099c"}`, `e'{"a": "b\u0099c"}'`},
+		{`{\"a\": \"b\u0099c\"}`, `e'{\"a\": \"b\u0099c\"}'`},
+	}
+
+	for _, tc := range testCases {
+		var buf bytes.Buffer
+		lexbase.EncodeSQLStringWithFlags(&buf, tc.input, lexbase.EncNoDoubleEscape)
+		out := buf.String()
+
+		if out != tc.output {
+			t.Errorf("`%s`: expected `%s`, got `%s`", tc.input, tc.output, out)
+		}
+	}
+}
+
 func BenchmarkEncodeSQLString(b *testing.B) {
 	str := strings.Repeat("foo", 10000)
 	for i := 0; i < b.N; i++ {
