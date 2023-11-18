@@ -1,4 +1,4 @@
-# NB: "Xw==" is the byte representation of "_", which is what we use to redact fields. 
+# NB: "Xw==" is the byte representation of "_", which is what we use to redact fields.
 statement ok
 CREATE TABLE collate_partition (a STRING COLLATE da PRIMARY KEY) PARTITION BY RANGE (a) (
     PARTITION p1 VALUES FROM ('x' COLLATE da) TO ('ü' COLLATE da)
@@ -162,7 +162,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
                     "withGrantOption": "2"
                 }
             ],
-            "version": 2
+            "version": 3
         },
         "replacementOf": {
             "time": {}
@@ -356,7 +356,7 @@ SELECT descriptor from redacted_descriptors where id = 'subpartition'::REGCLASS;
                     "withGrantOption": "2"
                 }
             ],
-            "version": 2
+            "version": 3
         },
         "replacementOf": {
             "time": {}
