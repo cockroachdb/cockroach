@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -61,13 +60,13 @@ func (j *Job) maybeWithTxn(txn isql.Txn) Updater {
 	return j.NoTxn()
 }
 
-func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn) (retErr error) {
+func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 	if u.txn == nil {
 		return u.j.registry.db.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
 		) error {
 			u.txn = txn
-			return u.update(ctx, useReadLock, updateFn)
+			return u.update(ctx, updateFn)
 		})
 	}
 	ctx, sp := tracing.ChildSpan(ctx, "update-job")
@@ -102,7 +101,7 @@ func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn
 	row, err := u.txn.QueryRowEx(
 		ctx, "select-job", u.txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
-		getSelectStmtForJobUpdate(ctx, j.session != nil, useReadLock, u.j.registry.settings.Version), j.ID(),
+		getSelectStmtForJobUpdate(j.session != nil), j.ID(),
 	)
 	if err != nil {
 		return err
@@ -362,8 +361,7 @@ func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobU
 // Note that there are various convenience wrappers (like FractionProgressed)
 // defined in jobs.go.
 func (u Updater) Update(ctx context.Context, updateFn UpdateFn) error {
-	const useReadLock = false
-	return u.update(ctx, useReadLock, updateFn)
+	return u.update(ctx, updateFn)
 }
 
 func (u Updater) now() time.Time {
@@ -371,9 +369,7 @@ func (u Updater) now() time.Time {
 }
 
 // getSelectStmtForJobUpdate constructs the select statement used in Job.update.
-func getSelectStmtForJobUpdate(
-	ctx context.Context, hasSession, useReadLock bool, version clusterversion.Handle,
-) string {
+func getSelectStmtForJobUpdate(hasSession bool) string {
 	const (
 		selectWithoutSession = `
 WITH
@@ -391,9 +387,6 @@ WITH
 	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
 	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
 	WHERE id = $1`
-
-		forUpdate = `
-  FOR UPDATE`
 	)
 
 	stmt := selectWithoutSession
@@ -402,9 +395,5 @@ WITH
 	}
 	stmt += backoffColumns
 	stmt += from
-	if useReadLock {
-		stmt += forUpdate
-	}
-
 	return stmt
 }

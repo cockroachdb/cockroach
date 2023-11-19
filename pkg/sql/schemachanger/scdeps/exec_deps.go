@@ -42,7 +42,7 @@ type JobRegistry interface {
 	MakeJobID() jobspb.JobID
 	CreateJobWithTxn(ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn isql.Txn) (*jobs.Job, error)
 	UpdateJobWithTxn(
-		ctx context.Context, jobID jobspb.JobID, txn isql.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
+		ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc jobs.UpdateFn,
 	) error
 	CheckPausepoint(name string) error
 }
@@ -129,8 +129,7 @@ func (t nameEntry) GetID() descpb.ID {
 func (d *txnDeps) UpdateSchemaChangeJob(
 	ctx context.Context, id jobspb.JobID, callback scexec.JobUpdateCallback,
 ) error {
-	const useReadLock = false
-	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, useReadLock, func(
+	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, func(
 		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		return callback(md, ju.UpdateProgress, ju.UpdatePayload)
