@@ -299,7 +299,7 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 			return err
 		}
 	}
-	details, progress, err := initDetailsAndProgress(ctx, &execCfg, r.job.ID())
+	details, progress, err := initDetailsAndProgress(ctx, &execCfg, r.job)
 	if err != nil {
 		return err
 	}
@@ -319,7 +319,7 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
-	persistProgress(ctx, &execCfg, r.job.ID(), progress,
+	persistProgress(ctx, &execCfg, r.job, progress,
 		sql.RunningStatusDeletingData)
 	if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
 		if err := fn(r.job.ID()); err != nil {
@@ -329,7 +329,7 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	if err := deleteData(ctx, &execCfg, details, progress); err != nil {
 		return err
 	}
-	persistProgress(ctx, &execCfg, r.job.ID(), progress, sql.RunningStatusWaitingForMVCCGC)
+	persistProgress(ctx, &execCfg, r.job, progress, sql.RunningStatusWaitingForMVCCGC)
 	r.job.MarkIdle(true)
 	return waitForGC(ctx, &execCfg, details, progress)
 }
