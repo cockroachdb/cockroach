@@ -283,16 +283,18 @@ func persistProgress(
 		if err != nil {
 			return err
 		}
-		if err := job.WithTxn(txn).SetProgress(ctx, *progress); err != nil {
+		if err := job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			if err := md.CheckRunningOrReverting(); err != nil {
+				return err
+			}
+			md.Progress.RunningStatus = string(runningStatus)
+			md.Progress.Details = jobspb.WrapProgressDetails(*progress)
+			ju.UpdateProgress(md.Progress)
+			return nil
+		}); err != nil {
 			return err
 		}
 		log.Infof(ctx, "updated progress payload: %+v", progress)
-		err = job.WithTxn(txn).RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return runningStatus, nil
-		})
-		if err != nil {
-			return err
-		}
 		log.Infof(ctx, "updated running status: %+v", runningStatus)
 		return nil
 	}); err != nil {
