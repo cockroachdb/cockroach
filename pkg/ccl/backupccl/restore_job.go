@@ -1813,9 +1813,8 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 	var devalidateIndexes map[descpb.ID][]descpb.IndexID
 	if toValidate := len(details.RevalidateIndexes); toValidate > 0 {
-		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return jobs.RunningStatus(fmt.Sprintf("re-validating %d indexes", toValidate)), nil
-		}); err != nil {
+		status := jobs.RunningStatus(fmt.Sprintf("re-validating %d indexes", toValidate))
+		if err := r.job.NoTxn().RunningStatus(ctx, status); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
 		}
 		bad, err := revalidateIndexes(ctx, p.ExecCfg(), r.job, details.TableDescs, details.RevalidateIndexes)
@@ -3235,9 +3234,7 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 	// progress as that number goes down later.
 	if total == 0 {
 		log.Infof(ctx, "calculating total download size (across all stores) to complete restore")
-		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return jobs.RunningStatus("Calculating total download size..."), nil
-		}); err != nil {
+		if err := r.job.NoTxn().RunningStatus(ctx, jobs.RunningStatus("Calculating total download size...")); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
 		}
 
@@ -3265,9 +3262,8 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 			return err
 		}
 
-		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return jobs.RunningStatus(fmt.Sprintf("Downloading %s of restored data...", sz(total))), nil
-		}); err != nil {
+		status := jobs.RunningStatus(fmt.Sprintf("Downloading %s of restored data...", sz(total)))
+		if err := r.job.NoTxn().RunningStatus(ctx, status); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
 		}
 	}
