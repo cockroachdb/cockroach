@@ -213,12 +213,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			jobSpanCount += len(spanPartition.Spans)
 		}
 
-		jobRegistry := execCfg.JobRegistry
-		if err := jobRegistry.UpdateJobWithTxn(
-			ctx,
-			jobID,
-			nil,  /* txn */
-			true, /* useReadLock */
+		if err := t.job.NoTxn().Update(ctx,
 			func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				progress := md.Progress
 				rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
