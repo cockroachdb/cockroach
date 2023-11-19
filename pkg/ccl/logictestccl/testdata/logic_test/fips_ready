@@ -1,0 +1,14 @@
+subtest fips_ready
+
+# We do not have the plumbing that would let test cases know whether they are
+# running in a fips environment or not so this is just a very basic test to
+# make sure that all the registration, oids, etc work properly.
+query _
+SELECT crdb_internal.fips_ready()
+----
+_
+
+user testuser
+
+statement error pq: crdb_internal\.fips_ready\(\): user testuser does not have VIEWCLUSTERSETTING system privilege
+SELECT crdb_internal.fips_ready()
