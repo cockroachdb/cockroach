@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -293,11 +295,39 @@ func alterTenantJobCutover(
 				cutoverTime, record.Timestamp)
 		}
 	}
-	if err := applyCutoverTime(ctx, jobRegistry, txn, tenInfo.PhysicalReplicationConsumerJobID, cutoverTime); err != nil {
+	if err := applyCutoverTime(ctx, job, txn, cutoverTime); err != nil {
 		return hlc.Timestamp{}, err
 	}
 
 	return cutoverTime, nil
+}
+
+// applyCutoverTime modifies the consumer job record with a cutover time and
+// unpauses the job if necessary.
+func applyCutoverTime(
+	ctx context.Context, job *jobs.Job, txn isql.Txn, cutoverTimestamp hlc.Timestamp,
+) error {
+	log.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
+	if err := job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		progress := md.Progress.GetStreamIngest()
+		details := md.Payload.GetStreamIngestion()
+		if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
+			return errors.Newf("job %d already started cutting over to timestamp %s",
+				job.ID(), progress.CutoverTime)
+		}
+
+		progress.ReplicationStatus = jobspb.ReplicationPendingCutover
+		// Update the sentinel being polled by the stream ingestion job to
+		// check if a complete has been signaled.
+		progress.CutoverTime = cutoverTimestamp
+		progress.RemainingCutoverSpans = roachpb.Spans{details.Span}
+		ju.UpdateProgress(md.Progress)
+		return nil
+	}); err != nil {
+		return err
+	}
+	// Unpause the job if it is paused.
+	return job.WithTxn(txn).Unpaused(ctx)
 }
 
 func alterTenantOptions(
