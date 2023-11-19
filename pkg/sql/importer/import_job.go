@@ -756,9 +756,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		ctx, span = tracing.ChildSpan(ctx, "import-parsing-bundle-schema")
 		defer span.Finish()
 
-		if err := r.job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return runningStatusImportBundleParseSchema, nil
-		}); err != nil {
+		if err := r.job.NoTxn().RunningStatus(ctx, runningStatusImportBundleParseSchema); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
 		}
 
@@ -1123,9 +1121,8 @@ func (r *importResumer) checkVirtualConstraints(
 		desc.SetPublic()
 
 		if sql.HasVirtualUniqueConstraints(desc) {
-			if err := job.NoTxn().RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-				return jobs.RunningStatus(fmt.Sprintf("re-validating %s", desc.GetName())), nil
-			}); err != nil {
+			status := jobs.RunningStatus(fmt.Sprintf("re-validating %s", desc.GetName()))
+			if err := job.NoTxn().RunningStatus(ctx, status); err != nil {
 				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(job.ID()))
 			}
 		}
