@@ -43,22 +43,6 @@ type streamIngestManagerImpl struct {
 	sessionID   clusterunique.ID
 }
 
-// CompleteStreamIngestion implements streaming.StreamIngestManager interface.
-func (r *streamIngestManagerImpl) CompleteStreamIngestion(
-	ctx context.Context, ingestionJobID jobspb.JobID, cutoverTimestamp hlc.Timestamp,
-) error {
-	return applyCutoverTime(ctx, r.jobRegistry, r.txn, ingestionJobID, cutoverTimestamp)
-}
-
-// GetStreamIngestionStats implements streaming.StreamIngestManager interface.
-func (r *streamIngestManagerImpl) GetStreamIngestionStats(
-	ctx context.Context,
-	streamIngestionDetails jobspb.StreamIngestionDetails,
-	jobProgress jobspb.Progress,
-) (*streampb.StreamIngestionStats, error) {
-	return replicationutils.GetStreamIngestionStats(ctx, streamIngestionDetails, jobProgress)
-}
-
 // GetReplicationStatsAndStatus implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) GetReplicationStatsAndStatus(
 	ctx context.Context, ingestionJobID jobspb.JobID,
@@ -205,39 +189,6 @@ func newStreamIngestManagerWithPrivilegesCheck(
 		jobRegistry: execCfg.JobRegistry,
 		sessionID:   sessionID,
 	}, nil
-}
-
-// applyCutoverTime modifies the consumer job record with a cutover time and
-// unpauses the job if necessary.
-func applyCutoverTime(
-	ctx context.Context,
-	jobRegistry *jobs.Registry,
-	txn isql.Txn,
-	ingestionJobID jobspb.JobID,
-	cutoverTimestamp hlc.Timestamp,
-) error {
-	log.Infof(ctx, "adding cutover time %s to job record", cutoverTimestamp)
-	if err := jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false,
-		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			progress := md.Progress.GetStreamIngest()
-			details := md.Payload.GetStreamIngestion()
-			if progress.ReplicationStatus == jobspb.ReplicationCuttingOver {
-				return errors.Newf("job %d already started cutting over to timestamp %s",
-					ingestionJobID, progress.CutoverTime)
-			}
-
-			progress.ReplicationStatus = jobspb.ReplicationPendingCutover
-			// Update the sentinel being polled by the stream ingestion job to
-			// check if a complete has been signaled.
-			progress.CutoverTime = cutoverTimestamp
-			progress.RemainingCutoverSpans = roachpb.Spans{details.Span}
-			ju.UpdateProgress(md.Progress)
-			return nil
-		}); err != nil {
-		return err
-	}
-	// Unpause the job if it is paused.
-	return jobRegistry.Unpause(ctx, txn, ingestionJobID)
 }
 
 func getReplicationStatsAndStatus(

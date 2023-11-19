@@ -867,20 +867,7 @@ type ReplicationStreamManager interface {
 // StreamIngestManager represents a collection of APIs that streaming replication supports
 // on the ingestion side.
 type StreamIngestManager interface {
-	// CompleteStreamIngestion signals a running stream ingestion job to complete on the consumer side.
-	CompleteStreamIngestion(
-		ctx context.Context,
-		ingestionJobID jobspb.JobID,
-		cutoverTimestamp hlc.Timestamp,
-	) error
-
 	// GetStreamIngestionStats gets a statistics summary for a stream ingestion job.
-	GetStreamIngestionStats(
-		ctx context.Context,
-		streamIngestionDetails jobspb.StreamIngestionDetails,
-		jobProgress jobspb.Progress,
-	) (*streampb.StreamIngestionStats, error)
-
 	GetReplicationStatsAndStatus(
 		ctx context.Context,
 		ingestionJobID jobspb.JobID,
