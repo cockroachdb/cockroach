@@ -64,7 +64,7 @@ type Job struct {
 	}
 }
 
-// CreatedByInfo encapsulates they type and the ID of the system which created
+// CreatedByInfo encapsulates the type and the ID of the system which created
 // this job.
 type CreatedByInfo struct {
 	Name string
@@ -277,18 +277,6 @@ func (u Updater) CheckStatus(ctx context.Context) error {
 	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, _ *JobUpdater) error {
 		return md.CheckRunningOrReverting()
 	})
-}
-
-// CheckTerminalStatus returns true if the job is in a terminal status.
-func (u Updater) CheckTerminalStatus(ctx context.Context) bool {
-	err := u.Update(ctx, func(_ isql.Txn, md JobMetadata, _ *JobUpdater) error {
-		if !md.Status.Terminal() {
-			return &InvalidStatusError{md.ID, md.Status, "checking that job status is success", md.Payload.Error}
-		}
-		return nil
-	})
-
-	return err == nil
 }
 
 // RunningStatus updates the detailed status of a job currently in progress.
