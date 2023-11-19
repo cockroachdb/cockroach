@@ -337,3 +337,7 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 	require.True(t, errors.Is(err, catalog.ErrDescriptorDropped),
 		"expected dropped descriptor error, found: %v", err)
 }
+
+// TODO(yang): Write a test where the lease manager returns a error (e.g. GC TTL).
+
+// TODO(yang): Write a test with various combinations of locking and unlocking.
