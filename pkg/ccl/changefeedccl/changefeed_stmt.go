@@ -1653,8 +1653,7 @@ func maybeUpgradePreProductionReadyExpression(
 	}
 	details.Select = cdceval.AsStringUnredacted(newExpression)
 
-	const useReadLock = false
-	if err := jobExec.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, nil, useReadLock,
+	if err := jobExec.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, nil, /* txn */
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			payload := md.Payload
 			payload.Details = jobspb.WrapPayloadDetails(details)

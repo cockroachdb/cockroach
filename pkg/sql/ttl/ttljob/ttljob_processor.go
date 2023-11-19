@@ -241,8 +241,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	return jobRegistry.UpdateJobWithTxn(
 		ctx,
 		jobID,
-		nil,  /* txn */
-		true, /* useReadLock */
+		nil, /* txn */
 		func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
 			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL

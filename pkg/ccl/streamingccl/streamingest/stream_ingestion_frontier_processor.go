@@ -421,7 +421,7 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 
 	sf.lastPartitionUpdate = timeutil.Now()
 	log.VInfof(ctx, 2, "persisting replicated time of %s", replicatedTime)
-	if err := registry.UpdateJobWithTxn(ctx, jobID, nil, false, func(
+	if err := registry.UpdateJobWithTxn(ctx, jobID, nil /* txn */, func(
 		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
