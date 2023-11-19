@@ -969,11 +969,8 @@ func (sc *SchemaChanger) distIndexBackfill(
 
 	writeAsOf := sc.job.Details().(jobspb.SchemaChangeDetails).WriteTimestamp
 	if writeAsOf.IsEmpty() {
-		if err := sc.job.NoTxn().RunningStatus(ctx, func(
-			_ context.Context, _ jobspb.Details,
-		) (jobs.RunningStatus, error) {
-			return jobs.RunningStatus("scanning target index for in-progress transactions"), nil
-		}); err != nil {
+		status := jobs.RunningStatus("scanning target index for in-progress transactions")
+		if err := sc.job.NoTxn().RunningStatus(ctx, status); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
 		writeAsOf = sc.clock.Now()
@@ -1012,11 +1009,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		}); err != nil {
 			return err
 		}
-		if err := sc.job.NoTxn().RunningStatus(ctx, func(
-			_ context.Context, _ jobspb.Details,
-		) (jobs.RunningStatus, error) {
-			return RunningStatusBackfill, nil
-		}); err != nil {
+		if err := sc.job.NoTxn().RunningStatus(ctx, RunningStatusBackfill); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 		}
 	} else {
@@ -1424,11 +1417,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 			}
 		}
 		if updateJobRunningProgress && !tableDesc.Dropped() {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(
-				ctx context.Context, details jobspb.Details,
-			) (jobs.RunningStatus, error) {
-				return status, nil
-			}); err != nil {
+			if err := sc.job.WithTxn(txn).RunningStatus(ctx, status); err != nil {
 				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
 			}
 		}
@@ -2381,11 +2370,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(
-				ctx context.Context, details jobspb.Details,
-			) (jobs.RunningStatus, error) {
-				return runStatus, nil
-			}); err != nil {
+			if err := sc.job.WithTxn(txn).RunningStatus(ctx, runStatus); err != nil {
 				return errors.Wrap(err, "failed to update job status")
 			}
 		}
