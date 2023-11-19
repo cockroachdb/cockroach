@@ -532,7 +532,7 @@ func cancelJob(
 		// Using this way of canceling because the migration job us non-cancelable.
 		// Canceling in this way skips the check.
 		return s.JobRegistry().(*jobs.Registry).UpdateJobWithTxn(
-			ctx, jobID, txn, false /* useReadLock */, func(
+			ctx, jobID, txn, func(
 				txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 			) error {
 				ju.UpdateStatus(jobs.StatusCancelRequested)
