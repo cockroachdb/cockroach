@@ -66,8 +66,7 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 			if err != nil {
 				return false, err
 			}
-			isTerminal := j.WithTxn(txn).CheckTerminalStatus(ctx)
-			return isTerminal, nil
+			return j.Status().Terminal(), nil
 		}
 	case Schedules:
 		return func(ctx context.Context, txn isql.Txn, meta []byte) (shouldRemove bool, _ error) {
