@@ -52,13 +52,6 @@ func (j *Job) WithTxn(txn isql.Txn) Updater {
 	return Updater{j: j, txn: txn}
 }
 
-func (j *Job) maybeWithTxn(txn isql.Txn) Updater {
-	if txn != nil {
-		return j.WithTxn(txn)
-	}
-	return j.NoTxn()
-}
-
 func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 	if u.txn == nil {
 		return u.j.registry.db.Txn(ctx, func(
