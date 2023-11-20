@@ -1002,7 +1002,7 @@ available replica will error.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
 </span></td><td>Immutable</td></tr>
-<tr><td><a name="metaphone"></a><code>metaphone(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compute ‘sound-like’ string from the input string.</p>
+<tr><td><a name="metaphone"></a><code>metaphone(source: <a href="string.html">string</a>, max_output_length: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Compute ‘sound-like’ string from the input string.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="soundex"></a><code>soundex(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a string to its Soundex code.</p>
 </span></td><td>Immutable</td></tr></tbody>

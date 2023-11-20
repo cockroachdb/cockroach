@@ -3958,16 +3958,25 @@ value if you rely on the HLC for accuracy.`,
 	"metaphone":              makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}},
+			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}, {Name: "max_output_length", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				const maxLen = 255
+				const maxDefaultLen = 255
 				s := string(tree.MustBeDString(args[0]))
-				if (len(s) > maxLen) {
+				maxOutputLen := int(tree.MustBeDInt(args[1]))
+				if len(s) > maxDefaultLen {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-						"metaphone argument exceeds maximum length of %d characters", maxLen)
+						"argument exceeds maximum length of %d characters", maxDefaultLen)
 				}
-				m := fuzzystrmatch.Metaphone(s)
+				if maxOutputLen > maxDefaultLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"output exceeds maximum length of %d characters", maxDefaultLen)
+				}
+				if maxOutputLen < 0 {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"output length must be > 0")
+				}
+				m := fuzzystrmatch.Metaphone(s, maxDefaultLen)
 				return tree.NewDString(m), nil
 			},
 			Info: 		"Compute 'sound-like' string from the input string.",
