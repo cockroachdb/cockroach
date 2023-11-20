@@ -12,6 +12,7 @@ go_library(
         "optype.go",
         "query_util.go",
         "schemachange.go",
+        "tracing.go",
         "type_resolver.go",
         "watch_dog.go",
         ":gen-optype-stringer",  # keep
@@ -45,6 +46,10 @@ go_library(
         "@com_github_jackc_pgx_v5//pgxpool",
         "@com_github_lib_pq//oid",
         "@com_github_spf13_pflag//:pflag",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@io_opentelemetry_go_otel_sdk//trace",
+        "@io_opentelemetry_go_otel_trace//:trace",
         "@org_golang_x_exp//slices",
     ],
 )
