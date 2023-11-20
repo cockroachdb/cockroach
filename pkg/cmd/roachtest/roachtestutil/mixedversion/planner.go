@@ -41,7 +41,6 @@ type (
 	// a test plan from the given rng and user-provided hooks.
 	testPlanner struct {
 		stepCount      int
-		startClusterID int
 		versions       []*clusterupgrade.Version
 		currentContext *Context
 		crdbNodes      option.NodeListOption
@@ -111,7 +110,7 @@ const (
 //     - AfterUpgradeFinalizedStage: run after-upgrade hooks.
 func (p *testPlanner) Plan() *TestPlan {
 	initSteps := append([]testStep{}, p.testSetupSteps()...)
-	initSteps = append(initSteps, p.hooks.BackgroundSteps(p.nextID, p.longRunningContext(), p.bgChans)...)
+	initSteps = append(initSteps, p.hooks.BackgroundSteps(p.longRunningContext(), p.bgChans)...)
 
 	var upgrades []*upgradePlan
 	for prevVersionIdx := 0; prevVersionIdx+1 < len(p.versions); prevVersionIdx++ {
@@ -139,11 +138,13 @@ func (p *testPlanner) Plan() *TestPlan {
 		upgrades = append(upgrades, plan)
 	}
 
-	return &TestPlan{
-		initSteps:      initSteps,
-		startClusterID: p.startClusterID,
-		upgrades:       upgrades,
+	testPlan := &TestPlan{
+		initSteps: initSteps,
+		upgrades:  upgrades,
 	}
+
+	testPlan.assignIDs()
+	return testPlan
 }
 
 func (p *testPlanner) longRunningContext() *Context {
@@ -160,29 +161,27 @@ func (p *testPlanner) testSetupSteps() []testStep {
 	if p.prng.Float64() < p.options.useFixturesProbability {
 		steps = []testStep{
 			p.newSingleStep(
-				installFixturesStep{id: p.nextID(), version: initialVersion, crdbNodes: p.crdbNodes},
+				installFixturesStep{version: initialVersion, crdbNodes: p.crdbNodes},
 			),
 		}
 	}
 
-	p.startClusterID = p.nextID()
 	steps = append(steps,
 		p.newSingleStep(startStep{
-			id:        p.startClusterID,
 			version:   initialVersion,
 			rt:        p.rt,
 			crdbNodes: p.crdbNodes,
 			settings:  p.clusterSettings(),
 		}),
 		p.newSingleStep(waitForStableClusterVersionStep{
-			id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout,
+			nodes: p.crdbNodes, timeout: p.options.upgradeTimeout,
 		}),
 	)
 
 	p.currentContext.Stage = OnStartupStage
 	return append(
 		steps,
-		p.hooks.StartupSteps(p.nextID, p.longRunningContext())...,
+		p.hooks.StartupSteps(p.longRunningContext())...,
 	)
 }
 
@@ -193,7 +192,7 @@ func (p *testPlanner) initUpgradeSteps() []testStep {
 	p.currentContext.Stage = InitUpgradeStage
 	return []testStep{
 		p.newSingleStep(
-			preserveDowngradeOptionStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
+			preserveDowngradeOptionStep{prng: p.newRNG(), crdbNodes: p.crdbNodes},
 		),
 	}
 }
@@ -205,7 +204,7 @@ func (p *testPlanner) initUpgradeSteps() []testStep {
 func (p *testPlanner) afterUpgradeSteps(fromVersion, toVersion *clusterupgrade.Version) []testStep {
 	p.currentContext.Finalizing = false
 	p.currentContext.Stage = AfterUpgradeFinalizedStage
-	return p.hooks.AfterUpgradeFinalizedSteps(p.nextID, p.currentContext)
+	return p.hooks.AfterUpgradeFinalizedSteps(p.currentContext)
 }
 
 func (p *testPlanner) upgradeSteps(
@@ -240,10 +239,10 @@ func (p *testPlanner) changeVersionSteps(
 	var steps []testStep
 	for _, node := range previousVersionNodes {
 		steps = append(steps, p.newSingleStep(
-			restartWithNewBinaryStep{id: p.nextID(), version: to, node: node, rt: p.rt, settings: p.clusterSettings()},
+			restartWithNewBinaryStep{version: to, node: node, rt: p.rt, settings: p.clusterSettings()},
 		))
 		p.currentContext.changeVersion(node, to)
-		steps = append(steps, p.hooks.MixedVersionSteps(p.currentContext, p.nextID)...)
+		steps = append(steps, p.hooks.MixedVersionSteps(p.currentContext)...)
 	}
 
 	return []testStep{sequentialRunStep{label: label, steps: steps}}
@@ -259,11 +258,11 @@ func (p *testPlanner) finalizeUpgradeSteps(
 	p.currentContext.Finalizing = true
 	p.currentContext.Stage = RunningUpgradeMigrationsStage
 	runMigrations := p.newSingleStep(
-		finalizeUpgradeStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
+		finalizeUpgradeStep{prng: p.newRNG(), crdbNodes: p.crdbNodes},
 	)
-	mixedVersionStepsDuringMigrations := p.hooks.MixedVersionSteps(p.currentContext, p.nextID)
+	mixedVersionStepsDuringMigrations := p.hooks.MixedVersionSteps(p.currentContext)
 	waitForMigrations := p.newSingleStep(
-		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
+		waitForStableClusterVersionStep{nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
 	)
 
 	return append(
@@ -288,13 +287,8 @@ func (p *testPlanner) shouldRollback(toVersion *clusterupgrade.Version) bool {
 	return p.prng.Float64() < rollbackIntermediateUpgradesProbability
 }
 
-func (p *testPlanner) newSingleStep(impl singleStepProtocol) singleStep {
+func (p *testPlanner) newSingleStep(impl singleStepProtocol) *singleStep {
 	return newSingleStep(p.currentContext, impl)
-}
-
-func (p *testPlanner) nextID() int {
-	p.stepCount++
-	return p.stepCount
 }
 
 func (p *testPlanner) clusterSettings() []install.ClusterSettingOption {
@@ -320,6 +314,45 @@ func newUpgradePlan(from, to *clusterupgrade.Version) *upgradePlan {
 
 func (up *upgradePlan) Add(steps []testStep) {
 	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
+}
+
+// assignIDs iterates over each `singleStep` in the test plan, and
+// assigns them a unique numeric ID. These IDs are not necessary for
+// correctness, but are nice to have when debugging failures and
+// matching output from a step to where it happens in the test plan.
+func (plan *TestPlan) assignIDs() {
+	var currentID int
+	nextID := func() int {
+		currentID++
+		return currentID
+	}
+
+	var assignIDsToSteps func([]testStep)
+	assignIDsToSteps = func(steps []testStep) {
+		for _, step := range steps {
+			switch s := step.(type) {
+			case sequentialRunStep:
+				assignIDsToSteps(s.steps)
+			case concurrentRunStep:
+				assignIDsToSteps(s.delayedSteps)
+			case delayedStep:
+				assignIDsToSteps([]testStep{s.step})
+			default:
+				ss := s.(*singleStep)
+				stepID := nextID()
+				if _, ok := ss.impl.(startStep); ok && plan.startClusterID == 0 {
+					plan.startClusterID = stepID
+				}
+
+				ss.ID = stepID
+			}
+		}
+	}
+
+	assignIDsToSteps(plan.initSteps)
+	for _, upgrade := range plan.upgrades {
+		assignIDsToSteps(upgrade.sequentialStep.steps)
+	}
 }
 
 // Steps returns a list of all steps involved in carrying out the
@@ -390,7 +423,7 @@ func (plan *TestPlan) prettyPrintStep(
 	// there's a delay associated with the step (in the case of
 	// concurrent execution), and what database node the step is
 	// connecting to.
-	writeSingle := func(ss singleStep, extraContext ...string) {
+	writeSingle := func(ss *singleStep, extraContext ...string) {
 		var extras string
 		if contextStr := strings.Join(extraContext, ", "); contextStr != "" {
 			extras = ", " + contextStr
@@ -403,7 +436,7 @@ func (plan *TestPlan) prettyPrintStep(
 		}
 
 		out.WriteString(fmt.Sprintf(
-			"%s %s%s (%d)%s\n", prefix, ss.impl.Description(), extras, ss.impl.ID(), debugInfo,
+			"%s %s%s (%d)%s\n", prefix, ss.impl.Description(), extras, ss.ID, debugInfo,
 		))
 	}
 
@@ -414,9 +447,9 @@ func (plan *TestPlan) prettyPrintStep(
 		writeNested(s.Description(), s.delayedSteps)
 	case delayedStep:
 		delayStr := fmt.Sprintf("after %s delay", s.delay)
-		writeSingle(s.step.(singleStep), delayStr)
+		writeSingle(s.step.(*singleStep), delayStr)
 	default:
-		writeSingle(s.(singleStep))
+		writeSingle(s.(*singleStep))
 	}
 }
 
