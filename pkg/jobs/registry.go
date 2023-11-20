@@ -1286,7 +1286,7 @@ func (r *Registry) cancelRequested(ctx context.Context, txn isql.Txn, id jobspb.
 	if err != nil {
 		return err
 	}
-	return job.maybeWithTxn(txn).CancelRequested(ctx)
+	return job.WithTxn(txn).CancelRequested(ctx)
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
