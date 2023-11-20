@@ -46,6 +46,7 @@ go_library(
         "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/backupccl/backupresolver",
         "//pkg/ccl/backupccl/backuputils",
+        "//pkg/ccl/kvccl/kvfollowerreadsccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/utilccl",
