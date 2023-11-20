@@ -1216,7 +1216,7 @@ func checkContinuousChangefeedLogs(t *testing.T, startTime int64) []eventpb.Chan
 // after startTime for a particular job and asserts that at least one message has positive emitted bytes.
 // This function also asserts the LoggingInterval and Closing fields of
 // each message.
-func verifyLogsWithEmittedBytes(
+func verifyLogsWithEmittedBytesAndMessages(
 	t *testing.T, jobID jobspb.JobID, startTime int64, interval int64, closing bool,
 ) {
 	testutils.SucceedsSoon(t, func() error {
@@ -1224,22 +1224,24 @@ func verifyLogsWithEmittedBytes(
 		if len(emittedBytesLogs) == 0 {
 			return errors.New("no logs found")
 		}
-		emittedBytes := false
+		var emittedBytes int64 = 0
+		var emittedMessages int64 = 0
 		for _, msg := range emittedBytesLogs {
 			if msg.JobId != int64(jobID) {
 				continue
 			}
 
-			if msg.EmittedBytes > 0 {
-				emittedBytes = true
-			}
+			emittedBytes += msg.EmittedBytes
+			emittedMessages += msg.EmittedMessages
 			require.Equal(t, interval, msg.LoggingInterval)
 			if closing {
 				require.Equal(t, true, msg.Closing)
 			}
 		}
-		if !emittedBytes {
-			return errors.New("expected emitted bytes in log messages, but found 0")
+		if emittedBytes == 0 || emittedMessages == 0 {
+			return errors.Newf(
+				"expected some emitted messages and bytes in log messages, but found %d messages and %d bytes",
+				emittedMessages, emittedBytes)
 		}
 		return nil
 	})

@@ -119,6 +119,7 @@ export default function (props: GraphDashboardProps) {
     <LineGraph
       title="Replicas per Node"
       tenantSource={tenantSource}
+      isKvGraph={true}
       tooltip={
         <div>
           The number of range replicas stored on this node.{" "}
