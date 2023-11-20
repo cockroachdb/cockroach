@@ -2154,8 +2154,8 @@ func (c *clusterImpl) Wipe(ctx context.Context, preserveCerts bool, nodes ...opt
 }
 
 // Run a command on the specified nodes and call test.Fatal if there is an error.
-func (c *clusterImpl) Run(ctx context.Context, node option.NodeListOption, args ...string) {
-	err := c.RunE(ctx, node, args...)
+func (c *clusterImpl) Run(ctx context.Context, nodes option.NodeListOption, args ...string) {
+	err := c.RunE(ctx, nodes, args...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -2169,6 +2169,7 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 	if len(args) == 0 {
 		return errors.New("No command passed")
 	}
+
 	l, logFile, err := c.loggerForCmd(nodes, args...)
 	if err != nil {
 		return err
@@ -2178,7 +2179,10 @@ func (c *clusterImpl) RunE(ctx context.Context, nodes option.NodeListOption, arg
 	cmd := strings.Join(args, " ")
 	c.t.L().Printf("running cmd `%s` on nodes [%v]; details in %s.log", roachprod.TruncateString(cmd, 30), nodes, logFile)
 	l.Printf("> %s", cmd)
-	if err := roachprod.Run(ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(), l.Stdout, l.Stderr, args); err != nil {
+	if err := roachprod.Run(
+		ctx, l, c.MakeNodes(nodes), "", "", c.IsSecure(),
+		l.Stdout, l.Stderr, args, install.OnNodes(nodes.InstallNodes()),
+	); err != nil {
 		if err := ctx.Err(); err != nil {
 			l.Printf("(note: incoming context was canceled: %s)", err)
 			return err
@@ -2234,7 +2238,10 @@ func (c *clusterImpl) RunWithDetails(
 	}
 
 	l.Printf("> %s", cmd)
-	results, err := roachprod.RunWithDetails(ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "" /* processTag */, c.IsSecure(), args)
+	results, err := roachprod.RunWithDetails(
+		ctx, l, c.MakeNodes(nodes), "" /* SSHOptions */, "", /* processTag */
+		c.IsSecure(), args, install.OnNodes(nodes.InstallNodes()),
+	)
 
 	var logFileFull string
 	if l.File != nil {

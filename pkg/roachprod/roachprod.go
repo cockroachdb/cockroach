@@ -359,7 +359,7 @@ func Run(
 	secure bool,
 	stdout, stderr io.Writer,
 	cmdArray []string,
-	opts ...install.ParallelOption,
+	options install.RunOptions,
 ) error {
 	if err := LoadClusters(); err != nil {
 		return err
@@ -374,9 +374,13 @@ func Run(
 	if len(cmdArray) == 0 {
 		return c.SSH(ctx, l, strings.Split(SSHOptions, " "), cmdArray)
 	}
+	// If no nodes were specified, run on nodes derived from the clusterName.
+	if len(options.Nodes) == 0 {
+		options.Nodes = c.TargetNodes()
+	}
 
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
-	return c.Run(ctx, l, stdout, stderr, c.Nodes, TruncateString(cmd, 30), cmd, opts...)
+	return c.Run(ctx, l, stdout, stderr, options, TruncateString(cmd, 30), cmd)
 }
 
 // RunWithDetails runs a command on the nodes in a cluster.
@@ -386,6 +390,7 @@ func RunWithDetails(
 	clusterName, SSHOptions, processTag string,
 	secure bool,
 	cmdArray []string,
+	options install.RunOptions,
 ) ([]install.RunResultDetails, error) {
 	if err := LoadClusters(); err != nil {
 		return nil, err
@@ -400,9 +405,12 @@ func RunWithDetails(
 	if len(cmdArray) == 0 {
 		return nil, c.SSH(ctx, l, strings.Split(SSHOptions, " "), cmdArray)
 	}
-
+	// If no nodes were specified, run on nodes derived from the clusterName.
+	if len(options.Nodes) == 0 {
+		options.Nodes = c.TargetNodes()
+	}
 	cmd := strings.TrimSpace(strings.Join(cmdArray, " "))
-	return c.RunWithDetails(ctx, l, c.Nodes, TruncateString(cmd, 30), cmd)
+	return c.RunWithDetails(ctx, l, options, TruncateString(cmd, 30), cmd)
 }
 
 // SQL runs `cockroach sql` on a remote cluster. If a single node is passed,
@@ -807,7 +815,7 @@ func Reformat(ctx context.Context, l *logger.Logger, clusterName string, fs stri
 		return fmt.Errorf("unknown filesystem %q", fs)
 	}
 
-	err = c.Run(ctx, l, os.Stdout, os.Stderr, c.Nodes, "reformatting", fmt.Sprintf(`
+	err = c.Run(ctx, l, os.Stdout, os.Stderr, install.OnNodes(c.Nodes), "reformatting", fmt.Sprintf(`
 set -euo pipefail
 if sudo zpool list -Ho name 2>/dev/null | grep ^data1$; then
 sudo zpool destroy -f data1
@@ -1106,71 +1114,72 @@ func Pprof(ctx context.Context, l *logger.Logger, clusterName string, opts Pprof
 
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
-	err = c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
-		res := &install.RunResultDetails{Node: node}
-		host := c.Host(node)
-		port, err := c.NodeUIPort(ctx, node)
-		if err != nil {
-			return nil, err
-		}
-		scheme := "http"
-		if c.Secure {
-			scheme = "https"
-		}
-		outputFile := fmt.Sprintf("pprof-%s-%d-%s-%04d.out", profType, startTime, c.Name, node)
-		outputDir := filepath.Dir(outputFile)
-		file, err := os.CreateTemp(outputDir, ".pprof")
-		if err != nil {
-			res.Err = errors.Wrap(err, "create tmpfile for pprof download")
-			return res, res.Err
-		}
-
-		defer func() {
-			err := file.Close()
-			if err != nil && !errors.Is(err, oserror.ErrClosed) {
-				l.Errorf("warning: could not close temporary file")
+	err = c.Parallel(ctx, l, install.OnNodes(c.TargetNodes()).WithDisplay(description),
+		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
+			res := &install.RunResultDetails{Node: node}
+			host := c.Host(node)
+			port, err := c.NodeUIPort(ctx, node)
+			if err != nil {
+				return nil, err
 			}
-			err = os.Remove(file.Name())
-			if err != nil && !oserror.IsNotExist(err) {
-				l.Errorf("warning: could not remove temporary file")
+			scheme := "http"
+			if c.Secure {
+				scheme = "https"
 			}
-		}()
+			outputFile := fmt.Sprintf("pprof-%s-%d-%s-%04d.out", profType, startTime, c.Name, node)
+			outputDir := filepath.Dir(outputFile)
+			file, err := os.CreateTemp(outputDir, ".pprof")
+			if err != nil {
+				res.Err = errors.Wrap(err, "create tmpfile for pprof download")
+				return res, res.Err
+			}
 
-		pprofURL := fmt.Sprintf("%s://%s:%d/%s", scheme, host, port, pprofPath)
-		resp, err := httpClient.Get(context.Background(), pprofURL)
-		if err != nil {
-			res.Err = err
-			return res, res.Err
-		}
-		defer resp.Body.Close()
+			defer func() {
+				err := file.Close()
+				if err != nil && !errors.Is(err, oserror.ErrClosed) {
+					l.Errorf("warning: could not close temporary file")
+				}
+				err = os.Remove(file.Name())
+				if err != nil && !oserror.IsNotExist(err) {
+					l.Errorf("warning: could not remove temporary file")
+				}
+			}()
 
-		if resp.StatusCode != http.StatusOK {
-			res.Err = errors.Newf("unexpected status from pprof endpoint: %s", resp.Status)
-			return res, res.Err
-		}
+			pprofURL := fmt.Sprintf("%s://%s:%d/%s", scheme, host, port, pprofPath)
+			resp, err := httpClient.Get(context.Background(), pprofURL)
+			if err != nil {
+				res.Err = err
+				return res, res.Err
+			}
+			defer resp.Body.Close()
 
-		if _, err := io.Copy(file, resp.Body); err != nil {
-			res.Err = err
-			return res, res.Err
-		}
-		if err := file.Sync(); err != nil {
-			res.Err = err
-			return res, res.Err
-		}
-		if err := file.Close(); err != nil {
-			res.Err = err
-			return res, res.Err
-		}
-		if err := os.Rename(file.Name(), outputFile); err != nil {
-			res.Err = err
-			return res, res.Err
-		}
+			if resp.StatusCode != http.StatusOK {
+				res.Err = errors.Newf("unexpected status from pprof endpoint: %s", resp.Status)
+				return res, res.Err
+			}
 
-		mu.Lock()
-		outputFiles = append(outputFiles, outputFile)
-		mu.Unlock()
-		return res, nil
-	}, install.WithDisplay(description))
+			if _, err := io.Copy(file, resp.Body); err != nil {
+				res.Err = err
+				return res, res.Err
+			}
+			if err := file.Sync(); err != nil {
+				res.Err = err
+				return res, res.Err
+			}
+			if err := file.Close(); err != nil {
+				res.Err = err
+				return res, res.Err
+			}
+			if err := os.Rename(file.Name(), outputFile); err != nil {
+				res.Err = err
+				return res, res.Err
+			}
+
+			mu.Lock()
+			outputFiles = append(outputFiles, outputFile)
+			mu.Unlock()
+			return res, nil
+		})
 
 	for _, s := range outputFiles {
 		l.Printf("Created %s", s)
@@ -1700,75 +1709,76 @@ func CreateSnapshot(
 		syncutil.Mutex
 		snapshots []vm.VolumeSnapshot
 	}{}
-	if err := c.Parallel(ctx, l, nodes, func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
-		res := &install.RunResultDetails{Node: node}
+	if err := c.Parallel(ctx, l, install.OnNodes(nodes),
+		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
+			res := &install.RunResultDetails{Node: node}
 
-		cVM := c.VMs[node-1]
-		crdbVersion := statusByNodeID[int(node)].Version
-		if crdbVersion == "" {
-			crdbVersion = "unknown"
-		}
-		crdbVersion = strings.TrimPrefix(crdbVersion, "cockroach-")
-		// N.B. snapshot name cannot exceed 63 characters, so we use short sha for dev version.
-		if index := strings.Index(crdbVersion, "dev-"); index != -1 {
-			sha := crdbVersion[index+4:]
-			if len(sha) > 7 {
-				crdbVersion = crdbVersion[:index+4] + sha[:7]
+			cVM := c.VMs[node-1]
+			crdbVersion := statusByNodeID[int(node)].Version
+			if crdbVersion == "" {
+				crdbVersion = "unknown"
 			}
-		}
-
-		labels := map[string]string{
-			"roachprod-node-src-spec": cVM.MachineType,
-			"roachprod-cluster-node":  cVM.Name,
-			"roachprod-crdb-version":  crdbVersion,
-			vm.TagCluster:             clusterName,
-			vm.TagRoachprod:           "true",
-			vm.TagLifetime:            SnapshotTTL.String(),
-			vm.TagCreated: strings.ToLower(
-				strings.ReplaceAll(timeutil.Now().Format(time.RFC3339), ":", "_")), // format according to gce label naming requirements
-		}
-		for k, v := range vsco.Labels {
-			labels[k] = v
-		}
-
-		if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
-			volumes, err := provider.ListVolumes(l, &cVM)
-			if err != nil {
-				return err
-			}
-
-			if len(volumes) == 0 {
-				return fmt.Errorf("node %d does not have any non-bootable persistent volumes attached", node)
-			}
-
-			for _, volume := range volumes {
-				snapshotFingerprintInfix := strings.ReplaceAll(
-					fmt.Sprintf("%s-n%d", crdbVersion, len(nodes)), ".", "-")
-				snapshotName := fmt.Sprintf("%s-%s-%04d", vsco.Name, snapshotFingerprintInfix, node)
-				if len(snapshotName) > 63 {
-					return fmt.Errorf("snapshot name %q exceeds 63 characters; shorten name prefix and use description arg. for more context", snapshotName)
+			crdbVersion = strings.TrimPrefix(crdbVersion, "cockroach-")
+			// N.B. snapshot name cannot exceed 63 characters, so we use short sha for dev version.
+			if index := strings.Index(crdbVersion, "dev-"); index != -1 {
+				sha := crdbVersion[index+4:]
+				if len(sha) > 7 {
+					crdbVersion = crdbVersion[:index+4] + sha[:7]
 				}
-				volumeSnapshot, err := provider.CreateVolumeSnapshot(l, volume,
-					vm.VolumeSnapshotCreateOpts{
-						Name:        snapshotName,
-						Labels:      labels,
-						Description: vsco.Description,
-					})
+			}
+
+			labels := map[string]string{
+				"roachprod-node-src-spec": cVM.MachineType,
+				"roachprod-cluster-node":  cVM.Name,
+				"roachprod-crdb-version":  crdbVersion,
+				vm.TagCluster:             clusterName,
+				vm.TagRoachprod:           "true",
+				vm.TagLifetime:            SnapshotTTL.String(),
+				vm.TagCreated: strings.ToLower(
+					strings.ReplaceAll(timeutil.Now().Format(time.RFC3339), ":", "_")), // format according to gce label naming requirements
+			}
+			for k, v := range vsco.Labels {
+				labels[k] = v
+			}
+
+			if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
+				volumes, err := provider.ListVolumes(l, &cVM)
 				if err != nil {
 					return err
 				}
-				l.Printf("created volume snapshot %s (id=%s) for volume %s on %s/n%d\n",
-					volumeSnapshot.Name, volumeSnapshot.ID, volume.Name, volume.ProviderResourceID, node)
-				volumesSnapshotMu.Lock()
-				volumesSnapshotMu.snapshots = append(volumesSnapshotMu.snapshots, volumeSnapshot)
-				volumesSnapshotMu.Unlock()
+
+				if len(volumes) == 0 {
+					return fmt.Errorf("node %d does not have any non-bootable persistent volumes attached", node)
+				}
+
+				for _, volume := range volumes {
+					snapshotFingerprintInfix := strings.ReplaceAll(
+						fmt.Sprintf("%s-n%d", crdbVersion, len(nodes)), ".", "-")
+					snapshotName := fmt.Sprintf("%s-%s-%04d", vsco.Name, snapshotFingerprintInfix, node)
+					if len(snapshotName) > 63 {
+						return fmt.Errorf("snapshot name %q exceeds 63 characters; shorten name prefix and use description arg. for more context", snapshotName)
+					}
+					volumeSnapshot, err := provider.CreateVolumeSnapshot(l, volume,
+						vm.VolumeSnapshotCreateOpts{
+							Name:        snapshotName,
+							Labels:      labels,
+							Description: vsco.Description,
+						})
+					if err != nil {
+						return err
+					}
+					l.Printf("created volume snapshot %s (id=%s) for volume %s on %s/n%d\n",
+						volumeSnapshot.Name, volumeSnapshot.ID, volume.Name, volume.ProviderResourceID, node)
+					volumesSnapshotMu.Lock()
+					volumesSnapshotMu.snapshots = append(volumesSnapshotMu.snapshots, volumeSnapshot)
+					volumesSnapshotMu.Unlock()
+				}
+				return nil
+			}); err != nil {
+				res.Err = err
 			}
-			return nil
+			return res, nil
 		}); err != nil {
-			res.Err = err
-		}
-		return res, nil
-	}); err != nil {
 		return nil, err
 	}
 
@@ -1819,97 +1829,99 @@ func ApplySnapshots(
 	}
 
 	// Detach and delete existing volumes. This is destructive.
-	if err := c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
-		res := &install.RunResultDetails{Node: node}
+	if err := c.Parallel(ctx, l, install.OnNodes(c.TargetNodes()),
+		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
+			res := &install.RunResultDetails{Node: node}
 
-		cVM := &c.VMs[node-1]
-		if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
-			volumes, err := provider.ListVolumes(l, cVM)
-			if err != nil {
-				return err
-			}
-			for _, volume := range volumes {
-				if err := provider.DeleteVolume(l, volume, cVM); err != nil {
+			cVM := &c.VMs[node-1]
+			if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
+				volumes, err := provider.ListVolumes(l, cVM)
+				if err != nil {
 					return err
 				}
-				l.Printf("detached and deleted volume %s from %s", volume.ProviderResourceID, cVM.Name)
+				for _, volume := range volumes {
+					if err := provider.DeleteVolume(l, volume, cVM); err != nil {
+						return err
+					}
+					l.Printf("detached and deleted volume %s from %s", volume.ProviderResourceID, cVM.Name)
+				}
+				return nil
+			}); err != nil {
+				res.Err = err
 			}
-			return nil
+			return res, nil
 		}); err != nil {
-			res.Err = err
-		}
-		return res, nil
-	}); err != nil {
 		return err
 	}
 
-	return c.Parallel(ctx, l, c.TargetNodes(), func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
-		res := &install.RunResultDetails{Node: node}
+	return c.Parallel(ctx, l, install.OnNodes(c.TargetNodes()),
+		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
+			res := &install.RunResultDetails{Node: node}
 
-		volumeOpts := opts // make a copy
-		volumeOpts.Labels = map[string]string{}
-		for k, v := range opts.Labels {
-			volumeOpts.Labels[k] = v
-		}
-
-		// TODO: same issue as above if the target nodes are not sequential starting from 1
-		cVM := &c.VMs[node-1]
-		if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
-			volumeOpts.Zone = cVM.Zone
-			// NB: The "-1" signifies that it's the first attached non-boot volume.
-			// This is typical naming convention in GCE clusters.
-			volumeOpts.Name = fmt.Sprintf("%s-%04d-1", clusterName, node)
-			volumeOpts.SourceSnapshotID = snapshots[node-1].ID
-
-			volumes, err := provider.ListVolumes(l, cVM)
-			if err != nil {
-				return err
+			volumeOpts := opts // make a copy
+			volumeOpts.Labels = map[string]string{}
+			for k, v := range opts.Labels {
+				volumeOpts.Labels[k] = v
 			}
-			for _, vol := range volumes {
-				if vol.Name == volumeOpts.Name {
-					l.Printf(
-						"volume (%s) is already attached to node %d skipping volume creation", vol.ProviderResourceID, node)
-					return nil
+
+			// TODO: same issue as above if the target nodes are not sequential starting from 1
+			cVM := &c.VMs[node-1]
+			if err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
+				volumeOpts.Zone = cVM.Zone
+				// NB: The "-1" signifies that it's the first attached non-boot volume.
+				// This is typical naming convention in GCE clusters.
+				volumeOpts.Name = fmt.Sprintf("%s-%04d-1", clusterName, node)
+				volumeOpts.SourceSnapshotID = snapshots[node-1].ID
+
+				volumes, err := provider.ListVolumes(l, cVM)
+				if err != nil {
+					return err
 				}
+				for _, vol := range volumes {
+					if vol.Name == volumeOpts.Name {
+						l.Printf(
+							"volume (%s) is already attached to node %d skipping volume creation", vol.ProviderResourceID, node)
+						return nil
+					}
+				}
+
+				volumeOpts.Labels[vm.TagCluster] = clusterName
+				volumeOpts.Labels[vm.TagLifetime] = cVM.Lifetime.String()
+				volumeOpts.Labels[vm.TagRoachprod] = "true"
+				volumeOpts.Labels[vm.TagCreated] = strings.ToLower(
+					strings.ReplaceAll(timeutil.Now().Format(time.RFC3339), ":", "_")) // format according to gce label naming requirements
+
+				volume, err := provider.CreateVolume(l, volumeOpts)
+				if err != nil {
+					return err
+				}
+				l.Printf("created volume %s", volume.ProviderResourceID)
+
+				device, err := cVM.AttachVolume(l, volume)
+				if err != nil {
+					return err
+				}
+				l.Printf("attached volume %s to %s", volume.ProviderResourceID, cVM.ProviderID)
+
+				// Save the cluster to cache.
+				if err := saveCluster(l, &c.Cluster); err != nil {
+					return err
+				}
+
+				var buf bytes.Buffer
+				if err := c.Run(ctx, l, &buf, &buf, install.OnNodes([]install.Node{node}),
+					"mounting volume", genMountCommands(device, "/mnt/data1")); err != nil {
+					l.Printf(buf.String())
+					return err
+				}
+				l.Printf("mounted %s to %s", volume.ProviderResourceID, cVM.ProviderID)
+
+				return nil
+			}); err != nil {
+				res.Err = err
 			}
-
-			volumeOpts.Labels[vm.TagCluster] = clusterName
-			volumeOpts.Labels[vm.TagLifetime] = cVM.Lifetime.String()
-			volumeOpts.Labels[vm.TagRoachprod] = "true"
-			volumeOpts.Labels[vm.TagCreated] = strings.ToLower(
-				strings.ReplaceAll(timeutil.Now().Format(time.RFC3339), ":", "_")) // format according to gce label naming requirements
-
-			volume, err := provider.CreateVolume(l, volumeOpts)
-			if err != nil {
-				return err
-			}
-			l.Printf("created volume %s", volume.ProviderResourceID)
-
-			device, err := cVM.AttachVolume(l, volume)
-			if err != nil {
-				return err
-			}
-			l.Printf("attached volume %s to %s", volume.ProviderResourceID, cVM.ProviderID)
-
-			// Save the cluster to cache.
-			if err := saveCluster(l, &c.Cluster); err != nil {
-				return err
-			}
-
-			var buf bytes.Buffer
-			if err := c.Run(ctx, l, &buf, &buf, []install.Node{node},
-				"mounting volume", genMountCommands(device, "/mnt/data1")); err != nil {
-				l.Printf(buf.String())
-				return err
-			}
-			l.Printf("mounted %s to %s", volume.ProviderResourceID, cVM.ProviderID)
-
-			return nil
-		}); err != nil {
-			res.Err = err
-		}
-		return res, nil
-	})
+			return res, nil
+		})
 }
 
 func genMountCommands(devicePath, mountDir string) string {
@@ -1994,7 +2006,7 @@ func sendCaptureCommand(
 ) error {
 	nodes := c.TargetNodes()
 	httpClient := httputil.NewClientWithTimeout(0 /* timeout: None */)
-	_, _, err := c.ParallelE(ctx, l, nodes,
+	_, _, err := c.ParallelE(ctx, l, install.OnNodes(nodes).WithDisplay(fmt.Sprintf("Performing workload capture %s", action)),
 		func(ctx context.Context, node install.Node) (*install.RunResultDetails, error) {
 			port, err := c.NodeUIPort(ctx, node)
 			if err != nil {
@@ -2061,7 +2073,7 @@ func sendCaptureCommand(
 				}
 			}
 			return res, res.Err
-		}, install.WithDisplay(fmt.Sprintf("Performing workload capture %s", action)))
+		})
 	return err
 }
 
@@ -2103,7 +2115,7 @@ func createAttachMountVolumes(
 				return err
 			}
 			l.Printf("Attached Volume %s to %s", volume.ProviderResourceID, cVM.ProviderID)
-			err = c.Run(ctx, l, l.Stdout, l.Stderr, curNode,
+			err = c.Run(ctx, l, l.Stdout, l.Stderr, install.OnNodes(curNode),
 				"Mounting volume", genMountCommands(device, mountDir))
 			return err
 		})

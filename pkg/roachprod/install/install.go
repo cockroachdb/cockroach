@@ -161,7 +161,7 @@ func SortedCmds() []string {
 func Install(ctx context.Context, l *logger.Logger, c *SyncedCluster, args []string) error {
 	do := func(title, cmd string) error {
 		var buf bytes.Buffer
-		err := c.Run(ctx, l, &buf, &buf, c.Nodes, "installing "+title, cmd)
+		err := c.Run(ctx, l, &buf, &buf, OnNodes(c.Nodes), "installing "+title, cmd)
 		if err != nil {
 			l.Printf(buf.String())
 		}

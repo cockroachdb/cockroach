@@ -270,7 +270,7 @@ func (c *SyncedCluster) servicesWithOpenPortSelection(
 ) (ServiceDescriptors, error) {
 	var mu syncutil.Mutex
 	var servicesToRegister ServiceDescriptors
-	err := c.Parallel(ctx, l, c.Nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	err := c.Parallel(ctx, l, OnNodes(c.Nodes), func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		services := make(ServiceDescriptors, 0)
 		res := &RunResultDetails{Node: node}
 		if _, ok := serviceMap[node][ServiceTypeSQL]; !ok {
@@ -559,21 +559,22 @@ func (c *SyncedCluster) ExecSQL(
 	args []string,
 ) ([]*RunResultDetails, error) {
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	results, _, err := c.ParallelE(ctx, l, nodes, func(ctx context.Context, node Node) (*RunResultDetails, error) {
-		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
-		if err != nil {
-			return nil, err
-		}
-		var cmd string
-		if c.IsLocal() {
-			cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
-		}
-		cmd += cockroachNodeBinary(c, node) + " sql --url " +
-			c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode) + " " +
-			ssh.Escape(args)
+	results, _, err := c.ParallelE(ctx, l, OnNodes(nodes).WithDisplay(display).WithFailSlow(),
+		func(ctx context.Context, node Node) (*RunResultDetails, error) {
+			desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+			if err != nil {
+				return nil, err
+			}
+			var cmd string
+			if c.IsLocal() {
+				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(node))
+			}
+			cmd += cockroachNodeBinary(c, node) + " sql --url " +
+				c.NodeURL("localhost", desc.Port, virtualClusterName, desc.ServiceMode) + " " +
+				ssh.Escape(args)
 
-		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
-	}, WithDisplay(display), WithWaitOnFail())
+			return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("run-sql"))
+		})
 
 	return results, err
 }
