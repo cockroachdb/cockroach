@@ -77,7 +77,7 @@ export function filteredStatementsData(
         INTERNAL_APP_NAME_PREFIX,
       );
       return (
-        (!appNames?.length && !isInternal) ||
+        !appNames?.length ||
         (includeInternalApps && isInternal) ||
         appNames?.includes(
           statement.applicationName ? statement.applicationName : unset,
