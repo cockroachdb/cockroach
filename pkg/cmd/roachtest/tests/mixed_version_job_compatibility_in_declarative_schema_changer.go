@@ -88,7 +88,7 @@ func planAndRunSchemaChange(
 	return nil
 }
 
-// executeSupportedDDLs tests all stmts supported in V22_2.
+// executeSupportedDDLs tests all stmts supported in V23_1.
 // Stmts here is based on set up in testSetupResetStep.
 func executeSupportedDDLs(
 	c cluster.Cluster, t test.Test, testingUpgradedNodes bool,
@@ -109,25 +109,56 @@ func executeSupportedDDLs(
 		if err := testUtils.disableJobAdoption(ctx, t.L(), nodes); err != nil {
 			return err
 		}
-		node := option.NodeListOption{helper.RandomNode(r, nodes)}
-		planAndRunSchemaChange(ctx, t, c, node, `COMMENT ON DATABASE testdb IS 'this is a database comment'`)
-		planAndRunSchemaChange(ctx, t, c, node, `COMMENT ON SCHEMA testdb.testsc IS 'this is a schema comment'`)
-		planAndRunSchemaChange(ctx, t, c, node, `COMMENT ON TABLE testdb.testsc.t IS 'this is a table comment'`)
-		planAndRunSchemaChange(ctx, t, c, node, `COMMENT ON COLUMN testdb.testsc.t.i IS 'this is a column comment'`)
-		planAndRunSchemaChange(ctx, t, c, node, `COMMENT ON INDEX testdb.testsc.t@idx IS 'this is a index comment'`)
-		planAndRunSchemaChange(ctx, t, c, node, `COMMENT ON CONSTRAINT check_j ON testdb.testsc.t IS 'this is a constraint comment'`)
-		planAndRunSchemaChange(ctx, t, c, node, `ALTER TABLE testdb.testsc.t ADD COLUMN k INT DEFAULT 35`)
-		planAndRunSchemaChange(ctx, t, c, node, `ALTER TABLE testdb.testsc.t DROP COLUMN k`)
-		planAndRunSchemaChange(ctx, t, c, node, `ALTER TABLE testdb.testsc.t2 ADD PRIMARY KEY (i)`)
-		planAndRunSchemaChange(ctx, t, c, node, `ALTER TABLE testdb.testsc.t2 ALTER PRIMARY KEY USING COLUMNS (j)`)
-		planAndRunSchemaChange(ctx, t, c, node, `DROP SEQUENCE testdb.testsc.s`)
-		planAndRunSchemaChange(ctx, t, c, node, `DROP TYPE testdb.testsc.typ`)
-		planAndRunSchemaChange(ctx, t, c, node, `DROP VIEW testdb.testsc.v`)
-		planAndRunSchemaChange(ctx, t, c, node, `DROP TABLE testdb.testsc.t`)
-		planAndRunSchemaChange(ctx, t, c, node, `DROP TABLE testdb.testsc.t2`)
-		planAndRunSchemaChange(ctx, t, c, node, `DROP SCHEMA testdb.testsc`)
-		planAndRunSchemaChange(ctx, t, c, node, `DROP DATABASE testdb CASCADE`)
 
+		// DDLs supported since V22_2.
+		v222DDLs := []string{
+			`COMMENT ON DATABASE testdb IS 'this is a database comment'`,
+			`COMMENT ON SCHEMA testdb.testsc IS 'this is a schema comment'`,
+			`COMMENT ON TABLE testdb.testsc.t IS 'this is a table comment'`,
+			`COMMENT ON COLUMN testdb.testsc.t.i IS 'this is a column comment'`,
+			`COMMENT ON INDEX testdb.testsc.t@idx IS 'this is a index comment'`,
+			`COMMENT ON CONSTRAINT check_j ON testdb.testsc.t IS 'this is a constraint comment'`,
+			`ALTER TABLE testdb.testsc.t ADD COLUMN k INT DEFAULT 35`,
+			`ALTER TABLE testdb.testsc.t DROP COLUMN k`,
+			`ALTER TABLE testdb.testsc.t2 ADD PRIMARY KEY (i)`,
+			`ALTER TABLE testdb.testsc.t2 ALTER PRIMARY KEY USING COLUMNS (j)`,
+		}
+
+		// DDLs supported since V23_1.
+		v231DDls := []string{
+			`CREATE UNIQUE INDEX ON testdb.testsc.t2 (k)`,
+			`ALTER TABLE testdb.testsc.t2 ALTER COLUMN k SET NOT NULL`,
+			`ALTER TABLE testdb.testsc.t2 ALTER PRIMARY KEY USING COLUMNS (k) USING HASH`,
+			`ALTER TABLE testdb.testsc.t3 ADD PRIMARY KEY (i) NOT VALID`,
+			`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT j_unique UNIQUE (j)`,
+			`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT j_unique_unvalidated UNIQUE (j) NOT VALID`,
+			`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT check_positive CHECK (j > 0)`,
+			`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT check_positive_unvalidated CHECK (j > 0) NOT VALID`,
+		}
+
+		// DDLs supported since V22_2, used to clean up our CREATE-d elements after we are done with them.
+		cleanup := []string{
+			// TODO drop owned by?
+			`DROP INDEX testdb.testsc.t2@k`,
+			`DROP SEQUENCE testdb.testsc.s`,
+			`DROP TYPE testdb.testsc.typ`,
+			`DROP VIEW testdb.testsc.v`,
+			`DROP TABLE testdb.testsc.t`,
+			`DROP TABLE testdb.testsc.t2`,
+			`DROP TABLE testdb.testsc.t3`,
+			`DROP SCHEMA testdb.testsc`,
+			`DROP DATABASE testdb CASCADE`,
+			// Supported since V23_1.
+			`DROP FUNCTION fn`,
+		}
+
+		ddls := append(append(v222DDLs, v231DDls...), cleanup...)
+
+		for _, ddl := range ddls {
+			if err := planAndRunSchemaChange(ctx, t, c, option.NodeListOption{helper.RandomNode(r, nodes)}, ddl); err != nil {
+				return err
+			}
+		}
 		return testUtils.enableJobAdoption(ctx, t.L(), nodes)
 	}
 }
