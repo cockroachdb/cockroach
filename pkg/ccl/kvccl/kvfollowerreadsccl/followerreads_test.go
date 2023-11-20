@@ -530,10 +530,13 @@ func TestOracle(t *testing.T) {
 	futureTxn := kv.NewTxn(ctx, c, 0)
 	require.NoError(t, futureTxn.SetFixedTimestamp(ctx, future))
 
+	region := func(name string) (l roachpb.Locality) {
+		return roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: name}}}
+	}
 	nodes := mockNodeStore{
-		{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1")},
-		{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2")},
-		{NodeID: 3, Address: util.MakeUnresolvedAddr("tcp", "3")},
+		{NodeID: 1, Address: util.MakeUnresolvedAddr("tcp", "1"), Locality: region("a")},
+		{NodeID: 2, Address: util.MakeUnresolvedAddr("tcp", "2"), Locality: region("b")},
+		{NodeID: 3, Address: util.MakeUnresolvedAddr("tcp", "3"), Locality: region("c")},
 	}
 	replicas := []roachpb.ReplicaDescriptor{
 		{NodeID: 1, StoreID: 1},
@@ -666,6 +669,16 @@ func TestOracle(t *testing.T) {
 			exp:                   leaseholder,
 		},
 	}
+	cfg := func(st *cluster.Settings) replicaoracle.Config {
+		return replicaoracle.Config{
+			NodeDescs:  nodes,
+			Settings:   st,
+			RPCContext: rpcContext,
+			Clock:      clock,
+			HealthFunc: func(roachpb.NodeID) bool { return true },
+		}
+	}
+
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
 			if !c.disabledEnterprise {
@@ -674,19 +687,34 @@ func TestOracle(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			kvserver.FollowerReadsEnabled.Override(ctx, &st.SV, !c.disabledFollowerReads)
 
-			o := replicaoracle.NewOracle(followerReadOraclePolicy, replicaoracle.Config{
-				NodeDescs:  nodes,
-				Settings:   st,
-				RPCContext: rpcContext,
-				Clock:      clock,
-				HealthFunc: func(roachpb.NodeID) bool { return true },
-			})
+			o := replicaoracle.NewOracle(followerReadOraclePolicy, cfg(st))
 
 			res, _, err := o.ChoosePreferredReplica(ctx, c.txn, desc, c.lh, c.ctPolicy, replicaoracle.QueryState{})
 			require.NoError(t, err)
 			require.Equal(t, c.exp, res)
 		})
 	}
+
+	t.Run("bulk", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettings()
+		ctx := context.Background()
+		var noTxn *kv.Txn
+		var noLeaseholder *roachpb.ReplicaDescriptor
+		var noCTPolicy roachpb.RangeClosedTimestampPolicy
+		var noQueryState replicaoracle.QueryState
+
+		t.Run("no-filter", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), roachpb.Locality{})
+			_, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, noQueryState)
+			require.NoError(t, err)
+		})
+		t.Run("filter", func(t *testing.T) {
+			br := NewBulkOracle(cfg(st), region("b"))
+			picked, _, err := br.ChoosePreferredReplica(ctx, noTxn, desc, noLeaseholder, noCTPolicy, noQueryState)
+			require.NoError(t, err)
+			require.Equal(t, roachpb.NodeID(2), picked.NodeID)
+		})
+	})
 }
 
 // Test that follower reads recover from a situation where a gateway node has
