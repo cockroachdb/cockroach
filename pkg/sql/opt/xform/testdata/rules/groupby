@@ -2704,23 +2704,23 @@ project
       │    │    ├── limit hint: 3.00
       │    │    ├── union-all
       │    │    │    ├── columns: a:2!null rowid:7!null
-      │    │    │    ├── left columns: a:30 rowid:35
-      │    │    │    ├── right columns: a:39 rowid:44
+      │    │    │    ├── left columns: a:48 rowid:53
+      │    │    │    ├── right columns: a:57 rowid:62
       │    │    │    ├── ordering: +2
       │    │    │    ├── limit hint: 3.00
       │    │    │    ├── scan regional@partial_a,partial
-      │    │    │    │    ├── columns: a:30!null rowid:35!null
-      │    │    │    │    ├── constraint: /29/30: [/'east' - /'east']
-      │    │    │    │    ├── key: (35)
-      │    │    │    │    ├── fd: (35)-->(30), (30)-->(35)
-      │    │    │    │    ├── ordering: +30
+      │    │    │    │    ├── columns: a:48!null rowid:53!null
+      │    │    │    │    ├── constraint: /47/48: [/'east' - /'east']
+      │    │    │    │    ├── key: (53)
+      │    │    │    │    ├── fd: (53)-->(48), (48)-->(53)
+      │    │    │    │    ├── ordering: +48
       │    │    │    │    └── limit hint: 3.00
       │    │    │    └── scan regional@partial_a,partial
-      │    │    │         ├── columns: a:39!null rowid:44!null
-      │    │    │         ├── constraint: /38/39: [/'west' - /'west']
-      │    │    │         ├── key: (44)
-      │    │    │         ├── fd: (44)-->(39), (39)-->(44)
-      │    │    │         ├── ordering: +39
+      │    │    │         ├── columns: a:57!null rowid:62!null
+      │    │    │         ├── constraint: /56/57: [/'west' - /'west']
+      │    │    │         ├── key: (62)
+      │    │    │         ├── fd: (62)-->(57), (57)-->(62)
+      │    │    │         ├── ordering: +57
       │    │    │         └── limit hint: 3.00
       │    │    └── aggregations
       │    │         └── count-rows [as=count_rows:10]

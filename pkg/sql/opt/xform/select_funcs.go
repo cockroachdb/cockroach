@@ -453,23 +453,6 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			return
 		}
 
-		// Make a best-effort check to avoid generating trivial constrained scans
-		// that actually scan the entire table.
-		checkConstraintFilters := c.checkConstraintFilters(scanPrivate.Table)
-		for i := range checkConstraintFilters {
-			if !checkConstraintFilters[i].ScalarProps().TightConstraints {
-				continue
-			}
-			optionalConstraints := checkConstraintFilters[i].ScalarProps().Constraints
-			if optionalConstraints == nil || optionalConstraints.Length() != 1 {
-				continue
-			}
-			cons := optionalConstraints.Constraint(0)
-			if combinedConstraint.Contains(c.e.evalCtx, cons) {
-				return
-			}
-		}
-
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Distribution.Regions = nil
