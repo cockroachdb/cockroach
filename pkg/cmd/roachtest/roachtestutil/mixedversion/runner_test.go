@@ -70,7 +70,6 @@ type testSingleStep struct {
 	runFunc func() error
 }
 
-func (testSingleStep) ID() int                { return 42 }
 func (testSingleStep) Description() string    { return "testSingleStep" }
 func (testSingleStep) Background() shouldStop { return nil }
 
@@ -80,7 +79,7 @@ func (tss testSingleStep) Run(
 	return tss.runFunc()
 }
 
-func newTestStep(f func() error) singleStep {
+func newTestStep(f func() error) *singleStep {
 	initialVersion := parseVersions([]string{predecessorVersion})[0]
 	return newSingleStep(newInitialContext(initialVersion, nodes), testSingleStep{runFunc: f})
 }
