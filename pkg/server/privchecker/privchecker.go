@@ -271,34 +271,15 @@ func (c *adminPrivilegeChecker) HasAdminRole(
 	return bool(dbDatum), nil
 }
 
-// HasRoleOptions is part of the SQLPrivilegeChecker interface.
+// HasRoleOption is part of the SQLPrivilegeChecker interface.
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
 func (c *adminPrivilegeChecker) HasRoleOption(
 	ctx context.Context, user username.SQLUsername, roleOption roleoption.Option,
 ) (bool, error) {
-	if user.IsRootUser() {
-		// Shortcut.
-		return true, nil
-	}
-	row, err := c.ie.QueryRowEx(
-		ctx, "check-role-option", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: user},
-		"SELECT crdb_internal.has_role_option($1)", roleOption.String())
-	if err != nil {
-		return false, err
-	}
-	if row == nil {
-		return false, errors.AssertionFailedf("hasRoleOption: expected 1 row, got 0")
-	}
-	if len(row) != 1 {
-		return false, errors.AssertionFailedf("hasRoleOption: expected 1 column, got %d", len(row))
-	}
-	dbDatum, ok := tree.AsDBool(row[0])
-	if !ok {
-		return false, errors.AssertionFailedf("hasRoleOption: expected bool, got %T", row[0])
-	}
-	return bool(dbDatum), nil
+	aa, cleanup := c.makeAuthzAccessor("check-role-option")
+	defer cleanup()
+	return aa.UserHasRoleOption(ctx, user, roleOption)
 }
 
 // HasPrivilegeOrRoleOption is a helper function which calls both HasGlobalPrivilege and HasRoleOption.
