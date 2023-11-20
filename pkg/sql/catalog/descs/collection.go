@@ -960,8 +960,6 @@ func (tc *Collection) aggregateAllLayers(
 		if e.GetParentID() != descpb.InvalidID && e.GetParentSchemaID() == descpb.InvalidID &&
 			strings.HasPrefix(e.GetName(), catconstants.PgTempSchemaName) {
 			ret.UpsertDescriptor(schemadesc.NewTemporarySchema(e.GetName(), e.GetID(), e.GetParentID()))
-		} else {
-			descIDs.Add(e.GetID())
 		}
 		ret.UpsertNamespaceEntry(e, e.GetID(), e.GetMVCCTimestamp())
 		return nil
