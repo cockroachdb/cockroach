@@ -278,18 +278,12 @@ CREATE TABLE t83390 (
 opt
 SELECT * FROM t83390@idx WHERE a IS NULL
 ----
-select
+index-join t83390
  ├── columns: k:1!null a:2
  ├── key: (1)
  ├── fd: ()-->(2)
- ├── index-join t83390
- │    ├── columns: k:1!null a:2
- │    ├── key: (1)
- │    ├── fd: (1)-->(2)
- │    └── scan t83390@idx
- │         ├── columns: k:1!null
- │         ├── constraint: /5/1: [/true - /true]
- │         ├── flags: force-index=idx
- │         └── key: (1)
- └── filters
-      └── a:2 IS NULL [outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
+ └── scan t83390@idx
+      ├── columns: k:1!null
+      ├── constraint: /5/1: [/true - /true]
+      ├── flags: force-index=idx
+      └── key: (1)

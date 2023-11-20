@@ -2613,6 +2613,43 @@ project
       └── filters
            └── z:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
 
+# Regression test for #114798. A constrained scan should be planned on boolean
+# virtual computed columns.
+
+exec-ddl
+CREATE TABLE t114798 (
+  k INT PRIMARY KEY,
+  b BOOL,
+  s BOOL AS (COALESCE(b, false)) STORED,
+  v BOOL AS (COALESCE(b, true)) VIRTUAL,
+  INDEX (s),
+  INDEX (v)
+)
+----
+
+opt expect=GenerateConstrainedScans
+SELECT k FROM t114798 WHERE COALESCE(b, false)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan t114798@t114798_s_idx
+      ├── columns: k:1!null
+      ├── constraint: /3/1: [/true - /true]
+      └── key: (1)
+
+opt expect=GenerateConstrainedScans
+SELECT k FROM t114798 WHERE COALESCE(b, true)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan t114798@t114798_v_idx
+      ├── columns: k:1!null
+      ├── constraint: /4/1: [/true - /true]
+      └── key: (1)
+
+
 # --------------------------------------------------
 # GenerateInvertedIndexScans
 # --------------------------------------------------
