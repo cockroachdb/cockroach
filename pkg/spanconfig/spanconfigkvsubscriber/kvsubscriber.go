@@ -222,6 +222,7 @@ func New(
 		int(bufferMemLimit/spanConfigurationsTableRowSize),
 		[]roachpb.Span{spanConfigTableSpan},
 		true, // withPrevValue
+		true, // withRowTSInInitialScan
 		NewSpanConfigDecoder().TranslateEvent,
 		s.handleUpdate,
 		rfCacheKnobs,

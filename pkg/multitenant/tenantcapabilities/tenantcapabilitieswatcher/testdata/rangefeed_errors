@@ -24,7 +24,6 @@ ok
 
 updates
 ----
-Incremental Update
 update: ten=10 name=foo state=add service=shared cap={can_admin_unsplit:true}
 update: ten=11 name=bar state=add service=none cap={default}
 update: ten=12 name=baz state=ready service=none cap={default}
@@ -81,7 +80,6 @@ ok
 # it is able to restart.
 updates
 ----
-Complete Update
 update: ten=11 name=bar state=add service=none cap={default}
 update: ten=12 name=bli state=add service=none cap={can_admin_unsplit:true}
 update: ten=50 name=blax state=add service=none cap={default}
