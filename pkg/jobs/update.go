@@ -327,7 +327,7 @@ func (ju *JobUpdater) UpdateRunStats(numRuns int, lastRun time.Time) {
 }
 
 // UpdateHighwaterProgressed updates job updater progress with the new high water mark.
-func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobUpdater) error {
+func (ju *JobUpdater) UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata) error {
 	if err := md.CheckRunningOrReverting(); err != nil {
 		return err
 	}
