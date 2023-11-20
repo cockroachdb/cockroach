@@ -30,6 +30,17 @@ index-constraints vars=(j json, field int as ((j->'foo')::string::int) stored) i
 ----
 [/10 - /10]
 
+# Generate constraints for indexed, boolean computed expressions.
+index-constraints vars=(b bool, c bool as (coalesce(b, false)) stored) index=(c)
+coalesce(b, false)
+----
+[/true - /true]
+
+index-constraints vars=(b bool, c bool as (coalesce(b, false)) stored) index=(c)
+NOT coalesce(b, false)
+----
+[/false - /false]
+
 # ---------------------------------------------------
 # Unit tests for computed column predicate derivation
 # ---------------------------------------------------

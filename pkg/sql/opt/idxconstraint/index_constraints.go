@@ -706,6 +706,12 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 		return c.makeSpansForExpr(offset, t.And, out)
 	}
 
+	// Support e as (c = TRUE) if c is an indexed, boolean, computed expression
+	// equivalent to e. This is similar to the VariableExpr case above.
+	if c.colType(offset).Family() == types.BoolFamily && c.isExpressionIndexColumn(e, offset) {
+		return c.makeSpansForSingleColumnDatum(offset, opt.EqOp, tree.DBoolTrue, out)
+	}
+
 	if e.ChildCount() < 2 {
 		c.unconstrained(offset, out)
 		return false
@@ -1280,6 +1286,15 @@ func (c *indexConstraintCtx) isIndexColumn(e opt.Expr, offset int) bool {
 	if v, ok := e.(*memo.VariableExpr); ok && v.Col == c.columns[offset].ID() {
 		return true
 	}
+	if c.isExpressionIndexColumn(e, offset) {
+		return true
+	}
+	return false
+}
+
+// isExpressionIndexColumn returns true if e is computed column expression that
+// corresponds to index column <offset>.
+func (c *indexConstraintCtx) isExpressionIndexColumn(e opt.Expr, offset int) bool {
 	if c.computedCols != nil && e == c.computedCols[c.columns[offset].ID()] {
 		return true
 	}
