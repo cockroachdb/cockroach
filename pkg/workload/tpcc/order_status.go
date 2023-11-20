@@ -14,7 +14,6 @@ import (
 	"context"
 	"time"
 
-	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -133,8 +132,8 @@ func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
 		d.cID = o.config.randCustomerID(rng)
 	}
 
-	if err := crdbpgx.ExecuteTx(
-		ctx, o.mcp.Get(), pgx.TxOptions{},
+	if err := o.config.executeTx(
+		ctx, o.mcp.Get(),
 		func(tx pgx.Tx) error {
 			// 2.6.2.2 explains this entire transaction.
 

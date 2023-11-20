@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"time"
 
-	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -189,8 +188,8 @@ func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
 		d.cID = p.config.randCustomerID(rng)
 	}
 
-	if err := crdbpgx.ExecuteTx(
-		ctx, p.mcp.Get(), pgx.TxOptions{},
+	if err := p.config.executeTx(
+		ctx, p.mcp.Get(),
 		func(tx pgx.Tx) error {
 			var wName, dName string
 			// Update warehouse with payment

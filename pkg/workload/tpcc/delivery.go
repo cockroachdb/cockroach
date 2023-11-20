@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"strings"
 
-	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
@@ -87,8 +86,8 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 	oCarrierID := rng.Intn(10) + 1
 	olDeliveryD := timeutil.Now()
 
-	err := crdbpgx.ExecuteTx(
-		ctx, del.mcp.Get(), pgx.TxOptions{},
+	err := del.config.executeTx(
+		ctx, del.mcp.Get(),
 		func(tx pgx.Tx) error {
 			// 2.7.4.2. For each district:
 			dIDoIDPairs := make(map[int]int)
