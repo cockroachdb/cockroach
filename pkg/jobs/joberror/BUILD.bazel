@@ -9,10 +9,10 @@ go_library(
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/sql/flowinfra",
         "//pkg/sql/sqlerrors",
+        "//pkg/sql/sqlinstance",
         "//pkg/util/circuit",
         "//pkg/util/grpcutil",
         "//pkg/util/sysutil",
-        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -20,11 +20,9 @@ go_library(
 go_test(
     name = "joberror_test",
     srcs = ["errors_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":joberror"],
     deps = [
         "//pkg/util/circuit",
-        "@com_github_cockroachdb_circuitbreaker//:circuitbreaker",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",

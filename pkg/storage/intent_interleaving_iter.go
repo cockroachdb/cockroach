@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -20,9 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -69,16 +68,16 @@ var intentInterleavingReaderPool = sync.Pool{
 // NewMVCCIterator implements the Reader interface. The
 // intentInterleavingReader can be freed once this method returns.
 func (imr *intentInterleavingReader) NewMVCCIterator(
-	iterKind MVCCIterKind, opts IterOptions,
+	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
 ) (MVCCIterator, error) {
-	if (!opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty()) &&
+	if (!opts.MinTimestamp.IsEmpty() || !opts.MaxTimestamp.IsEmpty()) &&
 		iterKind == MVCCKeyAndIntentsIterKind {
 		panic("cannot ask for interleaved intents when specifying timestamp hints")
 	}
 	if iterKind == MVCCKeyIterKind || opts.KeyTypes == IterKeyTypeRangesOnly {
-		return imr.wrappableReader.NewMVCCIterator(MVCCKeyIterKind, opts)
+		return imr.wrappableReader.NewMVCCIterator(ctx, MVCCKeyIterKind, opts)
 	}
-	return newIntentInterleavingIterator(imr.wrappableReader, opts)
+	return newIntentInterleavingIterator(ctx, imr.wrappableReader, opts)
 }
 
 func (imr *intentInterleavingReader) Free() {
@@ -141,6 +140,12 @@ const (
 // one of the lower or upper bound. We use that to "constrain" the iterator as
 // either a local key iterator or global key iterator and panic if a caller
 // violates that in a subsequent SeekGE/SeekLT call.
+//
+// intentInterleavingIter ignores locks in the lock table keyspace with
+// strengths other than lock.Intent (i.e. shared and exclusive locks). Future
+// versions of the iterator may expose information to users about whether any
+// non-intent locks were observed and, if so, which keys they were found on. For
+// now, no such information is exposed.
 type intentInterleavingIter struct {
 	prefix     bool
 	constraint intentInterleavingIterConstraint
@@ -154,9 +159,10 @@ type intentInterleavingIter struct {
 	// key parsing.
 	iterKey MVCCKey
 
-	// intentIter is for iterating over separated intents, so that
-	// intentInterleavingIter can make them look as if they were interleaved.
-	intentIter      *pebbleIterator // EngineIterator
+	// intentIter is for iterating over the lock table keyspace and finding
+	// intents, so that intentInterleavingIter can make them look as if they
+	// were interleaved.
+	intentIter      *LockTableIterator // EngineIterator
 	intentIterState pebble.IterValidityState
 	// The decoded key from the lock table. This is an unsafe key
 	// in that it is only valid when intentIter has not been
@@ -227,8 +233,10 @@ func isLocal(k roachpb.Key) bool {
 	return k.Compare(keys.LocalMax) < 0
 }
 
-func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterator, error) {
-	if !opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty() {
+func newIntentInterleavingIterator(
+	ctx context.Context, reader Reader, opts IterOptions,
+) (MVCCIterator, error) {
+	if !opts.MinTimestamp.IsEmpty() || !opts.MaxTimestamp.IsEmpty() {
 		panic("intentInterleavingIter must not be used with timestamp hints")
 	}
 	var lowerIsLocal, upperIsLocal bool
@@ -279,48 +287,42 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterato
 	// bound for prefix iteration, though since they don't need to, most callers
 	// don't.
 
-	intentOpts := opts
-
 	// There cannot be any range keys across the lock table, so create the intent
 	// iterator for point keys only, or return a normal MVCC iterator if only
 	// range keys are requested.
-	if intentOpts.KeyTypes == IterKeyTypeRangesOnly {
-		return reader.NewMVCCIterator(MVCCKeyIterKind, opts)
+	if opts.KeyTypes == IterKeyTypeRangesOnly {
+		return reader.NewMVCCIterator(ctx, MVCCKeyIterKind, opts)
 	}
-	intentOpts.KeyTypes = IterKeyTypePointsOnly
-	intentOpts.RangeKeyMaskingBelow = hlc.Timestamp{}
 
 	iiIter := intentInterleavingIterPool.Get().(*intentInterleavingIter)
 	intentKeyBuf := iiIter.intentKeyBuf
 	intentLimitKeyBuf := iiIter.intentLimitKeyBuf
+
+	ltOpts := LockTableIteratorOptions{Prefix: opts.Prefix, MatchMinStr: lock.Intent}
 	if opts.LowerBound != nil {
-		intentOpts.LowerBound, intentKeyBuf = keys.LockTableSingleKey(opts.LowerBound, intentKeyBuf)
+		ltOpts.LowerBound, intentKeyBuf = keys.LockTableSingleKey(opts.LowerBound, intentKeyBuf)
 	} else if !opts.Prefix {
 		// Make sure we don't step outside the lock table key space. Note that
 		// this is the case where the lower bound was not set and
 		// constrainedToLocal.
-		intentOpts.LowerBound = keys.LockTableSingleKeyStart
+		ltOpts.LowerBound = keys.LockTableSingleKeyStart
 	}
 	if opts.UpperBound != nil {
-		intentOpts.UpperBound, intentLimitKeyBuf =
+		ltOpts.UpperBound, intentLimitKeyBuf =
 			keys.LockTableSingleKey(opts.UpperBound, intentLimitKeyBuf)
 	} else if !opts.Prefix {
 		// Make sure we don't step outside the lock table key space. Note that
 		// this is the case where the upper bound was not set and
 		// constrainedToGlobal.
-		intentOpts.UpperBound = keys.LockTableSingleKeyEnd
+		ltOpts.UpperBound = keys.LockTableSingleKeyEnd
 	}
 
-	// All readers given to intentInterleavingIter construct pebbleIterators, so
-	// we can use the concrete type here to avoid the cost of dynamic dispatch.
-	//
 	// Note that we can reuse intentKeyBuf, intentLimitKeyBuf after
-	// NewEngineIterator returns.
-	intentEngineIter, err := reader.NewEngineIterator(intentOpts)
+	// NewLockTableIter returns.
+	intentIter, err := NewLockTableIterator(ctx, reader, ltOpts)
 	if err != nil {
 		return nil, err
 	}
-	intentIter := intentEngineIter.(*pebbleIterator)
 
 	// The creation of these iterators can race with concurrent mutations, which
 	// may make them inconsistent with each other. So we clone here, to ensure
@@ -328,13 +330,13 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) (MVCCIterato
 	// and we use that when possible to save allocations).
 	var iter *pebbleIterator
 	if reader.ConsistentIterators() {
-		mvccIter, err := reader.NewMVCCIterator(MVCCKeyIterKind, opts)
+		mvccIter, err := reader.NewMVCCIterator(ctx, MVCCKeyIterKind, opts)
 		if err != nil {
 			return nil, err
 		}
 		iter = maybeUnwrapUnsafeIter(mvccIter).(*pebbleIterator)
 	} else {
-		iter = newPebbleIteratorByCloning(intentIter.CloneContext(), opts, StandardDurability)
+		iter = newPebbleIteratorByCloning(ctx, intentIter.CloneContext(), opts, StandardDurability)
 	}
 
 	*iiIter = intentInterleavingIter{
@@ -584,44 +586,6 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 		if err := i.maybeSkipIntentRangeKey(); err != nil {
 			return
 		}
-	}
-	i.computePos()
-}
-
-func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
-	adjustRangeKeyChanged := i.shouldAdjustSeekRangeKeyChanged()
-
-	i.dir = +1
-	i.valid = true
-	i.err = nil
-
-	if i.constraint != notConstrained {
-		i.checkConstraint(key, false)
-	}
-	i.iter.SeekGE(MVCCKey{Key: key})
-	if err := i.tryDecodeKey(); err != nil {
-		return
-	}
-	i.rangeKeyChanged = i.iter.RangeKeyChanged()
-	if adjustRangeKeyChanged {
-		i.adjustSeekRangeKeyChanged()
-	}
-	var engineKey EngineKey
-	engineKey, i.intentKeyBuf = LockTableKey{
-		Key:      key,
-		Strength: lock.Intent,
-		TxnUUID:  txnUUID,
-	}.ToEngineKey(i.intentKeyBuf)
-	var limitKey roachpb.Key
-	if i.iterValid && !i.prefix {
-		limitKey = i.makeUpperLimitKey()
-	}
-	iterState, err := i.intentIter.SeekEngineKeyGEWithLimit(engineKey, limitKey)
-	if err = i.tryDecodeLockKey(iterState, err); err != nil {
-		return
-	}
-	if err := i.maybeSkipIntentRangeKey(); err != nil {
-		return
 	}
 	i.computePos()
 }
@@ -1378,13 +1342,7 @@ func (i *intentInterleavingIter) FindSplitKey(
 func (i *intentInterleavingIter) Stats() IteratorStats {
 	stats := i.iter.Stats()
 	intentStats := i.intentIter.Stats()
-	for i := pebble.IteratorStatsKind(0); i < pebble.NumStatsKind; i++ {
-		stats.Stats.ForwardSeekCount[i] += intentStats.Stats.ForwardSeekCount[i]
-		stats.Stats.ReverseSeekCount[i] += intentStats.Stats.ReverseSeekCount[i]
-		stats.Stats.ForwardStepCount[i] += intentStats.Stats.ForwardStepCount[i]
-		stats.Stats.ReverseStepCount[i] += intentStats.Stats.ReverseStepCount[i]
-	}
-	stats.Stats.InternalStats.Merge(intentStats.Stats.InternalStats)
+	stats.Stats.Merge(intentStats.Stats)
 	return stats
 }
 

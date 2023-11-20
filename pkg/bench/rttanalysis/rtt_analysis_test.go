@@ -13,22 +13,38 @@ package rttanalysis
 import (
 	"context"
 	gosql "database/sql"
+	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
 	t testing.TB, knobs base.TestingKnobs,
 ) (_ *gosql.DB, cleanup func()) {
-	s, sql, _ := serverutils.StartServer(t, base.TestServerArgs{
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "bench",
 		Knobs:       knobs,
 	})
 	// Eventlog is async, and introduces jitter in the benchmark.
-	if _, err := sql.Exec("SET CLUSTER SETTING server.eventlog.enabled = false"); err != nil {
+	if _, err := db.Exec("SET CLUSTER SETTING server.eventlog.enabled = false"); err != nil {
 		t.Fatal(err)
 	}
-	return sql, func() { s.Stopper().Stop(context.Background()) }
+	if _, err := db.Exec("CREATE USER testuser"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("GRANT admin TO testuser"); err != nil {
+		t.Fatal(err)
+	}
+	url, testuserCleanup := sqlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), "rttanalysis", url.User("testuser"))
+	conn, err := gosql.Open("postgres", url.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return conn, func() {
+		s.Stopper().Stop(context.Background())
+		testuserCleanup()
+	}
 }))

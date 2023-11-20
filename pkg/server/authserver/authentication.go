@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
@@ -95,7 +94,7 @@ var ConfigureOIDC = func(
 
 // WebSessionTimeout is the cluster setting for web session TTL.
 var WebSessionTimeout = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.web_session_timeout",
 	"the duration that a newly created web session will be valid",
 	7*24*time.Hour,
@@ -466,8 +465,6 @@ func (s *authenticationServer) NewAuthSession(
 	ctx context.Context, userName username.SQLUsername,
 ) (int64, []byte, error) {
 	st := s.sqlServer.ExecutorConfig().Settings
-	webSessionsTableHasUserIDCol := st.Version.IsActive(ctx,
-		clusterversion.V23_1WebSessionsTableHasUserIDColumn)
 
 	secret, hashedSecret, err := CreateAuthSecret()
 	if err != nil {
@@ -477,17 +474,10 @@ func (s *authenticationServer) NewAuthSession(
 	expiration := s.sqlServer.ExecutorConfig().Clock.PhysicalTime().Add(WebSessionTimeout.Get(&st.SV))
 
 	insertSessionStmt := `
-INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt")
-VALUES($1, $2, $3)
-RETURNING id
-`
-	if webSessionsTableHasUserIDCol {
-		insertSessionStmt = `
 INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt", user_id)
 VALUES($1, $2, $3, (SELECT user_id FROM system.users WHERE username = $2))
 RETURNING id
 `
-	}
 	var id int64
 
 	row, err := s.sqlServer.InternalExecutor().QueryRowEx(

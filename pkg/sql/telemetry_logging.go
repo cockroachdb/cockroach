@@ -28,7 +28,7 @@ import (
 const defaultMaxEventFrequency = 8
 
 var TelemetryMaxEventFrequency = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.telemetry.query_sampling.max_event_frequency",
 	"the max event frequency at which we sample executions for telemetry, "+
 		"note that it is recommended that this value shares a log-line limit of 10 "+
@@ -37,17 +37,18 @@ var TelemetryMaxEventFrequency = settings.RegisterIntSetting(
 		"transaction are counted as 1 unit.",
 	defaultMaxEventFrequency,
 	settings.NonNegativeInt,
+	settings.WithPublic,
 )
 
 var telemetryInternalQueriesEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.telemetry.query_sampling.internal.enabled",
 	"when set to true, internal queries will be sampled in telemetry logging",
 	false,
 	settings.WithPublic)
 
 var telemetryInternalConsoleQueriesEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.telemetry.query_sampling.internal_console.enabled",
 	"when set to true, all internal queries used to populated the UI Console"+
 		"will be logged into telemetry",
@@ -60,7 +61,7 @@ const (
 )
 
 var telemetrySamplingMode = settings.RegisterEnumSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.telemetry.query_sampling.mode",
 	"the execution level used for telemetry sampling. If set to 'statement', events "+
 		"are sampled at the statement execution level. If set to 'transaction', events are "+
@@ -72,15 +73,17 @@ var telemetrySamplingMode = settings.RegisterEnumSetting(
 		telemetryModeStatement:   "statement",
 		telemetryModeTransaction: "transaction",
 	},
+	settings.WithPublic,
 )
 
 var telemetryTrackedTxnsLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.telemetry.txn_mode.tracking_limit",
 	"the maximum number of transactions tracked at one time for which we will send "+
 		"all statements to telemetry",
 	10000,
 	settings.NonNegativeInt,
+	settings.WithPublic,
 )
 
 // TelemetryLoggingMetrics keeps track of the last time at which an event

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -39,7 +40,11 @@ var Mode = settings.RegisterEnumSetting(
 	settings.SystemOnly,
 	"kvadmission.flow_control.mode",
 	"determines the 'mode' of flow control we use for replication traffic in KV, if enabled",
-	ApplyToElastic.String(),
+	util.ConstantWithMetamorphicTestChoice(
+		"kv.snapshot.ingest_as_write_threshold",
+		modeDict[ApplyToElastic], /* default value */
+		modeDict[ApplyToAll],     /* other value */
+	).(string),
 	map[int64]string{
 		int64(ApplyToElastic): modeDict[ApplyToElastic],
 		int64(ApplyToAll):     modeDict[ApplyToAll],
@@ -115,7 +120,10 @@ type Controller interface {
 	// the given priority, create-time, and over the given stream. This blocks
 	// until there are flow tokens available or the stream disconnects, subject to
 	// context cancellation. This returns true if the request was admitted through
-	// flow control. Ignore the first return type if err != nil
+	// flow control. Ignore the first return type if err != nil. admitted ==
+	// false && err == nil is a valid return, when something (e.g.
+	// configuration) caused the callee to not care whether flow tokens were
+	// available.
 	Admit(context.Context, admissionpb.WorkPriority, time.Time, ConnectedStream) (admitted bool, _ error)
 	// DeductTokens deducts (without blocking) flow tokens for replicating work
 	// with given priority over the given stream. Requests are expected to
@@ -157,6 +165,9 @@ type Handle interface {
 	// the given priority and create-time. This blocks until there are flow tokens
 	// available for all connected streams. This returns true if the request was
 	// admitted through flow control. Ignore the first return type if err != nil.
+	// admitted == false && err == nil is a valid return, when something (e.g.
+	// configuration) caused the callee to not care whether flow tokens were
+	// available.
 	Admit(context.Context, admissionpb.WorkPriority, time.Time) (admitted bool, _ error)
 	// DeductTokensFor deducts (without blocking) flow tokens for replicating
 	// work with given priority along connected streams. The deduction is
@@ -272,7 +283,7 @@ type DispatchWriter interface {
 // the stream breaking by freeing up all held tokens.
 type DispatchReader interface {
 	PendingDispatch() []roachpb.NodeID
-	PendingDispatchFor(roachpb.NodeID) []kvflowcontrolpb.AdmittedRaftLogEntries
+	PendingDispatchFor(nodeID roachpb.NodeID, maxBytes int64) (admittedRaftLogEntries []kvflowcontrolpb.AdmittedRaftLogEntries, remainingDispatches int)
 }
 
 func (t Tokens) String() string {

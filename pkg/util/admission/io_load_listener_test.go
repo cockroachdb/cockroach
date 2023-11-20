@@ -84,6 +84,15 @@ func TestIOLoadListener(t *testing.T) {
 				if d.HasArg("ingested-bytes") {
 					d.ScanArgs(t, "ingested-bytes", &req.stats.ingestedAccountedBytes)
 				}
+				belowRaft := false
+				if d.HasArg("below-raft") {
+					d.ScanArgs(t, "below-raft", &belowRaft)
+				}
+				if !belowRaft {
+					req.stats.aboveRaftStats.workCount = req.stats.workCount
+					req.stats.aboveRaftStats.writeAccountedBytes = req.stats.writeAccountedBytes
+					req.stats.aboveRaftStats.ingestedAccountedBytes = req.stats.ingestedAccountedBytes
+				}
 				return fmt.Sprintf("%+v", req.stats)
 
 			case "set-min-flush-util":
@@ -316,8 +325,9 @@ func TestBadIOLoadListenerStats(t *testing.T) {
 		req.stats.workCount = rand.Uint64()
 		req.stats.writeAccountedBytes = rand.Uint64()
 		req.stats.ingestedAccountedBytes = rand.Uint64()
-		req.stats.statsToIgnore.Bytes = rand.Uint64()
-		req.stats.statsToIgnore.ApproxIngestedIntoL0Bytes = rand.Uint64()
+		req.stats.statsToIgnore.ingestStats.Bytes = rand.Uint64()
+		req.stats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes = rand.Uint64()
+		req.stats.statsToIgnore.writeBytes = rand.Uint64()
 	}
 	kvGranter := &testGranterNonNegativeTokens{t: t}
 	st := cluster.MakeTestingClusterSettings()

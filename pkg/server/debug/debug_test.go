@@ -27,8 +27,8 @@ import (
 )
 
 // debugURL returns the root debug URL.
-func debugURL(s serverutils.ApplicationLayerInterface) string {
-	return s.AdminURL().WithPath(debug.Endpoint).String()
+func debugURL(s serverutils.ApplicationLayerInterface, path string) string {
+	return s.AdminURL().WithPath(debug.Endpoint).WithPath(path).String()
 }
 
 // TestAdminDebugExpVar verifies that cmdline and memstats variables are
@@ -36,12 +36,16 @@ func debugURL(s serverutils.ApplicationLayerInterface) string {
 func TestAdminDebugExpVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 113187,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
 
-	jI, err := srvtestutils.GetJSON(ts, debugURL(ts)+"vars")
+	jI, err := srvtestutils.GetJSON(ts, debugURL(ts, "vars"))
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -59,12 +63,16 @@ func TestAdminDebugExpVar(t *testing.T) {
 func TestAdminDebugMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 113187,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
 
-	jI, err := srvtestutils.GetJSON(ts, debugURL(ts)+"metrics")
+	jI, err := srvtestutils.GetJSON(ts, debugURL(ts, "metrics"))
 	if err != nil {
 		t.Fatalf("failed to fetch JSON: %v", err)
 	}
@@ -82,12 +90,16 @@ func TestAdminDebugMetrics(t *testing.T) {
 func TestAdminDebugPprof(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 113187,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
 
-	body, err := srvtestutils.GetText(ts, debugURL(ts)+"pprof/block?debug=1")
+	body, err := srvtestutils.GetText(ts, debugURL(ts, "pprof/block?debug=1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +113,11 @@ func TestAdminDebugPprof(t *testing.T) {
 func TestAdminDebugTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 113187,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	ts := s.ApplicationLayer()
@@ -114,7 +130,7 @@ func TestAdminDebugTrace(t *testing.T) {
 	}
 
 	for _, c := range tc {
-		body, err := srvtestutils.GetText(ts, debugURL(ts)+c.segment)
+		body, err := srvtestutils.GetText(ts, debugURL(ts, c.segment))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -132,7 +148,7 @@ func TestAdminDebugAuth(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 
-	url := debugURL(ts)
+	url := debugURL(ts, "")
 
 	// Unauthenticated.
 	client, err := ts.GetUnauthenticatedHTTPClient()
@@ -182,12 +198,16 @@ func TestAdminDebugAuth(t *testing.T) {
 func TestAdminDebugRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantProbabilistic, 112955,
+		),
+	})
 	defer s.Stopper().Stop(context.Background())
 	ts := s.ApplicationLayer()
 
-	expURL := debugURL(ts)
-	origURL := expURL + "incorrect"
+	expURL := debugURL(ts, "/")
+	origURL := debugURL(ts, "/incorrect")
 
 	// Must be admin to access debug endpoints
 	client, err := ts.GetAdminHTTPClient()

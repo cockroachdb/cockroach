@@ -1,7 +1,7 @@
 query-sql-system
 SELECT * FROM [SHOW TENANT [10] WITH CAPABILITIES] WHERE capability_name = 'can_admin_scatter'
 ----
-10 tenant-10 ready external can_admin_scatter true
+10 cluster-10 ready external can_admin_scatter true
 
 exec-sql-tenant
 CREATE TABLE t(a INT)

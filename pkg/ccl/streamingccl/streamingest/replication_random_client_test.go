@@ -176,7 +176,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			// Test hangs with test tenant. More investigation is required.
 			// Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 			Knobs: base.TestingKnobs{
 				TenantTestingKnobs: &sql.TenantTestingKnobs{
 					// Needed to pin down the ID of the replication target.
@@ -220,9 +220,9 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 
 	// Attempt to run the ingestion job without enabling the experimental setting.
 	_, err = conn.Exec(query)
-	require.True(t, testutils.IsError(err, "cross cluster replication is disabled"))
+	require.True(t, testutils.IsError(err, "physical replication is disabled"))
 
-	_, err = conn.Exec(`SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
+	_, err = conn.Exec(`SET CLUSTER SETTING physical_replication.enabled = true;`)
 	require.NoError(t, err)
 
 	_, err = conn.Exec(query)
@@ -300,7 +300,7 @@ func assertExactlyEqualKVs(
 ) hlc.Timestamp {
 	// Iterate over the store.
 	store := tc.GetFirstStoreFromServer(t, 0)
-	it, err := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	it, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound: tenantSpan.Key,
 		UpperBound: tenantSpan.EndKey,
 	})

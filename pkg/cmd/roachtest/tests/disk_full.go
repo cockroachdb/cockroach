@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -27,17 +28,18 @@ import (
 
 func registerDiskFull(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "disk-full",
-		Owner:   registry.OwnerStorage,
-		Cluster: r.MakeClusterSpec(5),
-		Leases:  registry.MetamorphicLeases,
+		Name:             "disk-full",
+		Owner:            registry.OwnerStorage,
+		Cluster:          r.MakeClusterSpec(5),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				t.Skip("you probably don't want to fill your local disk")
 			}
 
 			nodes := c.Spec().NodeCount - 1
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, c.Spec().NodeCount))
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 			// Node 1 will soon be killed, when the ballast file fills up its disk. To
@@ -115,9 +117,10 @@ func registerDiskFull(r registry.Registry) {
 					// propagated from roachprod, obscures the Cockroach
 					// exit code. There should still be a record of it
 					// in the systemd logs.
-					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(n),
-						`systemctl status cockroach.service | grep 'Main PID' | grep -oE '\((.+)\)'`,
-					)
+					result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(n), fmt.Sprintf(
+						`systemctl status %s | grep 'Main PID' | grep -oE '\((.+)\)'`,
+						roachtestutil.SystemInterfaceSystemdUnitName(),
+					))
 					if err != nil {
 						t.Fatal(err)
 					}

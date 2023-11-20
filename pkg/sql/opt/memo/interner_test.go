@@ -54,6 +54,23 @@ func TestInterner(t *testing.T) {
 	tup6 := tree.NewDTuple(tupTyp5, tree.DNull, tree.DNull)
 	tup7 := tree.NewDTuple(tupTyp6, tree.DNull, tree.DNull)
 
+	tuple1 := &TupleExpr{
+		Elems: ScalarListExpr{&ConstExpr{Value: tree.NewDInt(100), Typ: types.Int},
+			&ConstExpr{Value: tree.NewDString("foo"), Typ: types.String}},
+		Typ: tupTyp1,
+	}
+	tuple2 := &TupleExpr{
+		Elems: ScalarListExpr{&ConstExpr{Value: tree.NewDInt(100), Typ: types.Int},
+			&ConstExpr{Value: tree.NewDString("foo"), Typ: types.String}},
+		Typ: tupTyp2,
+	}
+	tupleTyp3 := types.MakeLabeledTuple([]*types.T{types.Int, types.Int}, []string{"a", "b"})
+	tuple3 := &TupleExpr{
+		Elems: ScalarListExpr{&ConstExpr{Value: tree.NewDInt(100), Typ: types.Int},
+			&ConstExpr{Value: tree.NewDInt(100), Typ: types.Int}},
+		Typ: tupleTyp3,
+	}
+
 	arr1 := tree.NewDArray(tupTyp1)
 	arr1.Array = tree.Datums{tup1, tup2}
 	arr2 := tree.NewDArray(tupTyp2)
@@ -96,6 +113,7 @@ func TestInterner(t *testing.T) {
 	explain3.Flags[2] = true
 	explain3.Flags[3] = true
 
+	selectNode := &SelectExpr{}
 	scanNode := &ScanExpr{}
 	andExpr := &AndExpr{}
 
@@ -518,6 +536,188 @@ func TestInterner(t *testing.T) {
 				val1:  opt.Locking{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
 				val2:  opt.Locking{Strength: tree.ForUpdate, WaitPolicy: tree.LockWaitError},
 				equal: true,
+			},
+		}},
+
+		{hashFn: in.hasher.HashFastPathUniqueChecksExpr, eqFn: in.hasher.IsFastPathUniqueChecksExprEqual, variations: []testVariation{
+			{
+				val1:  FastPathUniqueChecksExpr{FastPathUniqueChecksItem{Check: scanNode}},
+				val2:  FastPathUniqueChecksExpr{FastPathUniqueChecksItem{Check: scanNode}},
+				equal: true,
+			},
+			{
+				val1: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check:                           scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{CheckOrdinal: 0}}},
+				val2: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check:                           scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{CheckOrdinal: 0}}},
+				equal: true,
+			},
+			{
+				val1: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check:                           scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{CheckOrdinal: 0}}},
+				val2: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check:                           scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{CheckOrdinal: 1}}},
+				equal: false,
+			},
+			{
+				val1: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check:                           scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{ReferencedTableID: opt.TableID(1)}}},
+				val2: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check:                           scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{ReferencedTableID: opt.TableID(1)}}},
+				equal: true,
+			},
+			{
+				val1: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				val2: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				equal: true,
+			},
+			{
+				val1: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				val2: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(2),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				equal: false,
+			},
+			{
+				val1: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 2,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				val2: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				equal: false,
+			},
+			{
+				val1: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 4},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				val2: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				equal: false,
+			},
+			{
+				val1: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple3},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				val2: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				equal: false,
+			},
+			{
+				val1: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForNoKeyUpdate},
+					}}},
+				val2: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				equal: false,
+			},
+			{
+				val1: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: selectNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				val2: FastPathUniqueChecksExpr{FastPathUniqueChecksItem{
+					Check: scanNode,
+					FastPathUniqueChecksItemPrivate: FastPathUniqueChecksItemPrivate{
+						ReferencedTableID:      opt.TableID(1),
+						ReferencedIndexOrdinal: 1,
+						InsertCols:             opt.ColList{1, 2, 3},
+						DatumsFromConstraint:   ScalarListExpr{tuple1, tuple2},
+						Locking:                opt.Locking{Strength: tree.ForUpdate},
+					}}},
+				equal: false,
 			},
 		}},
 

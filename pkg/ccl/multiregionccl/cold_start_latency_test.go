@@ -165,8 +165,6 @@ func TestColdStartLatency(t *testing.T) {
 		var stmts []string
 		if !isTenant {
 			stmts = []string{
-				"ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true",
-				"ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.multiregion.enabled = true",
 				`alter range meta configure zone using constraints = '{"+region=us-east1": 1, "+region=us-west1": 1, "+region=europe-west1": 1}';`,
 			}
 		} else {
@@ -318,7 +316,7 @@ SELECT checkpoint > extract(epoch from after)
 		defer r.Release()
 		start := timeutil.Now()
 		sn := tenantServerKnobs(i)
-		tenant, err := tc.Server(i).StartTenant(ctx, base.TestTenantArgs{
+		tenant, err := tc.Server(i).TenantController().StartTenant(ctx, base.TestTenantArgs{
 			TenantID:            serverutils.TestTenantID(),
 			DisableCreateTenant: true,
 			SkipTenantCheck:     true,

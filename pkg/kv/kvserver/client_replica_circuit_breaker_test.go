@@ -673,10 +673,12 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 		})
 	}
 
-	// Restore the breaker via the probe.
+	// Restore the breaker via the probe, and wait for any pending (re)proposals
+	// from previous tests to be flushed.
 	resumeHeartbeats()
 	tc.SetProbeEnabled(n1, true)
 	tc.UntripsSoon(t, tc.Write, n1)
+	tc.WaitForProposals(t, n1)
 
 	// Lose quorum (liveness stays intact).
 	tc.SetSlowThreshold(10 * time.Millisecond)
@@ -886,6 +888,19 @@ func (cbt *circuitBreakerTest) UntripsSoon(t *testing.T, method func(idx int) er
 	})
 }
 
+func (cbt *circuitBreakerTest) WaitForProposals(t *testing.T, idx int) {
+	t.Helper()
+	testutils.SucceedsSoon(t, func() error {
+		t.Helper()
+
+		repl := cbt.repls[idx].Replica
+		if n := repl.NumPendingProposals(); n > 0 {
+			return errors.Errorf("%d pending proposals", n)
+		}
+		return nil
+	})
+}
+
 func (cbt *circuitBreakerTest) ExpireAllLeasesAndN1LivenessRecord(
 	t *testing.T, pauseHeartbeats bool,
 ) (undo func()) {
@@ -1069,14 +1084,14 @@ func (cbt *circuitBreakerTest) Write(idx int) error {
 func (cbt *circuitBreakerTest) Read(idx int) error {
 	cbt.t.Helper()
 	repl := cbt.repls[idx]
-	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
+	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey())
 	return cbt.Send(idx, get)
 }
 
 func (cbt *circuitBreakerTest) FollowerRead(idx int) error {
 	cbt.t.Helper()
 	repl := cbt.repls[idx]
-	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
+	get := kvpb.NewGet(repl.Desc().StartKey.AsRawKey())
 	ctx := context.Background()
 	ts := repl.GetCurrentClosedTimestamp(ctx)
 	return cbt.SendCtxTS(ctx, idx, get, ts)

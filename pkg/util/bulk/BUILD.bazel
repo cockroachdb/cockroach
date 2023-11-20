@@ -14,8 +14,6 @@ go_library(
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
         "//pkg/sql/protoreflect",
@@ -31,12 +29,9 @@ go_library(
 go_test(
     name = "bulk_test",
     srcs = ["tracing_aggregator_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":bulk",
         "//pkg/ccl/backupccl/backuppb",
-        "//pkg/kv/bulk/bulkpb",
-        "//pkg/roachpb",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "@com_github_gogo_protobuf//proto",

@@ -12,7 +12,7 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-    - uses: actions/stale@v3
+    - uses: actions/stale@v8
       with:
         operations-per-run: 1000
         repo-token: ${{ secrets.GITHUB_TOKEN }}

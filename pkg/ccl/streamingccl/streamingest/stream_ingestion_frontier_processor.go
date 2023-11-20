@@ -36,17 +36,13 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// JobCheckpointFrequency controls the frequency of frontier checkpoints into
-// the jobs table.
-var JobCheckpointFrequency = settings.RegisterDurationSetting(
-	settings.TenantWritable,
-	"stream_replication.job_checkpoint_frequency",
-	"controls the frequency with which partitions update their progress; if 0, disabled",
-	10*time.Second,
-	settings.NonNegativeDuration,
-)
+const (
+	streamIngestionFrontierProcName = `ingestfntr`
 
-const streamIngestionFrontierProcName = `ingestfntr`
+	// frontierEntriesFilename is the name of the file at which the stream ingestion
+	// frontier periodically dumps its state.
+	frontierEntriesFilename = "~replication-frontier-entries.binpb"
+)
 
 type streamIngestionFrontier struct {
 	execinfra.ProcessorBase
@@ -78,7 +74,10 @@ type streamIngestionFrontier struct {
 	persistedReplicatedTime hlc.Timestamp
 
 	lastPartitionUpdate time.Time
+	lastFrontierDump    time.Time
 	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
+
+	lastNodeLagCheck time.Time
 }
 
 var _ execinfra.Processor = &streamIngestionFrontier{}
@@ -173,7 +172,7 @@ func newHeartbeatSender(
 ) (*heartbeatSender, error) {
 
 	streamID := streampb.StreamID(spec.StreamID)
-	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses, streamclient.WithStreamID(streamID))
+	streamClient, err := streamclient.GetFirstActiveClient(ctx, spec.StreamAddresses, flowCtx.Cfg.DB, streamclient.WithStreamID(streamID))
 	if err != nil {
 		return nil, err
 	}
@@ -305,6 +304,16 @@ func (sf *streamIngestionFrontier) Next() (
 			break
 		}
 
+		if err := sf.maybePersistFrontierEntries(); err != nil {
+			log.Errorf(sf.Ctx(), "failed to persist frontier entries: %+v", err)
+		}
+
+		if err := sf.maybeCheckForLaggingNodes(); err != nil {
+			sf.MoveToDraining(err)
+			break
+		}
+
+		// Send back a row to the job so that it can update the progress.
 		select {
 		case <-sf.Ctx().Done():
 			sf.MoveToDraining(sf.Ctx().Err())
@@ -392,7 +401,7 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 // the status of each partition.
 func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	ctx := sf.Ctx()
-	updateFreq := JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
+	updateFreq := streamingccl.JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
 		sf.updateLagMetric()
 		return nil
@@ -488,4 +497,65 @@ func (sf *streamIngestionFrontier) updateLagMetric() {
 		// implying the initial scan has completed.
 		sf.metrics.FrontierLagNanos.Update(timeutil.Since(sf.persistedReplicatedTime.GoTime()).Nanoseconds())
 	}
+}
+
+// maybePersistFrontierEntries periodically persists the current state of the
+// frontier to the `system.job_info` table. This information is used to hydrate
+// the execution details that can be requested for the C2C ingestion job. Note,
+// we always persist the entries to the same info key and so we never have more
+// than one row describing the state of the frontier at a given point in time.
+func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
+	dumpFreq := streamingccl.DumpFrontierEntries.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	if dumpFreq == 0 || timeutil.Since(sf.lastFrontierDump) < dumpFreq {
+		return nil
+	}
+	ctx := sf.Ctx()
+	f := sf.frontier
+	jobID := jobspb.JobID(sf.spec.JobID)
+
+	frontierEntries := &execinfrapb.FrontierEntries{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
+	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+		frontierEntries.ResolvedSpans = append(frontierEntries.ResolvedSpans, jobspb.ResolvedSpan{Span: sp, Timestamp: ts})
+		return span.ContinueMatch
+	})
+
+	frontierBytes, err := protoutil.Marshal(frontierEntries)
+	if err != nil {
+		return err
+	}
+
+	if err = sf.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobs.WriteChunkedFileToJobInfo(ctx, frontierEntriesFilename, frontierBytes, txn, jobID, sf.EvalCtx.Settings.Version)
+	}); err != nil {
+		return err
+	}
+
+	sf.lastFrontierDump = timeutil.Now()
+	return nil
+}
+
+func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
+	ctx := sf.Ctx()
+	checkFreq := streamingccl.ReplanFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	maxLag := streamingccl.InterNodeLag.Get(&sf.FlowCtx.Cfg.Settings.SV)
+	if checkFreq == 0 || maxLag == 0 || timeutil.Since(sf.lastNodeLagCheck) < checkFreq {
+		log.VEventf(ctx, 2, "skipping lag replanning check: maxLag %d; checkFreq %.2f; last node check %s; time since last check %.2f",
+			maxLag, checkFreq.Minutes(), sf.lastNodeLagCheck, timeutil.Since(sf.lastNodeLagCheck).Minutes())
+		return nil
+	}
+	// Don't check for lagging nodes if the hwm has yet to advance.
+	if sf.replicatedTimeAtStart.Equal(sf.persistedReplicatedTime) {
+		log.VEventf(ctx, 2, "skipping lag replanning check: hwm has yet to advance past %s", sf.replicatedTimeAtStart)
+		return nil
+	}
+	defer func() {
+		sf.lastNodeLagCheck = timeutil.Now()
+	}()
+	executionDetails := constructSpanFrontierExecutionDetailsWithFrontier(sf.spec.PartitionSpecs, sf.frontier)
+	log.VEvent(ctx, 2, "checking for lagging nodes")
+	return checkLaggingNodes(
+		ctx,
+		executionDetails,
+		maxLag,
+	)
 }

@@ -47,7 +47,7 @@ import (
 //     simulation. The default values are: rw_ratio=0 rate=0 min_block=1
 //     max_block=1 min_key=1 max_key=10_000 access_skew=false.
 //
-//   - "ken_cluster" [nodes=<int>] [stores_per_node=<int>]
+//   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
 //     simulation. The default values are: nodes=3 stores_per_node=1.
@@ -73,6 +73,11 @@ import (
 //     Set the liveness status of the node with ID NodeID. This applies at the
 //     start of the simulation or with some delay after the simulation starts,
 //     if specified.
+//
+//   - set_locality node=<int> [delay=<duration] locality=string
+//     Sets the locality of the node with ID NodeID. This applies at the start
+//     of the simulation or with some delay after the simulation stats, if
+//     specified.
 //
 //   - add_node: [stores=<int>] [locality=<string>] [delay=<duration>]
 //     Add a node to the cluster after initial generation with some delay,
@@ -285,6 +290,19 @@ func TestDataDriven(t *testing.T) {
 					LivenessStatus: livenessStatus,
 				})
 				return ""
+			case "set_locality":
+				var nodeID int
+				var localityString string
+				var delay time.Duration
+				scanArg(t, d, "node", &nodeID)
+				scanArg(t, d, "locality", &localityString)
+				scanIfExists(t, d, "delay", &delay)
+
+				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLocalityEvent{
+					NodeID:         state.NodeID(nodeID),
+					LocalityString: localityString,
+				})
+				return ""
 			case "set_capacity":
 				var store int
 				var ioThreshold float64 = -1
@@ -394,20 +412,26 @@ func TestDataDriven(t *testing.T) {
 						Stores:    stores,
 					})
 				case "conformance":
-					var under, over, unavailable, violating int
+					var under, over, unavailable, violating, leaseViolating, leaseLessPref int
 					under = assertion.ConformanceAssertionSentinel
 					over = assertion.ConformanceAssertionSentinel
 					unavailable = assertion.ConformanceAssertionSentinel
 					violating = assertion.ConformanceAssertionSentinel
+					leaseLessPref = assertion.ConformanceAssertionSentinel
+					leaseViolating = assertion.ConformanceAssertionSentinel
 					scanIfExists(t, d, "under", &under)
 					scanIfExists(t, d, "over", &over)
 					scanIfExists(t, d, "unavailable", &unavailable)
 					scanIfExists(t, d, "violating", &violating)
+					scanIfExists(t, d, "lease-violating", &leaseViolating)
+					scanIfExists(t, d, "lease-less-preferred", &leaseLessPref)
 					assertions = append(assertions, assertion.ConformanceAssertion{
-						Underreplicated: under,
-						Overreplicated:  over,
-						Violating:       violating,
-						Unavailable:     unavailable,
+						Underreplicated:           under,
+						Overreplicated:            over,
+						ViolatingConstraints:      violating,
+						Unavailable:               unavailable,
+						ViolatingLeasePreferences: leaseViolating,
+						LessPreferredLeases:       leaseLessPref,
 					})
 				}
 				return ""

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
@@ -42,7 +43,7 @@ import (
 // KVAdmissionControlEnabled). Only the system tenant can modify these
 // settings in the storage servers, while a regular tenant can modify these
 // settings for their SQL-only servers. Which is why these are typically
-// TenantWritable.
+// ApplicationLevel.
 
 // KVAdmissionControlEnabled controls whether KV server-side admission control
 // is enabled.
@@ -70,7 +71,7 @@ var KVBulkOnlyAdmissionControlEnabled = settings.RegisterBoolSetting(
 // SQLKVResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for KV requests, is enabled.
 var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.sql_kv_response.enabled",
 	"when true, work performed by the SQL layer when receiving a KV response is subject to "+
 		"admission control",
@@ -80,7 +81,7 @@ var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
 // SQLSQLResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for DistSQL requests, is enabled.
 var SQLSQLResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.sql_sql_response.enabled",
 	"when true, work performed by the SQL layer when receiving a DistSQL response is subject "+
 		"to admission control",
@@ -121,14 +122,14 @@ var KVStoresTenantWeightsEnabled = settings.RegisterBoolSetting(
 // enabled, and we don't want to carry forward unnecessarily granular
 // settings.
 var EpochLIFOEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.epoch_lifo.enabled",
 	"when true, epoch-LIFO behavior is enabled when there is significant delay in admission",
 	false,
 	settings.WithPublic)
 
 var epochLIFOEpochDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.epoch_lifo.epoch_duration",
 	"the duration of an epoch, for epoch-LIFO admission control ordering",
 	epochLength,
@@ -140,7 +141,7 @@ var epochLIFOEpochDuration = settings.RegisterDurationSetting(
 	}), settings.WithPublic)
 
 var epochLIFOEpochClosingDeltaDuration = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.epoch_lifo.epoch_closing_delta_duration",
 	"the delta duration before closing an epoch, for epoch-LIFO admission control ordering",
 	epochClosingDelta,
@@ -152,7 +153,7 @@ var epochLIFOEpochClosingDeltaDuration = settings.RegisterDurationSetting(
 	}), settings.WithPublic)
 
 var epochLIFOQueueDelayThresholdToSwitchToLIFO = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo",
 	"the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering",
 	maxQueueDelayToSwitchToLifo,
@@ -164,7 +165,7 @@ var epochLIFOQueueDelayThresholdToSwitchToLIFO = settings.RegisterDurationSettin
 	}), settings.WithPublic)
 
 var rangeSequencerGCThreshold = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"admission.replication_control.range_sequencer_gc_threshold",
 	"the inactive duration for a range sequencer after it's garbage collected",
 	5*time.Minute,
@@ -538,7 +539,7 @@ func (q *WorkQueue) tryCloseEpoch(timeNow time.Time) {
 			// specifically all the store WorkQueues share the same metric. We
 			// should eliminate that sharing and make those per store metrics.
 			log.Infof(q.ambientCtx, "%s: FIFO threshold for tenant %d %s %d",
-				workKindString(q.workKind), tenant.id, logVerb, tenant.fifoPriorityThreshold)
+				q.workKind, tenant.id, logVerb, tenant.fifoPriorityThreshold)
 		}
 		// Note that we are ignoring the new priority threshold and only
 		// dequeueing the ones that are in the closed epoch. It is possible to
@@ -717,7 +718,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		deadline, _ := ctx.Deadline()
 		return true,
 			errors.Newf("work %s deadline already expired: deadline: %v, now: %v",
-				workKindString(q.workKind), deadline, startTime)
+				q.workKind, deadline, startTime)
 	}
 	// Push onto heap(s).
 	ordering := fifoWorkOrdering
@@ -759,6 +760,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 	}
 
 	// Start waiting for admission.
+	var span *tracing.Span
+	ctx, span = tracing.ChildSpan(ctx, "admissionWorkQueueWait")
+	defer span.Finish()
 	defer releaseWaitingWork(work)
 	select {
 	case <-ctx.Done():
@@ -799,11 +803,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		q.metrics.incErrored(info.Priority)
 		q.metrics.recordFinishWait(info.Priority, waitDur)
 		deadline, _ := ctx.Deadline()
+		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, true)
 		log.Eventf(ctx, "deadline expired, waited in %s queue for %v",
-			workKindString(q.workKind), waitDur)
+			q.workKind, waitDur)
 		return true,
 			errors.Newf("work %s deadline expired while waiting: deadline: %v, start: %v, dur: %v",
-				workKindString(q.workKind), deadline, startTime, waitDur)
+				q.workKind, deadline, startTime, waitDur)
 	case chainID, ok := <-work.ch:
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
@@ -814,10 +819,24 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		if work.heapIndex != -1 {
 			panic(errors.AssertionFailedf("grantee should be removed from heap"))
 		}
-		log.Eventf(ctx, "admitted, waited in %s queue for %v", workKindString(q.workKind), waitDur)
+		recordAdmissionWorkQueueStats(span, waitDur, q.workKind, false)
+		log.Eventf(ctx, "admitted, waited in %s queue for %v", q.workKind, waitDur)
 		q.granter.continueGrantChain(chainID)
 		return true, nil
 	}
+}
+
+func recordAdmissionWorkQueueStats(
+	span *tracing.Span, waitDur time.Duration, workKind WorkKind, deadlineExceeded bool,
+) {
+	if span == nil {
+		return
+	}
+	span.RecordStructured(&admissionpb.AdmissionWorkQueueStats{
+		WaitDurationNanos: waitDur,
+		WorkKind:          workKind.String(),
+		DeadlineExceeded:  deadlineExceeded,
+	})
 }
 
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
@@ -1944,7 +1963,7 @@ func (q *StoreWorkQueue) Admit(
 	// point. These statistics are used to maintain the underlying linear
 	// models (modeling relation between physical log writes and total L0
 	// growth, which includes the state machine application).
-	q.updateStoreStatsAfterWorkDone(1, storeWorkDoneInfo, false)
+	q.updateStoreStatsAfterWorkDone(1, storeWorkDoneInfo, false, false)
 	return h, nil
 }
 
@@ -2072,7 +2091,7 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkD
 	if !h.UseAdmittedWorkDone() {
 		return nil // nothing to do
 	}
-	q.updateStoreStatsAfterWorkDone(1, doneInfo, false)
+	q.updateStoreStatsAfterWorkDone(1, doneInfo, false, true)
 	additionalTokens := q.granters[h.workClass].storeWriteDone(h.writeTokens, doneInfo)
 	q.q[h.workClass].adjustTenantUsed(h.tenantID, additionalTokens)
 	return nil
@@ -2082,7 +2101,7 @@ func (q *StoreWorkQueue) AdmittedWorkDone(h StoreWorkHandle, doneInfo StoreWorkD
 // can (a) adjust remaining tokens, (b) account for this in the per-work token
 // estimation model.
 func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDoneInfo) {
-	q.updateStoreStatsAfterWorkDone(uint64(workCount), doneInfo, true)
+	q.updateStoreStatsAfterWorkDone(uint64(workCount), doneInfo, true, false)
 	// Since we have no control over such work, we choose to count it as
 	// regularWorkClass.
 	additionalTokensTaken := q.granters[admissionpb.RegularWorkClass].storeWriteDone(0 /* originalTokens */, doneInfo)
@@ -2091,15 +2110,16 @@ func (q *StoreWorkQueue) BypassedWorkDone(workCount int64, doneInfo StoreWorkDon
 
 // StatsToIgnore is called for range snapshot ingestion -- see the comment in
 // storeAdmissionStats.
-func (q *StoreWorkQueue) StatsToIgnore(ingestStats pebble.IngestOperationStats) {
+func (q *StoreWorkQueue) StatsToIgnore(ingestStats pebble.IngestOperationStats, writeBytes uint64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.mu.stats.statsToIgnore.Bytes += ingestStats.Bytes
-	q.mu.stats.statsToIgnore.ApproxIngestedIntoL0Bytes += ingestStats.ApproxIngestedIntoL0Bytes
+	q.mu.stats.statsToIgnore.ingestStats.Bytes += ingestStats.Bytes
+	q.mu.stats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes += ingestStats.ApproxIngestedIntoL0Bytes
+	q.mu.stats.statsToIgnore.writeBytes += writeBytes
 }
 
 func (q *StoreWorkQueue) updateStoreStatsAfterWorkDone(
-	workCount uint64, doneInfo StoreWorkDoneInfo, bypassed bool,
+	workCount uint64, doneInfo StoreWorkDoneInfo, bypassed bool, aboveRaft bool,
 ) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -2110,6 +2130,11 @@ func (q *StoreWorkQueue) updateStoreStatsAfterWorkDone(
 		q.mu.stats.aux.bypassedCount += workCount
 		q.mu.stats.aux.writeBypassedAccountedBytes += uint64(doneInfo.WriteBytes)
 		q.mu.stats.aux.ingestedBypassedAccountedBytes += uint64(doneInfo.IngestedBytes)
+	}
+	if aboveRaft {
+		q.mu.stats.aboveRaftStats.workCount += workCount
+		q.mu.stats.aboveRaftStats.writeAccountedBytes += uint64(doneInfo.WriteBytes)
+		q.mu.stats.aboveRaftStats.ingestedAccountedBytes += uint64(doneInfo.IngestedBytes)
 	}
 }
 

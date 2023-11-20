@@ -315,7 +315,7 @@ func TestErrorOnRollback(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	getTargetKey := func(s serverutils.TestServerInterface, tableID uint32) string {
-		if s.StartedDefaultTestTenant() {
+		if s.TenantController().StartedDefaultTestTenant() {
 			return fmt.Sprintf("/Tenant/%d/Table/%d/1/1/0", serverutils.TestTenantID().ToUint64(), tableID)
 		}
 		return fmt.Sprintf("/Table/%d/1/1/0", tableID)
@@ -425,23 +425,36 @@ func TestHalloweenProblemAvoidance(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
-	if _, err := db.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (x FLOAT);
-`); err != nil {
-		t.Fatal(err)
+	for _, s := range []string{
+		`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true;`,
+		`SET CLUSTER SETTING sql.txn.snapshot_isolation.enabled = true;`,
+		`CREATE DATABASE t;`,
+		`CREATE TABLE t.test (x FLOAT);`,
+	} {
+		if _, err := db.Exec(s); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	if _, err := db.Exec(
-		`INSERT INTO t.test(x) SELECT generate_series(1, $1)::FLOAT`,
-		numRows); err != nil {
-		t.Fatal(err)
-	}
-
-	// Now slightly modify the values in duplicate rows.
-	// We choose a float +0.1 to ensure that none of the derived
-	// values become duplicate of already-present values.
-	if _, err := db.Exec(`
+	for _, isoLevel := range []tree.IsolationLevel{
+		tree.ReadCommittedIsolation,
+		tree.SnapshotIsolation,
+		tree.SerializableIsolation,
+	} {
+		t.Run(isoLevel.String(), func(t *testing.T) {
+			if _, err := db.Exec("DELETE FROM t.test"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(
+				`INSERT INTO t.test(x) SELECT generate_series(1, $1)::FLOAT`,
+				numRows); err != nil {
+				t.Fatal(err)
+			}
+			// Now slightly modify the values in duplicate rows.
+			// We choose a float +0.1 to ensure that none of the derived
+			// values become duplicate of already-present values.
+			q := fmt.Sprintf(`
+BEGIN TRANSACTION ISOLATION LEVEL %s;
 INSERT INTO t.test(x)
     -- the if ensures that no row is processed two times.
 SELECT IF(x::INT::FLOAT = x,
@@ -451,20 +464,23 @@ SELECT IF(x::INT::FLOAT = x,
        + 0.1
   FROM t.test
   -- the function used here is implemented by using the internal executor.
-  WHERE has_table_privilege('root', ((x+.1)/(x+1) + 1)::int::oid, 'INSERT') IS NULL
-`); err != nil {
-		t.Fatal(err)
-	}
+  WHERE has_table_privilege('root', ((x+.1)/(x+1) + 1)::int::oid, 'INSERT') IS NULL;
+COMMIT;`, isoLevel.String())
+			if _, err := db.Exec(q); err != nil {
+				t.Fatal(err)
+			}
 
-	// Finally verify that no rows has been operated on more than once.
-	row := db.QueryRow(`SELECT count(DISTINCT x) FROM t.test`)
-	var cnt int
-	if err := row.Scan(&cnt); err != nil {
-		t.Fatal(err)
-	}
+			// Finally verify that no rows has been operated on more than once.
+			row := db.QueryRow(`SELECT count(DISTINCT x) FROM t.test`)
+			var cnt int
+			if err := row.Scan(&cnt); err != nil {
+				t.Fatal(err)
+			}
 
-	if cnt != 2*numRows {
-		t.Fatalf("expected %d rows in final table, got %d", 2*numRows, cnt)
+			if cnt != 2*numRows {
+				t.Fatalf("expected %d rows in final table, got %d", 2*numRows, cnt)
+			}
+		})
 	}
 }
 
@@ -1194,7 +1210,7 @@ func TestTransactionDeadline(t *testing.T) {
 		},
 	}
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantAlwaysEnabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs:             knobs,
 	})
 	defer s.Stopper().Stop(ctx)
@@ -1274,7 +1290,7 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 		// the session expiry should be ignored.
 		// Open a DB connection on the server and not the tenant to test that the session
 		// expiry is ignored outside of the multi-tenant environment.
-		dbConn := s.SystemLayer().SQLConn(t, "")
+		dbConn := s.SystemLayer().SQLConn(t)
 		defer dbConn.Close()
 		// Set up a dummy database and table to write into for the test.
 		if _, err := dbConn.Exec(`CREATE DATABASE t1;
@@ -1451,7 +1467,9 @@ func TestInjectRetryErrors(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	defer db.Close()
 
-	_, err := db.Exec("SET inject_retry_errors_enabled = 'true'")
+	_, err := db.Exec(`SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true`)
+	require.NoError(t, err)
+	_, err = db.Exec("SET inject_retry_errors_enabled = 'true'")
 	require.NoError(t, err)
 
 	t.Run("with_savepoints", func(t *testing.T) {
@@ -1642,7 +1660,7 @@ func TestTrackOnlyUserOpenTransactionsAndActiveStatements(t *testing.T) {
 	params := base.TestServerArgs{}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-	dbConn := s.ApplicationLayer().SQLConn(t, "")
+	dbConn := s.ApplicationLayer().SQLConn(t)
 	defer dbConn.Close()
 
 	waitChannel := make(chan struct{})
@@ -1825,7 +1843,7 @@ func TestSessionTotalActiveTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rawSQL := s.SQLConnForUser(t, username.TestUser, "")
+	rawSQL := s.SQLConn(t, serverutils.User(username.TestUser))
 
 	getSessionWithTestUser := func() *serverpb.Session {
 		sessions := s.SQLServer().(*sql.Server).GetExecutorConfig().SessionRegistry.SerializeAll()

@@ -202,7 +202,7 @@ func (r *replicaTruncatorTest) printEngine(t *testing.T, eng storage.Engine) {
 	require.NoError(t, err)
 	fmt.Fprintf(r.buf, "truncated index: %d\n", truncState.Index)
 	prefix := r.stateLoader.RaftLogPrefix()
-	iter, err := eng.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := eng.NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, storage.IterOptions{
 		UpperBound: r.stateLoader.RaftLogKey(math.MaxUint64),
 	})
 	if err != nil {

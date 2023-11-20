@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"hash/fnv"
 	"strconv"
 	"strings"
 	"time"
@@ -25,11 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -128,12 +131,67 @@ func checkPrivilegesForSetting(
 func (p *planner) SetClusterSetting(
 	ctx context.Context, n *tree.SetClusterSetting,
 ) (planNode, error) {
+	forSystemTenant := p.ExecCfg().Codec.ForSystemTenant()
+	tipSystemInterface := !forSystemTenant && TipUserAboutSystemInterface.Get(&p.ExecCfg().Settings.SV)
 	name := settings.SettingName(strings.ToLower(n.Name))
-	st := p.EvalContext().Settings
-	setting, ok, nameStatus := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
-	if !ok {
-		return nil, errors.Errorf("unknown cluster setting '%s'", name)
+
+	friendlyIgnore := func() {
+		p.BufferClientNotice(ctx, errors.WithHintf(pgnotice.Newf("ignoring attempt to modify %q", name),
+			"The setting is only modifiable by the operator.\n"+
+				"Normally, an error would be reported, but the operation is silently accepted here as configured by %q.",
+			TipUserAboutSystemInterface.Name()))
 	}
+
+	st := p.EvalContext().Settings
+	setting, ok, nameStatus := settings.LookupForLocalAccess(name, forSystemTenant)
+	if !ok {
+		// Uh-oh.
+		unknownSettingError := pgerror.Newf(pgcode.UndefinedParameter, "unknown cluster setting '%s'", name)
+
+		// There's 3 cases here.
+		//
+		// - the setting does not exist. We'll fall back to a "unknown
+		//   setting" error below.
+		//
+		// - the setting exists and was previously application. In this case,
+		//   either report "unknown setting" in the common case, or, if
+		//   the "tip" flag is enabled, _make the operation succeed
+		//   as a no-op_ with a simple NOTICE.
+		//
+		// - the setting exists and has always been non-application. Either
+		//   tell the user "unknown setting" in the common case, or, if the
+		//   "tip" flag is enabled, tell the user "nope, connect to system
+		//   interface instead".
+		//
+		//
+
+		// Check if the setting exists at all, perhaps as a system setting.
+		actualSetting, settingExists, _ := settings.LookupForLocalAccess(name, true /* forSystemTenant */)
+		if !settingExists {
+			return nil, unknownSettingError
+		}
+
+		// Did the setting previously have ApplicationLevel?
+		if settings.SettingPreviouslyHadApplicationClass(actualSetting.InternalKey()) {
+			if !tipSystemInterface {
+				return nil, unknownSettingError
+			}
+
+			friendlyIgnore()
+			return &zeroNode{}, nil
+		}
+
+		// This is a system setting.
+
+		if !tipSystemInterface {
+			return nil, unknownSettingError
+		}
+
+		return nil, p.maybeAddSystemInterfaceHint(
+			pgerror.Newf(pgcode.InsufficientPrivilege, "cannot modify storage-level setting from virtual cluster"),
+			"modify the cluster setting")
+	}
+
 	if nameStatus != settings.NameActive {
 		p.BufferClientNotice(ctx, settingNameDeprecationNotice(name, setting.Name()))
 		name = setting.Name()
@@ -143,14 +201,32 @@ func (p *planner) SetClusterSetting(
 		return nil, err
 	}
 
-	if !p.execCfg.Codec.ForSystemTenant() {
+	if !forSystemTenant {
 		switch setting.Class() {
 		case settings.SystemOnly:
 			// The Lookup call above should never return SystemOnly settings if this
 			// is a tenant.
 			return nil, errors.AssertionFailedf("looked up system-only setting")
-		case settings.TenantReadOnly:
-			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "setting %s is only settable by the operator", name)
+
+		case settings.SystemVisible:
+			// Did the setting previously have ApplicationLevel?
+			if settings.SettingPreviouslyHadApplicationClass(setting.InternalKey()) && tipSystemInterface {
+				friendlyIgnore()
+				return &zeroNode{}, nil
+			}
+
+			return nil, p.maybeAddSystemInterfaceHint(
+				pgerror.Newf(pgcode.InsufficientPrivilege, "setting %s is only settable by the operator", name),
+				"modify the cluster setting")
+		}
+	} else {
+		switch setting.Class() {
+		case settings.ApplicationLevel:
+			if err := p.shouldRestrictAccessToSystemInterface(ctx,
+				"update to application-level cluster setting", /* operation */
+				"changing the setting" /* alternate action */); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -261,6 +337,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		params.extendedEvalCtx.Codec.ForSystemTenant(),
 		params.p.logEvent,
 		params.p.descCollection.ReleaseLeases,
+		params.p.makeUnsafeSettingInterlockInfo(),
 	)
 	if err != nil {
 		return err
@@ -356,6 +433,7 @@ func writeSettingInternal(
 	forSystemTenant bool,
 	logFn func(context.Context, descpb.ID, logpb.EventPayload) error,
 	releaseLeases func(context.Context),
+	interlockInfo unsafeSettingInterlockInfo,
 ) (expectedEncodedValue string, err error) {
 	if err := func() error {
 		var reportedValue string
@@ -367,7 +445,6 @@ func writeSettingInternal(
 				return err
 			}
 		} else {
-
 			// Setting a non-DEFAULT value.
 			value, err := eval.Expr(ctx, evalCtx, value)
 			if err != nil {
@@ -377,11 +454,18 @@ func writeSettingInternal(
 				ctx, hook, db,
 				setting, user, st, value, forSystemTenant,
 				releaseLeases,
+				interlockInfo,
 			)
 			if err != nil {
 				return err
 			}
 		}
+
+		if setting.IsUnsafe() {
+			// Also mention the change in the non-structured DEV log.
+			log.Warningf(ctx, "unsafe setting changed: %q -> %v", name, reportedValue)
+		}
+
 		return logFn(ctx,
 			0, /* no target */
 			&eventpb.SetClusterSetting{
@@ -423,6 +507,7 @@ func writeNonDefaultSettingValue(
 	value tree.Datum,
 	forSystemTenant bool,
 	releaseLeases func(context.Context),
+	interlockInfo unsafeSettingInterlockInfo,
 ) (reportedValue string, expectedEncodedValue string, err error) {
 	// Stringify the value set by the statement for reporting in errors, logs etc.
 	reportedValue = tree.AsStringWithFlags(value, tree.FmtBareStrings)
@@ -444,6 +529,12 @@ func writeNonDefaultSettingValue(
 		}
 	} else {
 		// Modifying another setting than the version.
+		if setting.IsUnsafe() {
+			if err := unsafeSettingInterlock(ctx, st, setting, encoded, interlockInfo); err != nil {
+				return reportedValue, expectedEncodedValue, err
+			}
+		}
+
 		if _, err = db.Executor().ExecEx(
 			ctx, "update-setting", nil,
 			sessiondata.RootUserSessionDataOverride,
@@ -526,22 +617,49 @@ func setVersionSetting(
 		if err != nil {
 			return err
 		}
-		return db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			// Confirm if the version has actually changed on us.
-			datums, err := txn.QueryRowEx(
-				ctx, "retrieve-prev-setting", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
-				"SELECT value FROM system.settings WHERE name = $1", setting.InternalKey(),
-			)
+		return db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// On complex clusters with a large number of descriptors (> 500) and
+			// multi-region nodes (> 9), normal priority transactions reading/updating
+			// the version row can be starved. This is due to the lease manager reading
+			// the version row at high priority, when refreshing leases (#95227), with
+			// a complex cluster this traffic will continuous.
+			// Run the version bump inside the upgrade as high priority, since
+			// lease manager ends up reading the version row (with high priority)
+			// inside the settings table when refreshing leases. On complex clusters
+			// (multi-region with high latency) or with a large number of descriptors
+			// ( >500) it's possible for normal transactions to be starved by continuous
+			// lease traffic.
+			// This is safe from deadlocks / starvation because we expected this
+			// transaction only do the following:
+			// 1) We expect this transaction to only read and write to the
+			//    version key in the system.settings table. To achieve the smallest
+			//    possible txn and avoid extra operations on other keys, we are going to
+			//	  use KV call with EncodeSettingKey/EncodeSettingValue functions
+			//	  instead of using the internal executor.
+			// 2) Reads from the system.sql_instances table to confirm all SQL servers
+			//    have been upgraded in multi-tenant environments.
+			// 3) Other transactions will use a normal priority and get pushed out by
+			//    this one, if they involve schema changes on the system database
+			//    descriptor (highly unlikely).
+			if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
+				return err
+			}
+
+			// Fetch the existing version setting and see if its
+			// been modified.
+			codec := db.(*InternalDB).server.cfg.Codec
+			decoder := settingswatcher.MakeRowDecoder(codec)
+			key := settingswatcher.EncodeSettingKey(codec, "version")
+			row, err := txn.Get(ctx, key)
 			if err != nil {
 				return err
 			}
-			if len(datums) > 0 {
-				dStr, ok := datums[0].(*tree.DString)
-				if !ok {
-					return errors.AssertionFailedf("existing version value is not a string, got %T", datums[0])
+			if row.Value != nil {
+				_, val, _, err := decoder.DecodeRow(roachpb.KeyValue{Key: row.Key, Value: *row.Value}, nil /* alloc */)
+				if err != nil {
+					return err
 				}
-				oldRawValue := []byte(string(*dStr))
+				oldRawValue := []byte(val.Value)
 				if bytes.Equal(oldRawValue, rawValue) {
 					return nil
 				}
@@ -555,22 +673,22 @@ func setVersionSetting(
 					return nil
 				}
 			}
-			// Only if the version has increased, alter the setting.
-			if _, err = txn.ExecEx(
-				ctx, "update-setting", txn.KV(),
-				sessiondata.RootUserSessionDataOverride,
-				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
-				setting.InternalKey(), string(rawValue), setting.Typ(),
-			); err != nil {
+			// Encode the setting value to write out the updated version.
+			var tuple []byte
+			if tuple, err = settingswatcher.EncodeSettingValue(rawValue, setting.Typ()); err != nil {
 				return err
 			}
-
+			newValue := &roachpb.Value{}
+			newValue.SetTuple(tuple)
+			if err := txn.Put(ctx, row.Key, newValue); err != nil {
+				return err
+			}
 			// Perform any necessary post-setting validation. This is used in
 			// the tenant upgrade interlock to ensure that the set of sql
 			// servers present at the time of the settings update, matches the
 			// set that was present when the fence bump occurred (see comment in
 			// upgrademanager.Migrate() for more details).
-			if err = postSettingValidate(ctx, txn.KV()); err != nil {
+			if err = postSettingValidate(ctx, txn); err != nil {
 				return err
 			}
 			return err
@@ -774,4 +892,53 @@ func toSettingString(
 	default:
 		return "", errors.Errorf("unsupported setting type %T", setting)
 	}
+}
+
+// unsafeSettingInterlockInfo contains information about the current
+// session that is used by the unsafe setting interlock system.
+type unsafeSettingInterlockInfo struct {
+	sessionID    clusterunique.ID
+	interlockKey string
+}
+
+func (p *planner) makeUnsafeSettingInterlockInfo() unsafeSettingInterlockInfo {
+	return unsafeSettingInterlockInfo{
+		sessionID:    p.ExtendedEvalContext().SessionID,
+		interlockKey: p.SessionData().UnsafeSettingInterlockKey,
+	}
+}
+
+const interlockKeySessionVarName = "unsafe_setting_interlock_key"
+
+// unsafeSettingInterlock ensures that changes to unsafe settings are
+// doubly confirmed by the operator by a special value in a session
+// variable.
+func unsafeSettingInterlock(
+	ctx context.Context,
+	st *cluster.Settings,
+	setting settings.Setting,
+	encodedValue string,
+	info unsafeSettingInterlockInfo,
+) error {
+	// The interlock key is a combination of:
+	// - the session ID, so that different sessions need different keys.
+	// - the setting key, so that different settings need different
+	//   interlock keys.
+	h := fnv.New32()
+	h.Write([]byte(info.sessionID.String()))
+	h.Write([]byte(setting.InternalKey()))
+	pastableKey := base64.StdEncoding.EncodeToString(h.Sum(nil))
+
+	if info.interlockKey != pastableKey {
+		return errors.WithDetailf(
+			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"changing cluster setting %q may cause cluster instability or data corruption.\n"+
+					"To confirm the change, run the following command before trying again:\n\n"+
+					"   SET %s = '%s';\n\n",
+				setting.Name(), interlockKeySessionVarName, pastableKey,
+			),
+			"key: %s", pastableKey,
+		)
+	}
+	return nil
 }

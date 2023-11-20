@@ -1,10 +1,10 @@
-# LogicTest: !3node-tenant-default-configs !local-mixed-22.2-23.1
+# LogicTest: !3node-tenant-default-configs !local-mixed-23.1
 
 query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    10      system
+1   true    12      system
 
 # Create a few tenants.
 
@@ -142,7 +142,7 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 CREATE TENANT four
 
 subtest drop_tenant
@@ -195,19 +195,19 @@ set default_transaction_read_only = off;
 
 user testuser
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 DROP TENANT three
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SHOW TENANTS
 
-statement error user testuser does not have MANAGETENANT privilege on global
+statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 SHOW TENANT 'two'
 
 user root
 
 statement ok
-GRANT SYSTEM MANAGETENANT TO testuser
+GRANT SYSTEM MANAGEVIRTUALCLUSTER TO testuser
 
 user testuser
 
@@ -225,6 +225,21 @@ SHOW TENANT two
 ----
 id  name        data_state  service_mode
 3   two         ready       none
+
+user root
+
+statement ok
+REVOKE SYSTEM MANAGEVIRTUALCLUSTER FROM testuser
+
+# Sanity check that using the original "internal key" privilege name is
+# respected.
+statement ok
+GRANT SYSTEM MANAGETENANT TO testuser
+
+user testuser
+
+statement ok
+SHOW TENANTS
 
 user root
 
@@ -550,3 +565,26 @@ RESET CLUSTER SETTING server.controller.default_target_cluster
 
 statement ok
 DROP TENANT withservice
+
+subtest restrict_system_access
+
+statement ok
+SET CLUSTER SETTING sql.restrict_system_interface.enabled = true
+
+statement error blocked update to application-level cluster setting.*\nHINT:.*\nTry changing the setting from a virtual cluster
+SET CLUSTER SETTING ui.display_timezone = 'America/New_York'
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE TABLE foo(x INT)
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE DATABASE foo
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE SCHEMA foo
+
+statement error blocked DDL execution from the system interface.*\nHINT:.*\nTry running the DDL from a virtual cluster
+CREATE VIEW foo AS SELECT latitude,longitude FROM system.locations
+
+statement ok
+RESET CLUSTER SETTING sql.restrict_system_interface.enabled

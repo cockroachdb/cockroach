@@ -856,11 +856,11 @@ func (u *sqlSymUnion) stmts() tree.Statements {
 func (u *sqlSymUnion) routineBody() *tree.RoutineBody {
     return u.val.(*tree.RoutineBody)
 }
-func (u *sqlSymUnion) functionObj() tree.FuncObj {
-    return u.val.(tree.FuncObj)
+func (u *sqlSymUnion) functionObj() tree.RoutineObj {
+    return u.val.(tree.RoutineObj)
 }
-func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
-    return u.val.(tree.FuncObjs)
+func (u *sqlSymUnion) routineObjs() tree.RoutineObjs {
+    return u.val.(tree.RoutineObjs)
 }
 func (u *sqlSymUnion) tenantReplicationOptions() *tree.TenantReplicationOptions {
   return u.val.(*tree.TenantReplicationOptions)
@@ -885,6 +885,9 @@ func (u *sqlSymUnion) showCreateFormatOption() tree.ShowCreateFormatOption {
 }
 func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
     return u.val.(*tree.BeginTransaction)
+}
+func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
+    return u.val.(*tree.ShowFingerprintOptions)
 }
 %}
 
@@ -946,7 +949,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %token <str> HAVING HASH HEADER HIGH HISTOGRAM HOLD HOUR
 
 %token <str> IDENTITY
-%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMUTABLE IMPORT IN INCLUDE
+%token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMMEDIATELY IMMUTABLE IMPORT IN INCLUDE
 %token <str> INCLUDING INCLUDE_ALL_SECONDARY_TENANTS INCLUDE_ALL_VIRTUAL_CLUSTERS INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
@@ -981,13 +984,13 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES
-%token <str> PROCEDURAL PROCEDURE PUBLIC PUBLICATION
+%token <str> PROCEDURAL PROCEDURE PROCEDURES PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY QUOTE
 
 %token <str> RANGE RANGES READ REAL REASON REASSIGN RECURSIVE RECURRING REDACT REF REFERENCES REFRESH
 %token <str> REGCLASS REGION REGIONAL REGIONS REGNAMESPACE REGPROC REGPROCEDURE REGROLE REGTYPE REINDEX
-%token <str> RELATIVE RELOCATE REMOVE_PATH RENAME REPEATABLE REPLACE REPLICATION
+%token <str> RELATIVE RELOCATE REMOVE_PATH REMOVE_REGIONS RENAME REPEATABLE REPLACE REPLICATION
 %token <str> RELEASE RESET RESTART RESTORE RESTRICT RESTRICTED RESUME RETENTION RETURNING RETURN RETURNS RETRY REVISION_HISTORY
 %token <str> REVOKE RIGHT ROLE ROLES ROLLBACK ROLLUP ROUTINES ROW ROWS RSHIFT RULE RUNNING
 
@@ -995,8 +998,8 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %token <str> SEARCH SECOND SECONDARY SECURITY SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SERVICE SESSION SESSIONS SESSION_USER SET SETOF SETS SETTING SETTINGS
 %token <str> SHARE SHARED SHOW SIMILAR SIMPLE SIZE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
-%token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SKIP_MISSING_UDFS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
-%token <str> SQLLOGIN
+%token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SKIP_MISSING_UDFS SMALLINT SMALLSERIAL
+%token <str> SNAPSHOT SOME SPLIT SQL SQLLOGIN
 %token <str> STABLE START STATE STATISTICS STATUS STDIN STDOUT STOP STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
 %token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
@@ -1007,7 +1010,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %token <str> TRACING
 
 %token <str> UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN UNLISTEN UNLOGGED UNSAFE_RESTORE_INCOMPATIBLE_VERSION UNSPLIT
-%token <str> UPDATE UPSERT UNSET UNTIL USE USER USERS USING UUID
+%token <str> UPDATE UPDATES_CLUSTER_MONITORING_METRICS UPSERT UNSET UNTIL USE USER USERS USING UUID
 
 %token <str> VALID VALIDATE VALUE VALUES VARBIT VARCHAR VARIADIC VERIFY_BACKUP_TABLE_DATA VIEW VARYING VIEWACTIVITY VIEWACTIVITYREDACTED VIEWDEBUG
 %token <str> VIEWCLUSTERMETADATA VIEWCLUSTERSETTING VIRTUAL VISIBLE INVISIBLE VISIBILITY VOLATILE VOTERS
@@ -1069,6 +1072,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> alter_schema_stmt
 %type <tree.Statement> alter_unsupported_stmt
 %type <tree.Statement> alter_func_stmt
+%type <tree.Statement> alter_proc_stmt
 
 // ALTER RANGE
 %type <tree.Statement> alter_zone_range_stmt
@@ -1155,6 +1159,11 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> alter_func_owner_stmt
 %type <tree.Statement> alter_func_dep_extension_stmt
 
+// ALTER PROCEDURE
+%type <tree.Statement> alter_proc_rename_stmt
+%type <tree.Statement> alter_proc_set_schema_stmt
+%type <tree.Statement> alter_proc_owner_stmt
+
 %type <tree.Statement> backup_stmt
 %type <tree.Statement> begin_stmt
 
@@ -1221,6 +1230,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
 %type <tree.Statement> drop_func_stmt
+%type <tree.Statement> drop_proc_stmt
 %type <tree.Statement> drop_virtual_cluster_stmt
 %type <bool>           opt_immediate
 
@@ -1279,8 +1289,9 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> show_databases_stmt
 %type <tree.Statement> show_default_privileges_stmt
 %type <tree.Statement> show_enums_stmt
-%type <tree.Statement> show_fingerprints_stmt
+%type <tree.Statement> show_fingerprints_stmt opt_with_show_fingerprints_options fingerprint_options_list fingerprint_options
 %type <tree.Statement> show_functions_stmt
+%type <tree.Statement> show_procedures_stmt
 %type <tree.Statement> show_grants_stmt
 %type <tree.Statement> show_histogram_stmt
 %type <tree.Statement> show_indexes_stmt
@@ -1347,7 +1358,7 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <*tree.TenantReplicationOptions> opt_with_replication_options replication_options replication_options_list
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
-%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list show_backup_connection_options show_backup_connection_options_list
+%type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list show_backup_connection_options opt_with_show_backup_connection_options_list show_backup_connection_options_list
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
 %type <str> storage_parameter_key
@@ -1413,7 +1424,8 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <str> cursor_name database_name index_name opt_index_name column_name insert_column_item statistics_name window_name opt_in_database
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
 %type <str> db_object_name_component
-%type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
+%type <*tree.UnresolvedObjectName> table_name db_name standalone_index_name sequence_name type_name
+%type <*tree.UnresolvedObjectName> view_name db_object_name simple_db_object_name complex_db_object_name
 %type <[]*tree.UnresolvedObjectName> type_name_list
 %type <str> schema_name opt_in_schema
 %type <tree.ObjectNamePrefix>  qualifiable_schema_name opt_schema_name wildcard_pattern
@@ -1683,8 +1695,8 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <tree.Statement> routine_return_stmt routine_body_stmt
 %type <tree.Statements> routine_body_stmt_list
 %type <*tree.RoutineBody> opt_routine_body
-%type <tree.FuncObj> function_with_paramtypes
-%type <tree.FuncObjs> function_with_paramtypes_list
+%type <tree.RoutineObj> function_with_paramtypes
+%type <tree.RoutineObjs> function_with_paramtypes_list
 %type <empty> opt_link_sym
 
 %type <*tree.LabelSpec> label_spec
@@ -1827,6 +1839,7 @@ alter_ddl_stmt:
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
 | alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
 | alter_func_stmt               // EXTEND WITH HELP: ALTER FUNCTION
+| alter_proc_stmt               // EXTEND WITH HELP: ALTER PROCEDURE
 | alter_backup_schedule  // EXTEND WITH HELP: ALTER BACKUP SCHEDULE
 
 // %Help: ALTER TABLE - change the definition of a table
@@ -2020,6 +2033,23 @@ alter_func_stmt:
 | alter_func_set_schema_stmt
 | alter_func_dep_extension_stmt
 | ALTER FUNCTION error // SHOW HELP: ALTER FUNCTION
+
+// %Help: ALTER PROCEDURE - change the definition of a procedure
+// %Category: DDL
+// %Text:
+// ALTER PROCEDURE name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+//    RENAME TO new_name
+// ALTER PROCEDURE name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+//    OWNER TO { new_owner | CURRENT_USER | SESSION_USER }
+// ALTER PROCEDURE name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+//    SET SCHEMA new_schema
+//
+// %SeeAlso: WEBDOCS/alter-procedure.html
+alter_proc_stmt:
+  alter_proc_rename_stmt
+| alter_proc_owner_stmt
+| alter_proc_set_schema_stmt
+| ALTER PROCEDURE error // SHOW HELP: ALTER PROCEDURE
 
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
@@ -2900,7 +2930,7 @@ alter_column_default:
   }
 
 alter_column_on_update:
-  SET ON UPDATE b_expr
+  SET ON UPDATE a_expr
   {
     $$.val = $4.expr()
   }
@@ -3320,6 +3350,14 @@ backup_options:
   {
     $$.val = &tree.BackupOptions{IncludeAllSecondaryTenants: $3.expr()}
   }
+| UPDATES_CLUSTER_MONITORING_METRICS
+  {
+    $$.val = &tree.BackupOptions{UpdatesClusterMonitoringMetrics: tree.MakeDBool(true)}
+  }
+| UPDATES_CLUSTER_MONITORING_METRICS '=' a_expr
+  {
+    $$.val = &tree.BackupOptions{UpdatesClusterMonitoringMetrics: $3.expr()}
+  }
 
 include_all_clusters:
   INCLUDE_ALL_SECONDARY_TENANTS { /* SKIP DOC */ }
@@ -3494,6 +3532,14 @@ alter_backup_schedule_cmd:
 		$$.val = &tree.AlterBackupScheduleSetScheduleOption{
 		  Option:  $4.kvOption(),
 		}
+  }
+| EXECUTE IMMEDIATELY
+  {
+    $$.val = &tree.AlterBackupScheduleNextRun{}
+  }
+| EXECUTE FULL IMMEDIATELY
+  {
+    $$.val = &tree.AlterBackupScheduleNextRun{Full: true}
   }
 
 // sconst_or_placeholder matches a simple string, or a placeholder.
@@ -3836,6 +3882,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{ExperimentalOnline: true}
   }
+| REMOVE_REGIONS
+  {
+    $$.val = &tree.RestoreOptions{RemoveRegions: true, SkipLocalitiesCheck: true}
+  }
 
 virtual_cluster_opt:
   TENANT  { /* SKIP DOC */ }
@@ -4009,9 +4059,17 @@ opt_with_options:
     $$.val = nil
   }
 
-// CALL invokes a stored procedure. It is not currently supported in CRDB.
+// %Help: CALL - invoke a procedure
+// %Category: Misc
+// %Text: CALL <name> ( [ <expr> [, ...] ] )
+// %SeeAlso: CREATE PROCEDURE
 call_stmt:
-  CALL error { return unimplementedWithIssueDetail(sqllex, 17511, "call procedure") }
+  CALL func_application
+  {
+    p := $2.expr().(*tree.FuncExpr)
+    p.InCall = true
+    $$.val = &tree.Call{Proc: p}
+  }
 
 // The COPY grammar in postgres has 3 different versions, all of which are supported by postgres:
 // 1) The "really old" syntax from v7.2 and prior
@@ -4535,6 +4593,11 @@ replication_options:
   {
     $$.val = &tree.TenantReplicationOptions{Retention: $3.expr()}
   }
+|
+  RESUME TIMESTAMP '=' d_expr
+  {
+    $$.val = &tree.TenantReplicationOptions{ResumeTimestamp: $4.expr()}
+  }
 
 // %Help: CREATE SCHEDULE
 // %Category: Group
@@ -4584,7 +4647,7 @@ create_func_stmt:
   RETURNS opt_return_table opt_return_set routine_return_type
   opt_create_routine_opt_list opt_routine_body
   {
-    name := $4.unresolvedObjectName().ToFunctionName()
+    name := $4.unresolvedObjectName().ToRoutineName()
     $$.val = &tree.CreateRoutine{
       IsProcedure: false,
       Replace: $2.bool(),
@@ -4592,7 +4655,7 @@ create_func_stmt:
       Params: $6.routineParams(),
       ReturnType: tree.RoutineReturnType{
         Type: $11.typeReference(),
-        IsSet: $10.bool(),
+        SetOf: $10.bool(),
       },
       Options: $12.routineOptions(),
       RoutineBody: $13.routineBody(),
@@ -4613,7 +4676,7 @@ create_proc_stmt:
   CREATE opt_or_replace PROCEDURE routine_create_name '(' opt_routine_param_with_default_list ')'
   opt_create_routine_opt_list opt_routine_body
   {
-    name := $4.unresolvedObjectName().ToFunctionName()
+    name := $4.unresolvedObjectName().ToRoutineName()
     $$.val = &tree.CreateRoutine{
       IsProcedure: true,
       Replace: $2.bool(),
@@ -4621,6 +4684,9 @@ create_proc_stmt:
       Params: $6.routineParams(),
       Options: $8.routineOptions(),
       RoutineBody: $9.routineBody(),
+      ReturnType: tree.RoutineReturnType{
+        Type: types.Void,
+      },
     }
   }
 | CREATE opt_or_replace PROCEDURE error // SHOW HELP: CREATE PROCEDURE
@@ -4878,43 +4944,69 @@ opt_link_sym:
 drop_func_stmt:
   DROP FUNCTION function_with_paramtypes_list opt_drop_behavior
   {
-    $$.val = &tree.DropFunction{
-      Functions: $3.functionObjs(),
+    $$.val = &tree.DropRoutine{
+      Routines: $3.routineObjs(),
       DropBehavior: $4.dropBehavior(),
     }
   }
 | DROP FUNCTION IF EXISTS function_with_paramtypes_list opt_drop_behavior
   {
-    $$.val = &tree.DropFunction{
+    $$.val = &tree.DropRoutine{
       IfExists: true,
-      Functions: $5.functionObjs(),
+      Routines: $5.routineObjs(),
       DropBehavior: $6.dropBehavior(),
     }
   }
 | DROP FUNCTION error // SHOW HELP: DROP FUNCTION
 
+// %Help: DROP PROCEDURE - remove a procedure
+// %Category: DDL
+// %Text:
+// DROP PROCEDURE [ IF EXISTS ] name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ] [, ...]
+//    [ CASCADE | RESTRICT ]
+// %SeeAlso: WEBDOCS/drop-procedure.html
+drop_proc_stmt:
+  DROP PROCEDURE function_with_paramtypes_list opt_drop_behavior
+  {
+    $$.val = &tree.DropRoutine{
+      Procedure: true,
+      Routines: $3.routineObjs(),
+      DropBehavior: $4.dropBehavior(),
+    }
+  }
+| DROP PROCEDURE IF EXISTS function_with_paramtypes_list opt_drop_behavior
+  {
+    $$.val = &tree.DropRoutine{
+      IfExists: true,
+      Procedure: true,
+      Routines: $5.routineObjs(),
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
+| DROP PROCEDURE error // SHOW HELP: DROP PROCEDURE
+
 function_with_paramtypes_list:
   function_with_paramtypes
   {
-    $$.val = tree.FuncObjs{$1.functionObj()}
+    $$.val = tree.RoutineObjs{$1.functionObj()}
   }
   | function_with_paramtypes_list ',' function_with_paramtypes
   {
-    $$.val = append($1.functionObjs(), $3.functionObj())
+    $$.val = append($1.routineObjs(), $3.functionObj())
   }
 
 function_with_paramtypes:
   db_object_name func_params
   {
-    $$.val = tree.FuncObj{
-      FuncName: $1.unresolvedObjectName().ToFunctionName(),
+    $$.val = tree.RoutineObj{
+      FuncName: $1.unresolvedObjectName().ToRoutineName(),
       Params: $2.routineParams(),
     }
   }
   | db_object_name
   {
-    $$.val = tree.FuncObj{
-      FuncName: $1.unresolvedObjectName().ToFunctionName(),
+    $$.val = tree.RoutineObj{
+      FuncName: $1.unresolvedObjectName().ToRoutineName(),
     }
   }
 
@@ -4964,7 +5056,7 @@ opt_restrict:
 alter_func_rename_stmt:
   ALTER FUNCTION function_with_paramtypes RENAME TO name
   {
-    $$.val = &tree.AlterFunctionRename{
+    $$.val = &tree.AlterRoutineRename{
       Function: $3.functionObj(),
       NewName: tree.Name($6),
     }
@@ -4973,7 +5065,7 @@ alter_func_rename_stmt:
 alter_func_set_schema_stmt:
   ALTER FUNCTION function_with_paramtypes SET SCHEMA schema_name
   {
-    $$.val = &tree.AlterFunctionSetSchema{
+    $$.val = &tree.AlterRoutineSetSchema{
       Function: $3.functionObj(),
       NewSchemaName: tree.Name($6),
     }
@@ -4982,7 +5074,7 @@ alter_func_set_schema_stmt:
 alter_func_owner_stmt:
   ALTER FUNCTION function_with_paramtypes OWNER TO role_spec
   {
-    $$.val = &tree.AlterFunctionSetOwner{
+    $$.val = &tree.AlterRoutineSetOwner{
       Function: $3.functionObj(),
       NewOwner: $6.roleSpec(),
     }
@@ -4995,6 +5087,36 @@ alter_func_dep_extension_stmt:
       Function: $3.functionObj(),
       Remove: $4.bool(),
       Extension: tree.Name($8),
+    }
+  }
+
+alter_proc_rename_stmt:
+  ALTER PROCEDURE function_with_paramtypes RENAME TO name
+  {
+    $$.val = &tree.AlterRoutineRename{
+      Function: $3.functionObj(),
+      NewName: tree.Name($6),
+      Procedure: true,
+    }
+  }
+
+alter_proc_set_schema_stmt:
+  ALTER PROCEDURE function_with_paramtypes SET SCHEMA schema_name
+  {
+    $$.val = &tree.AlterRoutineSetSchema{
+      Function: $3.functionObj(),
+      NewSchemaName: tree.Name($6),
+      Procedure: true,
+    }
+  }
+
+alter_proc_owner_stmt:
+  ALTER PROCEDURE function_with_paramtypes OWNER TO role_spec
+  {
+    $$.val = &tree.AlterRoutineSetOwner{
+      Function: $3.functionObj(),
+      NewOwner: $6.roleSpec(),
+      Procedure: true,
     }
   }
 
@@ -5453,6 +5575,7 @@ drop_ddl_stmt:
 | drop_schema_stmt   // EXTEND WITH HELP: DROP SCHEMA
 | drop_type_stmt     // EXTEND WITH HELP: DROP TYPE
 | drop_func_stmt     // EXTEND WITH HELP: DROP FUNCTION
+| drop_proc_stmt     // EXTEND WITH HELP: DROP FUNCTION
 
 // %Help: DROP VIEW - remove a view
 // %Category: DDL
@@ -6231,6 +6354,18 @@ grant_stmt:
       WithGrantOption: $11.bool(),
     }
   }
+| GRANT privileges ON ALL PROCEDURES IN SCHEMA schema_name_list TO role_spec_list opt_with_grant_option
+  {
+    $$.val = &tree.Grant{
+      Privileges: $2.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllProceduresInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      WithGrantOption: $11.bool(),
+    }
+  }
 | GRANT SYSTEM privileges TO role_spec_list opt_with_grant_option
   {
     $$.val = &tree.Grant{
@@ -6366,6 +6501,30 @@ revoke_stmt:
       Targets: tree.GrantTargetList{
         Schemas: $11.objectNamePrefixList(),
         AllFunctionsInSchema: true,
+      },
+      Grantees: $13.roleSpecList(),
+      GrantOptionFor: true,
+    }
+  }
+| REVOKE privileges ON ALL PROCEDURES IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $2.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $8.objectNamePrefixList(),
+        AllProceduresInSchema: true,
+      },
+      Grantees: $10.roleSpecList(),
+      GrantOptionFor: false,
+    }
+  }
+| REVOKE GRANT OPTION FOR privileges ON ALL PROCEDURES IN SCHEMA schema_name_list FROM role_spec_list
+  {
+    $$.val = &tree.Revoke{
+      Privileges: $5.privilegeList(),
+      Targets: tree.GrantTargetList{
+        Schemas: $11.objectNamePrefixList(),
+        AllProceduresInSchema: true,
       },
       Grantees: $13.roleSpecList(),
       GrantOptionFor: true,
@@ -7149,6 +7308,7 @@ show_stmt:
 | show_types_stmt            // EXTEND WITH HELP: SHOW TYPES
 | show_fingerprints_stmt
 | show_functions_stmt        // EXTEND WITH HELP: SHOW FUNCTIONS
+| show_procedures_stmt       // EXTEND WITH HELP: SHOW PROCEDURES
 | show_grants_stmt           // EXTEND WITH HELP: SHOW GRANTS
 | show_histogram_stmt        // EXTEND WITH HELP: SHOW HISTOGRAM
 | show_indexes_stmt          // EXTEND WITH HELP: SHOW INDEXES
@@ -7462,6 +7622,7 @@ session_var:
 // TIME ZONE is special: it is two tokens, but is really the identifier "TIME ZONE".
 | TIME ZONE { $$ = "timezone" }
 | TIME error // SHOW HELP: SHOW SESSION
+| VIRTUAL_CLUSTER_NAME
 
 session_var_parts:
   '.' IDENT
@@ -7597,19 +7758,12 @@ show_backup_stmt:
   			Options: *$5.showBackupOptions(),
   		}
   	}
-| SHOW BACKUP CONNECTION string_or_placeholder
+| SHOW BACKUP CONNECTION string_or_placeholder opt_with_show_backup_connection_options_list
   	{
   		$$.val = &tree.ShowBackup{
   		  Details:  tree.BackupConnectionTest,
   			Path:    $4.expr(),
-  		}
-  	}
-| SHOW BACKUP CONNECTION string_or_placeholder WITH show_backup_connection_options_list
-  	{
-  		$$.val = &tree.ShowBackup{
-  		  Details:  tree.BackupConnectionTest,
-  			Path:    $4.expr(),
-        Options: *$6.showBackupOptions(),
+  			Options: *$5.showBackupOptions(),
   		}
   	}
 | SHOW BACKUP error // SHOW HELP: SHOW BACKUP
@@ -7709,6 +7863,20 @@ show_backup_options:
  {
  $$.val = &tree.ShowBackupOptions{DebugMetadataSST: true}
  }
+
+opt_with_show_backup_connection_options_list:
+  WITH show_backup_connection_options_list
+  {
+    $$.val = $2.showBackupOptions()
+  }
+| WITH OPTIONS '(' show_backup_connection_options_list ')'
+  {
+    $$.val = $4.showBackupOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.ShowBackupOptions{}
+  }
 
 show_backup_connection_options_list:
   // Require at least one option
@@ -8282,7 +8450,7 @@ show_tables_stmt:
 show_functions_stmt:
   SHOW FUNCTIONS FROM name '.' name
   {
-    $$.val = &tree.ShowFunctions{ObjectNamePrefix:tree.ObjectNamePrefix{
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
         CatalogName: tree.Name($4),
         ExplicitCatalog: true,
         SchemaName: tree.Name($6),
@@ -8291,7 +8459,7 @@ show_functions_stmt:
   }
 | SHOW FUNCTIONS FROM name
   {
-    $$.val = &tree.ShowFunctions{ObjectNamePrefix:tree.ObjectNamePrefix{
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
         // Note: the schema name may be interpreted as database name,
         // see name_resolution.go.
         SchemaName: tree.Name($4),
@@ -8300,9 +8468,37 @@ show_functions_stmt:
   }
 | SHOW FUNCTIONS
   {
-    $$.val = &tree.ShowFunctions{}
+    $$.val = &tree.ShowRoutines{}
   }
 | SHOW FUNCTIONS error // SHOW HELP: SHOW FUNCTIONS
+
+// %Help: SHOW PROCEDURES - list procedures
+// %Category: DDL
+// %Text: SHOW PROCEDURES [FROM <databasename> [ . <schemaname> ] ]
+show_procedures_stmt:
+  SHOW PROCEDURES FROM name '.' name
+  {
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
+        CatalogName: tree.Name($4),
+        ExplicitCatalog: true,
+        SchemaName: tree.Name($6),
+        ExplicitSchema: true,
+    }, Procedure: true}
+  }
+| SHOW PROCEDURES FROM name
+  {
+    $$.val = &tree.ShowRoutines{ObjectNamePrefix:tree.ObjectNamePrefix{
+        // Note: the schema name may be interpreted as database name,
+        // see name_resolution.go.
+        SchemaName: tree.Name($4),
+        ExplicitSchema: true,
+    }, Procedure: true}
+  }
+| SHOW PROCEDURES
+  {
+    $$.val = &tree.ShowRoutines{Procedure: true}
+  }
+| SHOW PROCEDURES error // SHOW HELP: SHOW PROCEDURES
 
 // %Help: SHOW TRANSACTIONS - list open client transactions across the cluster
 // %Category: Misc
@@ -8494,10 +8690,20 @@ show_create_stmt:
 | SHOW CREATE FUNCTION db_object_name
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowCreateFunction{
+    $$.val = &tree.ShowCreateRoutine{
       Name: tree.ResolvableFunctionReference{
         FunctionReference: $4.unresolvedObjectName().ToUnresolvedName(),
       },
+    }
+  }
+| SHOW CREATE PROCEDURE db_object_name
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowCreateRoutine{
+      Name: tree.ResolvableFunctionReference{
+        FunctionReference: $4.unresolvedObjectName().ToUnresolvedName(),
+      },
+      Procedure: true,
     }
   }
 | SHOW CREATE ALL SCHEMAS
@@ -8838,6 +9044,46 @@ show_fingerprints_stmt:
     /* SKIP DOC */
     $$.val = &tree.ShowFingerprints{Table: $5.unresolvedObjectName()}
   }
+| SHOW EXPERIMENTAL_FINGERPRINTS FROM virtual_cluster virtual_cluster_spec opt_with_show_fingerprints_options
+  {
+    /* SKIP DOC */
+    $$.val = &tree.ShowFingerprints{TenantSpec: $5.tenantSpec(), Options: *$6.showFingerprintOptions()}
+  }
+
+opt_with_show_fingerprints_options:
+  WITH fingerprint_options_list
+  {
+    $$.val = $2.showFingerprintOptions()
+  }
+| WITH OPTIONS '(' fingerprint_options_list ')'
+  {
+    $$.val = $4.showFingerprintOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.ShowFingerprintOptions{}
+  }
+
+fingerprint_options_list:
+  // Require at least one option
+  fingerprint_options
+  {
+    $$.val = $1.showFingerprintOptions()
+  }
+| fingerprint_options_list ',' fingerprint_options
+  {
+    if err := $1.showFingerprintOptions().CombineWith($3.showFingerprintOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+// List of valid backup options.
+fingerprint_options:
+  START TIMESTAMP '=' d_expr
+  {
+    $$.val = &tree.ShowFingerprintOptions{StartTimestamp: $4.expr()}
+  }
+
 
 show_full_scans_stmt:
   SHOW FULL TABLE SCANS
@@ -9047,7 +9293,11 @@ grant_targets:
   }
 | FUNCTION function_with_paramtypes_list
   {
-    $$.val = tree.GrantTargetList{Functions: $2.functionObjs()}
+    $$.val = tree.GrantTargetList{Functions: $2.routineObjs()}
+  }
+| PROCEDURE function_with_paramtypes_list
+  {
+    $$.val = tree.GrantTargetList{Procedures: $2.routineObjs()}
   }
 
 // backup_targets is similar to grant_targets but used by backup and restore, and thus
@@ -11506,7 +11756,7 @@ target_object_type:
   }
 | FUNCTIONS
   {
-    $$.val = privilege.Functions
+    $$.val = privilege.Routines
   }
 | ROUTINES error
   {
@@ -16699,6 +16949,7 @@ unreserved_keyword:
 | HOUR
 | IDENTITY
 | IMMEDIATE
+| IMMEDIATELY
 | IMMUTABLE
 | IMPORT
 | INCLUDE
@@ -16838,6 +17089,7 @@ unreserved_keyword:
 | PRIORITY
 | PRIVILEGES
 | PROCEDURE
+| PROCEDURES
 | PUBLIC
 | PUBLICATION
 | QUERIES
@@ -16860,6 +17112,7 @@ unreserved_keyword:
 | RELATIVE
 | RELEASE
 | RELOCATE
+| REMOVE_REGIONS
 | RENAME
 | REPEATABLE
 | REPLACE
@@ -16980,6 +17233,7 @@ unreserved_keyword:
 | UNSPLIT
 | UNTIL
 | UPDATE
+| UPDATES_CLUSTER_MONITORING_METRICS
 | UPSERT
 | USE
 | USERS
@@ -17217,6 +17471,7 @@ bare_label_keywords:
 | IGNORE_FOREIGN_KEYS
 | ILIKE
 | IMMEDIATE
+| IMMEDIATELY
 | IMMUTABLE
 | IMPORT
 | IN
@@ -17389,6 +17644,7 @@ bare_label_keywords:
 | PRIORITY
 | PRIVILEGES
 | PROCEDURE
+| PROCEDURES
 | PUBLIC
 | PUBLICATION
 | QUERIES
@@ -17413,6 +17669,7 @@ bare_label_keywords:
 | RELATIVE
 | RELEASE
 | RELOCATE
+| REMOVE_REGIONS
 | RENAME
 | REPEATABLE
 | REPLACE
@@ -17554,6 +17811,7 @@ bare_label_keywords:
 | UNSPLIT
 | UNTIL
 | UPDATE
+| UPDATES_CLUSTER_MONITORING_METRICS
 | UPSERT
 | USE
 | USER

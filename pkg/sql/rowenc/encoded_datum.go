@@ -422,7 +422,8 @@ type EncDatumRow []EncDatum
 
 func (r EncDatumRow) stringToBuf(types []*types.T, a *tree.DatumAlloc, b *bytes.Buffer) {
 	if len(types) != len(r) {
-		panic(errors.AssertionFailedf("mismatched types (%v) and row (%v)", types, r))
+		b.WriteString(fmt.Sprintf("mismatched types (%v) and row (%v)", types, r))
+		return
 	}
 	b.WriteString("[")
 	for i := range r {

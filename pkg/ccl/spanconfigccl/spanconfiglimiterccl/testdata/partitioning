@@ -2,10 +2,10 @@
 # changes operations that would take us past it. Repartitioning old partitions,
 # or dropping them entirely, should return quota back for subsequent use.
 
-initialize tenant=10
+initialize tenant=11
 ----
 
-exec-sql tenant=10
+exec-sql tenant=11
 CREATE DATABASE db;
 CREATE TABLE db.list_partitions(i INT PRIMARY KEY, j INT, k INT);
 CREATE INDEX idx_i ON db.list_partitions (i);
@@ -17,7 +17,7 @@ ALTER INDEX db.list_partitions@idx_i PARTITION BY LIST (i) (
 );
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 15
@@ -25,7 +25,7 @@ SELECT span_count FROM system.span_count;
 override limit=15
 ----
 
-exec-sql tenant=10
+exec-sql tenant=11
 ALTER INDEX db.list_partitions@idx_j PARTITION BY LIST (j) (
   PARTITION one_and_five    VALUES IN (1, 5),
   PARTITION everything_else VALUES IN (DEFAULT)
@@ -35,32 +35,32 @@ err: pq: exceeded limit for number of table spans
 
 # Drop partitioning spans, expect to see span_count reduce accordingly.
 #
-exec-sql tenant=10
+exec-sql tenant=11
 ALTER INDEX db.list_partitions@idx_i PARTITION BY NOTHING
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 9
 
 # Re-attempt the secondary index partition, should succeed.
 #
-exec-sql tenant=10
+exec-sql tenant=11
 ALTER INDEX db.list_partitions@idx_j PARTITION BY LIST (j) (
   PARTITION one_and_five    VALUES IN (1, 5),
   PARTITION everything_else VALUES IN (DEFAULT)
 );
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 15
 
 # We could also claw back quota by dropping a partitioned index entirely.
 #
-exec-sql tenant=10
+exec-sql tenant=11
 ALTER INDEX db.list_partitions@idx_k PARTITION BY LIST (k) (
   PARTITION one_and_five    VALUES IN (1, 5),
   PARTITION everything_else VALUES IN (DEFAULT)
@@ -68,16 +68,16 @@ ALTER INDEX db.list_partitions@idx_k PARTITION BY LIST (k) (
 ----
 err: pq: exceeded limit for number of table spans
 
-exec-sql tenant=10
+exec-sql tenant=11
 DROP INDEX db.list_partitions@idx_j;
 ----
 
-query-sql tenant=10
+query-sql tenant=11
 SELECT span_count FROM system.span_count;
 ----
 7
 
-exec-sql tenant=10
+exec-sql tenant=11
 ALTER INDEX db.list_partitions@idx_k PARTITION BY LIST (k) (
   PARTITION one_and_five    VALUES IN (1, 5),
   PARTITION everything_else VALUES IN (DEFAULT)

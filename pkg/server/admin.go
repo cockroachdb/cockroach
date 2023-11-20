@@ -141,7 +141,7 @@ type systemAdminServer struct {
 var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_ADMIN_MEMORY_USAGE", 100*1024)
 
 var tableStatsMaxFetcherConcurrency = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.admin.table_stats.max_fetcher_concurrency",
 	"maximum number of concurrent table stats fetches to run",
 	64, // arbitrary
@@ -312,8 +312,9 @@ func (s *adminServer) AllMetricMetadata(
 	ctx context.Context, req *serverpb.MetricMetadataRequest,
 ) (*serverpb.MetricMetadataResponse, error) {
 
+	md, _, _ := s.metricsRecorder.GetMetricsMetadata(true /* combine */)
 	resp := &serverpb.MetricMetadataResponse{
-		Metadata: s.metricsRecorder.GetMetricsMetadata(),
+		Metadata: md,
 	}
 
 	return resp, nil
@@ -323,9 +324,9 @@ func (s *adminServer) AllMetricMetadata(
 func (s *adminServer) ChartCatalog(
 	ctx context.Context, req *serverpb.ChartCatalogRequest,
 ) (*serverpb.ChartCatalogResponse, error) {
-	metricsMetadata := s.metricsRecorder.GetMetricsMetadata()
+	nodeMd, appMd, srvMd := s.metricsRecorder.GetMetricsMetadata(false /* combine */)
 
-	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
+	chartCatalog, err := catalog.GenerateCatalog(nodeMd, appMd, srvMd)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -1546,7 +1547,7 @@ func (s *adminServer) Events(
 ) (_ *serverpb.EventsResponse, retErr error) {
 	ctx = s.AnnotateCtx(ctx)
 
-	userName, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
@@ -1559,6 +1560,10 @@ func (s *adminServer) Events(
 		limit = apiconstants.DefaultAPIEventLimit
 	}
 
+	userName, err := authserver.UserFromIncomingRPCContext(ctx)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
 	r, err := s.eventsHelper(ctx, req, userName, int(limit), 0, redactEvents)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
@@ -2016,6 +2021,12 @@ func (s *adminServer) Settings(
 		}
 	}
 
+	showSystem := s.sqlServer.execCfg.Codec.ForSystemTenant()
+	target := settings.ForVirtualCluster
+	if showSystem {
+		target = settings.ForSystemTenant
+	}
+
 	// settingsKeys is the list of setting keys to retrieve.
 	settingsKeys := make([]settings.InternalKey, 0, len(req.Keys))
 	for _, desiredSetting := range req.Keys {
@@ -2029,7 +2040,7 @@ func (s *adminServer) Settings(
 	}
 	if !consoleSettingsOnly {
 		if len(settingsKeys) == 0 {
-			settingsKeys = settings.Keys(settings.ForSystemTenant)
+			settingsKeys = settings.Keys(target)
 		}
 	} else {
 		if len(settingsKeys) == 0 {
@@ -2075,13 +2086,14 @@ func (s *adminServer) Settings(
 		var v settings.Setting
 		var ok bool
 		if redactValues {
-			v, ok = settings.LookupForReportingByKey(k, settings.ForSystemTenant)
+			v, ok = settings.LookupForReportingByKey(k, target)
 		} else {
-			v, ok = settings.LookupForLocalAccessByKey(k, settings.ForSystemTenant)
+			v, ok = settings.LookupForLocalAccessByKey(k, target)
 		}
 		if !ok {
 			continue
 		}
+
 		var altered *time.Time
 		if val, ok := alteredSettings[k]; ok {
 			altered = val
@@ -3180,7 +3192,7 @@ func (s *systemAdminServer) EnqueueRange(
 	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	if _, err := s.privilegeChecker.RequireAdminUser(ctx); err != nil {
+	if err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx); err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
 		return nil, err
@@ -3234,8 +3246,8 @@ func (s *systemAdminServer) EnqueueRange(
 	}
 
 	if err := timeutil.RunWithTimeout(ctx, "enqueue range", time.Minute, func(ctx context.Context) error {
-		return s.server.status.iterateNodes(
-			ctx, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
+		return iterateNodes(
+			ctx, s.serverIterator, s.server.stopper, fmt.Sprintf("enqueue r%d in queue %s", req.RangeID, req.Queue),
 			noTimeout,
 			dialFn, nodeFn, responseFn, errorFn,
 		)
@@ -3328,7 +3340,7 @@ func (s *systemAdminServer) SendKVBatch(
 	ctx = s.AnnotateCtx(ctx)
 	// Note: the root user will bypass SQL auth checks, which is useful in case of
 	// a cluster outage.
-	user, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx)
 	if err != nil {
 		// NB: not using srverrors.ServerError() here since the priv checker
 		// already returns a proper gRPC error status.
@@ -3336,6 +3348,11 @@ func (s *systemAdminServer) SendKVBatch(
 	}
 	if ba == nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "BatchRequest cannot be nil")
+	}
+
+	user, err := authserver.UserFromIncomingRPCContext(ctx)
+	if err != nil {
+		return nil, srverrors.ServerError(ctx, err)
 	}
 
 	// Emit a structured log event for the call.
@@ -3386,7 +3403,7 @@ func (s *systemAdminServer) RecoveryCollectReplicaInfo(
 ) error {
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return err
 	}
@@ -3401,7 +3418,7 @@ func (s *systemAdminServer) RecoveryCollectLocalReplicaInfo(
 ) error {
 	ctx := stream.Context()
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return err
 	}
@@ -3414,7 +3431,7 @@ func (s *systemAdminServer) RecoveryStagePlan(
 	ctx context.Context, request *serverpb.RecoveryStagePlanRequest,
 ) (*serverpb.RecoveryStagePlanResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireRepairClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3427,7 +3444,7 @@ func (s *systemAdminServer) RecoveryNodeStatus(
 	ctx context.Context, request *serverpb.RecoveryNodeStatusRequest,
 ) (*serverpb.RecoveryNodeStatusResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3439,7 +3456,7 @@ func (s *systemAdminServer) RecoveryVerify(
 	ctx context.Context, request *serverpb.RecoveryVerifyRequest,
 ) (*serverpb.RecoveryVerifyResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -4029,7 +4046,7 @@ func (s *systemAdminServer) ListTenants(
 
 	tenantList := make([]*serverpb.Tenant, 0, len(tenantNames))
 	for _, tenantName := range tenantNames {
-		server, err := s.server.serverController.getServer(ctx, tenantName)
+		server, _, err := s.server.serverController.getServer(ctx, tenantName)
 		if err != nil {
 			if errors.Is(err, errNoTenantServerRunning) {
 				// The service for this tenant is not started yet. This is not

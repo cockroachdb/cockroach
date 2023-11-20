@@ -61,11 +61,6 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 
 	firstServer := testCluster.Server(0)
 
-	// Enable zone configs for secondary tenants.
-	systemSqlDb := firstServer.SystemLayer().SQLConn(t, "system")
-	_, err := systemSqlDb.Exec("ALTER TENANT ALL SET CLUSTER SETTING sql.virtual_cluster.feature_access.zone_configs.enabled = true")
-	require.NoError(t, err)
-
 	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
 
 	sqlDB.Exec(t, `CREATE DATABASE roachblog`)
@@ -95,7 +90,7 @@ func TestAdminAPIDataDistributionPartitioning(t *testing.T) {
 	}
 
 	var resp serverpb.DataDistributionResponse
-	err = serverutils.GetJSONProto(firstServer, adminPrefix+"data_distribution", &resp)
+	err := serverutils.GetJSONProto(firstServer, adminPrefix+"data_distribution", &resp)
 	require.NoError(t, err)
 
 	actualZoneConfigNames := map[string]struct{}{}
@@ -238,9 +233,16 @@ func TestTableAndDatabaseDetailsAndStats(t *testing.T) {
 	require.Greater(t, tableStatsResp.Stats.LiveBytes, int64(0))
 
 	// TableDetails
-	tableDetailsResp := &serverpb.TableDetailsResponse{}
-	err = getAdminJSONProto(st, "databases/defaultdb/tables/public.test", tableDetailsResp)
-	require.NoError(t, err)
-
-	require.Greater(t, tableDetailsResp.DataLiveBytes, int64(0))
+	// Call to endpoint is wrapped with retry logic to potentially avoid flakiness of
+	// returned results (issue #112387).
+	testutils.SucceedsSoon(t, func() error {
+		tableDetailsResp := &serverpb.TableDetailsResponse{}
+		if err := getAdminJSONProto(st, "databases/defaultdb/tables/public.test", tableDetailsResp); err != nil {
+			return err
+		}
+		if tableDetailsResp.DataLiveBytes <= 0 {
+			return fmt.Errorf("expected DataLiveBytes to be greater than 0 but got %d", tableDetailsResp.DataLiveBytes)
+		}
+		return nil
+	})
 }

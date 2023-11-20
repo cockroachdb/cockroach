@@ -12,7 +12,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -79,12 +78,6 @@ func normalizeAndValidateSelectForTarget(
 				tree.AsString(sc), r)
 		}
 	}()
-
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2EnablePredicateProjectionChangefeed) {
-		return nil, errors.Newf(
-			`filters and projections not supported until upgrade to version %s or higher is finalized`,
-			clusterversion.TODODelete_V22_2EnablePredicateProjectionChangefeed.String())
-	}
 
 	// This really shouldn't happen as it's enforced by sql.y.
 	if len(sc.From.Tables) != 1 {

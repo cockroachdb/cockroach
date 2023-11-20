@@ -326,7 +326,7 @@ func TestJoinVersionGate(t *testing.T) {
 		return nil
 	})
 
-	var newVersion = clusterversion.TestingBinaryVersion
+	var newVersion = clusterversion.Latest.Version()
 	var oldVersion = prev(newVersion)
 
 	knobs := base.TestingKnobs{

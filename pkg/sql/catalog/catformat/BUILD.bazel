@@ -21,7 +21,6 @@ go_test(
     name = "catformat_test",
     size = "small",
     srcs = ["index_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":catformat"],
     deps = [
         "//pkg/sql/catalog/catenumpb",

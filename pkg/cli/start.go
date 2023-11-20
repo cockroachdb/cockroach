@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -414,6 +415,9 @@ func runStartInternal(
 	// signals later, some startup logging might be lost.
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, DrainSignals...)
+	if exitAbruptlySignal != nil {
+		signal.Notify(signalCh, exitAbruptlySignal)
+	}
 
 	// Check for stores with full disks and exit with an informative exit
 	// code. This needs to happen early during start, before we perform any
@@ -491,6 +495,14 @@ func runStartInternal(
 			errors.New("no --join flags provided to 'cockroach start'"),
 			"Consider using 'cockroach init' or 'cockroach start-single-node' instead")
 		return err
+	}
+
+	// Check the --tenant-id-file flag.
+	if fl := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.TenantIDFile.Name); fl != nil && fl.Changed {
+		fileName := fl.Value.String()
+		serverCfg.DelayedSetTenantID = func(ctx context.Context) (roachpb.TenantID, error) {
+			return tenantIDFromFile(ctx, fileName, nil, nil, nil)
+		}
 	}
 
 	// Now perform additional configuration tweaks specific to the start
@@ -936,9 +948,13 @@ func waitForShutdown(
 		// timely, and we don't want logs to be lost.
 		log.StartAlwaysFlush()
 
+		if sig == exitAbruptlySignal {
+			log.Ops.Shoutf(shutdownCtx, severity.ERROR, "received signal '%s', exiting", redact.Safe(sig))
+			exit.WithCode(exit.Killed())
+		}
+
 		log.Ops.Infof(shutdownCtx, "received signal '%s'", sig)
-		switch sig {
-		case os.Interrupt:
+		if sig == os.Interrupt {
 			// Graceful shutdown after an interrupt should cause the process
 			// to terminate with a non-zero exit code; however SIGTERM is
 			// "legitimate" and should be acknowledged with a success exit

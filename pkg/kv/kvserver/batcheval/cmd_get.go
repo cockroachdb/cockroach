@@ -37,7 +37,7 @@ func Get(
 		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                   h.Txn,
-		FailOnMoreRecent:      args.KeyLocking != lock.None,
+		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
 		ScanStats:             cArgs.ScanStats,
 		Uncertainty:           cArgs.Uncertainty,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
@@ -83,8 +83,12 @@ func Get(
 	}
 
 	var res result.Result
-	if args.KeyLocking != lock.None && h.Txn != nil && getRes.Value != nil {
-		acq := roachpb.MakeLockAcquisition(h.Txn, args.Key, lock.Unreplicated, args.KeyLocking)
+	if args.KeyLockingStrength != lock.None && h.Txn != nil && getRes.Value != nil {
+		acq, err := acquireLockOnKey(ctx, readWriter, h.Txn, args.KeyLockingStrength,
+			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
+		if err != nil {
+			return result.Result{}, err
+		}
 		res.Local.AcquiredLocks = []roachpb.LockAcquisition{acq}
 	}
 	res.Local.EncounteredIntents = intents

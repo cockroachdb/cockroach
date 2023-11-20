@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -55,7 +54,7 @@ func SetSmallMaxGCIntervalForTest() func() {
 }
 
 var idleWaitDuration = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.gc_job.idle_wait_duration",
 	"after this duration of waiting for an update, the gc job will mark itself idle",
 	time.Second,
@@ -360,7 +359,7 @@ func waitForGC(
 // EmptySpanPollInterval is the interval at which the GC job will poll the
 // spans to determine whether the data have been garbage collected.
 var EmptySpanPollInterval = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"sql.gc_job.wait_for_gc.interval",
 	"interval at which the GC job should poll to see if the deleted data has been GC'd",
 	5*time.Minute,
@@ -507,10 +506,7 @@ func shouldUseDelRange(
 	knobs *sql.GCJobTestingKnobs,
 ) bool {
 	// TODO(ajwerner): Adopt the DeleteRange protocol for tenant GC.
-	return details.Tenant == nil &&
-		(storage.CanUseMVCCRangeTombstones(ctx, s) ||
-			// Allow this testing knob to override the storage setting, for convenience.
-			knobs.SkipWaitingForMVCCGC)
+	return details.Tenant == nil
 }
 
 // waitForWork waits until there is work to do given the gossipUpDateC, the
@@ -580,6 +576,11 @@ func isMissingDescriptorError(err error) bool {
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
 func (r schemaChangeGCResumer) OnFailOrCancel(context.Context, interface{}, error) error {
+	return nil
+}
+
+// CollectProfile is part of the jobs.Resumer interface.
+func (r schemaChangeGCResumer) CollectProfile(context.Context, interface{}) error {
 	return nil
 }
 

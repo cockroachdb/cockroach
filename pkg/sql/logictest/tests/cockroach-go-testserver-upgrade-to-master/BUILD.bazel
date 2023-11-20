@@ -4,20 +4,14 @@ go_test(
     name = "cockroach-go-testserver-upgrade-to-master_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/cmd/cockroach-short",  # keep
+        "//pkg/sql/logictest:cockroach_predecessor_version",  # keep
         "//pkg/sql/logictest:testdata",  # keep
     ],
-    exec_properties = {
-        "dockerNetwork": "standard",
-        "Pool": "large",
-    },
-    shard_count = 9,
+    exec_properties = {"Pool": "large"},
+    shard_count = 16,
     tags = [
         "cpu:2",
     ],

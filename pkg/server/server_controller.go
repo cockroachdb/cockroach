@@ -16,6 +16,7 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/redact"
 )
 
@@ -76,15 +78,20 @@ type serverController struct {
 	// a tenant routing error to the incoming client.
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName)
 
+	tenantWaiter *singleflight.Group
+
 	// draining is set when the surrounding server starts draining, and
 	// prevents further creation of new tenant servers.
 	draining syncutil.AtomicBool
+	drainCh  chan struct{}
 
 	// orchestrator is the orchestration method to use.
 	orchestrator serverOrchestrator
 
+	watcher *tenantcapabilitieswatcher.Watcher
+
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 
 		// servers maps tenant names to the server for that tenant.
 		//
@@ -98,6 +105,10 @@ type serverController struct {
 		// nextServerIdx is the index to provide to the next call to
 		// newServerFn.
 		nextServerIdx int
+
+		// newServerCh is closed anytime a server is added to
+		// the servers list.
+		newServerCh chan struct{}
 	}
 }
 
@@ -112,6 +123,7 @@ func newServerController(
 	systemServer onDemandServer,
 	systemTenantNameContainer *roachpb.TenantNameContainer,
 	sendSQLRoutingError func(ctx context.Context, conn net.Conn, tenantName roachpb.TenantName),
+	watcher *tenantcapabilitieswatcher.Watcher,
 ) *serverController {
 	c := &serverController{
 		AmbientContext:      ambientCtx,
@@ -121,14 +133,25 @@ func newServerController(
 		stopper:             parentStopper,
 		tenantServerCreator: tenantServerCreator,
 		sendSQLRoutingError: sendSQLRoutingError,
+		watcher:             watcher,
+		tenantWaiter:        singleflight.NewGroup("tenant server poller", "poll"),
+		drainCh:             make(chan struct{}),
 	}
 	c.orchestrator = newServerOrchestrator(parentStopper, c)
 	c.mu.servers = map[roachpb.TenantName]serverState{
 		catconstants.SystemTenantName: c.orchestrator.makeServerStateForSystemTenant(systemTenantNameContainer, systemServer),
 	}
 	c.mu.testArgs = make(map[roachpb.TenantName]base.TestSharedProcessTenantArgs)
+	c.mu.newServerCh = make(chan struct{})
 	parentStopper.AddCloser(c)
 	return c
+}
+
+func (s *serverController) SetDraining() {
+	if !s.draining.Get() {
+		s.draining.Set(true)
+		close(s.drainCh)
+	}
 }
 
 // tenantServerWrapper implements the onDemandServer interface for SQLServerWrapper.

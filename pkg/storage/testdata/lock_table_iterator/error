@@ -1,0 +1,52 @@
+define
+lock k=a str=intent txn=1
+----
+
+# test construction-time validation
+iter
+----
+error constructing new iter: LockTableIterator must set prefix or upper bound or lower bound
+
+iter lower=Global/a
+----
+error constructing new iter: LockTableIterator lower bound must be a lock table key
+
+iter upper=Global/a
+----
+error constructing new iter: LockTableIterator upper bound must be a lock table key
+
+iter prefix=true
+----
+error constructing new iter: LockTableIterator must specify MatchTxnID, MatchMinStr, or both
+
+# test seek-time validation
+iter upper=z match-min-str=shared
+seek-ge k=Global/a
+seek-lt k=Global/a
+seek-ge-with-limit k=Global/a limit=a
+seek-lt-with-limit k=Global/a limit=a
+seek-ge-with-limit k=a limit=Global/a
+seek-lt-with-limit k=a limit=Global/a
+next-with-limit limit=Global/a
+prev-with-limit limit=Global/a
+----
+seek-ge k=Global/a: output: err: LockTableIterator: key is not a lock table key
+seek-lt k=Global/a: output: err: LockTableIterator: key is not a lock table key
+seek-ge-with-limit k=Global/a limit=a: output: err: LockTableIterator: key is not a lock table key
+seek-lt-with-limit k=Global/a limit=a: output: err: LockTableIterator: key is not a lock table key
+seek-ge-with-limit k=a limit=Global/a: output: err: LockTableIterator: key is not a lock table key
+seek-lt-with-limit k=a limit=Global/a: output: err: LockTableIterator: key is not a lock table key
+next-with-limit limit=Global/a: output: err: LockTableIterator: key is not a lock table key
+prev-with-limit limit=Global/a: output: err: LockTableIterator: key is not a lock table key
+
+# nil limit keys are allowed
+iter upper=z match-min-str=shared
+seek-ge-with-limit k=a limit=nil
+seek-lt-with-limit k=a limit=nil
+next-with-limit limit=nil
+prev-with-limit limit=nil
+----
+seek-ge-with-limit k=a limit=nil: output: k=a str=intent txn=1
+seek-lt-with-limit k=a limit=nil: output: . (exhausted)
+next-with-limit limit=nil: output: k=a str=intent txn=1
+prev-with-limit limit=nil: output: . (exhausted)

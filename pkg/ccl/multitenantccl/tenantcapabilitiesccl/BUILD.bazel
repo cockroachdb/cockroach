@@ -6,7 +6,6 @@ go_test(
         "capabilities_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     tags = ["ccl_test"],
     deps = [
@@ -18,8 +17,6 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/settings/cluster",
-        "//pkg/sql",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",

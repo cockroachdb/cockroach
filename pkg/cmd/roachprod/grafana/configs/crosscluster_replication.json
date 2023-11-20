@@ -296,7 +296,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "replication_sst_bytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}",
+          "expr": "physical_replication_sst_bytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -391,7 +391,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "replication_logical_bytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}",
+          "expr": "physical_replication_logical_bytes{job=\"cockroachdb\",cluster=\"$cluster\",instance=~\"$node\"}",
           "hide": false,
           "legendFormat": "__auto",
           "range": true,

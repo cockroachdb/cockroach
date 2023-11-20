@@ -101,7 +101,9 @@ func TestNodeRangesV2(t *testing.T) {
 
 	// Take the first range ID, and call the ranges/ endpoint with it.
 	rangeID := nodeRangesResp.Ranges[0].Desc.RangeID
-	req, err = http.NewRequest("GET", fmt.Sprintf("%s%sranges/%d/", ts.AdminURL(), apiconstants.APIV2Path, rangeID), nil)
+	req, err = http.NewRequest(
+		"GET", ts.AdminURL().WithPath(fmt.Sprintf("%sranges/%d/", apiconstants.APIV2Path, rangeID)).String(), nil,
+	)
 	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)

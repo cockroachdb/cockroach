@@ -76,8 +76,8 @@ import (
 // check-opt-no-conflicts            req=<req-name>
 // is-key-locked-by-conflicting-txn  req=<req-name> key=<key> strength=<strength>
 //
-// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u] [strength=<strength>]
-// on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]]
+// on-lock-acquired  req=<req-name> key=<key> [seq=<seq>] [dur=r|u] [str=<strength>]
+// on-lock-updated   req=<req-name> txn=<txn-name> key=<key> status=[committed|aborted|pending] [ts=<int>[,<int>]] [ignored-seqs=<int>[-<int>][,<int>[-<int>]]
 // on-txn-updated    txn=<txn-name> status=[committed|aborted|pending] [ts=<int>[,<int>]]
 //
 // on-lease-updated  leaseholder=<bool> lease-seq=<seq>
@@ -377,6 +377,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				var key string
 				d.ScanArgs(t, "key", &key)
+				// TODO(nvanbenschoten): replace with scanLockStrength.
 				strength := concurrency.ScanLockStrength(t, d)
 				ok, txn, err := g.IsKeyLockedByConflictingTxn(roachpb.Key(key), strength)
 				if err != nil {
@@ -416,7 +417,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				var str lock.Strength
 				if d.HasArg("str") {
-					str = concurrency.ScanLockStrength(t, d)
+					str = scanLockStrength(t, d)
 				} else {
 					// If no lock strength is provided in the test, infer it from the
 					// durability.
@@ -450,7 +451,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				mon.runSync("acquire lock", func(ctx context.Context) {
 					log.Eventf(ctx, "txn %s @ %s", txn.Short(), key)
-					acq := roachpb.MakeLockAcquisition(txnAcquire, roachpb.Key(key), dur, str)
+					acq := roachpb.MakeLockAcquisition(txnAcquire.TxnMeta, roachpb.Key(key), dur, str, nil)
 					m.OnLockAcquired(ctx, &acq)
 				})
 				return c.waitAndCollect(t, mon)
@@ -478,6 +479,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				if d.HasArg("ts") {
 					ts = scanTimestamp(t, d)
 				}
+				ignoredSeqNums := scanIgnoredSeqNumbers(t, d)
 
 				// Confirm that the request has a corresponding ResolveIntent.
 				found := false
@@ -502,6 +504,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					log.Eventf(ctx, "%s txn %s @ %s", verb, txn.Short(), key)
 					span := roachpb.Span{Key: roachpb.Key(key)}
 					up := roachpb.MakeLockUpdate(txnUpdate, span)
+					up.IgnoredSeqNums = ignoredSeqNums
 					m.OnLockUpdated(ctx, &up)
 				})
 				return c.waitAndCollect(t, mon)
@@ -1048,7 +1051,10 @@ func (c *cluster) collectSpans(
 	h := kvpb.Header{Txn: txn, Timestamp: ts, WaitPolicy: wp}
 	for _, req := range reqs {
 		if cmd, ok := batcheval.LookupCommand(req.Method()); ok {
-			cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans, 0)
+			err := cmd.DeclareKeys(c.rangeDesc, &h, req, latchSpans, lockSpans, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
 		} else {
 			t.Fatalf("unrecognized command %s", req.Method())
 		}
@@ -1311,6 +1317,7 @@ var goroutineStalledStates = map[string]bool{
 	"waiting":   true,
 	"dead":      false,
 	"copystack": false,
+	"preempted": false,
 	"???":       false, // catch-all in runtime.goroutineheader
 
 	// runtime.goroutineheader may override these G statuses with a waitReason.
@@ -1338,13 +1345,22 @@ var goroutineStalledStates = map[string]bool{
 	// runtime itself. No request-level synchronization points use mutexes to
 	// wait for state transitions by other requests, so it is safe to ignore
 	// this state and wait for it to exit.
-	"semacquire":             false,
-	"sleep":                  false,
-	"sync.Cond.Wait":         true,
-	"timer goroutine (idle)": false,
+	"semacquire":     false,
+	"sleep":          false,
+	"sync.Cond.Wait": true,
+	// Similar to "semaquire" above, we mark the following three mutex states as
+	// non-stalled, assuming that they are transient states.
+	"sync.Mutex.Lock":        false,
+	"sync.RWMutex.RLock":     false,
+	"sync.RWMutex.Lock":      false,
 	"trace reader (blocked)": false,
 	"wait for GC cycle":      false,
 	"GC worker (idle)":       false,
+	"GC worker (active)":     false,
+	// "preempted" is already included above as part of gStatusStrings.
+	"debug call":          false,
+	"GC mark termination": false,
+	"stopping the world":  false,
 }
 
 // goroutineStatus returns a stack trace for each goroutine whose stack frame

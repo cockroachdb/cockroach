@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -44,10 +43,6 @@ func TestStatementReuses(t *testing.T) {
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	tenantSettings := s.ApplicationLayer().ClusterSettings()
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &tenantSettings.SV, true)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tenantSettings.SV, true)
 
 	initStmts := []string{
 		`CREATE DATABASE d`,
@@ -523,8 +518,6 @@ func TestExplainRedact(t *testing.T) {
 	params, _ := createTestServerParams()
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
 
 	query := func(sql string) (*gosql.Rows, error) {
 		return sqlDB.QueryContext(ctx, sql)

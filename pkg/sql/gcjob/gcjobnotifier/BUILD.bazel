@@ -6,13 +6,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
-        "//pkg/storage",
         "//pkg/util/log/logcrash",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
@@ -23,7 +21,6 @@ go_test(
     name = "gcjobnotifier_test",
     size = "small",
     srcs = ["notifier_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":gcjobnotifier"],
     deps = [
         "//pkg/config",

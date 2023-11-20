@@ -76,7 +76,11 @@ func runSQLFmt(cmd *cobra.Command, args []string) error {
 	}
 
 	for i := range sl {
-		fmt.Print(cfg.Pretty(sl[i].AST))
+		p, err := cfg.Pretty(sl[i].AST)
+		if err != nil {
+			return err
+		}
+		fmt.Print(p)
 		if len(sl) > 1 {
 			fmt.Print(";")
 		}

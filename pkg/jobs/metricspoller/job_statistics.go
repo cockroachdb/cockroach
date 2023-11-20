@@ -121,7 +121,7 @@ func manageProtectedTimestamps(ctx context.Context, execCtx sql.JobExecContext) 
 					return err
 				}
 			case jobsprotectedts.GetMetaType(jobsprotectedts.Schedules):
-				if err := processSchedulePTSRecord(ctx, id, rec, schedulePtsStats, txn); err != nil {
+				if err := processSchedulePTSRecord(ctx, jobspb.ScheduleID(id), rec, schedulePtsStats, txn); err != nil {
 					return err
 				}
 			default:
@@ -213,7 +213,7 @@ func updateJobPTSMetrics(
 
 func processSchedulePTSRecord(
 	ctx context.Context,
-	scheduleID int64,
+	scheduleID jobspb.ScheduleID,
 	rec ptpb.Record,
 	ptsStats map[string]*schedulePTSStat,
 	txn isql.Txn,

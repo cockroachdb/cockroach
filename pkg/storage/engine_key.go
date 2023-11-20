@@ -171,17 +171,25 @@ func (k EngineKey) ToLockTableKey() (LockTableKey, error) {
 		return LockTableKey{}, err
 	}
 	key := LockTableKey{Key: lockedKey}
-	switch len(k.Version) {
-	case engineKeyVersionLockTableLen:
-		key.Strength, err = getReplicatedLockStrengthForByte(k.Version[0])
-		if err != nil {
-			return LockTableKey{}, err
-		}
-		key.TxnUUID = *(*uuid.UUID)(k.Version[1:])
-	default:
-		return LockTableKey{}, errors.Errorf("version is not valid for a LockTableKey %x", k.Version)
+	key.Strength, key.TxnUUID, err = k.decodeLockTableKeyVersion()
+	if err != nil {
+		return LockTableKey{}, err
 	}
 	return key, nil
+}
+
+// decodeLockTableKeyVersion decodes the strength and transaction ID from the
+// version of a LockTableKey, without decoding the key.
+func (k EngineKey) decodeLockTableKeyVersion() (lock.Strength, uuid.UUID, error) {
+	if len(k.Version) != engineKeyVersionLockTableLen {
+		return 0, uuid.UUID{}, errors.Errorf("version is not valid for a LockTableKey %x", k.Version)
+	}
+	str, err := getReplicatedLockStrengthForByte(k.Version[0])
+	if err != nil {
+		return 0, uuid.UUID{}, err
+	}
+	txnID := *(*uuid.UUID)(k.Version[1:])
+	return str, txnID, nil
 }
 
 // Validate checks if the EngineKey is a valid MVCCKey or LockTableKey.
@@ -341,6 +349,11 @@ func (lk LockTableKey) ToEngineKey(buf []byte) (EngineKey, []byte) {
 	k.Version[0] = getByteForReplicatedLockStrength(lk.Strength)
 	copy(k.Version[1:], lk.TxnUUID[:])
 	return k, buf
+}
+
+// EncodedSize returns the size of the LockTableKey when encoded.
+func (lk LockTableKey) EncodedSize() int64 {
+	return int64(len(lk.Key)) + engineKeyVersionLockTableLen
 }
 
 // EngineRangeKeyValue is a raw value for a general range key as stored in the

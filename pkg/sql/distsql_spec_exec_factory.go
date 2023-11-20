@@ -256,6 +256,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	}
 	trSpec.LockingStrength = descpb.ToScanLockingStrength(params.Locking.Strength)
 	trSpec.LockingWaitPolicy = descpb.ToScanLockingWaitPolicy(params.Locking.WaitPolicy)
+	trSpec.LockingDurability = descpb.ToScanLockingDurability(params.Locking.Durability)
 	if trSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 		// Scans that are performing row-level locking cannot currently be
 		// distributed because their locks would not be propagated back to
@@ -736,6 +737,7 @@ func (e *distSQLSpecExecFactory) constructZigzagJoinSide(
 		fixedValues:       valuesSpec,
 		lockingStrength:   descpb.ToScanLockingStrength(locking.Strength),
 		lockingWaitPolicy: descpb.ToScanLockingWaitPolicy(locking.WaitPolicy),
+		lockingDurability: descpb.ToScanLockingDurability(locking.Durability),
 	}, nil
 }
 
@@ -974,7 +976,8 @@ func (e *distSQLSpecExecFactory) ConstructInsertFastPath(
 	insertCols exec.TableColumnOrdinalSet,
 	returnCols exec.TableColumnOrdinalSet,
 	checkCols exec.CheckOrdinalSet,
-	fkChecks []exec.InsertFastPathFKCheck,
+	fkChecks []exec.InsertFastPathCheck,
+	uniqChecks []exec.InsertFastPathCheck,
 	autoCommit bool,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: insert fast path")
@@ -1244,4 +1247,8 @@ func (e *distSQLSpecExecFactory) ConstructLiteralValues(
 	rows tree.ExprContainer, cols colinfo.ResultColumns,
 ) (exec.Node, error) {
 	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: literal values")
+}
+
+func (e *distSQLSpecExecFactory) ConstructCall(proc *tree.RoutineExpr) (exec.Node, error) {
+	return nil, unimplemented.NewWithIssue(47473, "experimental opt-driven distsql planning: call")
 }

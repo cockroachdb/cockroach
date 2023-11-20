@@ -27,6 +27,7 @@ go_library(
         "//pkg/security/pprompt",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/scanner",
+        "//pkg/sql/sem/catconstants",
         "//pkg/util/version",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
@@ -45,7 +46,6 @@ go_test(
         "parse_bool_test.go",
         "string_to_duration_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":clisqlclient"],
     deps = [
         "//pkg/build",

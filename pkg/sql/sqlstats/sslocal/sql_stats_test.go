@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -62,7 +62,7 @@ func TestStmtStatsBulkIngestWithRandomMetadata(t *testing.T) {
 
 	for i := 0; i < 50; i++ {
 		var stats serverpb.StatementsResponse_CollectedStatementStatistics
-		randomData := sqlstatsutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+		randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
 		stats.Key.KeyData = randomData.Key
 		testData = append(testData, stats)
 	}
@@ -317,7 +317,7 @@ func TestNodeLocalInMemoryViewDoesNotReturnPersistedStats(t *testing.T) {
 
 	// Open two connections so that we can run statements without messing up
 	// the SQL stats.
-	testConn := server.SQLConn(t, "")
+	testConn := server.SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(testConn)
 	sqlDB.Exec(t, "SET application_name = 'app1'")
 	sqlDB.Exec(t, "SELECT 1 WHERE true")
@@ -499,6 +499,17 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		require.Equal(t, tc.curFingerprintCount, sqlStats.GetTotalFingerprintCount(),
 			"testCase: %+v", tc)
 	}
+
+	// Verify reset works correctly.
+	require.NoError(t, sqlStats.Reset(ctx))
+	require.Zero(t, sqlStats.GetTotalFingerprintCount())
+
+	// Verify the count again after the reset.
+	for _, tc := range testCases {
+		recordStats(&tc)
+		require.Equal(t, tc.curFingerprintCount, sqlStats.GetTotalFingerprintCount(),
+			"testCase: %+v", tc)
+	}
 }
 
 func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
@@ -627,6 +638,9 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			}
 			require.Equal(t, expectedCount, len(stats), "testCase: %+v, stats: %+v", txn, stats)
 		}
+
+		require.NoError(t, sqlStats.Reset(ctx))
+		require.Zero(t, sqlStats.GetTotalFingerprintCount())
 	})
 }
 
@@ -674,7 +688,7 @@ func TestUnprivilegedUserReset(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	sqlConn := sqlutils.MakeSQLRunner(conn)
-	sqlConn.Exec(t, "CREATE USER nonAdminUser")
+	sqlConn.Exec(t, "CREATE USER non_admin_user")
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
 
@@ -683,7 +697,7 @@ func TestUnprivilegedUserReset(t *testing.T) {
 		"test-reset-sql-stats-as-non-admin-user",
 		nil, /* txn */
 		sessiondata.InternalExecutorOverride{
-			User: username.MakeSQLUsernameFromPreNormalizedString("nonAdminUser"),
+			User: username.MakeSQLUsernameFromPreNormalizedString("non_admin_user"),
 		},
 		"SELECT crdb_internal.reset_sql_stats()",
 	)
@@ -1261,7 +1275,7 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			// Note that we're not using pgx here because it *always* prepares
 			// statements, and we want to test our client latency measurements
 			// both with and without prepared statements.
-			opsDB := s.SQLConn(t, "")
+			opsDB := s.SQLConn(t)
 
 			// Set a unique application name for our session, so we can find our
 			// stats easily.
@@ -1366,7 +1380,7 @@ func TestSQLStatsIndexesUsed(t *testing.T) {
 		{
 			name:          "buildZigZag",
 			tableCreation: "CREATE TABLE t5 (a INT, b INT, INDEX a_idx(a), INDEX b_idx(b))",
-			statement:     "SELECT * FROM t5@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1",
+			statement:     "SET enable_zigzag_join = true; SELECT * FROM t5@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1; RESET enable_zigzag_join",
 			fingerprint:   "SELECT * FROM t5@{FORCE_ZIGZAG} WHERE (a = _) AND (b = _)",
 			indexes: []indexInfo{
 				{name: "a_idx", table: "t5"},

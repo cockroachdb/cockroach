@@ -5393,7 +5393,7 @@ SELECT public.ST_AsText('POINT(10.5 20.25)'::geometry)
 ----
 POINT (10.5 20.25)
 
-statement error pq: unknown function: public.log\(\): function undefined
+statement error pq: unknown function: public.log\(\)
 SELECT public.log(10)
 
 query TT
@@ -6177,3 +6177,83 @@ null
 empty 1
 empty 2
 
+# Regression test for #111556. st_union produces different results depending on
+# the number of duplicate values, so it should not ignore duplicate values. This
+# test ensures that the optimizer does not eliminate joins and change the number
+# of input values to an st_union aggregate.
+subtest regression_111556
+
+# Create a table for input and a table for results of the st_union aggregate.
+statement ok
+CREATE TABLE t111556_in (g GEOMETRY NOT NULL);
+CREATE TABLE t111556_res (g GEOMETRY);
+
+# Insert two identical values in the input table
+statement ok
+INSERT INTO t111556_in(g)
+SELECT '0103000000010000000500000000000000000000000000000000000000000000000000F03F0000000000000000000000000000F03F000000000000F03F0000000000000000000000000000F03F00000000000000000000000000000000'
+FROM generate_series(1, 2)
+
+# Perform an st_union aggregate and insert the results into the table.
+statement ok
+INSERT INTO t111556_res
+SELECT st_union(t2.g) FROM t111556_in t1 JOIN t111556_in t2 ON t1.g = t2.g
+
+# Turn off all optimizations.
+statement ok
+SET testing_optimizer_disable_rule_probability = 1.0
+
+# Perform the same st_union aggregate and insert the results into the table.
+statement ok
+INSERT INTO t111556_res
+SELECT st_union(t2.g) FROM t111556_in t1 JOIN t111556_in t2 ON t1.g = t2.g
+
+# Count the number of distinct values in the results table. It should be 1
+# because the INSERTS above should insert the same value.
+query I
+SELECT count(DISTINCT g) FROM t111556_res
+----
+1
+
+statement ok
+SET testing_optimizer_disable_rule_probability = 0
+
+subtest end
+
+
+subtest regressions
+
+# Regression test for #111157
+query T
+SELECT ST_Extent(ST_GeomFromGeoHash('C'::TEXT, NULL::INT4)::GEOMETRY);
+----
+BOX(-135 45,-90 90)
+
+query T
+SELECT ST_Extent(ST_GeomFromGeoHash(NULL::TEXT, 1::INT4)::GEOMETRY);
+----
+NULL
+
+query T
+SELECT ST_Extent(ST_PointFromGeoHash('C'::TEXT, NULL::INT4)::GEOMETRY);
+----
+BOX(-112.5 67.5,-112.5 67.5)
+
+query T
+SELECT ST_Extent(ST_PointFromGeoHash(NULL::TEXT, 1::INT4)::GEOMETRY);
+----
+NULL
+
+# X min > X max
+query T
+SELECT ST_AsEWKT(ST_MakeEnvelope(8.0::FLOAT8, 2.0::FLOAT8, 5.0::FLOAT8, 4.0::FLOAT8)::GEOMETRY);
+----
+POLYGON ((8 2, 8 4, 5 4, 5 2, 8 2))
+
+# Y min > Y max
+query T
+SELECT ST_AsEWKT(ST_MakeEnvelope(5.0::FLOAT8, 4.0::FLOAT8, 8.0::FLOAT8, 2.0::FLOAT8)::GEOMETRY);
+----
+POLYGON ((5 4, 5 2, 8 2, 8 4, 5 4))
+
+subtest end

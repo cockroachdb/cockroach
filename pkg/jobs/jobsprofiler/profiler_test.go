@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler/profilerconstants"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -56,8 +57,10 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`INSERT INTO foo VALUES (1), (2)`)
 	require.NoError(t, err)
-	_, err = sqlDB.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	require.NoError(t, err)
+
+	for _, l := range []serverutils.ApplicationLayerInterface{s.ApplicationLayer(), s.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
 
 	for _, tc := range []struct {
 		name string
@@ -93,7 +96,7 @@ func TestProfilerStorePlanDiagram(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
 				var count int
 				err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-					infoStorage := jobs.InfoStorageForJob(txn, jobID)
+					infoStorage := jobs.InfoStorageForJob(txn, jobID, execCfg.Settings.Version)
 					return infoStorage.Iterate(ctx, profilerconstants.DSPDiagramInfoKeyPrefix,
 						func(infoKey string, value []byte) error {
 							count++
@@ -140,19 +143,19 @@ func TestStorePerNodeProcessorProgressFraction(t *testing.T) {
 	n2proc1.ID = 1
 
 	jobsprofiler.StorePerNodeProcessorProgressFraction(ctx, s.InternalDB().(isql.DB),
-		jobID, map[execinfrapb.ComponentID]float32{n1proc1: 0.95, n2proc1: 0.50})
+		jobID, map[execinfrapb.ComponentID]float32{n1proc1: 0.95, n2proc1: 0.50}, s.ClusterSettings().Version)
 
 	// Update n2proc1.
 	jobsprofiler.StorePerNodeProcessorProgressFraction(ctx, s.InternalDB().(isql.DB),
-		jobID, map[execinfrapb.ComponentID]float32{n2proc1: 0.70})
+		jobID, map[execinfrapb.ComponentID]float32{n2proc1: 0.70}, s.ClusterSettings().Version)
 	// Update n1proc1.
 	jobsprofiler.StorePerNodeProcessorProgressFraction(ctx, s.InternalDB().(isql.DB),
-		jobID, map[execinfrapb.ComponentID]float32{n1proc1: 1.00})
+		jobID, map[execinfrapb.ComponentID]float32{n1proc1: 1.00}, s.ClusterSettings().Version)
 
 	var persistedProgress map[string]string
 	err := s.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		persistedProgress = make(map[string]string)
-		infoStorage := jobs.InfoStorageForJob(txn, jobID)
+		infoStorage := jobs.InfoStorageForJob(txn, jobID, s.ClusterSettings().Version)
 		return infoStorage.Iterate(ctx, profilerconstants.NodeProcessorProgressInfoKeyPrefix,
 			func(infoKey string, value []byte) error {
 				f, err := strconv.ParseFloat(string(value), 32)
@@ -216,7 +219,7 @@ func TestTraceRecordingOnResumerCompletion(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		recordings := make([][]byte, 0)
 		execCfg := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig)
-		edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobspb.JobID(jobID))
+		edFiles, err := jobs.ListExecutionDetailFiles(ctx, execCfg.InternalDB, jobspb.JobID(jobID), s.ClusterSettings().Version)
 		if err != nil {
 			return err
 		}
@@ -229,7 +232,7 @@ func TestTraceRecordingOnResumerCompletion(t *testing.T) {
 
 		return execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			for _, f := range traceFiles {
-				data, err := jobs.ReadExecutionDetailFile(ctx, f, txn, jobspb.JobID(jobID))
+				data, err := jobs.ReadExecutionDetailFile(ctx, f, txn, jobspb.JobID(jobID), s.ClusterSettings().Version)
 				if err != nil {
 					return err
 				}

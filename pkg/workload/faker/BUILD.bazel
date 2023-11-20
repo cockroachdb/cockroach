@@ -18,7 +18,6 @@ go_test(
     name = "faker_test",
     size = "small",
     srcs = ["faker_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":faker"],
     deps = [
         "@com_github_stretchr_testify//assert",

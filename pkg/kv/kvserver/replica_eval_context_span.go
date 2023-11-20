@@ -178,8 +178,8 @@ func (rec SpanSetReplicaEvalContext) GetGCThreshold() hlc.Timestamp {
 
 // ExcludeDataFromBackup returns whether the replica is to be excluded from a
 // backup.
-func (rec SpanSetReplicaEvalContext) ExcludeDataFromBackup() bool {
-	return rec.i.ExcludeDataFromBackup()
+func (rec SpanSetReplicaEvalContext) ExcludeDataFromBackup(ctx context.Context) bool {
+	return rec.i.ExcludeDataFromBackup(ctx)
 }
 
 // String implements Stringer.
@@ -261,8 +261,8 @@ func (rec *SpanSetReplicaEvalContext) GetResponseMemoryAccount() *mon.BoundAccou
 }
 
 // GetMaxBytes implements the batcheval.EvalContext interface.
-func (rec *SpanSetReplicaEvalContext) GetMaxBytes() int64 {
-	return rec.i.GetMaxBytes()
+func (rec *SpanSetReplicaEvalContext) GetMaxBytes(ctx context.Context) int64 {
+	return rec.i.GetMaxBytes(ctx)
 }
 
 // GetEngineCapacity implements the batcheval.EvalContext interface.

@@ -129,6 +129,16 @@ var FlowTokenDispatchInterval = settings.RegisterDurationSetting(
 	settings.PositiveDuration, settings.NonNegativeDurationWithMaximum(time.Minute),
 )
 
+// FlowTokenDispatchMaxBytes determines the maximum number of bytes of dispatch
+// messages that are annotated onto a single RaftTransport message.
+var FlowTokenDispatchMaxBytes = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kvadmission.flow_control.dispatch.max_bytes",
+	"limits the size of flow control dispatch messages being attached to a single raft message",
+	64<<20,                         // 64 MB
+	settings.IntWithMinimum(1<<20), // 1 MB
+)
+
 // ConnectedStoreExpiration controls how long the RaftTransport layers considers
 // a stream connected without it having observed any messages from it.
 var ConnectedStoreExpiration = settings.RegisterDurationSetting(
@@ -159,9 +169,11 @@ type Controller interface {
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
 	SetTenantWeightProvider(TenantWeightProvider, *stop.Stopper)
-	// SnapshotIngested informs admission control about a range snapshot
-	// ingestion.
-	SnapshotIngested(roachpb.StoreID, pebble.IngestOperationStats)
+	// SnapshotIngestedOrWritten informs admission control about a range
+	// snapshot ingestion or a range snapshot written as a normal write.
+	// writeBytes should roughly correspond to the size of the write when
+	// flushed to a sstable.
+	SnapshotIngestedOrWritten(_ roachpb.StoreID, _ pebble.IngestOperationStats, writeBytes uint64)
 	// FollowerStoreWriteBytes informs admission control about writes
 	// replicated to a raft follower, that have not been subject to admission
 	// control.
@@ -522,15 +534,15 @@ func (n *controllerImpl) SetTenantWeightProvider(
 	}()
 }
 
-// SnapshotIngested implements the Controller interface.
-func (n *controllerImpl) SnapshotIngested(
-	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats,
+// SnapshotIngestedOrWritten implements the Controller interface.
+func (n *controllerImpl) SnapshotIngestedOrWritten(
+	storeID roachpb.StoreID, ingestStats pebble.IngestOperationStats, writeBytes uint64,
 ) {
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(int32(storeID))
 	if storeAdmissionQ == nil {
 		return
 	}
-	storeAdmissionQ.StatsToIgnore(ingestStats)
+	storeAdmissionQ.StatsToIgnore(ingestStats, writeBytes)
 }
 
 // FollowerStoreWriteBytes implements the Controller interface.

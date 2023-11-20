@@ -10,13 +10,17 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-weekly-bazel $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
-source $root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh
+arch=amd64
+if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
+  arch=amd64-fips
+fi
+$root/build/teamcity/cockroach/nightlies/roachtest_compile_bits.sh $arch
 
 artifacts=/artifacts
 source $root/build/teamcity/util/roachtest_util.sh
 
 build/teamcity-roachtest-invoke.sh \
-  tag:aws-weekly \
+  --suite weekly \
   --cloud="${CLOUD}" \
   --cluster-id "${TC_BUILD_ID}" \
   --artifacts=/artifacts \

@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -44,18 +43,10 @@ func TestInsightsWorkload(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		UseDatabase: `test`,
-
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109458),
-	})
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
 	defer srv.Stopper().Stop(ctx)
-	s := srv.ApplicationLayer()
 
 	sqlutils.MakeSQLRunner(db).Exec(t, `CREATE DATABASE test`)
-
-	// To enable workloadsql.Split.
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("rows=%d/ranges=%d", test.rows, test.ranges), func(t *testing.T) {

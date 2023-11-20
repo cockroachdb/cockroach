@@ -24,7 +24,7 @@ function docsURLNoVersion(pageName: string): string {
 }
 
 export let adminUILoginNoVersion = docsURLNoVersion(
-  "ui-overview.html#db-console-security",
+  "ui-overview.html#db-console-security-considerations",
 );
 export let startFlags: string;
 export let pauseJob: string;
@@ -77,7 +77,7 @@ export let readsAndWritesOverviewPage: string;
 
 export const recomputeDocsURLs = () => {
   adminUILoginNoVersion = docsURLNoVersion(
-    "ui-overview.html#db-console-security",
+    "ui-overview.html#db-console-security-considerations",
   );
   startFlags = docsURL("start-a-node.html#flags");
   pauseJob = docsURL("pause-job.html");

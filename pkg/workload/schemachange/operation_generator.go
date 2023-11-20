@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -33,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
@@ -95,10 +98,10 @@ type OpGenLogMessage struct {
 
 // LogQueryResults logs a string query result.
 func (og *operationGenerator) LogQueryResults(
-	queryName string, result interface{}, queryArgs ...interface{},
+	sql string, result interface{}, queryArgs ...interface{},
 ) {
-	formattedQuery := queryName
-	parsedQuery, err := parser.Parse(queryName)
+	formattedQuery := sql
+	parsedQuery, err := parser.Parse(sql)
 	if err == nil {
 		formattedQuery = parsedQuery.String()
 	}
@@ -149,214 +152,6 @@ func (og *operationGenerator) resetTxnState() {
 	og.stmtsInTxt = nil
 }
 
-//go:generate stringer -type=opType
-type opType int
-
-const (
-	addColumn               opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
-	addConstraint                         // ALTER TABLE <table> ADD CONSTRAINT <constraint> <def>
-	addForeignKeyConstraint               // ALTER TABLE <table> ADD CONSTRAINT <constraint> FOREIGN KEY (<column>) REFERENCES <table> (<column>)
-	addRegion                             // ALTER DATABASE <db> ADD REGION <region>
-	addUniqueConstraint                   // ALTER TABLE <table> ADD CONSTRAINT <constraint> UNIQUE (<column>)
-
-	alterTableLocality // ALTER TABLE <table> LOCALITY <locality>
-
-	createIndex    // CREATE INDEX <index> ON <table> <def>
-	createSequence // CREATE SEQUENCE <sequence> <def>
-	createTable    // CREATE TABLE <table> <def>
-	createTableAs  // CREATE TABLE <table> AS <def>
-	createView     // CREATE VIEW <view> AS <def>
-	createEnum     // CREATE TYPE <type> ENUM AS <def>
-	createSchema   // CREATE SCHEMA <schema>
-
-	dropColumn        // ALTER TABLE <table> DROP COLUMN <column>
-	dropColumnDefault // ALTER TABLE <table> ALTER [COLUMN] <column> DROP DEFAULT
-	dropColumnNotNull // ALTER TABLE <table> ALTER [COLUMN] <column> DROP NOT NULL
-	dropColumnStored  // ALTER TABLE <table> ALTER [COLUMN] <column> DROP STORED
-	dropConstraint    // ALTER TABLE <table> DROP CONSTRAINT <constraint>
-	dropIndex         // DROP INDEX <index>@<table>
-	dropSequence      // DROP SEQUENCE <sequence>
-	dropTable         // DROP TABLE <table>
-	dropView          // DROP VIEW <view>
-	dropSchema        // DROP SCHEMA <schema>
-
-	primaryRegion //  ALTER DATABASE <db> PRIMARY REGION <region>
-
-	renameColumn   // ALTER TABLE <table> RENAME [COLUMN] <column> TO <column>
-	renameIndex    // ALTER TABLE <table> RENAME CONSTRAINT <constraint> TO <constraint>
-	renameSequence // ALTER SEQUENCE <sequence> RENAME TO <sequence>
-	renameTable    // ALTER TABLE <table> RENAME TO <table>
-	renameView     // ALTER VIEW <view> RENAME TO <view>
-
-	setColumnDefault // ALTER TABLE <table> ALTER [COLUMN] <column> SET DEFAULT <expr>
-	setColumnNotNull // ALTER TABLE <table> ALTER [COLUMN] <column> SET NOT NULL
-	setColumnType    // ALTER TABLE <table> ALTER [COLUMN] <column> [SET DATA] TYPE <type>
-
-	survive // ALTER DATABASE <db> SURVIVE <failure_mode>
-
-	insertRow // INSERT INTO <table> (<cols>) VALUES (<values>)
-
-	selectStmt // SELECT..
-
-	validate // validate all table descriptors
-
-	numOpTypes int = iota
-)
-
-var opFuncs = map[opType]func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, error){
-	addColumn:               (*operationGenerator).addColumn,
-	addConstraint:           (*operationGenerator).addConstraint,
-	addForeignKeyConstraint: (*operationGenerator).addForeignKeyConstraint,
-	addRegion:               (*operationGenerator).addRegion,
-	addUniqueConstraint:     (*operationGenerator).addUniqueConstraint,
-	alterTableLocality:      (*operationGenerator).alterTableLocality,
-	createIndex:             (*operationGenerator).createIndex,
-	createSequence:          (*operationGenerator).createSequence,
-	createTable:             (*operationGenerator).createTable,
-	createTableAs:           (*operationGenerator).createTableAs,
-	createView:              (*operationGenerator).createView,
-	createEnum:              (*operationGenerator).createEnum,
-	createSchema:            (*operationGenerator).createSchema,
-	dropColumn:              (*operationGenerator).dropColumn,
-	dropColumnDefault:       (*operationGenerator).dropColumnDefault,
-	dropColumnNotNull:       (*operationGenerator).dropColumnNotNull,
-	dropColumnStored:        (*operationGenerator).dropColumnStored,
-	dropConstraint:          (*operationGenerator).dropConstraint,
-	dropIndex:               (*operationGenerator).dropIndex,
-	dropSequence:            (*operationGenerator).dropSequence,
-	dropTable:               (*operationGenerator).dropTable,
-	dropView:                (*operationGenerator).dropView,
-	dropSchema:              (*operationGenerator).dropSchema,
-	primaryRegion:           (*operationGenerator).primaryRegion,
-	renameColumn:            (*operationGenerator).renameColumn,
-	renameIndex:             (*operationGenerator).renameIndex,
-	renameSequence:          (*operationGenerator).renameSequence,
-	renameTable:             (*operationGenerator).renameTable,
-	renameView:              (*operationGenerator).renameView,
-	setColumnDefault:        (*operationGenerator).setColumnDefault,
-	setColumnNotNull:        (*operationGenerator).setColumnNotNull,
-	setColumnType:           (*operationGenerator).setColumnType,
-	survive:                 (*operationGenerator).survive,
-	insertRow:               (*operationGenerator).insertRow,
-	selectStmt:              (*operationGenerator).selectStmt,
-	validate:                (*operationGenerator).validate,
-}
-
-func init() {
-	// Validate that we have an operation function for each opType.
-	if len(opFuncs) != numOpTypes {
-		panic(errors.Errorf("expected %d opFuncs, got %d", numOpTypes, len(opFuncs)))
-	}
-}
-
-var opWeights = []int{
-	addColumn:               1,
-	addConstraint:           0, // TODO(spaskob): unimplemented
-	addForeignKeyConstraint: 0, // Disabled and tracked with #91195
-	addRegion:               1,
-	addUniqueConstraint:     0,
-	alterTableLocality:      1,
-	createIndex:             1,
-	createSequence:          1,
-	createTable:             1,
-	createTableAs:           1,
-	createView:              1,
-	createEnum:              1,
-	createSchema:            1,
-	dropColumn:              0,
-	dropColumnDefault:       1,
-	dropColumnNotNull:       1,
-	dropColumnStored:        1,
-	dropConstraint:          1,
-	dropIndex:               1,
-	dropSequence:            1,
-	dropTable:               1,
-	dropView:                1,
-	dropSchema:              1,
-	primaryRegion:           0, // Disabled and tracked with #83831
-	renameColumn:            1,
-	renameIndex:             1,
-	renameSequence:          1,
-	renameTable:             1,
-	renameView:              1,
-	setColumnDefault:        1,
-	setColumnNotNull:        1,
-	setColumnType:           0, // Disabled and tracked with #66662.
-	survive:                 0, // Disabled and tracked with #83831
-	insertRow:               0, // Disabled and tracked with #91863
-	selectStmt:              10,
-	validate:                2, // validate twice more often
-}
-
-var opDeclarative = []bool{
-	addColumn:               true,
-	addConstraint:           false,
-	addForeignKeyConstraint: true,
-	addRegion:               false,
-	addUniqueConstraint:     true,
-	alterTableLocality:      false,
-	createIndex:             true,
-	createSequence:          true,
-	createTable:             false,
-	createTableAs:           false,
-	createView:              false,
-	createEnum:              false,
-	createSchema:            false,
-	dropColumn:              true,
-	dropColumnDefault:       false,
-	dropColumnNotNull:       true,
-	dropColumnStored:        false,
-	dropConstraint:          true,
-	dropIndex:               true,
-	dropSequence:            true,
-	dropTable:               true,
-	dropView:                true,
-	dropSchema:              true,
-	primaryRegion:           false,
-	renameColumn:            false,
-	renameIndex:             false,
-	renameSequence:          false,
-	renameTable:             false,
-	renameView:              false,
-	setColumnDefault:        false,
-	setColumnNotNull:        false,
-	setColumnType:           false,
-	survive:                 false,
-	insertRow:               false,
-	selectStmt:              false,
-	validate:                false,
-}
-
-// This workload will maintain its own list of supported versions for declarative
-// schema changer, since the cluster we are running against can be downlevel.
-// The declarative schema changer builder does have a supported list, but it's not
-// sufficient for that reason.
-var opDeclarativeVersion = []clusterversion.Key{
-	addColumn:               clusterversion.V22_2,
-	addForeignKeyConstraint: clusterversion.V23_1,
-	addUniqueConstraint:     clusterversion.V23_1,
-	createIndex:             clusterversion.V23_1,
-	createSequence:          clusterversion.V23_2,
-	dropColumn:              clusterversion.V22_2,
-	dropColumnNotNull:       clusterversion.V23_1,
-	dropConstraint:          clusterversion.V23_1,
-	dropIndex:               clusterversion.V23_1,
-	dropSequence:            clusterversion.BinaryMinSupportedVersionKey,
-	dropTable:               clusterversion.BinaryMinSupportedVersionKey,
-	dropView:                clusterversion.BinaryMinSupportedVersionKey,
-	dropSchema:              clusterversion.BinaryMinSupportedVersionKey,
-}
-
-func init() {
-	// Assert that an active version is set for all declarative statements.
-	for op := range opDeclarative {
-		if opDeclarative[op] &&
-			opDeclarativeVersion[op] < clusterversion.BinaryMinSupportedVersionKey {
-			panic(errors.AssertionFailedf("declarative op %v doesn't have an active version", op))
-		}
-	}
-}
-
 // getSupportedDeclarativeOp generates declarative operations until,
 // a fully supported one is found. This is required for mixed version testing
 // support, where statements may be partially supproted.
@@ -365,9 +160,8 @@ func (og *operationGenerator) getSupportedDeclarativeOp(
 ) (opType, error) {
 	for {
 		op := opType(og.params.declarativeOps.Int())
-		if !clusterversion.TestingBinaryMinSupportedVersion.Equal(
-			clusterversion.ByKey(opDeclarativeVersion[op])) {
-			notSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.ByKey(opDeclarativeVersion[op]))
+		if opVerKey := opDeclarativeVersion[op]; opVerKey != clusterversion.MinSupported {
+			notSupported, err := isClusterVersionLessThan(ctx, tx, opVerKey.Version())
 			if err != nil {
 				return op, err
 			}
@@ -698,10 +492,7 @@ func (og *operationGenerator) getDatabaseRegionNames(
 }
 
 func (og *operationGenerator) getDatabase(ctx context.Context, tx pgx.Tx) (string, error) {
-	var database string
-	err := tx.QueryRow(ctx, "SHOW DATABASE").Scan(&database)
-	og.LogQueryResults("SHOW DATABASE", database)
-	return database, err
+	return Scan[string](ctx, og, tx, `SHOW DATABASE`)
 }
 
 type getRegionsResult struct {
@@ -1041,7 +832,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	if notvisible := og.randIntn(20) == 0; notvisible {
 		invisibility.Value = 1.0
 		partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
-			ctx, tx, clusterversion.ByKey(clusterversion.V23_2_PartiallyVisibleIndexes),
+			ctx, tx, clusterversion.ByKey(clusterversion.V23_2),
 		)
 		if err != nil {
 			return nil, err
@@ -1235,15 +1026,6 @@ func (og *operationGenerator) createSequence(ctx context.Context, tx pgx.Tx) (*o
 		{code: pgcode.UndefinedSchema, condition: !schemaExists},
 		{code: pgcode.DuplicateRelation, condition: sequenceExists && !ifNotExists},
 	})
-	// Descriptor ID generator may be temporarily unavailable, so
-	// allow this to be detected.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	stmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	})
 
 	var seqOptions tree.SequenceOptions
 	// Decide if the sequence should be owned by a column. If so, it can
@@ -1318,7 +1100,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	}
 
 	partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
-		ctx, tx, clusterversion.ByKey(clusterversion.V23_2_PartiallyVisibleIndexes),
+		ctx, tx, clusterversion.ByKey(clusterversion.V23_2),
 	)
 	if err != nil {
 		return nil, err
@@ -1351,6 +1133,14 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	}()
 	// PGLSN was added in 23.2.
 	pgLSNNotSupported, err := isClusterVersionLessThan(
+		ctx,
+		tx,
+		clusterversion.ByKey(clusterversion.V23_2))
+	if err != nil {
+		return nil, err
+	}
+	// REFCURSOR was added in 23.2.
+	refCursorNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
 		clusterversion.ByKey(clusterversion.V23_2))
@@ -1459,17 +1249,12 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedTSQuery},
 		{code: pgcode.Syntax, condition: pgLSNNotSupported},
 		{code: pgcode.FeatureNotSupported, condition: pgLSNNotSupported},
+		{code: pgcode.UndefinedObject, condition: pgLSNNotSupported},
+		{code: pgcode.Syntax, condition: refCursorNotSupported},
+		{code: pgcode.FeatureNotSupported, condition: refCursorNotSupported},
+		{code: pgcode.UndefinedObject, condition: refCursorNotSupported},
 		{code: pgcode.FeatureNotSupported, condition: hasUnsupportedIdxQueries},
 		{code: pgcode.InvalidTableDefinition, condition: hasUnsupportedIdxQueries},
-	})
-	// Descriptor ID generator may be temporarily unavailable, so
-	// allow uncategorized errors temporarily.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
 	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
@@ -1488,15 +1273,6 @@ func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (*opStm
 	opStmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.DuplicateObject, condition: typeExists},
 		{code: pgcode.InvalidSchemaName, condition: !schemaExists},
-	})
-	// Descriptor ID generator may be temporarily unavailable, so
-	// allow uncategorized errors temporarily.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
 	})
 	stmt := randgen.RandCreateType(og.params.rng, typName.Object(), "asdf")
 	stmt.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
@@ -1619,15 +1395,6 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 		{code: pgcode.Syntax, condition: len(selectStatement.Exprs) == 0},
 		{code: pgcode.DuplicateAlias, condition: duplicateSourceTables},
 		{code: pgcode.DuplicateColumn, condition: duplicateColumns},
-	})
-	// Descriptor ID generator may be temporarily unavailable, so
-	// allow uncategorized errors temporarily.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
 	})
 	// Confirm the select itself doesn't run into any column generation errors,
 	// by executing it independently first until we add validation when adding
@@ -1760,13 +1527,6 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	})
 	opStmt.sql = fmt.Sprintf(`CREATE VIEW %s AS %s`,
 		destViewName, selectStatement.String())
 	return opStmt, nil
@@ -2152,6 +1912,39 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (*opStmt,
 		{pgcode.DependentObjectsStillExist, dropBehavior != tree.DropCascade && viewHasDependencies},
 	})
 	stmt.sql = dropView.String()
+	return stmt, nil
+}
+
+func (og *operationGenerator) dropTypeValue(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	enum, exists, err := og.randEnum(ctx, tx, og.pctExisting(true))
+	if err != nil {
+		return nil, err
+	}
+
+	validValue := false
+	value := "IrrelevantEnumValue"
+
+	if exists {
+		value, validValue, err = og.randEnumValue(ctx, tx, og.pctExisting(true), enum)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	valueDropping := false
+	if validValue {
+		valueDropping, err = og.enumValueIsBeingRemoved(ctx, tx, enum.String(), value)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{pgcode.UndefinedObject, !exists || !validValue},
+		{pgcode.ObjectNotInPrerequisiteState, valueDropping},
+	})
+	stmt.sql = fmt.Sprintf(`ALTER TYPE %s DROP VALUE '%s'`, enum, value)
 	return stmt, nil
 }
 
@@ -2607,6 +2400,130 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 	return stmt, nil
 }
 
+func (og *operationGenerator) alterTableAlterPrimaryKey(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	type Column struct {
+		Name     tree.Name
+		Nullable bool
+		Unique   bool
+	}
+
+	rowToTableName := func(row pgx.CollectableRow) (*tree.UnresolvedName, error) {
+		var schema string
+		var name string
+		if err := row.Scan(&schema, &name); err != nil {
+			return nil, err
+		}
+		return tree.NewUnresolvedName(schema, name), nil
+	}
+
+	columnsFrom := func(table tree.NodeFormatter) ([]Column, error) {
+		query := With([]CTE{
+			{"stats", fmt.Sprintf(`SELECT * FROM [SHOW STATISTICS FOR TABLE %v]`, table)},
+			{"unique_columns", `SELECT column_names[1] AS name FROM stats WHERE row_count = distinct_count AND array_length(column_names, 1) = 1`},
+		}, fmt.Sprintf(`SELECT column_name, is_nullable, EXISTS(SELECT * FROM unique_columns WHERE name = column_name) FROM [SHOW COLUMNS FROM %v] WHERE NOT is_hidden`, table))
+
+		return Collect(ctx, og, tx, pgx.RowToStructByPos[Column], query)
+	}
+
+	ctes := []CTE{
+		{"tables", `SELECT * FROM [SHOW TABLES] WHERE type = 'table'`},
+		{"descriptors", descJSONQuery},
+		{"tables_undergoing_schema_changes", `SELECT id FROM descriptors WHERE descriptor ? 'table' AND json_array_length(descriptor->'table'->'mutations') > 0`},
+	}
+
+	tablesUndergoingSchemaChangesQuery := With(ctes, `SELECT schema_name, table_name FROM tables WHERE NOT EXISTS(SELECT * FROM tables_undergoing_schema_changes WHERE id = (schema_name || '.' || table_name)::regclass::oid)`)
+	tablesNotUndergoingSchemaChangesQuery := With(ctes, `SELECT schema_name, table_name FROM tables WHERE EXISTS(SELECT * FROM tables_undergoing_schema_changes WHERE id = (schema_name || '.' || table_name)::regclass::oid)`)
+
+	var table *tree.UnresolvedName
+	stmt, code, err := Generate[*tree.AlterTable](og.params.rng, og.produceError(), []GenerationCase{
+		// IF EXISTS should noop if the table doesn't exist.
+		{pgcode.SuccessfulCompletion, `ALTER TABLE IF EXISTS "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
+		// Targeting a table that doesn't exist should error out.
+		{pgcode.UndefinedTable, `ALTER TABLE "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
+		// Targeting a column that doesn't exist should error out.
+		{pgcode.InvalidSchemaDefinition, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ("NonExistentColumn")`},
+		// NonUniqueColumns can't be used as PKs.
+		{pgcode.UniqueViolation, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({NonUniqueColumns})`},
+		// NullableColumns can't be used as PKs.
+		{pgcode.InvalidSchemaDefinition, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({NullableColumns})`},
+		// Tables undergoing a schema change may not have their PK changed.
+		// TODO(chrisseto): This case doesn't cause errors as expected.
+		// {pgcode.Code{}, `ALTER TABLE {TableUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({UniqueNotNullableColumns})`},
+		// Successful cases.
+		{pgcode.SuccessfulCompletion, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({UniqueNotNullableColumns})`},
+		{pgcode.SuccessfulCompletion, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({UniqueNotNullableColumns}) USING HASH`},
+		// TODO(chrisseto): Add support for hash parameters and storage parameters.
+	}, template.FuncMap{
+		"TableNotUnderGoingSchemaChange": func() (*tree.UnresolvedName, error) {
+			tables, err := Collect(ctx, og, tx, rowToTableName, tablesNotUndergoingSchemaChangesQuery)
+			if err != nil {
+				return nil, err
+			}
+			table, err = PickOne(og.params.rng, tables)
+			return table, err
+		},
+		"TableUnderGoingSchemaChange": func() (*tree.UnresolvedName, error) {
+			tables, err := Collect(ctx, og, tx, rowToTableName, tablesUndergoingSchemaChangesQuery)
+			if err != nil {
+				return nil, err
+			}
+			table, err = PickOne(og.params.rng, tables)
+			return table, err
+		},
+		"NullableColumns": func() (Values, error) {
+			columns, err := columnsFrom(table)
+			if err != nil {
+				return nil, err
+			}
+
+			names := util.Map(util.Filter(columns, func(c Column) bool {
+				return c.Nullable
+			}), func(c Column) *tree.Name {
+				return &c.Name
+			})
+
+			return AsValues(PickAtLeast(og.params.rng, 1, names))
+		},
+		"NonUniqueColumns": func() (Values, error) {
+			columns, err := columnsFrom(table)
+			if err != nil {
+				return nil, err
+			}
+
+			names := util.Map(util.Filter(columns, func(c Column) bool {
+				return !c.Nullable && !c.Unique
+			}), func(c Column) *tree.Name {
+				return &c.Name
+			})
+
+			return AsValues(PickAtLeast(og.params.rng, 1, names))
+		},
+		"UniqueNotNullableColumns": func() (Values, error) {
+			columns, err := columnsFrom(table)
+			if err != nil {
+				return nil, err
+			}
+
+			names := util.Map(util.Filter(columns, func(c Column) bool {
+				return !c.Nullable && c.Unique
+			}), func(c Column) *tree.Name {
+				return &c.Name
+			})
+
+			return AsValues(PickAtLeast(og.params.rng, 1, names))
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return newOpStmt(stmt, codesWithConditions{
+		{code, true},
+	}), nil
+}
+
 func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
 	dbRegions, err := og.getDatabaseRegionNames(ctx, tx)
 	if err != nil {
@@ -2832,6 +2749,31 @@ func makeOpStmt(queryType opStmtType) *opStmt {
 	return &opStmt{
 		queryType:           queryType,
 		expectedExecErrors:  makeExpectedErrorSet(),
+		potentialExecErrors: makeExpectedErrorSet(),
+	}
+}
+
+// opStmtFromTree constructs an operation from the provide tree.Statement.
+//
+//lint:ignore U1000 Used in future commits. TODO(chrisseto): Remove the ignore.
+func newOpStmt(stmt tree.Statement, expectedExecErrors codesWithConditions) *opStmt {
+	var queryType opStmtType
+	switch stmt.StatementType() {
+	case tree.TypeDDL:
+		queryType = OpStmtDDL
+	case tree.TypeDML:
+		queryType = OpStmtDML
+	default:
+		panic("unhandled statement type")
+	}
+
+	expectedErrors := makeExpectedErrorSet()
+	expectedErrors.addAll(expectedExecErrors)
+
+	return &opStmt{
+		sql:                 tree.Serialize(stmt),
+		queryType:           queryType,
+		expectedExecErrors:  expectedErrors,
 		potentialExecErrors: makeExpectedErrorSet(),
 	}
 }
@@ -3390,6 +3332,50 @@ ORDER BY random()
 	return &typeName, true, nil
 }
 
+func (og *operationGenerator) randEnumValue(
+	ctx context.Context, tx pgx.Tx, pctExisting int, enum *tree.TypeName,
+) (value string, exists bool, err error) {
+	const q = `SELECT unnest(values) FROM [SHOW ENUMS] WHERE schema = $1 AND name = $2`
+
+	rows, err := tx.Query(ctx, q, enum.Schema(), enum.Object())
+	if err != nil {
+		return "", false, err
+	}
+
+	defer rows.Close()
+
+	var values []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return "", false, err
+		}
+		values = append(values, v)
+	}
+
+	if rows.Err() != nil {
+		return "", false, rows.Err()
+	}
+
+	if og.randIntn(100) >= pctExisting || len(values) == 0 {
+		valueSet := make(map[string]bool, len(values))
+		for _, v := range values {
+			valueSet[v] = true
+		}
+
+		// It's pretty unlikely that we'll generate conflicting values but better
+		// safe than sorry.
+		for {
+			nonExistentValue := og.randString(5, 5)
+			if !valueSet[nonExistentValue] {
+				return nonExistentValue, false, nil
+			}
+		}
+	}
+
+	return values[og.randIntn(len(values))], true, nil
+}
+
 // randTable returns a schema name along with a table name
 func (og *operationGenerator) randTable(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
@@ -3609,15 +3595,6 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (*opS
 	// TODO(jayshrivastava): Support authorization
 	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, tree.MakeRoleSpecWithRoleName(username.RootUserName().Normalized()))
 	opStmt.sql = tree.Serialize(stmt)
-	// Descriptor ID generator may be temporarily unavailable, so
-	// allow uncategorized errors temporarily.
-	potentialDescIDGeneratorError, err := maybeExpectPotentialDescIDGenerationError(ctx, tx)
-	if err != nil {
-		return nil, err
-	}
-	opStmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.Uncategorized, condition: potentialDescIDGeneratorError},
-	})
 	return opStmt, nil
 }
 
@@ -3820,9 +3797,24 @@ func (og *operationGenerator) produceError() bool {
 	return og.randIntn(100) < og.params.errorRate
 }
 
-// Returns an int in the range [0,topBound). It panics if topBound <= 0.
+// randIntn returns an int in the range [0,topBound). It panics if topBound <= 0.
 func (og *operationGenerator) randIntn(topBound int) int {
 	return og.params.rng.Intn(topBound)
+}
+
+// randString return a random string that matches the regex `[a-z_]{min,max}`.
+// It panics if min < 0 or min > max.
+func (og *operationGenerator) randString(min, max int) string {
+	if min < 0 || min > max {
+		panic("invalid arguments to randString")
+	}
+
+	// Use a more restricted alphabet here so we generate strings that are safe
+	// for values or identifiers.
+	const alphabet = "abcdefghijklmnopqrstuvwxyz_"
+
+	length := og.randIntn(max) + min
+	return randutil.RandString(og.params.rng, length, alphabet)
 }
 
 func (og *operationGenerator) newUniqueSeqNum() int64 {
@@ -3865,11 +3857,4 @@ func isClusterVersionLessThan(
 		return false, err
 	}
 	return clusterVersion.LessEq(targetVersion), nil
-}
-
-func maybeExpectPotentialDescIDGenerationError(ctx context.Context, tx pgx.Tx) (bool, error) {
-	descIDGenerationVersion := clusterversion.ByKey(clusterversion.V23_1DescIDSequenceForSystemTenant)
-	descIDGenerationErrorPossible, err := isClusterVersionLessThan(ctx,
-		tx, descIDGenerationVersion)
-	return descIDGenerationErrorPossible, err
 }

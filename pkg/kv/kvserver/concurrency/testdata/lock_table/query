@@ -89,7 +89,7 @@ num locks: 2, bytes returned: 82, resume reason: RESUME_KEY_LIMIT, resume span: 
 
 query span=a,f max-bytes=50 uncontended
 ----
-num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
+num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {e-f}
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
 
@@ -97,7 +97,7 @@ num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span:
 
 query span=a,f max-bytes=10 uncontended
 ----
-num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {c-f}
+num locks: 1, bytes returned: 41, resume reason: RESUME_BYTE_LIMIT, resume span: {e-f}
  locks:
   range_id=3 key="b" holder=00000000-0000-0000-0000-000000000001 durability=Unreplicated duration=0s
 

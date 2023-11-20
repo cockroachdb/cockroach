@@ -32,7 +32,7 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS]
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/62>  …/1/1         {1}       1
+<before:/Table/65>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -2422,3 +2422,72 @@ SHOW HISTOGRAM $hist_id_1
 upper_bound  range_rows  distinct_range_rows  equal_rows
 'hello'      0           0                    2
 'hi'         0           0                    1
+
+# Test that SHOW STATISTICS displays created_at in the session timezone.
+
+statement ok
+CREATE TABLE t107651 (i INT PRIMARY KEY)
+
+statement ok
+SET TIME ZONE -7
+
+statement ok
+ALTER TABLE t107651 INJECT STATISTICS '[
+    {
+        "avg_size": 0,
+        "columns": [
+            "i"
+        ],
+        "created_at": "2023-09-15 21:00:00.000000",
+        "distinct_count": 0,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 0
+    }
+]'
+
+query TT
+SELECT statistics_name, created FROM
+[SHOW STATISTICS FOR TABLE t107651]
+----
+__auto__  2023-09-15 14:00:00 -0700 -0700
+
+statement ok
+SET TIME ZONE -4
+
+query TT
+SELECT statistics_name, created FROM
+[SHOW STATISTICS FOR TABLE t107651]
+----
+__auto__  2023-09-15 17:00:00 -0400 -0400
+
+# Test that a non-admin can use SHOW STATISTICS.
+
+statement ok
+CREATE TABLE tab_test_privileges (a INT PRIMARY KEY);
+
+statement ok
+INSERT INTO tab_test_privileges VALUES (1);
+
+statement ok
+CREATE STATISTICS tab_test_privileges_stat ON a FROM tab_test_privileges;
+
+user testuser
+
+query error testuser has no privileges on relation tab_test_privileges
+SELECT statistics_name, created FROM [SHOW STATISTICS FOR TABLE tab_test_privileges]
+
+user root
+
+statement ok
+GRANT SELECT ON tab_test_privileges TO testuser
+
+user testuser
+
+query T
+SELECT statistics_name FROM [SHOW STATISTICS FOR TABLE tab_test_privileges]
+----
+tab_test_privileges_stat
+
+user root

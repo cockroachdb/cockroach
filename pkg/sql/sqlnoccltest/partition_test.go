@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -39,7 +38,6 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	srv, sqlDBRaw, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 
 	const numRows = 100

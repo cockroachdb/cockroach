@@ -27,11 +27,13 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 	crdbNodeCount := 4
 
 	r.Add(registry.TestSpec{
-		Name:    "multitenant/shared-process/basic",
-		Owner:   registry.OwnerMultiTenant,
-		Cluster: r.MakeClusterSpec(crdbNodeCount + 1),
-		Leases:  registry.MetamorphicLeases,
-		Timeout: 1 * time.Hour,
+		Name:             "multitenant/shared-process/basic",
+		Owner:            registry.OwnerMultiTenant,
+		Cluster:          r.MakeClusterSpec(crdbNodeCount + 1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			var (
 				tpccWarehouses = 500
@@ -39,7 +41,6 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 				workloadNode   = c.Node(crdbNodeCount + 1)
 			)
 			t.Status(`set up Unified Architecture Cluster`)
-			c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 
 			// In order to observe the app tenant's db console, create a secure

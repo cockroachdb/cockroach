@@ -264,7 +264,7 @@ func TestGenerateNodeCerts(t *testing.T) {
 // client.root.crt: client certificate for the root user.
 // client-tenant.10.crt: tenant client certificate for tenant 10.
 // tenant-signing.10.crt: tenant signing certificate for tenant 10.
-func generateBaseCerts(certsDir string) error {
+func generateBaseCerts(certsDir string, clientCertLifetime time.Duration) error {
 	{
 		caKey := filepath.Join(certsDir, certnames.EmbeddedCAKey)
 
@@ -286,7 +286,7 @@ func generateBaseCerts(certsDir string) error {
 			certsDir,
 			caKey,
 			testKeySize,
-			time.Hour*48,
+			clientCertLifetime,
 			true,
 			username.RootUserName(),
 			[]roachpb.TenantID{roachpb.SystemTenantID},
@@ -329,7 +329,7 @@ func generateBaseCerts(certsDir string) error {
 // client.node.crt: node client cert: signed by ca-client.crt
 // client.root.crt: root client cert: signed by ca-client.crt
 func generateSplitCACerts(certsDir string) error {
-	if err := generateBaseCerts(certsDir); err != nil {
+	if err := generateBaseCerts(certsDir, 48*time.Hour); err != nil {
 		return err
 	}
 
@@ -384,7 +384,7 @@ func TestUseCerts(t *testing.T) {
 	defer ResetTest()
 	certsDir := t.TempDir()
 
-	if err := generateBaseCerts(certsDir); err != nil {
+	if err := generateBaseCerts(certsDir, 48*time.Hour); err != nil {
 		t.Fatal(err)
 	}
 
@@ -568,11 +568,11 @@ func TestUseSplitCACerts(t *testing.T) {
 		// Bad server CA: can't verify server certificate.
 		{"root", certnames.EmbeddedClientCACert, "client.root", "certificate signed by unknown authority"},
 		// Bad client cert: we're using the node cert but it's not signed by the client CA.
-		{"node", certnames.EmbeddedCACert, "node", "tls: bad certificate"},
+		{"node", certnames.EmbeddedCACert, "node", "tls: unknown certificate authority"},
 		// We can't verify the node certificate using the UI cert.
 		{"node", certnames.EmbeddedUICACert, "node", "certificate signed by unknown authority"},
 		// And the SQL server doesn't know what the ui.crt is.
-		{"node", certnames.EmbeddedCACert, "ui", "tls: bad certificate"},
+		{"node", certnames.EmbeddedCACert, "ui", "tls: unknown certificate authority"},
 	}
 
 	for i, tc := range testCases {
@@ -693,7 +693,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		expectedError            string
 	}{
 		// Certificate signed by wrong client CA.
-		{"root", certnames.EmbeddedCACert, "client.root", "tls: bad certificate"},
+		{"root", certnames.EmbeddedCACert, "client.root", "tls: unknown certificate authority"},
 		// Success! The node certificate still contains "CN=node" and is signed by ca.crt.
 		{"node", certnames.EmbeddedCACert, "node", "pq: password authentication failed for user node"},
 	}

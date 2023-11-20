@@ -31,9 +31,11 @@ import (
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildJoin(
-	join *tree.JoinTableExpr, locking lockingSpec, inScope *scope,
+	join *tree.JoinTableExpr, lockCtx lockingContext, inScope *scope,
 ) (outScope *scope) {
-	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, locking, inScope)
+	// TODO(michae2, 97434): Poison the lockCtx for the null-extended side(s) if
+	// this is an outer join.
+	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, lockCtx, inScope)
 
 	inScopeRight := inScope
 	isLateral := b.exprIsLateral(join.Right)
@@ -45,7 +47,7 @@ func (b *Builder) buildJoin(
 		inScopeRight.context = exprKindLateralJoin
 	}
 
-	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, locking, inScopeRight)
+	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, lockCtx, inScopeRight)
 
 	// Check that the same table name is not used on both sides.
 	b.validateJoinTableNames(leftScope, rightScope)
@@ -115,7 +117,8 @@ func (b *Builder) buildJoin(
 		if on, ok := cond.(*tree.OnJoinCond); ok {
 			// Do not allow special functions in the ON clause.
 			b.semaCtx.Properties.Require(
-				exprKindOn.String(), tree.RejectGenerators|tree.RejectWindowApplications,
+				exprKindOn.String(),
+				tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectProcedures,
 			)
 			outScope.context = exprKindOn
 			filter := b.buildScalar(

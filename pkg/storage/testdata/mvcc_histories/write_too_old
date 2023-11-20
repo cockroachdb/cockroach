@@ -9,6 +9,8 @@ with t=A
   put  k=a v=abc resolve
   txn_remove
 ----
+put: lock acquisition = {a id=00000001 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=44.000000000,0 min=0,0 seq=0 Replicated Intent []}
+resolve_intent: "a" -> resolved key = true
 >> at end:
 data: "a"/44.000000000,0 -> /BYTES/abc
 
@@ -28,6 +30,7 @@ error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestam
 run ok
 resolve_intent t=A k=a status=ABORTED
 ----
+resolve_intent: "a" -> resolved key = false
 >> at end:
 data: "a"/44.000000000,0 -> /BYTES/abc
 
@@ -49,5 +52,6 @@ error: (*kvpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestam
 run ok
 resolve_intent t=B k=a status=ABORTED
 ----
+resolve_intent: "a" -> resolved key = false
 >> at end:
 data: "a"/44.000000000,0 -> /BYTES/abc

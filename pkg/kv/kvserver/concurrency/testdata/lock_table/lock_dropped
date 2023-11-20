@@ -10,6 +10,9 @@ new-lock-table maxlocks=10000
 new-txn txn=txn1 ts=10 epoch=0 seq=2
 ----
 
+new-txn txn=txn2 ts=10 epoch=0 seq=1
+----
+
 new-request r=req1 txn=txn1 ts=10 spans=intent@a+exclusive@a
 ----
 
@@ -184,3 +187,269 @@ num=0
 guard-state r=req3
 ----
 new: state=doneWaiting
+
+# ------------------------------------------------------------------------------
+# Test locks are dropped regardless of the sequence number the replicated lock
+# is being acquired at. If the replicated lock is acquired at a higher sequence
+# number and we drop the lock, the replicaed lock may not provide sufficient
+# protection in the face of sequence number rollbacks. See
+# tryFreeOnReplicatedAcquire for details, but while we have this behavior, we
+# add tests for it.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req4 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req4
+----
+start-waiting: false
+
+acquire k=a r=req4 durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
+
+# Replicated re-acquisition at higher sequence number.
+new-txn txn=txn1 ts=10 epoch=0 seq=4
+----
+
+new-request r=req5 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req5
+----
+start-waiting: false
+
+acquire k=a r=req5 durability=r strength=exclusive
+----
+num=0
+
+# Replicated re-acquisition at lower sequence number.
+acquire k=a r=req4 durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
+
+new-txn txn=txn1 ts=10 epoch=0 seq=1
+----
+
+new-request r=req6 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req6
+----
+start-waiting: false
+
+acquire k=a r=req6 durability=r strength=exclusive
+----
+num=0
+
+# ------------------------------------------------------------------------------
+# Test unreplicated locks aren't dropped if the lock acquisition corresponds to
+# a weaker lock strength, as the lock doesn't offer enough protection. We check
+# for sequence numbers at, below, and above the unreplicated lock's sequence
+# number.
+# ------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=10 epoch=0 seq=2
+----
+
+new-request r=req7 txn=txn1 ts=10 spans=exclusive@a
+----
+
+scan r=req7
+----
+start-waiting: false
+
+acquire k=a r=req7 durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: unrepl [(str: Exclusive seq: 2)]
+
+# At the unreplicated lock's sequence number.
+new-request r=req8 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req8
+----
+start-waiting: false
+
+acquire k=a r=req8 durability=r strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Shared], unrepl [(str: Exclusive seq: 2)]
+
+# Lower sequence number.
+new-txn txn=txn1 ts=10 epoch=0 seq=1
+----
+
+new-request r=req9 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req9
+----
+start-waiting: false
+
+acquire k=a r=req9 durability=r strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Shared], unrepl [(str: Exclusive seq: 2)]
+
+# Higher sequence number.
+new-txn txn=txn1 ts=10 epoch=0 seq=3
+----
+
+new-request r=req10 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req10
+----
+start-waiting: false
+
+acquire k=a r=req10 durability=r strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,0, info: repl [Shared], unrepl [(str: Exclusive seq: 2)]
+
+# ------------------------------------------------------------------------------
+# Test interactions with shared locks. Each transaction's shared locks should be
+# handled independently. The key should only be unlocked once all shared locks
+# are released.
+# ------------------------------------------------------------------------------
+
+clear
+----
+num=0
+
+new-request r=req11 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req11
+----
+start-waiting: false
+
+acquire k=a r=req11 durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]
+
+
+new-request r=req12 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req12
+----
+start-waiting: false
+
+acquire k=a r=req12 durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 3)]
+           txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req13 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req13
+----
+start-waiting: false
+
+acquire k=a r=req13 durability=r strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+# Ensure a replicated lock acquisition by a different txn (txn1) doesn't release
+# the shared lock.
+
+acquire k=a r=req13 durability=r strength=shared
+----
+num=1
+ lock: "a"
+  holders: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+           txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
+
+release span=a txn=txn1
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+new-request r=req14 txn=txn2 ts=10 spans=shared@a
+----
+
+scan r=req14
+----
+start-waiting: false
+
+acquire k=a r=req14 durability=r strength=shared
+----
+num=0
+
+# ------------------------------------------------------------------------------
+# Ensure unreplicated locks aren't forgotten if the replicated lock acquisition
+# belongs to a different epoch.
+# ------------------------------------------------------------------------------
+
+new-txn txn=txn1 ts=10 epoch=1 seq=0
+----
+
+new-request r=req15 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req15
+----
+start-waiting: false
+
+acquire k=a r=req15 durability=u strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
+
+# Lower epoch.
+new-txn txn=txn1 ts=10 epoch=0 seq=0
+----
+
+new-request r=req16 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req16
+----
+start-waiting: false
+
+acquire k=a r=req16 durability=r strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, info: repl [Shared], unrepl [(str: Shared seq: 0)]
+
+# Higher epoch.
+new-txn txn=txn1 ts=10 epoch=2 seq=0
+----
+
+new-request r=req17 txn=txn1 ts=10 spans=shared@a
+----
+
+scan r=req17
+----
+start-waiting: false
+
+acquire k=a r=req17 durability=r strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 2, iso: Serializable, info: repl [Shared]

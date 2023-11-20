@@ -11,6 +11,7 @@
 package rangefeed
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,8 +39,32 @@ var (
 	}
 	metaRangeFeedRegistrations = metric.Metadata{
 		Name:        "kv.rangefeed.registrations",
-		Help:        "Number of active rangefeed registrations",
+		Help:        "Number of active RangeFeed registrations",
 		Measurement: "Registrations",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedProcessorsGO = metric.Metadata{
+		Name:        "kv.rangefeed.processors_goroutine",
+		Help:        "Number of active RangeFeed processors using goroutines",
+		Measurement: "Processors",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedProcessorsScheduler = metric.Metadata{
+		Name:        "kv.rangefeed.processors_scheduler",
+		Help:        "Number of active RangeFeed processors using scheduler",
+		Measurement: "Processors",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaQueueTimeHistogramsTemplate = metric.Metadata{
+		Name:        "kv.rangefeed.scheduler.%s.latency",
+		Help:        "KV RangeFeed %s scheduler latency",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaQueueSizeTemplate = metric.Metadata{
+		Name:        "kv.rangefeed.scheduler.%s.queue_size",
+		Help:        "Number of entries in the KV RangeFeed %s scheduler queue",
+		Measurement: "Pending Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
 )
@@ -56,6 +81,11 @@ type Metrics struct {
 	// limit, but it's here to limit the effect on stability in case something
 	// unexpected happens.
 	RangeFeedSlowClosedTimestampNudgeSem chan struct{}
+	// Metrics exposing rangefeed processor by type. Those metrics are used to
+	// monitor processor switch over. They could be removed when legacy processor
+	// is removed.
+	RangeFeedProcessorsGO        *metric.Gauge
+	RangeFeedProcessorsScheduler *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -70,6 +100,8 @@ func NewMetrics() *Metrics {
 		RangeFeedRegistrations:               metric.NewGauge(metaRangeFeedRegistrations),
 		RangeFeedSlowClosedTimestampLogN:     log.Every(5 * time.Second),
 		RangeFeedSlowClosedTimestampNudgeSem: make(chan struct{}, 1024),
+		RangeFeedProcessorsGO:                metric.NewGauge(metaRangeFeedProcessorsGO),
+		RangeFeedProcessorsScheduler:         metric.NewGauge(metaRangeFeedProcessorsScheduler),
 	}
 }
 
@@ -99,5 +131,51 @@ func NewFeedBudgetMetrics(histogramWindow time.Duration) *FeedBudgetPoolMetrics 
 			"Memory usage by rangefeeds on system ranges")),
 		SharedBytesCount: metric.NewGauge(makeMemMetricMetadata("shared",
 			"Memory usage by rangefeeds")),
+	}
+}
+
+// ShardMetrics metrics for individual scheduler shard.
+type ShardMetrics struct {
+	// QueueTime is time spent by range in scheduler queue.
+	QueueTime metric.IHistogram
+	// QueueSize is number of elements in the queue recently observed by reader.
+	QueueSize *metric.Gauge
+}
+
+// MetricStruct implements metrics.Struct interface.
+func (*ShardMetrics) MetricStruct() {}
+
+// SchedulerMetrics for production monitoring of rangefeed Scheduler.
+type SchedulerMetrics struct {
+	SystemPriority *ShardMetrics
+	NormalPriority *ShardMetrics
+}
+
+// MetricStruct implements metrics.Struct interface.
+func (*SchedulerMetrics) MetricStruct() {}
+
+// NewSchedulerMetrics creates metric struct for Scheduler.
+func NewSchedulerMetrics(histogramWindow time.Duration) *SchedulerMetrics {
+	return &SchedulerMetrics{
+		SystemPriority: newSchedulerShardMetrics("system", histogramWindow),
+		NormalPriority: newSchedulerShardMetrics("normal", histogramWindow),
+	}
+}
+
+func newSchedulerShardMetrics(name string, histogramWindow time.Duration) *ShardMetrics {
+	expandTemplate := func(template metric.Metadata) metric.Metadata {
+		result := template
+		result.Name = fmt.Sprintf(template.Name, name)
+		result.Help = fmt.Sprintf(template.Help, name)
+		return result
+	}
+	return &ShardMetrics{
+		QueueTime: metric.NewHistogram(metric.HistogramOptions{
+			Mode:         metric.HistogramModePreferHdrLatency,
+			Metadata:     expandTemplate(metaQueueTimeHistogramsTemplate),
+			Duration:     histogramWindow,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		QueueSize: metric.NewGauge(expandTemplate(metaQueueSizeTemplate)),
 	}
 }

@@ -76,6 +76,8 @@ type TestingKnobs struct {
 	// clusterversion.V23_1AddSystemActivityTables upgrade, which prevents a
 	// job from being created.
 	SkipUpdateSQLActivityJobBootstrap bool
+
+	SkipMVCCStatisticsJobBootstrap bool
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.

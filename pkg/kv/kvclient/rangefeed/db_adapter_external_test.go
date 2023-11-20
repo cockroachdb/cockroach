@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -57,8 +56,6 @@ func TestDBClientScan(t *testing.T) {
 	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	ts := srv.ApplicationLayer()
-
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
 
 	beforeAny := db.Clock().Now()
 
@@ -146,6 +143,12 @@ func TestDBClientScan(t *testing.T) {
 			db, ts.Codec(), "defaultdb", "foo")
 		fooSpan := fooDesc.PrimaryIndexSpan(ts.Codec())
 
+		// Refresh the DistSender range cache. ScanWithOptions will split the scan
+		// requests itself based on the range cache and assert on that split, before
+		// sending the requests to the DistSender.
+		_, err := db.Scan(ctx, fooSpan.Key, fooSpan.EndKey, 0)
+		require.NoError(t, err)
+
 		// We expect 4 splits -- we'll start the scan with parallelism set to 3.
 		// We will block these scans from completion until we know that we have 3
 		// concurrently running scan requests.
@@ -159,6 +162,7 @@ func TestDBClientScan(t *testing.T) {
 				func(value roachpb.KeyValue) {},
 				rangefeed.WithInitialScanParallelismFn(func() int { return parallelism }),
 				rangefeed.WithOnScanCompleted(func(ctx context.Context, sp roachpb.Span) error {
+					t.Logf("completed scan for %s", sp)
 					atomic.AddInt32(&barrier, 1)
 					<-proceed
 					return nil
@@ -167,10 +171,10 @@ func TestDBClientScan(t *testing.T) {
 		})
 
 		testutils.SucceedsSoon(t, func() error {
-			if atomic.LoadInt32(&barrier) == int32(parallelism) {
-				return nil
+			if b := atomic.LoadInt32(&barrier); b != int32(parallelism) {
+				return errors.Errorf("still waiting for barrier (%d/%d)", b, parallelism)
 			}
-			return errors.New("still  waiting for barrier")
+			return nil
 		})
 		close(proceed)
 		require.NoError(t, g.Wait())

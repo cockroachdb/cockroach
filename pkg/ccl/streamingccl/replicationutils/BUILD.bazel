@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/streamingccl/streamclient",
+        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvpb",
@@ -29,7 +29,6 @@ go_library(
 go_test(
     name = "replicationutils_test",
     srcs = ["utils_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":replicationutils"],
     tags = ["ccl_test"],
     deps = [

@@ -1409,7 +1409,7 @@ func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) 
 
 	// Perform an initial request-response round trip.
 	log.Infof(ctx, "first ping")
-	request := PingRequest{ServerVersion: clientCtx.Settings.Version.BinaryVersion()}
+	request := PingRequest{ServerVersion: clientCtx.Settings.Version.LatestVersion()}
 	if err := heartbeatClient.Send(&request); err != nil {
 		return err
 	}
@@ -1793,7 +1793,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 
 	ctx := context.Background()
 	v1 := roachpb.Version{Major: 1}
-	v2 := clusterversion.TestingBinaryVersion
+	v2 := clusterversion.Latest.Version()
 
 	testData := []struct {
 		name          string

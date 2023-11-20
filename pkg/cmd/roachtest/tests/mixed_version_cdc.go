@@ -67,18 +67,14 @@ var (
 )
 
 func registerCDCMixedVersions(r registry.Registry) {
-	var zones string
-	if r.MakeClusterSpec(1).Cloud == spec.GCE {
-		// see rationale in definition of `teamcityAgentZone`
-		zones = teamcityAgentZone
-	}
 	r.Add(registry.TestSpec{
-		Name:  "cdc/mixed-versions",
-		Owner: registry.OwnerCDC,
-		// N.B. ARM64 is not yet supported, see https://github.com/cockroachdb/cockroach/issues/103888.
-		Cluster:         r.MakeClusterSpec(5, spec.Zones(zones), spec.Arch(vm.ArchAMD64)),
-		Timeout:         60 * time.Minute,
-		RequiresLicense: true,
+		Name:             "cdc/mixed-versions",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(5, spec.GCEZones(teamcityAgentZone), spec.Arch(vm.ArchAMD64)),
+		Timeout:          60 * time.Minute,
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCMixedVersions(ctx, t, c)
 		},
@@ -135,7 +131,6 @@ func newCDCMixedVersionTester(
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	lastNode := c.Node(c.Spec().NodeCount)
 
-	c.Put(ctx, t.Cockroach(), "./cockroach", lastNode)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", lastNode)
 
 	return cdcMixedVersionTester{

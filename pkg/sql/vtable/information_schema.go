@@ -10,6 +10,95 @@
 
 package vtable
 
+// InformationSchemaAttributes describes the schema of the
+// information_schema.attributes view.
+// Postgres: https://www.postgresql.org/docs/16/infoschema-attributes.html
+const InformationSchemaAttributes = `
+CREATE VIEW information_schema.attributes AS
+    SELECT CAST(current_database() AS TEXT) AS udt_catalog,
+           CAST(nc.nspname AS TEXT) AS udt_schema,
+           CAST(c.relname AS TEXT) AS udt_name,
+           CAST(a.attname AS TEXT) AS attribute_name,
+           CAST(a.attnum AS INT) AS ordinal_position,
+           CAST(pg_get_expr(ad.adbin, ad.adrelid) AS TEXT) AS attribute_default,
+           CAST(CASE WHEN a.attnotnull OR (t.typtype = 'd' AND t.typnotnull) THEN 'NO' ELSE 'YES' END
+             AS TEXT)
+             AS is_nullable, 
+
+           CAST(
+             CASE WHEN t.typelem <> 0 AND t.typlen = -1 THEN 'ARRAY'
+                  WHEN nt.nspname = 'pg_catalog' THEN format_type(a.atttypid, null)
+                  ELSE 'USER-DEFINED' END
+             AS TEXT)
+             AS data_type,
+
+           CAST(
+             information_schema._pg_char_max_length(information_schema._pg_truetypid(a, t), information_schema._pg_truetypmod(a, t))
+             AS INT)
+             AS character_maximum_length,
+
+           CAST(
+             information_schema._pg_char_octet_length(information_schema._pg_truetypid(a, t), information_schema._pg_truetypmod(a, t))
+             AS INT)
+             AS character_octet_length,
+
+           CAST(null AS TEXT) AS character_set_catalog,
+           CAST(null AS TEXT) AS character_set_schema,
+           CAST(null AS TEXT) AS character_set_name,
+
+           CAST(CASE WHEN nco.nspname IS NOT NULL THEN current_database() END AS TEXT) AS collation_catalog,
+           CAST(nco.nspname AS TEXT) AS collation_schema,
+           CAST(co.collname AS TEXT) AS collation_name,
+
+           CAST(
+             information_schema._pg_numeric_precision(information_schema._pg_truetypid(a, t), information_schema._pg_truetypmod(a, t))
+             AS INT)
+             AS numeric_precision,
+
+           CAST(
+             information_schema._pg_numeric_precision_radix(information_schema._pg_truetypid(a, t), information_schema._pg_truetypmod(a, t))
+             AS INT)
+             AS numeric_precision_radix,
+
+           CAST(
+             information_schema._pg_numeric_scale(information_schema._pg_truetypid(a, t), information_schema._pg_truetypmod(a, t))
+             AS INT)
+             AS numeric_scale,
+
+           CAST(
+             information_schema._pg_datetime_precision(information_schema._pg_truetypid(a, t), information_schema._pg_truetypmod(a, t))
+             AS INT)
+             AS datetime_precision,
+
+           CAST(
+             information_schema._pg_interval_type(information_schema._pg_truetypid(a, t), information_schema._pg_truetypmod(a, t))
+             AS TEXT)
+             AS interval_type,
+           CAST(null AS INT) AS interval_precision,
+
+           CAST(current_database() AS TEXT) AS attribute_udt_catalog,
+           CAST(nt.nspname AS TEXT) AS attribute_udt_schema,
+           CAST(t.typname AS TEXT) AS attribute_udt_name,
+
+           CAST(null AS TEXT) AS scope_catalog,
+           CAST(null AS TEXT) AS scope_schema,
+           CAST(null AS TEXT) AS scope_name,
+
+           CAST(null AS INT) AS maximum_cardinality,
+           CAST(a.attnum AS TEXT) AS dtd_identifier,
+           CAST('NO' AS TEXT) AS is_derived_reference_attribute
+
+    FROM (pg_attribute a LEFT JOIN pg_attrdef ad ON attrelid = adrelid AND attnum = adnum)
+         JOIN (pg_class c JOIN pg_namespace nc ON (c.relnamespace = nc.oid)) ON a.attrelid = c.oid
+         JOIN (pg_type t JOIN pg_namespace nt ON (t.typnamespace = nt.oid)) ON a.atttypid = t.oid
+         LEFT JOIN (pg_collation co JOIN pg_namespace nco ON (co.collnamespace = nco.oid))
+           ON a.attcollation = co.oid AND (nco.nspname, co.collname) <> ('pg_catalog', 'default')
+
+    WHERE a.attnum > 0 AND NOT a.attisdropped
+          AND c.relkind IN ('c')
+          AND (pg_has_role(c.relowner, 'USAGE')
+               OR has_type_privilege(c.reltype, 'USAGE'));`
+
 // InformationSchemaColumnUDTUsage describes the schema of the
 // information_schema.column_udt_usage table.
 // Postgres: https://www.postgresql.org/docs/current/infoschema-column-udt-usage.html
@@ -516,6 +605,49 @@ CREATE TABLE information_schema.table_constraints (
 	INITIALLY_DEFERRED STRING NOT NULL
 )`
 
+// InformationSchemaUserDefinedTypes describes the schema of the
+// information_schema.user_defined_types view.
+const InformationSchemaUserDefinedTypes = `
+CREATE VIEW information_schema.user_defined_types AS
+    SELECT CAST(current_database() AS TEXT) AS user_defined_type_catalog,
+           CAST(n.nspname AS TEXT) AS user_defined_type_schema,
+           CAST(c.relname AS TEXT) AS user_defined_type_name,
+           CAST('STRUCTURED' AS TEXT) AS user_defined_type_category,
+           CAST('YES' AS TEXT) AS is_instantiable,
+           CAST(null AS TEXT) AS is_final,
+           CAST(null AS TEXT) AS ordering_form,
+           CAST(null AS TEXT) AS ordering_category,
+           CAST(null AS TEXT) AS ordering_routine_catalog,
+           CAST(null AS TEXT) AS ordering_routine_schema,
+           CAST(null AS TEXT) AS ordering_routine_name,
+           CAST(null AS TEXT) AS reference_type,
+           CAST(null AS TEXT) AS data_type,
+           CAST(null AS INT) AS character_maximum_length,
+           CAST(null AS INT) AS character_octet_length,
+           CAST(null AS TEXT) AS character_set_catalog,
+           CAST(null AS TEXT) AS character_set_schema,
+           CAST(null AS TEXT) AS character_set_name,
+           CAST(null AS TEXT) AS collation_catalog,
+           CAST(null AS TEXT) AS collation_schema,
+           CAST(null AS TEXT) AS collation_name,
+           CAST(null AS INT) AS numeric_precision,
+           CAST(null AS INT) AS numeric_precision_radix,
+           CAST(null AS INT) AS numeric_scale,
+           CAST(null AS INT) AS datetime_precision,
+           CAST(null AS TEXT) AS interval_type,
+           CAST(null AS INT) AS interval_precision,
+           CAST(null AS TEXT) AS source_dtd_identifier,
+           CAST(null AS TEXT) AS ref_dtd_identifier
+
+    FROM pg_namespace n, pg_class c, pg_type t
+
+    WHERE n.oid = c.relnamespace
+          AND t.typrelid = c.oid
+          AND c.relkind = 'c'
+          AND (pg_has_role(t.typowner, 'USAGE')
+               OR has_type_privilege(t.oid, 'USAGE'));
+`
+
 // InformationSchemaUserPrivileges describes the schema of the
 // information_schema.user_privileges table.
 const InformationSchemaUserPrivileges = `
@@ -757,42 +889,6 @@ CREATE TABLE information_schema.role_column_grants (
 	is_grantable STRING
 )`
 
-// InformationSchemaAttributes is an empty table in the information_schema that is not implemented yet
-const InformationSchemaAttributes = `
-CREATE TABLE information_schema.attributes (
-	udt_catalog STRING,
-	udt_schema STRING,
-	udt_name STRING,
-	attribute_name STRING,
-	ordinal_position INT,
-	attribute_default STRING,
-	is_nullable STRING,
-	data_type STRING,
-	character_maximum_length INT,
-	character_octet_length INT,
-	character_set_catalog STRING,
-	character_set_schema STRING,
-	character_set_name STRING,
-	collation_catalog STRING,
-	collation_schema STRING,
-	collation_name STRING,
-	numeric_precision INT,
-	numeric_precision_radix INT,
-	numeric_scale INT,
-	datetime_precision INT,
-	interval_type STRING,
-	interval_precision INT,
-	attribute_udt_catalog STRING,
-	attribute_udt_schema STRING,
-	attribute_udt_name STRING,
-	scope_catalog STRING,
-	scope_schema STRING,
-	scope_name STRING,
-	maximum_cardinality INT,
-	dtd_identifier STRING,
-	is_derived_reference_attribute STRING
-)`
-
 // InformationSchemaDomainConstraints is an empty table in the information_schema that is not implemented yet
 const InformationSchemaDomainConstraints = `
 CREATE TABLE information_schema.domain_constraints (
@@ -1032,40 +1128,6 @@ CREATE TABLE information_schema.processlist (
 	"user" STRING,
 	command STRING,
 	db STRING
-)`
-
-// InformationSchemaUserDefinedTypes is an empty table in the information_schema that is not implemented yet
-const InformationSchemaUserDefinedTypes = `
-CREATE TABLE information_schema.user_defined_types (
-	user_defined_type_catalog STRING,
-	user_defined_type_schema STRING,
-	user_defined_type_name STRING,
-	user_defined_type_category STRING,
-	is_instantiable STRING,
-	is_final STRING,
-	ordering_form STRING,
-	ordering_category STRING,
-	ordering_routine_catalog STRING,
-	ordering_routine_schema STRING,
-	ordering_routine_name STRING,
-	reference_type STRING,
-	data_type STRING,
-	character_maximum_length INT,
-	character_octet_length INT,
-	character_set_catalog STRING,
-	character_set_schema STRING,
-	character_set_name STRING,
-	collation_catalog STRING,
-	collation_schema STRING,
-	collation_name STRING,
-	numeric_precision INT,
-	numeric_precision_radix INT,
-	numeric_scale INT,
-	datetime_precision INT,
-	interval_type STRING,
-	interval_precision INT,
-	source_dtd_identifier STRING,
-	ref_dtd_identifier STRING
 )`
 
 // InformationSchemaTriggeredUpdateColumns is an empty table in the information_schema that is not implemented yet

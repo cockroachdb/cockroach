@@ -1,9 +1,5 @@
 #! /usr/bin/env expect -f
 
-# This test is skipped -- its filename lets it hide from the selector in
-# TestDockerCLI. Unskip it by renaming after fixing
-# https://github.com/cockroachdb/cockroach/issues/96239.
-
 source [file join [file dirname $argv0] common.tcl]
 
 spawn $argv demo --no-line-editor --empty --nodes 3 --multitenant --log-dir=logs

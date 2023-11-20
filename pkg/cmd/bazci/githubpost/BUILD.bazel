@@ -18,13 +18,13 @@ go_test(
     name = "githubpost_test",
     size = "small",
     srcs = ["githubpost_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + [
         "//:TEAMS.yaml",
         "//.github:CODEOWNERS",
     ],
     embed = [":githubpost"],
     deps = [
+        "//pkg/build/util",
         "//pkg/cmd/internal/issues",
         "//pkg/testutils/datapathutils",
         "@com_github_stretchr_testify//assert",

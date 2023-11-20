@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
 )
@@ -83,12 +82,6 @@ func (i *MVCCIterator) Valid() (bool, error) {
 func (i *MVCCIterator) SeekGE(key storage.MVCCKey) {
 	i.i.SeekGE(key)
 	i.checkAllowed(roachpb.Span{Key: key.Key}, true)
-}
-
-// SeekIntentGE is part of the storage.MVCCIterator interface.
-func (i *MVCCIterator) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
-	i.i.SeekIntentGE(key, txnUUID)
-	i.checkAllowed(roachpb.Span{Key: key}, true)
 }
 
 // SeekLT is part of the storage.MVCCIterator interface.
@@ -471,6 +464,7 @@ func (s spanSetReader) Closed() bool {
 }
 
 func (s spanSetReader) MVCCIterate(
+	ctx context.Context,
 	start, end roachpb.Key,
 	iterKind storage.MVCCIterKind,
 	keyTypes storage.IterKeyType,
@@ -485,13 +479,13 @@ func (s spanSetReader) MVCCIterate(
 			return err
 		}
 	}
-	return s.r.MVCCIterate(start, end, iterKind, keyTypes, f)
+	return s.r.MVCCIterate(ctx, start, end, iterKind, keyTypes, f)
 }
 
 func (s spanSetReader) NewMVCCIterator(
-	iterKind storage.MVCCIterKind, opts storage.IterOptions,
+	ctx context.Context, iterKind storage.MVCCIterKind, opts storage.IterOptions,
 ) (storage.MVCCIterator, error) {
-	mvccIter, err := s.r.NewMVCCIterator(iterKind, opts)
+	mvccIter, err := s.r.NewMVCCIterator(ctx, iterKind, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -501,8 +495,10 @@ func (s spanSetReader) NewMVCCIterator(
 	return NewIteratorAt(mvccIter, s.spans, s.ts), nil
 }
 
-func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) (storage.EngineIterator, error) {
-	engineIter, err := s.r.NewEngineIterator(opts)
+func (s spanSetReader) NewEngineIterator(
+	ctx context.Context, opts storage.IterOptions,
+) (storage.EngineIterator, error) {
+	engineIter, err := s.r.NewEngineIterator(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -898,7 +894,43 @@ func addLockTableSpans(spans *SpanSet) *SpanSet {
 		if span.EndKey != nil {
 			ltEndKey, _ = keys.LockTableSingleKey(span.EndKey, nil)
 		}
+		if sa == SpanReadOnly && span.Timestamp == hlc.MaxTimestamp {
+			// Shared lock acquisition uses a read-only latch access with
+			// the maximum timestamp. This gives it sufficient isolation to
+			// write to the lock table without having to declare a write
+			// latch and be serialized with other shared lock acquisitions.
+			// For details, see DefaultDeclareIsolatedKeys.
+			//
+			// For the sake of this function, we consider this to be strong
+			// enough to declare write access to the lock table. This could
+			// be made cleaner if latch spans operated on locking strengths
+			// instead of read/write access.
+			sa = SpanReadWrite
+		}
 		withLocks.AddNonMVCC(sa, roachpb.Span{Key: ltKey, EndKey: ltEndKey})
 	})
 	return withLocks
+}
+
+type spanSetEFOS struct {
+	spanSetReader
+	efos storage.EventuallyFileOnlyReader
+}
+
+// NewEventuallyFileOnlySnapshot returns a storage.EventuallyFileOnlyReader that
+// asserts access of the underlying EFOS against the given SpanSet. We only
+// consider span boundaries, associated timestamps are not considered.
+func NewEventuallyFileOnlySnapshot(
+	e storage.EventuallyFileOnlyReader, spans *SpanSet,
+) storage.EventuallyFileOnlyReader {
+	spans = addLockTableSpans(spans)
+	return &spanSetEFOS{
+		spanSetReader: spanSetReader{r: e, spans: spans, spansOnly: true},
+		efos:          e,
+	}
+}
+
+// WaitForFileOnly implements the storage.EventuallyFileOnlyReader interface.
+func (e *spanSetEFOS) WaitForFileOnly(ctx context.Context) error {
+	return e.efos.WaitForFileOnly(ctx)
 }

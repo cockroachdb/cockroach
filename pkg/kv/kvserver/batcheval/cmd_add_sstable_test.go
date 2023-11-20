@@ -375,11 +375,11 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{pointKV("b", 3, "sst")},
 			expectErr:  &kvpb.LockConflictError{},
 		},
-		"DisallowConflicts ignores intents in span": { // inconsistent with blind writes
+		"DisallowConflicts returns LockConflictError in span": {
 			noConflict: true,
 			data:       kvs{pointKV("b", intentTS, "intent")},
 			sst:        kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
-			expect:     kvs{pointKV("a", 3, "sst"), pointKV("b", intentTS, "intent"), pointKV("c", 3, "sst")},
+			expectErr:  &kvpb.LockConflictError{},
 		},
 		"DisallowConflicts is not idempotent": {
 			noConflict: true,
@@ -479,11 +479,11 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:       kvs{pointKV("b", 3, "sst")},
 			expectErr: &kvpb.LockConflictError{},
 		},
-		"DisallowShadowing ignores intents in span": { // inconsistent with blind writes
-			noShadow: true,
-			data:     kvs{pointKV("b", intentTS, "intent")},
-			sst:      kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
-			expect:   kvs{pointKV("a", 3, "sst"), pointKV("b", intentTS, "intent"), pointKV("c", 3, "sst")},
+		"DisallowShadowing returns LockConflictError in span": {
+			noShadow:  true,
+			data:      kvs{pointKV("b", intentTS, "intent")},
+			sst:       kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
+			expectErr: &kvpb.LockConflictError{},
 		},
 		"DisallowShadowing is idempotent": {
 			noShadow: true,
@@ -607,11 +607,11 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:           kvs{pointKV("b", 3, "sst")},
 			expectErr:     &kvpb.LockConflictError{},
 		},
-		"DisallowShadowingBelow ignores intents in span": { // inconsistent with blind writes
+		"DisallowShadowingBelow returns LockConflictError in span": {
 			noShadowBelow: 5,
 			data:          kvs{pointKV("b", intentTS, "intent")},
 			sst:           kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
-			expect:        kvs{pointKV("a", 3, "sst"), pointKV("b", intentTS, "intent"), pointKV("c", 3, "sst")},
+			expectErr:     &kvpb.LockConflictError{},
 		},
 		"DisallowShadowingBelow is not generally idempotent": {
 			noShadowBelow: 5,
@@ -1129,7 +1129,7 @@ func TestEvalAddSSTable(t *testing.T) {
 						defer engine.Close()
 
 						// Write initial data.
-						intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, 0, hlc.Timestamp{WallTime: intentTS * 1e9}, 0, 1)
+						intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, 0, hlc.Timestamp{WallTime: intentTS * 1e9}, 0, 1, 0)
 						b := engine.NewBatch()
 						defer b.Close()
 						for i := len(tc.data) - 1; i >= 0; i-- { // reverse, older timestamps first
@@ -1142,7 +1142,8 @@ func TestEvalAddSSTable(t *testing.T) {
 								kv.Key.Timestamp.WallTime *= 1e9
 								v, err := storage.DecodeMVCCValue(kv.Value)
 								require.NoError(t, err)
-								require.NoError(t, storage.MVCCPut(ctx, b, kv.Key.Key, kv.Key.Timestamp, v.Value, storage.MVCCWriteOptions{Txn: txn}))
+								_, err = storage.MVCCPut(ctx, b, kv.Key.Key, kv.Key.Timestamp, v.Value, storage.MVCCWriteOptions{Txn: txn})
+								require.NoError(t, err)
 							case storage.MVCCRangeKeyValue:
 								v, err := storage.DecodeMVCCValue(kv.Value)
 								require.NoError(t, err)
@@ -1986,7 +1987,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	require.True(t, closedTS.LessEq(writeTS), "timestamp %s below closed timestamp %s", result.Timestamp, closedTS)
 
 	// Check that the value was in fact written at the write timestamp.
-	kvs, err := storage.Scan(store.TODOEngine(), roachpb.Key("key"), roachpb.Key("key").Next(), 0)
+	kvs, err := storage.Scan(context.Background(), store.TODOEngine(), roachpb.Key("key"), roachpb.Key("key").Next(), 0)
 	require.NoError(t, err)
 	require.Len(t, kvs, 1)
 	require.Equal(t, storage.MVCCKey{Key: roachpb.Key("key"), Timestamp: writeTS}, kvs[0].Key)

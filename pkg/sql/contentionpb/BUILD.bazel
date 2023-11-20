@@ -49,7 +49,6 @@ go_proto_library(
 go_test(
     name = "contentionpb_test",
     srcs = ["contention_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":contentionpb"],
     deps = [
         "//pkg/sql/clusterunique",

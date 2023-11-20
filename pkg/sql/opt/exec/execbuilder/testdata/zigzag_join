@@ -1,5 +1,8 @@
 # LogicTest: local
 
+statement ok
+SET enable_zigzag_join = true
+
 # Make sure that the zigzag join is used in the regression tests for #71093.
 statement ok
 CREATE TABLE t71093 (a INT, b INT, c INT, d INT, INDEX a_idx(a) STORING (b), INDEX c_idx(c) STORING (d));

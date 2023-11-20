@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -253,25 +252,33 @@ func (tc testCase) runTest(
 
 	testServer := testCluster.Server(0)
 
-	systemDB := testServer.SystemLayer().SQLConn(t, "")
+	systemDB := testServer.SystemLayer().SQLConn(t)
 
 	createSecondaryDB := func(
 		tenantID roachpb.TenantID,
 		clusterSettings ...*settings.BoolSetting,
 	) *gosql.DB {
-		testingClusterSettings := cluster.MakeTestingClusterSettings()
-		for _, clusterSetting := range clusterSettings {
-			// Filter out nil cluster settings.
-			if clusterSetting != nil {
-				clusterSetting.Override(ctx, &testingClusterSettings.SV, true)
-			}
-		}
-		_, db := serverutils.StartTenant(
+		s, db := serverutils.StartTenant(
 			t, testServer, base.TestTenantArgs{
-				Settings: testingClusterSettings,
 				TenantID: tenantID,
 			},
 		)
+		st := s.ClusterSettings()
+		// StartTenant enables a couple of settings by default, but we want
+		// precise control of what's enabled, so we first disable the settings
+		// we care about and then apply the overrides the caller asked for.
+		for _, toDisable := range []*settings.BoolSetting{
+			sql.SecondaryTenantScatterEnabled,
+			sql.SecondaryTenantSplitAtEnabled,
+		} {
+			toDisable.Override(ctx, &st.SV, false)
+		}
+		for _, clusterSetting := range clusterSettings {
+			// Filter out nil cluster settings.
+			if clusterSetting != nil {
+				clusterSetting.Override(ctx, &st.SV, true)
+			}
+		}
 		return db
 	}
 
@@ -412,7 +419,6 @@ func bcap(cap tenantcapabilities.ID, val bool) capValue {
 func TestMultiTenantAdminFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	testCases := []testCase{
 		{
@@ -464,7 +470,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{ignore, "/1", maxTimestamp}},
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
-				errorMessage: "tenant cluster setting sql.virtual_cluster.feature_access.manual_range_split.enabled disabled",
+				errorMessage: "operation is disabled within a virtual cluster",
 			},
 			queryClusterSetting: sql.SecondaryTenantSplitAtEnabled,
 			setupCapability:     bcap(tenantcapabilities.CanAdminSplit, false),
@@ -478,7 +484,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xf0\x8a\x89", "/1", maxTimestamp}},
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
-				errorMessage: "tenant cluster setting sql.virtual_cluster.feature_access.manual_range_split.enabled disabled",
+				errorMessage: "operation is disabled within a virtual cluster",
 			},
 			queryClusterSetting: sql.SecondaryTenantSplitAtEnabled,
 			setupCapability:     bcap(tenantcapabilities.CanAdminSplit, false),
@@ -565,7 +571,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{ignore, ignore}},
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
-				errorMessage: "tenant cluster setting sql.virtual_cluster.feature_access.manual_range_scatter.enabled disabled",
+				errorMessage: "operation is disabled within a virtual cluster",
 			},
 			secondaryWithoutCapability: tenantExpected{
 				errorMessage: `does not have capability "can_admin_scatter"`,
@@ -582,7 +588,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				result: [][]string{{"\xf0\x8a", "/Table/104/2"}},
 			},
 			secondaryWithoutClusterSetting: tenantExpected{
-				errorMessage: "tenant cluster setting sql.virtual_cluster.feature_access.manual_range_scatter.enabled disabled",
+				errorMessage: "operation is disabled within a virtual cluster",
 			},
 			queryClusterSetting: sql.SecondaryTenantScatterEnabled,
 			setupCapability:     bcap(tenantcapabilities.CanAdminScatter, false),
@@ -625,7 +631,6 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 func TestTruncateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	tc := testCase{
 		system: tenantExpected{
@@ -677,7 +682,6 @@ func TestTruncateTable(t *testing.T) {
 func TestRelocateVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	testCases := []testCase{
 		{
@@ -769,7 +773,6 @@ func TestRelocateVoters(t *testing.T) {
 func TestExperimentalRelocateVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	testCases := []testCase{
 		{
@@ -843,7 +846,6 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 func TestRelocateNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	// This test occasionally flakes under race. More context can be found in
 	// #108081, but there is really no benefit from running it under race, so
@@ -935,7 +937,6 @@ func TestRelocateNonVoters(t *testing.T) {
 func TestExperimentalRelocateNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	testCases := []testCase{
 		{

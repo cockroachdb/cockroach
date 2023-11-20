@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -69,7 +68,6 @@ func TestProtectedTimestampsDuringImportInto(t *testing.T) {
 	s := tc.Server(0).ApplicationLayer()
 	tenantSettings := s.ClusterSettings()
 	protectedts.PollInterval.Override(ctx, &tenantSettings.SV, 100*time.Millisecond)
-	sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tenantSettings.SV, true)
 
 	tc.WaitForNodeLiveness(t)
 	require.NoError(t, tc.WaitForFullReplication())

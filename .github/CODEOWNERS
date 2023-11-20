@@ -105,6 +105,7 @@
 /pkg/sql/revoke*.go          @cockroachdb/sql-foundations
 /pkg/sql/schema*.go          @cockroachdb/sql-foundations
 /pkg/sql/zone*.go            @cockroachdb/sql-foundations
+/pkg/cmd/sql-bootstrap-data/ @cockroachdb/sql-foundations
 
 # Beware to not assign the CLI package directory to a single team, at
 # least until we heavily refactor the package to extract team-specific
@@ -401,7 +402,7 @@
 #!/pkg/ccl/utilccl/          @cockroachdb/unowned
 /pkg/ccl/workloadccl/        @cockroachdb/test-eng #! @cockroachdb/sql-foundations-noreview
 /pkg/ccl/benchccl/rttanalysisccl/     @cockroachdb/sql-foundations
-#!/pkg/clusterversion/       @cockroachdb/dev-inf-noreview  @cockroachdb/kv-prs-noreview
+#!/pkg/clusterversion/       @cockroachdb/dev-inf-noreview  @cockroachdb/kv-prs-noreview @cockroachdb/test-eng-prs
 /pkg/cmd/allocsim/           @cockroachdb/kv-prs
 /pkg/cmd/bazci/              @cockroachdb/dev-inf
 /pkg/cmd/cloudupload/        @cockroachdb/dev-inf
@@ -447,6 +448,20 @@
 /pkg/cmd/roachprod-microbench/ @cockroachdb/test-eng
 /pkg/cmd/roachprod-stress/   @cockroachdb/test-eng
 /pkg/cmd/roachtest/          @cockroachdb/test-eng
+/pkg/cmd/roachtest/tests/activerecord.go  @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/asyncpg.go       @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/django.go        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/gopg.go	        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/gorm.go	        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/hibernate.go	    @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/knex.go	        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/libpq.go	        @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/npgsql.go	      @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/pgjdbc.go	      @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/pgx.go	          @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/ruby_pg.go	      @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/sequelize.go	    @cockroachdb/test-eng @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/typeorm.go	      @cockroachdb/test-eng @cockroachdb/docs-infra-prs
 /pkg/cmd/label-merged-pr/    @cockroachdb/dev-inf
 # This isn't quite right, each file should ideally be owned
 # by a team (or at least most of them), namely the team that

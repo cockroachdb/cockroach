@@ -16,7 +16,6 @@ go_library(
         "go.go",
         "lint.go",
         "main.go",
-        "merge_test_xmls.go",
         "roachprod_stress.go",
         "test.go",
         "test_binaries.go",
@@ -46,11 +45,11 @@ go_binary(
 
 go_test(
     name = "dev_test",
+    size = "small",
     srcs = [
         "datadriven_test.go",
         "recorderdriven_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":dev_lib"],
     deps = [

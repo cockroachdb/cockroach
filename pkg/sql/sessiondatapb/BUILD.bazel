@@ -58,7 +58,6 @@ go_proto_library(
 go_test(
     name = "sessiondatapb_test",
     srcs = ["session_data_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":sessiondatapb"],
     deps = [
         "//pkg/sql/protoreflect",

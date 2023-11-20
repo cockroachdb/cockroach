@@ -31,13 +31,6 @@ func TestTenantTempTableCleanup(t *testing.T) {
 
 	ctx := context.Background()
 	t.Helper()
-	settings := cluster.MakeTestingClusterSettings()
-	sql.TempObjectCleanupInterval.Override(ctx, &settings.SV, time.Second)
-	sql.TempObjectWaitInterval.Override(ctx, &settings.SV, time.Second*0)
-	// Set up sessions to expire within 5 seconds of a
-	// nodes death.
-	slinstance.DefaultTTL.Override(ctx, &settings.SV, 5*time.Second)
-	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, time.Second)
 	// Knob state is used to track when temporary object clean up
 	// is executed.
 	var (
@@ -98,15 +91,26 @@ func TestTenantTempTableCleanup(t *testing.T) {
 		t, 3 /* numNodes */, base.TestClusterArgs{ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
-				Settings:          settings,
 			},
 		},
 	)
 	tenantStoppers := []*stop.Stopper{stop.NewStopper(), stop.NewStopper()}
+
+	tenantSettings := func() *cluster.Settings {
+		st := cluster.MakeTestingClusterSettings()
+		sql.TempObjectCleanupInterval.Override(ctx, &st.SV, time.Second)
+		sql.TempObjectWaitInterval.Override(ctx, &st.SV, time.Second*0)
+		// Set up sessions to expire within 5 seconds of a
+		// nodes death.
+		slinstance.DefaultTTL.Override(ctx, &st.SV, 5*time.Second)
+		slinstance.DefaultHeartBeat.Override(ctx, &st.SV, time.Second)
+		return st
+	}
+
 	_, tenantPrimaryDB := serverutils.StartTenant(t, tc.Server(0),
 		base.TestTenantArgs{
 			TenantID:     serverutils.TestTenantID(),
-			Settings:     settings,
+			Settings:     tenantSettings(),
 			TestingKnobs: tenantTempKnobSettings,
 			Stopper:      tenantStoppers[0],
 		})
@@ -123,7 +127,7 @@ func TestTenantTempTableCleanup(t *testing.T) {
 	_, tenantSecondDB := serverutils.StartTenant(t, tc.Server(1),
 		base.TestTenantArgs{
 			TenantID: serverutils.TestTenantID(),
-			Settings: settings,
+			Settings: tenantSettings(),
 			Stopper:  tenantStoppers[1],
 		})
 	tenantSecondSQL := sqlutils.MakeSQLRunner(tenantSecondDB)
@@ -164,7 +168,7 @@ func TestTenantTempTableCleanup(t *testing.T) {
 	_, tenantPrimaryDB = serverutils.StartTenant(t, tc.Server(0),
 		base.TestTenantArgs{
 			TenantID:     serverutils.TestTenantID(),
-			Settings:     settings,
+			Settings:     tenantSettings(),
 			TestingKnobs: tenantTempKnobSettings,
 			Stopper:      tenantStoppers[0]})
 	tenantSQL = sqlutils.MakeSQLRunner(tenantPrimaryDB)

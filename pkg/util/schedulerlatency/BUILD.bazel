@@ -27,7 +27,6 @@ go_test(
         "histogram_test.go",
         "scheduler_latency_test.go",
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":schedulerlatency"],
     deps = [

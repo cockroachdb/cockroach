@@ -159,7 +159,7 @@ type Catalog interface {
 
 	// ResolveFunction resolves a function by name.
 	ResolveFunction(
-		ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+		ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 	) (*tree.ResolvedFunctionDefinition, error)
 
 	// ResolveFunctionByOID resolves a function overload by OID.
@@ -173,13 +173,14 @@ type Catalog interface {
 	// the given catalog object. If not, then CheckAnyPrivilege returns an error.
 	CheckAnyPrivilege(ctx context.Context, o Object) error
 
+	// CheckExecutionPrivilege verifies that the current user has execution
+	// privileges for the UDF with the given OID. If not, then CheckPrivilege
+	// returns an error.
+	CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error
+
 	// HasAdminRole checks that the current user has admin privileges. If yes,
 	// returns true. Returns an error if query on the `system.users` table failed
 	HasAdminRole(ctx context.Context) (bool, error)
-
-	// RequireAdminRole checks that the current user has admin privileges. If not,
-	// returns an error.
-	RequireAdminRole(ctx context.Context, action string) error
 
 	// HasRoleOption converts the roleoption to its SQL column name and checks if
 	// the user belongs to a role where the option has value true. Requires a
@@ -198,8 +199,8 @@ type Catalog interface {
 	//    object itself changing (e.g. when a database is renamed).
 	FullyQualifiedName(ctx context.Context, ds DataSource) (DataSourceName, error)
 
-	// RoleExists returns true if the role exists.
-	RoleExists(ctx context.Context, role username.SQLUsername) (bool, error)
+	// CheckRoleExists returns an error if the role does not exist.
+	CheckRoleExists(ctx context.Context, role username.SQLUsername) error
 
 	// Optimizer returns the query Optimizer used to optimize SQL statements
 	// referencing objects in this catalog, if any.

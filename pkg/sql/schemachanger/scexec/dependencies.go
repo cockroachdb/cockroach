@@ -139,10 +139,6 @@ type TransactionalJobRegistry interface {
 	// See (*jobs.Registry).CheckPausepoint
 	CheckPausepoint(name string) error
 
-	// UseLegacyGCJob indicate whether the legacy GC job should be used.
-	// This only matters for setting the initial RunningStatus.
-	UseLegacyGCJob(ctx context.Context) bool
-
 	// TODO(ajwerner): Deal with setting the running status to indicate
 	// validating, backfilling, or generally performing metadata changes
 	// and waiting for lease draining.
@@ -348,7 +344,7 @@ type DescriptorMetadataUpdater interface {
 	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
 
 	// DeleteSchedule deletes the given schedule.
-	DeleteSchedule(ctx context.Context, id int64) error
+	DeleteSchedule(ctx context.Context, id jobspb.ScheduleID) error
 
 	// UpdateTTLScheduleLabel updates the schedule_name for the TTL Scheduled Job
 	// of the given table.

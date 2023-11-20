@@ -19,7 +19,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,9 +69,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 	)
 	s := tc.ApplicationLayer(0)
 	tenantSettings := s.ClusterSettings()
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &tenantSettings.SV, true)
-	conn := s.SQLConn(t, "defaultdb")
+	conn := s.SQLConn(t, serverutils.DBName("defaultdb"))
 	db := sqlutils.MakeSQLRunner(conn)
 
 	wk := bank.FromRows(rows)
@@ -473,7 +470,7 @@ func TestExportPrivileges(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER testuser`)
 	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
 
-	testuser := srv.ApplicationLayer().SQLConnForUser(t, "testuser", "")
+	testuser := srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 	_, err := testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err, "testuser does not have SELECT privilege"))
 
@@ -487,7 +484,7 @@ func TestExportPrivileges(t *testing.T) {
 	// Grant SELECT privilege.
 	sqlDB.Exec(t, `GRANT SELECT ON TABLE privs TO testuser`)
 
-	testuser = srv.ApplicationLayer().SQLConnForUser(t, "testuser", "")
+	testuser = srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 
 	_, err = testuser.Exec(`EXPORT INTO CSV 'nodelocal://1/privs' FROM TABLE privs`)
 	require.True(t, testutils.IsError(err,
@@ -537,10 +534,10 @@ func populateRangeCache(t *testing.T, db *gosql.DB, tableName string) {
 }
 
 func getPGXConnAndCleanupFunc(
-	ctx context.Context, t *testing.T, servingSQLAddr string,
+	ctx context.Context, t *testing.T, app serverutils.ApplicationLayerInterface,
 ) (*pgx.Conn, func()) {
 	t.Helper()
-	pgURL, cleanup := sqlutils.PGUrl(t, servingSQLAddr, t.Name(), url.User(username.RootUser))
+	pgURL, cleanup := app.PGUrl(t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser))
 	pgURL.Path = "test"
 	pgxConfig, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -613,14 +610,15 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 				0: {
 					Knobs: base.TestingKnobs{
 						SQLExecutor: &sql.ExecutorTestingKnobs{
-							DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
+							DistSQLReceiverPushCallbackFactory: func(query string) func(rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 								if strings.Contains(query, "EXPORT") {
-									return func(_ rowenc.EncDatumRow, _ coldata.Batch, meta *execinfrapb.ProducerMetadata) {
+									return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
 										if meta != nil && meta.Err != nil {
 											if testutils.IsError(meta.Err, "ReadWithinUncertaintyIntervalError") {
 												close(gotRWUIOnGateway)
 											}
 										}
+										return row, batch, meta
 									}
 								}
 								return nil
@@ -665,8 +663,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	if tc.StartedDefaultTestTenant() {
-		sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tc.Server(0).ApplicationLayer().ClusterSettings().SV, true)
-		systemSqlDB := tc.Server(0).SystemLayer().SQLConn(t, "system")
+		systemSqlDB := tc.Server(0).SystemLayer().SQLConn(t, serverutils.DBName("system"))
 		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
 		require.NoError(t, err)
 		serverutils.WaitForTenantCapabilities(t, tc.Server(0), serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
@@ -712,7 +709,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		_, err := origDB0.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '0'")
 		require.NoError(t, err)
 		// Create a new connection that will use the new result buffer size.
-		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0).AdvSQLAddr())
+		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0))
 		defer cleanup()
 
 		atomic.StoreInt64(&trapRead, 1)
@@ -758,7 +755,7 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		_, err := origDB0.Exec("SET CLUSTER SETTING sql.defaults.results_buffer.size = '524288'")
 		require.NoError(t, err)
 		// Create a new connection that will use the new results buffer size.
-		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0).AdvSQLAddr())
+		defaultConn, cleanup := getPGXConnAndCleanupFunc(ctx, t, tc.ApplicationLayer(0))
 		defer cleanup()
 
 		// Reads are trapped but not blocked, so node 1 should immediately return a

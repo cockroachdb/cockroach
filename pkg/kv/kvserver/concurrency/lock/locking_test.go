@@ -404,3 +404,88 @@ func TestCheckLockConflicts_IntentWithIntent(t *testing.T) {
 		)
 	}
 }
+
+func TestCheckLockConflicts_Empty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tsLock := makeTS(2)
+	st := cluster.MakeTestingClusterSettings()
+	for _, mode := range []lock.Mode{
+		lock.MakeModeIntent(tsLock),
+		lock.MakeModeExclusive(tsLock, isolation.Serializable),
+		lock.MakeModeUpdate(),
+		lock.MakeModeShared(),
+		lock.MakeModeNone(tsLock, isolation.Serializable),
+	} {
+		var empty lock.Mode
+		testCheckLockConflicts(t, fmt.Sprintf("empty with %s", mode), empty, mode, st, false)
+	}
+}
+
+// TestLockModeWeaker tests strength comparison semantics for various lock mode
+// combinations.
+func TestLockModeWeaker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tsBelow := makeTS(1)
+	tsLock := makeTS(2)
+	tsAbove := makeTS(3)
+
+	testCases := []struct {
+		m1  lock.Mode
+		m2  lock.Mode
+		exp bool
+	}{
+		{
+			m1:  lock.MakeModeNone(tsLock, isolation.Serializable),
+			m2:  lock.MakeModeNone(tsBelow, isolation.Serializable), // stronger
+			exp: true,
+		},
+		{
+			m1:  lock.MakeModeNone(tsLock, isolation.Serializable), // stronger
+			m2:  lock.MakeModeNone(tsAbove, isolation.Serializable),
+			exp: false,
+		},
+		{
+			m1:  lock.MakeModeIntent(tsLock), // stronger
+			m2:  lock.MakeModeNone(tsBelow, isolation.Serializable),
+			exp: false,
+		},
+		{
+			m1:  lock.MakeModeIntent(tsLock),
+			m2:  lock.MakeModeIntent(tsBelow), // stronger
+			exp: true,
+		},
+		{
+			m1:  lock.MakeModeIntent(tsLock), // stronger
+			m2:  lock.MakeModeIntent(tsAbove),
+			exp: false,
+		},
+		{
+			m1:  lock.MakeModeIntent(tsLock), // stronger
+			m2:  lock.MakeModeShared(),
+			exp: false,
+		},
+		{
+			m1:  lock.MakeModeIntent(tsLock), // stronger
+			m2:  lock.MakeModeUpdate(),
+			exp: false,
+		},
+		{
+			m1:  lock.MakeModeIntent(tsLock), // stronger
+			m2:  lock.MakeModeExclusive(tsBelow, isolation.Serializable),
+			exp: false,
+		},
+		{
+			m1:  lock.MakeModeIntent(tsLock), // stronger
+			m2:  lock.MakeModeExclusive(tsAbove, isolation.Serializable),
+			exp: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		require.Equal(t, tc.exp, tc.m1.Weaker(tc.m2))
+	}
+}

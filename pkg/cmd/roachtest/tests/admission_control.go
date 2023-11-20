@@ -28,6 +28,7 @@ func registerAdmission(r registry.Registry) {
 	// roachperf. Need to munge with histogram data to compute % test run spent
 	// over some latency threshold. Will be Useful to track over time.
 
+	registerFollowerOverload(r)
 	registerElasticControlForBackups(r)
 	registerElasticControlForCDC(r)
 	registerElasticControlForRowLevelTTL(r)

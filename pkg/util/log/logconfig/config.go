@@ -29,8 +29,10 @@ import (
 // specified in a configuration.
 const DefaultFileFormat = `crdb-v2`
 
-// DefaultStderrFormat is the entry format for stderr sinks
-// when not specified in a configuration.
+// DefaultStderrFormat is the entry format for stderr sinks.
+// NB: The format for stderr is always set to `crdb-v2-tty`,
+// and cannot be changed. We enforce this in the validation step.
+// See: https://www.cockroachlabs.com/docs/stable/configure-logs#output-to-stderr
 const DefaultStderrFormat = `crdb-v2-tty`
 
 // DefaultFluentFormat is the entry format for fluent sinks
@@ -512,6 +514,10 @@ type HTTPDefaults struct {
 
 	// Headers is a list of headers to attach to each HTTP request
 	Headers map[string]string `yaml:",omitempty,flow"`
+
+	// FileBasedHeaders is a list of headers with filepaths whose contents are
+	// attached to each HTTP request
+	FileBasedHeaders map[string]string `yaml:"file-based-headers,omitempty,flow"`
 
 	// Compression can be "none" or "gzip" to enable gzip compression.
 	// Set to "gzip" by default.

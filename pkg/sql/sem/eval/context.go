@@ -442,6 +442,18 @@ func (p *fakePlannerWithMonitor) Optimizer() interface{} {
 	return nil
 }
 
+// PLpgSQLFetchCursor is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) PLpgSQLFetchCursor(
+	ctx context.Context, cursorStmt *tree.CursorStmt,
+) (res tree.Datums, err error) {
+	return nil, nil
+}
+
+// AutoCommit is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) AutoCommit() bool {
+	return false
+}
+
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
 }
@@ -813,7 +825,7 @@ type StreamManagerFactory interface {
 type ReplicationStreamManager interface {
 	// StartReplicationStream starts a stream replication job for the specified
 	// tenant on the producer side.
-	StartReplicationStream(ctx context.Context, tenantName roachpb.TenantName) (streampb.ReplicationProducerSpec, error)
+	StartReplicationStream(ctx context.Context, tenantName roachpb.TenantName, req streampb.ReplicationProducerRequest) (streampb.ReplicationProducerSpec, error)
 
 	// SetupSpanConfigsStream creates and plans a replication stream to stream the span config updates for a specific tenant.
 	SetupSpanConfigsStream(ctx context.Context, tenantName roachpb.TenantName) (ValueGenerator, error)
@@ -873,4 +885,13 @@ type StreamIngestManager interface {
 		ctx context.Context,
 		ingestionJobID jobspb.JobID,
 	) (*streampb.StreamIngestionStats, string, error)
+
+	// RevertTenantToTimestamp reverts the given tenant to the given
+	// timestamp. This is a non-transactional destructive operation that
+	// should be used with care.
+	RevertTenantToTimestamp(
+		ctx context.Context,
+		tenantName roachpb.TenantName,
+		revertTo hlc.Timestamp,
+	) error
 }

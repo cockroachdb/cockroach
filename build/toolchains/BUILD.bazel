@@ -270,20 +270,6 @@ toolchain(
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
 
-toolchain(
-    name = "node_freebsd_toolchain",
-    exec_compatible_with = [
-        "@platforms//os:freebsd",
-    ],
-    toolchain = ":node_freebsd_local_toolchain",
-    toolchain_type = "@rules_nodejs//nodejs:toolchain_type",
-)
-
-node_toolchain(
-    name = "node_freebsd_local_toolchain",
-    target_tool_path = "/usr/local/bin/node",
-)
-
 # There are aliases for each of these flags defined in .bazelrc; for example,
 # --crdb_test instead of --//build/toolchains:crdb_test_flag.
 #
@@ -323,6 +309,19 @@ config_setting(
     name = "dev",
     flag_values = {
         ":dev_flag": "true",
+    },
+)
+
+bool_flag(
+    name = "bazel_code_coverage_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "bazel_code_coverage",
+    flag_values = {
+        ":bazel_code_coverage_flag": "true",
     },
 )
 
@@ -523,13 +522,6 @@ config_setting(
 )
 
 config_setting(
-    name = "use_ci_timeouts",
-    values = {
-        "define": "use_ci_timeouts=true",
-    },
-)
-
-config_setting(
     name = "is_linux_amd64_no_force_build_cdeps",
     constraint_values = [
         "@io_bazel_rules_go//go/toolchain:linux",
@@ -601,5 +593,37 @@ config_setting(
     visibility = [
         "//build/bazelutil:__pkg__",
         "//c-deps:__pkg__",
+    ],
+)
+
+config_setting(
+    name = "is_linux_amd64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_linux_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_amd64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "is_darwin_arm64",
+    constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:darwin",
+        "@platforms//cpu:arm64",
     ],
 )

@@ -951,11 +951,6 @@ func (s *TestState) CheckPausepoint(name string) error {
 	return nil
 }
 
-// UseLegacyGCJob is false.
-func (s *TestState) UseLegacyGCJob(ctx context.Context) bool {
-	return false
-}
-
 // UpdateSchemaChangeJob implements the scexec.TransactionalJobRegistry interface.
 func (s *TestState) UpdateSchemaChangeJob(
 	ctx context.Context, id jobspb.JobID, fn scexec.JobUpdateCallback,
@@ -1180,7 +1175,7 @@ func (s *TestState) DeleteDatabaseRoleSettings(_ context.Context, dbID descpb.ID
 }
 
 // DeleteSchedule implements scexec.DescriptorMetadataUpdater
-func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
+func (s *TestState) DeleteSchedule(ctx context.Context, id jobspb.ScheduleID) error {
 	s.LogSideEffectf("delete job schedule #%d", id)
 	return nil
 }
@@ -1237,9 +1232,9 @@ func (s *TestState) AddTableForStatsRefresh(id descpb.ID) {
 
 // ResolveFunction implements the scbuild.CatalogReader interface.
 func (s *TestState) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
-	fnName, err := name.ToFunctionName()
+	fnName, err := name.UnresolvedName().ToRoutineName()
 	if err != nil {
 		return nil, err
 	}
@@ -1258,7 +1253,7 @@ func (s *TestState) ResolveFunction(
 	}
 	fd, found := scDesc.GetResolvedFuncDefinition(fnName.Object())
 	if !found {
-		return nil, tree.ErrFunctionUndefined
+		return nil, tree.ErrRoutineUndefined
 	}
 	return fd, nil
 }

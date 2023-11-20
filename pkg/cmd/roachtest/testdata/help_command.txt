@@ -11,7 +11,7 @@ See: [How To Investigate \(internal\)](https://cockroachlabs.atlassian.net/l/c/S
 
 
 
-See: [Grafana](https://go.crdb.dev/p/roachfana/foo-cluster/1689957243000/1689957733000)
+See: [Grafana](https://go.crdb.dev/roachtest-grafana//acceptance-gossip-locality-address/1689957243000/1689957853000)
 
 ----
 ----

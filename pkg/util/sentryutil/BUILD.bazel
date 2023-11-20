@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "sentryutil",
+    srcs = ["sentry.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/sentryutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/util/log/logcrash",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

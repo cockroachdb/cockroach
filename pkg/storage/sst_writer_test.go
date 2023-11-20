@@ -15,7 +15,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -83,28 +82,6 @@ func TestMakeIngestionWriterOptions(t *testing.T) {
 		st   *cluster.Settings
 		want sstable.TableFormat
 	}{
-		{
-			name: "22.2",
-			st: cluster.MakeTestingClusterSettingsWithVersions(
-				clusterversion.ByKey(clusterversion.V22_2),
-				clusterversion.TestingBinaryMinSupportedVersion,
-				true,
-			),
-			want: sstable.TableFormatPebblev2,
-		},
-		{
-			name: "with value blocks",
-			st: func() *cluster.Settings {
-				st := cluster.MakeTestingClusterSettingsWithVersions(
-					clusterversion.ByKey(clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks),
-					clusterversion.TestingBinaryMinSupportedVersion,
-					true,
-				)
-				ValueBlocksEnabled.Override(context.Background(), &st.SV, true)
-				return st
-			}(),
-			want: sstable.TableFormatPebblev3,
-		},
 		{
 			name: "with virtual sstables",
 			st: func() *cluster.Settings {

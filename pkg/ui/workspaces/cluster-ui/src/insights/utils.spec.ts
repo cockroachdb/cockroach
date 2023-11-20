@@ -51,6 +51,7 @@ const blockedContentionMock: ContentionDetails = {
   tableName: "table",
   indexName: "index",
   contentionTimeMs: 500,
+  contentionType: "LOCK_WAIT",
 };
 
 const statementInsightMock: StmtInsightEvent = {
@@ -79,6 +80,7 @@ const statementInsightMock: StmtInsightEvent = {
   planGist: "gist",
   cpuSQLNanos: 50,
   errorCode: "",
+  errorMsg: "",
   status: StatementStatus.COMPLETED,
 };
 
@@ -121,6 +123,7 @@ const txnInsightEventMock: TxnInsightEvent = {
   stmtExecutionIDs: [statementInsightMock.statementExecutionID],
   cpuSQLNanos: 50,
   errorCode: "",
+  errorMsg: "",
   status: TransactionStatus.COMPLETED,
 };
 

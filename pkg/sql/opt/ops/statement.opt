@@ -355,3 +355,9 @@ define AlterRangeRelocatePrivate {
     # Props stores the required physical properties for the input expression.
     Props PhysProps
 }
+
+[Relational]
+define Call {
+    # Proc is the procedure being invoked. It is a UDFCallExpr.
+    Proc ScalarExpr
+}

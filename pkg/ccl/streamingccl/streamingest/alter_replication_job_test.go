@@ -114,7 +114,7 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	cutoverOutput := replicationtestutils.DecimalTimeToHLC(t, cutoverStr)
 	require.Equal(t, cutoverTime, cutoverOutput.GoTime())
 	jobutils.WaitForJobToSucceed(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-	cleanupTenant := c.StartDestTenant(ctx)
+	cleanupTenant := c.StartDestTenant(ctx, nil, 0)
 	defer func() {
 		require.NoError(t, cleanupTenant())
 	}()
@@ -139,7 +139,6 @@ func TestAlterTenantPauseResume(t *testing.T) {
 	})
 
 	t.Run("pause-resume-as-non-system-tenant", func(t *testing.T) {
-		c.DestTenantSQL.Exec(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true`)
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 PAUSE REPLICATION`, "foo")
 		c.DestTenantSQL.ExpectErr(t, "only the system tenant can alter tenant", `ALTER TENANT $1 RESUME REPLICATION`, "foo")
 	})
@@ -285,6 +284,10 @@ func (br *blockingResumer) Resume(ctx context.Context, execCtx interface{}) erro
 }
 
 func (br *blockingResumer) OnFailOrCancel(context.Context, interface{}, error) error {
+	panic("unimplemented")
+}
+
+func (br *blockingResumer) CollectProfile(context.Context, interface{}) error {
 	panic("unimplemented")
 }
 

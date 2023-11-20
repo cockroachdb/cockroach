@@ -46,11 +46,11 @@ func Scan(
 		ScanStats:             cArgs.ScanStats,
 		Uncertainty:           cArgs.Uncertainty,
 		MaxKeys:               h.MaxSpanRequestKeys,
-		MaxIntents:            storage.MaxIntentsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		MaxLockConflicts:      storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 		TargetBytes:           h.TargetBytes,
 		AllowEmpty:            h.AllowEmpty,
 		WholeRowsOfSize:       h.WholeRowsOfSize,
-		FailOnMoreRecent:      args.KeyLocking != lock.None,
+		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
 		Reverse:               false,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
 		LockTable:             cArgs.Concurrency,
@@ -109,12 +109,16 @@ func Scan(
 		}
 	}
 
-	if args.KeyLocking != lock.None && h.Txn != nil {
-		err = acquireUnreplicatedLocksOnKeys(&res, h.Txn, args.KeyLocking, args.ScanFormat, &scanRes)
+	if args.KeyLockingStrength != lock.None && h.Txn != nil {
+		acquiredLocks, err := acquireLocksOnKeys(
+			ctx, readWriter, h.Txn, args.KeyLockingStrength, args.KeyLockingDurability,
+			args.ScanFormat, &scanRes, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
 			return result.Result{}, err
 		}
+		res.Local.AcquiredLocks = acquiredLocks
 	}
+
 	res.Local.EncounteredIntents = scanRes.Intents
 	return res, nil
 }

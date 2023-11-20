@@ -11,44 +11,95 @@
 package clusterversion
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/redact"
-	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 )
 
-func TestVersionsAreValid(t *testing.T) {
+// TestVersionTable runs sanity checks on the versions table:
+//   - all keys have a non-zero version;
+//   - versions are strictly increasing;
+//   - we have no odd Internal values.
+func TestVersionTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	require.NoError(t, versionsSingleton.Validate())
+	var prev roachpb.Version
+	for k := Key(0); k < numKeys; k++ {
+		v := versionTable[k]
+		require.NotEqual(t, roachpb.Version{}, v)
+		// We don't use Patch for cluster versions.
+		require.Zero(t, v.Patch)
+		// All internal versions must be even (since 23.1).
+		require.Zero(t, v.Internal%2)
+		if k > 0 {
+			require.True(t, prev.Less(v))
+		}
+		prev = v
+	}
 }
 
-// TestPreserveVersionsForMinBinaryVersion ensures that versions
-// at or above binaryMinSupportedVersion are not deleted.
-func TestPreserveVersionsForMinBinaryVersion(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	prevVersion := keyedVersion{
-		Key:     -1,
-		Version: roachpb.Version{Major: 1, Minor: 1},
+// TestNoMissingVersions checks that starting with MinSupported, we have no gaps
+// in Internal versions (which would happen if a version was incorrectly
+// removed).
+func TestNoMissingVersions(t *testing.T) {
+	// removedVersions lists versions that have been purposely removed during a
+	// development cycle.
+	//
+	// Any additions here should be accompanied by a comment explaining the
+	// reason. The versions in the list must be in order.
+	removedVersions := []roachpb.Version{
+		// In the 23.2 cycle V23_2TTLAllowDescPK and V23_2_PartiallyVisibleIndexes
+		// were introduced but then later removed (since they were redundant).
+		{Major: 23, Minor: 1, Internal: 4},
+		{Major: 23, Minor: 1, Internal: 6},
 	}
-	for _, namedVersion := range versionsSingleton {
-		v := namedVersion.Version
-		if v.Less(binaryMinSupportedVersion) {
-			prevVersion = namedVersion
-			continue
+
+	for k := MinSupported + 1; k < numKeys; k++ {
+		prev := (k - 1).Version()
+		v := k.Version()
+		if v.Major == prev.Major && v.Minor == prev.Minor {
+			expectedInternal := prev.Internal + 2
+
+			// Allow exceptions. This loop assumes the removed versions are increasing
+			// (the condition could hit multiple times).
+			for _, removed := range removedVersions {
+				if (removed.Major == v.Major || removed.Major+DevOffset == v.Major) &&
+					removed.Minor == v.Minor &&
+					removed.Internal == expectedInternal {
+					expectedInternal += 2
+				}
+			}
+
+			require.Equalf(t, expectedInternal, v.Internal,
+				"version gap between %s (%s) and %s (%s)", k-1, prev, k, v,
+			)
 		}
-		if v.Major == prevVersion.Major && v.Minor == prevVersion.Minor {
-			require.Equalf(t, prevVersion.Internal+2, v.Internal,
-				"version(s) between %s (%s) and %s (%s) is(are) at or above minBinaryVersion (%s) and should not be removed",
-				prevVersion.Key, prevVersion.Version,
-				namedVersion.Key, namedVersion.Version,
-				binaryMinSupportedVersion)
-		}
-		prevVersion = namedVersion
+	}
+}
+
+// TestKeyConstants runs sanity checks on version key constants.
+func TestKeyConstants(t *testing.T) {
+	require.Equal(t, numKeys-1, Latest)
+	// MinSupported should be a final release.
+	require.True(t, MinSupported.IsFinal())
+
+	supported := SupportedPreviousReleases()
+	require.Equal(t, MinSupported, supported[0])
+	// Check PreviousRelease.
+	require.Equal(t, PreviousRelease, supported[len(supported)-1])
+}
+
+func TestFinalVersion(t *testing.T) {
+	if finalVersion >= 0 {
+		require.False(t, developmentBranch, "final version set but developmentBranch is still set")
+		require.Equal(t, Latest, finalVersion, "finalVersion must match the minted latest version")
+	} else {
+		require.False(t, Latest.IsFinal(), "finalVersion not set but Latest is final")
 	}
 }
 
@@ -108,62 +159,14 @@ func TestClusterVersionPrettyPrint(t *testing.T) {
 	}
 }
 
-func TestGetVersionsBetween(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// Define a list of versions v3..v9
-	var vs keyedVersions
-	for i := 3; i < 10; i++ {
-		vs = append(vs, keyedVersion{
-			Key:     Key(42),
-			Version: roachpb.Version{Major: int32(i)},
-		})
+func TestReleaseSeries(t *testing.T) {
+	require.Equal(t, fmt.Sprintf("v%s", Latest.ReleaseSeries()), build.BinaryVersionPrefix())
+	if Latest.IsFinal() {
+		require.True(t, Latest.Version() == Latest.ReleaseSeries())
+	} else {
+		require.True(t, removeDevOffset(Latest.Version()).Less(Latest.ReleaseSeries()))
 	}
-	v := func(major int32) roachpb.Version {
-		return roachpb.Version{Major: major}
-	}
-	list := func(first, last int32) []roachpb.Version {
-		var cvs []roachpb.Version
-		for i := first; i <= last; i++ {
-			cvs = append(cvs, v(i))
-		}
-		return cvs
-	}
-
-	tests := []struct {
-		from, to roachpb.Version
-		exp      []roachpb.Version
-	}{
-		{v(5), v(8), list(6, 8)},
-		{v(1), v(1), []roachpb.Version{}},
-		{v(7), v(7), []roachpb.Version{}},
-		{v(1), v(5), list(3, 5)},
-		{v(6), v(12), list(7, 9)},
-		{v(4), v(5), list(5, 5)},
-	}
-
-	for _, test := range tests {
-		actual := listBetweenInternal(test.from, test.to, vs)
-		if len(actual) != len(test.exp) {
-			t.Errorf("expected %d versions, got %d", len(test.exp), len(actual))
-		}
-
-		for i := range test.exp {
-			if actual[i] != test.exp[i] {
-				t.Errorf("%s version incorrect: expected %s, got %s", humanize.Ordinal(i), test.exp[i], actual[i])
-			}
-		}
-	}
-}
-
-// TestEnsureConsistentBinaryVersion ensures that BinaryVersionKey maps to a
-// version equal to binaryVersion.
-func TestEnsureConsistentBinaryVersion(t *testing.T) {
-	require.Equal(t, ByKey(BinaryVersionKey), binaryVersion)
-}
-
-// TestEnsureConsistentMinBinaryVersion ensures that BinaryMinSupportedVersionKey
-// maps to a version equal to binaryMinSupportedVersion.
-func TestEnsureConsistentMinBinaryVersion(t *testing.T) {
-	require.Equal(t, ByKey(BinaryMinSupportedVersionKey), binaryMinSupportedVersion)
+	require.Equal(t, PreviousRelease.ReleaseSeries(), removeDevOffset(PreviousRelease.Version()))
+	require.Equal(t, (PreviousRelease - 1).ReleaseSeries(), removeDevOffset(PreviousRelease.Version()))
+	require.Equal(t, MinSupported.ReleaseSeries(), removeDevOffset(MinSupported.Version()))
 }

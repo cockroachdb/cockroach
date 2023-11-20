@@ -20,6 +20,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,10 +64,14 @@ import (
 // Default for MaxSyncDuration below.
 var maxSyncDurationDefault = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT", 20*time.Second)
 
+// Default maximum wait time before an EventuallyFileOnlySnapshot transitions
+// to a file-only snapshot.
+var MaxEFOSWait = envutil.EnvOrDefaultDuration("COCKROACH_EFOS_MAX_WAIT", 3*time.Second)
+
 // MaxSyncDuration is the threshold above which an observed engine sync duration
 // triggers either a warning or a fatal error.
 var MaxSyncDuration = settings.RegisterDurationSetting(
-	settings.TenantReadOnly,
+	settings.SystemVisible,
 	"storage.max_sync_duration",
 	"maximum duration for disk operations; any operations that take longer"+
 		" than this setting trigger a warning log entry or process crash",
@@ -76,7 +81,7 @@ var MaxSyncDuration = settings.RegisterDurationSetting(
 // MaxSyncDurationFatalOnExceeded governs whether disk stalls longer than
 // MaxSyncDuration fatal the Cockroach process. Defaults to true.
 var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
-	settings.TenantReadOnly,
+	settings.ApplicationLevel, // used for temp storage in virtual cluster servers
 	"storage.max_sync_duration.fatal.enabled",
 	"if true, fatal the process when a disk operation exceeds storage.max_sync_duration",
 	true,
@@ -88,12 +93,41 @@ var MaxSyncDurationFatalOnExceeded = settings.RegisterBoolSetting(
 // compactions, and does not eagerly change the encoding of existing sstables.
 // Reads can correctly read both kinds of sstables.
 var ValueBlocksEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel, // used for temp storage in virtual cluster servers
 	"storage.value_blocks.enabled",
 	"set to true to enable writing of value blocks in sstables",
 	util.ConstantWithMetamorphicTestBool(
 		"storage.value_blocks.enabled", true),
 	settings.WithPublic)
+
+// UseEFOS controls whether uses of pebble Snapshots should use
+// EventuallyFileOnlySnapshots instead. This reduces write-amp with the main
+// tradeoff being higher space-amp. Note that UseExciseForSnapshot, if true,
+// effectively causes EventuallyFileOnlySnapshots to be used as well.
+//
+// Note: Do NOT read this setting directly. Use ShouldUseEFOS() instead.
+var UseEFOS = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"storage.experimental.eventually_file_only_snapshots.enabled",
+	"set to true to use eventually-file-only-snapshots even when kv.snapshot_receiver.excise.enabled is false",
+	util.ConstantWithMetamorphicTestBool(
+		"storage.experimental.eventually_file_only_snapshots.enabled", false), /* defaultValue */
+	settings.WithPublic)
+
+// UseExciseForSnapshots controls whether virtual-sstable-based excises should
+// be used instead of range deletions for clearing out replica contents as part
+// of a rebalance/recovery snapshot application. Applied on the receiver side.
+// Note that setting this setting to true also effectively causes UseEFOS above
+// to become true. This interaction is why this setting is defined in the
+// storage package even though it mostly affects KV.
+var UseExciseForSnapshots = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.snapshot_receiver.excise.enabled",
+	"set to true to use excises instead of range deletions for KV snapshots",
+	util.ConstantWithMetamorphicTestBool(
+		"kv.snapshot_receiver.excise.enabled", false), /* defaultValue */
+	settings.WithPublic,
+)
 
 // IngestAsFlushable controls whether ingested sstables that overlap the
 // memtable may be lazily ingested: written to the WAL and enqueued in the list
@@ -103,16 +137,20 @@ var ValueBlocksEnabled = settings.RegisterBoolSetting(
 // recovery will still enqueue the sstables as flushable when the ingest's WAL
 // entry is replayed.
 //
-// The value of this cluster setting is ignored if the cluster version is not
-// yet at least V23_1EnableFlushableIngest.
-//
 // This cluster setting will be removed in a subsequent release.
 var IngestAsFlushable = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.ApplicationLevel, // used to init temp storage in virtual cluster servers
 	"storage.ingest_as_flushable.enabled",
 	"set to true to enable lazy ingestion of sstables",
 	util.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
+
+// ShouldUseEFOS returns true if either of the UseEFOS or UseExciseForSnapshots
+// cluster settings are enabled, and EventuallyFileOnlySnapshots must be used
+// to guarantee snapshot-like semantics.
+func ShouldUseEFOS(settings *settings.Values) bool {
+	return UseEFOS.Get(settings) || UseExciseForSnapshots.Get(settings)
+}
 
 // EngineKeyCompare compares cockroach keys, including the version (which
 // could be MVCC timestamps).
@@ -562,23 +600,18 @@ const MinimumSupportedFormatVersion = pebble.FormatPrePebblev1Marked
 
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
-	// In RocksDB, the concurrency setting corresponds to both flushes and
-	// compactions. In Pebble, there is always a slot for a flush, and
-	// compactions are counted separately.
-	maxConcurrentCompactions := rocksdbConcurrency - 1
-	if maxConcurrentCompactions < 1 {
-		maxConcurrentCompactions = 1
-	}
-
 	opts := &pebble.Options{
 		Comparer: EngineComparer,
 		FS:       vfs.Default,
 		// A value of 2 triggers a compaction when there is 1 sub-level.
-		L0CompactionThreshold:       2,
-		L0StopWritesThreshold:       1000,
-		LBaseMaxBytes:               64 << 20, // 64 MB
-		Levels:                      make([]pebble.LevelOptions, 7),
-		MaxConcurrentCompactions:    func() int { return maxConcurrentCompactions },
+		L0CompactionThreshold: 2,
+		L0StopWritesThreshold: 1000,
+		LBaseMaxBytes:         64 << 20, // 64 MB
+		Levels:                make([]pebble.LevelOptions, 7),
+		// NB: Options.MaxConcurrentCompactions may be overidden in NewPebble to
+		// allow overriding the max at runtime through
+		// Engine.SetCompactionConcurrency.
+		MaxConcurrentCompactions:    getMaxConcurrentCompactions,
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
@@ -703,6 +736,10 @@ func (l pebbleLogger) Eventf(ctx context.Context, format string, args ...interfa
 
 func (l pebbleLogger) IsTracingEnabled(ctx context.Context) bool {
 	return log.HasSpanOrEvent(ctx)
+}
+
+func (l pebbleLogger) Errorf(format string, args ...interface{}) {
+	log.Storage.ErrorfDepth(l.ctx, l.depth, format, args...)
 }
 
 // PebbleConfig holds all configuration parameters and knobs used in setting up
@@ -861,9 +898,8 @@ func (p *Pebble) SetStoreID(ctx context.Context, storeID int32) error {
 	}
 	p.storeIDPebbleLog.Set(ctx, storeID)
 	// Note that SetCreatorID only does something if remote storage is configured
-	// in the pebble options. The version gate protects against accidentally
-	// setting the creator ID on an older store.
-	if storeID != base.TempStoreID && p.minVersion.AtLeast(clusterversion.ByKey(clusterversion.V23_1SetPebbleCreatorID)) {
+	// in the pebble options.
+	if storeID != base.TempStoreID {
 		if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
 			return err
 		}
@@ -1018,10 +1054,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		return minWALSyncInterval.Get(&cfg.Settings.SV)
 	}
 	opts.Experimental.EnableValueBlocks = func() bool {
-		version := cfg.Settings.Version.ActiveVersionOrEmpty(logCtx)
-		return !version.Less(clusterversion.ByKey(
-			clusterversion.V23_1EnablePebbleFormatSSTableValueBlocks)) &&
-			ValueBlocksEnabled.Get(&cfg.Settings.SV)
+		return ValueBlocksEnabled.Get(&cfg.Settings.SV)
 	}
 	opts.Experimental.DisableIngestAsFlushable = func() bool {
 		// Disable flushable ingests if shared storage is enabled. This is because
@@ -1105,6 +1138,18 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		onClose:          cfg.onClose,
 		replayer:         replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
 	}
+	// In test builds, add a layer of VFS middleware that ensures users of an
+	// Engine don't try to use the filesystem after the Engine has been closed.
+	// Usage after close causes goroutine leaks.
+	if buildutil.CrdbTestBuild {
+		testFS := &noUseAfterClose{closed: &p.closed, fs: p.FS}
+		p.FS = testFS
+		p.onClose = append(p.onClose, func(p *Pebble) {
+			if openFiles := testFS.openFiles.Load(); openFiles > 0 {
+				panic(errors.AssertionFailedf("during Engine.Close there remain %d files open by client code; all files must be closed before closing the Engine", openFiles))
+			}
+		})
+	}
 
 	// MaxConcurrentCompactions can be set by multiple sources, but all the
 	// sources will eventually call NewPebble. So, we override
@@ -1164,7 +1209,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
 			"": esWrapper,
 		})
-		opts.Experimental.CreateOnShared = true
+		opts.Experimental.CreateOnShared = remote.CreateOnSharedLower
 		opts.Experimental.CreateOnSharedLocator = ""
 	} else {
 		if cfg.RemoteStorageFactory != nil {
@@ -1187,18 +1232,18 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		// sequence (so now some stores have v21.2, but others v22.1) you are
 		// expected to run v22.1 again (hopefully without the crash this time) which
 		// would then rewrite all the stores.
-		if v := cfg.Settings.Version; storeClusterVersion.Less(v.BinaryMinSupportedVersion()) {
-			if storeClusterVersion.Major < clusterversion.DevOffset && v.BinaryVersion().Major >= clusterversion.DevOffset {
+		if v := cfg.Settings.Version; storeClusterVersion.Less(v.MinSupportedVersion()) {
+			if storeClusterVersion.Major < clusterversion.DevOffset && v.LatestVersion().Major >= clusterversion.DevOffset {
 				return nil, errors.Errorf(
 					"store last used with cockroach non-development version v%s "+
 						"cannot be opened by development version v%s",
-					storeClusterVersion, v.BinaryVersion(),
+					storeClusterVersion, v.LatestVersion(),
 				)
 			}
 			return nil, errors.Errorf(
 				"store last used with cockroach version v%s "+
 					"is too old for running version v%s (which requires data from v%s or later)",
-				storeClusterVersion, v.BinaryVersion(), v.BinaryMinSupportedVersion(),
+				storeClusterVersion, v.LatestVersion(), v.MinSupportedVersion(),
 			)
 		}
 		opts.ErrorIfNotExists = true
@@ -1243,7 +1288,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		storeClusterVersion = cfg.Settings.Version.ActiveVersionOrEmpty(ctx).Version
 		if storeClusterVersion == (roachpb.Version{}) {
 			// If there is no active version, use the minimum supported version.
-			storeClusterVersion = cfg.Settings.Version.BinaryMinSupportedVersion()
+			storeClusterVersion = cfg.Settings.Version.MinSupportedVersion()
 		}
 	}
 
@@ -1289,12 +1334,12 @@ func (p *Pebble) writePreventStartupFile(ctx context.Context, corruptionError er
 
 	preventStartupMsg := fmt.Sprintf(`ATTENTION:
 
-  this node is terminating because of sstable corruption. 
-	Corruption may be a consequence of a hardware error. 
+  this node is terminating because of sstable corruption.
+	Corruption may be a consequence of a hardware error.
 
-	Error: %s 
+	Error: %s
 
-  A file preventing this node from restarting was placed at: 
+  A file preventing this node from restarting was placed at:
   %s`, corruptionError.Error(), path)
 
 	if err := fs.WriteFile(p.unencryptedFS, path, []byte(preventStartupMsg)); err != nil {
@@ -1467,6 +1512,7 @@ func (p *Pebble) Closed() bool {
 
 // MVCCIterate implements the Engine interface.
 func (p *Pebble) MVCCIterate(
+	ctx context.Context,
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
@@ -1475,19 +1521,21 @@ func (p *Pebble) MVCCIterate(
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Engine interface.
-func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCIterator, error) {
+func (p *Pebble) NewMVCCIterator(
+	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
+) (MVCCIterator, error) {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter, err := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(ctx, iterKind, opts)
 		r.Free()
 		if err != nil {
 			return nil, err
@@ -1495,7 +1543,7 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCI
 		return maybeWrapInUnsafeIter(iter), nil
 	}
 
-	iter, err := newPebbleIterator(p.db, opts, StandardDurability, p)
+	iter, err := newPebbleIterator(ctx, p.db, opts, StandardDurability, p)
 	if err != nil {
 		return nil, err
 	}
@@ -1503,8 +1551,8 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) (MVCCI
 }
 
 // NewEngineIterator implements the Engine interface.
-func (p *Pebble) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
-	return newPebbleIterator(p.db, opts, StandardDurability, p)
+func (p *Pebble) NewEngineIterator(ctx context.Context, opts IterOptions) (EngineIterator, error) {
+	return newPebbleIterator(ctx, p.db, opts, StandardDurability, p)
 }
 
 // ScanInternal implements the Engine interface.
@@ -1518,7 +1566,9 @@ func (p *Pebble) ScanInternal(
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
-	return p.db.ScanInternal(ctx, rawLower, rawUpper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
+	// TODO(sumeer): set CategoryAndQoS.
+	return p.db.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
+		visitRangeDel, visitRangeKey, visitSharedFile)
 }
 
 // ConsistentIterators implements the Engine interface.
@@ -2052,6 +2102,21 @@ func (p *Pebble) NewSnapshot() Reader {
 	}
 }
 
+// NewEventuallyFileOnlySnapshot implements the Engine interface.
+func (p *Pebble) NewEventuallyFileOnlySnapshot(keyRanges []roachpb.Span) EventuallyFileOnlyReader {
+	engineKeyRanges := make([]pebble.KeyRange, len(keyRanges))
+	for i := range keyRanges {
+		engineKeyRanges[i].Start = EngineKey{Key: keyRanges[i].Key}.Encode()
+		engineKeyRanges[i].End = EngineKey{Key: keyRanges[i].EndKey}.Encode()
+	}
+	efos := p.db.NewEventuallyFileOnlySnapshot(engineKeyRanges)
+	return &pebbleEFOS{
+		efos:      efos,
+		parent:    p,
+		keyRanges: keyRanges,
+	}
+}
+
 // Type implements the Engine interface.
 func (p *Pebble) Type() enginepb.EngineType {
 	return enginepb.EngineTypePebble
@@ -2134,33 +2199,30 @@ func (p *Pebble) ScanStorageInternalKeys(
 	if err != nil {
 		return []enginepb.StorageInternalKeysMetrics{}, err
 	}
-
-	var metrics []enginepb.StorageInternalKeysMetrics
-
-	for level := 0; level < 7; level++ {
-		metrics = append(metrics, enginepb.StorageInternalKeysMetrics{
-			Level:                   int32(level),
-			SnapshotPinnedKeys:      uint64(stats.Levels[level].SnapshotPinnedKeys),
-			SnapshotPinnedKeysBytes: stats.Levels[level].SnapshotPinnedKeysBytes,
-			PointKeyDeleteCount:     uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindDelete]),
-			PointKeySetCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindSet]),
-			RangeDeleteCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeDelete]),
-			RangeKeySetCount:        uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeKeySet]),
-			RangeKeyDeleteCount:     uint64(stats.Levels[level].KindsCount[pebble.InternalKeyKindRangeKeyDelete]),
-		})
+	setMetricsFromStats := func(
+		level int, stats *pebble.KeyStatistics, m *enginepb.StorageInternalKeysMetrics) {
+		*m = enginepb.StorageInternalKeysMetrics{
+			Level:                       int32(level),
+			SnapshotPinnedKeys:          uint64(stats.SnapshotPinnedKeys),
+			SnapshotPinnedKeysBytes:     stats.SnapshotPinnedKeysBytes,
+			PointKeyDeleteCount:         uint64(stats.KindsCount[pebble.InternalKeyKindDelete]),
+			PointKeySetCount:            uint64(stats.KindsCount[pebble.InternalKeyKindSet]),
+			RangeDeleteCount:            uint64(stats.KindsCount[pebble.InternalKeyKindRangeDelete]),
+			RangeKeySetCount:            uint64(stats.KindsCount[pebble.InternalKeyKindRangeKeySet]),
+			RangeKeyDeleteCount:         uint64(stats.KindsCount[pebble.InternalKeyKindRangeKeyDelete]),
+			PointKeyDeleteIsLatestCount: uint64(stats.LatestKindsCount[pebble.InternalKeyKindDelete]),
+			PointKeySetIsLatestCount:    uint64(stats.LatestKindsCount[pebble.InternalKeyKindSet]),
+		}
 	}
-
-	metrics = append(metrics, enginepb.StorageInternalKeysMetrics{
-		Level:                   -1,
-		SnapshotPinnedKeys:      uint64(stats.Accumulated.SnapshotPinnedKeys),
-		SnapshotPinnedKeysBytes: stats.Accumulated.SnapshotPinnedKeysBytes,
-		PointKeyDeleteCount:     uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindDelete]),
-		PointKeySetCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindSet]),
-		RangeDeleteCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeDelete]),
-		RangeKeySetCount:        uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeKeySet]),
-		RangeKeyDeleteCount:     uint64(stats.Accumulated.KindsCount[pebble.InternalKeyKindRangeKeyDelete]),
-	})
-
+	var metrics []enginepb.StorageInternalKeysMetrics
+	for level := 0; level < 7; level++ {
+		var m enginepb.StorageInternalKeysMetrics
+		setMetricsFromStats(level, &stats.Levels[level], &m)
+		metrics = append(metrics, m)
+	}
+	var m enginepb.StorageInternalKeysMetrics
+	setMetricsFromStats(-1 /* level */, &stats.Accumulated, &m)
+	metrics = append(metrics, m)
 	return metrics, nil
 }
 
@@ -2243,6 +2305,65 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 	return nil
 }
 
+// pebbleFormatVersionMap maps cluster versions to the corresponding pebble format version.
+// For a given cluster version, the entry with the latest version that is not
+// newer than the given version is chosen.
+//
+// This map needs to include the "final" version for each supported previous
+// release, and the in-development versions of the current release.
+//
+// Pebble has a concept of format major versions, similar to cluster versions.
+// Backwards incompatible changes to Pebble's on-disk format are gated behind
+// new format major versions. Bumping the storage engine's format major version
+// is tied to a CockroachDB cluster version.
+//
+// Format major versions and cluster versions both only ratchet upwards. Here we
+// map the persisted cluster version to the corresponding format major version,
+// ratcheting Pebble's format major version if necessary.
+//
+// Note that when introducing a new Pebble format version that relies on _all_
+// engines in a cluster being at the same, newer format major version, two
+// cluster versions should be used. The first is used to enable the feature in
+// Pebble, and should control the version ratchet below. The second is used as a
+// feature flag. The use of two cluster versions relies on a guarantee provided
+// by the migration framework (see pkg/migration) that if a node is at a version
+// X+1, it is guaranteed that all nodes have already ratcheted their store
+// version to the version X that enabled the feature at the Pebble level.
+var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
+	clusterversion.V23_1:                                    pebble.FormatFlushableIngest,
+	clusterversion.V23_2_PebbleFormatVirtualSSTables:        pebble.FormatVirtualSSTables,
+	clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete: pebble.FormatDeleteSizedAndObsolete,
+}
+
+// pebbleFormatVersionKeys contains the keys in the map above, in descending order.
+var pebbleFormatVersionKeys []clusterversion.Key = func() []clusterversion.Key {
+	versionKeys := make([]clusterversion.Key, 0, len(pebbleFormatVersionMap))
+	for k := range pebbleFormatVersionMap {
+		versionKeys = append(versionKeys, k)
+	}
+	// Sort the keys in reverse order.
+	sort.Slice(versionKeys, func(i, j int) bool {
+		return versionKeys[i] > versionKeys[j]
+	})
+	return versionKeys
+}()
+
+// pebbleFormatVersion finds the most recent pebble format version supported by
+// the given cluster version.
+func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersion {
+	// pebbleFormatVersionKeys are sorted in descending order; find the first one
+	// that is not newer than clusterVersion.
+	for _, k := range pebbleFormatVersionKeys {
+		if clusterVersion.AtLeast(clusterversion.ByKey(k)) {
+			return pebbleFormatVersionMap[k]
+		}
+	}
+	// This should never happen in production. But we tolerate tests creating
+	// imaginary older versions; we must still use the earliest supported
+	// format.
+	return MinimumSupportedFormatVersion
+}
+
 // SetMinVersion implements the Engine interface.
 func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	p.minVersion = version
@@ -2261,62 +2382,14 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		return err
 	}
 
-	// Set the shared object creator ID if the version is high enough. See SetStoreID().
-	if version.AtLeast(clusterversion.ByKey(clusterversion.V23_1SetPebbleCreatorID)) {
-		if storeID := p.storeIDPebbleLog.Get(); storeID != 0 && storeID != base.TempStoreID {
-			if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
-				return err
-			}
+	// Set the shared object creator ID .
+	if storeID := p.storeIDPebbleLog.Get(); storeID != 0 && storeID != base.TempStoreID {
+		if err := p.db.SetCreatorID(uint64(storeID)); err != nil {
+			return err
 		}
 	}
 
-	// Pebble has a concept of format major versions, similar to cluster
-	// versions. Backwards incompatible changes to Pebble's on-disk
-	// format are gated behind new format major versions. Bumping the
-	// storage engine's format major version is tied to a CockroachDB
-	// cluster version.
-	//
-	// Format major versions and cluster versions both only ratchet
-	// upwards. Here we map the persisted cluster version to the
-	// corresponding format major version, ratcheting Pebble's format
-	// major version if necessary.
-	//
-	// Note that when introducing a new Pebble format version that relies on _all_
-	// engines in a cluster being at the same, newer format major version, two
-	// cluster versions should be used. The first is used to enable the feature in
-	// Pebble, and should control the version ratchet below. The second is used as
-	// a feature flag. The use of two cluster versions relies on a guarantee
-	// provided by the migration framework (see pkg/migration) that if a node is
-	// at a version X+1, it is guaranteed that all nodes have already ratcheted
-	// their store version to the version X that enabled the feature at the Pebble
-	// level.
-	var formatVers pebble.FormatMajorVersion
-	// Cases are ordered from newer to older versions.
-	switch {
-	case !version.Less(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatVirtualSSTables)):
-		formatVers = pebble.ExperimentalFormatVirtualSSTables
-
-	case !version.Less(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete)):
-		formatVers = pebble.ExperimentalFormatDeleteSizedAndObsolete
-
-	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnableFlushableIngest)):
-		formatVers = pebble.FormatFlushableIngest
-
-	case !version.Less(clusterversion.ByKey(clusterversion.V23_1EnsurePebbleFormatSSTableValueBlocks)):
-		formatVers = pebble.FormatSSTableValueBlocks
-
-	case !version.Less(clusterversion.ByKey(clusterversion.V22_2)):
-		// This is the earliest supported format. The code assumes that the features
-		// provided by this format are always available.
-		formatVers = pebble.FormatPrePebblev1Marked
-
-	default:
-		// This should never happen in production. But we tolerate tests creating
-		// imaginary older versions; we must still use the earliest supported
-		// format.
-		formatVers = MinimumSupportedFormatVersion
-	}
-
+	formatVers := pebbleFormatVersion(version)
 	if p.db.FormatMajorVersion() < formatVers {
 		if err := p.db.RatchetFormatMajorVersion(formatVers); err != nil {
 			return errors.Wrap(err, "ratcheting format major version")
@@ -2333,6 +2406,95 @@ func (p *Pebble) MinVersion() roachpb.Version {
 // BufferedSize implements the Engine interface.
 func (p *Pebble) BufferedSize() int {
 	return 0
+}
+
+// ConvertFilesToBatchAndCommit implements the Engine interface.
+func (p *Pebble) ConvertFilesToBatchAndCommit(
+	_ context.Context, paths []string, clearedSpans []roachpb.Span,
+) error {
+	files := make([]sstable.ReadableFile, len(paths))
+	closeFiles := func() {
+		for i := range files {
+			if files[i] != nil {
+				files[i].Close()
+			}
+		}
+	}
+	for i, fileName := range paths {
+		f, err := p.FS.Open(fileName)
+		if err != nil {
+			closeFiles()
+			return err
+		}
+		files[i] = f
+	}
+	iter, err := NewSSTEngineIterator(
+		[][]sstable.ReadableFile{files},
+		IterOptions{
+			KeyTypes:   IterKeyTypePointsAndRanges,
+			LowerBound: roachpb.KeyMin,
+			UpperBound: roachpb.KeyMax,
+		}, true)
+	if err != nil {
+		// TODO(sumeer): we don't call closeFiles() since in the error case some
+		// of the files may be closed. See the code in
+		// https://github.com/cockroachdb/pebble/blob/master/external_iterator.go#L104-L113
+		// which closes the opened readers. At this point in the code we don't
+		// know which files are already closed. The callee needs to be fixed to
+		// not close any of the files or close all the files in the error case.
+		// The natural behavior would be to not close any file. Fix this in
+		// Pebble, and then adjust the code here if needed.
+		return err
+	}
+	defer iter.Close()
+
+	batch := p.NewWriteBatch()
+	for i := range clearedSpans {
+		err :=
+			batch.ClearRawRange(clearedSpans[i].Key, clearedSpans[i].EndKey, true, true)
+		if err != nil {
+			return err
+		}
+	}
+	valid, err := iter.SeekEngineKeyGE(EngineKey{Key: roachpb.KeyMin})
+	for valid {
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasPoint {
+			var k EngineKey
+			if k, err = iter.UnsafeEngineKey(); err != nil {
+				break
+			}
+			var v []byte
+			if v, err = iter.UnsafeValue(); err != nil {
+				break
+			}
+			if err = batch.PutEngineKey(k, v); err != nil {
+				break
+			}
+		}
+		if hasRange && iter.RangeKeyChanged() {
+			var rangeBounds roachpb.Span
+			if rangeBounds, err = iter.EngineRangeBounds(); err != nil {
+				break
+			}
+			rangeKeys := iter.EngineRangeKeys()
+			for i := range rangeKeys {
+				if err = batch.PutEngineRangeKey(rangeBounds.Key, rangeBounds.EndKey, rangeKeys[i].Version,
+					rangeKeys[i].Value); err != nil {
+					break
+				}
+			}
+			if err != nil {
+				break
+			}
+		}
+		valid, err = iter.NextEngineKey()
+	}
+	if err != nil {
+		batch.Close()
+		return err
+	}
+	return batch.Commit(true)
 }
 
 type pebbleReadOnly struct {
@@ -2425,6 +2587,7 @@ func (p *pebbleReadOnly) Closed() bool {
 }
 
 func (p *pebbleReadOnly) MVCCIterate(
+	ctx context.Context,
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
@@ -2436,16 +2599,16 @@ func (p *pebbleReadOnly) MVCCIterate(
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Engine interface.
 func (p *pebbleReadOnly) NewMVCCIterator(
-	iterKind MVCCIterKind, opts IterOptions,
+	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
 ) (MVCCIterator, error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
@@ -2454,7 +2617,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter, err := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(ctx, iterKind, opts)
 		r.Free()
 		if err != nil {
 			return nil, err
@@ -2467,16 +2630,17 @@ func (p *pebbleReadOnly) NewMVCCIterator(
 		iter = &p.prefixIter
 	}
 	if iter.inuse {
-		return newPebbleIteratorByCloning(CloneContext{
+		return newPebbleIteratorByCloning(ctx, CloneContext{
 			rawIter: p.iter,
 			engine:  p.parent,
 		}, opts, p.durability), nil
 	}
 
 	if iter.iter != nil {
-		iter.setOptions(opts, p.durability)
+		iter.setOptions(ctx, opts, p.durability)
 	} else {
-		if err := iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent); err != nil {
+		if err := iter.initReuseOrCreate(
+			ctx, p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent); err != nil {
 			return nil, err
 		}
 		if p.iter == nil {
@@ -2492,7 +2656,9 @@ func (p *pebbleReadOnly) NewMVCCIterator(
 }
 
 // NewEngineIterator implements the Engine interface.
-func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
+func (p *pebbleReadOnly) NewEngineIterator(
+	ctx context.Context, opts IterOptions,
+) (EngineIterator, error) {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
@@ -2502,16 +2668,17 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) (EngineIterator, er
 		iter = &p.prefixEngineIter
 	}
 	if iter.inuse {
-		return newPebbleIteratorByCloning(CloneContext{
+		return newPebbleIteratorByCloning(ctx, CloneContext{
 			rawIter: p.iter,
 			engine:  p.parent,
 		}, opts, p.durability), nil
 	}
 
 	if iter.iter != nil {
-		iter.setOptions(opts, p.durability)
+		iter.setOptions(ctx, opts, p.durability)
 	} else {
-		err := iter.initReuseOrCreate(p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent)
+		err := iter.initReuseOrCreate(
+			ctx, p.parent.db, p.iter, p.iterUsed, opts, p.durability, p.parent)
 		if err != nil {
 			return nil, err
 		}
@@ -2683,6 +2850,7 @@ func (p *pebbleSnapshot) Closed() bool {
 
 // MVCCIterate implements the Reader interface.
 func (p *pebbleSnapshot) MVCCIterate(
+	ctx context.Context,
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
@@ -2691,21 +2859,21 @@ func (p *pebbleSnapshot) MVCCIterate(
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
 }
 
 // NewMVCCIterator implements the Reader interface.
 func (p *pebbleSnapshot) NewMVCCIterator(
-	iterKind MVCCIterKind, opts IterOptions,
+	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
 ) (MVCCIterator, error) {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		iter, err := r.NewMVCCIterator(iterKind, opts)
+		iter, err := r.NewMVCCIterator(ctx, iterKind, opts)
 		r.Free()
 		if err != nil {
 			return nil, err
@@ -2713,7 +2881,7 @@ func (p *pebbleSnapshot) NewMVCCIterator(
 		return maybeWrapInUnsafeIter(iter), nil
 	}
 
-	iter, err := newPebbleIterator(p.snapshot, opts, StandardDurability, p.parent)
+	iter, err := newPebbleIterator(ctx, p.snapshot, opts, StandardDurability, p.parent)
 	if err != nil {
 		return nil, err
 	}
@@ -2721,8 +2889,10 @@ func (p *pebbleSnapshot) NewMVCCIterator(
 }
 
 // NewEngineIterator implements the Reader interface.
-func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) (EngineIterator, error) {
-	return newPebbleIterator(p.snapshot, opts, StandardDurability, p.parent)
+func (p pebbleSnapshot) NewEngineIterator(
+	ctx context.Context, opts IterOptions,
+) (EngineIterator, error) {
+	return newPebbleIterator(ctx, p.snapshot, opts, StandardDurability, p.parent)
 }
 
 // ConsistentIterators implements the Reader interface.
@@ -2747,7 +2917,129 @@ func (p *pebbleSnapshot) ScanInternal(
 ) error {
 	rawLower := EngineKey{Key: lower}.Encode()
 	rawUpper := EngineKey{Key: upper}.Encode()
-	return p.snapshot.ScanInternal(ctx, rawLower, rawUpper, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
+	// TODO(sumeer): set CategoryAndQoS.
+	return p.snapshot.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
+		visitRangeDel, visitRangeKey, visitSharedFile)
+}
+
+// pebbleEFOS represents an eventually file-only snapshot created using
+// NewEventuallyFileOnlySnapshot.
+type pebbleEFOS struct {
+	efos      *pebble.EventuallyFileOnlySnapshot
+	parent    *Pebble
+	keyRanges []roachpb.Span
+	closed    bool
+}
+
+var _ EventuallyFileOnlyReader = &pebbleEFOS{}
+
+// Close implements the Reader interface.
+func (p *pebbleEFOS) Close() {
+	_ = p.efos.Close()
+	p.closed = true
+}
+
+// Closed implements the Reader interface.
+func (p *pebbleEFOS) Closed() bool {
+	return p.closed
+}
+
+// MVCCIterate implements the Reader interface.
+func (p *pebbleEFOS) MVCCIterate(
+	ctx context.Context,
+	start, end roachpb.Key,
+	iterKind MVCCIterKind,
+	keyTypes IterKeyType,
+	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
+) error {
+	if iterKind == MVCCKeyAndIntentsIterKind {
+		r := wrapReader(p)
+		// Doing defer r.Free() does not inline.
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
+		r.Free()
+		return err
+	}
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
+}
+
+// WaitForFileOnly implements the EventuallyFileOnlyReader interface.
+func (p *pebbleEFOS) WaitForFileOnly(ctx context.Context) error {
+	return p.efos.WaitForFileOnlySnapshot(ctx, MaxEFOSWait)
+}
+
+// NewMVCCIterator implements the Reader interface.
+func (p *pebbleEFOS) NewMVCCIterator(
+	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
+) (MVCCIterator, error) {
+	// Check if the bounds fall within the EFOS' keyRanges. We can only do this
+	// check for non-prefix iterators as prefix iterators often don't specify
+	// any bounds.
+	if !opts.Prefix {
+		if opts.LowerBound == nil || opts.UpperBound == nil {
+			return nil, errors.AssertionFailedf("cannot create iterators on EFOS without bounds")
+		}
+		var found bool
+		boundSpan := roachpb.Span{Key: opts.LowerBound, EndKey: opts.UpperBound}
+		for i := range p.keyRanges {
+			if p.keyRanges[i].Contains(boundSpan) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, errors.AssertionFailedf("iterator bounds exceed eventually-file-only-snapshot key ranges: %s", boundSpan.String())
+		}
+	}
+	if iterKind == MVCCKeyAndIntentsIterKind {
+		r := wrapReader(p)
+		// Doing defer r.Free() does not inline.
+		iter, err := r.NewMVCCIterator(ctx, iterKind, opts)
+		r.Free()
+		if err != nil {
+			return nil, err
+		}
+		return maybeWrapInUnsafeIter(iter), nil
+	}
+
+	iter, err := newPebbleIterator(ctx, p.efos, opts, StandardDurability, p.parent)
+	if err != nil {
+		return nil, err
+	}
+	return maybeWrapInUnsafeIter(MVCCIterator(iter)), nil
+}
+
+// NewEngineIterator implements the Reader interface.
+func (p *pebbleEFOS) NewEngineIterator(
+	ctx context.Context, opts IterOptions,
+) (EngineIterator, error) {
+	return newPebbleIterator(ctx, p.efos, opts, StandardDurability, p.parent)
+}
+
+// ConsistentIterators implements the Reader interface.
+func (p *pebbleEFOS) ConsistentIterators() bool {
+	return true
+}
+
+// PinEngineStateForIterators implements the Reader interface.
+func (p *pebbleEFOS) PinEngineStateForIterators() error {
+	// Snapshot already pins state, so nothing to do.
+	return nil
+}
+
+// ScanInternal implements the Reader interface.
+func (p *pebbleEFOS) ScanInternal(
+	ctx context.Context,
+	lower, upper roachpb.Key,
+	visitPointKey func(key *pebble.InternalKey, value pebble.LazyValue, info pebble.IteratorLevel) error,
+	visitRangeDel func(start []byte, end []byte, seqNum uint64) error,
+	visitRangeKey func(start []byte, end []byte, keys []rangekey.Key) error,
+	visitSharedFile func(sst *pebble.SharedSSTMeta) error,
+) error {
+	rawLower := EngineKey{Key: lower}.Encode()
+	rawUpper := EngineKey{Key: upper}.Encode()
+	// TODO(sumeer): set CategoryAndQoS.
+	return p.efos.ScanInternal(ctx, sstable.CategoryAndQoS{}, rawLower, rawUpper, visitPointKey,
+		visitRangeDel, visitRangeKey, visitSharedFile)
 }
 
 // ExceedMaxSizeError is the error returned when an export request
@@ -2762,4 +3054,176 @@ var _ error = &ExceedMaxSizeError{}
 
 func (e *ExceedMaxSizeError) Error() string {
 	return fmt.Sprintf("export size (%d bytes) exceeds max size (%d bytes)", e.reached, e.maxSize)
+}
+
+// noUseAfterClose wraps a vfs.FS and ensures the filesystem is not used after
+// an Engine is closed. It's used only in test builds. It ensures that all files
+// are closed before the Engine is closed and that the vfs.FS is not used after
+// the Engine is closed.
+type noUseAfterClose struct {
+	fs        vfs.FS
+	openFiles atomic.Int32
+	closed    *bool
+}
+
+func (fs *noUseAfterClose) ensureStillOpen() {
+	if *fs.closed {
+		panic(errors.AssertionFailedf("engine is closed; the Engine-provided filesystem cannot be used after Close"))
+	}
+}
+
+type noUseAfterCloseFile struct {
+	file vfs.File
+	fs   *noUseAfterClose
+}
+
+func (f *noUseAfterCloseFile) Close() error {
+	f.fs.ensureStillOpen()
+	f.fs.openFiles.Add(-1)
+	return f.file.Close()
+}
+func (f *noUseAfterCloseFile) Read(p []byte) (n int, err error) {
+	f.fs.ensureStillOpen()
+	return f.file.Read(p)
+}
+func (f *noUseAfterCloseFile) ReadAt(p []byte, off int64) (n int, err error) {
+	f.fs.ensureStillOpen()
+	return f.file.ReadAt(p, off)
+}
+func (f *noUseAfterCloseFile) Write(p []byte) (n int, err error) {
+	f.fs.ensureStillOpen()
+	return f.file.Write(p)
+}
+func (f *noUseAfterCloseFile) WriteAt(p []byte, off int64) (n int, err error) {
+	f.fs.ensureStillOpen()
+	return f.file.WriteAt(p, off)
+}
+func (f *noUseAfterCloseFile) Preallocate(offset, length int64) error {
+	f.fs.ensureStillOpen()
+	return f.file.Preallocate(offset, length)
+}
+func (f *noUseAfterCloseFile) Stat() (os.FileInfo, error) {
+	f.fs.ensureStillOpen()
+	return f.file.Stat()
+}
+func (f *noUseAfterCloseFile) Sync() error {
+	f.fs.ensureStillOpen()
+	return f.file.Sync()
+}
+func (f *noUseAfterCloseFile) SyncTo(length int64) (fullSync bool, err error) {
+	f.fs.ensureStillOpen()
+	return f.file.SyncTo(length)
+}
+func (f *noUseAfterCloseFile) SyncData() error {
+	f.fs.ensureStillOpen()
+	return f.file.SyncData()
+}
+func (f *noUseAfterCloseFile) Prefetch(offset int64, length int64) error {
+	f.fs.ensureStillOpen()
+	return f.file.Prefetch(offset, length)
+}
+func (f *noUseAfterCloseFile) Fd() uintptr { return f.file.Fd() }
+
+var _ vfs.FS = &noUseAfterClose{}
+
+func (fs *noUseAfterClose) Create(name string) (vfs.File, error) {
+	fs.ensureStillOpen()
+	return fs.fs.Create(name)
+}
+
+func (fs *noUseAfterClose) Link(oldname, newname string) error {
+	fs.ensureStillOpen()
+	return fs.fs.Link(oldname, newname)
+}
+
+func (fs *noUseAfterClose) Open(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+	fs.ensureStillOpen()
+	f, err := fs.fs.Open(name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	fs.openFiles.Add(1)
+	return &noUseAfterCloseFile{fs: fs, file: f}, nil
+}
+
+func (fs *noUseAfterClose) OpenReadWrite(name string, opts ...vfs.OpenOption) (vfs.File, error) {
+	fs.ensureStillOpen()
+	f, err := fs.fs.OpenReadWrite(name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	fs.openFiles.Add(1)
+	return &noUseAfterCloseFile{fs: fs, file: f}, nil
+}
+
+func (fs *noUseAfterClose) OpenDir(name string) (vfs.File, error) {
+	fs.ensureStillOpen()
+	f, err := fs.fs.OpenDir(name)
+	if err != nil {
+		return nil, err
+	}
+	fs.openFiles.Add(1)
+	return &noUseAfterCloseFile{fs: fs, file: f}, nil
+}
+
+func (fs *noUseAfterClose) Remove(name string) error {
+	fs.ensureStillOpen()
+	return fs.fs.Remove(name)
+}
+
+func (fs *noUseAfterClose) RemoveAll(name string) error {
+	fs.ensureStillOpen()
+	return fs.fs.RemoveAll(name)
+}
+
+func (fs *noUseAfterClose) Rename(oldname, newname string) error {
+	fs.ensureStillOpen()
+	return fs.fs.Rename(oldname, newname)
+}
+
+func (fs *noUseAfterClose) ReuseForWrite(oldname, newname string) (vfs.File, error) {
+	fs.ensureStillOpen()
+	f, err := fs.fs.ReuseForWrite(oldname, newname)
+	if err != nil {
+		return nil, err
+	}
+	fs.openFiles.Add(1)
+	return &noUseAfterCloseFile{fs: fs, file: f}, nil
+}
+
+func (fs *noUseAfterClose) MkdirAll(dir string, perm os.FileMode) error {
+	fs.ensureStillOpen()
+	return fs.fs.MkdirAll(dir, perm)
+}
+
+func (fs *noUseAfterClose) Lock(name string) (io.Closer, error) {
+	fs.ensureStillOpen()
+	return fs.fs.Lock(name)
+}
+
+func (fs *noUseAfterClose) List(dir string) ([]string, error) {
+	fs.ensureStillOpen()
+	return fs.fs.List(dir)
+}
+
+func (fs *noUseAfterClose) Stat(name string) (os.FileInfo, error) {
+	fs.ensureStillOpen()
+	return fs.fs.Stat(name)
+}
+
+func (fs *noUseAfterClose) PathBase(path string) string {
+	return fs.fs.PathBase(path)
+}
+
+func (fs *noUseAfterClose) PathJoin(elem ...string) string {
+	return fs.fs.PathJoin(elem...)
+}
+
+func (fs *noUseAfterClose) PathDir(path string) string {
+	return fs.fs.PathDir(path)
+}
+
+func (fs *noUseAfterClose) GetDiskUsage(path string) (vfs.DiskUsage, error) {
+	fs.ensureStillOpen()
+	return fs.fs.GetDiskUsage(path)
 }

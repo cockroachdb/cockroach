@@ -28,7 +28,6 @@ func registerEncryption(r registry.Registry) {
 	// to test the correctness of encryption at rest.
 	runEncryption := func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		nodes := c.Spec().NodeCount
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, nodes))
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, nodes))
 
 		// Check that /_status/stores/local endpoint has encryption status.
@@ -89,6 +88,8 @@ func registerEncryption(r registry.Registry) {
 			Leases:            registry.MetamorphicLeases,
 			Owner:             registry.OwnerStorage,
 			Cluster:           r.MakeClusterSpec(n),
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runEncryption(ctx, t, c)
 			},

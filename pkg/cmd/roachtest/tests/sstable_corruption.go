@@ -32,7 +32,6 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 	corruptNodes := crdbNodes
 
 	t.Status("installing cockroach")
-	c.Put(ctx, t.Cockroach(), "./cockroach", crdbNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
 
 	{
@@ -178,11 +177,13 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 func registerSSTableCorruption(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:    "sstable-corruption/table",
-		Owner:   registry.OwnerStorage,
-		Cluster: r.MakeClusterSpec(3),
-		Leases:  registry.MetamorphicLeases,
-		Timeout: 2 * time.Hour,
+		Name:             "sstable-corruption/table",
+		Owner:            registry.OwnerStorage,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		Leases:           registry.MetamorphicLeases,
+		Timeout:          2 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSSTableCorruption(ctx, t, c)
 		},

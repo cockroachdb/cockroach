@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"strconv"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -286,6 +285,7 @@ func runPlanInsidePlan(
 
 	plannerCopy := *params.p
 	plannerCopy.curPlan.planComponents = *plan
+
 	// "Pausable portal" execution model is only applicable to the outer
 	// statement since we actually need to execute all inner plans to completion
 	// before we can produce any "outer" rows to be returned to the client, so
@@ -325,7 +325,7 @@ func runPlanInsidePlan(
 			recv,
 			&subqueryResultMemAcc,
 			false, /* skipDistSQLDiagramGeneration */
-			atomic.LoadUint32(&params.p.atomic.innerPlansMustUseLeafTxn) == 1,
+			params.p.mustUseLeafTxn(),
 		) {
 			return resultWriter.Err()
 		}
@@ -333,6 +333,12 @@ func runPlanInsidePlan(
 		// We don't have "inner" subqueries, so the apply join can only refer to
 		// the "outer" ones.
 		plannerCopy.curPlan.subqueryPlans = params.p.curPlan.subqueryPlans
+		// During cleanup, nil out the inner subquery plans before closing the plan
+		// components. Otherwise, we may inadvertently close nodes that are needed
+		// when executing the outer query.
+		defer func() {
+			plan.subqueryPlans = nil
+		}()
 	}
 
 	distributePlan := getPlanDistribution(
@@ -346,13 +352,16 @@ func runPlanInsidePlan(
 	evalCtx := evalCtxFactory()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
 	planCtx.stmtType = recv.stmtType
-	planCtx.mustUseLeafTxn = atomic.LoadUint32(&params.p.atomic.innerPlansMustUseLeafTxn) == 1
+	planCtx.mustUseLeafTxn = params.p.mustUseLeafTxn()
 
-	finishedSetupFn, cleanup := getFinishedSetupFn(&plannerCopy)
-	defer cleanup()
-	execCfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
-	)
+	// Wrap PlanAndRun in a function call so that we clean up immediately.
+	func() {
+		finishedSetupFn, cleanup := getFinishedSetupFn(&plannerCopy)
+		defer cleanup()
+		execCfg.DistSQLPlanner.PlanAndRun(
+			ctx, evalCtx, planCtx, plannerCopy.Txn(), plan.main, recv, finishedSetupFn,
+		)
+	}()
 
 	// Check if there was an error interacting with the resultWriter.
 	if recv.commErr != nil {
@@ -365,10 +374,13 @@ func runPlanInsidePlan(
 	evalCtxFactory2 := func(usedConcurrently bool) *extendedEvalContext {
 		return evalCtxFactory()
 	}
-
+	plannerCopy.autoCommit = false
 	execCfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
 		ctx, &plannerCopy, evalCtxFactory2, &plannerCopy.curPlan.planComponents, recv,
 	)
+	// We might have appended some cascades or checks to the plannerCopy, so we
+	// need to update the plan for cleanup purposes before proceeding.
+	*plan = plannerCopy.curPlan.planComponents
 	if recv.commErr != nil {
 		return recv.commErr
 	}

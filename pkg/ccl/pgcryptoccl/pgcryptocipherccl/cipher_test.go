@@ -9,6 +9,7 @@
 package pgcryptocipherccl_test
 
 import (
+	"crypto/aes"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/pgcryptoccl/pgcryptocipherccl"
@@ -43,6 +44,23 @@ func FuzzEncryptDecryptAES(f *testing.F) {
 		ciphertext, err := pgcryptocipherccl.Encrypt(plaintext, key, iv, "aes")
 		require.NoError(t, err)
 		decryptedCiphertext, err := pgcryptocipherccl.Decrypt(ciphertext, key, iv, "aes")
+		require.NoError(t, err)
+		require.Equal(t, plaintext, decryptedCiphertext)
+	})
+}
+
+func FuzzEncryptDecryptAESNoPadding(f *testing.F) {
+	for _, tc := range cipherTestCases {
+		f.Add(tc.plaintext, tc.key, tc.iv)
+	}
+	f.Fuzz(func(t *testing.T, plaintext []byte, key []byte, iv []byte) {
+		ciphertext, err := pgcryptocipherccl.Encrypt(plaintext, key, iv, "aes/pad:none")
+		if plaintextLength := len(plaintext); plaintextLength%aes.BlockSize != 0 {
+			require.ErrorIs(t, err, pgcryptocipherccl.ErrInvalidDataLength)
+			return
+		}
+		require.NoError(t, err)
+		decryptedCiphertext, err := pgcryptocipherccl.Decrypt(ciphertext, key, iv, "aes/pad:none")
 		require.NoError(t, err)
 		require.Equal(t, plaintext, decryptedCiphertext)
 	})

@@ -88,7 +88,7 @@ const (
 // threshold and the current GC TTL (true) or just based on the GC threshold
 // (false).
 var StrictGCEnforcement = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.gc_ttl.strict_enforcement.enabled",
 	"if true, fail to serve requests at timestamps below the TTL even if the data still exists",
 	true,
@@ -946,23 +946,27 @@ func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
 }
 
 // GetMinBytes gets the replica's minimum byte threshold.
-func (r *Replica) GetMinBytes() int64 {
+func (r *Replica) GetMinBytes(_ context.Context) int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.conf.RangeMinBytes
 }
 
 // GetMaxBytes gets the replica's maximum byte threshold.
-func (r *Replica) GetMaxBytes() int64 {
+func (r *Replica) GetMaxBytes(_ context.Context) int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.conf.RangeMaxBytes
 }
 
-// SetSpanConfig sets the replica's span config.
-func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
+// SetSpanConfig sets the replica's span config. It returns whether the change
+// to the span config was "significant". For significant changes, the caller
+// should queue up the span to all the relevant queues since they may not decide
+// to process this replica.
+func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	oldConf := r.mu.conf
 
 	if r.IsInitialized() && !r.mu.conf.IsEmpty() && !conf.IsEmpty() {
 		total := r.mu.state.Stats.Total()
@@ -984,11 +988,36 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) {
 			r.mu.largestPreviousMaxRangeSizeBytes = 0
 		}
 	}
-
 	if knobs := r.store.TestingKnobs(); knobs != nil && knobs.SetSpanConfigInterceptor != nil {
 		conf = knobs.SetSpanConfigInterceptor(r.descRLocked(), conf)
 	}
 	r.mu.conf, r.mu.spanConfigExplicitlySet = conf, true
+	return oldConf.HasConfigurationChange(conf)
+}
+
+// MaybeQueue attempts to check and queue against the subset of that are
+// impacted by changes to the SpanConfig. This should be called after any
+// changes to the span configs.
+func (r *Replica) MaybeQueue(ctx context.Context, now hlc.ClockTimestamp) {
+	r.store.splitQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, r, now)
+	})
+	r.store.mergeQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, r, now)
+	})
+	if EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled.Get(&r.store.GetStoreConfig().Settings.SV) {
+		r.store.mvccGCQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			h.MaybeAdd(ctx, r, now)
+		})
+	}
+	// The replicate queue has a relatively more expensive queue check
+	// (shouldQueue), because it scales with the number of stores, and
+	// performs more checks.
+	if EnqueueInReplicateQueueOnSpanConfigUpdateEnabled.Get(&r.store.GetStoreConfig().Settings.SV) {
+		r.store.replicateQueue.Async(ctx, "span config update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			h.MaybeAdd(ctx, r, now)
+		})
+	}
 }
 
 // IsScratchRange returns true if this is range is a scratch range (i.e.
@@ -1032,17 +1061,23 @@ func (r *Replica) IsQuiescent() bool {
 
 // DescAndSpanConfig returns the authoritative range descriptor as well
 // as the span config for the replica.
-func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig) {
+func (r *Replica) DescAndSpanConfig() (*roachpb.RangeDescriptor, *roachpb.SpanConfig) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.state.Desc, r.mu.conf
+	// This method is being removed shortly. We can't pass out a pointer to the
+	// underlying replica's SpanConfig.
+	conf := r.mu.conf
+	return r.mu.state.Desc, &conf
 }
 
-// SpanConfig returns the authoritative span config for the replica.
-func (r *Replica) SpanConfig() roachpb.SpanConfig {
+// LoadSpanConfig loads the authoritative span config for the replica.
+func (r *Replica) LoadSpanConfig(_ context.Context) (*roachpb.SpanConfig, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.conf
+	// This method is being removed shortly. We can't pass out a pointer to the
+	// underlying replica's SpanConfig.
+	conf := r.mu.conf
+	return &conf, nil
 }
 
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
@@ -1142,7 +1177,7 @@ func (r *Replica) GetGCHint() roachpb.GCHint {
 
 // ExcludeDataFromBackup returns whether the replica is to be excluded from a
 // backup.
-func (r *Replica) ExcludeDataFromBackup() bool {
+func (r *Replica) ExcludeDataFromBackup(_ context.Context) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.conf.ExcludeDataFromBackup

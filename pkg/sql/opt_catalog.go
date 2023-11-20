@@ -15,6 +15,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -358,7 +359,7 @@ func (oc *optCatalog) ResolveType(
 
 // ResolveFunction is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveFunction(
-	ctx context.Context, name *tree.UnresolvedName, path tree.SearchPath,
+	ctx context.Context, name tree.UnresolvedRoutineName, path tree.SearchPath,
 ) (*tree.ResolvedFunctionDefinition, error) {
 	return oc.planner.ResolveFunction(ctx, name, path)
 }
@@ -422,14 +423,24 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 	return oc.planner.CheckAnyPrivilege(ctx, desc)
 }
 
+// CheckExecutionPrivilege is part of the cat.Catalog interface.
+func (oc *optCatalog) CheckExecutionPrivilege(ctx context.Context, oid oid.Oid) error {
+	// If the required cluster version is not active, revert to pre-23.2
+	// behavior without any privilege checks.
+	activeVersion := oc.planner.ExecCfg().Settings.Version.ActiveVersion(ctx)
+	if !activeVersion.IsActive(clusterversion.V23_2_GrantExecuteToPublic) {
+		return nil
+	}
+	desc, err := oc.planner.FunctionDesc(ctx, oid)
+	if err != nil {
+		return errors.WithAssertionFailure(err)
+	}
+	return oc.planner.CheckPrivilege(ctx, desc, privilege.EXECUTE)
+}
+
 // HasAdminRole is part of the cat.Catalog interface.
 func (oc *optCatalog) HasAdminRole(ctx context.Context) (bool, error) {
 	return oc.planner.HasAdminRole(ctx)
-}
-
-// RequireAdminRole is part of the cat.Catalog interface.
-func (oc *optCatalog) RequireAdminRole(ctx context.Context, action string) error {
-	return oc.planner.RequireAdminRole(ctx, action)
 }
 
 // HasRoleOption is part of the cat.Catalog interface.
@@ -485,9 +496,9 @@ func (oc *optCatalog) fullyQualifiedNameWithTxn(
 		nil
 }
 
-// RoleExists is part of the cat.Catalog interface.
-func (oc *optCatalog) RoleExists(ctx context.Context, role username.SQLUsername) (bool, error) {
-	return RoleExists(ctx, oc.planner.InternalSQLTxn(), role)
+// CheckRoleExists is part of the cat.Catalog interface.
+func (oc *optCatalog) CheckRoleExists(ctx context.Context, role username.SQLUsername) error {
+	return oc.planner.CheckRoleExists(ctx, role)
 }
 
 // Optimizer is part of the cat.Catalog interface.

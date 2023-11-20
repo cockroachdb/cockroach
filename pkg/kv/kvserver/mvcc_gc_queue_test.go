@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -231,7 +232,7 @@ func TestMVCCGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
 			ms := enginepb.MVCCStats{
-				IntentCount: 1e9,
+				LockCount: 1e9,
 			}
 			if tc.mvccGC {
 				ms.ValBytes = 1e9
@@ -268,11 +269,11 @@ func newCachedWriteSimulator(t *testing.T) *cachedWriteSimulator {
 	cws.cache = map[gcTestCacheKey]gcTestCacheVal{
 		{enginepb.MVCCStats{LastUpdateNanos: 946684800000000000}, "1-1m0s-1.0 MiB"}: {
 			first: [cacheFirstLen]enginepb.MVCCStats{
-				{ContainsEstimates: 0, LastUpdateNanos: 946684800000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
-				{ContainsEstimates: 0, LastUpdateNanos: 946684801000000000, IntentAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
-				{ContainsEstimates: 0, LastUpdateNanos: 946684802000000000, IntentAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684800000000000, LockAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 23, KeyCount: 1, ValBytes: 1048581, ValCount: 1, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684801000000000, LockAge: 0, GCBytesAge: 0, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 35, KeyCount: 1, ValBytes: 2097162, ValCount: 2, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+				{ContainsEstimates: 0, LastUpdateNanos: 946684802000000000, LockAge: 0, GCBytesAge: 1048593, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 47, KeyCount: 1, ValBytes: 3145743, ValCount: 3, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
 			},
-			last: enginepb.MVCCStats{ContainsEstimates: 0, LastUpdateNanos: 946684860000000000, IntentAge: 0, GCBytesAge: 1856009610, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
+			last: enginepb.MVCCStats{ContainsEstimates: 0, LastUpdateNanos: 946684860000000000, LockAge: 0, GCBytesAge: 1856009610, LiveBytes: 1048604, LiveCount: 1, KeyBytes: 743, KeyCount: 1, ValBytes: 63963441, ValCount: 61, IntentBytes: 0, IntentCount: 0, SysBytes: 0, SysCount: 0, AbortSpanBytes: 0},
 		},
 	}
 	return &cws
@@ -304,7 +305,7 @@ func (cws *cachedWriteSimulator) multiKey(
 		Txn:   txn,
 		Stats: &eachMS,
 	}
-	if err := storage.MVCCPut(ctx, eng, key, ts, value, opts); err != nil {
+	if _, err := storage.MVCCPut(ctx, eng, key, ts, value, opts); err != nil {
 		t.Fatal(err)
 	}
 	for i := 1; i < numOps; i++ {
@@ -333,7 +334,7 @@ func (cws *cachedWriteSimulator) singleKeySteady(
 		for i := 0; i < qps; i++ {
 			now := initialNow.Add(elapsed.Nanoseconds(), int32(i))
 
-			if err := storage.MVCCPut(ctx, eng, key, now, value, storage.MVCCWriteOptions{Stats: ms}); err != nil {
+			if _, err := storage.MVCCPut(ctx, eng, key, now, value, storage.MVCCWriteOptions{Stats: ms}); err != nil {
 				t.Fatal(err)
 			}
 			if len(firstSl) < cacheFirstLen {
@@ -528,9 +529,10 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 			if rng.Float32() > 0.5 {
 				value.SetBytes(make([]byte, 20))
 			}
-			require.NoError(t, storage.MVCCPut(ctx, rw, key,
+			_, err := storage.MVCCPut(ctx, rw, key,
 				hlc.Timestamp{WallTime: time.Millisecond.Nanoseconds() * int64(i)},
-				value, storage.MVCCWriteOptions{Stats: &ms}))
+				value, storage.MVCCWriteOptions{Stats: &ms})
+			require.NoError(t, err)
 		}
 		return ms, hlc.Timestamp{WallTime: time.Millisecond.Nanoseconds() * int64(valCount)}
 	}
@@ -541,7 +543,8 @@ func TestFullRangeDeleteHeuristic(t *testing.T) {
 	}
 	deleteWithPoints := func(rw storage.ReadWriter, delTime hlc.Timestamp, ms *enginepb.MVCCStats) {
 		for _, key := range keys {
-			require.NoError(t, storage.MVCCPut(ctx, rw, key, delTime, roachpb.Value{}, storage.MVCCWriteOptions{Stats: ms}))
+			_, err := storage.MVCCPut(ctx, rw, key, delTime, roachpb.Value{}, storage.MVCCWriteOptions{Stats: ms})
+			require.NoError(t, err)
 		}
 	}
 
@@ -660,10 +663,7 @@ func TestGCScoreWithHint(t *testing.T) {
 	}
 }
 
-// TestMVCCGCQueueProcess creates test data in the range over various time
-// scales and verifies that scan queue process properly GCs test data.
-func TestMVCCGCQueueProcess(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+func testMVCCGCQueueProcessImpl(t *testing.T, useEfos bool) {
 	defer log.Scope(t).Close(t)
 	storage.DisableMetamorphicSimpleValueEncoding(t)
 	ctx := context.Background()
@@ -672,18 +672,18 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
 
-	const intentAgeThreshold = 2 * time.Hour
+	const lockAgeThreshold = 2 * time.Hour
 	const txnCleanupThreshold = time.Hour
 
 	tc.manualClock.Advance(48 * 60 * 60 * 1e9) // 2d past the epoch
 	now := tc.Clock().Now().WallTime
 
-	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                     // 2d old (add one nanosecond so we're not using zero timestamp)
-	ts2 := makeTS(now-25*60*60*1e9, 0)                         // GC will occur at time=25 hours
-	ts2m1 := ts2.Prev()                                        // ts2 - 1 so we have something not right at the GC time
-	ts3 := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)     // 2h old
-	ts4 := makeTS(now-(intentAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
-	ts5 := makeTS(now-1e9, 0)                                  // 1s old
+	ts1 := makeTS(now-2*24*60*60*1e9+1, 0)                   // 2d old (add one nanosecond so we're not using zero timestamp)
+	ts2 := makeTS(now-25*60*60*1e9, 0)                       // GC will occur at time=25 hours
+	ts2m1 := ts2.Prev()                                      // ts2 - 1 so we have something not right at the GC time
+	ts3 := makeTS(now-lockAgeThreshold.Nanoseconds(), 0)     // 2h old
+	ts4 := makeTS(now-(lockAgeThreshold.Nanoseconds()-1), 0) // 2h-1ns old
+	ts5 := makeTS(now-1e9, 0)                                // 1s old
 	mkKey := func(suff string) roachpb.Key {
 		var k roachpb.Key
 		k = append(k, keys.ScratchRangeMin...)
@@ -863,8 +863,13 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 
 	// Call Run with dummy functions to get current Info.
 	gcInfo, err := func() (gc.Info, error) {
-		snap := tc.repl.store.TODOEngine().NewSnapshot()
+		var snap storage.Reader
 		desc := tc.repl.Desc()
+		if useEfos {
+			snap = tc.repl.store.TODOEngine().NewEventuallyFileOnlySnapshot(rditer.MakeReplicatedKeySpans(desc))
+		} else {
+			snap = tc.repl.store.TODOEngine().NewSnapshot()
+		}
 		defer snap.Close()
 
 		conf, err := cfg.GetSpanConfigForKey(ctx, desc.StartKey)
@@ -875,11 +880,11 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		now := tc.Clock().Now()
 		newThreshold := gc.CalculateThreshold(now, conf.TTL())
 		return gc.Run(ctx, desc, snap, now, newThreshold, gc.RunOptions{
-			IntentAgeThreshold:  intentAgeThreshold,
+			LockAgeThreshold:    lockAgeThreshold,
 			TxnCleanupThreshold: txnCleanupThreshold,
 		},
 			conf.TTL(), gc.NoopGCer{},
-			func(ctx context.Context, intents []roachpb.Intent) error {
+			func(ctx context.Context, locks []roachpb.Lock) error {
 				return nil
 			},
 			func(ctx context.Context, txn *roachpb.Transaction) error {
@@ -905,6 +910,9 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		t.Errorf("expected total range value size: %d bytes; got %d bytes", expectedVersionsRangeValBytes,
 			gcInfo.AffectedVersionsRangeValBytes)
 	}
+
+	settings := tc.repl.ClusterSettings()
+	storage.UseEFOS.Override(ctx, &settings.SV, useEfos)
 
 	// Process through a scan queue.
 	mgcq := newMVCCGCQueue(tc.store)
@@ -946,7 +954,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 	// However, because the GC processing pushes transactions and
 	// resolves intents asynchronously, we use a SucceedsSoon loop.
 	testutils.SucceedsSoon(t, func() error {
-		kvs, err := storage.Scan(tc.store.TODOEngine(), key1, keys.MaxKey, 0)
+		kvs, err := storage.Scan(context.Background(), tc.store.TODOEngine(), key1, keys.MaxKey, 0)
 		if err != nil {
 			return err
 		}
@@ -968,6 +976,17 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		t.Log("success")
 		return nil
 	})
+}
+
+// TestMVCCGCQueueProcess creates test data in the range over various time
+// scales and verifies that scan queue process properly GCs test data.
+func TestMVCCGCQueueProcess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	for _, useEfos := range []bool{false, true} {
+		t.Run(fmt.Sprintf("use_efos=%v", useEfos), func(t *testing.T) {
+			testMVCCGCQueueProcessImpl(t, useEfos)
+		})
+	}
 }
 
 func TestMVCCGCQueueTransactionTable(t *testing.T) {
@@ -1251,8 +1270,8 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		newTransaction("txn1", roachpb.Key("0-0"), 1, tc.Clock()),
 		newTransaction("txn2", roachpb.Key("1-0"), 1, tc.Clock()),
 	}
-	intentAgeThreshold := gc.IntentAgeThreshold.Get(&tc.repl.store.ClusterSettings().SV)
-	intentResolveTS := makeTS(now-intentAgeThreshold.Nanoseconds(), 0)
+	lockAgeThreshold := gc.LockAgeThreshold.Get(&tc.repl.store.ClusterSettings().SV)
+	intentResolveTS := makeTS(now-lockAgeThreshold.Nanoseconds(), 0)
 	txns[0].ReadTimestamp = intentResolveTS
 	txns[0].WriteTimestamp = intentResolveTS
 	// The MinTimestamp is used by pushers that don't find a transaction record to
@@ -1295,19 +1314,17 @@ func TestMVCCGCQueueIntentResolution(t *testing.T) {
 		meta := &enginepb.MVCCMetadata{}
 		// The range is specified using only global keys, since the implementation
 		// may use an intentInterleavingIter.
-		return tc.store.TODOEngine().MVCCIterate(
-			keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
-			func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-				if !kv.Key.IsValue() {
-					if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
-						return err
-					}
-					if meta.Txn != nil {
-						return errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
-					}
+		return tc.store.TODOEngine().MVCCIterate(context.Background(), keys.LocalMax, roachpb.KeyMax, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+			if !kv.Key.IsValue() {
+				if err := protoutil.Unmarshal(kv.Value, meta); err != nil {
+					return err
 				}
-				return nil
-			})
+				if meta.Txn != nil {
+					return errors.Errorf("non-nil Txn after GC for key %s", kv.Key)
+				}
+			}
+			return nil
+		})
 	})
 }
 

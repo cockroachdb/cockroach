@@ -39,8 +39,9 @@ const (
 	ServiceTypeUI ServiceType = "ui"
 )
 
-// SystemTenantName is default system tenant name.
-const SystemTenantName = "system"
+// SystemInterfaceName is the virtual cluster name to use to access the
+// system interface. (a.k.a. "system tenant")
+const SystemInterfaceName = "system"
 
 type ServiceMode string
 
@@ -56,8 +57,9 @@ const SharedPriorityClass = 1000
 
 // ServiceDesc describes a service running on a node.
 type ServiceDesc struct {
-	// TenantName is the name of the tenant that owns the service.
-	TenantName string
+	// VirtualClusterName is the name of the virtual cluster that owns
+	// the service.
+	VirtualClusterName string
 	// ServiceType is the type of service.
 	ServiceType ServiceType
 	// ServiceMode is the mode of the service.
@@ -88,15 +90,18 @@ var localClusterPortCache struct {
 
 // serviceDNSName returns the DNS name for a service in the standard SRV form.
 func serviceDNSName(
-	dnsProvider vm.DNSProvider, tenantName string, serviceType ServiceType, clusterName string,
+	dnsProvider vm.DNSProvider,
+	virtualClusterName string,
+	serviceType ServiceType,
+	clusterName string,
 ) string {
 	// An SRV record name must adhere to the standard form:
 	// _service._proto.name.
-	return fmt.Sprintf("_%s-%s._tcp.%s.%s", tenantName, serviceType, clusterName, dnsProvider.Domain())
+	return fmt.Sprintf("_%s-%s._tcp.%s.%s", virtualClusterName, serviceType, clusterName, dnsProvider.Domain())
 }
 
-// serviceNameComponents returns the tenant name and service type from a DNS
-// name in the standard SRV form.
+// serviceNameComponents returns the virtual cluster name and service
+// type from a DNS name in the standard SRV form.
 func serviceNameComponents(name string) (string, ServiceType, error) {
 	nameParts := strings.Split(name, ".")
 	if len(nameParts) < 2 {
@@ -122,23 +127,26 @@ func serviceNameComponents(name string) (string, ServiceType, error) {
 	return serviceName[:splitIndex], serviceType, nil
 }
 
-// DiscoverServices discovers services running on the given nodes. Services
-// matching the tenant name and service type are returned and can be filtered by
-// passing predicates. It's possible that multiple services can be returned for
-// the given parameters if instances of the same tenant and type are running on
-// any of the nodes.
+// DiscoverServices discovers services running on the given nodes.
+// Services matching the virtual cluster name and service type are
+// returned and can be filtered by passing predicates. It's possible
+// that multiple services can be returned for the given parameters if
+// instances of the same virtual cluster and type are running on any of the
+// nodes.
 func (c *SyncedCluster) DiscoverServices(
-	tenantName string, serviceType ServiceType, predicates ...ServicePredicate,
+	ctx context.Context,
+	virtualClusterName string,
+	serviceType ServiceType,
+	predicates ...ServicePredicate,
 ) (ServiceDescriptors, error) {
-	// If no tenant name is specified, use the system tenant.
-	if tenantName == "" {
-		tenantName = SystemTenantName
+	// If no VC name is specified, use the system interface.
+	if virtualClusterName == "" {
+		virtualClusterName = SystemInterfaceName
 	}
 	mu := syncutil.Mutex{}
 	records := make([]vm.DNSRecord, 0)
 	err := vm.FanOutDNS(c.VMs, func(dnsProvider vm.DNSProvider, _ vm.List) error {
-		service := fmt.Sprintf("%s-%s", tenantName, string(serviceType))
-		r, lookupErr := dnsProvider.LookupSRVRecords(service, "tcp", c.Name)
+		r, lookupErr := dnsProvider.LookupSRVRecords(ctx, serviceDNSName(dnsProvider, virtualClusterName, serviceType, c.Name))
 		if lookupErr != nil {
 			return lookupErr
 		}
@@ -161,24 +169,51 @@ func (c *SyncedCluster) DiscoverServices(
 // no services are found, it returns a service descriptor with the default port
 // for the service type.
 func (c *SyncedCluster) DiscoverService(
-	node Node, tenantName string, serviceType ServiceType, tenantInstance int,
+	ctx context.Context,
+	node Node,
+	virtualClusterName string,
+	serviceType ServiceType,
+	sqlInstance int,
 ) (ServiceDesc, error) {
+	// We first try to discover an external service for the virtual
+	// cluster name provided on the requested node. Note that we filter
+	// by `ServiceModeExternal` for explicitness: shared-process virtual
+	// clusters have a fixed, sentinel node	(`sharedProcessVirtualClusterNode`).
+	// They are handled in the logic below, when this call to
+	// `DiscoverServices` returns an empty collection.
+	//
+	// This call should return service descriptors for the storage
+	// service and for external-process virtual clusters.
 	services, err := c.DiscoverServices(
-		tenantName, serviceType, ServiceNodePredicate(node), ServiceInstancePredicate(tenantInstance),
+		ctx, virtualClusterName, serviceType,
+		ServiceNodePredicate(node), ServiceModePredicate(ServiceModeExternal), ServiceInstancePredicate(sqlInstance),
 	)
 	if err != nil {
 		return ServiceDesc{}, err
 	}
-	// If no services are found matching the criteria, attempt to discover a
-	// service for the system tenant, and assume the service is shared.
-	if len(services) == 0 {
+
+	isSystemInterface := virtualClusterName == "" || virtualClusterName == SystemInterfaceName
+	// If no external services are found matching the criteria, attempt
+	// to discover a a shared service.
+	if len(services) == 0 && !isSystemInterface {
+		// At this point, we know that we are searching for a
+		// shared-process virtual cluster. Find the corresponding system
+		// service, if any.
 		services, err = c.DiscoverServices(
-			SystemTenantName, serviceType, ServiceNodePredicate(node),
+			ctx, SystemInterfaceName, serviceType, ServiceNodePredicate(node),
 		)
 		if err != nil {
 			return ServiceDesc{}, err
 		}
+
+		// Update the system service to point to the virtual cluster
+		// requested.
+		for j := range services {
+			services[j].VirtualClusterName = virtualClusterName
+			services[j].ServiceMode = ServiceModeShared
+		}
 	}
+
 	// Finally, fall back to the default ports if no services are found. This is
 	// useful for backwards compatibility with clusters that were created before
 	// the introduction of service discovery, or without a DNS provider.
@@ -194,27 +229,29 @@ func (c *SyncedCluster) DiscoverService(
 			return ServiceDesc{}, errors.Newf("invalid service type: %s", serviceType)
 		}
 		return ServiceDesc{
-			ServiceType: serviceType,
-			ServiceMode: ServiceModeShared,
-			TenantName:  tenantName,
-			Node:        node,
-			Port:        port,
-			Instance:    0,
+			ServiceType:        serviceType,
+			ServiceMode:        ServiceModeShared,
+			VirtualClusterName: virtualClusterName,
+			Node:               node,
+			Port:               port,
+			Instance:           0,
 		}, nil
 	}
 	return services[0], err
 }
 
-// MapServices discovers all service types for a given tenant and instance and
-// maps it by node and service type
-func (c *SyncedCluster) MapServices(tenantName string, instance int) (NodeServiceMap, error) {
+// MapServices discovers all service types for a given virtual cluster
+// and instance and maps it by node and service type.
+func (c *SyncedCluster) MapServices(
+	ctx context.Context, virtualClusterName string, instance int,
+) (NodeServiceMap, error) {
 	nodeFilter := ServiceNodePredicate(c.Nodes...)
 	instanceFilter := ServiceInstancePredicate(instance)
-	sqlServices, err := c.DiscoverServices(tenantName, ServiceTypeSQL, nodeFilter, instanceFilter)
+	sqlServices, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL, nodeFilter, instanceFilter)
 	if err != nil {
 		return nil, err
 	}
-	uiServices, err := c.DiscoverServices(tenantName, ServiceTypeUI, nodeFilter, instanceFilter)
+	uiServices, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeUI, nodeFilter, instanceFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +269,7 @@ func (c *SyncedCluster) MapServices(tenantName string, instance int) (NodeServic
 // RegisterServices registers services with the DNS provider. This function is
 // lenient and will not return an error if no DNS provider is available to
 // register the service.
-func (c *SyncedCluster) RegisterServices(services ServiceDescriptors) error {
+func (c *SyncedCluster) RegisterServices(ctx context.Context, services ServiceDescriptors) error {
 	servicesByDNSProvider := make(map[string]ServiceDescriptors)
 	for _, desc := range services {
 		dnsProvider := c.VMs[desc.Node-1].DNSProvider
@@ -245,7 +282,7 @@ func (c *SyncedCluster) RegisterServices(services ServiceDescriptors) error {
 		return vm.ForDNSProvider(dnsProviderName, func(dnsProvider vm.DNSProvider) error {
 			records := make([]vm.DNSRecord, 0)
 			for _, desc := range servicesByDNSProvider[dnsProviderName] {
-				name := serviceDNSName(dnsProvider, desc.TenantName, desc.ServiceType, c.Name)
+				name := serviceDNSName(dnsProvider, desc.VirtualClusterName, desc.ServiceType, c.Name)
 				priority := 0
 				if desc.ServiceMode == ServiceModeShared {
 					priority = SharedPriorityClass
@@ -258,7 +295,7 @@ func (c *SyncedCluster) RegisterServices(services ServiceDescriptors) error {
 				}
 				records = append(records, vm.CreateSRVRecord(name, srvData))
 			}
-			err := dnsProvider.CreateRecords(records...)
+			err := dnsProvider.CreateRecords(ctx, records...)
 			if err != nil {
 				return err
 			}
@@ -296,11 +333,19 @@ func ServiceNodePredicate(nodes ...Node) ServicePredicate {
 	}
 }
 
-// ServiceInstancePredicate returns a ServicePredicate that match on the provided
-// instance.
+// ServiceInstancePredicate returns a ServicePredicate that matches on
+// the provided instance.
 func ServiceInstancePredicate(instance int) ServicePredicate {
 	return func(descriptor ServiceDesc) bool {
 		return descriptor.Instance == instance
+	}
+}
+
+// ServiceModePredicate returns a ServicePredicate that matches on the
+// provided service mode.
+func ServiceModePredicate(serviceMode ServiceMode) ServicePredicate {
+	return func(descriptor ServiceDesc) bool {
+		return descriptor.ServiceMode == serviceMode
 	}
 }
 
@@ -405,17 +450,17 @@ func (c *SyncedCluster) dnsRecordsToServiceDescriptors(
 		if data.Priority >= SharedPriorityClass {
 			serviceMode = ServiceModeShared
 		}
-		tenantName, serviceType, err := serviceNameComponents(record.Name)
+		virtualClusterName, serviceType, err := serviceNameComponents(record.Name)
 		if err != nil {
 			return nil, err
 		}
 		ports = append(ports, ServiceDesc{
-			TenantName:  tenantName,
-			ServiceType: serviceType,
-			ServiceMode: serviceMode,
-			Port:        int(data.Port),
-			Instance:    int(data.Weight),
-			Node:        dnsNameToNode[data.Target],
+			VirtualClusterName: virtualClusterName,
+			ServiceType:        serviceType,
+			ServiceMode:        serviceMode,
+			Port:               int(data.Port),
+			Instance:           int(data.Weight),
+			Node:               dnsNameToNode[data.Target],
 		})
 	}
 	return ports, nil

@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -48,7 +47,6 @@ func TestTableRollback(t *testing.T) {
 	tt := s.ApplicationLayer()
 	codec, sv := tt.Codec(), &tt.ClusterSettings().SV
 	execCfg := tt.ExecutorConfig().(sql.ExecutorConfig)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, sv, true)
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `CREATE DATABASE IF NOT EXISTS test`)
@@ -318,12 +316,12 @@ func TestRevertGCThreshold(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	kvDB := tc.Server(0).DB()
+	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
 
 	req := &kvpb.RevertRangeRequest{
-		RequestHeader: kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+		RequestHeader: kvpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(codec), EndKey: codec.TenantEndKey()},
 		TargetTime:    hlc.Timestamp{WallTime: -1},
 	}
 	_, pErr := kv.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)

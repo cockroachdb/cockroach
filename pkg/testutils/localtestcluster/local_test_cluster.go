@@ -154,7 +154,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 
 	cfg.RPCContext.NodeID.Set(ctx, nodeID)
 	clusterID := cfg.RPCContext.StorageClusterID
-	ltc.Gossip = gossip.New(ambient, clusterID, nc, ltc.stopper, metric.NewRegistry(), roachpb.Locality{}, zonepb.DefaultZoneConfigRef())
+	ltc.Gossip = gossip.New(ambient, clusterID, nc, ltc.stopper, metric.NewRegistry(), roachpb.Locality{})
 	var err error
 	ltc.Eng, err = storage.Open(
 		ctx,
@@ -199,13 +199,11 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		Stopper:                 ltc.stopper,
 		Clock:                   cfg.Clock,
 		Storage:                 liveness.NewKVStorage(cfg.DB),
-		Gossip:                  cfg.Gossip,
+		Cache:                   liveness.NewCache(cfg.Gossip, cfg.Clock, cfg.Settings, cfg.NodeDialer),
 		LivenessThreshold:       active,
 		RenewalDuration:         renewal,
-		Settings:                cfg.Settings,
 		HistogramWindowInterval: cfg.HistogramWindowInterval,
 		Engines:                 []storage.Engine{ltc.Eng},
-		NodeDialer:              cfg.NodeDialer,
 	})
 	liveness.TimeUntilNodeDead.Override(ctx, &cfg.Settings.SV, liveness.TestTimeUntilNodeDead)
 	nodeCountFn := func() int {
@@ -280,7 +278,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		ctx,
 		ltc.Eng,
 		initialValues,
-		clusterversion.TestingBinaryVersion,
+		clusterversion.Latest.Version(),
 		1, /* numStores */
 		splits,
 		ltc.Clock.PhysicalNow(),

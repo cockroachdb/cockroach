@@ -884,10 +884,16 @@ func TestPlanDiagramReplicationStream(t *testing.T) {
       "core": {
         "title": "StreamIngestionData/1",
         "details": [
-          "Partitions",
-          "n1: [{a-b}]",
-          "n2: [{d-e}]",
-          "n3: [{f1-g1} {f2-g2} {f3-g3}] and 1 more spans",
+          "Partitions:",
+          "Source node 1, spans:",
+          "{a-b}",
+          "Source node 2, spans:",
+          "{d-e}",
+          "Source node 3, spans:",
+          "{f1-g1}",
+          "{f2-g2}",
+          "{f3-g3}",
+          "and 1 more spans",
           "and 1 more partitions"
         ]
       },
@@ -931,5 +937,65 @@ func TestProcessorsImplementDiagramCellType(t *testing.T) {
 	pcu := reflect.ValueOf(ProcessorCoreUnion{})
 	for i := 0; i < pcu.NumField(); i++ {
 		require.Implements(t, (*diagramCellType)(nil), pcu.Field(i).Interface())
+	}
+}
+
+func TestChangeAggregatorSpec(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		name            string
+		aggregatorSpec  ChangeAggregatorSpec
+		expectedWatches []string
+	}{
+		{
+			name:            "no watches",
+			aggregatorSpec:  ChangeAggregatorSpec{},
+			expectedWatches: []string{""},
+		},
+		{
+			name: "limit",
+			aggregatorSpec: ChangeAggregatorSpec{
+				Watches: []ChangeAggregatorSpec_Watch{
+					{
+						Span: roachpb.Span{Key: roachpb.Key("a")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("b")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("c")},
+					},
+				},
+			},
+			expectedWatches: []string{"Watches [3]: a, b, c"},
+		},
+		{
+			name: "overlimit",
+			aggregatorSpec: ChangeAggregatorSpec{
+				Watches: []ChangeAggregatorSpec_Watch{
+					{
+						Span: roachpb.Span{Key: roachpb.Key("a")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("b")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("c")},
+					},
+					{
+						Span: roachpb.Span{Key: roachpb.Key("d")},
+					},
+				},
+			},
+			expectedWatches: []string{"Watches [4]: a, b, c..."},
+		},
+	}
+
+	for _, td := range testData {
+		t.Run(td.name, func(t *testing.T) {
+			_, details := td.aggregatorSpec.summary()
+			require.Equal(t, td.expectedWatches, details)
+		})
 	}
 }

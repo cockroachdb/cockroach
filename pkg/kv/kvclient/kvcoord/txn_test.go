@@ -422,7 +422,7 @@ func TestTxnReadCommittedPerStatementReadSnapshot(t *testing.T) {
 			incrementKey()
 
 			if step {
-				require.NoError(t, txn1.Step(ctx))
+				require.NoError(t, txn1.Step(ctx, true /* allowReadTimestampStep */))
 			}
 
 			// Read the key twice in the same batch, to demonstrate that regardless of
@@ -1044,9 +1044,9 @@ func TestTxnContinueAfterCputError(t *testing.T) {
 }
 
 // Test that a transaction can be used after a locking request returns a
-// LockConflictError. This is not generally allowed for other errors, but
-// a LockConflictError is special.
-func TestTxnContinueAfterLockConflictError(t *testing.T) {
+// WriteIntentError. This is not generally allowed for other errors, but
+// a WriteIntentError is special.
+func TestTxnContinueAfterWriteIntentError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1062,7 +1062,7 @@ func TestTxnContinueAfterLockConflictError(t *testing.T) {
 	b.Header.WaitPolicy = lock.WaitPolicy_Error
 	b.Put("a", "c")
 	err := txn.Run(ctx, b)
-	require.IsType(t, &kvpb.LockConflictError{}, err)
+	require.IsType(t, &kvpb.WriteIntentError{}, err)
 
 	require.NoError(t, txn.Put(ctx, "a'", "c"))
 	require.NoError(t, txn.Commit(ctx))
@@ -1126,9 +1126,9 @@ func TestTxnWaitPolicies(t *testing.T) {
 			// Should return error immediately, without blocking.
 			err := <-errorC
 			require.NotNil(t, err)
-			lcErr := new(kvpb.LockConflictError)
+			lcErr := new(kvpb.WriteIntentError)
 			require.True(t, errors.As(err, &lcErr))
-			require.Equal(t, kvpb.LockConflictError_REASON_WAIT_POLICY, lcErr.Reason)
+			require.Equal(t, kvpb.WriteIntentError_REASON_WAIT_POLICY, lcErr.Reason)
 		}
 
 		// SkipLocked wait policy.
@@ -1203,9 +1203,9 @@ func TestTxnErrorWaitPolicyWithOldVersionPushTouch(t *testing.T) {
 		// Should return error immediately, without blocking, regardless of priority.
 		err := <-errorC
 		require.NotNil(t, err)
-		lcErr := new(kvpb.LockConflictError)
+		lcErr := new(kvpb.WriteIntentError)
 		require.True(t, errors.As(err, &lcErr))
-		require.Equal(t, kvpb.LockConflictError_REASON_WAIT_POLICY, lcErr.Reason)
+		require.Equal(t, kvpb.WriteIntentError_REASON_WAIT_POLICY, lcErr.Reason)
 
 		require.NoError(t, txn.Commit(ctx))
 	})
@@ -1227,9 +1227,9 @@ func TestTxnLockTimeout(t *testing.T) {
 	b.Get(key)
 	err := s.DB.Run(ctx, &b)
 	require.NotNil(t, err)
-	lcErr := new(kvpb.LockConflictError)
+	lcErr := new(kvpb.WriteIntentError)
 	require.True(t, errors.As(err, &lcErr))
-	require.Equal(t, kvpb.LockConflictError_REASON_LOCK_TIMEOUT, lcErr.Reason)
+	require.Equal(t, kvpb.WriteIntentError_REASON_LOCK_TIMEOUT, lcErr.Reason)
 }
 
 // TestTxnReturnsWriteTooOldErrorOnConflictingDeleteRange tests that if two

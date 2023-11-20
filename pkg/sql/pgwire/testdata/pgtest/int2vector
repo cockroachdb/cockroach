@@ -1,0 +1,33 @@
+# This test validates that int2vector produces an array
+# of int2 objects. Previously CRDB incorrectly was returning
+# int8 values as observed in #111907, which would cause problems
+# for binary pgwire clients.
+send
+Query {"String": "DROP TABLE IF EXISTS t"}
+Query {"String": "CREATE TABLE t (a int primary key, b text)"}
+----
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "select i.indoption from pg_index i join pg_class c on i.indrelid = c.oid where c.relname = 't';"}
+Bind {"ParameterFormatCodes": [0], "ResultFormatCodes": [1]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"0000000100000000000000150000000100000001000000020002"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

@@ -15,7 +15,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -311,7 +310,6 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 	case core.InvertedJoiner != nil:
 	case core.BackupData != nil:
 		return errBackupDataWrap
-	case core.SplitAndScatter != nil:
 	case core.RestoreData != nil:
 	case core.Filterer != nil:
 	case core.StreamIngestionData != nil:
@@ -836,9 +834,6 @@ func NewColOperator(
 			var resultTypes []*types.T
 			if flowCtx.EvalCtx.SessionData().DirectColumnarScansEnabled {
 				canUseDirectScan := func() bool {
-					if !flowCtx.EvalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1_KVDirectColumnarScans) {
-						return false
-					}
 					// We currently don't use the direct scans if TraceKV is
 					// enabled (due to not being able to tell the KV server
 					// about it). One idea would be to include this boolean into
@@ -1886,7 +1881,7 @@ func (r *renderExprCountVisitor) VisitPost(expr tree.Expr) tree.Expr {
 }
 
 var renderWrappingRowCountThreshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.vectorize_render_wrapping.max_row_count",
 	"determines the maximum number of estimated rows that flow through the render "+
 		"expressions up to which we handle those renders by wrapping a row-by-row processor",
@@ -1895,7 +1890,7 @@ var renderWrappingRowCountThreshold = settings.RegisterIntSetting(
 )
 
 var renderWrappingRenderCountThreshold = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.vectorize_render_wrapping.min_render_count",
 	"determines the minimum number of render expressions for which we fall "+
 		"back to handling renders by wrapping a row-by-row processor",

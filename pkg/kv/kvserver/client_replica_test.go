@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
@@ -473,7 +474,7 @@ func testTxnReadWithinUncertaintyInterval(t *testing.T, observedTS bool, readOp 
 	now := s.Clock().Now()
 	maxOffset := s.Clock().MaxOffset().Nanoseconds()
 	require.NotZero(t, maxOffset)
-	txn := roachpb.MakeTransaction("test", key, isolation.Serializable, 1, now, maxOffset, int32(s.SQLInstanceID()))
+	txn := roachpb.MakeTransaction("test", key, isolation.Serializable, 1, now, maxOffset, int32(s.SQLInstanceID()), 0)
 	require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
 	require.Len(t, txn.ObservedTimestamps, 0)
 
@@ -625,7 +626,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 	// Create a new writer transaction.
 	maxOffset := clocks[0].MaxOffset().Nanoseconds()
 	require.NotZero(t, maxOffset)
-	writerTxn := roachpb.MakeTransaction("test_writer", keyA, isolation.Serializable, 1, clocks[0].Now(), maxOffset, int32(tc.Servers[0].NodeID()))
+	writerTxn := roachpb.MakeTransaction("test_writer", keyA, isolation.Serializable, 1, clocks[0].Now(), maxOffset, int32(tc.Servers[0].NodeID()), 0)
 
 	// Write to key A and key B in the writer transaction.
 	for _, key := range []roachpb.Key{keyA, keyB} {
@@ -670,7 +671,7 @@ func testTxnReadWithinUncertaintyIntervalAfterIntentResolution(
 	//
 	// NB: we use writerTxn.MinTimestamp instead of clocks[1].Now() so that a
 	// stray clock update doesn't influence the reader's read timestamp.
-	readerTxn := roachpb.MakeTransaction("test_reader", keyA, isolation.Serializable, 1, writerTxn.MinTimestamp, maxOffset, int32(tc.Servers[1].NodeID()))
+	readerTxn := roachpb.MakeTransaction("test_reader", keyA, isolation.Serializable, 1, writerTxn.MinTimestamp, maxOffset, int32(tc.Servers[1].NodeID()), 0)
 	require.True(t, readerTxn.ReadTimestamp.Less(writerTxn.WriteTimestamp))
 	require.False(t, readerTxn.GlobalUncertaintyLimit.Less(writerTxn.WriteTimestamp))
 
@@ -826,7 +827,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	now := clocks[1].Now()
 	maxOffset := clocks[1].MaxOffset().Nanoseconds()
 	require.NotZero(t, maxOffset)
-	txn := roachpb.MakeTransaction("test", keyB, isolation.Serializable, 1, now, maxOffset, int32(tc.Servers[1].SQLInstanceID()))
+	txn := roachpb.MakeTransaction("test", keyB, isolation.Serializable, 1, now, maxOffset, int32(tc.Servers[1].SQLInstanceID()), 0)
 	require.True(t, txn.ReadTimestamp.Less(txn.GlobalUncertaintyLimit))
 	require.Len(t, txn.ObservedTimestamps, 0)
 
@@ -1013,8 +1014,8 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 
 		// Create two identical transactions. The first one will perform a read to a
 		// store before the merge, the second will only read after the merge.
-		txn := roachpb.MakeTransaction("txn1", keyA, isolation.Serializable, 1, now, maxOffset, instanceId)
-		txn2 := roachpb.MakeTransaction("txn2", keyA, isolation.Serializable, 1, now, maxOffset, instanceId)
+		txn := roachpb.MakeTransaction("txn1", keyA, isolation.Serializable, 1, now, maxOffset, instanceId, 0)
+		txn2 := roachpb.MakeTransaction("txn2", keyA, isolation.Serializable, 1, now, maxOffset, instanceId, 0)
 
 		// Simulate a read which will cause the observed time to be set to now
 		resp, pErr := kv.SendWrappedWith(ctx, tc.Servers[1].DistSenderI().(kv.Sender), kvpb.Header{Txn: &txn}, getArgs(keyA))
@@ -1434,23 +1435,36 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 		}
 	}
 
-	l.tc = testcluster.StartTestCluster(t, 2,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-							TestingEvalFilter: testingEvalFilter,
-						},
-						TestingProposalFilter:                testingProposalFilter,
-						LeaseTransferBlockedOnExtensionEvent: leaseTransferBlockedOnExtensionEvent,
+	const numNodes = 2
+	serverArgs := make(map[int]base.TestServerArgs, numNodes)
+	for i := 0; i < numNodes; i++ {
+		st := cluster.MakeClusterSettings()
+		// leaseTransferTest tests manually control the clock and may induce clock
+		// jumps. Disable the suspect timer to prevent nodes from becoming suspect
+		// and being excluded as lease transfer targets when we bump clocks.
+		liveness.TimeAfterNodeSuspect.Override(context.Background(), &st.SV, 0)
+
+		serverArgs[i] = base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						TestingEvalFilter: testingEvalFilter,
 					},
-					Server: &server.TestingKnobs{
-						WallClock: l.manualClock,
-					},
+					TestingProposalFilter:                testingProposalFilter,
+					LeaseTransferBlockedOnExtensionEvent: leaseTransferBlockedOnExtensionEvent,
+				},
+				Server: &server.TestingKnobs{
+					WallClock: l.manualClock,
 				},
 			},
+		}
+	}
+
+	l.tc = testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: serverArgs,
 		})
 	key := l.tc.ScratchRangeWithExpirationLease(t)
 	l.tc.AddVotersOrFatal(t, key, l.tc.Target(1))
@@ -1993,7 +2007,7 @@ func TestRangeLocalUncertaintyLimitAfterNewLease(t *testing.T) {
 	}
 
 	// Start a transaction using node2 as a gateway.
-	txn := roachpb.MakeTransaction("test", keyA, isolation.Serializable, 1, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds(), int32(tc.Servers[1].SQLInstanceID()))
+	txn := roachpb.MakeTransaction("test", keyA, isolation.Serializable, 1, tc.Servers[1].Clock().Now(), tc.Servers[1].Clock().MaxOffset().Nanoseconds(), int32(tc.Servers[1].SQLInstanceID()), 0)
 	// Simulate a read to another range on node2 by setting the observed timestamp.
 	txn.UpdateObservedTimestamp(2, tc.Servers[1].Clock().NowAsClockTimestamp())
 
@@ -2391,7 +2405,7 @@ func TestRemoveLeaseholder(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 		})
 	defer tc.Stopper().Stop(context.Background())
-	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
+	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
 
 	// We start with having the range under test on (1,2,3).
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
@@ -2713,7 +2727,7 @@ func TestClearRange(t *testing.T) {
 		t.Helper()
 		start := prefix
 		end := prefix.PrefixEnd()
-		kvs, err := storage.Scan(store.TODOEngine(), start, end, 0 /* maxRows */)
+		kvs, err := storage.Scan(context.Background(), store.TODOEngine(), start, end, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -4142,7 +4156,11 @@ func TestStrictGCEnforcement(t *testing.T) {
 				for i := 0; i < tc.NumServers(); i++ {
 					s := tc.Server(i)
 					_, r := getFirstStoreReplica(t, s, tableKey)
-					if c := r.SpanConfig(); c.TTL().Seconds() != (time.Duration(exp) * time.Second).Seconds() {
+					c, err := r.LoadSpanConfig(ctx)
+					if err != nil {
+						return err
+					}
+					if c.TTL().Seconds() != (time.Duration(exp) * time.Second).Seconds() {
 						return errors.Errorf("expected %d, got %f", exp, c.TTL().Seconds())
 					}
 				}
@@ -4470,7 +4488,11 @@ func TestProposalOverhead(t *testing.T) {
 			if repl == nil {
 				return errors.New("scratch range replica not found")
 			}
-			if repl.SpanConfig().RangefeedEnabled {
+			conf, err := repl.LoadSpanConfig(ctx)
+			if err != nil {
+				return err
+			}
+			if conf.RangefeedEnabled {
 				return errors.New("waiting for span configs to apply")
 			}
 			return nil
@@ -4700,16 +4722,18 @@ func TestTenantID(t *testing.T) {
 	t.Run("(1) initial set", func(t *testing.T) {
 		// Ensure that a normal range has the system tenant.
 		{
-			_, repl := getFirstStoreReplica(t, tc.Server(0), bootstrap.TestingUserTableDataMin())
-			ri := repl.State(ctx)
-			require.Equal(t, roachpb.SystemTenantID.ToUint64(), ri.TenantID, "%v", repl)
+			_, repl := getFirstStoreReplica(t, tc.Server(0), bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
+			tenantId, valid := repl.TenantID()
+			require.True(t, valid)
+			require.Equal(t, roachpb.SystemTenantID, tenantId, "%v", repl)
 		}
 		// Ensure that a range with a tenant prefix has the proper tenant ID.
 		tc.SplitRangeOrFatal(t, tenant2Prefix)
 		{
 			_, repl := getFirstStoreReplica(t, tc.Server(0), tenant2Prefix)
-			ri := repl.State(ctx)
-			require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
+			tenantId, valid := repl.TenantID()
+			require.True(t, valid)
+			require.Equal(t, tenant2, tenantId, "%v", repl)
 		}
 	})
 	t.Run("(2) not set before snapshot", func(t *testing.T) {
@@ -4722,7 +4746,6 @@ func TestTenantID(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					BeforeSnapshotSSTIngestion: func(
 						snapshot kvserver.IncomingSnapshot,
-						requestType kvserverpb.SnapshotRequest_Type,
 						strings []string,
 					) error {
 						if snapshot.Desc.RangeID == repl.RangeID {
@@ -4761,19 +4784,20 @@ func TestTenantID(t *testing.T) {
 
 		uninitializedRepl, _, err := tc.Server(1).GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, repl.RangeID)
 		require.NoError(t, err)
-		ri := uninitializedRepl.State(ctx)
-		require.Equal(t, uint64(0), ri.TenantID)
+		_, valid := uninitializedRepl.TenantID()
+		require.False(t, valid)
 		close(blockSnapshot)
 		require.NoError(t, <-addReplicaErr)
-		ri = uninitializedRepl.State(ctx) // now initialized
-		require.Equal(t, tenant2.ToUint64(), ri.TenantID)
+		tenantID, valid := uninitializedRepl.TenantID() // now initialized
+		require.True(t, valid)
+		require.Equal(t, tenant2, tenantID)
 	})
 	t.Run("(3) upon restart", func(t *testing.T) {
 		tc.StopServer(0)
 		tc.AddAndStartServer(t, stickySpecTestServerArgs)
 		_, repl := getFirstStoreReplica(t, tc.Server(2), tenant2Prefix)
-		ri := repl.State(ctx)
-		require.Equal(t, tenant2.ToUint64(), ri.TenantID, "%v", repl)
+		tenantID, _ := repl.TenantID() // now initialized
+		require.Equal(t, tenant2, tenantID, "%v", repl)
 	})
 
 }
@@ -4801,7 +4825,6 @@ func TestUninitializedMetric(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				BeforeSnapshotSSTIngestion: func(
 					snapshot kvserver.IncomingSnapshot,
-					_ kvserverpb.SnapshotRequest_Type,
 					_ []string,
 				) error {
 					if snapshot.Desc.RangeID == repl.RangeID {
@@ -4956,6 +4979,67 @@ func setupDBAndWriteAAndB(t *testing.T) (serverutils.TestServerInterface, *kv.DB
 	return s, db
 }
 
+// TestSharedLocksBasic tests basic shared lock semantics. In particular, it
+// tests multiple shared locks are compatible with each other, but exclusive
+// locks aren't.
+func TestSharedLocksBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db := setupDBAndWriteAAndB(t)
+	defer s.Stopper().Stop(ctx)
+
+	testutils.RunTrueAndFalse(t, "guaranteed-durability", func(t *testing.T, guaranteedDurability bool) {
+		txn1 := db.NewTxn(ctx, "txn1")
+		txn2 := db.NewTxn(ctx, "txn2")
+
+		dur := kvpb.BestEffort
+		if guaranteedDurability {
+			dur = kvpb.GuaranteedDurability
+		}
+
+		res, err := txn1.ScanForShare(ctx, "a", "c", 0, dur)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(res))
+
+		_, err = txn2.ReverseScanForShare(ctx, "a", "c", 0, dur)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(res))
+
+		ch := make(chan struct{}, 1) // we won't pull off the channel
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			txn3 := db.NewTxn(ctx, "txn3")
+			res, err := txn3.GetForUpdate(ctx, "a", dur)
+			require.NoError(t, err)
+			ch <- struct{}{}
+			require.NotNil(t, res.Value)
+			require.NoError(t, txn3.Commit(ctx))
+		}()
+
+		ensureGetForUpdateIsBlocked := func() {
+			select {
+			case <-ch:
+				t.Fatal("expected GetForUpdate request to block")
+			case <-time.After(10 * time.Millisecond):
+				// sleep for a bit to allow the GetForUpdate to block.
+			}
+		}
+		ensureGetForUpdateIsBlocked()
+		require.NoError(t, txn1.Commit(ctx))
+		// Finalizing just one of the shared locking transactions shouldn't unblock
+		// the GetForUpdate.
+		ensureGetForUpdateIsBlocked()
+		require.NoError(t, txn2.Rollback(ctx))
+
+		wg.Wait()
+	})
+}
+
 // TestOptimisticEvalRetry tests the case where an optimistically evaluated
 // scan encounters contention from a concurrent txn holding unreplicated
 // exclusive locks, and therefore re-evaluates pessimistically, and eventually
@@ -4969,7 +5053,7 @@ func TestOptimisticEvalRetry(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	txn1 := db.NewTxn(ctx, "locking txn")
-	_, err := txn1.ScanForUpdate(ctx, "a", "c", 0)
+	_, err := txn1.ScanForUpdate(ctx, "a", "c", 0, kvpb.BestEffort)
 	require.NoError(t, err)
 
 	readDone := make(chan error)
@@ -5024,7 +5108,7 @@ func TestOptimisticEvalNoContention(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	txn1 := db.NewTxn(ctx, "locking txn")
-	_, err := txn1.ScanForUpdate(ctx, "b", "c", 0)
+	_, err := txn1.ScanForUpdate(ctx, "b", "c", 0, kvpb.BestEffort)
 	require.NoError(t, err)
 
 	readDone := make(chan error)
@@ -5151,7 +5235,7 @@ func BenchmarkOptimisticEvalForLocks(b *testing.B) {
 					go func() {
 						for {
 							txn := db.NewTxn(ctx, "locking txn")
-							_, err = txn.ScanForUpdate(ctx, lockStart, "c", 0)
+							_, err = txn.ScanForUpdate(ctx, lockStart, "c", 0, kvpb.BestEffort)
 							require.NoError(b, err)
 							time.Sleep(5 * time.Millisecond)
 							// Normally, it would do a write here, but we don't bother.

@@ -35,11 +35,13 @@ import (
 // elastic IO tokens, the overload is limited.
 func registerElasticIO(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:      "admission-control/elastic-io",
-		Owner:     registry.OwnerAdmissionControl,
-		Timeout:   time.Hour,
-		Benchmark: true,
+		Name:             "admission-control/elastic-io",
+		Owner:            registry.OwnerAdmissionControl,
+		Timeout:          time.Hour,
+		Benchmark:        true,
+		CompatibleClouds: registry.AllExceptAWS,
 		// TODO(sumeer): Reduce to weekly after working well.
+		Suites: registry.Suites(registry.Nightly),
 		// Tags:      registry.Tags(`weekly`),
 		// Second node is solely for Prometheus.
 		Cluster:         r.MakeClusterSpec(2, spec.CPU(8)),
@@ -66,7 +68,6 @@ func registerElasticIO(r registry.Registry) {
 			require.NoError(t, err)
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, crdbNodes))
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workAndPromNode))
 			startOpts := option.DefaultStartOptsNoBackups()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,

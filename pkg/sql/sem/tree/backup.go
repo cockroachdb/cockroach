@@ -40,13 +40,14 @@ const (
 
 // BackupOptions describes options for the BACKUP execution.
 type BackupOptions struct {
-	CaptureRevisionHistory     Expr
-	IncludeAllSecondaryTenants Expr
-	EncryptionPassphrase       Expr
-	Detached                   *DBool
-	EncryptionKMSURI           StringOrPlaceholderOptList
-	IncrementalStorage         StringOrPlaceholderOptList
-	ExecutionLocality          Expr
+	CaptureRevisionHistory          Expr
+	IncludeAllSecondaryTenants      Expr
+	EncryptionPassphrase            Expr
+	Detached                        *DBool
+	EncryptionKMSURI                StringOrPlaceholderOptList
+	IncrementalStorage              StringOrPlaceholderOptList
+	ExecutionLocality               Expr
+	UpdatesClusterMonitoringMetrics Expr
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -148,6 +149,7 @@ type RestoreOptions struct {
 	UnsafeRestoreIncompatibleVersion bool
 	ExecutionLocality                Expr
 	ExperimentalOnline               bool
+	RemoveRegions                    bool
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -199,15 +201,9 @@ func (node *Restore) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.AsOf)
 	}
 	if !node.Options.IsDefault() {
-		if ctx.HasFlags(FmtHideConstants) {
-			ctx.WriteString(" WITH OPTIONS (")
-			ctx.FormatNode(&node.Options)
-			ctx.WriteString(")")
-		} else {
-			ctx.WriteString(" WITH OPTIONS (")
-			ctx.FormatNode(&node.Options)
-			ctx.WriteString(")")
-		}
+		ctx.WriteString(" WITH OPTIONS (")
+		ctx.FormatNode(&node.Options)
+		ctx.WriteString(")")
 	}
 }
 
@@ -319,6 +315,12 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("include_all_virtual_clusters = ")
 		ctx.FormatNode(o.IncludeAllSecondaryTenants)
 	}
+
+	if o.UpdatesClusterMonitoringMetrics != nil {
+		maybeAddSep()
+		ctx.WriteString("updates_cluster_monitoring_metrics = ")
+		ctx.FormatNode(o.UpdatesClusterMonitoringMetrics)
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -372,6 +374,13 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		o.IncludeAllSecondaryTenants = other.IncludeAllSecondaryTenants
 	}
 
+	if o.UpdatesClusterMonitoringMetrics != nil {
+		if other.UpdatesClusterMonitoringMetrics != nil {
+			return errors.New("updates_cluster_monitoring_metrics option specified multiple times")
+		}
+	} else {
+		o.UpdatesClusterMonitoringMetrics = other.UpdatesClusterMonitoringMetrics
+	}
 	return nil
 }
 
@@ -379,12 +388,13 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 func (o BackupOptions) IsDefault() bool {
 	options := BackupOptions{}
 	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
-		o.Detached == options.Detached &&
+		(o.Detached == nil || o.Detached == DBoolFalse) &&
 		cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.ExecutionLocality == options.ExecutionLocality &&
-		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants
+		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
+		o.UpdatesClusterMonitoringMetrics == options.UpdatesClusterMonitoringMetrics
 }
 
 // Format implements the NodeFormatter interface.
@@ -504,20 +514,19 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	}
 
 	if o.ExecutionLocality != nil {
-		if ctx.HasFlags(FmtHideConstants) {
-			maybeAddSep()
-			ctx.WriteString("execution locality = ")
-			ctx.FormatNode(o.ExecutionLocality)
-		} else {
-			maybeAddSep()
-			ctx.WriteString("execution locality = ")
-			ctx.FormatNode(o.ExecutionLocality)
-		}
+		maybeAddSep()
+		ctx.WriteString("execution locality = ")
+		ctx.FormatNode(o.ExecutionLocality)
 	}
 
 	if o.ExperimentalOnline {
 		maybeAddSep()
 		ctx.WriteString("experimental deferred copy")
+	}
+
+	if o.RemoveRegions {
+		maybeAddSep()
+		ctx.WriteString("remove_regions")
 	}
 }
 
@@ -591,7 +600,8 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 	}
 
 	if o.SkipLocalitiesCheck {
-		if other.SkipLocalitiesCheck {
+		// If RemoveRegions is true, SkipLocalitiesCheck should also be true
+		if other.SkipLocalitiesCheck && !other.RemoveRegions {
 			return errors.New("skip_localities_check specified multiple times")
 		}
 	} else {
@@ -673,6 +683,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.ExperimentalOnline = other.ExperimentalOnline
 	}
 
+	if o.RemoveRegions {
+		if other.RemoveRegions {
+			return errors.New("remove_regions specified multiple times")
+		}
+	} else {
+		o.RemoveRegions = other.RemoveRegions
+	}
+
 	return nil
 }
 
@@ -699,7 +717,8 @@ func (o RestoreOptions) IsDefault() bool {
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
 		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
 		o.ExecutionLocality == options.ExecutionLocality &&
-		o.ExperimentalOnline == options.ExperimentalOnline
+		o.ExperimentalOnline == options.ExperimentalOnline &&
+		o.RemoveRegions == options.RemoveRegions
 }
 
 // BackupTargetList represents a list of targets.

@@ -16,7 +16,6 @@ go_binary(
 go_test(
     name = "label-merged-pr_test",
     srcs = ["main_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":label-merged-pr_lib"],
     deps = [
         "//pkg/testutils/skip",

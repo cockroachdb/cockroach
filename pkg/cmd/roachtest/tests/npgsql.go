@@ -25,6 +25,9 @@ import (
 )
 
 var npgsqlReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
+
+// WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
+// This is used by docs automation to produce a list of supported versions for ORM's.
 var npgsqlSupportedTag = "v7.0.2"
 
 // This test runs npgsql's full test suite against a single cockroach node.
@@ -39,8 +42,7 @@ func registerNpgsql(r registry.Registry) {
 		}
 		node := c.Node(1)
 		t.Status("setting up cockroach")
-		c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
+		c.Start(ctx, t.L(), option.DefaultStartOptsInMemory(), install.MakeClusterSettings(install.SecureOption(true)), c.All())
 
 		version, err := fetchCockroachVersion(ctx, t.L(), c, node[0])
 		if err != nil {
@@ -76,7 +78,7 @@ func registerNpgsql(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo snap install dotnet-sdk --classic && \
+			`sudo snap install dotnet-sdk --channel=7.0/stable --classic && \
 sudo snap alias dotnet-sdk.dotnet dotnet && \
 sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
 		); err != nil {
@@ -166,11 +168,13 @@ echo '%s' | git apply --ignore-whitespace -`, npgsqlPatch),
 	}
 
 	r.Add(registry.TestSpec{
-		Name:    "npgsql",
-		Owner:   registry.OwnerSQLFoundations,
-		Cluster: r.MakeClusterSpec(1),
-		Leases:  registry.MetamorphicLeases,
-		Tags:    registry.Tags(`default`, `driver`),
+		Name:             "npgsql",
+		Owner:            registry.OwnerSQLFoundations,
+		Cluster:          r.MakeClusterSpec(1),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly, registry.Driver),
+		Tags:             registry.Tags(`default`, `driver`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNpgsql(ctx, t, c)
 		},

@@ -198,7 +198,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			{"enable_implicit_transaction_for_batch_statements", "off"},
 			{"enable_insert_fast_path", "off"},
 			{"enable_multiple_modifications_of_table", "on"},
-			{"enable_zigzag_join", "off"},
+			{"enable_zigzag_join", "on"},
 			{"expect_and_ignore_not_visible_columns_in_copy", "on"},
 			{"intervalstyle", "iso_8601"},
 			{"large_full_scan_rows", "2000"},
@@ -357,16 +357,17 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		defer r.Exec(t, "SET ROLE root")
 		r.Exec(t, "CREATE TABLE permissions (k PRIMARY KEY) AS SELECT 1")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM permissions")
-		// Check that we see two errors about missing privileges as warnings
-		// (one for the cluster settings and another for the table statistics).
+		// Check that we see an error about missing privileges for the cluster
+		// settings as a warnings. (Since `test` is the table owner, it already
+		// has permissions on the table itself.)
 		var numErrors int
 		for _, row := range rows {
-			if strings.HasPrefix(row[0], "-- error") {
+			if strings.HasPrefix(row[0], "-- error getting cluster settings:") {
 				numErrors++
 			}
 		}
-		if numErrors != 2 {
-			t.Fatalf("didn't see 2 errors in %v", rows)
+		if numErrors != 1 {
+			t.Fatalf("didn't see 1 error in %v", rows)
 		}
 		checkBundle(
 			t, fmt.Sprint(rows), "permission" /* tableName */, nil /* contentCheck */, true, /* expectErrors */

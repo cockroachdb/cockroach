@@ -6,6 +6,7 @@ go_library(
     name = "jobspb",
     srcs = [
         "jobs.go",
+        "schedule.go",
         "wrap.go",
     ],
     embed = [":jobspb_go_proto"],
@@ -75,7 +76,6 @@ go_proto_library(
 go_test(
     name = "jobspb_test",
     srcs = ["wrap_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         ":jobspb",
         "@com_github_stretchr_testify//assert",

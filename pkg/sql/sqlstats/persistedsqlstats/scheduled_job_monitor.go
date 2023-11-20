@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -146,7 +147,7 @@ func (j *jobMonitor) getSchedule(
 		return nil, errScheduleNotFound
 	}
 
-	scheduledJobID := int64(tree.MustBeDInt(row[0]))
+	scheduledJobID := jobspb.ScheduleID(tree.MustBeDInt(row[0]))
 
 	sj, err = jobs.ScheduledJobTxn(txn).Load(ctx, scheduledjobs.ProdJobSchedulerEnv, scheduledJobID)
 	if err != nil {

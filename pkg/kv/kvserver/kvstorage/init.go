@@ -101,7 +101,7 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	//
 	// We use an EngineIterator to ensure that there are no keys that cannot be
 	// parsed as MVCCKeys (e.g. lock table keys) in the engine.
-	iter, err := eng.NewEngineIterator(storage.IterOptions{
+	iter, err := eng.NewEngineIterator(ctx, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		UpperBound: roachpb.KeyMax,
 	})
@@ -166,7 +166,7 @@ func IterateIDPrefixKeys(
 ) error {
 	rangeID := roachpb.RangeID(1)
 	// NB: Range-ID local keys have no versions and no intents.
-	iter, err := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+	iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		UpperBound: keys.LocalRangeIDPrefix.PrefixEnd().AsRawKey(),
 	})
 	if err != nil {
@@ -506,7 +506,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 		}
 
 		// Migrate into RaftReplicaID. This migration can be removed once the
-		// BinaryMinSupportedVersion is >= 23.1, and we can assert that
+		// MinSupportedVersion is >= 23.1, and we can assert that
 		// repl.ReplicaID != 0 always holds.
 
 		if descReplicaID != 0 {

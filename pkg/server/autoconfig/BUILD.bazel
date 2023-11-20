@@ -13,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/autoconfig",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/security/username",
@@ -37,7 +38,6 @@ go_test(
         "main_test.go",
         "task_markers_test.go",
     ],
-    args = ["-test.timeout=295s"],
     deps = [
         ":autoconfig",
         "//pkg/base",

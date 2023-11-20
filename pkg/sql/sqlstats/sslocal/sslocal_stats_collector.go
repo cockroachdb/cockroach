@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // StatsCollector is used to collect statement and transaction statistics
@@ -106,8 +105,9 @@ func (s *StatsCollector) EndTransaction(
 		s.ApplicationStats,
 	)
 
+	// Avoid taking locks if no stats are discarded.
 	if discardedStats > 0 {
-		log.Warningf(ctx, "%d statement statistics discarded due to memory limit", discardedStats)
+		s.flushTarget.MaybeLogDiscardMessage(ctx)
 	}
 
 	s.ApplicationStats.Free(ctx)

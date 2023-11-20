@@ -17,7 +17,6 @@ go_library(
         "//pkg/cloud/externalconn",
         "//pkg/cloud/externalconn/connectionpb",
         "//pkg/cloud/externalconn/utils",
-        "//pkg/clusterversion",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -51,7 +50,6 @@ go_test(
         "aws_kms_test.go",
         "s3_storage_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":amazon"],
     exec_properties = {
         "dockerNetwork": "standard",

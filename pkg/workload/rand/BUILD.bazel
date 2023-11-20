@@ -25,7 +25,6 @@ go_test(
     name = "rand_test",
     size = "small",
     srcs = ["rand_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":rand"],
     deps = [
         "//pkg/base",

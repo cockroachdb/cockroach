@@ -432,6 +432,7 @@ func (r *Replica) propose(
 	if err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx)); err != nil {
 		return kvpb.NewError(err)
 	}
+	r.store.metrics.RaftCommandsProposed.Inc(1)
 	return nil
 }
 
@@ -1491,7 +1492,9 @@ func (r *Replica) refreshProposalsLocked(
 			r.cleanupFailedProposalLocked(p)
 			p.finishApplication(ctx, makeProposalResultErr(
 				kvpb.NewAmbiguousResultError(err)))
+			continue
 		}
+		r.store.metrics.RaftCommandsReproposed.Inc(1)
 	}
 }
 
@@ -2622,7 +2625,7 @@ func ComputeRaftLogSize(
 ) (int64, error) {
 	prefix := keys.RaftLogPrefix(rangeID)
 	prefixEnd := prefix.PrefixEnd()
-	ms, err := storage.ComputeStats(reader, prefix, prefixEnd, 0 /* nowNanos */)
+	ms, err := storage.ComputeStats(ctx, reader, prefix, prefixEnd, 0 /* nowNanos */)
 	if err != nil {
 		return 0, err
 	}
@@ -2709,7 +2712,8 @@ func (r *Replica) printRaftTail(
 	end := keys.RaftLogPrefix(r.RangeID).PrefixEnd()
 
 	// NB: raft log does not have intents.
-	it, err := r.store.TODOEngine().NewEngineIterator(storage.IterOptions{LowerBound: start, UpperBound: end})
+	it, err := r.store.TODOEngine().NewEngineIterator(
+		ctx, storage.IterOptions{LowerBound: start, UpperBound: end})
 	if err != nil {
 		return "", err
 	}

@@ -142,7 +142,6 @@ func TestDataDriven(t *testing.T) {
 			switch d.Cmd {
 			case "initialize":
 				secondaryTenant := spanConfigTestCluster.InitializeTenant(ctx, tenantID)
-				spanConfigTestCluster.AllowSecondaryTenantToSetZoneConfigurations(t, tenantID)
 				spanConfigTestCluster.EnsureTenantCanSetZoneConfigurationsOrFatal(t, secondaryTenant)
 
 			case "exec-sql":

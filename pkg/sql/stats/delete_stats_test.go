@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -671,6 +672,8 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t) // slow test
+
 	var params base.TestServerArgs
 	params.ScanMaxIdleTime = time.Millisecond // speed up MVCC GC queue scans
 	params.DefaultTestTenant = base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109380)
@@ -679,7 +682,7 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	runner := sqlutils.MakeSQLRunner(sqlDB)
 
 	// Poll for MVCC GC more frequently.
-	systemDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t, ""))
+	systemDB := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
 	systemDB.Exec(t, "SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';")
 
 	// Disable auto stats so that it doesn't interfere.
@@ -687,8 +690,8 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	// Cached protected timestamp state delays MVCC GC, update it every second.
 	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';")
 
-	if s.StartedDefaultTestTenant() {
-		systemDB.Exec(t, "ALTER TENANT ALL SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
+	if s.TenantController().StartedDefaultTestTenant() {
+		systemDB.Exec(t, "SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true")
 		// Block until we see that zone configs are enabled.
 		testutils.SucceedsSoon(t, func() error {
 			var enabled bool
@@ -705,10 +708,12 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
 		// Lower the garbage collection interval to speed up the test.
 		runner.Exec(t, "SET CLUSTER SETTING sql.stats.garbage_collection_interval = '1s';")
-		// Create a table with short TTL and collect stats on it.
+		// Create the table and collect stats on it. Set a short TTL interval after
+		// the stats collection to ensure that the stats job doesn't exceed the gc
+		// threshold and fail.
 		runner.Exec(t, "CREATE TABLE t (k PRIMARY KEY) AS SELECT 1;")
-		runner.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;")
 		runner.Exec(t, "ANALYZE t;")
+		runner.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;")
 
 		r := runner.QueryRow(t, "SELECT 't'::regclass::oid")
 		var tableID int
@@ -743,9 +748,11 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 		const numTables = 5
 		countStatisticsQuery := `SELECT count(*) FROM system.table_statistics WHERE "tableID"  IN (`
 		for i := 1; i <= numTables; i++ {
+			// Analyze the table before setting the gc.ttl to avoid hitting the gc
+			// threshold.
 			runner.Exec(t, fmt.Sprintf("CREATE TABLE t%d (k PRIMARY KEY) AS SELECT 1;", i))
-			runner.Exec(t, fmt.Sprintf("ALTER TABLE t%d CONFIGURE ZONE USING gc.ttlseconds = 1;", i))
 			runner.Exec(t, fmt.Sprintf("ANALYZE t%d;", i))
+			runner.Exec(t, fmt.Sprintf("ALTER TABLE t%d CONFIGURE ZONE USING gc.ttlseconds = 1;", i))
 			r := runner.QueryRow(t, fmt.Sprintf("SELECT 't%d'::regclass::oid", i))
 			var tableID int
 			r.Scan(&tableID)

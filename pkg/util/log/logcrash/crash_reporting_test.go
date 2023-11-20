@@ -87,7 +87,7 @@ Error types: (1) *runtime.TypeAssertionError`,
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -109,7 +109,7 @@ Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *runtime.TypeA
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -141,7 +141,7 @@ Error types: (1) *safedetails.withSafeDetails (2) *runtime.TypeAssertionError`,
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -161,7 +161,7 @@ Error types: (1) *withstack.withStack (2) *errutil.leafError`,
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -197,7 +197,7 @@ Error types: (1) *os.LinkError (2) *safedetails.withSafeDetails (3) logcrash.lea
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -210,7 +210,7 @@ Wraps: (3) attached stack trace
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -229,7 +229,7 @@ Wraps: (7) attached stack trace
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -262,7 +262,7 @@ Error types: (1) *net.OpError (2) logcrash.leafErr`,
   | 	...crash_reporting_test.go:NN
   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   | 	...crash_reporting_test.go:NN
-  | runtime.doInit
+  | runtime.doInit1
   | 	...proc.go:NN
   | runtime.doInit
   | 	...proc.go:NN
@@ -278,7 +278,7 @@ Wraps: (2) secondary error attachment
   |   | 	...crash_reporting_test.go:NN
   |   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   |   | 	...crash_reporting_test.go:NN
-  |   | runtime.doInit
+  |   | runtime.doInit1
   |   | 	...proc.go:NN
   |   | runtime.doInit
   |   | 	...proc.go:NN
@@ -297,7 +297,7 @@ Wraps: (2) secondary error attachment
   |   | 	...crash_reporting_test.go:NN
   |   | github.com/cockroachdb/cockroach/pkg/util/log/logcrash.init
   |   | 	...crash_reporting_test.go:NN
-  |   | runtime.doInit
+  |   | runtime.doInit1
   |   | 	...proc.go:NN
   |   | runtime.doInit
   |   | 	...proc.go:NN

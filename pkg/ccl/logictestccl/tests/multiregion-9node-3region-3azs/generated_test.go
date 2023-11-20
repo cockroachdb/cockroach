@@ -232,6 +232,13 @@ func TestCCLLogic_regional_by_row_hash_sharded_index_query_plan(
 	runCCLLogicTest(t, "regional_by_row_hash_sharded_index_query_plan")
 }
 
+func TestCCLLogic_regional_by_row_insert_fast_path(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "regional_by_row_insert_fast_path")
+}
+
 func TestCCLLogic_regional_by_row_placement_restricted(
 	t *testing.T,
 ) {
@@ -244,6 +251,13 @@ func TestCCLLogic_regional_by_row_query_behavior(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_row_query_behavior")
+}
+
+func TestCCLLogic_regional_by_row_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "regional_by_row_read_committed")
 }
 
 func TestCCLLogic_regional_by_row_rename_column(

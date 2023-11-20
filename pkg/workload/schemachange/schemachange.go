@@ -63,7 +63,7 @@ const (
 	defaultSequenceOwnedByPct              = 25
 	defaultFkParentInvalidPct              = 5
 	defaultFkChildInvalidPct               = 5
-	defaultDeclarativeSchemaChangerPct     = 25
+	defaultDeclarativeSchemaChangerPct     = 75
 	defaultDeclarativeSchemaMaxStmtsPerTxn = 1
 )
 
@@ -118,7 +118,7 @@ var schemaChangeMeta = workload.Meta{
 			`Percentage of times to choose an invalid child column in a fk constraint.`)
 		s.flags.IntVar(&s.declarativeSchemaChangerPct, `declarative-schema-changer-pct`,
 			defaultDeclarativeSchemaChangerPct,
-			`Percentage of the declarative schema changer is used.`)
+			`Percentage (between 0 and 100) of schema change statements handled by declarative schema changer, if supported.`)
 		s.flags.IntVar(&s.declarativeSchemaMaxStmtsPerTxn, `declarative-schema-changer-stmt-per-txn`,
 			defaultDeclarativeSchemaMaxStmtsPerTxn,
 			`Number of statements per-txn used by the declarative schema changer.`)
@@ -145,15 +145,6 @@ func (s *schemaChange) Flags() workload.Flags {
 // Tables implements the workload.Generator interface.
 func (s *schemaChange) Tables() []workload.Table {
 	return nil
-}
-
-// Hooks implements the workload.Hookser interface.
-func (s *schemaChange) Hooks() workload.Hooks {
-	return workload.Hooks{
-		PostRun: func(_ time.Duration) error {
-			return s.closeJSONLogFile()
-		},
-	}
 }
 
 // Ops implements the workload.Opser interface.
@@ -193,13 +184,19 @@ func (s *schemaChange) Ops(
 	// only for supported schema changes.
 	declarativeOpWeights := make([]int, len(opWeights))
 	for idx, weight := range opWeights {
-		if opDeclarative[idx] {
+		if _, ok := opDeclarativeVersion[opType(idx)]; ok {
 			declarativeOpWeights[idx] = weight
 		}
 	}
 	declarativeOps := newDeck(rng, declarativeOpWeights...)
 
-	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	ql := workload.QueryLoad{
+		SQLDatabase: sqlDatabase,
+		Close: func(ctx context.Context) error {
+			pool.Close()
+			return s.closeJSONLogFile()
+		},
+	}
 
 	var artifactsLog *atomicLog
 	if s.logFilePath != "" {
@@ -251,9 +248,6 @@ func (s *schemaChange) Ops(
 		s.workers = append(s.workers, w)
 
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
-		ql.Close = func(ctx2 context.Context) {
-			pool.Close()
-		}
 	}
 	return ql, nil
 }
@@ -431,7 +425,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection")
 	}
-	useDeclarativeSchemaChanger := w.opGen.randIntn(100) > w.workload.declarativeSchemaChangerPct
+	useDeclarativeSchemaChanger := w.opGen.randIntn(100) < w.workload.declarativeSchemaChangerPct
 	if useDeclarativeSchemaChanger {
 		if _, err := conn.Exec(ctx, "SET use_declarative_schema_changer='unsafe_always';"); err != nil {
 			return err

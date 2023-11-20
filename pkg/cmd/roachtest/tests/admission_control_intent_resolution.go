@@ -44,9 +44,11 @@ func registerIntentResolutionOverload(r registry.Registry) {
 		// TODO(sumeer): Reduce to weekly after working well.
 		// Tags:      registry.Tags(`weekly`),
 		// Second node is solely for Prometheus.
-		Cluster:         r.MakeClusterSpec(2, spec.CPU(8)),
-		RequiresLicense: true,
-		Leases:          registry.MetamorphicLeases,
+		Cluster:          r.MakeClusterSpec(2, spec.CPU(8)),
+		RequiresLicense:  true,
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount != 2 {
 				t.Fatalf("expected 2 nodes, found %d", c.Spec().NodeCount)
@@ -65,7 +67,6 @@ func registerIntentResolutionOverload(r registry.Registry) {
 			require.NoError(t, err)
 			statCollector := clusterstats.NewStatsCollector(ctx, promClient)
 
-			c.Put(ctx, t.Cockroach(), "./cockroach", c.Range(1, crdbNodes))
 			startOpts := option.DefaultStartOptsNoBackups()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")
@@ -122,10 +123,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 				}
 				// Loop for up to 20 minutes. Intents take ~10min to resolve, and
 				// we're padding by another 10min.
-				//
-				// TODO(sumeer): change subLevelThreshold to 20 after intent
-				// resolution is subject to admission control.
-				const subLevelThreshold = 100
+				const subLevelThreshold = 20
 				numErrors := 0
 				numSuccesses := 0
 				latestIntentCount := math.MaxInt

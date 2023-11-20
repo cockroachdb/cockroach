@@ -31,7 +31,7 @@ func testPrepareTransactionForRetry(t *testing.T, isoLevel isolation.Level) {
 	ts1 := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
 	tsClock := hlc.Timestamp{WallTime: 3}
-	txn := roachpb.MakeTransaction("test", nil, isoLevel, -1, ts1, 0, 99)
+	txn := roachpb.MakeTransaction("test", nil, isoLevel, -1, ts1, 0, 99, 0)
 	txn2ID := uuid.MakeV4() // used if txn is aborted
 	tests := []struct {
 		name   string
@@ -167,7 +167,7 @@ func TestTransactionRefreshTimestamp(t *testing.T) {
 func testTransactionRefreshTimestamp(t *testing.T, isoLevel isolation.Level) {
 	ts1 := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
-	txn := roachpb.MakeTransaction("test", nil, isoLevel, 1, ts1, 0, 99)
+	txn := roachpb.MakeTransaction("test", nil, isoLevel, 1, ts1, 0, 99, 0)
 	tests := []struct {
 		name  string
 		err   *Error

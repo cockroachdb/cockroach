@@ -526,8 +526,12 @@ const (
 	numWorkKinds
 )
 
-func workKindString(workKind WorkKind) string {
-	switch workKind {
+// SafeValue implements the redact.SafeValue interface.
+func (WorkKind) SafeValue() {}
+
+// String implements the fmt.Stringer interface.
+func (wk WorkKind) String() string {
+	switch wk {
 	case KVWork:
 		return "kv"
 	case SQLKVResponseWork:
@@ -569,13 +573,33 @@ type storeAdmissionStats struct {
 	// that PR is closer to the final solution, and this is a step in that
 	// direction).
 	statsToIgnore struct {
-		pebble.IngestOperationStats
+		// Stats for ingests.
+		ingestStats pebble.IngestOperationStats
+		// Stats for regular writes. These roughly correspond to what the writes
+		// will turn into when written to a flushed sstable.
+		writeBytes uint64
+	}
+	// aboveRaftStats is a subset of the top-level storeAdmissionStats that
+	// represents admission that happened above-raft for which we deducted
+	// tokens prior to proposal evaluation. Replication admission/flow control
+	// happens below-raft, so those stats are *not* here. Only above-raft
+	// request stats are used to estimate tokens to deduct prior to evaluation.
+	// Since large write requests (often ingested) use the below-raft admission
+	// path as part of replication admission control, not ignoring such requests
+	// inflates estimates and results in under-admission. See
+	// https://github.com/cockroachdb/cockroach/issues/113711.
+	aboveRaftStats struct {
+		workCount              uint64
+		writeAccountedBytes    uint64
+		ingestedAccountedBytes uint64
 	}
 	// aux represents additional information carried for informational purposes
 	// (e.g. for logging).
 	aux struct {
 		// These bypassed numbers are already included in the corresponding
-		// {workCount, writeAccountedBytes, ingestedAccountedBytes}.
+		// {workCount, writeAccountedBytes, ingestedAccountedBytes}. These are a
+		// subset of the below-raft stats (those that were not subject to
+		// replication admission control).
 		bypassedCount                  uint64
 		writeBypassedAccountedBytes    uint64
 		ingestedBypassedAccountedBytes uint64

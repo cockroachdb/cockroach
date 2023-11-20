@@ -43,9 +43,9 @@ func (p *planner) GenerateExecutionDetailsJSON(
 	payload := j.Payload()
 	switch payload.Type() {
 	case jobspb.TypeBackup:
-		executionDetailsJSON, err = constructBackupExecutionDetails(ctx, jobID, execCfg.InternalDB)
+		executionDetailsJSON, err = constructBackupExecutionDetails(ctx, jobID, execCfg.InternalDB, execCfg.Settings.Version)
 	default:
-		executionDetailsJSON, err = constructDefaultExecutionDetails(ctx, jobID, execCfg.InternalDB)
+		executionDetailsJSON, err = constructDefaultExecutionDetails(ctx, jobID, execCfg.InternalDB, execCfg.Settings.Version)
 	}
 
 	return executionDetailsJSON, err
@@ -60,12 +60,12 @@ type defaultExecutionDetails struct {
 }
 
 func constructDefaultExecutionDetails(
-	ctx context.Context, jobID jobspb.JobID, db isql.DB,
+	ctx context.Context, jobID jobspb.JobID, db isql.DB, cv clusterversion.Handle,
 ) ([]byte, error) {
 	executionDetails := &defaultExecutionDetails{}
 	err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Populate the latest DSP diagram URL.
-		infoStorage := jobs.InfoStorageForJob(txn, jobID)
+		infoStorage := jobs.InfoStorageForJob(txn, jobID, cv)
 		err := infoStorage.GetLast(ctx, profilerconstants.DSPDiagramInfoKeyPrefix, func(infoKey string, value []byte) error {
 			executionDetails.PlanDiagram = string(value)
 			return nil
@@ -94,13 +94,13 @@ type backupExecutionDetails struct {
 }
 
 func constructBackupExecutionDetails(
-	ctx context.Context, jobID jobspb.JobID, db isql.DB,
+	ctx context.Context, jobID jobspb.JobID, db isql.DB, cv clusterversion.Handle,
 ) ([]byte, error) {
 	var annotatedURL url.URL
 	marshallablePerComponentProgress := make(map[string]float32)
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Read the latest DistSQL diagram.
-		infoStorage := jobs.InfoStorageForJob(txn, jobID)
+		infoStorage := jobs.InfoStorageForJob(txn, jobID, cv)
 		var distSQLURL string
 		if err := infoStorage.GetLast(ctx, profilerconstants.DSPDiagramInfoKeyPrefix, func(infoKey string, value []byte) error {
 			distSQLURL = string(value)

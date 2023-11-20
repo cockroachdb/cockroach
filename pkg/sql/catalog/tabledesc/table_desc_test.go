@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/stretchr/testify/require"
 )
@@ -116,9 +115,6 @@ func TestStripDanglingBackReferences(t *testing.T) {
 					{MutationID: 2},
 				},
 				DropJobID: 1,
-				RowLevelTTL: &catpb.RowLevelTTL{
-					ScheduleID: 123,
-				},
 			},
 			expectedOutput: descpb.TableDescriptor{
 				Name: "foo",

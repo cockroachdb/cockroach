@@ -152,25 +152,25 @@ export const TransactionRestartsToolTip: React.FC<{
   </div>
 );
 
-export const CircuitBreakerTrippedReplicasTooltip: React.FC = () => (
+export const CircuitBreakerTrippedReplicasTooltip: React.ReactNode = (
   <div>
     Number of Replicas for which the per-Replica circuit breaker is currently
     tripped.
   </div>
 );
 
-export const CircuitBreakerTrippedEventsTooltip: React.FC = () => (
+export const CircuitBreakerTrippedEventsTooltip: React.ReactNode = (
   <div>
     The number of circuit breaker events occurred per aggregated interval of
     time across all nodes since the process started.
   </div>
 );
 
-export const PausedFollowersTooltip: React.FC = () => (
+export const PausedFollowersTooltip: React.ReactNode = (
   <div>The number of nonessential followers that have replication paused.</div>
 );
 
-export const ReceiverSnapshotsQueuedTooltip: React.FC = () => (
+export const ReceiverSnapshotsQueuedTooltip: React.ReactNode = (
   <div>
     The number of snapshots queued to be applied on a receiver which can only{" "}
     accept 1 at a time per store.

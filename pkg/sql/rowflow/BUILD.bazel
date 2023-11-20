@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/syncutil",
@@ -41,7 +42,6 @@ go_test(
         "input_sync_test.go",
         "routers_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":rowflow"],
     deps = [
         "//pkg/base",

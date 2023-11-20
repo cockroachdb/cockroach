@@ -206,4 +206,3 @@ message CorpusState {
 message CorpusDisk {
   repeated CorpusState corpus_array = 1;
 }
-

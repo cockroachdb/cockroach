@@ -1,4 +1,4 @@
-create-replication-clusters
+create-replication-clusters no-external-conn
 ----
 
 start-replication-stream

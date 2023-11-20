@@ -19,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -39,8 +41,7 @@ func (s *statusServer) RequestJobProfilerExecutionDetails(
 	ctx context.Context, req *serverpb.RequestJobProfilerExecutionDetailsRequest,
 ) (*serverpb.RequestJobProfilerExecutionDetailsResponse, error) {
 	ctx = s.AnnotateCtx(ctx)
-	// TODO(adityamaru): Figure out the correct privileges required to request execution details.
-	_, err := s.privilegeChecker.RequireAdminUser(ctx)
+	err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +71,7 @@ func (s *statusServer) RequestJobProfilerExecutionDetails(
 			return nil, errors.Newf("execution details can only be requested on a cluster with version >= %s",
 				clusterversion.V23_2.String())
 		}
-		e := makeJobProfilerExecutionDetailsBuilder(execCfg.SQLStatusServer, execCfg.InternalDB, jobID, execCfg.JobRegistry)
+		e := makeJobProfilerExecutionDetailsBuilder(execCfg.SQLStatusServer, execCfg.InternalDB, jobID, execCfg.JobRegistry, execCfg.Settings.Version)
 
 		// TODO(adityamaru): When we start collecting more information we can consider
 		// parallelize the collection of the various pieces.
@@ -78,8 +79,19 @@ func (s *statusServer) RequestJobProfilerExecutionDetails(
 		e.addLabelledGoroutines(ctx)
 		e.addClusterWideTraces(ctx)
 
-		// TODO(dt,adityamaru): add logic to reach out the registry and call resumer
-		// specific execution details collection logic.
+		user, err := authserver.UserFromIncomingRPCContext(ctx)
+		if err != nil {
+			return nil, srverrors.ServerError(ctx, err)
+		}
+		r, err := execCfg.JobRegistry.GetResumerForClaimedJob(jobID)
+		if err != nil {
+			return nil, err
+		}
+		jobExecCtx, close := sql.MakeJobExecContext(ctx, "collect-profile", user, &sql.MemoryMetrics{}, execCfg)
+		defer close()
+		if err := r.CollectProfile(ctx, jobExecCtx); err != nil {
+			return nil, err
+		}
 
 		return &serverpb.RequestJobProfilerExecutionDetailsResponse{}, nil
 	}
@@ -99,14 +111,19 @@ type executionDetailsBuilder struct {
 	db       isql.DB
 	jobID    jobspb.JobID
 	registry *jobs.Registry
+	cv       clusterversion.Handle
 }
 
 // makeJobProfilerExecutionDetailsBuilder returns an instance of an executionDetailsBuilder.
 func makeJobProfilerExecutionDetailsBuilder(
-	srv serverpb.SQLStatusServer, db isql.DB, jobID jobspb.JobID, registry *jobs.Registry,
+	srv serverpb.SQLStatusServer,
+	db isql.DB,
+	jobID jobspb.JobID,
+	registry *jobs.Registry,
+	cv clusterversion.Handle,
 ) executionDetailsBuilder {
 	e := executionDetailsBuilder{
-		srv: srv, db: db, jobID: jobID, registry: registry,
+		srv: srv, db: db, jobID: jobID, registry: registry, cv: cv,
 	}
 	return e
 }
@@ -128,7 +145,7 @@ func (e *executionDetailsBuilder) addLabelledGoroutines(ctx context.Context) {
 	}
 	filename := fmt.Sprintf("goroutines.%s.txt", timeutil.Now().Format("20060102_150405.00"))
 	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return jobs.WriteExecutionDetailFile(ctx, filename, resp.Data, txn, e.jobID)
+		return jobs.WriteExecutionDetailFile(ctx, filename, resp.Data, txn, e.jobID, e.cv)
 	}); err != nil {
 		log.Errorf(ctx, "failed to write goroutine for job %d: %v", e.jobID, err.Error())
 	}
@@ -149,7 +166,7 @@ func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 		if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return jobs.WriteExecutionDetailFile(ctx, filename,
 				[]byte(fmt.Sprintf(`<meta http-equiv="Refresh" content="0; url=%s">`, dspDiagramURL)),
-				txn, e.jobID)
+				txn, e.jobID, e.cv)
 		}); err != nil {
 			log.Errorf(ctx, "failed to write DistSQL diagram for job %d: %v", e.jobID, err.Error())
 		}
@@ -160,7 +177,7 @@ func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 // that captures the active tracing spans of a job on all nodes in the cluster.
 func (e *executionDetailsBuilder) addClusterWideTraces(ctx context.Context) {
 	z := zipper.MakeInternalExecutorInflightTraceZipper(e.db.Executor())
-	traceID, err := jobs.GetJobTraceID(ctx, e.db, e.jobID)
+	traceID, err := jobs.GetJobTraceID(ctx, e.db, e.jobID, e.cv)
 	if err != nil {
 		log.Warningf(ctx, "failed to fetch job trace ID: %+v", err.Error())
 		return
@@ -173,7 +190,7 @@ func (e *executionDetailsBuilder) addClusterWideTraces(ctx context.Context) {
 
 	filename := fmt.Sprintf("trace.%s.zip", timeutil.Now().Format("20060102_150405.00"))
 	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return jobs.WriteExecutionDetailFile(ctx, filename, zippedTrace, txn, e.jobID)
+		return jobs.WriteExecutionDetailFile(ctx, filename, zippedTrace, txn, e.jobID, e.cv)
 	}); err != nil {
 		log.Errorf(ctx, "failed to write traces for job %d: %v", e.jobID, err.Error())
 	}

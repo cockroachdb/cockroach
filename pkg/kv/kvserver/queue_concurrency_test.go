@@ -64,6 +64,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		// We don't care about these, but we don't want to crash.
 		successes:       metric.NewCounter(metric.Metadata{Name: "processed"}),
 		failures:        metric.NewCounter(metric.Metadata{Name: "failures"}),
+		storeFailures:   metric.NewCounter(metric.Metadata{Name: "store_failures"}),
 		pending:         metric.NewGauge(metric.Metadata{Name: "pending"}),
 		processingNanos: metric.NewCounter(metric.Metadata{Name: "processingnanos"}),
 		purgatory:       metric.NewGauge(metric.Metadata{Name: "purgatory"}),
@@ -78,7 +79,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 			Clock:             hlc.NewClockForTesting(nil),
 			AmbientCtx:        log.MakeTestingAmbientContext(tr),
 			DefaultSpanConfig: roachpb.TestingDefaultSpanConfig(),
-			Settings:          cluster.MakeTestingClusterSettingsWithVersions(clusterversion.TestingBinaryVersion, clusterversion.TestingBinaryVersion, true),
+			Settings:          cluster.MakeTestingClusterSettingsWithVersions(clusterversion.Latest.Version(), clusterversion.Latest.Version(), true),
 		},
 	}
 

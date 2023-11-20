@@ -87,7 +87,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
         Same as above, but time out after 60 seconds if no test has failed
           (Note: the timeout command is called "gtimeout" on macOS and can be installed with "brew install coreutils")
 
-    dev test pkg/cmd/dev:dev_test --stress --test-args='-test.timeout 5s'
+    dev test pkg/cmd/dev:dev_test --stress --timeout 5s
         Run a test repeatedly until it runs longer than 5s
 
     end=$((SECONDS+N))
@@ -252,7 +252,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		pkg = strings.TrimPrefix(pkg, "./")
 		pkg = strings.TrimRight(pkg, "/")
 
-		if !strings.HasPrefix(pkg, "pkg/") {
+		if !strings.HasPrefix(pkg, "pkg/") && !strings.HasPrefix(pkg, "pkg:") {
 			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
 
@@ -321,15 +321,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_arg", "-show-diff")
 	}
 	if timeout > 0 {
-		// The bazel timeout should be higher than the timeout passed to the
-		// test binary (giving it ample time to clean up, 5 seconds is probably
-		// enough).
-		args = append(args, fmt.Sprintf("--test_timeout=%d", 5+int(timeout.Seconds())))
-		args = append(args, "--test_arg", fmt.Sprintf("-test.timeout=%s", timeout.String()))
-
-		// If --test-args '-test.timeout=X' is specified as well, or
-		// -- --test_arg '-test.timeout=X', that'll take precedence further
-		// below.
+		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}
 
 	if stress {
@@ -362,7 +354,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if count == 1 {
 		ignoreCache = true
 	} else if count != 0 {
-		args = append(args, fmt.Sprintf("--runs_per_test=%d", count))
+		args = append(args, fmt.Sprintf("--runs_per_test=%d", count), "--runs_per_test=.*disallowed_imports_test@1")
 	}
 	if vModule != "" {
 		args = append(args, "--test_arg", fmt.Sprintf("-vmodule=%s", vModule))
@@ -477,28 +469,10 @@ func getDirectoryFromTarget(target string) string {
 }
 
 func (d *dev) determineAffectedTargets(ctx context.Context) ([]string, error) {
-	// List files changed against `master`.
-	remotes, err := d.exec.CommandContextSilent(ctx, "git", "remote", "-v")
+	base, err := d.getMergeBaseHash(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var upstream string
-	for _, remote := range strings.Split(strings.TrimSpace(string(remotes)), "\n") {
-		if (strings.Contains(remote, "github.com/cockroachdb/cockroach") || strings.Contains(remote, "github.com:cockroachdb/cockroach")) && strings.HasSuffix(remote, "(fetch)") {
-			upstream = strings.Fields(remote)[0]
-			break
-		}
-	}
-	if upstream == "" {
-		return nil, fmt.Errorf("could not find git upstream")
-	}
-
-	baseBytes, err := d.exec.CommandContextSilent(ctx, "git", "merge-base", fmt.Sprintf("%s/master", upstream), "HEAD")
-	if err != nil {
-		return nil, err
-	}
-	base := strings.TrimSpace(string(baseBytes))
-
 	changedFiles, err := d.exec.CommandContextSilent(ctx, "git", "diff", "--no-ext-diff", "--name-only", base, "--", "*.go", "**/testdata/**")
 	if err != nil {
 		return nil, err

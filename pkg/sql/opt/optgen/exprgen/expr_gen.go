@@ -411,7 +411,7 @@ func (eg *exprGen) populateBestProps(
 		provided := &physical.Provided{}
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.
-		provided.Ordering = ordering.BuildProvided(rel, &required.Ordering)
+		provided.Ordering = ordering.BuildProvided(eg.f.EvalContext(), rel, &required.Ordering)
 		provided.Distribution = distribution.BuildProvided(ctx, eg.f.EvalContext(), rel, &required.Distribution)
 
 		cost += eg.coster.ComputeCost(rel, required)

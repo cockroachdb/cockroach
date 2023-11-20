@@ -15,6 +15,7 @@ package bootstrap
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"sort"
@@ -475,6 +476,9 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 
 	// Tables introduced in 23.2.
 	target.AddDescriptor(systemschema.RegionLivenessTable)
+	target.AddDescriptor(systemschema.SystemMVCCStatisticsTable)
+	target.AddDescriptor(systemschema.TransactionExecInsightsTable)
+	target.AddDescriptor(systemschema.StatementExecInsightsTable)
 
 	// Adding a new system table? It should be added here to the metadata schema,
 	// and also created as a migration for older clusters.
@@ -488,7 +492,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // NumSystemTablesForSystemTenant is the number of system tables defined on
 // the system tenant. This constant is only defined to avoid having to manually
 // update auto stats tests every time a new system table is added.
-const NumSystemTablesForSystemTenant = 52
+const NumSystemTablesForSystemTenant = 55
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
 // MetadataSchema.
@@ -624,11 +628,15 @@ func addSystemTenantEntry(target *MetadataSchema) {
 	target.otherKV = append(target.otherKV, kvs...)
 }
 
+func testingMinUserDescID(codec keys.SQLCodec) uint32 {
+	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	return uint32(ms.FirstNonSystemDescriptorID())
+}
+
 // TestingMinUserDescID returns the smallest user-created descriptor ID in a
 // bootstrapped cluster.
 func TestingMinUserDescID() uint32 {
-	ms := MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
-	return uint32(ms.FirstNonSystemDescriptorID())
+	return testingMinUserDescID(keys.SystemSQLCodec)
 }
 
 // TestingMinNonDefaultUserDescID returns the smallest user-creatable descriptor
@@ -646,6 +654,21 @@ func TestingUserDescID(offset uint32) uint32 {
 
 // TestingUserTableDataMin is a convenience function which returns the first
 // user table data key in a simple unit test setting.
-func TestingUserTableDataMin() roachpb.Key {
-	return keys.SystemSQLCodec.TablePrefix(TestingUserDescID(0))
+func TestingUserTableDataMin(codec keys.SQLCodec) roachpb.Key {
+	return codec.TablePrefix(testingMinUserDescID(codec))
+}
+
+// GetAndHashInitialValuesToString generates the bootstrap keys and sha-256 that
+// can be used to generate data files (to be included in future releases).
+func GetAndHashInitialValuesToString(tenantID uint64) (initialValues string, hash string) {
+	codec := keys.SystemSQLCodec
+	if tenantID > 0 {
+		codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
+	}
+	ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+
+	initialValues = InitialValuesToString(ms)
+	h := sha256.Sum256([]byte(initialValues))
+	hash = hex.EncodeToString(h[:])
+	return initialValues, hash
 }

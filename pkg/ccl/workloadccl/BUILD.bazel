@@ -35,7 +35,6 @@ go_test(
         "fixture_test.go",
         "main_test.go",
     ],
-    args = ["-test.timeout=55s"],
     tags = ["ccl_test"],
     deps = [
         ":workloadccl",
@@ -44,6 +43,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/settings/cluster",
         "//pkg/sql/stats",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

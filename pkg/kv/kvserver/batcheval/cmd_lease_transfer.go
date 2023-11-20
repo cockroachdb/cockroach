@@ -35,7 +35,7 @@ func declareKeysTransferLease(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// TransferLease must not run concurrently with any other request so it uses
 	// latches to synchronize with all other reads and writes on the outgoing
 	// leaseholder. Additionally, it observes the state of the timestamp cache
@@ -56,6 +56,7 @@ func declareKeysTransferLease(
 	// reads. We'd need to be careful here, so we should only pull on this if we
 	// decide that doing so is important.
 	declareAllKeys(latchSpans)
+	return nil
 }
 
 // TransferLease sets the lease holder for the range.

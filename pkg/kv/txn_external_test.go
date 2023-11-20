@@ -428,7 +428,7 @@ func testTxnNegotiateAndSendDoesNotBlock(t *testing.T, multiRange, strict, route
 				if err := store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 					// Issue a bounded-staleness read over the keys. If using strict
 					// bounded staleness, use an error wait policy so that we'll hear an
-					// error (LockConflictError) under conditions that would otherwise
+					// error (WriteIntentError) under conditions that would otherwise
 					// cause us to block on an intent. Otherwise, allow the request to be
 					// redirected to the leaseholder and to block on intents.
 					ba := &kvpb.BatchRequest{}
@@ -747,7 +747,7 @@ func testPrepareForRetry(t *testing.T, isoLevel isolation.Level) {
 	require.NoError(t, txn.SetIsoLevel(isoLevel))
 	// Write to "a" in the first epoch.
 	require.NoError(t, txn.Put(ctx, keyA, 1))
-	require.NoError(t, txn.Step(ctx))
+	require.NoError(t, txn.Step(ctx, true /* allowReadTimestampStep */))
 	// Read from "b" to establish a refresh span.
 	res, err := txn.Get(ctx, keyB)
 	require.NoError(t, err)
@@ -824,7 +824,7 @@ func TestPrepareForPartialRetry(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, txn.Put(ctx, keyA, 1))
 	require.NoError(t, txn.ReleaseSavepoint(ctx, stmt1))
-	require.NoError(t, txn.Step(ctx))
+	require.NoError(t, txn.Step(ctx, true /* allowReadTimestampStep */))
 	// Perform a series of reads and writes in the second "statement".
 	stmt2, err := txn.CreateSavepoint(ctx)
 	require.NoError(t, err)

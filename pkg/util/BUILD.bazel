@@ -38,6 +38,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@org_golang_x_exp//constraints",
+        "@org_golang_x_exp//slices",
     ],
 )
 
@@ -54,7 +55,6 @@ go_test(
         "topk_test.go",
         "unresolved_addr_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":util"],
     deps = [
         "//pkg/util/randutil",

@@ -99,7 +99,7 @@ func descExists(sqlDB *gosql.DB, exists bool, id descpb.ID) error {
 	}
 	defer rows.Close()
 	if exists != rows.Next() {
-		return errors.Errorf("descriptor exists = %v", exists)
+		return errors.Errorf("descriptor exists expected=%v was=%v", exists, !exists)
 	}
 	return nil
 }
@@ -417,6 +417,14 @@ func TestDropIndex(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
+	require.NoError(t, err)
+
+	// Refresh protected timestamp cache immediately to make MVCC GC queue to
+	// process GC immediately.
+	_, err = sqlDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
+	require.NoError(t, err)
+
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
@@ -426,6 +434,9 @@ func TestDropIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	if _, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, tableDesc.GetID()); err != nil {
+		t.Fatal(err)
+	}
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(keys.SystemSQLCodec), 3*numRows)
 	idx, err := catalog.MustFindIndexByName(tableDesc, "foo")
 	if err != nil {
@@ -721,7 +732,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	for i := 0; i < numTables; i++ {
 		if err := descExists(sqlDB, true, descs[i].GetID()); err != nil {
-			t.Fatal(err)
+			t.Fatalf("table (id=%d name=%s) was deleted. error: %v", descs[i].GetID(), descs[i].GetName(), err)
 		}
 		tableSpan := descs[i].TableSpan(keys.SystemSQLCodec)
 		tests.CheckKeyCountIncludingTombstoned(t, s, tableSpan, numKeys)
@@ -743,7 +754,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	checkTableGCed := func(i int) {
 		testutils.SucceedsSoon(t, func() error {
 			if err := descExists(sqlDB, false, descs[i].GetID()); err != nil {
-				return err
+				return errors.Wrapf(err, "table (id=%d name=%s) not yet deleted", descs[i].GetID(), descs[i].GetName())
 			}
 			return zoneExists(sqlDB, nil, descs[i].GetID())
 		})

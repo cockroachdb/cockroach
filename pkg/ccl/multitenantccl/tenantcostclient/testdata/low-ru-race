@@ -1,11 +1,6 @@
 # This test verifies that a low RU notification still triggers a token bucket
 # request, even if another token bucket request is already in progress.
 
-# Wait for initial 10K RUs to be granted.
-wait-for-event
-token-bucket-response
-----
-
 # Force token bucket provider to block until the unblock-request command is
 # issued.
 configure
@@ -19,9 +14,9 @@ advance wait=true
 ----
 00:00:40.000
 
-# Fire off a 6K write. This will trigger a low RU notification, which will
+# Fire off a 1K write. This will trigger a low RU notification, which will
 # happen while the token bucket request is still in progress.
-write bytes=6141952
+write bytes=1021952
 ----
 
 wait-for-event

@@ -332,7 +332,10 @@ func (m *managerImpl) sequenceReqWithGuard(
 		} else {
 			// Scan for conflicting locks.
 			log.Event(ctx, "scanning lock table for conflicting locks")
-			g.ltg = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+			g.ltg, err = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// Wait on conflicting locks, if necessary. Note that this will never be
@@ -503,7 +506,7 @@ func (m *managerImpl) HandleLockConflictError(
 	// If the discovery process collected a set of intents to resolve before the
 	// next evaluation attempt, do so.
 	if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
-		if err := m.ltw.ResolveDeferredIntents(ctx, toResolve); err != nil {
+		if err := m.ltw.ResolveDeferredIntents(ctx, g.Req.AdmissionHeader, toResolve); err != nil {
 			m.FinishReq(g)
 			return nil, err
 		}
@@ -720,16 +723,33 @@ func (g *Guard) AssertNoLatches() {
 // before the request can evaluate at that later timestamp.
 func (g *Guard) IsolatedAtLaterTimestamps() bool {
 	// If the request acquired any read latches with bounded (MVCC) timestamps
-	// then it can not trivially bump its timestamp without dropping and
-	// re-acquiring those latches. Doing so could allow the request to read at an
-	// unprotected timestamp. We only look at global latch spans because local
+	// then it cannot trivially bump its timestamp without dropping and
+	// re-acquiring those latches. Doing so could allow the request to read at
+	// an unprotected timestamp. We only look at global latch spans because local
 	// latch spans always use unbounded (NonMVCC) timestamps.
-	return len(g.Req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) == 0 &&
-		// Similarly, if the request intends to perform any non-locking reads, it
-		// cannot trivially bump its timestamp and expect to be isolated at the
-		// higher timestamp. Bumping its timestamp could cause the request to
-		// conflict with locks that it previously did not conflict with. It must
-		// drop its lockTableGuard and re-scan the lockTable.
+	//
+	// Even still, the existence of read only global latch spans is not enough for
+	// us to determine that the request is not isolated at higher timestamps -- we
+	// must check the timestamps at which the latches are declared as well. That's
+	// because if a read latch is declared at hlc.MaxTimestamp, it is isolated at
+	// higher timestamps; shared locking requests do exactly this.
+	readLatchesIsolatedAtHigherTimestamp := true
+	for _, l := range g.Req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal) {
+		if !l.Timestamp.Equal(hlc.MaxTimestamp) {
+			readLatchesIsolatedAtHigherTimestamp = false
+			break
+		}
+	}
+	// If read latches are isolated at higher timestamps then the request can
+	// trivially bump its timestamp without dropping and re-acquiring those
+	// latches. There's no need to check write latches, as they're always isolated
+	// at higher timestamps.
+	return readLatchesIsolatedAtHigherTimestamp &&
+		// If the request intends to perform any non-locking reads, it cannot
+		// trivially bump its timestamp and expect to be isolated at the higher
+		// timestamp. Bumping its timestamp could cause the request to conflict with
+		// locks that it previously did not conflict with. It must drop its
+		// lockTableGuard and re-scan the lockTable.
 		len(g.Req.LockSpans.GetSpans(lock.None)) == 0
 }
 

@@ -472,6 +472,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			ReadConsistency: ba.ReadConsistency,
 			WaitPolicy:      ba.WaitPolicy,
 			LockTimeout:     ba.LockTimeout,
+			AdmissionHeader: ba.AdmissionHeader,
 			PoisonPolicy:    pp,
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans, // nil if g != nil
@@ -1184,11 +1185,17 @@ func (r *Replica) collectSpans(
 	// than the request timestamp, and may have to retry at a higher timestamp.
 	// This is still safe as we're only ever writing at timestamps higher than the
 	// timestamp any write latch would be declared at.
-	batcheval.DeclareKeysForBatch(desc, &ba.Header, latchSpans)
+	err := batcheval.DeclareKeysForBatch(desc, &ba.Header, latchSpans)
+	if err != nil {
+		return nil, nil, concurrency.PessimisticEval, err
+	}
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans, r.Clock().MaxOffset())
+			err := cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans, r.Clock().MaxOffset())
+			if err != nil {
+				return nil, nil, concurrency.PessimisticEval, err
+			}
 			if considerOptEvalForLimit {
 				switch inner.(type) {
 				case *kvpb.ScanRequest, *kvpb.ReverseScanRequest:

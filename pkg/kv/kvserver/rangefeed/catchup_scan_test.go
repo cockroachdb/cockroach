@@ -103,17 +103,21 @@ func TestCatchupScan(t *testing.T) {
 	// Put with no intent.
 	for _, kv := range []storage.MVCCKeyValue{kv1_1_1, kv1_2_2, kv1_3_3, kv2_1_1, kv2_2_2, kv2_5_3} {
 		v := roachpb.Value{RawBytes: kv.Value}
-		if err := storage.MVCCPut(ctx, eng, kv.Key.Key, kv.Key.Timestamp, v, storage.MVCCWriteOptions{}); err != nil {
+		if _, err := storage.MVCCPut(
+			ctx, eng, kv.Key.Key, kv.Key.Timestamp, v, storage.MVCCWriteOptions{},
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// Put with an intent.
-	if err := storage.MVCCPut(ctx, eng, kv1_4_4.Key.Key, txn.ReadTimestamp, val, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
+	if _, err := storage.MVCCPut(
+		ctx, eng, kv1_4_4.Key.Key, txn.ReadTimestamp, val, storage.MVCCWriteOptions{Txn: &txn},
+	); err != nil {
 		t.Fatal(err)
 	}
 	testutils.RunTrueAndFalse(t, "withDiff", func(t *testing.T, withDiff bool) {
 		span := roachpb.Span{Key: testKey1, EndKey: roachpb.KeyMax}
-		iter, err := NewCatchUpIterator(eng, span, ts1, nil, nil)
+		iter, err := NewCatchUpIterator(ctx, eng, span, ts1, nil, nil)
 		require.NoError(t, err)
 		defer iter.Close()
 		var events []kvpb.RangeFeedValue
@@ -153,11 +157,12 @@ func TestCatchupScanInlineError(t *testing.T) {
 	defer eng.Close()
 
 	// Write an inline value.
-	require.NoError(t, storage.MVCCPut(ctx, eng, roachpb.Key("inline"), hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{}))
+	_, err := storage.MVCCPut(ctx, eng, roachpb.Key("inline"), hlc.Timestamp{}, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{})
+	require.NoError(t, err)
 
 	// Run a catchup scan across the span and watch it error.
 	span := roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey}
-	iter, err := NewCatchUpIterator(eng, span, hlc.Timestamp{}, nil, nil)
+	iter, err := NewCatchUpIterator(ctx, eng, span, hlc.Timestamp{}, nil, nil)
 	require.NoError(t, err)
 	defer iter.Close()
 
@@ -186,19 +191,22 @@ func TestCatchupScanSeesOldIntent(t *testing.T) {
 	tsIntent := tsCutoff.Add(-10, 0)          // the intent is below the lower bound
 	tsVersionInWindow := tsCutoff.Add(10, 0)  // an unrelated version is above the lower bound
 
-	require.NoError(t, storage.MVCCPut(ctx, eng, roachpb.Key("b"),
-		tsVersionInWindow, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{}))
+	_, err := storage.MVCCPut(ctx, eng, roachpb.Key("b"),
+		tsVersionInWindow, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{})
+	require.NoError(t, err)
 
-	txn := roachpb.MakeTransaction("foo", roachpb.Key("d"), isolation.Serializable, roachpb.NormalUserPriority, tsIntent, 100, 0)
-	require.NoError(t, storage.MVCCPut(ctx, eng, roachpb.Key("d"),
-		tsIntent, roachpb.MakeValueFromString("intent"), storage.MVCCWriteOptions{Txn: &txn}))
+	txn := roachpb.MakeTransaction("foo", roachpb.Key("d"), isolation.Serializable, roachpb.NormalUserPriority, tsIntent, 100, 0, 0)
+	_, err = storage.MVCCPut(ctx, eng, roachpb.Key("d"),
+		tsIntent, roachpb.MakeValueFromString("intent"), storage.MVCCWriteOptions{Txn: &txn})
+	require.NoError(t, err)
 
-	require.NoError(t, storage.MVCCPut(ctx, eng, roachpb.Key("e"),
-		tsVersionInWindow, roachpb.MakeValueFromString("bar"), storage.MVCCWriteOptions{}))
+	_, err = storage.MVCCPut(ctx, eng, roachpb.Key("e"),
+		tsVersionInWindow, roachpb.MakeValueFromString("bar"), storage.MVCCWriteOptions{})
+	require.NoError(t, err)
 
 	// Run a catchup scan across the span and watch it succeed.
 	span := roachpb.Span{Key: keys.LocalMax, EndKey: keys.MaxKey}
-	iter, err := NewCatchUpIterator(eng, span, tsCutoff, nil, nil)
+	iter, err := NewCatchUpIterator(ctx, eng, span, tsCutoff, nil, nil)
 	require.NoError(t, err)
 	defer iter.Close()
 

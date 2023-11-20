@@ -7,4 +7,4 @@ ALTER INDEX db.tbl@b_idx CONFIGURE ZONE DISCARD;
 
 translate database=db table=tbl
 ----
-[/Table/<table-id>, /Table/<table-id+1>)               range default
+/Table/10{6-7}                             range default

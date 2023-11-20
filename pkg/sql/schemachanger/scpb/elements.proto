@@ -274,11 +274,17 @@ message PrimaryIndex {
 message SecondaryIndex {
   Index embedded_index = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Expression embedded_expr = 3 [(gogoproto.nullable) = true];
+
+  // If an index is being recreated, this is the original
+  // secondary index that we are trying to replace (this
+  // is done for primary key changes).
+  uint32 recreate_source_id = 4 [(gogoproto.customname) = "RecreateSourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message TemporaryIndex {
   Index embedded_index = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool is_using_secondary_encoding = 2;
+  Expression expr = 3 [(gogoproto.nullable) = true];
 }
 
 message SecondaryIndexPartial {
@@ -672,6 +678,7 @@ message Function {
 
   bool return_set = 3;
   TypeT return_type = 4 [(gogoproto.nullable) = false];
+  bool is_procedure = 5;
 }
 
 message FunctionName {

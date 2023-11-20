@@ -95,7 +95,7 @@ var errAcquireTimeout = pgerror.New(
 )
 
 var fdCountingSemaphoreMaxRetries = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.distsql.acquire_vec_fds.max_retries",
 	"determines the number of retries performed during the acquisition of "+
 		"file descriptors needed for disk-spilling operations, set to 0 for "+
@@ -281,6 +281,10 @@ func (f *vectorizedFlow) Setup(
 // Resume is part of the Flow interface.
 func (f *vectorizedFlow) Resume(recv execinfra.RowReceiver) {
 	if f.batchFlowCoordinator != nil {
+		// Resume is expected to be called only for pausable portals, for which
+		// we must be using limitedCommandResult which currently doesn't
+		// implement the execinfra.BatchReceiver interface, so we shouldn't have
+		// a batch flow coordinator here.
 		recv.Push(
 			nil, /* row */
 			&execinfrapb.ProducerMetadata{
@@ -383,6 +387,9 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow
 	// as well as closes all the closers.
 	f.creator.cleanup(ctx)
+
+	// Ensure that the "head" processor is always closed.
+	f.ConsumerClosedOnHeadProc()
 
 	f.tempStorage.Lock()
 	created := f.tempStorage.path != ""
@@ -764,7 +771,7 @@ func (s *vectorizedFlowCreator) setupRemoteOutputStream(
 	run := func(ctx context.Context, flowCtxCancel context.CancelFunc) {
 		outbox.Run(
 			ctx,
-			s.f.Cfg.PodNodeDialer,
+			s.f.Cfg.SQLInstanceDialer,
 			stream.TargetNodeID,
 			stream.StreamID,
 			flowCtxCancel,
@@ -911,7 +918,7 @@ func (s *vectorizedFlowCreator) setupInput(
 
 			// Retrieve the latency from the origin node (the one that has the
 			// outbox).
-			latency, err := s.f.Cfg.PodNodeDialer.Latency(roachpb.NodeID(inputStream.OriginNodeID))
+			latency, err := s.f.Cfg.SQLInstanceDialer.Latency(roachpb.NodeID(inputStream.OriginNodeID))
 			if err != nil {
 				// If an error occurred, latency's nil value of 0 is used. If latency is
 				// 0, it is not included in the displayed stats for EXPLAIN ANALYZE

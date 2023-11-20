@@ -398,10 +398,7 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 			defer tc.Stopper().Stop(ctx)
 			s := tc.ApplicationLayer(0)
 			tenantSettings := s.ClusterSettings()
-			conn := s.SQLConn(t, "defaultdb")
-			// Ensure that if we're running with the test tenant, it can split
-			// the table below.
-			sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantSettings.SV, true)
+			conn := s.SQLConn(t, serverutils.DBName("defaultdb"))
 
 			{
 				// This test asserts on KV-internal effects (i.e. range splits
@@ -409,9 +406,8 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 				// installed splits. To ensure it works with the span configs
 				// infrastructure quickly enough, we set a low closed timestamp
 				// target duration.
-				sysDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t, ""))
+				sysDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
 				sysDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-				sysDB.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 			}
 
 			var err error

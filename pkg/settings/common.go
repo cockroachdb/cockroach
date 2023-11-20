@@ -24,6 +24,7 @@ type common struct {
 	name          SettingName
 	description   string
 	visibility    Visibility
+	unsafe        bool
 	slot          slotIdx
 	nonReportable bool
 	retired       bool
@@ -117,6 +118,17 @@ func (c *common) setName(name SettingName) {
 		panic(errors.AssertionFailedf("duplicate use of WithName"))
 	}
 	c.name = name
+}
+
+// setUnsafe is used to override the unsafe status of the setting.
+// Refer to the WithUnsafe option for details.
+func (c *common) setUnsafe() {
+	c.unsafe = true
+}
+
+// IsUnsafe indicates whether the setting is unsafe.
+func (c *common) IsUnsafe() bool {
+	return c.unsafe
 }
 
 // SetOnChange installs a callback to be called when a setting's value changes.

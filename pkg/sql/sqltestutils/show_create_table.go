@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/stretchr/testify/require"
 )
@@ -49,9 +48,6 @@ func ShowCreateTableTest(
 		},
 	})
 	defer s.Stopper().Stop(context.Background())
-	tenantSettings := s.ApplicationLayer().ClusterSettings()
-	// In case we're with multi region abstractions against the test tenant.
-	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(context.Background(), &tenantSettings.SV, true)
 
 	if _, err := sqlDB.Exec(`
     SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;

@@ -164,6 +164,11 @@ func (t schemaTelemetryResumer) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile is part of the jobs.Resumer interface.
+func (t schemaTelemetryResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func init() {
 	jobs.RegisterConstructor(
 		jobspb.TypeAutoSchemaTelemetry,

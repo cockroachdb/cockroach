@@ -128,9 +128,9 @@ func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 	}
 	// Push back the first token so that it's included in the SQL string.
 	l.PushBack(1)
-	startPos, endPos, _ := l.readSQLConstruct(';')
-	if endPos <= startPos || startPos <= 0 {
-		return nil, errors.New("expected SQL statement")
+	startPos, endPos, _, err := l.readSQLConstruct(false /* isExpr */, ';')
+	if err != nil {
+		return nil, err
 	}
 	// Move past the semicolon.
 	l.lastPos++
@@ -144,8 +144,10 @@ func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 		prevTok := tok
 		tok = l.tokens[pos]
 		if tok.id == INTO {
-			if prevTok.id == INSERT || prevTok.id == MERGE || firstTok.id == IMPORT {
-				// INSERT INTO, MERGE INTO, and IMPORT ... INTO are not INTO-targets.
+			if prevTok.id == INSERT || prevTok.id == UPSERT ||
+				prevTok.id == MERGE || firstTok.id == IMPORT {
+				// INSERT INTO, UPSERT INTO, MERGE INTO, and IMPORT ... INTO are not
+				// INTO-targets.
 				continue
 			}
 			if haveInto {
@@ -200,8 +202,11 @@ func (l *lexer) MakeExecSqlStmt() (*plpgsqltree.Execute, error) {
 	}, nil
 }
 
-func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.DynamicExecute {
-	cmdStr, _ := l.ReadSqlConstruct(INTO, USING, ';')
+func (l *lexer) MakeDynamicExecuteStmt() (*plpgsqltree.DynamicExecute, error) {
+	cmdStr, _, err := l.ReadSqlStatement(INTO, USING, ';')
+	if err != nil {
+		return nil, err
+	}
 	ret := &plpgsqltree.DynamicExecute{
 		Query: cmdStr,
 	}
@@ -211,7 +216,7 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.DynamicExecute {
 	for {
 		if lval.id == INTO {
 			if ret.Into {
-				l.setErr(errors.AssertionFailedf("seen multiple INTO"))
+				return nil, errors.New("multiple INTO keywords")
 			}
 			ret.Into = true
 			nextTok := l.Peek()
@@ -221,15 +226,21 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.DynamicExecute {
 			}
 			// TODO we need to read each "INTO" variable name instead of just a
 			// string.
-			l.ReadSqlExpressionStr2(USING, ';')
+			_, _, err = l.ReadSqlExpr(USING, ';')
+			if err != nil {
+				return nil, err
+			}
 			l.Lex(&lval)
 		} else if lval.id == USING {
 			if ret.Params != nil {
-				l.setErr(errors.AssertionFailedf("seen multiple USINGs"))
+				return nil, errors.New("multiple USING keywords")
 			}
 			ret.Params = make([]plpgsqltree.Expr, 0)
 			for {
-				l.ReadSqlConstruct(',', ';', INTO)
+				_, _, err = l.ReadSqlExpr(',', ';', INTO)
+				if err != nil {
+					return nil, err
+				}
 				ret.Params = append(ret.Params, nil)
 				l.Lex(&lval)
 				if lval.id == ';' {
@@ -239,82 +250,16 @@ func (l *lexer) MakeDynamicExecuteStmt() *plpgsqltree.DynamicExecute {
 		} else if lval.id == ';' {
 			break
 		} else {
-			l.setErr(errors.AssertionFailedf("syntax error"))
+			return nil, errors.Newf("unexpected token: %s", lval.id)
 		}
 	}
 
-	return ret
-}
-
-func (l *lexer) ProcessForOpenCursor(nullCursorExplicitExpr bool) *plpgsqltree.Open {
-	openStmt := &plpgsqltree.Open{}
-	openStmt.CursorOptions = plpgsqltree.CursorOptionFastPlan.Mask()
-
-	if nullCursorExplicitExpr {
-		if l.Peek().id == NO {
-			l.lastPos++
-			if l.Peek().id == SCROLL {
-				openStmt.CursorOptions |= plpgsqltree.CursorOptionNoScroll.Mask()
-				l.lastPos++
-			}
-		} else if l.Peek().id == SCROLL {
-			openStmt.CursorOptions |= plpgsqltree.CursorOptionScroll.Mask()
-			l.lastPos++
-		}
-
-		if l.Peek().id != FOR {
-			l.setErr(pgerror.New(pgcode.Syntax, "syntax error, expected \"FOR\""))
-			return nil
-		}
-
-		l.lastPos++
-		if l.Peek().id == EXECUTE {
-			l.lastPos++
-			dynamicQuery, endToken := l.ReadSqlExpressionStr2(USING, ';')
-			openStmt.DynamicQuery = dynamicQuery
-			l.lastPos++
-			if endToken == USING {
-				// Continue reading for params for the sql expression till the ending
-				// token is not a comma.
-				openStmt.Params = make([]string, 0)
-				for {
-					param, endToken := l.ReadSqlExpressionStr2(',', ';')
-					openStmt.Params = append(openStmt.Params, param)
-					if endToken != ',' {
-						break
-					}
-					l.lastPos++
-				}
-			}
-		} else {
-			openStmt.Query = l.ReadSqlExpressionStr(';')
-		}
-	} else {
-		// read_cursor_args()
-		openStmt.ArgQuery = "hello"
-	}
-	return openStmt
-}
-
-// ReadSqlExpressionStr returns the string from the l.lastPos till it sees
-// the terminator for the first time. The returned string is made by tokens
-// between the starting index (included) to the terminator (not included).
-// TODO(plpgsql-team): pass the output to the sql parser
-// (i.e. sqlParserImpl.Parse()).
-func (l *lexer) ReadSqlExpressionStr(terminator int) (sqlStr string) {
-	sqlStr, _ = l.ReadSqlConstruct(terminator, 0, 0)
-	return sqlStr
-}
-
-func (l *lexer) ReadSqlExpressionStr2(
-	terminator1 int, terminator2 int,
-) (sqlStr string, terminatorMet int) {
-	return l.ReadSqlConstruct(terminator1, terminator2, 0)
+	return ret, nil
 }
 
 func (l *lexer) readSQLConstruct(
-	terminator1 int, terminators ...int,
-) (startPos, endPos, terminatorMet int) {
+	isExpr bool, terminator1 int, terminators ...int,
+) (startPos, endPos, terminatorMet int, err error) {
 	if l.parser.Lookahead() != -1 {
 		// Push back the lookahead token so that it can be included.
 		l.PushBack(1)
@@ -340,32 +285,108 @@ func (l *lexer) readSQLConstruct(
 		} else if tok.id == ')' || tok.id == ']' {
 			parenLevel--
 			if parenLevel < 0 {
-				panic(errors.AssertionFailedf("wrongly nested parentheses"))
+				return 0, 0, 0, errors.New("mismatched parentheses")
 			}
 		}
 		l.lastPos++
 	}
 	if parenLevel != 0 {
-		panic(errors.AssertionFailedf("parentheses is badly nested"))
-	}
-	if startPos > l.lastPos {
-		//TODO(jane): show the terminator in the panic message.
-		l.setErr(errors.New("missing SQL expression"))
-		return 0, 0, 0
+		return 0, 0, 0, errors.New("mismatched parentheses")
 	}
 	endPos = l.lastPos + 1
 	if endPos > len(l.tokens) {
 		endPos = len(l.tokens)
 	}
-	return startPos, endPos, terminatorMet
+	if endPos <= startPos {
+		if isExpr {
+			return 0, 0, 0, errors.New("missing expression")
+		} else {
+			return 0, 0, 0, errors.New("missing SQL statement")
+		}
+	}
+	return startPos, endPos, terminatorMet, nil
 }
 
-func (l *lexer) ReadSqlConstruct(
+func (l *lexer) MakeFetchOrMoveStmt(isMove bool) (plpgsqltree.Statement, error) {
+	if l.parser.Lookahead() != -1 {
+		// Push back the lookahead token so that it can be included.
+		l.PushBack(1)
+	}
+	prefix := "FETCH "
+	if isMove {
+		prefix = "MOVE "
+	}
+	sqlStr, terminator, err := l.ReadSqlStatement(INTO, ';')
+	if err != nil {
+		return nil, err
+	}
+	sqlStr = prefix + sqlStr
+	sqlStmt, err := parser.ParseOne(sqlStr)
+	if err != nil {
+		return nil, err
+	}
+	var cursor tree.CursorStmt
+	switch t := sqlStmt.AST.(type) {
+	case *tree.FetchCursor:
+		cursor = t.CursorStmt
+	case *tree.MoveCursor:
+		cursor = t.CursorStmt
+	default:
+		return nil, errors.Newf("invalid FETCH or MOVE syntax")
+	}
+	var target []plpgsqltree.Variable
+	if !isMove {
+		if terminator != INTO {
+			return nil, errors.Newf("invalid syntax for FETCH")
+		}
+		// Read past the INTO.
+		l.lastPos++
+		startPos, endPos, _, err := l.readSQLConstruct(true /* isExpr */, ';')
+		if err != nil {
+			return nil, err
+		}
+		for pos := startPos; pos < endPos; pos += 2 {
+			tok := l.tokens[pos]
+			if tok.id != IDENT {
+				return nil, errors.Newf("\"%s\" is not a scalar variable", tok.str)
+			}
+			if pos+1 != endPos && l.tokens[pos+1].id != ',' {
+				return nil, errors.Newf("expected INTO target to be a comma-separated list")
+			}
+			variable := plpgsqltree.Variable(strings.TrimSpace(l.getStr(pos, pos+1)))
+			target = append(target, variable)
+		}
+		if len(target) == 0 {
+			return nil, errors.Newf("expected INTO target")
+		}
+	}
+	// Move past the semicolon.
+	l.lastPos++
+	return &plpgsqltree.Fetch{
+		Cursor: cursor,
+		Target: target,
+		IsMove: isMove,
+	}, nil
+}
+
+func (l *lexer) ReadSqlExpr(
 	terminator1 int, terminators ...int,
-) (sqlStr string, terminatorMet int) {
+) (sqlStr string, terminatorMet int, err error) {
 	var startPos, endPos int
-	startPos, endPos, terminatorMet = l.readSQLConstruct(terminator1, terminators...)
-	return l.getStr(startPos, endPos), terminatorMet
+	startPos, endPos, terminatorMet, err = l.readSQLConstruct(
+		true /* isExpr */, terminator1, terminators...,
+	)
+	return l.getStr(startPos, endPos), terminatorMet, err
+}
+
+func (l *lexer) ReadSqlStatement(
+	terminator1 int, terminators ...int,
+) (sqlStr string, terminatorMet int, err error) {
+	var startPos, endPos int
+	startPos, endPos, terminatorMet, err = l.readSQLConstruct(
+		false /* isExpr */, terminator1, terminators...,
+	)
+	return l.getStr(startPos, endPos), terminatorMet, err
 }
 
 func (l *lexer) getStr(startPos, endPos int) string {
@@ -378,26 +399,6 @@ func (l *lexer) getStr(startPos, endPos int) string {
 	}
 	start := int(l.tokens[startPos].Pos())
 	return l.in[start:end]
-}
-
-func (l *lexer) ProcessQueryForCursorWithoutExplicitExpr(openStmt *plpgsqltree.Open) {
-	l.lastPos++
-	if int(l.Peek().id) == EXECUTE {
-		dynamicQuery, endToken := l.ReadSqlExpressionStr2(USING, ';')
-		openStmt.DynamicQuery = dynamicQuery
-		if endToken == USING {
-			var expr string
-			for {
-				expr, endToken = l.ReadSqlExpressionStr2(',', ';')
-				openStmt.Params = append(openStmt.Params, expr)
-				if endToken != ',' {
-					break
-				}
-			}
-		}
-	} else {
-		openStmt.Query = l.ReadSqlExpressionStr(';')
-	}
 }
 
 // Peek peeks
@@ -477,5 +478,14 @@ func (l *lexer) GetTypeFromValidSQLSyntax(sqlStr string) (tree.ResolvableTypeRef
 }
 
 func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.Expr, error) {
-	return parser.ParseExpr(sqlStr)
+	// Use ParseExprs instead of ParseExpr in order to correctly handle the case
+	// when multiple expressions are incorrectly passed.
+	exprs, err := parser.ParseExprs([]string{sqlStr})
+	if err != nil {
+		return nil, err
+	}
+	if len(exprs) != 1 {
+		return nil, pgerror.Newf(pgcode.Syntax, "query returned %d columns", len(exprs))
+	}
+	return exprs[0], nil
 }

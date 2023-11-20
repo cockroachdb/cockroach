@@ -871,6 +871,12 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			)
 			e.emitLockingPolicyWithPrefix("FK check ", fk.Locking)
 		}
+		for _, uniq := range a.UniqChecks {
+			ob.Attr(
+				"uniqueness check", fmt.Sprintf("%s@%s", uniq.ReferencedTable.Name(), uniq.ReferencedIndex.Name()),
+			)
+			e.emitLockingPolicyWithPrefix("uniqueness check ", uniq.Locking)
+		}
 		if len(a.Rows) > 0 {
 			e.emitTuples(tree.RawRows(a.Rows), len(a.Rows[0]))
 		}
@@ -1074,12 +1080,16 @@ func (e *emitter) emitLockingPolicy(locking opt.Locking) {
 func (e *emitter) emitLockingPolicyWithPrefix(keyPrefix string, locking opt.Locking) {
 	strength := descpb.ToScanLockingStrength(locking.Strength)
 	waitPolicy := descpb.ToScanLockingWaitPolicy(locking.WaitPolicy)
+	form := locking.Form
 	durability := locking.Durability
 	if strength != descpb.ScanLockingStrength_FOR_NONE {
 		e.ob.Attr(keyPrefix+"locking strength", strength.PrettyString())
 	}
 	if waitPolicy != descpb.ScanLockingWaitPolicy_BLOCK {
 		e.ob.Attr(keyPrefix+"locking wait policy", waitPolicy.PrettyString())
+	}
+	if form != tree.LockRecord {
+		e.ob.Attr(keyPrefix+"locking form", form.String())
 	}
 	if durability != tree.LockDurabilityBestEffort {
 		e.ob.Attr(keyPrefix+"locking durability", durability.String())

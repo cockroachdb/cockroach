@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -271,7 +272,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 
 	if benchSpec.multiregion {
 		geoZones := []string{regionUsEast, regionUsWest, regionUsCentral}
-		specOptions = append(specOptions, spec.Zones(strings.Join(geoZones, ",")))
+		specOptions = append(specOptions, spec.GCEZones(strings.Join(geoZones, ",")))
 		specOptions = append(specOptions, spec.Geo())
 		extraNameParts = append(extraNameParts, "multi-region")
 	}
@@ -293,6 +294,8 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 			benchSpec.nodes+addlNodeCount+1,
 			specOptions...,
 		),
+		CompatibleClouds:    registry.AllExceptAWS,
+		Suites:              registry.Suites(registry.Nightly),
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		Timeout:             timeout,
 		NonReleaseBlocker:   true,
@@ -370,7 +373,6 @@ func setupDecommissionBench(
 	workloadNode, pinnedNode int,
 	importCmd string,
 ) {
-	c.Put(ctx, t.Cockroach(), "./cockroach", c.All())
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workloadNode))
 	for i := 1; i <= benchSpec.nodes; i++ {
 		// Don't start a scheduled backup as this roachtest reports to roachperf.
@@ -938,8 +940,8 @@ func runSingleDecommission(
 		if err := h.c.RunE(
 			ctx, h.c.Node(target),
 			fmt.Sprintf("sudo bash -c 'echo \"259:0  %d\" > "+
-				"/sys/fs/cgroup/blkio/system.slice/cockroach.service/blkio.throttle.write_bps_device'",
-				100*(1<<20))); err != nil {
+				"/sys/fs/cgroup/blkio/system.slice/%s.service/blkio.throttle.write_bps_device'",
+				100*(1<<20), roachtestutil.SystemInterfaceSystemdUnitName())); err != nil {
 			return err
 		}
 		// Wait for some time after limiting write bandwidth in order to affect read amplification.

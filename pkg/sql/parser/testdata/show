@@ -1308,6 +1308,30 @@ SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t -- literals removed
 SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE _._ -- identifiers removed
 
 parse
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t
+----
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER (t) -- fully parenthesized
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t -- literals removed
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER _ -- identifiers removed
+
+parse
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH START TIMESTAMP = '132412341234.000000'
+----
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- normalized!
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER (t) WITH OPTIONS (START TIMESTAMP = ('132412341234.000000')) -- fully parenthesized
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '_') -- literals removed
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER _ WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- identifiers removed
+
+parse
+SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT t WITH START TIMESTAMP = '132412341234.000000'
+----
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- normalized!
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER (t) WITH OPTIONS (START TIMESTAMP = ('132412341234.000000')) -- fully parenthesized
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER t WITH OPTIONS (START TIMESTAMP = '_') -- literals removed
+SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER _ WITH OPTIONS (START TIMESTAMP = '132412341234.000000') -- identifiers removed
+
+parse
 SHOW ZONE CONFIGURATIONS
 ----
 SHOW ZONE CONFIGURATIONS
@@ -2055,23 +2079,23 @@ SHOW VIRTUAL CLUSTER _ WITH REPLICATION STATUS, CAPABILITIES -- identifiers remo
 parse
 SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH incremental_location = 'nullif', privileges, debug_dump_metadata_sst
 ----
-SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH incremental_location = 'nullif', privileges, debug_dump_metadata_sst
-SHOW BACKUP ('family') IN (('string'), ('placeholder'), ('placeholder'), ('placeholder'), ('string'), ('placeholder'), ('string'), ('placeholder')) WITH incremental_location = ('nullif'), privileges, debug_dump_metadata_sst -- fully parenthesized
-SHOW BACKUP '_' IN ('_', '_', '_', '_', '_', '_', '_', '_') WITH incremental_location = '_', privileges, debug_dump_metadata_sst -- literals removed
-SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH incremental_location = 'nullif', privileges, debug_dump_metadata_sst -- identifiers removed
+SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH OPTIONS (incremental_location = 'nullif', privileges, debug_dump_metadata_sst) -- normalized!
+SHOW BACKUP ('family') IN (('string'), ('placeholder'), ('placeholder'), ('placeholder'), ('string'), ('placeholder'), ('string'), ('placeholder')) WITH OPTIONS (incremental_location = ('nullif'), privileges, debug_dump_metadata_sst) -- fully parenthesized
+SHOW BACKUP '_' IN ('_', '_', '_', '_', '_', '_', '_', '_') WITH OPTIONS (incremental_location = '_', privileges, debug_dump_metadata_sst) -- literals removed
+SHOW BACKUP 'family' IN ('string', 'placeholder', 'placeholder', 'placeholder', 'string', 'placeholder', 'string', 'placeholder') WITH OPTIONS (incremental_location = 'nullif', privileges, debug_dump_metadata_sst) -- identifiers removed
 
 parse
 SHOW BACKUP 'abc' WITH SKIP SIZE
 ----
-SHOW BACKUP 'abc' WITH skip size -- normalized!
-SHOW BACKUP ('abc') WITH skip size -- fully parenthesized
-SHOW BACKUP '_' WITH skip size -- literals removed
-SHOW BACKUP 'abc' WITH skip size -- identifiers removed
+SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- normalized!
+SHOW BACKUP ('abc') WITH OPTIONS (skip size) -- fully parenthesized
+SHOW BACKUP '_' WITH OPTIONS (skip size) -- literals removed
+SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- identifiers removed
 
 parse
 SHOW BACKUP 'abc' WITH NOWAIT
 ----
-SHOW BACKUP 'abc' WITH skip size -- normalized!
-SHOW BACKUP ('abc') WITH skip size -- fully parenthesized
-SHOW BACKUP '_' WITH skip size -- literals removed
-SHOW BACKUP 'abc' WITH skip size -- identifiers removed
+SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- normalized!
+SHOW BACKUP ('abc') WITH OPTIONS (skip size) -- fully parenthesized
+SHOW BACKUP '_' WITH OPTIONS (skip size) -- literals removed
+SHOW BACKUP 'abc' WITH OPTIONS (skip size) -- identifiers removed

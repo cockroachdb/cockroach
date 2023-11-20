@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -41,6 +42,17 @@ const (
 
 	// JSONContentType is the JSON content type.
 	JSONContentType = "application/json"
+)
+
+// ServerHTTPBasePath is a cluster setting that contains the path to
+// route the user to after successful login. It is intended to be
+// overridden in cases where DB Console is being proxied.
+var ServerHTTPBasePath = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"server.http.base_path",
+	"path to redirect the user to upon succcessful login",
+	"/",
+	settings.WithPublic,
 )
 
 // httpMux redirects incoming HTTP requests to the server selected by
@@ -69,7 +81,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantName := getTenantNameFromHTTPRequest(c.st, r)
-	s, err := c.getServer(ctx, tenantName)
+	s, _, err := c.getServer(ctx, tenantName)
 	if err != nil {
 		log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 		// Clear session and tenant cookies since it appears they reference invalid state.
@@ -93,7 +105,7 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		// get into a state where they cannot load DB Console assets at all due to invalid
 		// cookies.
 		defaultTenantName := roachpb.TenantName(multitenant.DefaultTenantSelect.Get(&c.st.SV))
-		s, err = c.getServer(ctx, defaultTenantName)
+		s, _, err = c.getServer(ctx, defaultTenantName)
 		if err != nil {
 			log.Warningf(ctx, "unable to find server for default tenant %q: %v", defaultTenantName, err)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -157,7 +169,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 		redirectLocation := "/" // default to home page
 		collectedErrors := make([]string, len(tenantNames))
 		for i, name := range tenantNames {
-			server, err := c.getServer(ctx, name)
+			server, _, err := c.getServer(ctx, name)
 			if err != nil {
 				if errors.Is(err, errNoTenantServerRunning) {
 					// Server has stopped after the call to
@@ -289,7 +301,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 			return
 		}
 		for _, name := range tenantNames {
-			server, err := c.getServer(ctx, name)
+			server, _, err := c.getServer(ctx, name)
 			if err != nil {
 				if errors.Is(err, errNoTenantServerRunning) {
 					// Server has stopped after the call to

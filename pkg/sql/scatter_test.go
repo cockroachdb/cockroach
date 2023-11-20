@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -119,9 +118,6 @@ func TestScatterResponse(t *testing.T) {
 	defer ts.Stopper().Stop(context.Background())
 
 	s := ts.ApplicationLayer()
-
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	sqlutils.CreateTable(
 		t, sqlDB, "t",

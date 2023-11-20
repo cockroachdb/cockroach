@@ -47,7 +47,7 @@ func isInterestingSQL(t *testing.T, contains string) reduce.InterestingFn {
 		serv := serverutils.StartServerOnly(t, args)
 		defer serv.Stopper().Stop(ctx)
 
-		db := serv.ApplicationLayer().SQLConn(t, "")
+		db := serv.ApplicationLayer().SQLConn(t)
 
 		_, err := db.Exec(f)
 		if err == nil {

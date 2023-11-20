@@ -74,12 +74,12 @@ var _ lockTableGuard = &mockLockTableGuard{}
 // mockLockTableGuard implements the lockTableGuard interface.
 func (g *mockLockTableGuard) ShouldWait() bool            { return true }
 func (g *mockLockTableGuard) NewStateChan() chan struct{} { return g.signal }
-func (g *mockLockTableGuard) CurState() waitingState {
+func (g *mockLockTableGuard) CurState() (waitingState, error) {
 	s := g.state
 	if g.stateObserved != nil {
 		g.stateObserved <- struct{}{}
 	}
-	return s
+	return s, nil
 }
 func (g *mockLockTableGuard) ResolveBeforeScanning() []roachpb.LockUpdate {
 	return g.toResolve
@@ -133,7 +133,7 @@ func setupLockTableWaiterTest() (
 }
 
 func makeTxnProto(name string) roachpb.Transaction {
-	return roachpb.MakeTransaction(name, []byte("key"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 6)
+	return roachpb.MakeTransaction(name, []byte("key"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 6, 0)
 }
 
 // TestLockTableWaiterWithTxn tests the lockTableWaiter's behavior under
@@ -501,7 +501,7 @@ func testErrorWaitPush(
 	k waitKind,
 	makeReq func() Request,
 	expPushTS hlc.Timestamp,
-	errReason kvpb.LockConflictError_Reason,
+	errReason kvpb.WriteIntentError_Reason,
 ) {
 	ctx := context.Background()
 	keyA := roachpb.Key("keyA")
@@ -531,9 +531,9 @@ func testErrorWaitPush(
 			if expPushTS == dontExpectPush {
 				err := w.WaitOn(ctx, req, g)
 				require.NotNil(t, err)
-				lcErr := new(kvpb.LockConflictError)
-				require.True(t, errors.As(err.GoError(), &lcErr))
-				require.Equal(t, errReason, lcErr.Reason)
+				wiErr := new(kvpb.WriteIntentError)
+				require.True(t, errors.As(err.GoError(), &wiErr))
+				require.Equal(t, errReason, wiErr.Reason)
 				return
 			}
 
@@ -587,9 +587,9 @@ func testErrorWaitPush(
 			err := w.WaitOn(ctx, req, g)
 			if pusheeActive {
 				require.NotNil(t, err)
-				lcErr := new(kvpb.LockConflictError)
-				require.True(t, errors.As(err.GoError(), &lcErr))
-				require.Equal(t, errReason, lcErr.Reason)
+				wiErr := new(kvpb.WriteIntentError)
+				require.True(t, errors.As(err.GoError(), &wiErr))
+				require.Equal(t, errReason, wiErr.Reason)
 			} else {
 				require.Nil(t, err)
 			}
@@ -766,9 +766,9 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 				err := w.WaitOn(ctx, req, g)
 				if pusheeActive {
 					require.NotNil(t, err)
-					lcErr := new(kvpb.LockConflictError)
-					require.True(t, errors.As(err.GoError(), &lcErr))
-					require.Equal(t, reasonLockTimeout, lcErr.Reason)
+					wiErr := new(kvpb.WriteIntentError)
+					require.True(t, errors.As(err.GoError(), &wiErr))
+					require.Equal(t, reasonLockTimeout, wiErr.Reason)
 				} else {
 					require.Nil(t, err)
 				}

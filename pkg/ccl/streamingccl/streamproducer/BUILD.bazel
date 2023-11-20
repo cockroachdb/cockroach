@@ -39,6 +39,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/clusterunique",
         "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
@@ -74,7 +75,6 @@ go_test(
         "replication_stream_test.go",
         "stream_event_batcher_test.go",
     ],
-    args = ["-test.timeout=895s"],
     embed = [":streamproducer"],
     tags = ["ccl_test"],
     deps = [
@@ -108,6 +108,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/clusterunique",
         "//pkg/sql/distsql",
         "//pkg/sql/isql",
         "//pkg/sql/sem/catconstants",

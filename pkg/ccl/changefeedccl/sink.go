@@ -159,7 +159,7 @@ func getAndDialSink(
 // WebhookV2Enabled determines whether or not the refactored Webhook sink
 // or the deprecated sink should be used.
 var WebhookV2Enabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.new_webhook_sink_enabled",
 	"if enabled, this setting enables a new implementation of the webhook sink"+
 		" that allows for a much higher throughput",
@@ -171,7 +171,7 @@ var WebhookV2Enabled = settings.RegisterBoolSetting(
 // PubsubV2Enabled determines whether or not the refactored Webhook sink
 // or the deprecated sink should be used.
 var PubsubV2Enabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"changefeed.new_pubsub_sink_enabled",
 	"if enabled, this setting enables a new implementation of the pubsub sink"+
 		" that allows for a higher throughput",
@@ -232,7 +232,7 @@ func getSink(
 				nullIsAccounted = knobs.NullSinkIsExternalIOAccounted
 			}
 			return makeNullSink(sinkURL{URL: u}, metricsBuilder(nullIsAccounted))
-		case u.Scheme == changefeedbase.SinkSchemeKafka:
+		case isKafkaSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
 				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
 			})

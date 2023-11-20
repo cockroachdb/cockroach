@@ -171,6 +171,11 @@ func (c *Cache) readFromStorage(
 		}
 	}
 
+	// Admin always has ALL global privileges.
+	if spo.GetObjectType() == privilege.Global {
+		privDesc.Grant(username.AdminRoleName(), privilege.List{privilege.ALL}, true)
+	}
+
 	// We use InvalidID to skip checks on the root/admin roles having
 	// privileges.
 	validPrivs, err := privilege.GetValidPrivilegesForObject(spo.GetObjectType())

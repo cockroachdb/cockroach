@@ -45,11 +45,12 @@ go_library(
 go_test(
     name = "azure_test",
     srcs = [
+        "azure_connection_test.go",
         "azure_file_credentials_test.go",
+        "azure_kms_connection_test.go",
         "azure_kms_test.go",
         "azure_storage_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":azure"],
     deps = [
         "//pkg/base",
@@ -57,6 +58,8 @@ go_test(
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/cloudtestutils",
+        "//pkg/cloud/externalconn",
+        "//pkg/cloud/externalconn/connectionpb",
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/testutils",

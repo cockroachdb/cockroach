@@ -9,12 +9,15 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/pretty",
     visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/errorutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 go_test(
     name = "pretty_test",
     size = "small",
     srcs = ["pretty_test.go"],
-    args = ["-test.timeout=55s"],
     deps = [":pretty"],
 )

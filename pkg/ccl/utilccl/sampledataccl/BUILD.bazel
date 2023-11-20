@@ -17,7 +17,6 @@ go_test(
     name = "sampledataccl_test",
     size = "small",
     srcs = ["main_test.go"],
-    args = ["-test.timeout=55s"],
     embed = [":sampledataccl"],
     tags = ["ccl_test"],
     deps = [

@@ -41,7 +41,7 @@ type timeSeriesResolutionInfo struct {
 // intended to be called by a storage queue which can inspect the local data for
 // a single range without the need for expensive network calls.
 func (tsdb *DB) findTimeSeries(
-	reader storage.Reader, startKey, endKey roachpb.RKey, now hlc.Timestamp,
+	ctx context.Context, reader storage.Reader, startKey, endKey roachpb.RKey, now hlc.Timestamp,
 ) ([]timeSeriesResolutionInfo, error) {
 	var results []timeSeriesResolutionInfo
 
@@ -64,7 +64,8 @@ func (tsdb *DB) findTimeSeries(
 	thresholds := tsdb.computeThresholds(now.WallTime)
 
 	// NB: timeseries don't have intents.
-	iter, err := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: endKey.AsRawKey()})
+	iter, err := reader.NewMVCCIterator(
+		ctx, storage.MVCCKeyIterKind, storage.IterOptions{UpperBound: endKey.AsRawKey()})
 	if err != nil {
 		return nil, err
 	}

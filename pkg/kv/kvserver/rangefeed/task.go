@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -93,21 +94,29 @@ type IntentScanner interface {
 	Close()
 }
 
-// SeparatedIntentScanner is an IntentScanner that assumes that
-// separated intents are in use.
-//
-// EngineIterator Contract:
-//
-//   - The EngineIterator must have an UpperBound set.
-//   - The range must be using separated intents.
+// SeparatedIntentScanner is an IntentScanner that scans the lock table keyspace
+// and searches for intents.
 type SeparatedIntentScanner struct {
-	iter storage.EngineIterator
+	iter *storage.LockTableIterator
 }
 
 // NewSeparatedIntentScanner returns an IntentScanner appropriate for
 // use when the separated intents migration has completed.
-func NewSeparatedIntentScanner(iter storage.EngineIterator) IntentScanner {
-	return &SeparatedIntentScanner{iter: iter}
+func NewSeparatedIntentScanner(
+	ctx context.Context, reader storage.Reader, span roachpb.RSpan,
+) (IntentScanner, error) {
+	lowerBound, _ := keys.LockTableSingleKey(span.Key.AsRawKey(), nil)
+	upperBound, _ := keys.LockTableSingleKey(span.EndKey.AsRawKey(), nil)
+	iter, err := storage.NewLockTableIterator(ctx, reader, storage.LockTableIteratorOptions{
+		LowerBound: lowerBound,
+		UpperBound: upperBound,
+		// Ignore Shared and Exclusive locks. We only care about intents.
+		MatchMinStr: lock.Intent,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &SeparatedIntentScanner{iter: iter}, nil
 }
 
 // ConsumeIntents implements the IntentScanner interface.
@@ -126,13 +135,16 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 			break
 		}
 
-		engineKey, err := s.iter.EngineKey()
+		engineKey, err := s.iter.UnsafeEngineKey()
 		if err != nil {
 			return err
 		}
-		lockedKey, err := keys.DecodeLockTableSingleKey(engineKey.Key)
+		ltKey, err := engineKey.ToLockTableKey()
 		if err != nil {
-			return errors.Wrapf(err, "decoding LockTable key: %s", lockedKey)
+			return errors.Wrapf(err, "decoding LockTable key: %s", ltKey)
+		}
+		if ltKey.Strength != lock.Intent {
+			return errors.AssertionFailedf("LockTableKey with strength %s: %s", ltKey.Strength, ltKey)
 		}
 
 		v, err := s.iter.UnsafeValue()
@@ -140,10 +152,10 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 			return err
 		}
 		if err := protoutil.Unmarshal(v, &meta); err != nil {
-			return errors.Wrapf(err, "unmarshaling mvcc meta for locked key %s", lockedKey)
+			return errors.Wrapf(err, "unmarshaling mvcc meta for locked key %s", ltKey)
 		}
 		if meta.Txn == nil {
-			return errors.Newf("expected transaction metadata but found none for %s", lockedKey)
+			return errors.Newf("expected transaction metadata but found none for %s", ltKey)
 		}
 
 		consumer(enginepb.MVCCWriteIntentOp{
@@ -159,76 +171,6 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 
 // Close implements the IntentScanner interface.
 func (s *SeparatedIntentScanner) Close() { s.iter.Close() }
-
-// LegacyIntentScanner is an IntentScanner that assumers intents might
-// not be separated.
-//
-// MVCCIterator Contract:
-//
-//	The provided MVCCIterator must observe all intents in the Processor's keyspan.
-//	An important implication of this is that if the iterator is a
-//	TimeBoundIterator, its MinTimestamp cannot be above the keyspan's largest
-//	known resolved timestamp, if one has ever been recorded. If one has never
-//	been recorded, the TimeBoundIterator cannot have any lower bound.
-type LegacyIntentScanner struct {
-	iter storage.SimpleMVCCIterator
-}
-
-// NewLegacyIntentScanner returns an IntentScanner appropriate for use
-// when the separated intents migration has not yet completed.
-func NewLegacyIntentScanner(iter storage.SimpleMVCCIterator) IntentScanner {
-	return &LegacyIntentScanner{iter: iter}
-}
-
-// ConsumeIntents implements the IntentScanner interface.
-func (l *LegacyIntentScanner) ConsumeIntents(
-	ctx context.Context, start roachpb.Key, end roachpb.Key, consumer eventConsumer,
-) error {
-	startKey := storage.MakeMVCCMetadataKey(start)
-	endKey := storage.MakeMVCCMetadataKey(end)
-	// Iterate through all keys using NextKey. This will look at the first MVCC
-	// version for each key. We're only looking for MVCCMetadata versions, which
-	// will always be the first version of a key if it exists, so its fine that
-	// we skip over all other versions of keys.
-	var meta enginepb.MVCCMetadata
-	for l.iter.SeekGE(startKey); ; l.iter.NextKey() {
-		if ok, err := l.iter.Valid(); err != nil {
-			return err
-		} else if !ok || !l.iter.UnsafeKey().Less(endKey) {
-			break
-		}
-
-		// If the key is not a metadata key, ignore it.
-		unsafeKey := l.iter.UnsafeKey()
-		if unsafeKey.IsValue() {
-			continue
-		}
-
-		// Found a metadata key. Unmarshal.
-		v, err := l.iter.UnsafeValue()
-		if err != nil {
-			return err
-		}
-		if err := protoutil.Unmarshal(v, &meta); err != nil {
-			return errors.Wrapf(err, "unmarshaling mvcc meta: %v", unsafeKey)
-		}
-
-		// If this is an intent, inform the Processor.
-		if meta.Txn != nil {
-			consumer(enginepb.MVCCWriteIntentOp{
-				TxnID:           meta.Txn.ID,
-				TxnKey:          meta.Txn.Key,
-				TxnIsoLevel:     meta.Txn.IsoLevel,
-				TxnMinTimestamp: meta.Txn.MinTimestamp,
-				Timestamp:       meta.Txn.WriteTimestamp,
-			})
-		}
-	}
-	return nil
-}
-
-// Close implements the IntentScanner interface.
-func (l *LegacyIntentScanner) Close() { l.iter.Close() }
 
 // TxnPusher is capable of pushing transactions to a new timestamp and
 // cleaning up the intents of transactions that are found to be committed.

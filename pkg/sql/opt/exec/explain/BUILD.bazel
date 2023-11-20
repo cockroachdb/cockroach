@@ -55,7 +55,6 @@ go_test(
         "output_test.go",
         "plan_gist_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]) + [
         "//pkg/sql/opt/testutils/opttester:testfixtures",
     ],
@@ -66,7 +65,6 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/execinfra",
         "//pkg/sql/opt/cat",

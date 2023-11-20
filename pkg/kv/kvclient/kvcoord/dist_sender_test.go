@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/simulation"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -220,7 +219,7 @@ func (l *simpleTransportAdapter) Release() {}
 
 func makeGossip(t *testing.T, stopper *stop.Stopper, rpcContext *rpc.Context) *gossip.Gossip {
 	const nodeID = 1
-	g := gossip.NewTest(nodeID, stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	g := gossip.NewTest(nodeID, stopper, metric.NewRegistry())
 	if err := g.SetNodeDescriptor(newNodeDesc(nodeID)); err != nil {
 		t.Fatal(err)
 	}
@@ -490,7 +489,7 @@ func TestSendRPCOrder(t *testing.T) {
 				RangeID:       rangeID, // Not used in this test, but why not.
 				RoutingPolicy: tc.routingPolicy,
 			}
-			req := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("b"), false)
+			req := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("b"))
 			_, pErr := kv.SendWrappedWith(ctx, ds, header, req)
 			require.Nil(t, pErr)
 		})
@@ -618,7 +617,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 
 	txn := roachpb.MakeTransaction(
 		"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
-		clock.Now(), clock.MaxOffset().Nanoseconds(), int32(ds.getNodeID()),
+		clock.Now(), clock.MaxOffset().Nanoseconds(), int32(ds.nodeIDGetter()), 0,
 	)
 	origTxnTs := txn.WriteTimestamp
 
@@ -951,7 +950,7 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 		Lease: lease,
 	})
 
-	get := kvpb.NewGet(roachpb.Key("a"), false /* forUpdate */)
+	get := kvpb.NewGet(roachpb.Key("a"))
 	_, pErr := kv.SendWrapped(ctx, ds, get)
 	require.Nil(t, pErr)
 	require.Equal(t, []roachpb.NodeID{1, 2}, sentTo)
@@ -1023,7 +1022,7 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 
 	// Send a request. It should try all three replicas once: the first two fail
 	// with NLHE, the third one succeeds. None of them should trigger backoffs.
-	_, pErr := kv.SendWrapped(ctx, ds, kvpb.NewGet(roachpb.Key("a"), false /* forUpdate */))
+	_, pErr := kv.SendWrapped(ctx, ds, kvpb.NewGet(roachpb.Key("a")))
 	require.NoError(t, pErr.GoError())
 	require.Equal(t, []roachpb.NodeID{1, 2, 3}, sentTo)
 	require.Equal(t, int64(0), ds.Metrics().InLeaseTransferBackoffs.Count())
@@ -1119,7 +1118,7 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 		Lease: cachedLease,
 	})
 
-	get := kvpb.NewGet(roachpb.Key("a"), false /* forUpdate */)
+	get := kvpb.NewGet(roachpb.Key("a"))
 	_, pErr := kv.SendWrapped(ctx, ds, get)
 	require.Nil(t, pErr)
 
@@ -1241,7 +1240,7 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 				Lease: cachedLease,
 			})
 
-			get := kvpb.NewGet(roachpb.Key("a"), false /* forUpdate */)
+			get := kvpb.NewGet(roachpb.Key("a"))
 			_, pErr := kv.SendWrapped(ctx, ds, get)
 			require.Nil(t, pErr)
 
@@ -1350,7 +1349,7 @@ func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 				Lease: cachedLease,
 			})
 
-			get := kvpb.NewGet(roachpb.Key("a"), false /* forUpdate */)
+			get := kvpb.NewGet(roachpb.Key("a"))
 			_, pErr := kv.SendWrapped(ctx, ds, get)
 			if spec.shouldRetry {
 				require.True(t, secondReplicaTried, "Second replica was not retried")
@@ -1664,9 +1663,9 @@ func TestEvictCacheOnError(t *testing.T) {
 		},
 	}
 
-	rangeMismachErr := kvpb.NewRangeKeyMismatchError(
+	rangeMismatchErr := kvpb.NewRangeKeyMismatchError(
 		context.Background(), nil, nil, &lhs, nil /* lease */)
-	rangeMismachErr.AppendRangeInfo(context.Background(), roachpb.RangeInfo{Desc: rhs, Lease: roachpb.Lease{}})
+	rangeMismatchErr.AppendRangeInfo(context.Background(), roachpb.RangeInfo{Desc: rhs, Lease: roachpb.Lease{}})
 
 	testCases := []struct {
 		canceledCtx            bool
@@ -1675,7 +1674,7 @@ func TestEvictCacheOnError(t *testing.T) {
 		shouldClearReplica     bool
 	}{
 		{false, errors.New(errString), false, false},      // non-retryable replica error
-		{false, rangeMismachErr, false, false},            // RangeKeyMismatch replica error
+		{false, rangeMismatchErr, false, false},           // RangeKeyMismatch replica error
 		{false, &kvpb.RangeNotFoundError{}, false, false}, // RangeNotFound replica error
 		{false, nil, false, false},                        // RPC error
 		{true, nil, false, false},                         // canceled context
@@ -1904,7 +1903,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		Settings:           cluster.MakeTestingClusterSettings(),
 	}
 	ds := NewDistSender(cfg)
-	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
+	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	if _, err := kv.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
@@ -2008,7 +2007,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		RPCRetryOptions: &retry.Options{MaxRetries: 1},
 	}
 	ds := NewDistSender(cfg)
-	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
+	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	if _, err := kv.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
 	}
@@ -2021,7 +2020,7 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 	stopper := stop.NewStopper(stop.WithTracer(tr))
 	defer stopper.Stop(context.Background())
 
-	n := simulation.NewNetwork(stopper, 3, true, zonepb.DefaultZoneConfigRef())
+	n := simulation.NewNetwork(stopper, 3, true)
 	for _, node := range n.Nodes {
 		// TODO(spencer): remove the use of gossip/simulation here.
 		node.Gossip.EnableSimulationCycler(false)
@@ -2128,7 +2127,7 @@ func TestSendRPCRetry(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 	ds := NewDistSender(cfg)
-	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
+	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	sr, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{MaxSpanRequestKeys: 1}, scan)
 	if err != nil {
 		t.Fatal(err)
@@ -2254,7 +2253,7 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 
 			// Send a request that's going to receive a response with a RangeInfo.
 			k := roachpb.Key("a")
-			get := kvpb.NewGet(k, false /* forUpdate */)
+			get := kvpb.NewGet(k)
 			ba := &kvpb.BatchRequest{}
 			ba.Add(get)
 			_, pErr := ds.Send(ctx, ba)
@@ -2367,7 +2366,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 	ds = NewDistSender(cfg)
-	get := kvpb.NewGet(roachpb.Key("b"), false /* forUpdate */)
+	get := kvpb.NewGet(roachpb.Key("b"))
 	_, err := kv.SendWrapped(ctx, ds, get)
 	if err != nil {
 		t.Fatal(err)
@@ -2458,12 +2457,13 @@ func TestMultiRangeGapReverse(t *testing.T) {
 		clock.Now(),
 		0, // maxOffsetNs
 		1, // coordinatorNodeID
+		0,
 	)
 
 	ba := &kvpb.BatchRequest{}
 	ba.Txn = &txn
-	ba.Add(kvpb.NewReverseScan(splits[0], splits[1], false))
-	ba.Add(kvpb.NewReverseScan(splits[2], splits[3], false))
+	ba.Add(kvpb.NewReverseScan(splits[0], splits[1]))
+	ba.Add(kvpb.NewReverseScan(splits[2], splits[3]))
 
 	// Before fixing https://github.com/cockroachdb/cockroach/issues/18174, this
 	// would error with:
@@ -2564,7 +2564,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		Settings: cluster.MakeTestingClusterSettings(),
 	}
 	ds := NewDistSender(cfg)
-	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"), false)
+	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	reply, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{
 		MaxSpanRequestKeys: 10,
@@ -2918,7 +2918,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 	ba.Add(kvpb.NewScan(
 		keys.RangeDescriptorKey(roachpb.RKey("a")),
 		keys.RangeDescriptorKey(roachpb.RKey("c")),
-		false /* forUpdate */))
+	))
 
 	if _, pErr := ds.Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
@@ -3264,7 +3264,7 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 	key := roachpb.Key("a")
 	txn := roachpb.MakeTransaction(
 		"test", key, isolation.Serializable, roachpb.NormalUserPriority,
-		clock.Now(), clock.MaxOffset().Nanoseconds(), 1, /* coordinatorNodeID */
+		clock.Now(), clock.MaxOffset().Nanoseconds(), 1 /* coordinatorNodeID */, 0,
 	)
 
 	txnRecordPresent := true
@@ -3651,7 +3651,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 
 	txn := roachpb.MakeTransaction(
 		"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
-		clock.Now(), clock.MaxOffset().Nanoseconds(), 1, /* coordinatorNodeID */
+		clock.Now(), clock.MaxOffset().Nanoseconds(), 1 /* coordinatorNodeID */, 0,
 	)
 	// We're also going to check that the highest bumped WriteTimestamp makes it
 	// to the merged error.
@@ -3661,7 +3661,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 	retryErr := kvpb.NewTransactionRetryError(kvpb.RETRY_SERIALIZABLE, "test err")
 	abortErr := kvpb.NewTransactionAbortedError(kvpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 	conditionFailedErr := &kvpb.ConditionFailedError{}
-	lockConflictErr := &kvpb.LockConflictError{}
+	writeIntentErr := &kvpb.WriteIntentError{}
 	sendErr := &sendError{}
 	ambiguousErr := &kvpb.AmbiguousResultError{}
 	randomErr := &kvpb.IntegerOverflowError{}
@@ -3732,19 +3732,19 @@ func TestMultipleErrorsMerged(t *testing.T) {
 			err2:   randomErr,
 			expErr: "results in overflow",
 		},
-		// LockConflictError also has a low score since it's "not ambiguous".
+		// WriteIntentError also has a low score since it's "not ambiguous".
 		{
-			err1:   lockConflictErr,
+			err1:   writeIntentErr,
 			err2:   ambiguousErr,
 			expErr: "result is ambiguous",
 		},
 		{
-			err1:   lockConflictErr,
+			err1:   writeIntentErr,
 			err2:   sendErr,
 			expErr: "failed to send RPC",
 		},
 		{
-			err1:   lockConflictErr,
+			err1:   writeIntentErr,
 			err2:   randomErr,
 			expErr: "results in overflow",
 		},
@@ -4037,19 +4037,19 @@ func TestCanSendToFollower(t *testing.T) {
 			kvpb.Header{
 				Txn: &roachpb.Transaction{},
 			},
-			kvpb.NewGet(roachpb.Key("a"), false /* forUpdate */),
+			kvpb.NewGet(roachpb.Key("a")),
 			1,
 		},
 		{
 			true,
 			kvpb.Header{},
-			kvpb.NewGet(roachpb.Key("a"), false /* forUpdate */),
+			kvpb.NewGet(roachpb.Key("a")),
 			1,
 		},
 		{
 			false,
 			kvpb.Header{},
-			kvpb.NewGet(roachpb.Key("a"), false /* forUpdate */),
+			kvpb.NewGet(roachpb.Key("a")),
 			2,
 		},
 	} {
@@ -4240,7 +4240,7 @@ func TestEvictMetaRange(t *testing.T) {
 		}
 		ds := NewDistSender(cfg)
 
-		scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("b"), false)
+		scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("b"))
 		if _, pErr := kv.SendWrapped(ctx, ds, scan); pErr != nil {
 			t.Fatalf("scan encountered error: %s", pErr)
 		}
@@ -4255,7 +4255,7 @@ func TestEvictMetaRange(t *testing.T) {
 		// Simulate a split on the meta2 range and mark it as stale.
 		isStale = true
 
-		scan = kvpb.NewScan(roachpb.Key("b"), roachpb.Key("c"), false)
+		scan = kvpb.NewScan(roachpb.Key("b"), roachpb.Key("c"))
 		if _, pErr := kv.SendWrapped(ctx, ds, scan); pErr != nil {
 			t.Fatalf("scan encountered error: %s", pErr)
 		}
@@ -4552,6 +4552,169 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 	}
 }
 
+// TestErrorIndexOnRangeSplit verifies that in case divideAndSendBatchToRanges
+// is called recursively due to a stale range descriptor and the error is
+// encountered during that recursive call, the error index is set correctly to
+// point to the request in the original batch. It is a regression test for
+// #111481.
+func TestErrorIndexOnRangeSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+	splitKey := keys.MustAddr(keyC)
+	newSplitKey := keys.MustAddr(keyB)
+
+	ctx := context.Background()
+	tr := tracing.NewTracer()
+	stopper := stop.NewStopper(stop.WithTracer(tr))
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+
+	// We start out with two ranges split at splitKey. This is needed so that
+	// we don't hit the fast-path in divideAndSendBatchToRanges where only a
+	// single range is touched.
+	repls := []roachpb.ReplicaDescriptor{
+		{
+			NodeID:  1,
+			StoreID: 1,
+		},
+		{
+			NodeID:  1,
+			StoreID: 1,
+		},
+	}
+	initDescs := []roachpb.RangeDescriptor{
+		{
+			RangeID:          roachpb.RangeID(1),
+			Generation:       1,
+			StartKey:         roachpb.RKeyMin,
+			EndKey:           splitKey,
+			InternalReplicas: repls,
+		},
+		{
+			RangeID:          roachpb.RangeID(2),
+			Generation:       1,
+			StartKey:         splitKey,
+			EndKey:           roachpb.RKeyMax,
+			InternalReplicas: repls,
+		},
+	}
+	// We'll send a BatchRequest touching the original two ranges, which is so
+	// that it is split into two parallel BatchRequests, then on the one
+	// touching the first range we'll inject a range key mismatch error to
+	// simulate a range split. Thus, after the injected split we'll have three
+	// ranges with split points at newSplitKey and splitKey.
+	splitDescs := []roachpb.RangeDescriptor{
+		{
+			RangeID:          roachpb.RangeID(1),
+			Generation:       2,
+			StartKey:         roachpb.RKeyMin,
+			EndKey:           newSplitKey,
+			InternalReplicas: repls,
+		},
+		{
+			RangeID:          roachpb.RangeID(3),
+			Generation:       2,
+			StartKey:         newSplitKey,
+			EndKey:           splitKey,
+			InternalReplicas: repls,
+		},
+		{
+			RangeID:          roachpb.RangeID(2),
+			Generation:       2,
+			StartKey:         splitKey,
+			EndKey:           roachpb.RKeyMax,
+			InternalReplicas: repls,
+		},
+	}
+
+	initialRDB := mockRangeDescriptorDBForDescs(initDescs...)
+	splitRDB := mockRangeDescriptorDBForDescs(splitDescs...)
+
+	var rc *rangecache.RangeCache
+	var wg sync.WaitGroup
+	var once sync.Once
+	wg.Add(2)
+	waitThenSwitchToSplitDesc := func() {
+		// Wait for both partial requests to be sent.
+		wg.Done()
+		wg.Wait()
+		// Switch out the RangeDescriptorDB.
+		once.Do(func() { rc.TestingSetDB(splitRDB) })
+	}
+
+	transportFn := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		rep := ba.CreateReply()
+		switch ba.ClientRangeInfo.DescriptorGeneration {
+		case 1:
+			waitThenSwitchToSplitDesc()
+			// We have two parallel batches: one with 2 requests and another
+			// with 1 request. Do nothing for the latter.
+			if len(ba.Requests) != 2 {
+				return rep, nil
+			}
+			// For the batch with 2 requests we inject an error to simulate a
+			// stale range cache.
+			rangeMismatchErr := kvpb.NewRangeKeyMismatchError(ctx, nil, nil, &splitDescs[0], nil /* lease */)
+			rangeMismatchErr.AppendRangeInfo(context.Background(), roachpb.RangeInfo{Desc: splitDescs[1], Lease: roachpb.Lease{}})
+			rep.Error = kvpb.NewError(rangeMismatchErr)
+			return rep, nil
+		case 2:
+			// We'll receive a few batches, all with 1 Get. Find the one
+			// targeting keyB and simulate it encountering an error (that could
+			// occur for InitPuts).
+			if len(ba.Requests) != 1 {
+				require.Fail(t, "unexpected number of requests in a batch")
+			}
+			if ba.Requests[0].GetGet().Key.Equal(keyB) {
+				rep.Error = kvpb.NewError(&kvpb.ConditionFailedError{})
+				// This is the zeroth request in a batch with 1 request.
+				rep.Error.SetErrorIndex(0)
+			}
+			return rep, nil
+		default:
+			require.Fail(t, "unexpected desc generation")
+			return nil, nil
+		}
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.AmbientContext{Tracer: tr},
+		Clock:             clock,
+		NodeDescs:         g,
+		RPCContext:        rpcContext,
+		RangeDescriptorDB: initialRDB,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(transportFn),
+		},
+		Settings: cluster.MakeTestingClusterSettings(),
+	}
+
+	ds := NewDistSender(cfg)
+	rc = ds.rangeCache
+
+	ba := &kvpb.BatchRequest{}
+	// Issue a BatchRequest such that it touches the original two ranges, and
+	// then the last request gets an error injected.
+	ba.Add(kvpb.NewGet(keyA), kvpb.NewGet(keyC), kvpb.NewGet(keyB))
+	// Inconsistent read because otherwise the batch will ask to be re-sent in a
+	// txn when split.
+	ba.ReadConsistency = kvpb.INCONSISTENT
+
+	_, pErr := ds.Send(ctx, ba)
+	require.NotNil(t, pErr)
+	require.NotNil(t, pErr.Index)
+	// This is the crux of the test - the error should have the position of
+	// Get(keyB) request from the original batch.
+	require.Equal(t, int32(2), pErr.Index.Index)
+}
+
 // Test the following scenario: the DistSender sends a request that results in a
 // sendError, meaning that the descriptor is probably stale. The descriptor is
 // then refreshed, and it turns out that the range had split in the meantime.
@@ -4569,13 +4732,13 @@ func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
 	splitKey := keys.MustAddr(keyB)
 
 	get := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewGet(k, false /* forUpdate */)
+		return kvpb.NewGet(k)
 	}
 	scan := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewScan(k, k.Next(), false /* forUpdate */)
+		return kvpb.NewScan(k, k.Next())
 	}
 	revScan := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewReverseScan(k, k.Next(), false /* forUpdate */)
+		return kvpb.NewReverseScan(k, k.Next())
 	}
 
 	for _, tc := range []struct {
@@ -4708,7 +4871,7 @@ func TestRequestSubdivisionAfterDescriptorChangeWithUnavailableReplicasTerminate
 	splitKey := keys.MustAddr(keyB)
 
 	get := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewGet(k, false /* forUpdate */)
+		return kvpb.NewGet(k)
 	}
 
 	ctx := context.Background()
@@ -4801,13 +4964,13 @@ func TestDescriptorChangeAfterRequestSubdivision(t *testing.T) {
 	laterSplitKey2 := keys.MustAddr(keyD)
 
 	get := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewGet(k, false /* forUpdate */)
+		return kvpb.NewGet(k)
 	}
 	scan := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewScan(k, k.Next(), false /* forUpdate */)
+		return kvpb.NewScan(k, k.Next())
 	}
 	revScan := func(k roachpb.Key) kvpb.Request {
-		return kvpb.NewReverseScan(k, k.Next(), false /* forUpdate */)
+		return kvpb.NewReverseScan(k, k.Next())
 	}
 
 	for _, tc := range []struct {
@@ -5235,17 +5398,21 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 		return desc
 	}
 
+	makeLocality := func(region string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "az", Value: fmt.Sprintf("az%d", rand.Intn(10))},
+				{Key: "region", Value: region},
+				{Key: "dc", Value: fmt.Sprintf("dc%d", rand.Intn(10))},
+			},
+		}
+	}
+
 	makeNodeDescriptor := func(nodeID int, region string) roachpb.NodeDescriptor {
 		return roachpb.NodeDescriptor{
-			NodeID:  roachpb.NodeID(nodeID),
-			Address: util.UnresolvedAddr{},
-			Locality: roachpb.Locality{
-				Tiers: []roachpb.Tier{
-					{Key: "az", Value: fmt.Sprintf("az%d", rand.Intn(10))},
-					{Key: "region", Value: region},
-					{Key: "dc", Value: fmt.Sprintf("dc%d", rand.Intn(10))},
-				},
-			},
+			NodeID:   roachpb.NodeID(nodeID),
+			Address:  util.UnresolvedAddr{},
+			Locality: makeLocality(region),
 		}
 	}
 
@@ -5254,11 +5421,7 @@ func TestDistSenderComputeNetworkCost(t *testing.T) {
 			ReplicaDescriptor: roachpb.ReplicaDescriptor{
 				ReplicaID: roachpb.ReplicaID(replicaID),
 			},
-			Tiers: []roachpb.Tier{
-				{Key: "az", Value: fmt.Sprintf("az%d", rand.Intn(10))},
-				{Key: "region", Value: region},
-				{Key: "dc", Value: fmt.Sprintf("dc%d", rand.Intn(10))},
-			},
+			Locality: makeLocality(region),
 		}
 	}
 

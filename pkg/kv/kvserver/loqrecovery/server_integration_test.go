@@ -99,7 +99,7 @@ func TestReplicaCollection(t *testing.T) {
 		}
 		require.NotEqual(t, replicas.ClusterID, uuid.UUID{}.String(), "cluster UUID must not be empty")
 		require.Equal(t, replicas.Version,
-			clusterversion.ByKey(clusterversion.BinaryVersionKey),
+			clusterversion.Latest.Version(),
 			"replica info version must match current binary version")
 	}
 
@@ -305,7 +305,7 @@ func TestStageBadVersions(t *testing.T) {
 	plan.Updates = []loqrecoverypb.ReplicaUpdate{
 		createRecoveryForRange(t, tc, sk, 1),
 	}
-	plan.Version = clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
+	plan.Version = clusterversion.MinSupported.Version()
 	plan.Version.Major -= 1
 
 	_, err := adm.RecoveryStagePlan(ctx, &serverpb.RecoveryStagePlanRequest{Plan: &plan, AllNodes: true})
@@ -738,6 +738,6 @@ func makeTestRecoveryPlan(
 	return loqrecoverypb.ReplicaUpdatePlan{
 		PlanID:    uuid.MakeV4(),
 		ClusterID: cr.ClusterID,
-		Version:   clusterversion.ByKey(clusterversion.BinaryVersionKey),
+		Version:   clusterversion.Latest.Version(),
 	}
 }

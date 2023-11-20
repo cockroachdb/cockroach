@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -188,7 +187,7 @@ func startReplication(
 	conn, err := pgx.ConnectConfig(queryCtx, pgxConfig)
 	require.NoError(t, err)
 
-	rows, err := conn.Query(queryCtx, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`)
+	rows, err := conn.Query(queryCtx, `SET CLUSTER SETTING physical_replication.enabled = true;`)
 	require.NoError(t, err)
 	rows.Close()
 
@@ -232,10 +231,6 @@ func testStreamReplicationStatus(
 		expectedStreamStatus.ProtectedTimestamp = &updatedFrontier
 	}
 	checkStreamStatus(t, updatedFrontier, expectedStreamStatus)
-	// Send a query.
-	// The expected protected timestamp is still 'updatedFrontier' as the protected
-	// timestamp doesn't get updated when this is a query.
-	checkStreamStatus(t, hlc.MaxTimestamp, expectedStreamStatus)
 }
 
 func TestReplicationStreamInitialization(t *testing.T) {
@@ -243,10 +238,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	serverArgs := base.TestServerArgs{
-		// This test fails when run from within a test tenant. This is likely
-		// due to the lack of support for tenant streaming, but more
-		// investigation is required. Tracked with #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
@@ -351,9 +343,7 @@ func TestStreamPartition(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	h, cleanup := replicationtestutils.NewReplicationHelper(t,
 		base.TestServerArgs{
-			// Test fails within a test tenant. More investigation is required.
-			// Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -374,34 +364,6 @@ USE d;
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
 	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t1")
-
-	t.Run("stream-table-cursor-error", func(t *testing.T) {
-
-		srcTenant.SQL.Exec(t, `
-CREATE TABLE d.t2(i int primary key, a string, b string);
-INSERT INTO d.t2 (i) VALUES (42);
-`)
-		_, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
-			streamPartitionQuery, streamID, encodeSpec(t, h, srcTenant, initialScanTimestamp, hlc.Timestamp{}, "t2"))
-		defer feed.Close(ctx)
-		t2Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), srcTenant.Codec, "d", "t2")
-		expected := replicationtestutils.EncodeKV(t, srcTenant.Codec, t2Descr, 42)
-		feed.ObserveKey(ctx, expected.Key)
-
-		subscribedSpan := h.TableSpan(srcTenant.Codec, "t2")
-		// Send a ClearRange to trigger rows cursor to return internal error from rangefeed.
-		_, err := kv.SendWrapped(ctx, h.SysServer.DB().NonTransactionalSender(), &kvpb.ClearRangeRequest{
-			RequestHeader: kvpb.RequestHeader{
-				Key:    subscribedSpan.Key,
-				EndKey: subscribedSpan.EndKey,
-			},
-		})
-		require.Nil(t, err)
-
-		feed.ObserveError(ctx, func(err error) bool {
-			return strings.Contains(err.Error(), "unexpected MVCC history mutation")
-		})
-	})
 
 	t.Run("stream-table", func(t *testing.T) {
 		_, feed := startReplication(ctx, t, h, makePartitionStreamDecoder,
@@ -499,9 +461,7 @@ func TestStreamAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
-		// Test hangs when run within the default test tenant. Tracked with
-		// #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")
@@ -591,7 +551,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
 		})
 	defer cleanup()
 	srcTenantID := serverutils.TestTenantID()
@@ -659,9 +619,7 @@ func TestStreamDeleteRange(t *testing.T) {
 	skip.UnderStressRace(t, "disabled under stress and race")
 
 	h, cleanup := replicationtestutils.NewReplicationHelper(t, base.TestServerArgs{
-		// Test hangs when run within the default test tenant. Tracked with
-		// #76378.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
 	})
 	defer cleanup()
 	testTenantName := roachpb.TenantName("test-tenant")

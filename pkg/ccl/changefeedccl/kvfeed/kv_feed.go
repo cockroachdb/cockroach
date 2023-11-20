@@ -691,6 +691,17 @@ func copyFromSourceToDestUntilTableEvent(
 			return nil
 		}
 
+		// spanFrontier returns frontier timestamp for the specified span.
+		spanFrontier = func(sp roachpb.Span) (sf hlc.Timestamp) {
+			frontier.SpanEntries(sp, func(_ roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+				if sf.IsEmpty() || ts.Less(sf) {
+					sf = ts
+				}
+				return span.ContinueMatch
+			})
+			return sf
+		}
+
 		// applyScanBoundary apply the boundary that we set above.
 		// In most cases, a boundary isn't reached, and thus we do nothing.
 		// If a boundary is reached but event `e` happens before that boundary,
@@ -717,10 +728,29 @@ func copyFromSourceToDestUntilTableEvent(
 				if resolved.Timestamp.LessEq(boundaryResolvedTimestamp) {
 					return false, false, nil
 				}
-				if _, err := frontier.Forward(resolved.Span, boundaryResolvedTimestamp); err != nil {
-					return false, false, err
+
+				// At this point, we know event is after boundaryResolvedTimestamp.
+				skipEvent = true
+
+				if _, ok := scanBoundary.(*errEndTimeReached); ok {
+					// We know we have end time boundary. In this case, we do not want to
+					// skip this event because we want to make sure we emit checkpoint at
+					// exactly boundaryResolvedTimestamp. This checkpoint can be used to
+					// produce span based changefeed checkpoints if needed.
+					// We only want to emit this checkpoint once, and then we can skip
+					// subsequent checkpoints for this span until entire frontier reaches
+					// boundary timestamp.
+					if boundaryResolvedTimestamp.Compare(spanFrontier(resolved.Span)) > 0 {
+						e.Raw().Checkpoint.ResolvedTS = boundaryResolvedTimestamp
+						skipEvent = false
+					}
 				}
-				return true, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp), nil
+
+				if _, err := frontier.Forward(resolved.Span, boundaryResolvedTimestamp); err != nil {
+					return true, false, err
+				}
+
+				return skipEvent, frontier.Frontier().EqOrdering(boundaryResolvedTimestamp), nil
 			case kvevent.TypeFlush:
 				// TypeFlush events have a timestamp of zero and should have already
 				// been processed by the timestamp check above. We include this here
@@ -778,8 +808,13 @@ func copyFromSourceToDestUntilTableEvent(
 			if scanBoundaryReached {
 				// All component rangefeeds are now at the boundary.
 				// Break out of the ctxgroup by returning the sentinel error.
+				// (We don't care if skipEntry is false -- scan boundary can only be
+				// returned for resolved event, and we don't care if we emit this event
+				// since exiting with scan boundary error will cause appropriate
+				// boundary type (EXIT) to be emitted for the entire frontier)
 				return scanBoundary
 			}
+
 			if skipEntry {
 				return nil
 			}

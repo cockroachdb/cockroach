@@ -105,10 +105,13 @@ class TestDriver {
     expect(rest).toEqual(expectedRest);
     expect(
       // Moments are the same
-      moment(statsLastUpdated).isSame(expectedStatsLastUpdated) ||
+      moment(statsLastUpdated.stats_last_created_at).isSame(
+        expectedStatsLastUpdated.stats_last_created_at,
+      ) ||
         // Moments are null.
-        (statsLastUpdated === expectedStatsLastUpdated &&
-          statsLastUpdated === null),
+        (statsLastUpdated.stats_last_created_at ===
+          expectedStatsLastUpdated.stats_last_created_at &&
+          statsLastUpdated.stats_last_created_at === null),
     ).toBe(true);
   }
 
@@ -188,17 +191,17 @@ describe("Database Table Page", function () {
       details: {
         loading: false,
         loaded: false,
-        lastError: undefined,
-        createStatement: "",
-        replicaCount: 0,
-        indexNames: [],
-        grants: [],
-        statsLastUpdated: null,
-        livePercentage: 0,
-        liveBytes: 0,
-        totalBytes: 0,
-        sizeInBytes: 0,
-        rangeCount: 0,
+        requestError: undefined,
+        queryError: undefined,
+        createStatement: undefined,
+        replicaData: undefined,
+        spanStats: undefined,
+        indexData: undefined,
+        grants: {
+          all: [],
+          error: undefined,
+        },
+        statsLastUpdated: undefined,
         nodesByRegionString: "",
       },
       automaticStatsCollectionEnabled: true,
@@ -286,20 +289,31 @@ describe("Database Table Page", function () {
     driver.assertTableDetails({
       loading: false,
       loaded: true,
-      lastError: null,
-      createStatement: "CREATE TABLE foo",
-      replicaCount: 5,
-      indexNames: ["primary", "anotha", "one"],
-      grants: [
-        { user: "admin", privileges: ["CREATE", "DROP"] },
-        { user: "public", privileges: ["SELECT"] },
-      ],
-      statsLastUpdated: mockStatsLastCreatedTimestamp,
-      livePercentage: 1,
-      liveBytes: 45,
-      totalBytes: 45,
-      sizeInBytes: 23,
-      rangeCount: 56,
+      requestError: null,
+      queryError: undefined,
+      createStatement: { create_statement: "CREATE TABLE foo" },
+      replicaData: { replicaCount: 5, nodeCount: 5, nodeIDs: [1, 2, 3, 4, 5] },
+      spanStats: {
+        approximate_disk_bytes: 23,
+        live_bytes: 45,
+        total_bytes: 45,
+        range_count: 56,
+        live_percentage: 1,
+      },
+      indexData: {
+        columns: ["colA", "colB", "c"],
+        indexes: ["primary", "anotha", "one"],
+      },
+      grants: {
+        all: [
+          { user: "admin", privileges: ["CREATE", "DROP"] },
+          { user: "public", privileges: ["SELECT"] },
+        ],
+        error: undefined,
+      },
+      statsLastUpdated: {
+        stats_last_created_at: mockStatsLastCreatedTimestamp,
+      },
       nodesByRegionString: "",
     });
   });

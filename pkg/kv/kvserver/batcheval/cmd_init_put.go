@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
@@ -41,18 +42,20 @@ func InitPut(
 		LocalTimestamp:                 cArgs.Now,
 		Stats:                          cArgs.Stats,
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 	}
 
 	var err error
+	var acq roachpb.LockAcquisition
 	if args.Blind {
-		err = storage.MVCCBlindInitPut(
+		acq, err = storage.MVCCBlindInitPut(
 			ctx, readWriter, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, opts)
 	} else {
-		err = storage.MVCCInitPut(
+		acq, err = storage.MVCCInitPut(
 			ctx, readWriter, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, opts)
 	}
 	if err != nil {
 		return result.Result{}, err
 	}
-	return result.FromAcquiredLocks(h.Txn, args.Key), nil
+	return result.WithAcquiredLocks(acq), nil
 }

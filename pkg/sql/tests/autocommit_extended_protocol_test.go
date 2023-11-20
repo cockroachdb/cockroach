@@ -13,17 +13,14 @@ package tests
 import (
 	"context"
 	"errors"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -91,7 +88,7 @@ func TestInsertFastPathDisableDDLExtendedProtocol(t *testing.T) {
 	require.NoError(t, err)
 
 	// Use pgx so that we can introspect error codes returned from cockroach.
-	pgURL, cleanup := sqlutils.PGUrl(t, s.ApplicationLayer().AdvSQLAddr(), "", url.User("root"))
+	pgURL, cleanup := s.PGUrl(t)
 	defer cleanup()
 	conf, err := pgx.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -172,7 +169,6 @@ func TestErrorDuringExtendedProtocolCommit(t *testing.T) {
 			return nil
 		},
 	}
-	params.Settings = cluster.MakeTestingClusterSettings()
 
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)

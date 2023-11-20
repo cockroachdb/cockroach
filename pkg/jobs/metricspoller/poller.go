@@ -46,6 +46,11 @@ func (mp *metricsPoller) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile is a part of the Resumer interface.
+func (mp *metricsPoller) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // Resume is part of the Resumer interface.
 func (mp *metricsPoller) Resume(ctx context.Context, execCtx interface{}) error {
 	// The metrics polling job is a forever running background job. It's always

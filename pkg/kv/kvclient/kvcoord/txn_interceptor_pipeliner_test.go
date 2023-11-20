@@ -101,7 +101,7 @@ func makeMockTxnPipeliner(iter condensableSpanSetRangeIterator) (txnPipeliner, *
 
 func makeTxnProto() roachpb.Transaction {
 	return roachpb.MakeTransaction("test", []byte("key"), isolation.Serializable, 0,
-		hlc.Timestamp{WallTime: 10}, 0 /* maxOffsetNs */, 0 /* coordinatorNodeID */)
+		hlc.Timestamp{WallTime: 10}, 0 /* maxOffsetNs */, 0 /* coordinatorNodeID */, 0)
 }
 
 // TestTxnPipeliner1PCTransaction tests that the writes performed by 1PC
@@ -122,8 +122,8 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
 	scanArgs := kvpb.ScanRequest{
-		RequestHeader: kvpb.RequestHeader{Key: keyA, EndKey: keyB},
-		KeyLocking:    lock.Exclusive,
+		RequestHeader:      kvpb.RequestHeader{Key: keyA, EndKey: keyB},
+		KeyLockingStrength: lock.Exclusive,
 	}
 	ba.Add(&scanArgs)
 	putArgs := kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}}
@@ -1353,7 +1353,7 @@ func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, EndKey: keyB.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	mockPErr := kvpb.NewErrorf("boom")
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
@@ -1382,7 +1382,7 @@ func TestTxnPipelinerRecordsLocksOnFailure(t *testing.T) {
 	ba.Requests = nil
 	ba.Add(&kvpb.PutRequest{RequestHeader: kvpb.RequestHeader{Key: keyD}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyE, EndKey: keyE.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
@@ -1450,7 +1450,7 @@ func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
 	ba.Header = kvpb.Header{Txn: &txn}
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyA}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyB, EndKey: keyB.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyC, EndKey: keyC.Next()}, KeyLockingStrength: lock.Exclusive})
 
 	condFailedErr := kvpb.NewError(&kvpb.ConditionFailedError{})
 	condFailedErr.SetErrorIndex(0)
@@ -1474,16 +1474,16 @@ func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
 	expLocks = append(expLocks, roachpb.Span{Key: keyC, EndKey: keyC.Next()})
 	require.Equal(t, expLocks, tp.lockFootprint.asSlice())
 
-	// Return a LockConflictError for a Scan. The lock spans correspond to the
+	// Return a WriteIntentError for a Scan. The lock spans correspond to the
 	// Scan are not added to the lock footprint, but the lock spans for all
 	// other requests in the batch are.
 	ba.Requests = nil
 	ba.Add(&kvpb.ConditionalPutRequest{RequestHeader: kvpb.RequestHeader{Key: keyD}})
 	ba.Add(&kvpb.DeleteRangeRequest{RequestHeader: kvpb.RequestHeader{Key: keyE, EndKey: keyE.Next()}})
-	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLocking: lock.Exclusive})
+	ba.Add(&kvpb.ScanRequest{RequestHeader: kvpb.RequestHeader{Key: keyF, EndKey: keyF.Next()}, KeyLockingStrength: lock.Exclusive})
 
-	lockConflictErr := kvpb.NewError(&kvpb.LockConflictError{})
-	lockConflictErr.SetErrorIndex(2)
+	writeIntentErr := kvpb.NewError(&kvpb.WriteIntentError{})
+	writeIntentErr.SetErrorIndex(2)
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		require.Len(t, ba.Requests, 3)
 		require.False(t, ba.AsyncConsensus)
@@ -1491,12 +1491,12 @@ func TestTxnPipelinerIgnoresLocksOnUnambiguousFailure(t *testing.T) {
 		require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
 		require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[2].GetInner())
 
-		return nil, lockConflictErr
+		return nil, writeIntentErr
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.Nil(t, br)
-	require.Equal(t, lockConflictErr, pErr)
+	require.Equal(t, writeIntentErr, pErr)
 	require.Equal(t, 0, tp.ifWrites.len())
 
 	expLocks = append(expLocks, roachpb.Span{Key: keyD})

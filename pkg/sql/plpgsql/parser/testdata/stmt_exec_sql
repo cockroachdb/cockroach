@@ -131,3 +131,58 @@ SELECT max(x) FROM xy INTO i;
 INSERT INTO xy VALUES (10, 10) RETURNING x INTO i;
 RETURN i;
 END
+
+parse
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES 1,2);
+END
+----
+at or near "2": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+  INSERT INTO t1 VALUES (1,2;
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+  INSERT INTO t1 (VALUES (1,2);
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+
+# Regression test for #112940 - UPSERT INTO should be allowed.
+parse
+DECLARE
+BEGIN
+  UPSERT INTO t1 VALUES (1,2) RETURNING x INTO y;
+END
+----
+DECLARE
+BEGIN
+UPSERT INTO t1 VALUES (1, 2) RETURNING x INTO y;
+END
+
+parse
+DECLARE
+BEGIN
+  UPSERT INTO t1 VALUES (1,2) RETURNING x INTO STRICT y;
+END
+----
+DECLARE
+BEGIN
+UPSERT INTO t1 VALUES (1, 2) RETURNING x INTO STRICT y;
+END
+
+parse
+DECLARE
+BEGIN
+  UPSERT INTO t1 VALUES (1,2) INTO y;
+END
+----
+at or near ";": syntax error: INTO used with a command that cannot return data

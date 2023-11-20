@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -382,8 +381,6 @@ SET CLUSTER SETTING kv.rangefeed.enabled = true;
 SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 SET CLUSTER SETTING sql.defaults.vectorize=on;
-ALTER TENANT ALL SET CLUSTER SETTING kv.rangefeed.enabled = true;
-ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
 ALTER TENANT ALL SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
 ALTER TENANT ALL SET CLUSTER SETTING sql.defaults.vectorize=on;
 CREATE DATABASE d;
@@ -529,13 +526,10 @@ func startTestTenant(
 	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
 	tenantRunner.ExecMultiple(t, strings.Split(tenantSetupStatements, ";")...)
 
-	ctx := context.Background()
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &tenantServer.ClusterSettings().SV, true)
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &tenantServer.ClusterSettings().SV, true)
 	waitForTenantPodsActive(t, tenantServer, 1)
 	resetRetry := testingUseFastRetry()
 	return tenantID, tenantServer, tenantDB, func() {
-		tenantServer.AppStopper().Stop(ctx)
+		tenantServer.AppStopper().Stop(context.Background())
 		resetRetry()
 	}
 }

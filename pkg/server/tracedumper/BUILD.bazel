@@ -10,11 +10,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/server/dumpstore",
-        "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/sql/isql",
         "//pkg/util/log",
-        "//pkg/util/timeutil",
         "//pkg/util/tracing/zipper",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -26,11 +23,9 @@ go_test(
         "main_test.go",
         "tracedumper_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":tracedumper"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

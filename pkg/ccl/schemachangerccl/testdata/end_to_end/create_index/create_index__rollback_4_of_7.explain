@@ -12,7 +12,7 @@ Schema change plan for rolling back CREATE INDEX ‹idx› ON ‹defaultdb›.pu
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 11 elements transitioning toward ABSENT
-      │    │    ├── DELETE_ONLY      → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey)}
+      │    │    ├── DELETE_ONLY      → ABSENT      SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
       │    │    ├── PUBLIC           → ABSENT      IndexPartitioning:{DescID: 104 (t), IndexID: 2 (idx-)}
       │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (id), IndexID: 2 (idx-)}
       │    │    ├── PUBLIC           → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (name), IndexID: 2 (idx-)}

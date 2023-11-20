@@ -12,6 +12,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -100,6 +101,11 @@ func TestDataDriven(t *testing.T) {
 
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
+		// Skip the test if it is a .txt file. This is to allow us to have non-test
+		// testdata in the same directory as the test files.
+		if strings.HasSuffix(path, ".txt") {
+			return
+		}
 		ds := newDatadrivenTestState()
 		defer ds.cleanup(t)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -125,10 +131,14 @@ func TestDataDriven(t *testing.T) {
 
 			case "create-replication-clusters":
 				args := replicationtestutils.DefaultTenantStreamingClustersArgs
+				args.NoMetamorphicExternalConnection = d.HasArg("no-external-conn")
+				tempDir, dirCleanup := testutils.TempDir(t)
+				args.ExternalIODir = tempDir
 				var cleanup func()
 				ds.replicationClusters, cleanup = replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 				ds.cleanupFns = append(ds.cleanupFns, func() error {
 					cleanup()
+					dirCleanup()
 					return nil
 				})
 
@@ -145,7 +155,8 @@ func TestDataDriven(t *testing.T) {
 				ds.replicationClusters.WaitUntilReplicatedTime(stringToHLC(t, replicatedTimeTarget),
 					jobspb.JobID(ds.ingestionJobID))
 			case "start-replicated-tenant":
-				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx)
+				testingKnobs := replicationtestutils.DefaultAppTenantTestingKnobs()
+				cleanupTenant := ds.replicationClusters.StartDestTenant(ctx, &testingKnobs, 0)
 				ds.cleanupFns = append(ds.cleanupFns, cleanupTenant)
 			case "let":
 				if len(d.CmdArgs) == 0 {
@@ -153,7 +164,8 @@ func TestDataDriven(t *testing.T) {
 				}
 				var as string
 				d.ScanArgs(t, "as", &as)
-				output := ds.queryAs(t, as, d.Input)
+				output, err := ds.queryAs(ctx, t, as, d.Input)
+				require.NoError(t, err)
 				output = strings.TrimSpace(output)
 				values := strings.Split(output, "\n")
 				if len(values) != len(d.CmdArgs)-1 {
@@ -197,11 +209,18 @@ func TestDataDriven(t *testing.T) {
 
 			case "query-sql":
 				var as string
+				var regexError string
+				d.MaybeScanArgs(t, "regex-error", &regexError)
 				d.ScanArgs(t, "as", &as)
 				if d.HasArg("retry") {
-					ds.queryAsWithRetry(t, as, d.Input, d.Expected)
+					ds.queryAsWithRetry(ctx, t, as, d.Input, d.Expected, regexError)
 				}
-				return ds.queryAs(t, as, d.Input)
+				output, err := ds.queryAs(ctx, t, as, d.Input)
+				if regexError != "" {
+					require.NoError(t, handleRegex(t, err, regexError))
+					return ""
+				}
+				return output
 
 			case "compare-replication-results":
 				ds.replicationClusters.CompareResult(d.Input)
@@ -220,14 +239,17 @@ func TestDataDriven(t *testing.T) {
 					from = varValue
 				}
 				allRevisions := d.HasArg("with_revisions")
-				fingerprintQuery := `SELECT * FROM crdb_internal.fingerprint(crdb_internal.tenant_span('%s'), '%s'::TIMESTAMPTZ, %t) AS OF SYSTEM TIME '%s'`
+				fingerprintQuery := `SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT '%s'] AS OF SYSTEM TIME '%s'`
+				if allRevisions {
+					fingerprintQuery = `SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM TENANT '%s' WITH START TIMESTAMP = '%s'] AS OF SYSTEM TIME '%s'`
+				}
 				var fingerprintSrcTenant int64
 				ds.replicationClusters.SrcSysSQL.QueryRow(t, fmt.Sprintf(fingerprintQuery,
-					ds.replicationClusters.Args.SrcTenantName, from, allRevisions, to)).Scan(&fingerprintSrcTenant)
+					ds.replicationClusters.Args.SrcTenantName, from, to)).Scan(&fingerprintSrcTenant)
 				require.NotZero(t, fingerprintSrcTenant)
 				var fingerprintDestTenant int64
 				ds.replicationClusters.DestSysSQL.QueryRow(t, fmt.Sprintf(fingerprintQuery,
-					ds.replicationClusters.Args.DestTenantName, from, allRevisions, to)).Scan(&fingerprintDestTenant)
+					ds.replicationClusters.Args.DestTenantName, from, to)).Scan(&fingerprintDestTenant)
 				require.NotZero(t, fingerprintDestTenant)
 				if fingerprintSrcTenant != fingerprintDestTenant {
 					require.NoError(t, replicationutils.InvestigateFingerprints(ctx,
@@ -336,7 +358,7 @@ func TestDataDriven(t *testing.T) {
 FROM system.span_configurations
 WHERE start_key >= '\x%x' AND start_key <= '\x%x'
 ORDER BY start_key;`, startKey, endKey)
-				return ds.queryAsWithRetry(t, as, listQuery, d.Expected)
+				return ds.queryAsWithRetry(ctx, t, as, listQuery, d.Expected, "")
 
 			default:
 				t.Fatalf("unsupported instruction: %s", d.Cmd)
@@ -368,30 +390,43 @@ func (d *datadrivenTestState) cleanup(t *testing.T) {
 	}
 }
 
-func (d *datadrivenTestState) queryAs(t *testing.T, as, query string) string {
+func (d *datadrivenTestState) queryAs(
+	ctx context.Context, t *testing.T, as, query string,
+) (string, error) {
 	var rows *gosql.Rows
+	var err error
 	switch as {
 	case "source-system":
-		rows = d.replicationClusters.SrcSysSQL.Query(t, query)
+		rows, err = d.replicationClusters.SrcSysSQL.DB.QueryContext(ctx, query)
 	case "source-tenant":
-		rows = d.replicationClusters.SrcTenantSQL.Query(t, query)
+		rows, err = d.replicationClusters.SrcTenantSQL.DB.QueryContext(ctx, query)
 	case "destination-system":
-		rows = d.replicationClusters.DestSysSQL.Query(t, query)
+		rows, err = d.replicationClusters.DestSysSQL.DB.QueryContext(ctx, query)
 	case "destination-tenant":
-		rows = d.replicationClusters.DestTenantSQL.Query(t, query)
+		rows, err = d.replicationClusters.DestTenantSQL.DB.QueryContext(ctx, query)
 	default:
 		t.Fatalf("unsupported value to run SQL query as: %s", as)
 	}
 
+	if err != nil {
+		return "", err
+	}
 	output, err := sqlutils.RowsToDataDrivenOutput(rows)
 	require.NoError(t, err)
-	return output
+	return output, nil
 }
 
-func (d *datadrivenTestState) queryAsWithRetry(t *testing.T, as, query, expected string) string {
+func (d *datadrivenTestState) queryAsWithRetry(
+	ctx context.Context, t *testing.T, as, query, expected string, regexError string,
+) string {
 	var output string
+	var err error
 	testutils.SucceedsSoon(t, func() error {
-		output = d.queryAs(t, as, query)
+		output, err = d.queryAs(ctx, t, as, query)
+		if regexError != "" {
+			output = ""
+			return handleRegex(t, err, regexError)
+		}
 		if output != expected {
 			return errors.Newf("latest output: %s\n expected: %s", output, expected)
 		}
@@ -412,6 +447,19 @@ func (d *datadrivenTestState) execAs(t *testing.T, as, query string) {
 		d.replicationClusters.DestTenantSQL.Exec(t, query)
 	default:
 		t.Fatalf("unsupported value to run SQL query as: %s", as)
+	}
+}
+
+func handleRegex(t *testing.T, err error, regexError string) error {
+	if err == nil {
+		return errors.Newf("expected non nil error to match %s", regexError)
+	}
+	matched, matchStringErr := regexp.MatchString(regexError, err.Error())
+	require.NoError(t, matchStringErr)
+	if matched {
+		return nil
+	} else {
+		return errors.Wrapf(err, "error does not match regex error %s", regexError)
 	}
 }
 

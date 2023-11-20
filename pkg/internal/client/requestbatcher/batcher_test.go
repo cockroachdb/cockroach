@@ -147,7 +147,8 @@ func TestBatchesAtTheSameTime(t *testing.T) {
 	const N = 20
 	sendChan := make(chan Response, N)
 	for i := 0; i < N; i++ {
-		assert.Nil(t, b.SendWithChan(context.Background(), sendChan, roachpb.RangeID(i), &kvpb.GetRequest{}))
+		assert.Nil(t, b.SendWithChan(
+			context.Background(), sendChan, roachpb.RangeID(i), &kvpb.GetRequest{}, kvpb.AdmissionHeader{}))
 	}
 	for i := 0; i < N; i++ {
 		bs := <-sc
@@ -173,12 +174,16 @@ func TestBackpressure(t *testing.T) {
 	// These 3 should all send without blocking but should put the batcher into
 	// back pressure.
 	sendChan := make(chan Response, 6)
-	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 1, &kvpb.GetRequest{}))
-	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 2, &kvpb.GetRequest{}))
-	assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 3, &kvpb.GetRequest{}))
+	assert.Nil(t, b.SendWithChan(
+		context.Background(), sendChan, 1, &kvpb.GetRequest{}, kvpb.AdmissionHeader{}))
+	assert.Nil(t, b.SendWithChan(
+		context.Background(), sendChan, 2, &kvpb.GetRequest{}, kvpb.AdmissionHeader{}))
+	assert.Nil(t, b.SendWithChan(
+		context.Background(), sendChan, 3, &kvpb.GetRequest{}, kvpb.AdmissionHeader{}))
 	var sent int64
 	send := func() {
-		assert.Nil(t, b.SendWithChan(context.Background(), sendChan, 4, &kvpb.GetRequest{}))
+		assert.Nil(t, b.SendWithChan(
+			context.Background(), sendChan, 4, &kvpb.GetRequest{}, kvpb.AdmissionHeader{}))
 		atomic.AddInt64(&sent, 1)
 	}
 	go send()
@@ -405,7 +410,8 @@ func TestBatchTimeout(t *testing.T) {
 				ctx, cancel := context.WithTimeout(context.Background(), tc.requestTimeout)
 				defer cancel()
 				respChan := make(chan Response, 1)
-				if err := b.SendWithChan(ctx, respChan, 1, &kvpb.GetRequest{}); err != nil {
+				if err := b.SendWithChan(
+					ctx, respChan, 1, &kvpb.GetRequest{}, kvpb.AdmissionHeader{}); err != nil {
 					testutils.IsError(err, context.DeadlineExceeded.Error())
 					return
 				}
@@ -442,7 +448,7 @@ func TestBatchTimeout(t *testing.T) {
 		ctx := context.Background()
 		respChan := make(chan Response, 1)
 		minStartTimeForFirstBatchRequest := timeutil.Now()
-		err := b.SendWithChan(ctx, respChan, 1, &kvpb.GetRequest{})
+		err := b.SendWithChan(ctx, respChan, 1, &kvpb.GetRequest{}, kvpb.AdmissionHeader{})
 		require.NoError(t, err)
 		// First call to Send.
 		s := <-sc
@@ -686,7 +692,8 @@ func TestTargetBytesPerBatchReq(t *testing.T) {
 	})
 	respChan := make(chan Response, 1)
 
-	err := b.SendWithChan(context.Background(), respChan, 1, &kvpb.GetRequest{})
+	err := b.SendWithChan(
+		context.Background(), respChan, 1, &kvpb.GetRequest{}, kvpb.AdmissionHeader{})
 	require.NoError(t, err)
 	s := <-sc
 	assert.Equal(t, int64(4<<20), s.ba.TargetBytes)

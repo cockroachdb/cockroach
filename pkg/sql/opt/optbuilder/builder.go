@@ -14,6 +14,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
@@ -298,15 +299,13 @@ func (b *Builder) buildStmtAtRootWithScope(
 //	rather than a return value so its scopeColumns can be built up
 //	incrementally across several function calls.
 //
-// inScope   This parameter contains the name bindings that are visible for this
+// inScope - This parameter contains the name bindings that are visible for this
+// statement/expression (e.g., passed in from an enclosing statement).
 //
-//	statement/expression (e.g., passed in from an enclosing statement).
-//
-// outScope  This return value contains the newly bound variables that will be
-//
-//	visible to enclosing statements, as well as a pointer to any
-//	"parent" scope that is still visible. The top-level memo expression
-//	for the built statement/expression is returned in outScope.expr.
+// outScope - This return value contains the newly bound variables that will be
+// visible to enclosing statements, as well as a pointer to any
+// "parent" scope that is still visible. The top-level memo expression
+// for the built statement/expression is returned in outScope.expr.
 func (b *Builder) buildStmt(
 	stmt tree.Statement, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
@@ -326,7 +325,12 @@ func (b *Builder) buildStmt(
 	// An allowlist of statements supported for user defined function.
 	if b.insideFuncDef {
 		switch stmt := stmt.(type) {
-		case *tree.Select, tree.SelectStatement, *tree.Insert, *tree.Update, *tree.Delete:
+		case *tree.Select, tree.SelectStatement:
+		case *tree.Insert, *tree.Update, *tree.Delete:
+			activeVersion := b.evalCtx.Settings.Version.ActiveVersion(b.ctx)
+			if !activeVersion.IsActive(clusterversion.V23_2) {
+				panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition is not supported until version 23.2", stmt.StatementTag()))
+			}
 		default:
 			panic(unimplemented.Newf("user-defined functions", "%s usage inside a function definition", stmt.StatementTag()))
 		}
@@ -334,10 +338,10 @@ func (b *Builder) buildStmt(
 
 	switch stmt := stmt.(type) {
 	case *tree.Select:
-		return b.buildSelect(stmt, noRowLocking, desiredTypes, inScope)
+		return b.buildSelect(stmt, noLocking, desiredTypes, inScope)
 
 	case *tree.ParenSelect:
-		return b.buildSelect(stmt.Select, noRowLocking, desiredTypes, inScope)
+		return b.buildSelect(stmt.Select, noLocking, desiredTypes, inScope)
 
 	case *tree.Delete:
 		return b.processWiths(stmt.With, inScope, func(inScope *scope) *scope {
@@ -362,6 +366,9 @@ func (b *Builder) buildStmt(
 
 	case *tree.CreateRoutine:
 		return b.buildCreateFunction(stmt, inScope)
+
+	case *tree.Call:
+		return b.buildProcedure(stmt, inScope)
 
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)

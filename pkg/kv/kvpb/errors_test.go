@@ -55,7 +55,7 @@ func TestNewErrorNil(t *testing.T) {
 // TestSetTxn verifies that SetTxn updates the error message.
 func TestSetTxn(t *testing.T) {
 	e := NewError(NewTransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND))
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), isolation.Serializable, 1, hlc.Timestamp{}, 0, 99)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), isolation.Serializable, 1, hlc.Timestamp{}, 0, 99, 0)
 	e.SetTxn(&txn)
 	if !strings.HasPrefix(
 		e.String(), "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND): \"test\"") {
@@ -174,7 +174,7 @@ func TestErrorRedaction(t *testing.T) {
 			hlc.Timestamp{WallTime: 2},
 			hlc.ClockTimestamp{WallTime: 1, Logical: 2},
 		))
-		txn := roachpb.MakeTransaction("foo", roachpb.Key("bar"), isolation.Serializable, 1, hlc.Timestamp{WallTime: 1}, 1, 99)
+		txn := roachpb.MakeTransaction("foo", roachpb.Key("bar"), isolation.Serializable, 1, hlc.Timestamp{WallTime: 1}, 1, 99, 0)
 		txn.ID = uuid.Nil
 		txn.Priority = 1234
 		wrappedPErr.UnexposedTxn = &txn
@@ -229,6 +229,10 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &LockConflictError{},
+			expect: "conflicting locks on ",
+		},
+		{
+			err:    &WriteIntentError{},
 			expect: "conflicting locks on ",
 		},
 		{
@@ -410,4 +414,17 @@ func TestNotLeaseholderError(t *testing.T) {
 			require.Equal(t, tc.exp, tc.err.Error())
 		})
 	}
+}
+
+func TestDescNotFoundError(t *testing.T) {
+	t.Run("store not found", func(t *testing.T) {
+		err := NewStoreDescNotFoundError(42)
+		require.Equal(t, `store descriptor with store ID 42 was not found`, err.Error())
+		require.True(t, errors.HasType(err, &DescNotFoundError{}))
+	})
+	t.Run("node not found", func(t *testing.T) {
+		err := NewNodeDescNotFoundError(42)
+		require.Equal(t, `node descriptor with node ID 42 was not found`, err.Error())
+		require.True(t, errors.HasType(err, &DescNotFoundError{}))
+	})
 }

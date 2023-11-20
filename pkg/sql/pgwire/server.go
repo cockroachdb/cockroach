@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -62,7 +63,7 @@ import (
 // The "results_buffer_size" connection parameter can be used to override this
 // default for an individual connection.
 var connResultsBufferSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.defaults.results_buffer.size",
 	"default size of the buffer that accumulates results for a statement or a batch "+
 		"of statements before they are sent to the client. This can be overridden on "+
@@ -77,14 +78,14 @@ var connResultsBufferSize = settings.RegisterByteSizeSetting(
 	settings.WithPublic)
 
 var logConnAuth = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	sql.ConnAuditingClusterSettingName,
 	"if set, log SQL client connect and disconnect events (note: may hinder performance on loaded nodes)",
 	false,
 	settings.WithPublic)
 
 var logSessionAuth = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	sql.AuthAuditingClusterSettingName,
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false,
@@ -224,12 +225,12 @@ type Server struct {
 		connCancelMap cancelChanMap
 		// draining is set to true when the server starts draining the SQL layer.
 		// When set to true, remaining SQL connections will be closed.
-		// After the timeout set by server.shutdown.query_wait,
-		// all connections will be closed regardless any queries in flight.
+		// After the timeout set by server.shutdown.transactions.timeout,
+		// all connections will be closed regardless any txns in flight.
 		draining bool
 		// rejectNewConnections is set true when the server does not accept new
 		// SQL connections, e.g. when the draining process enters the phase whose
-		// duration is specified by the server.shutdown.connection_wait.
+		// duration is specified by the server.shutdown.connections.timeout.
 		rejectNewConnections bool
 	}
 
@@ -315,6 +316,7 @@ func MakeServer(
 	sqlMemMetrics sql.MemoryMetrics,
 	parentMemoryMonitor *mon.BytesMonitor,
 	histogramWindow time.Duration,
+	eventsExporter obs.EventsExporterInterface,
 	executorConfig *sql.ExecutorConfig,
 ) *Server {
 	ctx := ambientCtx.AnnotateCtx(context.Background())
@@ -337,7 +339,7 @@ func MakeServer(
 		nil, /* maxHist */
 		0, noteworthySQLMemoryUsageBytes, st)
 	server.sqlMemoryPool.StartNoReserved(ctx, parentMemoryMonitor)
-	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
+	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool, eventsExporter)
 
 	server.tenantSpecificConnMonitor = mon.NewMonitor("conn",
 		mon.MemoryResource,

@@ -13,6 +13,7 @@ package kvserver_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"strconv"
@@ -33,9 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1300,4 +1303,148 @@ func TestNodeLivenessDecommissionAbsent(t *testing.T) {
 	setMembershipStatus(nl1, livenesspb.MembershipStatus_DECOMMISSIONING, true)
 	// Recommission from third node.
 	setMembershipStatus(nl2, livenesspb.MembershipStatus_ACTIVE, true)
+}
+
+func BenchmarkNodeLivenessScanStorage(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	const numNodes = 100
+	setupEng := func(b *testing.B, numLiveVersions int, haveFullyDeadKeys bool) storage.Engine {
+		eng := storage.NewDefaultInMemForTesting(storage.DisableAutomaticCompactions)
+		// 20 per minute, so 1000 represents 50 min of liveness writes in a level.
+		// This is unusual, but we can have such accumulation if flushes and
+		// compactions are rare.
+		const numVersionsPerLevel = 1000
+		// All versions in level l will be deleted in level l+1. The versions
+		// written at the highest level are not deleted and the number of these
+		// per node is controlled by numLiveVersions. Additionally, if
+		// haveFullyDeadKeys is true, the highest level only has live versions for
+		// alternating nodes.
+		//
+		// NB: haveFullyDeadKeys=true is not representative of NodeLiveness, since
+		// we don't remove decommissioned entries. It is included here just to
+		// understand the effect on the NextPrefix optimization.
+		const numLevels = 7
+		tsFunc := func(l int, v int) int64 {
+			return int64(l*numVersionsPerLevel + v + 10)
+		}
+		for l := 0; l < numLevels; l++ {
+			for v := 0; v < numVersionsPerLevel; v++ {
+				ts := tsFunc(l, v)
+				for n := roachpb.NodeID(0); n < numNodes; n++ {
+					lKey := keys.NodeLivenessKey(n)
+					// Always write a version if not at the highest level. If at the
+					// highest level, only write if v < numLiveVersions. Additionally,
+					// either haveFullyDeadKeys must be false or this node is one that
+					// has live versions.
+					if l < numLevels-1 || (v < numLiveVersions && (!haveFullyDeadKeys || n%2 == 0)) {
+						liveness := livenesspb.Liveness{
+							NodeID:     n,
+							Epoch:      100,
+							Expiration: hlc.LegacyTimestamp{WallTime: ts},
+							Draining:   false,
+							Membership: livenesspb.MembershipStatus_ACTIVE,
+						}
+
+						require.NoError(b, storage.MVCCPutProto(
+							ctx, eng, lKey, hlc.Timestamp{WallTime: ts}, &liveness,
+							storage.MVCCWriteOptions{}))
+					}
+					// Else most recent level and the other conditions for writing a
+					// version are not satisfied.
+
+					if l != 0 {
+						// Clear the key from the next older level.
+						require.NoError(b, eng.ClearMVCC(storage.MVCCKey{
+							Key:       lKey,
+							Timestamp: hlc.Timestamp{WallTime: tsFunc(l-1, v)},
+						}, storage.ClearOptions{}))
+					}
+				}
+				if l == 0 && v < 10 {
+					// Flush to grow the memtable size.
+					require.NoError(b, eng.Flush())
+				}
+			}
+			if l == 0 {
+				// Since did many flushes, compact everything down.
+				require.NoError(b, eng.Compact())
+			} else {
+				// Flush the next level. This will become a L0 sub-level.
+				require.NoError(b, eng.Flush())
+			}
+		}
+		return eng
+	}
+	scanLiveness := func(b *testing.B, eng storage.Engine, expectedCount int) (blockBytes uint64) {
+		ss := &kvpb.ScanStats{}
+		opts := storage.MVCCScanOptions{
+			ScanStats: ss,
+		}
+		scanRes, err := storage.MVCCScan(
+			ctx, eng.NewReadOnly(storage.StandardDurability), keys.NodeLivenessPrefix,
+			keys.NodeLivenessKeyMax, hlc.MaxTimestamp, opts)
+		if err != nil {
+			b.Fatal(err.Error())
+		}
+		if expectedCount != len(scanRes.KVs) {
+			b.Fatalf("expected %d != actual %d", expectedCount, len(scanRes.KVs))
+		}
+		return ss.BlockBytes
+	}
+
+	// We expect active nodes to have 100s of live versions since liveness is
+	// written every 3s, and GC is configured to happen after 10min. But GC can
+	// be delayed, and decommissioned nodes will only have 1 version, so we
+	// explore those extremes.
+	//
+	// Results on M1 macbook with dead-keys=false and compacted=true:
+	// NodeLivenessScanStorage/num-live=2/compacted=true-10   26.80µ ± 9%
+	// NodeLivenessScanStorage/num-live=5/compacted=true-10   30.34µ ± 3%
+	// NodeLivenessScanStorage/num-live=10/compacted=true-10   38.88µ ± 8%
+	// NodeLivenessScanStorage/num-live=1000/compacted=true-10 861.5µ ± 3%
+	//
+	// When compacted=false the scan takes ~10ms, which is > 100x slower, but
+	// probably acceptable for this workload.
+	// NodeLivenessScanStorage/num-live=2/compacted=false-10     9.430m ± 5%
+	// NodeLivenessScanStorage/num-live=5/compacted=false-10     9.534m ± 4%
+	// NodeLivenessScanStorage/num-live=10/compacted=false-10    9.456m ± 2%
+	// NodeLivenessScanStorage/num-live=1000/compacted=false-10 10.34m ± 7%
+	//
+	// dead-keys=true (and compacted=false) defeats the NextPrefix optimization,
+	// since the next prefix can have all its keys deleted and the iterator has
+	// to step through all of them (it can't be sure that all the keys for that
+	// next prefix are deleted). This case should not occur in the liveness
+	// range, as discussed earlier.
+	//
+	// NodeLivenessScanStorage/num-live=2/dead-keys=true/compacted=false-10 58.33m
+	for _, numLiveVersions := range []int{2, 5, 10, 1000} {
+		b.Run(fmt.Sprintf("num-live=%d", numLiveVersions), func(b *testing.B) {
+			for _, haveDeadKeys := range []bool{false, true} {
+				b.Run(fmt.Sprintf("dead-keys=%t", haveDeadKeys), func(b *testing.B) {
+					for _, compacted := range []bool{false, true} {
+						b.Run(fmt.Sprintf("compacted=%t", compacted), func(b *testing.B) {
+							eng := setupEng(b, numLiveVersions, haveDeadKeys)
+							defer eng.Close()
+							if compacted {
+								require.NoError(b, eng.Compact())
+							}
+							b.ResetTimer()
+							blockBytes := uint64(0)
+							for i := 0; i < b.N; i++ {
+								expectedCount := numNodes
+								if haveDeadKeys {
+									expectedCount /= 2
+								}
+								blockBytes += scanLiveness(b, eng, expectedCount)
+							}
+							b.ReportMetric(float64(blockBytes)/float64(b.N), "block-bytes/op")
+						})
+					}
+				})
+			}
+		})
+	}
 }

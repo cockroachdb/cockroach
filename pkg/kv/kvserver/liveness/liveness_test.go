@@ -28,8 +28,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
+
+func TestLivenessRedaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	liveness := livenesspb.Liveness{
+		NodeID:     roachpb.NodeID(13),
+		Epoch:      3,
+		Expiration: hlc.Timestamp{WallTime: 12345}.ToLegacyTimestamp(),
+		Draining:   true,
+		Membership: livenesspb.MembershipStatus_ACTIVE,
+	}
+
+	require.EqualValues(t,
+		"liveness(nid:13 epo:3 exp:0.000012345,0 drain:true membership:active)",
+		redact.Sprintf("%+v", liveness).Redact())
+}
 
 func TestShouldReplaceLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -146,7 +164,7 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(100000, 100000)))
-	nl := NewNodeLiveness(NodeLivenessOptions{Clock: clock, Settings: cluster.MakeTestingClusterSettings()})
+	cache := NewCache(&mockGossip{}, clock, cluster.MakeTestingClusterSettings(), nil)
 	now := clock.Now()
 	threshold := TimeUntilNodeDead.Default()
 	suspectThreshold := TimeAfterNodeSuspect.Default()
@@ -383,10 +401,10 @@ func TestNodeLivenessLivenessStatus(t *testing.T) {
 			// mechanisms should return the same result.
 			// Use the set node descriptor.
 			if (tc.descriptor != UpdateInfo{}) {
-				nl.cache.mu.lastNodeUpdate[1] = tc.descriptor
+				cache.mu.lastNodeUpdate[1] = tc.descriptor
 			}
 
-			nv := nl.convertToNodeVitality(tc.liveness)
+			nv := cache.convertToNodeVitality(tc.liveness)
 			require.Equal(t, tc.expectedAlive, nv.IsLive(livenesspb.Rebalance))
 			require.Equal(t, tc.expectedStatus, nv.LivenessStatus())
 		})
@@ -446,12 +464,12 @@ func TestNodeLivenessIsLiveCallback(t *testing.T) {
 	mc := timeutil.NewManualTime(timeutil.Unix(1, 0))
 	g := &mockGossip{}
 	s := &mockStorage{}
+	clock := hlc.NewClockForTesting(mc)
 	nl := NewNodeLiveness(NodeLivenessOptions{
 		AmbientCtx:              log.MakeTestingAmbientCtxWithNewTracer(),
 		Stopper:                 stopper,
-		Settings:                st,
-		Gossip:                  g,
-		Clock:                   hlc.NewClockForTesting(mc),
+		Cache:                   NewCache(g, clock, st, nil),
+		Clock:                   clock,
 		Storage:                 s,
 		LivenessThreshold:       24 * time.Hour,
 		RenewalDuration:         23 * time.Hour,

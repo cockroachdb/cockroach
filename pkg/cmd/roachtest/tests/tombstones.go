@@ -29,24 +29,24 @@ import (
 // registerPointTombstone registers the point tombstone test.
 func registerPointTombstone(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:              "point-tombstone/heterogeneous-value-sizes",
-		Owner:             registry.OwnerStorage,
-		Cluster:           r.MakeClusterSpec(4),
+		Name:             "point-tombstone/heterogeneous-value-sizes",
+		Owner:            registry.OwnerStorage,
+		Cluster:          r.MakeClusterSpec(4),
+		CompatibleClouds: registry.AllExceptAWS,
+		// This roachtest is useful but relatively specific. Running it weekly
+		// should be fine to ensure we don't regress.
+		Suites:            registry.Suites(registry.Weekly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		Tags: map[string]struct{}{
-			// Set the weekly tag; this roachtest is useful but relatively
-			// specific. Running it weekly should be fine to ensure we don't
-			// regress.
-			"weekly": {},
-		},
-		Timeout: 120 * time.Minute,
+		Tags:              registry.Tags("weekly"),
+		Timeout:           120 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+				"--vmodule=mvcc_gc_queue=2,replica_protected_timestamp=2") // queue=2 is too verbose
 			startSettings := install.MakeClusterSettings()
 			startSettings.Env = append(startSettings.Env, "COCKROACH_AUTO_BALLAST=false")
 
 			t.Status("starting cluster")
-			c.Put(ctx, t.Cockroach(), "./cockroach")
 			c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
 
 			// Wait for upreplication.

@@ -22,7 +22,6 @@ x := 1 + 2;
 RETURN x;
 END
 
-
 parse
 DECLARE
 BEGIN
@@ -34,16 +33,13 @@ BEGIN
 RETURN (1, 'string');
 END
 
-
-
 parse
 DECLARE
 BEGIN
   RETURN QUERY SELECT 1 + 1;
 END
 ----
-at or near ";": syntax error: unimplemented: this syntax
-
+at or near "query": syntax error: unimplemented: this syntax
 
 parse
 DECLARE
@@ -51,4 +47,60 @@ BEGIN
   RETURN QUERY EXECUTE a dynamic command;
 END
 ----
-at or near ";": syntax error: unimplemented: this syntax
+at or near "query": syntax error: unimplemented: this syntax
+
+parse
+DECLARE
+BEGIN
+  RETURN NEXT 1 + 1;
+END
+----
+at or near "next": syntax error: unimplemented: this syntax
+
+parse
+DECLARE
+BEGIN
+  RETURN;
+END
+----
+at or near "return": syntax error: missing expression
+
+parse
+DECLARE
+BEGIN
+  RETURN (NULL;
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+  RETURN  NULL);
+END
+----
+at or near "null": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+  RETURN (1, ('string');
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+  RETURN 1, 'string';
+END
+----
+at or near "string": syntax error: query returned 2 columns
+
+parse
+DECLARE
+BEGIN
+  RETURN 1, (2, 3, 4, 5);
+END
+----
+at or near ")": syntax error: query returned 2 columns

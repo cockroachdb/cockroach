@@ -39,7 +39,7 @@ func TestMetricsMetadata(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	metricsMetadata := s.MetricsRecorder().GetMetricsMetadata()
+	metricsMetadata, _, _ := s.MetricsRecorder().GetMetricsMetadata(true /* combine */)
 
 	if len(metricsMetadata) < 200 {
 		t.Fatal("s.recorder.GetMetricsMetadata() failed sanity check; didn't return enough metrics.")
@@ -90,12 +90,14 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestTenantAlwaysEnabled,
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
+			base.TestTenantAlwaysEnabled, 112953,
+		),
 	})
 	defer srv.Stopper().Stop(context.Background())
 
 	testFn := func(s serverutils.ApplicationLayerInterface, expectedLabel string) {
-		db := s.SQLConn(t, "")
+		db := s.SQLConn(t)
 
 		if _, err := db.Exec("BEGIN;" +
 			"SAVEPOINT cockroach_restart;" +
@@ -133,6 +135,8 @@ func TestStatusVarsTxnMetrics(t *testing.T) {
 	t.Run("tenant", func(t *testing.T) {
 		s := srv.ApplicationLayer()
 		// TODO(knz): why is the tenant label missing here?
+		// TODO(herko): it is present when running in shared process mode. Hence why
+		// the test is now forced to run only in external process mode.
 		testFn(s, `tenant=""`)
 	})
 }

@@ -64,7 +64,7 @@ func TryDelegate(
 	case *tree.ShowCreate:
 		return d.delegateShowCreate(t)
 
-	case *tree.ShowCreateFunction:
+	case *tree.ShowCreateRoutine:
 		return d.delegateShowCreateFunction(t)
 
 	case *tree.ShowCreateAllSchemas:
@@ -140,7 +140,7 @@ func TryDelegate(
 	case *tree.ShowSyntax:
 		return d.delegateShowSyntax(t)
 
-	case *tree.ShowFunctions:
+	case *tree.ShowRoutines:
 		return d.delegateShowFunctions(t)
 
 	case *tree.ShowTables:

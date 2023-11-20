@@ -318,7 +318,8 @@ func setupKeysWithIntent(
 				putTxn = &otherTxn
 			}
 			key := makeKey(nil, j)
-			require.NoError(b, MVCCPut(context.Background(), batch, key, ts, value, MVCCWriteOptions{Txn: putTxn}))
+			_, err := MVCCPut(context.Background(), batch, key, ts, value, MVCCWriteOptions{Txn: putTxn})
+			require.NoError(b, err)
 		}
 		require.NoError(b, batch.Commit(true))
 		batch.Close()
@@ -339,7 +340,7 @@ func setupKeysWithIntent(
 					// is not one that should be resolved.
 					continue
 				}
-				found, _, _, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lu, MVCCResolveWriteIntentOptions{})
+				found, _, _, _, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lu, MVCCResolveWriteIntentOptions{})
 				require.Equal(b, true, found)
 				require.NoError(b, err)
 			}
@@ -368,7 +369,7 @@ func BenchmarkIntentScan(b *testing.B) {
 					setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false, /* resolveAll */
 						1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
 					lower := makeKey(nil, 0)
-					iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 						LowerBound: lower,
 						UpperBound: makeKey(nil, numIntentKeys),
 					})
@@ -457,7 +458,7 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 							// practice, so we don't want it to happen in this Benchmark
 							// either.
 							b.StopTimer()
-							iter, err = eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+							iter, err = eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 								LowerBound: lower,
 								UpperBound: makeKey(nil, numIntentKeys),
 							})
@@ -505,7 +506,7 @@ func BenchmarkScanOneAllIntentsResolved(b *testing.B) {
 					buf := append([]byte(nil), lower...)
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+						iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{
 							LowerBound: buf,
 							UpperBound: upper,
 						})
@@ -567,7 +568,7 @@ func BenchmarkIntentResolution(b *testing.B) {
 							b.StartTimer()
 						}
 						lockUpdate.Key = keys[i%numIntentKeys]
-						found, _, _, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lockUpdate, MVCCResolveWriteIntentOptions{})
+						found, _, _, _, err := MVCCResolveWriteIntent(context.Background(), batch, nil, lockUpdate, MVCCResolveWriteIntentOptions{})
 						if !found || err != nil {
 							b.Fatalf("intent not found or err %s", err)
 						}
@@ -627,7 +628,7 @@ func BenchmarkIntentRangeResolution(b *testing.B) {
 										rangeNum := i % numRanges
 										lockUpdate.Key = keys[rangeNum*numKeysPerRange]
 										lockUpdate.EndKey = keys[(rangeNum+1)*numKeysPerRange]
-										resolved, _, span, _, err := MVCCResolveWriteIntentRange(
+										resolved, _, span, _, _, err := MVCCResolveWriteIntentRange(
 											context.Background(), batch, nil, lockUpdate,
 											MVCCResolveWriteIntentRangeOptions{MaxKeys: 1000})
 										if err != nil {
@@ -720,10 +721,10 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 			batch = eng.NewBatch()
 			minWallTime = sstTimestamps[i/batchSize]
 		}
-		timestamp := hlc.Timestamp{WallTime: minWallTime + rand.Int63n(int64(batchTimeSpan))}
+		timestamp := hlc.Timestamp{WallTime: minWallTime + rng.Int63n(int64(batchTimeSpan))}
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueBytes))
 		value.InitChecksum(key)
-		if err := MVCCPut(ctx, batch, key, timestamp, value, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCPut(ctx, batch, key, timestamp, value, MVCCWriteOptions{}); err != nil {
 			return nil, err
 		}
 	}
@@ -770,7 +771,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, opts benchScanOptions) {
 		// Pull all of the sstables into the RocksDB cache in order to make the
 		// timings more stable. Otherwise, the first run will be penalized pulling
 		// data into the cache while later runs will not.
-		if _, err := ComputeStats(eng, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
+		if _, err := ComputeStats(ctx, eng, keys.LocalMax, roachpb.KeyMax, 0); err != nil {
 			b.Fatalf("stats failed: %s", err)
 		}
 	}
@@ -898,7 +899,7 @@ func runMVCCPut(
 		for j := 0; j < versions; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, rw, key, ts, value, MVCCWriteOptions{}); err != nil {
+			if _, err := MVCCPut(ctx, rw, key, ts, value, MVCCWriteOptions{}); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -921,7 +922,7 @@ func runMVCCBlindPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindPut(ctx, eng, key, ts, value, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCBlindPut(ctx, eng, key, ts, value, MVCCWriteOptions{}); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -945,7 +946,7 @@ func runMVCCConditionalPut(
 		for i := 0; i < b.N; i++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, eng, key, ts, value, MVCCWriteOptions{}); err != nil {
+			if _, err := MVCCPut(ctx, eng, key, ts, value, MVCCWriteOptions{}); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -957,7 +958,7 @@ func runMVCCConditionalPut(
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCConditionalPut(ctx, eng, key, ts, value, expected, CPutFailIfMissing, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCConditionalPut(ctx, eng, key, ts, value, expected, CPutFailIfMissing, MVCCWriteOptions{}); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -979,7 +980,7 @@ func runMVCCBlindConditionalPut(ctx context.Context, b *testing.B, emk engineMak
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindConditionalPut(
+		if _, err := MVCCBlindConditionalPut(
 			ctx, eng, key, ts, value, nil, CPutFailIfMissing, MVCCWriteOptions{},
 		); err != nil {
 			b.Fatalf("failed put: %+v", err)
@@ -1003,7 +1004,7 @@ func runMVCCInitPut(ctx context.Context, b *testing.B, emk engineMaker, valueSiz
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCInitPut(ctx, eng, key, ts, value, false, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCInitPut(ctx, eng, key, ts, value, false, MVCCWriteOptions{}); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -1025,7 +1026,7 @@ func runMVCCBlindInitPut(ctx context.Context, b *testing.B, emk engineMaker, val
 	for i := 0; i < b.N; i++ {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i)))
 		ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-		if err := MVCCBlindInitPut(ctx, eng, key, ts, value, false, MVCCWriteOptions{}); err != nil {
+		if _, err := MVCCBlindInitPut(ctx, eng, key, ts, value, false, MVCCWriteOptions{}); err != nil {
 			b.Fatalf("failed put: %+v", err)
 		}
 	}
@@ -1055,7 +1056,7 @@ func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 		for j := i; j < end; j++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(j)))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
+			if _, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
 				b.Fatalf("failed put: %+v", err)
 			}
 		}
@@ -1185,7 +1186,7 @@ func runMVCCDeleteRange(ctx context.Context, b *testing.B, valueBytes int) {
 			defer eng.Close()
 
 			b.StartTimer()
-			if _, _, _, err := MVCCDeleteRange(
+			if _, _, _, _, err := MVCCDeleteRange(
 				ctx,
 				eng,
 				keys.LocalMax,
@@ -1225,7 +1226,7 @@ func runMVCCDeleteRangeUsingTombstone(
 			eng := getInitialStateEngine(ctx, b, opts, false /* inMemory */)
 			defer eng.Close()
 
-			ms, err := ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+			ms, err := ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
 			require.NoError(b, err)
 
 			leftPeekBound = keys.LocalMax
@@ -1261,6 +1262,53 @@ func runMVCCDeleteRangeUsingTombstone(
 				b.Fatal(err)
 			}
 			b.StopTimer()
+		}()
+	}
+}
+
+// runMVCCDeleteRangeWithPredicate issues a predicate based delete range that
+// deletes all keys created after the `deleteAfterLayer` (0 indexed).
+func runMVCCDeleteRangeWithPredicate(
+	ctx context.Context,
+	b *testing.B,
+	config mvccImportedData,
+	deleteAfterLayer int64,
+	rangeTombstoneThreshold int64,
+) {
+	b.SetBytes(int64(config.layers*config.keyCount) * int64(overhead+config.valueBytes))
+	b.StopTimer()
+	b.ResetTimer()
+
+	// Since the db engine creates mvcc versions at 5 ns increments, multiply the
+	// deleteAtVersion by 5 to compute the delete range timestamp predicate.
+	predicates := kvpb.DeleteRangePredicates{
+		StartTime: hlc.Timestamp{WallTime: (deleteAfterLayer+1)*5 + 1},
+	}
+	var leftPeekBound, rightPeekBound roachpb.Key
+	for i := 0; i < b.N; i++ {
+		func() {
+			eng := getInitialStateEngine(ctx, b, config, false)
+			defer eng.Close()
+			b.StartTimer()
+			resumeSpan, err := MVCCPredicateDeleteRange(
+				ctx,
+				eng,
+				&enginepb.MVCCStats{},
+				keys.LocalMax,
+				roachpb.KeyMax,
+				hlc.MaxTimestamp,
+				hlc.ClockTimestamp{},
+				leftPeekBound,
+				rightPeekBound,
+				predicates,
+				0,
+				math.MaxInt64,
+				rangeTombstoneThreshold,
+				0,
+			)
+			b.StopTimer()
+			require.NoError(b, err)
+			require.Nil(b, resumeSpan)
 		}()
 	}
 }
@@ -1314,7 +1362,7 @@ func runMVCCComputeStats(ctx context.Context, b *testing.B, valueBytes int, numR
 	var stats enginepb.MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
-		stats, err = ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+		stats, err = ComputeStats(ctx, eng, keys.LocalMax, keys.MaxKey, 0)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1446,7 +1494,7 @@ func runMVCCGarbageCollect(
 				break
 			}
 			for _, key := range pointKeys {
-				if err := MVCCPut(ctx, batch, key, pts, val, MVCCWriteOptions{}); err != nil {
+				if _, err := MVCCPut(ctx, batch, key, pts, val, MVCCWriteOptions{}); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -1506,7 +1554,7 @@ func runBatchApplyBatchRepr(
 		for i := 0; i < batchSize; i++ {
 			key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(order[i])))
 			ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			if err := MVCCBlindPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
+			if _, err := MVCCBlindPut(ctx, batch, key, ts, value, MVCCWriteOptions{}); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -1901,7 +1949,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 			key := makeKey(nil, j)
 			lu := lockUpdate
 			lu.Key = key
-			found, _, _, err := MVCCResolveWriteIntent(
+			found, _, _, _, err := MVCCResolveWriteIntent(
 				ctx, batch, nil, lu, MVCCResolveWriteIntentOptions{})
 			require.Equal(b, true, found)
 			require.NoError(b, err)
@@ -1915,7 +1963,8 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		// Put the keys for this iteration.
 		for j := 0; j < numKeys; j++ {
 			key := makeKey(nil, j)
-			require.NoError(b, MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: &txn}))
+			_, err := MVCCPut(ctx, batch, key, ts, value, MVCCWriteOptions{Txn: &txn})
+			require.NoError(b, err)
 		}
 		numPrevKeys = numKeys
 		// Read the keys from the Batch and write them to a sstable to ingest.
@@ -1961,7 +2010,7 @@ func BenchmarkMVCCScannerWithIntentsAndVersions(b *testing.B) {
 		startKey := makeKey(nil, 0)
 		endKey := makeKey(nil, totalNumKeys+1)
 		iter, err := newMVCCIterator(
-			rw, ts, false, false, IterOptions{
+			ctx, rw, ts, false, false, IterOptions{
 				KeyTypes:   IterKeyTypePointsAndRanges,
 				LowerBound: startKey,
 				UpperBound: endKey,

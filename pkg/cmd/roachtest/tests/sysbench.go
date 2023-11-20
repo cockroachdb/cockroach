@@ -97,7 +97,6 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	loadNode := c.Node(c.Spec().NodeCount)
 
 	t.Status("installing cockroach")
-	c.Put(ctx, t.Cockroach(), "./cockroach", allNodes)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), roachNodes)
 	err := WaitFor3XReplication(ctx, t, c.Conn(ctx, t.L(), allNodes[0]))
 	require.NoError(t, err)
@@ -154,9 +153,11 @@ func registerSysbench(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:    fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
-			Owner:   registry.OwnerTestEng,
-			Cluster: r.MakeClusterSpec(n+1, spec.CPU(cpus)),
+			Name:             fmt.Sprintf("sysbench/%s/nodes=%d/cpu=%d/conc=%d", w, n, cpus, conc),
+			Owner:            registry.OwnerTestEng,
+			Cluster:          r.MakeClusterSpec(n+1, spec.CPU(cpus)),
+			CompatibleClouds: registry.AllExceptAWS,
+			Suites:           registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSysbench(ctx, t, c, opts)
 			},

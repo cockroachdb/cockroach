@@ -667,6 +667,13 @@ func TestTenantLogic_drop_database(
 	runLogicTest(t, "drop_database")
 }
 
+func TestTenantLogic_drop_function(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_function")
+}
+
 func TestTenantLogic_drop_index(
 	t *testing.T,
 ) {
@@ -679,6 +686,13 @@ func TestTenantLogic_drop_owned_by(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_owned_by")
+}
+
+func TestTenantLogic_drop_procedure(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "drop_procedure")
 }
 
 func TestTenantLogic_drop_role_with_default_privileges(
@@ -966,6 +980,13 @@ func TestTenantLogic_hash_sharded_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "hash_sharded_index")
+}
+
+func TestTenantLogic_hash_sharded_index_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "hash_sharded_index_read_committed")
 }
 
 func TestTenantLogic_hidden_columns(
@@ -1374,6 +1395,20 @@ func TestTenantLogic_pgoidtype(
 	runLogicTest(t, "pgoidtype")
 }
 
+func TestTenantLogic_plpgsql_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "plpgsql_builtins")
+}
+
+func TestTenantLogic_plpgsql_cursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "plpgsql_cursor")
+}
+
 func TestTenantLogic_poison_after_push(
 	t *testing.T,
 ) {
@@ -1423,18 +1458,32 @@ func TestTenantLogic_procedure(
 	runLogicTest(t, "procedure")
 }
 
+func TestTenantLogic_procedure_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_plpgsql")
+}
+
+func TestTenantLogic_procedure_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_privileges")
+}
+
+func TestTenantLogic_procedure_schema_change(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "procedure_schema_change")
+}
+
 func TestTenantLogic_propagate_input_ordering(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "propagate_input_ordering")
-}
-
-func TestTenantLogic_raise(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "raise")
 }
 
 func TestTenantLogic_read_committed(
@@ -1463,6 +1512,13 @@ func TestTenantLogic_redact_descriptor(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "redact_descriptor")
+}
+
+func TestTenantLogic_refcursor(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "refcursor")
 }
 
 func TestTenantLogic_rename_atomic(
@@ -1547,6 +1603,13 @@ func TestTenantLogic_role(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "role")
+}
+
+func TestTenantLogic_routine_schema_change(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "routine_schema_change")
 }
 
 func TestTenantLogic_row_level_ttl(
@@ -1654,11 +1717,25 @@ func TestTenantLogic_select(
 	runLogicTest(t, "select")
 }
 
+func TestTenantLogic_select_for_share(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select_for_share")
+}
+
 func TestTenantLogic_select_for_update(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_for_update")
+}
+
+func TestTenantLogic_select_for_update_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select_for_update_read_committed")
 }
 
 func TestTenantLogic_select_index(
@@ -2025,6 +2102,13 @@ func TestTenantLogic_tenant_from_tenant(
 	runLogicTest(t, "tenant_from_tenant")
 }
 
+func TestTenantLogic_tenant_from_tenant_hint(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tenant_from_tenant_hint")
+}
+
 func TestTenantLogic_tenant_slow_repro(
 	t *testing.T,
 ) {
@@ -2228,6 +2312,13 @@ func TestTenantLogic_udf_privileges(
 	runLogicTest(t, "udf_privileges")
 }
 
+func TestTenantLogic_udf_privileges_mutations(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_privileges_mutations")
+}
+
 func TestTenantLogic_udf_record(
 	t *testing.T,
 ) {
@@ -2310,6 +2401,13 @@ func TestTenantLogic_unique(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "unique")
+}
+
+func TestTenantLogic_unique_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "unique_read_committed")
 }
 
 func TestTenantLogic_update(
@@ -2576,6 +2674,20 @@ func TestTenantLogicCCL_zone_config_secondary_tenants_disallowed(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "zone_config_secondary_tenants_disallowed")
+}
+
+func TestTenantLogicCCL_zone_configs_secondary_tenants_restricted(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "zone_configs_secondary_tenants_restricted")
+}
+
+func TestTenantLogicCCL_zone_configs_secondary_tenants_unrestricted(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "zone_configs_secondary_tenants_unrestricted")
 }
 
 func TestTenantExecBuild_distsql_tenant(

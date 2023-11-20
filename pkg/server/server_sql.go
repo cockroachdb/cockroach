@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -62,7 +63,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
-	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -97,6 +97,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -149,20 +150,20 @@ import (
 // standalone SQLServer instances per tenant (the KV layer is shared across all
 // tenants).
 type SQLServer struct {
-	ambientCtx       log.AmbientContext
-	stopper          *stop.Stopper
-	stopTrigger      *stopTrigger
-	sqlIDContainer   *base.SQLIDContainer
-	pgServer         *pgwire.Server
-	distSQLServer    *distsql.ServerImpl
-	execCfg          *sql.ExecutorConfig
-	cfg              *BaseConfig
-	internalExecutor *sql.InternalExecutor
-	internalDB       descs.DB
-	leaseMgr         *lease.Manager
-	tracingService   *service.Service
-	nodeDialer       *nodedialer.Dialer
-	tenantConnect    kvtenant.Connector
+	ambientCtx        log.AmbientContext
+	stopper           *stop.Stopper
+	stopTrigger       *stopTrigger
+	sqlIDContainer    *base.SQLIDContainer
+	pgServer          *pgwire.Server
+	distSQLServer     *distsql.ServerImpl
+	execCfg           *sql.ExecutorConfig
+	cfg               *BaseConfig
+	internalExecutor  *sql.InternalExecutor
+	internalDB        descs.DB
+	leaseMgr          *lease.Manager
+	tracingService    *service.Service
+	sqlInstanceDialer *nodedialer.Dialer
+	tenantConnect     kvtenant.Connector
 	// sessionRegistry can be queried for info on running SQL sessions. It is
 	// shared between the sql.Server and the statusServer.
 	sessionRegistry        *sql.SessionRegistry
@@ -257,6 +258,13 @@ type sqlServerOptionalKVArgs struct {
 	// inspectzServer is used to power various crdb_internal vtables, exposing
 	// the equivalent of /inspectz but through SQL.
 	inspectzServer inspectzpb.InspectzServer
+
+	// notifyChangeToSystemVisibleSettings is called by the settings
+	// watcher when one or more TenandReadOnly setting is updated via
+	// SET CLUSTER SETTING (i.e. updated in system.settings).
+	//
+	// The second argument must be sorted by setting key already.
+	notifyChangeToSystemVisibleSettings func(context.Context, []kvpb.TenantSetting)
 }
 
 // sqlServerOptionalTenantArgs are the arguments supplied to newSQLServer which
@@ -307,10 +315,10 @@ type sqlServerArgs struct {
 	keyVisServerAccessor *spanstatskvaccessor.SpanStatsKVAccessor
 
 	// Used by DistSQLPlanner to dial KV nodes.
-	nodeDialer *nodedialer.Dialer
+	kvNodeDialer *nodedialer.Dialer
 
-	// Used by DistSQLPlanner to dial other pods in a multi-tenant environment.
-	podNodeDialer *nodedialer.Dialer
+	// Used by DistSQLPlanner to dial other SQL instances.
+	sqlInstanceDialer *nodedialer.Dialer
 
 	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
 	// uses range descriptors and leaseholders, which DistSender maintains,
@@ -321,7 +329,8 @@ type sqlServerArgs struct {
 	db *kv.DB
 
 	// Various components want to register themselves with metrics.
-	registry *metric.Registry
+	registry    *metric.Registry
+	sysRegistry *metric.Registry
 
 	// Recorder exposes metrics to the prometheus endpoint.
 	recorder *status.MetricsRecorder
@@ -425,7 +434,7 @@ type monitorAndMetricsOptions struct {
 }
 
 var vmoduleSetting = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"server.debug.default_vmodule",
 	"vmodule string (ignored by any server with an explicit one provided at start)",
 	"",
@@ -511,7 +520,7 @@ func (r *refreshInstanceSessionListener) OnSessionDeleted(
 				r.cfg.AdvertiseAddr,
 				r.cfg.SQLAdvertiseAddr,
 				r.cfg.Locality,
-				r.cfg.Settings.Version.BinaryVersion(),
+				r.cfg.Settings.Version.LatestVersion(),
 				nodeID,
 			); err != nil {
 				log.Warningf(ctx, "failed to update instance with new session ID: %v", err)
@@ -567,8 +576,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	var settingsWatcher *settingswatcher.SettingsWatcher
 	if codec.ForSystemTenant() {
-		settingsWatcher = settingswatcher.New(
-			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.settingsStorage,
+		settingsWatcher = settingswatcher.NewWithNotifier(ctx,
+			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.notifyChangeToSystemVisibleSettings, cfg.settingsStorage,
 		)
 	} else {
 		// Create the tenant settings watcher, using the tenant connector as the
@@ -606,14 +615,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.db,
 	)
 
-	// We can't use the nodeDialer as the podNodeDialer unless we
+	// We can't use the nodeDialer as the sqlInstanceDialer unless we
 	// are serving the system tenant despite the fact that we've
 	// arranged for pod IDs and instance IDs to match since the
 	// secondary tenant gRPC servers currently live on a different
 	// port.
-	canUseNodeDialerAsPodNodeDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
-	if canUseNodeDialerAsPodNodeDialer {
-		cfg.podNodeDialer = cfg.nodeDialer
+	canUseNodeDialerAsSQLInstanceDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
+	if canUseNodeDialerAsSQLInstanceDialer {
+		cfg.sqlInstanceDialer = cfg.kvNodeDialer
 	} else {
 		// In a multi-tenant environment, use the sqlInstanceReader to resolve
 		// SQL pod addresses.
@@ -624,7 +633,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			}
 			return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, nil
 		}
-		cfg.podNodeDialer = nodedialer.New(cfg.rpcContext, addressResolver)
+		cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 	}
 
 	jobRegistry := cfg.circularJobRegistry
@@ -636,7 +645,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			jobsKnobs = cfg.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs)
 		}
 
-		td := tracedumper.NewTraceDumper(ctx, cfg.InflightTraceDirName, cfg.Settings)
 		*jobRegistry = *jobs.MakeRegistry(
 			ctx,
 			cfg.AmbientCtx,
@@ -653,7 +661,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				return sql.MakeJobExecContext(ctx, opName, user, &sql.MemoryMetrics{}, execCfg)
 			},
 			jobAdoptionStopFile,
-			td,
 			jobsKnobs,
 		)
 	}
@@ -837,7 +844,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SQLLivenessReader: cfg.sqlLivenessProvider.CachedReader(),
 		JobRegistry:       jobRegistry,
 		Gossip:            cfg.gossip,
-		PodNodeDialer:     cfg.podNodeDialer,
+		SQLInstanceDialer: cfg.sqlInstanceDialer,
 		LeaseManager:      leaseMgr,
 
 		ExternalStorage:        cfg.externalStorage,
@@ -911,7 +918,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 
 	// Setup the trace collector that is used to fetch inflight trace spans from
 	// all nodes in the cluster.
-	traceCollector := collector.New(cfg.Tracer, cfg.sqlInstanceReader.GetAllInstances, cfg.podNodeDialer)
+	traceCollector := collector.New(cfg.Tracer, cfg.sqlInstanceReader.GetAllInstances, cfg.sqlInstanceDialer)
 	contentionMetrics := contention.NewMetrics()
 	cfg.registry.AddMetricStruct(contentionMetrics)
 
@@ -921,7 +928,19 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		&contentionMetrics,
 	)
 
-	storageEngineClient := kvserver.NewStorageEngineClient(cfg.nodeDialer)
+	if !cfg.Insecure {
+		certMgr, err := cfg.rpcContext.SecurityContext.GetCertificateManager()
+		if err != nil {
+			return nil, errors.Wrap(err, "initializing certificate manager")
+		}
+		certMgr.RegisterExpirationCache(
+			security.NewClientCertExpirationCache(
+				ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
+			),
+		)
+	}
+
+	storageEngineClient := kvserver.NewStorageEngineClient(cfg.kvNodeDialer)
 	*execCfg = sql.ExecutorConfig{
 		Settings:                cfg.Settings,
 		NodeInfo:                nodeInfo,
@@ -959,9 +978,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		AuditConfig: &auditlogging.AuditConfigLock{
 			Config: auditlogging.EmptyAuditConfig(),
 		},
-		ClientCertExpirationCache: security.NewClientCertExpirationCache(
-			ctx, cfg.Settings, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
-		),
 		RootMemoryMonitor:           rootSQLMemoryMonitor,
 		TestingKnobs:                sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:       storageEngineClient.CompactEngineSpan,
@@ -990,8 +1006,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.gossip,
 			cfg.stopper,
 			isAvailable,
-			cfg.nodeDialer.ConnHealthTryDial,
-			cfg.podNodeDialer,
+			cfg.kvNodeDialer.ConnHealthTryDial, // only used by system tenant
+			cfg.sqlInstanceDialer,
 			codec,
 			cfg.sqlInstanceReader,
 			cfg.clock,
@@ -1020,6 +1036,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
 		AutoConfigProvider:         cfg.AutoConfigProvider,
+	}
+
+	if codec.ForSystemTenant() {
+		execCfg.VirtualClusterName = catconstants.SystemTenantName
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
@@ -1125,6 +1145,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlMemMetrics,
 		rootSQLMemoryMonitor,
 		cfg.HistogramWindowInterval(),
+		cfg.eventsExporter,
 		execCfg,
 	)
 
@@ -1218,14 +1239,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		if codec.ForSystemTenant() {
 			c = upgradecluster.New(upgradecluster.ClusterConfig{
 				NodeLiveness:     nodeLiveness,
-				Dialer:           cfg.nodeDialer,
+				Dialer:           cfg.kvNodeDialer,
 				RangeDescScanner: rangedesc.NewScanner(cfg.db),
 				DB:               cfg.db,
 			})
 		} else {
 			c = upgradecluster.NewTenantCluster(
 				upgradecluster.TenantClusterConfig{
-					Dialer:         cfg.podNodeDialer,
+					Dialer:         cfg.sqlInstanceDialer,
 					InstanceReader: cfg.sqlInstanceReader,
 					DB:             cfg.db,
 				})
@@ -1243,51 +1264,47 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgradebase.TestingKnobs)
 		upgradeMgr = upgrademanager.NewManager(
 			systemDeps, leaseMgr, cfg.circularInternalExecutor, jobRegistry, codec,
-			cfg.Settings, clusterIDForSQL.Get(), knobs,
+			cfg.Settings, clusterIDForSQL, knobs,
 		)
 		execCfg.UpgradeJobDeps = upgradeMgr
 		execCfg.VersionUpgradeHook = upgradeMgr.Migrate
 		execCfg.UpgradeTestingKnobs = knobs
 	}
 
-	if !codec.ForSystemTenant() || !cfg.SpanConfigsDisabled {
-		// Instantiate a span config manager. If we're the host tenant we'll
-		// only do it unless COCKROACH_DISABLE_SPAN_CONFIGS is set.
-		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
-		spanConfig.sqlTranslatorFactory = spanconfigsqltranslator.NewFactory(
-			execCfg.ProtectedTimestampProvider, codec, spanConfigKnobs,
-		)
-		spanConfig.sqlWatcher = spanconfigsqlwatcher.New(
-			codec,
-			cfg.Settings,
-			cfg.rangeFeedFactory,
-			1<<20, /* 1 MB bufferMemLimit */
-			cfg.stopper,
-			// TODO(irfansharif): What should this no-op cadence be?
-			30*time.Second, /* checkpointNoopsEvery */
-			spanConfigKnobs,
-		)
-		spanConfigReconciler := spanconfigreconciler.New(
-			spanConfig.sqlWatcher,
-			spanConfig.sqlTranslatorFactory,
-			cfg.spanConfigAccessor,
-			execCfg,
-			codec,
-			cfg.TenantID,
-			cfg.Settings,
-			spanConfigKnobs,
-		)
-		spanConfig.manager = spanconfigmanager.New(
-			cfg.internalDB,
-			jobRegistry,
-			cfg.stopper,
-			cfg.Settings,
-			spanConfigReconciler,
-			spanConfigKnobs,
-		)
+	// Instantiate a span config manager.
+	spanConfig.sqlTranslatorFactory = spanconfigsqltranslator.NewFactory(
+		execCfg.ProtectedTimestampProvider, codec, spanConfigKnobs,
+	)
+	spanConfig.sqlWatcher = spanconfigsqlwatcher.New(
+		codec,
+		cfg.Settings,
+		cfg.rangeFeedFactory,
+		4<<20, /* 4 MB bufferMemLimit */
+		cfg.stopper,
+		// TODO(irfansharif): What should this no-op cadence be?
+		30*time.Second, /* checkpointNoopsEvery */
+		spanConfigKnobs,
+	)
+	spanConfigReconciler := spanconfigreconciler.New(
+		spanConfig.sqlWatcher,
+		spanConfig.sqlTranslatorFactory,
+		cfg.spanConfigAccessor,
+		execCfg,
+		codec,
+		cfg.TenantID,
+		cfg.Settings,
+		spanConfigKnobs,
+	)
+	spanConfig.manager = spanconfigmanager.New(
+		cfg.internalDB,
+		jobRegistry,
+		cfg.stopper,
+		cfg.Settings,
+		spanConfigReconciler,
+		spanConfigKnobs,
+	)
 
-		execCfg.SpanConfigReconciler = spanConfigReconciler
-	}
+	execCfg.SpanConfigReconciler = spanConfigReconciler
 	execCfg.SpanConfigKVAccessor = cfg.spanConfigAccessor
 	execCfg.SpanConfigLimiter = spanConfig.limiter
 	execCfg.SpanConfigSplitter = spanConfig.splitter
@@ -1374,7 +1391,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sessionRegistry:                cfg.sessionRegistry,
 		closedSessionCache:             cfg.closedSessionCache,
 		jobRegistry:                    jobRegistry,
-		nodeDialer:                     cfg.podNodeDialer,
+		sqlInstanceDialer:              cfg.sqlInstanceDialer,
 		statsRefresher:                 statsRefresher,
 		temporaryObjectCleaner:         temporaryObjectCleaner,
 		internalMemMetrics:             internalMemMetrics,
@@ -1424,6 +1441,7 @@ func (s *SQLServer) preStart(
 		// from KV (or elsewhere).
 		if entry, _ := s.tenantConnect.TenantInfo(); entry.Name != "" {
 			s.cfg.idProvider.SetTenantName(entry.Name)
+			s.execCfg.VirtualClusterName = entry.Name
 		}
 		if err := s.startCheckService(ctx, stopper); err != nil {
 			return err
@@ -1493,7 +1511,7 @@ func (s *SQLServer) preStart(
 					s.cfg.AdvertiseAddr,
 					s.cfg.SQLAdvertiseAddr,
 					s.distSQLServer.Locality,
-					s.execCfg.Settings.Version.BinaryVersion(),
+					s.execCfg.Settings.Version.LatestVersion(),
 					nodeID,
 				)
 			}
@@ -1504,7 +1522,7 @@ func (s *SQLServer) preStart(
 				s.cfg.AdvertiseAddr,
 				s.cfg.SQLAdvertiseAddr,
 				s.distSQLServer.Locality,
-				s.execCfg.Settings.Version.BinaryVersion(),
+				s.execCfg.Settings.Version.LatestVersion(),
 			)
 		})
 	if err != nil {
@@ -1642,11 +1660,21 @@ func (s *SQLServer) preStart(
 		}); err != nil {
 		return err
 	}
-	if s.execCfg.Settings.Version.BinaryVersion().Less(tenantActiveVersion.Version) {
+	if s.execCfg.Settings.Version.LatestVersion().Less(tenantActiveVersion.Version) {
 		return errors.WithHintf(errors.Newf("preventing SQL server from starting because its binary version "+
 			"is too low for the tenant active version: server binary version = %v, tenant active version = %v",
-			s.execCfg.Settings.Version.BinaryVersion(), tenantActiveVersion.Version),
+			s.execCfg.Settings.Version.LatestVersion(), tenantActiveVersion.Version),
 			"use a tenant binary whose version is at least %v", tenantActiveVersion.Version)
+	}
+
+	// Prevent the server from starting if its minimum supported binary version is too high
+	// for the tenant cluster version.
+	if tenantActiveVersion.Version.Less(s.execCfg.Settings.Version.MinSupportedVersion()) {
+		return errors.WithHintf(errors.Newf("preventing SQL server from starting because its executable "+
+			"version is too new to run the current active logical version of the virtual cluster"),
+			"finalize the virtual cluster version to at least %v or downgrade the"+
+				"executable version to at most %v", s.execCfg.Settings.Version.MinSupportedVersion(), tenantActiveVersion.Version,
+		)
 	}
 
 	// Delete all orphaned table leases created by a prior instance of this
@@ -1710,7 +1738,59 @@ func (s *SQLServer) preStart(
 		}
 	}))
 
+	if !s.execCfg.Codec.ForSystemTenant() && (s.serviceMode != mtinfopb.ServiceModeExternal) {
+		if err := s.startTenantAutoUpgradeLoop(ctx); err != nil {
+			return errors.Wrap(err, "cannot start tenant auto upgrade checker task")
+		}
+	}
+
+	s.waitForActiveAutoConfigEnvironments(ctx)
+
 	return nil
+}
+
+// waitForActiveAutoConfigEnvironments waits until the set of
+// ActiveEnvironments is empty. ActiveEnvironments is empty once there
+// are no more tasks to run.
+//
+// This is sufficient to ensure all configuration task jobs have
+// completed becuase the environment runner only enqueues a task after
+// the previous task has completed and configuration profiles include
+// an "end task" that runs after all previous tasks.
+func (s *SQLServer) waitForActiveAutoConfigEnvironments(ctx context.Context) {
+	maxWait := 2 * time.Minute
+	serverKnobs := s.cfg.TestingKnobs.Server
+	if serverKnobs != nil && serverKnobs.(*TestingKnobs).AutoConfigProfileStartupWaitTime != nil {
+		maxWait = *serverKnobs.(*TestingKnobs).AutoConfigProfileStartupWaitTime
+	}
+
+	if maxWait == 0 {
+		log.Infof(ctx, "waiting for auto-configuration environments disabled")
+		return
+	}
+
+	envs := s.execCfg.AutoConfigProvider.ActiveEnvironments()
+	if len(envs) == 0 {
+		log.Infof(ctx, "auto-configuration environments not set or already complete")
+		return
+	}
+
+	log.Infof(ctx, "waiting up to %s for auto-configuration environments %v to complete", maxWait, envs)
+	ctx, cancel := context.WithTimeout(ctx, maxWait) // nolint:context
+	defer cancel()
+	retryCfg := retry.Options{
+		InitialBackoff: 100 * time.Millisecond,
+		MaxBackoff:     5 * time.Second,
+	}
+	waitStart := timeutil.Now()
+	for i := retry.StartWithCtx(ctx, retryCfg); i.Next(); {
+		envs := s.execCfg.AutoConfigProvider.ActiveEnvironments()
+		if len(envs) == 0 {
+			log.Infof(ctx, "auto-configuration environments reported no active tasks after %s", timeutil.Since(waitStart))
+			return
+		}
+	}
+	log.Warningf(ctx, "auto-configuration environments still running after %s, moving on", timeutil.Since(waitStart))
 }
 
 // startCheckService verifies that the tenant has the right

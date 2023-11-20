@@ -138,7 +138,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 	left, middle, right := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 
 	txn := func(key roachpb.Key, ts hlc.Timestamp) *roachpb.Transaction {
-		txn := roachpb.MakeTransaction("test", key, 0, 0, ts, 0, int32(s.SQLInstanceID()))
+		txn := roachpb.MakeTransaction("test", key, 0, 0, ts, 0, int32(s.SQLInstanceID()), 0)
 		return &txn
 	}
 
@@ -386,7 +386,7 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	// Verify the transaction record is gone.
 	start := storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMin))
 	end := storage.MakeMVCCMetadataKey(keys.MakeRangeKeyPrefix(roachpb.RKeyMax))
-	iter, err := store.TODOEngine().NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: end.Key})
+	iter, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: end.Key})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -448,12 +448,12 @@ func TestQueryLocksAcrossRanges(t *testing.T) {
 	txn1 := kv.NewTxn(ctx, db, s.NodeID())
 	err = txn1.Put(ctx, roachpb.Key("c"), []byte("baz"))
 	require.NoError(t, err)
-	_, err = txn1.GetForUpdate(ctx, roachpb.Key("x"))
+	_, err = txn1.GetForUpdate(ctx, roachpb.Key("x"), kvpb.BestEffort)
 	require.NoError(t, err)
 
 	// Use txn2 to get an unreplicated lock on "p".
 	txn2 := kv.NewTxn(ctx, db, s.NodeID())
-	_, err = txn2.GetForUpdate(ctx, roachpb.Key("p"))
+	_, err = txn2.GetForUpdate(ctx, roachpb.Key("p"), kvpb.BestEffort)
 	require.NoError(t, err)
 
 	now := s.Clock().NowAsClockTimestamp()
@@ -465,6 +465,7 @@ func TestQueryLocksAcrossRanges(t *testing.T) {
 		s.Clock().NowAsClockTimestamp().ToTimestamp(),
 		s.Clock().MaxOffset().Nanoseconds(),
 		int32(s.SQLInstanceID()),
+		0,
 	)
 	txn3ID := txn3Proto.ID
 
@@ -635,7 +636,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	// Increments are a good way of testing idempotency. Up here, we
 	// address them to the original range, then later to the one that
 	// contains the key.
-	txn := roachpb.MakeTransaction("test", []byte("c"), isolation.Serializable, 10, store.Clock().Now(), 0, int32(s.SQLInstanceID()))
+	txn := roachpb.MakeTransaction("test", []byte("c"), isolation.Serializable, 10, store.Clock().Now(), 0, int32(s.SQLInstanceID()), 0)
 	lIncArgs := incrementArgs([]byte("apoptosis"), 100)
 	lTxn := txn
 	lTxn.Sequence++
@@ -1113,7 +1114,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 				return errors.Errorf("expected range %s to span %s", repl, expectedRSpan)
 			}
 			// Check range's max bytes settings.
-			if actualMaxBytes := repl.GetMaxBytes(); actualMaxBytes != maxBytes {
+			if actualMaxBytes := repl.GetMaxBytes(ctx); actualMaxBytes != maxBytes {
 				return errors.Errorf("range %s max bytes mismatch, got: %d, expected: %d", repl, actualMaxBytes, maxBytes)
 			}
 			return nil
@@ -1187,9 +1188,9 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 		if newRng.RangeID == origRng.RangeID {
 			return errors.Errorf("expected new range created by split")
 		}
-		if newRng.GetMaxBytes() != maxBytes {
+		if newRng.GetMaxBytes(ctx) != maxBytes {
 			return errors.Errorf("expected %d max bytes for the new range, but got %d",
-				maxBytes, newRng.GetMaxBytes())
+				maxBytes, newRng.GetMaxBytes(ctx))
 		}
 		return nil
 	})
@@ -1230,7 +1231,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			var activateSplitFilter int32
-			splitKey := roachpb.RKey(bootstrap.TestingUserTableDataMin())
+			splitKey := roachpb.RKey(bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec))
 			splitPending, blockSplits := make(chan struct{}), make(chan struct{})
 
 			// Set maxBytes to something small so we can exceed the maximum split
@@ -1295,7 +1296,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			singleKey := tc.splitImpossible
 			fillRange(t, store, repl.RangeID, splitKey.AsRawKey(), 2*maxBytes+1, singleKey)
 
-			if !repl.ShouldBackpressureWrites() {
+			if !repl.ShouldBackpressureWrites(ctx) {
 				t.Fatal("expected ShouldBackpressureWrites=true, found false")
 			}
 
@@ -2452,13 +2453,13 @@ func TestStoreTxnWaitQueueEnabledOnSplit(t *testing.T) {
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
-	key := bootstrap.TestingUserTableDataMin()
+	key := bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec)
 	args := adminSplitArgs(key)
 	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)
 	}
 
-	rhsRepl := store.LookupReplica(roachpb.RKey(bootstrap.TestingUserTableDataMin()))
+	rhsRepl := store.LookupReplica(roachpb.RKey(bootstrap.TestingUserTableDataMin(keys.SystemSQLCodec)))
 	if !rhsRepl.GetConcurrencyManager().TestingTxnWaitQueue().IsEnabled() {
 		t.Errorf("expected RHS replica's push txn queue to be enabled post-split")
 	}
@@ -3235,9 +3236,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	txn := roachpb.MakeTransaction("test", key2, isolation.Serializable, 1,
-		store.Clock().Now(), store.Clock().MaxOffset().Nanoseconds(),
-		int32(s.SQLInstanceID()))
+	txn := roachpb.MakeTransaction("test", key2, isolation.Serializable, 1, store.Clock().Now(), store.Clock().MaxOffset().Nanoseconds(), int32(s.SQLInstanceID()), 0)
 	// Officially begin the transaction. If not for this, the intent resolution
 	// machinery would simply remove the intent we write below, see #3020.
 	// We send directly to Replica throughout this test, so there's no danger
@@ -3630,11 +3629,17 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 		}
 		return nil
 	}
+	// Set global reads.
+	zoneConfig := zonepb.DefaultZoneConfig()
+	zoneConfig.GlobalReads = proto.Bool(true)
 
 	ctx := context.Background()
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DisableSpanConfigs: true,
 		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DefaultZoneConfigOverride: &zoneConfig,
+			},
+
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:     true,
 				TestingResponseFilter: respFilter,
@@ -3661,11 +3666,6 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	_, pErr := kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
 
-	// Set global reads.
-	zoneConfig := zonepb.DefaultZoneConfig()
-	zoneConfig.GlobalReads = proto.Bool(true)
-	config.TestingSetZoneConfig(config.ObjectID(descID), zoneConfig)
-
 	// Perform a write to the system config span being watched by
 	// the SystemConfigProvider.
 	tdb.Exec(t, "CREATE TABLE foo ()")
@@ -3673,6 +3673,19 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 		repl := store.LookupReplica(roachpb.RKey(descKey))
 		if repl.ClosedTimestampPolicy() != roachpb.LEAD_FOR_GLOBAL_READS {
 			return errors.Errorf("expected LEAD_FOR_GLOBAL_READS policy")
+		}
+		return nil
+	})
+
+	// The commit wait count is 1 due to the split above since global reads are
+	// set for the default config.
+	var splitCount = int64(1)
+	testutils.SucceedsSoon(t, func() error {
+		if splitCount != store.Metrics().CommitWaitsBeforeCommitTrigger.Count() {
+			return errors.Errorf("commit wait count is %d", store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
+		}
+		if splitCount != atomic.LoadInt64(&splitsWithSyntheticTS) {
+			return errors.Errorf("num splits is %d", atomic.LoadInt64(&splitsWithSyntheticTS))
 		}
 		return nil
 	})
@@ -3687,8 +3700,9 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	splitArgs = adminSplitArgs(splitKey)
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(1), store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
-	require.Equal(t, int64(1), atomic.LoadInt64(&splitsWithSyntheticTS))
+	splitCount++
+	require.Equal(t, splitCount, store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
+	require.Equal(t, splitCount, atomic.LoadInt64(&splitsWithSyntheticTS))
 
 	repl := store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, splitKey, repl.Desc().StartKey.AsRawKey())
@@ -3697,7 +3711,7 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	mergeArgs := adminMergeArgs(descKey)
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
 	require.Nil(t, pErr)
-	require.Equal(t, int64(2), store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
+	require.Equal(t, splitCount+1, store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
 	require.Equal(t, int64(1), atomic.LoadInt64(&mergesWithSyntheticTS))
 
 	repl = store.LookupReplica(roachpb.RKey(splitKey))
@@ -3877,7 +3891,6 @@ func TestLBSplitUnsafeKeys(t *testing.T) {
 			}
 
 			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-				DisableSpanConfigs: true,
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						LoadBasedSplittingOverrideKey: overrideLBSplitFn,

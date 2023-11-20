@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"log"
@@ -58,9 +57,10 @@ type fileAndLine struct {
 // mock out the results of the getFileLine function.
 var fileLineForTesting map[packageAndTest]fileAndLine
 
-type formatter func(context.Context, failure) (issues.IssueFormatter, issues.PostRequest)
+type Formatter func(context.Context, Failure) (issues.IssueFormatter, issues.PostRequest)
+type FailurePoster func(context.Context, Failure) error
 
-func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, issues.PostRequest) {
+func DefaultFormatter(ctx context.Context, f Failure) (issues.IssueFormatter, issues.PostRequest) {
 	teams := getOwner(ctx, f.packageName, f.testName)
 	repro := fmt.Sprintf("./dev test ./pkg/%s --race --stress -f %s",
 		trimPkg(f.packageName), f.testName)
@@ -90,25 +90,32 @@ func defaultFormatter(ctx context.Context, f failure) (issues.IssueFormatter, is
 	}
 }
 
-func getIssueFilerForFormatter(formatterName string) func(ctx context.Context, f failure) error {
-	var reqFromFailure formatter
-	switch formatterName {
-	case "pebble-metamorphic":
-		reqFromFailure = formatPebbleMetamorphicIssue
-	default:
-		reqFromFailure = defaultFormatter
-	}
-
-	return func(ctx context.Context, f failure) error {
-		fmter, req := reqFromFailure(ctx, f)
+func DefaultIssueFilerFromFormatter(
+	formatter Formatter,
+) func(ctx context.Context, f Failure) error {
+	opts := issues.DefaultOptionsFromEnv()
+	return func(ctx context.Context, f Failure) error {
+		fmter, req := formatter(ctx, f)
 		if stress := os.Getenv("COCKROACH_NIGHTLY_STRESS"); stress != "" {
 			if req.ExtraParams == nil {
 				req.ExtraParams = make(map[string]string)
 			}
 			req.ExtraParams["stress"] = "true"
 		}
-		return issues.Post(ctx, log.Default(), fmter, req)
+		return issues.Post(ctx, log.Default(), fmter, req, opts)
 	}
+
+}
+
+func getFailurePosterFromFormatterName(formatterName string) FailurePoster {
+	var reqFromFailure Formatter
+	switch formatterName {
+	case "pebble-metamorphic":
+		reqFromFailure = formatPebbleMetamorphicIssue
+	default:
+		reqFromFailure = DefaultFormatter
+	}
+	return DefaultIssueFilerFromFormatter(reqFromFailure)
 }
 
 // PostFromJSON parses the JSON-formatted output from a Go test session,
@@ -118,22 +125,32 @@ func getIssueFilerForFormatter(formatterName string) func(ctx context.Context, f
 // GitHub.
 func PostFromJSON(formatterName string, in io.Reader) {
 	ctx := context.Background()
-	fileIssue := getIssueFilerForFormatter(formatterName)
+	fileIssue := getFailurePosterFromFormatterName(formatterName)
 	if err := listFailuresFromJSON(ctx, in, fileIssue); err != nil {
 		log.Println(err) // keep going
 	}
 }
 
-// PostFromTestXML consumes a Bazel-style `test.xml` stream and posts issues
-// for any failed tests to GitHub. If there are no failed tests, it does
-// nothing.
-func PostFromTestXML(formatterName string, in io.Reader) error {
+// PostFromTestXMLWithFormatterName consumes a Bazel-style `test.xml` stream
+// and posts issues for any failed tests to GitHub. If there are no failed
+// tests, it does nothing. Unlike PostFromTestXMLWithFailurePoster, it takes a
+// formatter name.
+func PostFromTestXMLWithFormatterName(formatterName string, testXml buildutil.TestSuites) error {
 	ctx := context.Background()
-	fileIssue := getIssueFilerForFormatter(formatterName)
-	return listFailuresFromTestXML(ctx, in, fileIssue)
+	fileIssue := getFailurePosterFromFormatterName(formatterName)
+	return PostFromTestXMLWithFailurePoster(ctx, fileIssue, testXml)
 }
 
-type failure struct {
+// PostFromTestXMLWithFailurePoster consumes a Bazel-style `test.xml` stream and posts
+// issues for any failed tests to GitHub. If there are no failed tests, it does
+// nothing.
+func PostFromTestXMLWithFailurePoster(
+	ctx context.Context, fileIssue FailurePoster, testXml buildutil.TestSuites,
+) error {
+	return listFailuresFromTestXML(ctx, testXml, fileIssue)
+}
+
+type Failure struct {
 	title       string
 	packageName string
 	testName    string
@@ -189,7 +206,7 @@ func trimPkg(pkg string) string {
 }
 
 func listFailuresFromJSON(
-	ctx context.Context, input io.Reader, fileIssue func(context.Context, failure) error,
+	ctx context.Context, input io.Reader, fileIssue func(context.Context, Failure) error,
 ) error {
 	// Tests that took less than this are not even considered for slow test
 	// reporting. This is so that we protect against large number of
@@ -387,7 +404,7 @@ func listFailuresFromJSON(
 	if lastEvent.Action == "fail" && len(failures) == 0 && timedOutCulprit.name == "" {
 		// If we couldn't find a failing Go test, assume that a failure occurred
 		// before running Go and post an issue about that.
-		err := fileIssue(ctx, failure{
+		err := fileIssue(ctx, Failure{
 			title:       fmt.Sprintf("%s: package failed", shortPkg()),
 			packageName: maybeEnv(pkgEnv, "unknown"),
 			testName:    unknown,
@@ -448,7 +465,7 @@ func listFailuresFromJSON(
 			// The test that was running when the timeout hit is the one that ran for
 			// the longest time.
 			log.Printf("timeout culprit found: %s\n", timedOutCulprit.name)
-			err := fileIssue(ctx, failure{
+			err := fileIssue(ctx, Failure{
 				title:       fmt.Sprintf("%s: %s timed out", trimPkg(timedOutCulprit.pkg), timedOutCulprit.name),
 				packageName: timedOutCulprit.pkg,
 				testName:    timedOutCulprit.name,
@@ -462,7 +479,7 @@ func listFailuresFromJSON(
 			// TODO(irfansharif): These are assigned to nobody given our lack of
 			// a story around #51653. It'd be nice to be able to go from pkg
 			// name to team-name, and be able to assign to a specific team.
-			err := fileIssue(ctx, failure{
+			err := fileIssue(ctx, Failure{
 				title:       fmt.Sprintf("%s: package timed out", shortPkg()),
 				packageName: maybeEnv(pkgEnv, "unknown"),
 				testName:    unknown,
@@ -478,17 +495,8 @@ func listFailuresFromJSON(
 }
 
 func listFailuresFromTestXML(
-	ctx context.Context, input io.Reader, fileIssue func(context.Context, failure) error,
+	ctx context.Context, suites buildutil.TestSuites, fileIssue func(context.Context, Failure) error,
 ) error {
-	var buf bytes.Buffer
-	_, err := buf.ReadFrom(input)
-	if err != nil {
-		return err
-	}
-	var suites buildutil.TestSuites
-	if err := xml.Unmarshal(buf.Bytes(), &suites); err != nil {
-		return err
-	}
 	failures := make(map[scopedTest][]testEvent)
 	for _, suite := range suites.Suites {
 		pkg := suite.Name
@@ -504,10 +512,13 @@ func listFailuresFromTestXML(
 					pkg:  pkg,
 					name: testCase.Name,
 				}
-				elapsed, err := strconv.ParseFloat(testCase.Time, 64)
-				if err != nil {
-					fmt.Printf("couldn't parse time %s as float64: %+v\n", testCase.Time, err)
-					elapsed = 0.0
+				elapsed := 0.0
+				if testCase.Time != "" {
+					var err error
+					elapsed, err = strconv.ParseFloat(testCase.Time, 64)
+					if err != nil {
+						fmt.Printf("couldn't parse time %s as float64: %+v\n", testCase.Time, err)
+					}
 				}
 				event := testEvent{
 					Action:  "fail",
@@ -529,7 +540,7 @@ func listFailuresFromTestXML(
 
 func processFailures(
 	ctx context.Context,
-	fileIssue func(context.Context, failure) error,
+	fileIssue func(context.Context, Failure) error,
 	failures map[scopedTest][]testEvent,
 ) error {
 	for test, testEvents := range failures {
@@ -559,7 +570,7 @@ func processFailures(
 		for _, testEvent := range testEvents {
 			outputs = append(outputs, testEvent.Output)
 		}
-		err := fileIssue(ctx, failure{
+		err := fileIssue(ctx, Failure{
 			title:       fmt.Sprintf("%s: %s failed", trimPkg(test.pkg), test.name),
 			packageName: test.pkg,
 			testName:    test.name,
@@ -681,7 +692,7 @@ func getOwner(ctx context.Context, packageName, testName string) (_teams []team.
 }
 
 func formatPebbleMetamorphicIssue(
-	ctx context.Context, f failure,
+	ctx context.Context, f Failure,
 ) (issues.IssueFormatter, issues.PostRequest) {
 	var repro string
 	{
@@ -711,13 +722,13 @@ func formatPebbleMetamorphicIssue(
 // insight into what caused the build failure and can't properly assign owners,
 // so a general issue is filed against test-eng in this case.
 func PostGeneralFailure(formatterName, logs string) {
-	fileIssue := getIssueFilerForFormatter(formatterName)
+	fileIssue := getFailurePosterFromFormatterName(formatterName)
 	postGeneralFailureImpl(logs, fileIssue)
 }
 
-func postGeneralFailureImpl(logs string, fileIssue func(context.Context, failure) error) {
+func postGeneralFailureImpl(logs string, fileIssue func(context.Context, Failure) error) {
 	ctx := context.Background()
-	err := fileIssue(ctx, failure{
+	err := fileIssue(ctx, Failure{
 		title:       "unexpected build failure",
 		testMessage: logs,
 	})

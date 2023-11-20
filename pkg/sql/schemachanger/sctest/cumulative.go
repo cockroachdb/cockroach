@@ -147,7 +147,7 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 		for _, injectPreCommit := range injectPreCommits {
 			for _, injection := range injectionRanges {
 				if !t.Run(
-					fmt.Sprintf("injection stage %v", injection),
+					fmt.Sprintf("injection stage %+v", injection),
 					func(t *testing.T) { testDMLInjectionCase(t, ts, injection, injectPreCommit) },
 				) {
 					return
@@ -216,9 +216,9 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 							}
 						}
 						usedStages[key.AsInt()] = struct{}{}
-						t.Logf("Completed stage: %v", key)
+						t.Logf("Completed stage: %+v", key)
 					} else {
-						t.Logf("Retrying stage: %v", key)
+						t.Logf("Retrying stage: %+v", key)
 					}
 				}
 				return nil
@@ -375,7 +375,7 @@ func pause(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
 			t.Logf("job %d is paused", jobID)
 
 			// Upgrade the cluster, if applicable.
-			tdb.Exec(t, "SET CLUSTER SETTING VERSION=$1", clusterversion.TestingBinaryVersion.String())
+			tdb.Exec(t, "SET CLUSTER SETTING VERSION=$1", clusterversion.Latest.String())
 
 			// Resume the job and check that it succeeds.
 			tdb.Exec(t, "RESUME JOB $1", jobID)

@@ -58,7 +58,7 @@ const readBufferMaxMessageSizeClusterSettingName = "sql.conn.max_read_buffer_mes
 // ReadBufferMaxMessageSizeClusterSetting is the cluster setting for configuring
 // ReadBuffer default message sizes.
 var ReadBufferMaxMessageSizeClusterSetting = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	readBufferMaxMessageSizeClusterSettingName,
 	"maximum buffer size to allow for ingesting sql statements. Connections must be restarted for this to take effect.",
 	defaultMaxReadBufferMessageSize,
@@ -815,6 +815,13 @@ func DecodeDatum(
 			return nil, err
 		}
 		return tree.NewDEnum(e), nil
+	case types.RefCursorFamily:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
+		// Note: we could use bs here if we were guaranteed all callers never
+		// mutated b.
+		return tree.NewDRefCursor(string(b)), nil
 	}
 	switch id {
 	case oid.T_text, oid.T_varchar, oid.T_unknown:

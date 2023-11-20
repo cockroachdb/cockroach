@@ -180,6 +180,8 @@ type txnKVFetcher struct {
 	// lockWaitPolicy represents the policy to be used for handling conflicting
 	// locks held by other active transactions.
 	lockWaitPolicy lock.WaitPolicy
+	// lockDurability represents the locking durability to use.
+	lockDurability lock.Durability
 	// lockTimeout specifies the maximum amount of time that the fetcher will
 	// wait while attempting to acquire a lock on a key or while blocking on an
 	// existing lock in order to perform a non-locking read on a key.
@@ -287,6 +289,7 @@ type newTxnKVFetcherArgs struct {
 	reverse                    bool
 	lockStrength               descpb.ScanLockingStrength
 	lockWaitPolicy             descpb.ScanLockingWaitPolicy
+	lockDurability             descpb.ScanLockingDurability
 	lockTimeout                time.Duration
 	acc                        *mon.BoundAccount
 	forceProductionKVBatchSize bool
@@ -314,6 +317,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		reverse:                    args.reverse,
 		lockStrength:               GetKeyLockingStrength(args.lockStrength),
 		lockWaitPolicy:             GetWaitPolicy(args.lockWaitPolicy),
+		lockDurability:             GetKeyLockingDurability(args.lockDurability),
 		lockTimeout:                args.lockTimeout,
 		acc:                        args.acc,
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,
@@ -487,7 +491,7 @@ func (f *txnKVFetcher) SetupNextFetch(
 
 	// Account for the memory of the spans that we're taking the ownership of.
 	if f.acc != nil {
-		newSpansAccountedFor := spans.MemUsage()
+		newSpansAccountedFor := spans.MemUsageUpToLen()
 		if err := f.acc.Grow(ctx, newSpansAccountedFor); err != nil {
 			return err
 		}
@@ -525,6 +529,12 @@ func (f *txnKVFetcher) SetupNextFetch(
 
 // fetch retrieves spans from the kv layer.
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
+	// Note that spansToRequests below might modify spans, so we need to log the
+	// spans before that.
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "Scan %s", f.spans.BoundedString(1024 /* bytesHint */))
+	}
+
 	ba := &kvpb.BatchRequest{}
 	ba.Header.WaitPolicy = f.lockWaitPolicy
 	ba.Header.LockTimeout = f.lockTimeout
@@ -544,11 +554,9 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 		ba.Header.WholeRowsOfSize = int32(f.indexFetchSpec.MaxKeysPerRow)
 	}
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = spansToRequests(f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.reqsScratch)
-
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.VEventf(ctx, 2, "Scan %s", f.spans)
-	}
+	ba.Requests = spansToRequests(
+		f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.lockDurability, f.reqsScratch,
+	)
 
 	monitoring := f.acc != nil
 
@@ -840,7 +848,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 		// We have some resume spans.
 		f.spans = f.scratchSpans
 		if f.acc != nil {
-			newSpansMemUsage := f.spans.MemUsage()
+			newSpansMemUsage := f.spans.MemUsageUpToLen()
 			if err := f.acc.Resize(ctx, f.spansAccountedFor, newSpansMemUsage); err != nil {
 				return KVBatchFetcherResponse{}, err
 			}
@@ -885,11 +893,16 @@ const requestUnionOverhead = int64(unsafe.Sizeof(kvpb.RequestUnion{}))
 //
 // The provided reqsScratch is reused if it has enough capacity for all spans,
 // if not, a new slice is allocated.
+//
+// NOTE: any span that results in a Scan or a ReverseScan request is nil-ed out.
+// This is because both callers of this method no longer need the original span
+// unless it resulted in a Get request.
 func spansToRequests(
 	spans roachpb.Spans,
 	scanFormat kvpb.ScanFormat,
 	reverse bool,
-	keyLocking lock.Strength,
+	lockStrength lock.Strength,
+	lockDurability lock.Durability,
 	reqsScratch []kvpb.RequestUnion,
 ) []kvpb.RequestUnion {
 	var reqs []kvpb.RequestUnion
@@ -923,8 +936,8 @@ func spansToRequests(
 				// A span without an EndKey indicates that the caller is requesting a
 				// single key fetch, which can be served using a GetRequest.
 				gets[curGet].req.Key = spans[i].Key
-				gets[curGet].req.KeyLocking = keyLocking
-				// TODO(michae2): Once #100193 is finished, also include locking durability.
+				gets[curGet].req.KeyLockingStrength = lockStrength
+				gets[curGet].req.KeyLockingDurability = lockDurability
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
 				curGet++
@@ -932,9 +945,10 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
+			spans[i] = roachpb.Span{}
 			scans[curScan].req.ScanFormat = scanFormat
-			scans[curScan].req.KeyLocking = keyLocking
-			// TODO(michae2): Once #100193 is finished, also include locking durability.
+			scans[curScan].req.KeyLockingStrength = lockStrength
+			scans[curScan].req.KeyLockingDurability = lockDurability
 			scans[curScan].union.ReverseScan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
 		}
@@ -948,8 +962,8 @@ func spansToRequests(
 				// A span without an EndKey indicates that the caller is requesting a
 				// single key fetch, which can be served using a GetRequest.
 				gets[curGet].req.Key = spans[i].Key
-				gets[curGet].req.KeyLocking = keyLocking
-				// TODO(michae2): Once #100193 is finished, also include locking durability.
+				gets[curGet].req.KeyLockingStrength = lockStrength
+				gets[curGet].req.KeyLockingDurability = lockDurability
 				gets[curGet].union.Get = &gets[curGet].req
 				reqs[i].Value = &gets[curGet].union
 				curGet++
@@ -957,9 +971,10 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
+			spans[i] = roachpb.Span{}
 			scans[curScan].req.ScanFormat = scanFormat
-			scans[curScan].req.KeyLocking = keyLocking
-			// TODO(michae2): Once #100193 is finished, also include locking durability.
+			scans[curScan].req.KeyLockingStrength = lockStrength
+			scans[curScan].req.KeyLockingDurability = lockDurability
 			scans[curScan].union.Scan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
 		}

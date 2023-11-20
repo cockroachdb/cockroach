@@ -22,6 +22,61 @@ BEGIN
 a := NULL;
 END
 
+parse
+DECLARE
+BEGIN
+  a :=;
+END
+----
+at or near ":": syntax error: missing expression
+
+parse
+DECLARE
+BEGIN
+johnny := (NULL;
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+johnny := NULL);
+END
+----
+at or near "null": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+johnny := (1 + (2);
+END
+----
+at or near "EOF": syntax error: mismatched parentheses
+
+parse
+DECLARE
+BEGIN
+  a := 1, 'string';
+END
+----
+at or near ";": syntax error: query returned 2 columns
+
+parse
+DECLARE
+BEGIN
+  a := 1, (2, 3, 4, 5);
+END
+----
+at or near ";": syntax error: query returned 2 columns
+
+parse
+DECLARE
+BEGIN
+  a := 1, (2, 3, 4, 5), 'abcd', true, ((1));
+END
+----
+at or near ";": syntax error: query returned 5 columns
 
 feature-count
 DECLARE

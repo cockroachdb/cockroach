@@ -1,0 +1,22 @@
+# LogicTest: cockroach-go-testserver-upgrade-to-master
+
+statement ok
+CREATE TABLE tbl (
+  id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')
+
+upgrade all
+
+query B retry
+SELECT version LIKE '%23.1-%' FROM [SHOW CLUSTER SETTING version]
+----
+true
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+  id INT8 NOT NULL,
+  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL)

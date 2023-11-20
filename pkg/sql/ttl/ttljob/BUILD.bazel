@@ -19,7 +19,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server/telemetry",
-        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
@@ -57,13 +56,15 @@ go_library(
 
 go_test(
     name = "ttljob_test",
+    size = "large",
     srcs = [
         "main_test.go",
         "ttljob_processor_test.go",
         "ttljob_query_builder_test.go",
         "ttljob_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    exec_properties = {"Pool": "large"},
+    shard_count = 4,
     deps = [
         ":ttljob",
         "//pkg/base",
@@ -76,7 +77,6 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
-        "//pkg/scheduledjobs",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -99,7 +99,10 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "//pkg/util/protoutil",
+        "//pkg/util/quotapool",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

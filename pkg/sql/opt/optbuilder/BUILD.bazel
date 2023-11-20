@@ -30,6 +30,7 @@ go_library(
         "partial_index.go",
         "plpgsql.go",
         "project.go",
+        "routine.go",
         "scalar.go",
         "scope.go",
         "scope_column.go",
@@ -49,6 +50,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/server/telemetry",
         "//pkg/settings",
@@ -89,6 +91,7 @@ go_library(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/errorutil",
@@ -110,7 +113,6 @@ go_test(
         "statement_tree_test.go",
         "union_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":optbuilder"],
     deps = [

@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -98,11 +97,13 @@ func importBankDataSplit(
 	dest := destinationName(c)
 
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 
 	// NB: starting the cluster creates the logs dir as a side effect,
 	// needed below.
 	c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
+	// See #113816 for why this is needed for now (probably until #94850 is
+	// resolved).
+	c.Run(ctx, c.Node(1), "./cockroach sql --insecure -e 'SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = false;'")
 	runImportBankDataSplit(ctx, rows, ranges, t, c)
 	return dest
 }
@@ -195,7 +196,7 @@ func runImportBankDataSplit(ctx context.Context, rows, ranges int, t test.Test, 
 }
 
 func importBankData(ctx context.Context, rows int, t test.Test, c cluster.Cluster) string {
-	return importBankDataSplit(ctx, rows, 0 /* ranges */, t, c)
+	return importBankDataSplit(ctx, rows, 0, t, c)
 }
 
 func registerBackupNodeShutdown(r registry.Registry) {
@@ -219,13 +220,15 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		Cluster:           backupNodeRestartSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
-			startBackup := func(c cluster.Cluster, t test.Test) (jobID jobspb.JobID, err error) {
-				gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
+			startBackup := func(c cluster.Cluster, l *logger.Logger) (jobID jobspb.JobID, err error) {
+				gatewayDB := c.Conn(ctx, l, gatewayNode)
 				defer gatewayDB.Close()
 
 				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
@@ -241,13 +244,15 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		Cluster:           backupNodeRestartSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 			dest := loadBackupData(ctx, t, c)
 			backupQuery := `BACKUP bank.bank TO 'nodelocal://1/` + dest + `' WITH DETACHED`
-			startBackup := func(c cluster.Cluster, t test.Test) (jobID jobspb.JobID, err error) {
-				gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
+			startBackup := func(c cluster.Cluster, l *logger.Logger) (jobID jobspb.JobID, err error) {
+				gatewayDB := c.Conn(ctx, l, gatewayNode)
 				defer gatewayDB.Close()
 
 				err = gatewayDB.QueryRowContext(ctx, backupQuery).Scan(&jobID)
@@ -396,6 +401,8 @@ func registerBackup(r registry.Registry) {
 		Owner:             registry.OwnerDisasterRecovery,
 		Benchmark:         true,
 		Cluster:           backup2TBSpec,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			rows := rows2TiB
@@ -445,8 +452,10 @@ func registerBackup(r registry.Registry) {
 			Cluster:           r.MakeClusterSpec(3),
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Nightly),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != item.machine {
+				if c.Cloud() != item.machine {
 					t.Skip("backup assumeRole is only configured to run on "+item.machine, "")
 				}
 
@@ -497,31 +506,12 @@ func registerBackup(r registry.Registry) {
 						return err
 					}
 
-					fingerprint := func(db string) (string, error) {
-						var b strings.Builder
-
-						query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, "bank")
-						rows, err := conn.QueryContext(ctx, query)
-						if err != nil {
-							return "", err
-						}
-						defer rows.Close()
-						for rows.Next() {
-							var name, fp string
-							if err := rows.Scan(&name, &fp); err != nil {
-								return "", err
-							}
-							fmt.Fprintf(&b, "%s: %s\n", name, fp)
-						}
-
-						return b.String(), rows.Err()
-					}
-
-					originalBank, err := fingerprint("bank")
+					table := "bank"
+					originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restore, err := fingerprint("restoreDB")
+					restore, err := fingerprint(ctx, conn, "restoreDB" /* db */, table)
 					if err != nil {
 						return err
 					}
@@ -540,10 +530,11 @@ func registerBackup(r registry.Registry) {
 	for _, item := range []struct {
 		kmsProvider string
 		machine     string
+		clouds      registry.CloudSet
 		tags        map[string]struct{}
 	}{
-		{kmsProvider: "GCS", machine: spec.GCE},
-		{kmsProvider: "AWS", machine: spec.AWS, tags: registry.Tags("aws")},
+		{kmsProvider: "GCS", machine: spec.GCE, clouds: registry.AllExceptAWS},
+		{kmsProvider: "AWS", machine: spec.AWS, clouds: registry.AllClouds, tags: registry.Tags("aws")},
 	} {
 		item := item
 		r.Add(registry.TestSpec{
@@ -552,9 +543,11 @@ func registerBackup(r registry.Registry) {
 			Cluster:           KMSSpec,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
+			CompatibleClouds:  item.clouds,
+			Suites:            registry.Suites(registry.Nightly),
 			Tags:              item.tags,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Spec().Cloud != item.machine {
+				if c.Cloud() != item.machine {
 					t.Skip("backupKMS roachtest is only configured to run on "+item.machine, "")
 				}
 
@@ -632,35 +625,16 @@ func registerBackup(r registry.Registry) {
 					}
 
 					t.Status(`fingerprint`)
-					fingerprint := func(db string) (string, error) {
-						var b strings.Builder
-
-						query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, "bank")
-						rows, err := conn.QueryContext(ctx, query)
-						if err != nil {
-							return "", err
-						}
-						defer rows.Close()
-						for rows.Next() {
-							var name, fp string
-							if err := rows.Scan(&name, &fp); err != nil {
-								return "", err
-							}
-							fmt.Fprintf(&b, "%s: %s\n", name, fp)
-						}
-
-						return b.String(), rows.Err()
-					}
-
-					originalBank, err := fingerprint("bank")
+					table := "bank"
+					originalBank, err := fingerprint(ctx, conn, "bank" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restoreA, err := fingerprint("restoreA")
+					restoreA, err := fingerprint(ctx, conn, "restoreA" /* db */, table)
 					if err != nil {
 						return err
 					}
-					restoreB, err := fingerprint("restoreB")
+					restoreB, err := fingerprint(ctx, conn, "restoreB" /* db */, table)
 					if err != nil {
 						return err
 					}
@@ -678,215 +652,6 @@ func registerBackup(r registry.Registry) {
 		})
 	}
 
-	// backupTPCC continuously runs TPCC, takes a full backup after some time,
-	// and incremental after more time. It then restores the two backups and
-	// verifies them with a fingerprint.
-	r.Add(registry.TestSpec{
-		Name:              `backupTPCC`,
-		Owner:             registry.OwnerDisasterRecovery,
-		Cluster:           r.MakeClusterSpec(3),
-		Leases:            registry.MetamorphicLeases,
-		Timeout:           1 * time.Hour,
-		EncryptionSupport: registry.EncryptionMetamorphic,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			c.Put(ctx, t.Cockroach(), "./cockroach")
-			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
-			c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
-			conn := c.Conn(ctx, t.L(), 1)
-
-			duration := 5 * time.Minute
-			if c.IsLocal() {
-				duration = 5 * time.Second
-			}
-			warehouses := 10
-
-			backupDir := "gs://" + backupTestingBucket + "/" + c.Name() + "?AUTH=implicit"
-			// Use inter-node file sharing on 20.1+.
-			if t.BuildVersion().AtLeast(version.MustParse(`v20.1.0-0`)) {
-				backupDir = "nodelocal://1/" + c.Name()
-			}
-			fullDir := backupDir + "/full"
-			incDir := backupDir + "/inc"
-
-			t.Status(`workload initialization`)
-			cmd := []string{fmt.Sprintf(
-				"./workload init tpcc --warehouses=%d {pgurl:1-%d}",
-				warehouses, c.Spec().NodeCount,
-			)}
-			if !t.BuildVersion().AtLeast(version.MustParse("v20.2.0")) {
-				cmd = append(cmd, "--deprecated-fk-indexes")
-			}
-			c.Run(ctx, c.Node(1), cmd...)
-
-			m := c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				_, err := conn.ExecContext(ctx, `
-					CREATE DATABASE restore_full;
-					CREATE DATABASE restore_inc;
-				`)
-				return err
-			})
-			m.Wait()
-
-			t.Status(`run tpcc`)
-			ctx, cancel := context.WithCancel(ctx)
-			defer cancel()
-
-			cmdDone := make(chan error)
-			go func() {
-				cmd := fmt.Sprintf(
-					"./workload run tpcc --warehouses=%d {pgurl:1-%d}",
-					warehouses, c.Spec().NodeCount,
-				)
-
-				cmdDone <- c.RunE(ctx, c.Node(1), cmd)
-			}()
-
-			select {
-			case <-time.After(duration):
-			case <-ctx.Done():
-				return
-			}
-
-			// Use a time slightly in the past to avoid "cannot specify timestamp in the future" errors.
-			tFull := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
-			m = c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`full backup`)
-				_, err := conn.ExecContext(ctx,
-					`BACKUP tpcc.* TO $1 AS OF SYSTEM TIME `+tFull,
-					fullDir,
-				)
-				return err
-			})
-			m.Wait()
-
-			t.Status(`continue tpcc`)
-			select {
-			case <-time.After(duration):
-			case <-ctx.Done():
-				return
-			}
-
-			tInc := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
-			m = c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`incremental backup`)
-				_, err := conn.ExecContext(ctx,
-					`BACKUP tpcc.* TO $1 AS OF SYSTEM TIME `+tInc+` INCREMENTAL FROM $2`,
-					incDir,
-					fullDir,
-				)
-				if err != nil {
-					return err
-				}
-
-				// Backups are done, make sure workload is still running.
-				select {
-				case err := <-cmdDone:
-					// Workload exited before it should have.
-					return err
-				default:
-					return nil
-				}
-			})
-			m.Wait()
-
-			m = c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`restore full`)
-				if _, err := conn.ExecContext(ctx,
-					`RESTORE tpcc.* FROM $1 WITH into_db='restore_full'`,
-					fullDir,
-				); err != nil {
-					return err
-				}
-
-				t.Status(`restore incremental`)
-				if _, err := conn.ExecContext(ctx,
-					`RESTORE tpcc.* FROM $1, $2 WITH into_db='restore_inc'`,
-					fullDir,
-					incDir,
-				); err != nil {
-					return err
-				}
-
-				t.Status(`fingerprint`)
-				// TODO(adityamaru): Pull the fingerprint logic into a utility method
-				// which can be shared by multiple roachtests.
-				fingerprint := func(db string, asof string) (string, error) {
-					var b strings.Builder
-
-					var tables []string
-					rows, err := conn.QueryContext(
-						ctx,
-						fmt.Sprintf("SELECT table_name FROM [SHOW TABLES FROM %s] ORDER BY table_name", db),
-					)
-					if err != nil {
-						return "", err
-					}
-					defer rows.Close()
-					for rows.Next() {
-						var name string
-						if err := rows.Scan(&name); err != nil {
-							return "", err
-						}
-						tables = append(tables, name)
-					}
-
-					for _, table := range tables {
-						fmt.Fprintf(&b, "table %s\n", table)
-						query := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", db, table)
-						if asof != "" {
-							query = fmt.Sprintf("SELECT * FROM [%s] AS OF SYSTEM TIME %s", query, asof)
-						}
-						rows, err = conn.QueryContext(ctx, query)
-						if err != nil {
-							return "", err
-						}
-						defer rows.Close()
-						for rows.Next() {
-							var name, fp string
-							if err := rows.Scan(&name, &fp); err != nil {
-								return "", err
-							}
-							fmt.Fprintf(&b, "%s: %s\n", name, fp)
-						}
-					}
-
-					return b.String(), rows.Err()
-				}
-
-				tpccFull, err := fingerprint("tpcc", tFull)
-				if err != nil {
-					return err
-				}
-				tpccInc, err := fingerprint("tpcc", tInc)
-				if err != nil {
-					return err
-				}
-				restoreFull, err := fingerprint("restore_full", "")
-				if err != nil {
-					return err
-				}
-				restoreInc, err := fingerprint("restore_inc", "")
-				if err != nil {
-					return err
-				}
-
-				if tpccFull != restoreFull {
-					return errors.Errorf("got %s, expected %s", restoreFull, tpccFull)
-				}
-				if tpccInc != restoreInc {
-					return errors.Errorf("got %s, expected %s", restoreInc, tpccInc)
-				}
-
-				return nil
-			})
-			m.Wait()
-		},
-	})
-
 	r.Add(registry.TestSpec{
 		Name:              "backup/mvcc-range-tombstones",
 		Owner:             registry.OwnerDisasterRecovery,
@@ -894,8 +659,10 @@ func registerBackup(r registry.Registry) {
 		Cluster:           r.MakeClusterSpec(3, spec.CPU(8)),
 		Leases:            registry.MetamorphicLeases,
 		EncryptionSupport: registry.EncryptionMetamorphic,
+		CompatibleClouds:  registry.AllExceptAWS,
+		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Spec().Cloud != spec.GCE && !c.IsLocal() {
+			if c.Cloud() != spec.GCE && !c.IsLocal() {
 				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			runBackupMVCCRangeTombstones(ctx, t, c, mvccRangeTombstoneConfig{})
@@ -941,7 +708,6 @@ func runBackupMVCCRangeTombstones(
 	ctx context.Context, t test.Test, c cluster.Cluster, config mvccRangeTombstoneConfig,
 ) {
 	if !config.skipClusterSetup {
-		c.Put(ctx, t.Cockroach(), "./cockroach")
 		c.Put(ctx, t.DeprecatedWorkload(), "./workload") // required for tpch
 		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings())
 	}
@@ -954,8 +720,11 @@ func runBackupMVCCRangeTombstones(
 	t.Status("configuring cluster")
 	_, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`)
 	require.NoError(t, err)
-	_, err = conn.Exec(`SET CLUSTER SETTING server.debug.default_vmodule = 'txn=2,sst_batcher=4,
-revert=2'`)
+	_, err = conn.Exec(`SET CLUSTER SETTING server.debug.default_vmodule = 'txn=2,sst_batcher=4,revert=2'`)
+	require.NoError(t, err)
+	// See #113816 for why this is needed for now (probably until #94850 is
+	// resolved).
+	_, err = conn.Exec(`SET CLUSTER SETTING sql.distsql.direct_columnar_scans.enabled = false;`)
 	require.NoError(t, err)
 	// Wait for ranges to upreplicate.
 	require.NoError(t, WaitFor3XReplication(ctx, t, conn))

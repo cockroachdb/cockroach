@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"math/big"
+	"net"
 	"net/url"
 	"os"
 	"time"
@@ -371,6 +372,14 @@ type Config struct {
 	// This is used if SplitListenSQL is set to true.
 	SQLAddr string
 
+	// SQLAddrListener will only be considered if SplitListenSQL is set and
+	// DisableSQLListener is not. Under these conditions, if not nil, it will be
+	// used as a listener for incoming SQL connection requests. This allows
+	// creating a listener early in the server initialization process and not
+	// rejecting incoming connection requests that may come before the server is
+	// fully ready.
+	SQLAddrListener net.Listener
+
 	// SQLAdvertiseAddrH contains the advertised SQL address.
 	// This is computed from SQLAddr if specified otherwise Addr.
 	//
@@ -404,14 +413,12 @@ type Config struct {
 	// RPCHearbeatTimeout is the timeout for Ping requests.
 	RPCHeartbeatTimeout time.Duration
 
-	// SecondaryTenantPortOffset is the increment to add to the various
-	// addresses to generate the network configuration for the in-memory
-	// secondary tenant. If set to zero (the default), ports are
-	// auto-allocated randomly.
-	// TODO(knz): Remove this mechanism altogether in favor of a single
-	// network listener with protocol routing.
-	// See: https://github.com/cockroachdb/cockroach/issues/84585
-	SecondaryTenantPortOffset int
+	// ApplicationInternalRPCPortMin/PortMax define the range of TCP ports
+	// used to start the internal RPC service for application-level
+	// servers. This service is used for node-to-node RPC traffic and to
+	// serve data for 'debug zip'.
+	ApplicationInternalRPCPortMin int
+	ApplicationInternalRPCPortMax int
 
 	// Enables the use of an PTP hardware clock user space API for HLC current time.
 	// This contains the path to the device to be used (i.e. /dev/ptp0)
@@ -485,7 +492,8 @@ func (cfg *Config) InitDefaults() {
 	cfg.DisableClusterNameVerification = false
 	cfg.ClockDevicePath = ""
 	cfg.AcceptSQLWithoutTLS = false
-	cfg.SecondaryTenantPortOffset = 0
+	cfg.ApplicationInternalRPCPortMin = 0
+	cfg.ApplicationInternalRPCPortMax = 0
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of

@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -114,8 +117,8 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 		inspectState, err := inspectEngines(
 			context.Background(),
 			s.Engines(),
-			s.ClusterSettings().Version.BinaryVersion(),
-			s.ClusterSettings().Version.BinaryMinSupportedVersion(),
+			s.ClusterSettings().Version.LatestVersion(),
+			s.ClusterSettings().Version.MinSupportedVersion(),
 		)
 		require.NoError(t, err)
 
@@ -142,6 +145,74 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 Expected: %+v
 Actual:   %+v
 `, settingsCache, state.initialSettingsKVs)
+		}
+		return nil
+	})
+}
+
+func TestCachedSettingDeletionIsPersisted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	hasKey := func(kvs []roachpb.KeyValue, key string) bool {
+		for _, kv := range kvs {
+			if strings.Contains(string(kv.Key), key) {
+				return true
+			}
+		}
+		return false
+	}
+
+	ctx := context.Background()
+
+	ts, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer ts.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Make the test faster.
+	st := ts.ClusterSettings()
+	factor := 1
+	if util.RaceEnabled {
+		// Under race, all the goroutines are generally slower. If we
+		// accelerate the rangefeeds and the closed ts framework too much,
+		// it can start overwhelming the scheduler and starve everything
+		// of CPU time. So give everything some breathing time in that
+		// case.
+		//
+		// TODO(knz): Replace this by the change in #111753.
+		factor = 4
+	}
+	closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond*time.Duration(factor))
+	closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond*time.Duration(factor))
+	kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond*time.Duration(factor))
+
+	// Customize a setting.
+	db.Exec(t, `SET CLUSTER SETTING ui.display_timezone = 'America/New_York'`)
+	// The setting won't propagate to the store until the setting watcher caches
+	// up with the rangefeed, which might take a while.
+	testutils.SucceedsSoon(t, func() error {
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(1)
+		require.NoError(t, err)
+		settings, err := loadCachedSettingsKVs(context.Background(), store.TODOEngine())
+		require.NoError(t, err)
+		if !hasKey(settings, `ui.display_timezone`) {
+			return errors.New("cached setting not found")
+		}
+		return nil
+	})
+
+	// Reset the setting.
+	db.Exec(t, `RESET CLUSTER SETTING ui.display_timezone`)
+	// Check that the setting is eventually deleted from the store.
+	testutils.SucceedsSoon(t, func() error {
+		store, err := ts.GetStores().(*kvserver.Stores).GetStore(1)
+		require.NoError(t, err)
+		settings, err := loadCachedSettingsKVs(context.Background(), store.TODOEngine())
+		require.NoError(t, err)
+		if hasKey(settings, `ui.display_timezone`) {
+			return errors.New("cached setting was still found")
 		}
 		return nil
 	})

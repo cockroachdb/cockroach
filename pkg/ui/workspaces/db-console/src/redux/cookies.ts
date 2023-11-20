@@ -36,7 +36,7 @@ export const selectTenantsFromMultitenantSessionCookie = (): string[] => {
     ? sessionsStr
         .replace(/["]/g, "")
         .split(/[,]/g)
-        .filter((_, idx) => idx % 2 == 1)
+        .filter((_, idx) => idx % 2 === 1)
     : [];
 };
 

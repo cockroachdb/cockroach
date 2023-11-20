@@ -63,6 +63,7 @@ describe("DiagnosticsView", () => {
             requestTime={undefined}
             currentScale={ts}
             onChangeTimeScale={mockSetTimeScale}
+            planGists={["gist"]}
           />
         </MemoryRouter>,
       );
@@ -73,6 +74,7 @@ describe("DiagnosticsView", () => {
       activateButtonComponent.simulate("click");
       expect(activateDiagnosticsRef.current.showModalFor).toBeCalledWith(
         statementFingerprint,
+        ["gist"],
       );
     });
   });
@@ -94,6 +96,7 @@ describe("DiagnosticsView", () => {
             dismissAlertMessage={() => {}}
             currentScale={ts}
             onChangeTimeScale={mockSetTimeScale}
+            planGists={["gist"]}
           />
         </TestStoreProvider>,
       );
@@ -110,6 +113,7 @@ describe("DiagnosticsView", () => {
       activateButtonComponent.simulate("click");
       expect(activateDiagnosticsRef.current.showModalFor).toBeCalledWith(
         statementFingerprint,
+        ["gist"],
       );
     });
 
@@ -128,6 +132,7 @@ describe("DiagnosticsView", () => {
             currentScale={ts}
             requestTime={requestTime}
             onChangeTimeScale={mockSetTimeScale}
+            planGists={["gist"]}
           />
         </TestStoreProvider>,
       );
@@ -152,6 +157,7 @@ describe("DiagnosticsView", () => {
             currentScale={ts}
             requestTime={requestTime}
             onChangeTimeScale={mockSetTimeScale}
+            planGists={["gist"]}
           />
         </TestStoreProvider>,
       );

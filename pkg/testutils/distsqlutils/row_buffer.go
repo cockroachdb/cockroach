@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -71,9 +70,6 @@ type RowBufferArgs struct {
 	// OnConsumerDone, if specified, is called as the first thing in the
 	// ConsumerDone() method.
 	OnConsumerDone func(*RowBuffer)
-	// OnConsumerClose, if specified, is called as the first thing in the
-	// ConsumerClosed() method.
-	OnConsumerClosed func(*RowBuffer)
 	// OnNext, if specified, is called as the first thing in the Next() method.
 	// If it returns an empty row and metadata, then RowBuffer.Next() is allowed
 	// to run normally. Otherwise, the values are returned from RowBuffer.Next().
@@ -196,16 +192,9 @@ func (rb *RowBuffer) ConsumerDone() {
 	}
 }
 
-// ConsumerClosed is part of the RowSource interface.
+// ConsumerClosed is part of the execinfra.RowSource interface.
 func (rb *RowBuffer) ConsumerClosed() {
-	status := execinfra.ConsumerStatus(atomic.LoadUint32((*uint32)(&rb.ConsumerStatus)))
-	if status == execinfra.ConsumerClosed {
-		log.Fatalf(context.Background(), "RowBuffer already closed")
-	}
 	atomic.StoreUint32((*uint32)(&rb.ConsumerStatus), uint32(execinfra.ConsumerClosed))
-	if rb.args.OnConsumerClosed != nil {
-		rb.args.OnConsumerClosed(rb)
-	}
 }
 
 // NextNoMeta is a version of Next which fails the test if

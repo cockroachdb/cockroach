@@ -29,9 +29,11 @@ import (
 // first %s is the released version. Second is an optional message
 // about the next released version for releases that include the
 // version.txt file.
-const commitTemplate = `release: released CockroachDB version %s%s
+const commitTemplate = `%s: released CockroachDB version %s%s
 
 Release note: None
+Epic: None
+Release justification: non-production (release infra) change.
 `
 
 const releasedVersionFlag = "released-version"
@@ -208,7 +210,7 @@ func (r prRepo) createPullRequest() (string, error) {
 	cmd := exec.Command(parts[0], parts[1:]...)
 	log.Printf("creating PR by running `%s`", strings.Join(parts, " "))
 	cmd.Dir = r.checkoutDir()
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed creating pull request via `%s` with message '%s': %w", cmd.String(), string(out), err)
 	}
@@ -369,28 +371,34 @@ func generateRepoList(
 	var reposToWorkOn []prRepo
 
 	// 1. Bump the version. Branches we need to bump the version on:
-	// alpha, beta, rc: master and maybe release-major.minor.0
-	// stable releases: release-major.minor
-	var maybeVersionBumpBranches []string
-	stabilizationBranch := fmt.Sprintf("release-%d.%d.0", releasedVersion.Major(), releasedVersion.Minor())
-	stabilizationBranchExists, err := remoteBranchExists(stabilizationBranch)
+	// stable releases: release-major.minor and all RC branches of the same release series.
+	// alpha, beta, rc: 1) master or 2) release-major.minor and all RC branches for the same release series
+	maybeVersionBumpBranches, err := listRemoteBranches(fmt.Sprintf("release-%d.%d.*", releasedVersion.Major(), releasedVersion.Minor()))
 	if err != nil {
-		return []prRepo{}, fmt.Errorf("checking stabilization branch: %w", err)
+		return []prRepo{}, fmt.Errorf("listing staging branches: %w", err)
 	}
 	if releasedVersion.Prerelease() == "" {
-		// Stable releases should bump the version on the main release branch (`release-$major.$minor`) and on the
-		// stabilization (aka dot zero) branch if it exists. This way we keep both branches ready for the next release.
-		maybeVersionBumpBranches = []string{fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor())}
-		if stabilizationBranchExists {
-			maybeVersionBumpBranches = append(maybeVersionBumpBranches, stabilizationBranch)
-		}
+		maybeVersionBumpBranches = append(maybeVersionBumpBranches, fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor()))
 	} else {
-		if stabilizationBranchExists {
-			maybeVersionBumpBranches = []string{stabilizationBranch}
-		} else {
+		// For alpha/betas/rc releases, if we have not created the dot-zero branch
+		// (which is covered by the `release-major.minor.*` pattern), then use either the `release-major.minor` or the master branch for version bump.
+		// First, try to find the `release-major.minor` branch.
+		maybeReleaseBranches, err := listRemoteBranches(fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor()))
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("listing release branches: %w", err)
+		}
+		if len(maybeReleaseBranches) > 1 {
+			return []prRepo{}, fmt.Errorf("more than one release branch found: %q", maybeReleaseBranches)
+		}
+		if len(maybeReleaseBranches) == 1 {
+			maybeVersionBumpBranches = append(maybeVersionBumpBranches, maybeReleaseBranches[0])
+		}
+		// if no staging/release branches found, fall back to the master branch.
+		if len(maybeVersionBumpBranches) == 0 {
 			maybeVersionBumpBranches = []string{"master"}
 		}
 	}
+	log.Printf("will bump version in the following branches: %s", strings.Join(maybeVersionBumpBranches, ", "))
 
 	for _, branch := range maybeVersionBumpBranches {
 		ok, err := fileExistsInGit(branch, versionFile)
@@ -401,14 +409,26 @@ func generateRepoList(
 			log.Printf("skipping version bump on the %s branch, because %s does not exist on that branch", branch, versionFile)
 			continue
 		}
+		curVersion, err := fileContent(branch, versionFile)
+		if err != nil {
+			return []prRepo{}, fmt.Errorf("reading git file content: %w", err)
+		}
+		if strings.TrimSpace(curVersion) == nextVersion.Original() {
+			log.Printf("skipping version bump on the %s branch, because the versions are the same", branch)
+			continue
+		}
 		prBranch := fmt.Sprintf("update-versions-%s-%s-%s", branch, releasedVersion.Original(), randomString(4))
+		commitMessagePrefix := "release"
+		if branch != "master" {
+			commitMessagePrefix = branch
+		}
 		repo := prRepo{
 			owner:          owner,
 			repo:           prefix + "cockroach",
 			branch:         branch,
 			prBranch:       prBranch,
 			githubUsername: "cockroach-teamcity",
-			commitMessage:  generateCommitMessage(releasedVersion, nextVersion),
+			commitMessage:  generateCommitMessage(commitMessagePrefix, releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
 				return updateVersionFile(path.Join(gitDir, versionFile), nextVersion.Original())
 			},
@@ -424,7 +444,7 @@ func generateRepoList(
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
-			commitMessage:  generateCommitMessage(releasedVersion, nextVersion),
+			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.Original()),
 			fn: func(gitDir string) error {
 				if dryRun {
 					log.Printf("brew fetches and verifies the binaries, so it's likely it'll fail in dry-run mode. Skipping..")
@@ -442,7 +462,7 @@ func generateRepoList(
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       fmt.Sprintf("update-versions-%s-%s", releasedVersion.Original(), randomString(4)),
-			commitMessage:  generateCommitMessage(releasedVersion, nextVersion),
+			commitMessage:  fmt.Sprintf("release: advance to %s", releasedVersion.Original()),
 			fn: func(gitDir string) error {
 				return updateHelm(gitDir, releasedVersion.Original())
 			},
@@ -456,7 +476,7 @@ func generateRepoList(
 			branch:         "master",
 			githubUsername: "cockroach-teamcity",
 			prBranch:       fmt.Sprintf("update-orchestration-versions-%s-%s", releasedVersion.Original(), randomString(4)),
-			commitMessage:  generateCommitMessage(releasedVersion, nextVersion),
+			commitMessage:  generateCommitMessage("release", releasedVersion, nextVersion),
 			fn: func(gitDir string) error {
 				return updateOrchestration(gitDir, releasedVersion.Original())
 			},
@@ -499,12 +519,12 @@ func hasVersionTxt(version *semver.Version) bool {
 	return version.Major() >= 23
 }
 
-func generateCommitMessage(released, next *semver.Version) string {
+func generateCommitMessage(prefix string, released, next *semver.Version) string {
 	var nextVersionMsg string
 	if hasVersionTxt(released) {
 		nextVersionMsg = ". Next version: " + next.String()
 	}
-	return fmt.Sprintf(commitTemplate, released, nextVersionMsg)
+	return fmt.Sprintf(commitTemplate, prefix, released, nextVersionMsg)
 }
 
 // nextReleaseSeries parses the version and returns the next release series assuming we have 2 releases yearly

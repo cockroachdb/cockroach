@@ -35,12 +35,13 @@ func declareKeysRequestLease(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	// NOTE: RequestLease is run on replicas that do not hold the lease, so
 	// acquiring latches would not help synchronize with other requests. As
 	// such, the request does not declare latches. See also
 	// concurrency.shouldIgnoreLatches().
 	latchSpans.DisableUndeclaredAccessAssertions()
+	return nil
 }
 
 // RequestLease sets the range lease for this range. The command fails

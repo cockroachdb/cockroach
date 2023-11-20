@@ -46,14 +46,14 @@ const maxScatterSize = 4 << 20
 
 var (
 	tooSmallSSTSize = settings.RegisterByteSizeSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"kv.bulk_io_write.small_write_size",
 		"size below which a 'bulk' write will be performed as a normal write instead",
 		400*1<<10, // 400 Kib
 	)
 
 	ingestDelay = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"bulkio.ingest.flush_delay",
 		"amount of time to wait before sending a file to the KV/Storage layer to ingest",
 		0,
@@ -61,7 +61,7 @@ var (
 	)
 
 	senderConcurrency = settings.RegisterIntSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"bulkio.ingest.sender_concurrency_limit",
 		"maximum number of concurrent bulk ingest requests sent by any one sender, such as a processor in an IMPORT, index creation or RESTORE, etc (0 = no limit)",
 		0,
@@ -103,6 +103,10 @@ type SSTBatcher struct {
 	settings *cluster.Settings
 	mem      *mon.ConcurrentBoundAccount
 	limiter  limit.ConcurrentRequestLimiter
+
+	// priority is the admission priority used for AddSSTable
+	// requests.
+	priority admissionpb.WorkPriority
 
 	// disallowShadowingBelow is described on kvpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
@@ -229,6 +233,7 @@ func MakeSSTBatcher(
 		disableScatters:        !scatterSplitRanges,
 		mem:                    mem,
 		limiter:                sendLimiter,
+		priority:               admissionpb.BulkNormalPri,
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -254,6 +259,20 @@ func MakeStreamSSTBatcher(
 		ingestAll: true,
 		mem:       mem,
 		limiter:   sendLimiter,
+		// disableScatters is set to true to disable scattering as-we-fill. The
+		// replication job already pre-splits and pre-scatters its target ranges to
+		// distribute the ingestion load.
+		//
+		// If the batcher knows that it is about to overfill a range, it always
+		// makes sense to split it before adding to it, rather than overfill it. It
+		// does not however make sense to scatter that range as the RHS maybe
+		// non-empty.
+		disableScatters: true,
+		// We use NormalPri since anything lower than normal priority is assumed to
+		// be able to handle reduced throughput. We are OK with his for now since
+		// the consuming cluster of a replication stream does not have a latency
+		// sensitive workload running against it.
+		priority: admissionpb.NormalPri,
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -280,6 +299,7 @@ func MakeTestingSSTBatcher(
 		ingestAll:      ingestAll,
 		mem:            mem,
 		limiter:        sendLimiter,
+		priority:       admissionpb.BulkNormalPri,
 	}
 	b.Reset(ctx)
 	return b, nil
@@ -797,6 +817,7 @@ func (b *SSTBatcher) addSSTable(
 				if b.settings != nil && int64(len(item.sstBytes)) < tooSmallSSTSize.Get(&b.settings.SV) {
 					log.VEventf(ctx, 3, "ingest data is too small (%d keys/%d bytes) for SSTable, adding via regular batch", item.stats.KeyCount, len(item.sstBytes))
 					ingestAsWriteBatch = true
+					ingestionPerformanceStats.AsWrites++
 				}
 
 				req := &kvpb.AddSSTableRequest{
@@ -815,7 +836,7 @@ func (b *SSTBatcher) addSSTable(
 				ba := &kvpb.BatchRequest{
 					Header: kvpb.Header{Timestamp: batchTS, ClientRangeInfo: roachpb.ClientRangeInfo{ExplicitlyRequested: true}},
 					AdmissionHeader: kvpb.AdmissionHeader{
-						Priority:                 int32(admissionpb.BulkNormalPri),
+						Priority:                 int32(b.priority),
 						CreateTime:               timeutil.Now().UnixNano(),
 						Source:                   kvpb.AdmissionHeader_FROM_SQL,
 						NoMemoryReservedAtSource: true,

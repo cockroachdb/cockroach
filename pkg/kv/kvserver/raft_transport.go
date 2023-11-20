@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"math"
 	"net"
 	"runtime/pprof"
 	"sync/atomic"
@@ -774,7 +775,10 @@ func (t *RaftTransport) processQueue(
 				// idle-but-not-culled connections, we have a fallback timer to
 				// periodically transmit one-off RaftMessageRequests for timely
 				// token returns.
-				pendingDispatches = t.kvflowControl.dispatchReader.PendingDispatchFor(q.nodeID)
+				pendingDispatches, _ = t.kvflowControl.dispatchReader.PendingDispatchFor(
+					q.nodeID,
+					kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV),
+				)
 				maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
 			}
 
@@ -811,15 +815,19 @@ func (t *RaftTransport) processQueue(
 				continue // nothing to do
 			}
 
-			pendingDispatches := t.kvflowControl.dispatchReader.PendingDispatchFor(q.nodeID)
+			pendingDispatches, remainingDispatches := t.kvflowControl.dispatchReader.PendingDispatchFor(
+				q.nodeID,
+				kvadmission.FlowTokenDispatchMaxBytes.Get(&t.st.SV),
+			)
 			if len(pendingDispatches) == 0 {
 				continue // nothing to do
 			}
+			// If there are remaining dispatches, schedule them immediately in the
+			// following raft message.
+			if remainingDispatches > 0 {
+				dispatchPendingFlowTokensTimer.Reset(0)
+			}
 
-			// TODO(irfansharif,aaditya): There's no limit on how many pending
-			// dispatches are going to be attached to the outgoing raft
-			// messages, both here and above. It can be excessive -- limit this
-			// by some count/byte policy as part of #104154.
 			req := newRaftMessageRequest()
 			maybeAnnotateWithAdmittedRaftLogEntries(req, pendingDispatches)
 			batch.Requests = append(batch.Requests, *req)
@@ -1091,8 +1099,12 @@ func (t *RaftTransport) dropFlowTokensForDisconnectedNodes() {
 			// when streams disconnect.
 			continue
 		}
-		// Drop any held tokens for that node.
-		pendingDispatches := t.kvflowControl.dispatchReader.PendingDispatchFor(nodeID)
+		// Drop any held tokens for that node. Pass maxBytes = MaxInt64 to clear the
+		// outbox.
+		pendingDispatches, _ := t.kvflowControl.dispatchReader.PendingDispatchFor(
+			nodeID,
+			math.MaxInt64,
+		)
 		t.metrics.FlowTokenDispatchesDropped.Inc(int64(len(pendingDispatches)))
 	}
 }

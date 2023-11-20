@@ -86,6 +86,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -133,6 +134,12 @@ var (
 		install.SecureOption(true),
 	}
 
+	// minSupportedARM64Version is the minimum version for which there
+	// is a published ARM64 build. If we are running a mixedversion test
+	// on ARM64, older versions will be skipped even if the test
+	// requested a certain number of upgrades.
+	minSupportedARM64Version = version.MustParse("v22.2.0")
+
 	defaultTestOptions = testOptions{
 		// We use fixtures more often than not as they are more likely to
 		// detect bugs, especially in migrations.
@@ -140,33 +147,11 @@ var (
 		upgradeTimeout:         clusterupgrade.DefaultUpgradeTimeout,
 		minUpgrades:            1,
 		maxUpgrades:            3,
-		predecessorFunc:        release.RandomPredecessorHistory,
+		predecessorFunc:        randomPredecessorHistory,
 	}
 )
 
 type (
-	// Context wraps the context passed to predicate functions that
-	// dictate when a mixed-version hook will run during a test
-	Context struct {
-		// FromVersion is the string representation of the version the
-		// nodes are migrating from
-		FromVersion string
-		// FromVersionNodes are the nodes that are currently running
-		// `FromVersion`
-		FromVersionNodes option.NodeListOption
-		// ToVersion is the string representation of the version the nodes
-		// are migrating to
-		ToVersion string
-		// ToVersionNodes are the nodes that are currently running
-		// `ToVersion`
-		ToVersionNodes option.NodeListOption
-		// Finalizing indicates whether the cluster version is in the
-		// process of upgrading (i.e., all nodes in the cluster have been
-		// upgraded to a certain version, and the migrations are being
-		// executed).
-		Finalizing bool
-	}
-
 	// userFunc is the signature for user-provided functions that run at
 	// various points in the test (synchronously or in the background).
 	// These functions run on the test runner node itself; i.e., any
@@ -197,10 +182,9 @@ type (
 	// series of steps to be run sequentially or concurrently).
 	testStep interface{}
 
-	// singleStep represents steps that implement the pieces on top of
-	// which a mixed-version test is built. In other words, they are not
-	// composed by other steps and hence can be directly executed.
-	singleStep interface {
+	// singleStepProtocol is the set of functions that single step
+	// implementations need to provide.
+	singleStepProtocol interface {
 		// ID returns a unique ID associated with the step, making it easy
 		// to reference test output with the exact step it relates to
 		ID() int
@@ -218,6 +202,14 @@ type (
 		Background() shouldStop
 		// Run implements the actual functionality of the step.
 		Run(context.Context, *logger.Logger, cluster.Cluster, *Helper) error
+	}
+
+	// singleStep represents steps that implement the pieces on top of
+	// which a mixed-version test is built. In other words, they are not
+	// composed by other steps and hence can be directly executed.
+	singleStep struct {
+		context Context            // the context the step runs in
+		impl    singleStepProtocol // the concrete implementation of the step
 	}
 
 	hooks []versionUpgradeHook
@@ -242,11 +234,12 @@ type (
 		minUpgrades            int
 		maxUpgrades            int
 		predecessorFunc        predecessorFunc
+		settings               []install.ClusterSettingOption
 	}
 
-	customOption func(*testOptions)
+	CustomOption func(*testOptions)
 
-	predecessorFunc func(*rand.Rand, *version.Version, int) ([]string, error)
+	predecessorFunc func(*rand.Rand, *clusterupgrade.Version, int) ([]*clusterupgrade.Version, error)
 
 	// Test is the main struct callers of this package interact with.
 	Test struct {
@@ -279,9 +272,9 @@ type (
 		// may choose to always use the latest predecessor as well.
 		predecessorFunc predecessorFunc
 
-		// test-only field, allowing us to avoid passing a test.Test
-		// implementation in the tests
-		_buildVersion *version.Version
+		// test-only field, allowing tests to simulate cluster
+		// architectures without passing a cluster.Cluster implementation.
+		_arch *vm.CPUArch
 	}
 
 	shouldStop chan struct{}
@@ -311,7 +304,7 @@ func AlwaysUseFixtures(opts *testOptions) {
 
 // UpgradeTimeout allows test authors to provide a different timeout
 // to apply when waiting for an upgrade to finish.
-func UpgradeTimeout(timeout time.Duration) customOption {
+func UpgradeTimeout(timeout time.Duration) CustomOption {
 	return func(opts *testOptions) {
 		opts.upgradeTimeout = timeout
 	}
@@ -319,7 +312,7 @@ func UpgradeTimeout(timeout time.Duration) customOption {
 
 // MinUpgrades allows callers to set a minimum number of upgrades each
 // test run should exercise.
-func MinUpgrades(n int) customOption {
+func MinUpgrades(n int) CustomOption {
 	return func(opts *testOptions) {
 		opts.minUpgrades = n
 	}
@@ -327,7 +320,7 @@ func MinUpgrades(n int) customOption {
 
 // MaxUpgrades allows callers to set a maximum number of upgrades to
 // be performed during a test run.
-func MaxUpgrades(n int) customOption {
+func MaxUpgrades(n int) CustomOption {
 	return func(opts *testOptions) {
 		opts.maxUpgrades = n
 	}
@@ -335,10 +328,18 @@ func MaxUpgrades(n int) customOption {
 
 // NumUpgrades allows callers to specify the exact number of upgrades
 // every test run should perform.
-func NumUpgrades(n int) customOption {
+func NumUpgrades(n int) CustomOption {
 	return func(opts *testOptions) {
 		opts.minUpgrades = n
 		opts.maxUpgrades = n
+	}
+}
+
+// ClusterSettingOption adds a cluster setting option, in addition to the
+// default set of options.
+func ClusterSettingOption(opt ...install.ClusterSettingOption) CustomOption {
+	return func(opts *testOptions) {
+		opts.settings = append(opts.settings, opt...)
 	}
 }
 
@@ -352,12 +353,8 @@ func NumUpgrades(n int) customOption {
 // subsequent patch releases. If possible, this option should be
 // avoided, but it might be necessary in certain cases to reduce noise
 // in case the test is more susceptible to fail due to known bugs.
-func AlwaysUseLatestPredecessors() customOption {
-	return func(opts *testOptions) {
-		opts.predecessorFunc = func(_ *rand.Rand, v *version.Version, n int) ([]string, error) {
-			return release.LatestPredecessorHistory(v, n)
-		}
-	}
+func AlwaysUseLatestPredecessors(opts *testOptions) {
+	opts.predecessorFunc = latestPredecessorHistory
 }
 
 // NewTest creates a Test struct that users can use to create and run
@@ -368,7 +365,7 @@ func NewTest(
 	l *logger.Logger,
 	c cluster.Cluster,
 	crdbNodes option.NodeListOption,
-	options ...customOption,
+	options ...CustomOption,
 ) *Test {
 	testLogger, err := prefixedLogger(l, logPrefix)
 	if err != nil {
@@ -419,7 +416,7 @@ func (t *Test) RNG() *rand.Rand {
 // InMixedVersion hooks are passed, they will be executed
 // concurrently.
 func (t *Test) InMixedVersion(desc string, fn userFunc) {
-	lastFromVersion := "invalid-version"
+	var lastFromVersion *clusterupgrade.Version
 	var numUpgradedNodes int
 	predicate := func(testContext Context) bool {
 		// If the cluster is finalizing an upgrade, run this hook
@@ -437,7 +434,7 @@ func (t *Test) InMixedVersion(desc string, fn userFunc) {
 			numUpgradedNodes = t.prng.Intn(len(t.crdbNodes)) + 1
 		}
 
-		return len(testContext.ToVersionNodes) == numUpgradedNodes
+		return len(testContext.NodesInNextVersion()) == numUpgradedNodes
 	}
 
 	t.hooks.AddMixedVersion(versionUpgradeHook{name: desc, predicate: predicate, fn: fn})
@@ -545,30 +542,32 @@ func (t *Test) run(plan *TestPlan) error {
 }
 
 func (t *Test) plan() (*TestPlan, error) {
-	previousReleases, err := t.predecessorFunc(t.prng, t.buildVersion(), t.numUpgrades())
+	previousReleases, err := t.choosePreviousReleases()
 	if err != nil {
 		return nil, err
 	}
 
+	initialRelease := previousReleases[0]
 	planner := testPlanner{
-		versions:  append(previousReleases, clusterupgrade.MainVersion),
-		options:   t.options,
-		rt:        t.rt,
-		crdbNodes: t.crdbNodes,
-		hooks:     t.hooks,
-		prng:      t.prng,
-		bgChans:   t.bgChans,
+		versions:       append(previousReleases, clusterupgrade.CurrentVersion()),
+		currentContext: newInitialContext(initialRelease, t.crdbNodes),
+		options:        t.options,
+		rt:             t.rt,
+		crdbNodes:      t.crdbNodes,
+		hooks:          t.hooks,
+		prng:           t.prng,
+		bgChans:        t.bgChans,
 	}
 
 	return planner.Plan(), nil
 }
 
-func (t *Test) buildVersion() *version.Version {
-	if t._buildVersion != nil {
-		return t._buildVersion // test-only
+func (t *Test) clusterArch() vm.CPUArch {
+	if t._arch != nil {
+		return *t._arch // test-only
 	}
 
-	return t.rt.BuildVersion()
+	return t.cluster.Architecture()
 }
 
 func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) userFunc {
@@ -576,6 +575,36 @@ func (t *Test) runCommandFunc(nodes option.NodeListOption, cmd string) userFunc 
 		l.Printf("running command `%s` on nodes %v", cmd, nodes)
 		return t.cluster.RunE(ctx, nodes, cmd)
 	}
+}
+
+// choosePreviousReleases returns a list of predecessor releases
+// relative to the current build version. It uses the
+// `predecessorFunc` field to compute the actual list of
+// predecessors. Special care is taken to avoid using releases that
+// are not available under a certain cluster architecture.
+// Specifically, ARM64 builds are only available on v22.2.0+.
+func (t *Test) choosePreviousReleases() ([]*clusterupgrade.Version, error) {
+	releases, err := t.predecessorFunc(t.prng, clusterupgrade.CurrentVersion(), t.numUpgrades())
+	if err != nil {
+		return nil, err
+	}
+
+	if t.clusterArch() != vm.ArchARM64 {
+		return releases, nil
+	}
+
+	var armReleases []*clusterupgrade.Version
+	for _, r := range releases {
+		if r.AtLeast(minSupportedARM64Version) {
+			armReleases = append(armReleases, r)
+		}
+	}
+
+	if len(armReleases) != len(releases) {
+		t.logger.Printf("WARNING: skipping upgrades as ARM64 is only supported on %s+", minSupportedARM64Version)
+	}
+
+	return armReleases, nil
 }
 
 // numUpgrades returns the number of upgrades that will be performed
@@ -587,12 +616,49 @@ func (t *Test) numUpgrades() int {
 	) + t.options.minUpgrades
 }
 
+// latestPredecessorHistory is an implementation of `predecessorFunc`
+// that always picks the latest predecessors.
+func latestPredecessorHistory(
+	_ *rand.Rand, v *clusterupgrade.Version, n int,
+) ([]*clusterupgrade.Version, error) {
+	history, err := release.LatestPredecessorHistory(&v.Version, n)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseVersions(history), nil
+}
+
+// randomPredecessorHistory is an implementation of `predecessorFunc`
+// that picks a random predecessor for each release series.
+func randomPredecessorHistory(
+	rng *rand.Rand, v *clusterupgrade.Version, n int,
+) ([]*clusterupgrade.Version, error) {
+	history, err := release.RandomPredecessorHistory(rng, &v.Version, n)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseVersions(history), nil
+}
+
+// parseVersions maps a list of valid version strings to a
+// corresponding list of parsed version objects.
+func parseVersions(vs []string) []*clusterupgrade.Version {
+	result := make([]*clusterupgrade.Version, 0, len(vs))
+	for _, v := range vs {
+		result = append(result, clusterupgrade.MustParseVersion(v))
+	}
+
+	return result
+}
+
 // installFixturesStep is the step that copies the fixtures from
 // `pkg/cmd/roachtest/fixtures` for a specific version into the nodes'
 // store dir.
 type installFixturesStep struct {
 	id        int
-	version   string
+	version   *clusterupgrade.Version
 	crdbNodes option.NodeListOption
 }
 
@@ -600,7 +666,7 @@ func (s installFixturesStep) ID() int                { return s.id }
 func (s installFixturesStep) Background() shouldStop { return nil }
 
 func (s installFixturesStep) Description() string {
-	return fmt.Sprintf("install fixtures for version %q", s.version)
+	return fmt.Sprintf("install fixtures for version %q", s.version.String())
 }
 
 func (s installFixturesStep) Run(
@@ -614,8 +680,9 @@ func (s installFixturesStep) Run(
 type startStep struct {
 	id        int
 	rt        test.Test
-	version   string
+	version   *clusterupgrade.Version
 	crdbNodes option.NodeListOption
+	settings  []install.ClusterSettingOption
 }
 
 func (s startStep) ID() int                { return s.id }
@@ -634,9 +701,8 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, c cluster.Cluster,
 	}
 
 	startOpts := option.DefaultStartOptsNoBackups()
-	startOpts.RoachprodOpts.Sequential = false
 	clusterSettings := append(
-		append([]install.ClusterSettingOption{}, defaultClusterSettings...),
+		append([]install.ClusterSettingOption{}, s.settings...),
 		install.BinaryOption(binaryPath),
 	)
 	return clusterupgrade.StartWithSettings(ctx, l, c, s.crdbNodes, startOpts, clusterSettings...)
@@ -705,17 +771,18 @@ func (s preserveDowngradeOptionStep) Run(
 // then the new binary will be uploaded and the `cockroach` process
 // will restart using the new binary.
 type restartWithNewBinaryStep struct {
-	id      int
-	version string
-	rt      test.Test
-	node    int
+	id       int
+	version  *clusterupgrade.Version
+	rt       test.Test
+	node     int
+	settings []install.ClusterSettingOption
 }
 
 func (s restartWithNewBinaryStep) ID() int                { return s.id }
 func (s restartWithNewBinaryStep) Background() shouldStop { return nil }
 
 func (s restartWithNewBinaryStep) Description() string {
-	return fmt.Sprintf("restart node %d with binary version %s", s.node, versionMsg(s.version))
+	return fmt.Sprintf("restart node %d with binary version %s", s.node, s.version.String())
 }
 
 func (s restartWithNewBinaryStep) Run(
@@ -735,7 +802,7 @@ func (s restartWithNewBinaryStep) Run(
 		// scheduled backup if necessary.
 		option.DefaultStartOptsNoBackups(),
 		s.version,
-		defaultClusterSettings...,
+		s.settings...,
 	)
 }
 
@@ -767,11 +834,10 @@ func (s finalizeUpgradeStep) Run(
 // runHookStep is a step used to run a user-provided hook (i.e.,
 // callbacks passed to `OnStartup`, `InMixedVersion`, or `AfterTest`).
 type runHookStep struct {
-	id          int
-	testContext Context
-	prng        *rand.Rand
-	hook        versionUpgradeHook
-	stopChan    shouldStop
+	id       int
+	prng     *rand.Rand
+	hook     versionUpgradeHook
+	stopChan shouldStop
 }
 
 func (s runHookStep) ID() int                { return s.id }
@@ -784,7 +850,6 @@ func (s runHookStep) Description() string {
 func (s runHookStep) Run(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
 ) error {
-	h.SetContext(&s.testContext)
 	return s.hook.fn(ctx, l, s.prng, h)
 }
 
@@ -835,6 +900,13 @@ func (s concurrentRunStep) Description() string {
 	return fmt.Sprintf("%s concurrently", s.label)
 }
 
+// newSingleStep creates a `singleStep` struct for the implementation
+// passed, making sure to copy the context so that any modifications
+// made to it do not affect this step's view of the context.
+func newSingleStep(context *Context, impl singleStepProtocol) singleStep {
+	return singleStep{context: context.clone(), impl: impl}
+}
+
 // prefixedLogger returns a logger instance off of the given `l`
 // parameter, and adds a prefix to everything logged by the retured
 // logger.
@@ -862,7 +934,7 @@ func (h hooks) Filter(testContext Context) hooks {
 // steps that are not meant to be run in the background, or contain
 // one stop channel (`shouldStop`) for each hook.
 func (h hooks) AsSteps(
-	label string, idGen func() int, prng *rand.Rand, testContext Context, stopChans []shouldStop,
+	label string, idGen func() int, prng *rand.Rand, testContext *Context, stopChans []shouldStop,
 ) []testStep {
 	steps := make([]testStep, 0, len(h))
 	stopChanFor := func(j int) shouldStop {
@@ -874,13 +946,12 @@ func (h hooks) AsSteps(
 
 	for j, hook := range h {
 		hookPrng := rngFromRNG(prng)
-		steps = append(steps, runHookStep{
-			id:          idGen(),
-			prng:        hookPrng,
-			hook:        hook,
-			stopChan:    stopChanFor(j),
-			testContext: testContext,
-		})
+		steps = append(steps, newSingleStep(testContext, runHookStep{
+			id:       idGen(),
+			prng:     hookPrng,
+			hook:     hook,
+			stopChan: stopChanFor(j),
+		}))
 	}
 
 	if len(steps) <= 1 {
@@ -906,23 +977,23 @@ func (th *testHooks) AddAfterUpgradeFinalized(hook versionUpgradeHook) {
 	th.afterUpgradeFinalized = append(th.afterUpgradeFinalized, hook)
 }
 
-func (th *testHooks) StartupSteps(idGen func() int, testContext Context) []testStep {
+func (th *testHooks) StartupSteps(idGen func() int, testContext *Context) []testStep {
 	return th.startup.AsSteps(startupLabel, idGen, th.prng, testContext, nil)
 }
 
 func (th *testHooks) BackgroundSteps(
-	idGen func() int, testContext Context, stopChans []shouldStop,
+	idGen func() int, testContext *Context, stopChans []shouldStop,
 ) []testStep {
 	return th.background.AsSteps(backgroundLabel, idGen, th.prng, testContext, stopChans)
 }
 
-func (th *testHooks) MixedVersionSteps(testContext Context, idGen func() int) []testStep {
+func (th *testHooks) MixedVersionSteps(testContext *Context, idGen func() int) []testStep {
 	return th.mixedVersion.
-		Filter(testContext).
+		Filter(*testContext).
 		AsSteps(mixedVersionLabel, idGen, th.prng, testContext, nil)
 }
 
-func (th *testHooks) AfterUpgradeFinalizedSteps(idGen func() int, testContext Context) []testStep {
+func (th *testHooks) AfterUpgradeFinalizedSteps(idGen func() int, testContext *Context) []testStep {
 	return th.afterUpgradeFinalized.AsSteps(afterTestLabel, idGen, th.prng, testContext, nil)
 }
 
@@ -933,10 +1004,6 @@ func randomDelay(rng *rand.Rand) time.Duration {
 
 func rngFromRNG(rng *rand.Rand) *rand.Rand {
 	return rand.New(rand.NewSource(rng.Int63()))
-}
-
-func versionMsg(version string) string {
-	return clusterupgrade.VersionMsg(version)
 }
 
 func assertValidTest(test *Test, fatalFunc func(...interface{})) {

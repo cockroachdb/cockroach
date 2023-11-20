@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -50,43 +51,48 @@ import (
 )
 
 var minimumFlushInterval = settings.RegisterDurationSettingWithExplicitUnit(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"bulkio.stream_ingestion.minimum_flush_interval",
 	"the minimum timestamp between flushes; flushes may still occur if internal buffers fill up",
 	5*time.Second,
 	settings.WithPublic,
+	settings.WithName("physical_replication.consumer.minimum_flush_interval"),
 )
 
 var maxKVBufferSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"bulkio.stream_ingestion.kv_buffer_size",
 	"the maximum size of the KV buffer allowed before a flush",
 	128<<20, // 128 MiB
+	settings.WithName("physical_replication.consumer.kv_buffer_size"),
 )
 
 var maxRangeKeyBufferSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"bulkio.stream_ingestion.range_key_buffer_size",
 	"the maximum size of the range key buffer allowed before a flush",
 	32<<20, // 32 MiB
+	settings.WithName("physical_replication.consumer.range_key_buffer_size"),
 )
 
 var tooSmallRangeKeySize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"bulkio.stream_ingestion.ingest_range_keys_as_writes",
 	"size below which a range key SST will be ingested using normal writes",
 	400*1<<10, // 400 KiB
+	settings.WithName("physical_replication.consumer.ingest_range_keys_as_writes"),
 )
 
 // checkForCutoverSignalFrequency is the frequency at which the resumer polls
 // the system.jobs table to check whether the stream ingestion job has been
 // signaled to cutover.
 var cutoverSignalPollInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"bulkio.stream_ingestion.cutover_signal_poll_interval",
 	"the interval at which the stream ingestion job checks if it has been signaled to cutover",
 	10*time.Second,
 	settings.NonNegativeDuration,
+	settings.WithName("physical_replication.consumer.cutover_signal_poll_interval"),
 )
 
 var streamIngestionResultTypes = []*types.T{
@@ -313,6 +319,7 @@ func newStreamIngestionDataProcessor(
 		cutoverProvider: &cutoverFromJobProgress{
 			jobID: jobspb.JobID(spec.JobID),
 			db:    flowCtx.Cfg.DB,
+			cv:    flowCtx.Cfg.Settings.Version,
 		},
 		buffer:           &streamIngestionBuffer{},
 		cutoverCh:        make(chan struct{}),
@@ -839,6 +846,14 @@ func (sip *streamIngestionProcessor) bufferKV(kv *roachpb.KeyValue) error {
 }
 
 func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
+	if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
+		if streamingKnobs != nil && streamingKnobs.ElideCheckpointEvent != nil {
+			if streamingKnobs.ElideCheckpointEvent(sip.FlowCtx.NodeID.SQLInstanceID(), sip.frontier.Frontier()) {
+				return nil
+			}
+		}
+	}
+
 	resolvedSpans := event.GetResolvedSpans()
 	if resolvedSpans == nil {
 		return errors.New("checkpoint event expected to have resolved spans")
@@ -915,7 +930,9 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 	sstToFlush := &rangeKeySST{
 		data:  sstFile.Bytes(),
 		start: start,
-		end:   end.Next(),
+		// NB: End is set from the range key EndKey, which is
+		// already exclusive.
+		end: end,
 	}
 
 	work := []*rangeKeySST{sstToFlush}
@@ -951,7 +968,16 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 				if err != nil {
 					return err
 				}
-				work = append([]*rangeKeySST{left, right}, work...)
+
+				if left != nil && right != nil {
+					work = append([]*rangeKeySST{left, right}, work...)
+				} else if left != nil {
+					log.Warningf(ctx, "RHS of split point %s was unexpectedly empty", split)
+					work = append([]*rangeKeySST{left}, work...)
+				} else if right != nil {
+					log.Warningf(ctx, "LHS of split point %s was unexpectedly empty", split)
+					work = append([]*rangeKeySST{right}, work...)
+				}
 			} else {
 				return err
 			}
@@ -980,6 +1006,17 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 func splitRangeKeySSTAtKey(
 	ctx context.Context, st *cluster.Settings, start, end, splitKey roachpb.Key, data []byte,
 ) (*rangeKeySST, *rangeKeySST, error) {
+	// Special case: The split key less than the start key.
+	if splitKey.Compare(start) < 0 {
+		return nil, &rangeKeySST{start: start, end: end, data: data}, nil
+	}
+
+	// Special case: The split key is greater or equal to the
+	// exclusive end key.
+	if end.Compare(splitKey) <= 0 {
+		return &rangeKeySST{start: start, end: end, data: data}, nil, nil
+	}
+
 	var (
 		// left and right are our output SSTs.
 		// Data less than the split key is written into left.
@@ -1019,6 +1056,10 @@ func splitRangeKeySSTAtKey(
 		if err := writer.Finish(); err != nil {
 			return err
 		}
+		if first == nil || last == nil {
+			return errors.AssertionFailedf("likely prorgramming error: invalid SST bounds on RHS [%v, %v)", first, last)
+		}
+
 		leftRet = &rangeKeySST{start: first, end: last, data: left.Data()}
 		writer = rightWriter
 		last = nil
@@ -1113,11 +1154,19 @@ func splitRangeKeySSTAtKey(
 		iter.Next()
 	}
 
+	if !reachedSplit {
+		return nil, nil, errors.AssertionFailedf("likely programming error: split point %s not found in SST", splitKey)
+	}
+
 	if err := writer.Finish(); err != nil {
 		return nil, nil, err
 	}
-	rightRet = &rangeKeySST{start: first, end: last, data: right.Data()}
 
+	if first == nil || last == nil {
+		return nil, nil, errors.AssertionFailedf("likely prorgramming error: invalid SST bounds on RHS [%v, %v)", first, last)
+	}
+
+	rightRet = &rangeKeySST{start: first, end: last, data: right.Data()}
 	return leftRet, rightRet, nil
 }
 
@@ -1206,10 +1255,11 @@ type cutoverProvider interface {
 type cutoverFromJobProgress struct {
 	db    isql.DB
 	jobID jobspb.JobID
+	cv    clusterversion.Handle
 }
 
 func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, error) {
-	ingestionProgress, err := replicationutils.LoadIngestionProgress(ctx, c.db, c.jobID)
+	ingestionProgress, err := replicationutils.LoadIngestionProgress(ctx, c.db, c.jobID, c.cv)
 	if err != nil {
 		return false, err
 	}

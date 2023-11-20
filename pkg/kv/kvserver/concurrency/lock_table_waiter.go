@@ -108,7 +108,7 @@ type lockTableWaiterImpl struct {
 	ir       IntentResolver
 	lt       lockTable
 
-	// When set, LockConflictError are propagated instead of pushing
+	// When set, WriteIntentErrors are propagated instead of pushing
 	// conflicting transactions.
 	disableTxnPushing bool
 	// When set, called just before each push timer event is processed.
@@ -137,7 +137,7 @@ type IntentResolver interface {
 // WaitOn implements the lockTableWaiter interface.
 func (w *lockTableWaiterImpl) WaitOn(
 	ctx context.Context, req Request, guard lockTableGuard,
-) (err *Error) {
+) *Error {
 	newStateC := guard.NewStateChan()
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()
@@ -161,7 +161,10 @@ func (w *lockTableWaiterImpl) WaitOn(
 		// about another contending transaction on newStateC.
 		case <-newStateC:
 			timerC = nil
-			state := guard.CurState()
+			state, err := guard.CurState()
+			if err != nil {
+				return kvpb.NewError(err)
+			}
 			log.VEventf(ctx, 3, "lock wait-queue event: %s", state)
 			tracer.notify(ctx, state)
 			switch state.kind {
@@ -306,7 +309,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// The request attempted to wait in a lock wait-queue whose length was
 				// already equal to or exceeding the request's configured maximum. As a
 				// result, the request was rejected.
-				return newLockConflictErr(req, state, reasonWaitQueueMaxLengthExceeded)
+				return newWriteIntentErr(req, state, reasonWaitQueueMaxLengthExceeded)
 
 			case doneWaiting:
 				// The request has waited for all conflicting locks to be released
@@ -326,7 +329,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// the comment in lockTableImpl.tryActiveWait for the proper way to
 				// remove this and other evaluation races.
 				toResolve := guard.ResolveBeforeScanning()
-				return w.ResolveDeferredIntents(ctx, toResolve)
+				return w.ResolveDeferredIntents(ctx, req.AdmissionHeader, toResolve)
 
 			default:
 				panic("unexpected waiting state")
@@ -348,25 +351,6 @@ func (w *lockTableWaiterImpl) WaitOn(
 
 			// push with the option to wait on the conflict if active.
 			pushWait := func(ctx context.Context) *Error {
-				// If the request is conflicting with a held lock then it pushes its
-				// holder synchronously - there is no way it will be able to proceed
-				// until the lock's transaction undergoes a state transition (either
-				// completing or being pushed) and then updates the lock's state
-				// through intent resolution. The request has a dependency on the
-				// entire conflicting transaction.
-				//
-				// However, if the request is conflicting with another request (that has
-				// claimed the lock, but not yet acquired it) then it pushes the
-				// claimant transaction asynchronously while continuing to listen to
-				// state transition in the lockTable. This allows the request to cancel
-				// its push if the conflicting claimant transaction exits the lock
-				// wait-queue without leaving behind a lock. In this case, the request
-				// has a dependency on the conflicting request but not necessarily the
-				// entire conflicting transaction.
-				if timerWaitingState.held {
-					return w.pushLockTxn(ctx, req, timerWaitingState)
-				}
-
 				// It would be more natural to launch an async task for the push and
 				// continue listening on this goroutine for lockTable state transitions,
 				// but doing so is harder to test against. Instead, we launch an async
@@ -376,15 +360,62 @@ func (w *lockTableWaiterImpl) WaitOn(
 				pushCtx, pushCancel := context.WithCancel(ctx)
 				defer pushCancel()
 				go watchForNotifications(pushCtx, pushCancel, newStateC)
-				err := w.pushRequestTxn(pushCtx, req, timerWaitingState)
-				if errors.Is(pushCtx.Err(), context.Canceled) {
-					// Ignore the context canceled error. If this was for the
-					// parent context then we'll notice on the next select.
+
+				var err *Error
+				if timerWaitingState.held {
+					// Note that even though the request has a dependency on the
+					// transaction that holds the lock, this dependency can be broken
+					// without the holder's transaction getting finalized[1] such that the
+					// pusher can proceed before the synchronous push below returns. The
+					// pusher must detect such cases (watchForNotifications) and cancel
+					// its push in such cases.
 					//
-					// NOTE: we look at pushCtx.Err() and not err to avoid the
-					// potential for bugs if context cancellation is not
-					// propagated correctly on some error paths.
-					err = nil
+					// [1] This can happen for a few reasons:
+					// 1. The pusher may not conflict with the lock holder itself, but one
+					// of the waiting requests instead. If the waiting request drops out
+					// of the lock's wait queue the pusher should be allowed to proceed.
+					// Concretely, a construction like follows:
+					//   - holder: shared
+					//     - wait-queue: exclusive, shared
+					// In this case, the waiting shared lock request will push the
+					// holder[*] However, if the waiting exclusive locking request drops
+					// out of the wait queue, the shared locking request no longer needs
+					// to wait/push the holder.
+					// 2. The lock may be rolled back because of savepoints even if the
+					// transaction isn't finalized/pushed successfully.
+					// 3. The lock may no longer be tracked by the lock table even though
+					// the holder's transaction is still pending. This can happen if it's
+					// an intent that's pushed to a higher timestamp by a different
+					// request. In such cases, the lock table will simply forget the lock
+					// when the intent is resolved. Note that in such cases, the pusher
+					// may still conflict with the intent and rediscover it -- that's
+					// okay.
+					//
+					// [*] The shared locking request will push the lock holder (strength
+					// shared) instead of the exclusive lock requesting (the one it
+					// actually conflicts with) because it transitively depends on the
+					// shared locking request. In doing so, it is essentially collapsing
+					// edges in the local portion of its dependency graph for deadlock
+					// detection, as doing so is cheaper that finding out the same
+					// information using (QueryTxnRequest) RPCs.
+					err = w.pushLockTxn(pushCtx, req, timerWaitingState)
+				} else {
+					// The request conflicts with another request that's claimed an unheld
+					// lock. The conflicting request may exit the lock table without
+					// actually acquiring the lock. If that happens, we may be able to
+					// proceed without needing to wait for the push to successfully
+					// complete. Such cases will be detected by listening for lock state
+					// transitions (watchForNotifications).
+					err = w.pushRequestTxn(pushCtx, req, timerWaitingState)
+				}
+				// Ignore the context canceled error. If this was for the parent context
+				// then we'll notice on the next select.
+				//
+				// NOTE: we look at pushCtx.Err() and not err to avoid the potential for
+				// bugs if context cancellation is not propagated correctly on some
+				// error paths.
+				if errors.Is(pushCtx.Err(), context.Canceled) {
+					return nil
 				}
 				return err
 			}
@@ -399,6 +430,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// We push with or without the option to wait on the conflict,
 			// depending on the state of the lock timeout, if one exists,
 			// and depending on the wait policy.
+			var err *Error
 			if req.WaitPolicy == lock.WaitPolicy_Error {
 				err = w.pushLockTxn(ctx, req, timerWaitingState)
 			} else if !lockDeadline.IsZero() {
@@ -441,12 +473,12 @@ func (w *lockTableWaiterImpl) WaitOn(
 // lock to trigger a state transition in the lockTable that will free up the
 // request to proceed. If the method returns successfully then the caller can
 // expect to have an updated waitingState. Otherwise, the method returns with a
-// LockConflictError and without blocking on the lock holder transaction.
+// WriteIntentError and without blocking on the lock holder transaction.
 func (w *lockTableWaiterImpl) pushLockTxn(
 	ctx context.Context, req Request, ws waitingState,
 ) *Error {
 	if w.disableTxnPushing {
-		return newLockConflictErr(req, ws, reasonWaitPolicy)
+		return newWriteIntentErr(req, ws, reasonWaitPolicy)
 	}
 
 	// Construct the request header and determine which form of push to use.
@@ -495,9 +527,9 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	pusheeTxn, err := w.ir.PushTransaction(ctx, ws.txn, h, pushType)
 	if err != nil {
 		// If pushing with an Error WaitPolicy and the push fails, then the lock
-		// holder is still active. Transform the error into a LockConflictError.
+		// holder is still active. Transform the error into a WriteIntentError.
 		if _, ok := err.GetDetail().(*kvpb.TransactionPushError); ok && req.WaitPolicy == lock.WaitPolicy_Error {
-			err = newLockConflictErr(req, ws, reasonWaitPolicy)
+			err = newWriteIntentErr(req, ws, reasonWaitPolicy)
 		}
 		return err
 	}
@@ -626,22 +658,22 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		resolve.ClockWhilePending = beforePushObs
 	}
 	logResolveIntent(ctx, resolve)
-	opts := intentresolver.ResolveOptions{Poison: true}
+	opts := intentresolver.ResolveOptions{Poison: true, AdmissionHeader: req.AdmissionHeader}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
 
 // pushLockTxnAfterTimeout is like pushLockTxn, but it sets the Error wait
 // policy on its request so that the request will not block on the lock holder
 // if it is still active. It is meant to be used after a lock timeout has been
-// elapsed, and returns a LockConflictErrors with a LOCK_TIMEOUT reason if the
+// elapsed, and returns a WriteIntentErrors with a LOCK_TIMEOUT reason if the
 // lock holder is not abandoned.
 func (w *lockTableWaiterImpl) pushLockTxnAfterTimeout(
 	ctx context.Context, req Request, ws waitingState,
 ) *Error {
 	req.WaitPolicy = lock.WaitPolicy_Error
 	err := w.pushLockTxn(ctx, req, ws)
-	if _, ok := err.GetDetail().(*kvpb.LockConflictError); ok {
-		err = newLockConflictErr(req, ws, reasonLockTimeout)
+	if _, ok := err.GetDetail().(*kvpb.WriteIntentError); ok {
+		err = newWriteIntentErr(req, ws, reasonLockTimeout)
 	}
 	return err
 }
@@ -808,7 +840,9 @@ func (w *lockTableWaiterImpl) timeUntilDeadline(deadline time.Time) time.Duratio
 
 // ResolveDeferredIntents implements the lockTableWaiter interface.
 func (w *lockTableWaiterImpl) ResolveDeferredIntents(
-	ctx context.Context, deferredResolution []roachpb.LockUpdate,
+	ctx context.Context,
+	admissionHeader kvpb.AdmissionHeader,
+	deferredResolution []roachpb.LockUpdate,
 ) *Error {
 	if len(deferredResolution) == 0 {
 		return nil
@@ -818,7 +852,7 @@ func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 		logResolveIntent(ctx, intent)
 	}
 	// See pushLockTxn for an explanation of these options.
-	opts := intentresolver.ResolveOptions{Poison: true}
+	opts := intentresolver.ResolveOptions{Poison: true, AdmissionHeader: admissionHeader}
 	return w.ir.ResolveIntents(ctx, deferredResolution, opts)
 }
 
@@ -834,7 +868,7 @@ func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 // proving that the pushee was active and began waiting in its txnwait.Queue.
 // The push may have timed out before this point due to a slow network, slow
 // CPU, or for some other reason. But just like with WaitPolicy_Error, we don't
-// want to throw a LockConflictError on abandoned locks. So on timeout, we issue
+// want to throw a WriteIntentError on abandoned locks. So on timeout, we issue
 // a new request with WaitPolicy_Error that is not subject to the lock_timeout
 // to check with certainty whether the conflict is active or not, but without
 // blocking if it happens to be active.
@@ -1228,15 +1262,15 @@ func (tag *contentionTag) Render() []attribute.KeyValue {
 }
 
 const (
-	reasonWaitPolicy                 = kvpb.LockConflictError_REASON_WAIT_POLICY
-	reasonLockTimeout                = kvpb.LockConflictError_REASON_LOCK_TIMEOUT
-	reasonWaitQueueMaxLengthExceeded = kvpb.LockConflictError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED
+	reasonWaitPolicy                 = kvpb.WriteIntentError_REASON_WAIT_POLICY
+	reasonLockTimeout                = kvpb.WriteIntentError_REASON_LOCK_TIMEOUT
+	reasonWaitQueueMaxLengthExceeded = kvpb.WriteIntentError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED
 )
 
-func newLockConflictErr(req Request, ws waitingState, reason kvpb.LockConflictError_Reason) *Error {
+func newWriteIntentErr(req Request, ws waitingState, reason kvpb.WriteIntentError_Reason) *Error {
 	// TODO(nvanbenschoten): we should use the correct Lock strength of the lock
 	// holder, once we have it.
-	err := kvpb.NewError(&kvpb.LockConflictError{
+	err := kvpb.NewError(&kvpb.WriteIntentError{
 		Locks:  []roachpb.Lock{roachpb.MakeIntent(ws.txn, ws.key).AsLock()},
 		Reason: reason,
 	})

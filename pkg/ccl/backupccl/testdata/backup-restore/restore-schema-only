@@ -71,7 +71,7 @@ CREATE USER testuser
 exec-sql user=testuser
 RESTORE FROM LATEST IN 'nodelocal://1/full_cluster_backup/' with schema_only
 ----
-pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore: user testuser does not have RESTORE privilege on global 
+pq: only users with the admin role or the RESTORE system privilege are allowed to perform a cluster restore: user testuser does not have RESTORE system privilege
 
 # Fail fast using a database backup
 exec-sql

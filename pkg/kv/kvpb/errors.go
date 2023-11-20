@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -152,10 +153,10 @@ func ErrPriority(err error) ErrorPriority {
 			return ErrorScoreTxnAbort
 		}
 		return ErrorScoreTxnRestart
-	case *ConditionFailedError, *LockConflictError:
+	case *ConditionFailedError, *WriteIntentError:
 		// We particularly care about returning the low ErrorScoreUnambiguousError
 		// because we don't want to transition a transaction that encounters a
-		// ConditionFailedError or a LockConflictError to an error state. More
+		// ConditionFailedError or a WriteIntentError to an error state. More
 		// specifically, we want to allow rollbacks to savepoint after one of these
 		// errors.
 		return ErrorScoreUnambiguousError
@@ -259,8 +260,7 @@ type ErrorDetailInterface interface {
 type ErrorDetailType int
 
 // This lists all ErrorDetail types. The numeric values in this list are used to
-// identify corresponding timeseries. The values correspond to the proto oneof
-// values.
+// identify corresponding timeseries.
 //
 //go:generate stringer -type=ErrorDetailType
 const (
@@ -272,7 +272,7 @@ const (
 	TransactionPushErrType                  ErrorDetailType = 6
 	TransactionRetryErrType                 ErrorDetailType = 7
 	TransactionStatusErrType                ErrorDetailType = 8
-	LockConflictErrType                     ErrorDetailType = 9
+	WriteIntentErrType                      ErrorDetailType = 9
 	WriteTooOldErrType                      ErrorDetailType = 10
 	OpRequiresTxnErrType                    ErrorDetailType = 11
 	ConditionFailedErrType                  ErrorDetailType = 12
@@ -297,6 +297,7 @@ const (
 	MinTimestampBoundUnsatisfiableErrType   ErrorDetailType = 42
 	RefreshFailedErrType                    ErrorDetailType = 43
 	MVCCHistoryMutationErrType              ErrorDetailType = 44
+	LockConflictErrType                     ErrorDetailType = 45
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -306,7 +307,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 45
+	NumErrors int = 46
 )
 
 // Register the migration of all errors that used to be in the roachpb package
@@ -323,7 +324,7 @@ func init() {
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionPushError", &TransactionPushError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionRetryError", &TransactionRetryError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionStatusError", &TransactionStatusError{})
-	errors.RegisterTypeMigration(roachpbPath, "*roachpb.WriteIntentError", &LockConflictError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.WriteIntentError", &WriteIntentError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.WriteTooOldError", &WriteTooOldError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.OpRequiresTxnError", &OpRequiresTxnError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ConditionFailedError", &ConditionFailedError{})
@@ -864,6 +865,9 @@ func (e *TransactionRetryError) SafeFormatError(p errors.Printer) (next error) {
 	} else if e.ExtraMsg != "" {
 		msg = redact.Sprintf(" - %s", e.ExtraMsg)
 	}
+	if e.ConflictingTxn != nil {
+		msg = redact.Sprintf(" %s - conflicting txn: meta={%s}", msg, e.ConflictingTxn.String())
+	}
 	p.Printf("TransactionRetryError: retry txn (%s%s)", redact.SafeString(TransactionRetryReason_name[int32(e.Reason)]), msg)
 	return nil
 }
@@ -922,17 +926,61 @@ func (e *LockConflictError) SafeFormatError(p errors.Printer) (next error) {
 }
 
 func (e *LockConflictError) printError(buf Printer) {
+	printConflictingLocks(buf, e.Locks)
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *LockConflictError) Type() ErrorDetailType {
+	return LockConflictErrType
+}
+
+var _ ErrorDetailInterface = &LockConflictError{}
+
+func (e *WriteIntentError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *WriteIntentError) SafeFormatError(p errors.Printer) (next error) {
+	e.printError(p)
+	return nil
+}
+
+func (e *WriteIntentError) printError(buf Printer) {
+	printConflictingLocks(buf, e.Locks)
+
+	switch e.Reason {
+	case WriteIntentError_REASON_UNSPECIFIED:
+		// Nothing to say.
+	case WriteIntentError_REASON_WAIT_POLICY:
+		buf.Printf(" [reason=wait_policy]")
+	case WriteIntentError_REASON_LOCK_TIMEOUT:
+		buf.Printf(" [reason=lock_timeout]")
+	case WriteIntentError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED:
+		buf.Printf(" [reason=lock_wait_queue_max_length_exceeded]")
+	default:
+		// Could panic, better to silently ignore in case new reasons are added.
+	}
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *WriteIntentError) Type() ErrorDetailType {
+	return WriteIntentErrType
+}
+
+var _ ErrorDetailInterface = &WriteIntentError{}
+
+func printConflictingLocks(buf Printer, locks []roachpb.Lock) {
 	buf.Printf("conflicting locks on ")
 
 	// If we have a lot of locks, we only want to show the first and the last.
 	const maxBegin = 5
 	const maxEnd = 5
 	var begin, end []roachpb.Lock
-	if len(e.Locks) <= maxBegin+maxEnd {
-		begin = e.Locks
+	if len(locks) <= maxBegin+maxEnd {
+		begin = locks
 	} else {
-		begin = e.Locks[0:maxBegin]
-		end = e.Locks[len(e.Locks)-maxEnd : len(e.Locks)]
+		begin = locks[0:maxBegin]
+		end = locks[len(locks)-maxEnd:]
 	}
 
 	for i := range begin {
@@ -950,27 +998,7 @@ func (e *LockConflictError) printError(buf Printer) {
 			buf.Print(end[i].Key)
 		}
 	}
-
-	switch e.Reason {
-	case LockConflictError_REASON_UNSPECIFIED:
-		// Nothing to say.
-	case LockConflictError_REASON_WAIT_POLICY:
-		buf.Printf(" [reason=wait_policy]")
-	case LockConflictError_REASON_LOCK_TIMEOUT:
-		buf.Printf(" [reason=lock_timeout]")
-	case LockConflictError_REASON_LOCK_WAIT_QUEUE_MAX_LENGTH_EXCEEDED:
-		buf.Printf(" [reason=lock_wait_queue_max_length_exceeded]")
-	default:
-		// Could panic, better to silently ignore in case new reasons are added.
-	}
 }
-
-// Type is part of the ErrorDetailInterface.
-func (e *LockConflictError) Type() ErrorDetailType {
-	return LockConflictErrType
-}
-
-var _ ErrorDetailInterface = &LockConflictError{}
 
 // NewWriteTooOldError creates a new write too old error. The function accepts
 // the timestamp of the operation that hit the error, along with the timestamp
@@ -1627,10 +1655,49 @@ func (e *MissingRecordError) SafeFormatError(p errors.Printer) (next error) {
 	return nil
 }
 
+// DescNotFoundError is reported when a descriptor is missing.
+type DescNotFoundError struct {
+	id      int32
+	isStore bool
+}
+
+// NewStoreDescNotFoundError initializes a new DescNotFoundError for a missing
+// store descriptor.
+func NewStoreDescNotFoundError(storeID roachpb.StoreID) *DescNotFoundError {
+	return &DescNotFoundError{
+		id:      int32(storeID),
+		isStore: true,
+	}
+}
+
+// NewNodeDescNotFoundError initializes a new DescNotFoundError for a missing
+// node descriptor.
+func NewNodeDescNotFoundError(nodeID roachpb.NodeID) *DescNotFoundError {
+	return &DescNotFoundError{
+		id:      int32(nodeID),
+		isStore: false,
+	}
+}
+
+func (e *DescNotFoundError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (e *DescNotFoundError) SafeFormatError(p errors.Printer) (next error) {
+	s := redact.SafeString("node")
+	if e.isStore {
+		s = "store"
+	}
+	p.Printf("%s descriptor with %s ID %d was not found", s, s, e.id)
+	return nil
+}
+
 func init() {
 	errors.RegisterLeafDecoder(errors.GetTypeKey((*MissingRecordError)(nil)), func(_ context.Context, _ string, _ []string, _ proto.Message) error {
 		return &MissingRecordError{}
 	})
+	errorutilpath := reflect.TypeOf(errorutil.TempSentinel{}).PkgPath()
+	errors.RegisterTypeMigration(errorutilpath, "*errorutil.descriptorNotFound", &DescNotFoundError{})
 }
 
 var _ errors.SafeFormatter = &MissingRecordError{}

@@ -53,9 +53,9 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	// We're validating the following:
 	//
 	//   node's minimum supported version <= target version <= node's binary version
-	if targetCV.Less(versionSetting.BinaryMinSupportedVersion()) {
+	if targetCV.Less(versionSetting.MinSupportedVersion()) {
 		msg := fmt.Sprintf("target cluster version %s less than binary's min supported version %s",
-			targetCV, versionSetting.BinaryMinSupportedVersion())
+			targetCV, versionSetting.MinSupportedVersion())
 		log.Warningf(ctx, "%s", msg)
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
@@ -72,9 +72,9 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	// It would be a bit clearer to use negative internal versions, to be able
 	// to surface more obvious errors. Alternatively we could simply construct
 	// a better error message here.
-	if versionSetting.BinaryVersion().Less(targetCV.Version) {
+	if versionSetting.LatestVersion().Less(targetCV.Version) {
 		msg := fmt.Sprintf("binary version %s less than target cluster version %s",
-			versionSetting.BinaryVersion(), targetCV)
+			versionSetting.LatestVersion(), targetCV)
 		log.Warningf(ctx, "%s", msg)
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
@@ -112,8 +112,8 @@ func bumpClusterVersion(
 
 	versionSetting := st.Version
 	prevCV, err := kvstorage.SynthesizeClusterVersionFromEngines(
-		ctx, engines, versionSetting.BinaryVersion(),
-		versionSetting.BinaryMinSupportedVersion(),
+		ctx, engines, versionSetting.LatestVersion(),
+		versionSetting.MinSupportedVersion(),
 	)
 	if err != nil {
 		return err

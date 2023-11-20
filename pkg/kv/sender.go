@@ -164,6 +164,10 @@ type TxnSender interface {
 	// This method is only valid when called on RootTxns.
 	ReleaseSavepoint(context.Context, SavepointToken) error
 
+	// CanUseSavepoint checks whether it would be valid to roll back or release
+	// the given savepoint in the current transaction state. It will never error.
+	CanUseSavepoint(context.Context, SavepointToken) bool
+
 	// SetFixedTimestamp makes the transaction run in an unusual way, at
 	// a "fixed timestamp": Timestamp and ReadTimestamp are set to ts,
 	// there's no clock uncertainty, and the txn's deadline is set to ts
@@ -300,17 +304,17 @@ type TxnSender interface {
 	// the time the snapshot was established and ignore writes performed by the
 	// transaction since.
 	//
-	// Additionally, for Read Committed transactions, Step also advances the
-	// transaction's external read snapshot (i.e. ReadTimestamp) to a timestamp
-	// captured from the local HLC clock. This ensures that subsequent read-only
-	// operations observe the writes of other transactions that were committed
-	// before the time the new snapshot was established. For more detail on the
-	// interaction between transaction isolation levels and Step, see
-	// (isolation.Level).PerStatementReadSnapshot.
+	// Additionally, for Read Committed transactions, if allowReadTimestampStep is
+	// set, Step also advances the transaction's external read snapshot (i.e.
+	// ReadTimestamp) to a timestamp captured from the local HLC clock. This
+	// ensures that subsequent read-only operations observe the writes of other
+	// transactions that were committed before the time the new snapshot was
+	// established. For more detail on the interaction between transaction
+	// isolation levels and Step, see (isolation.Level).PerStatementReadSnapshot.
 	//
 	// Step() can only be called after stepping mode has been enabled
 	// using ConfigureStepping(SteppingEnabled).
-	Step(context.Context) error
+	Step(ctx context.Context, allowReadTimestampStep bool) error
 
 	// GetReadSeqNum gets the read sequence point for the current transaction.
 	GetReadSeqNum() enginepb.TxnSeq

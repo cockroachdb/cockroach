@@ -32,7 +32,7 @@ go_test(
         "util_test.go",
         "zcfg_test.go",
     ],
-    args = ["-test.timeout=895s"],
+    shard_count = 8,
     deps = [
         "//pkg/base",
         "//pkg/ccl/streamingccl",
@@ -66,6 +66,7 @@ go_test(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats",
+        "//pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil",
         "//pkg/testutils",
         "//pkg/testutils/diagutils",
         "//pkg/testutils/serverutils",

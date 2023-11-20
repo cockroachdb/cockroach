@@ -103,9 +103,15 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb": {
 						"SnapshotRequest_Type": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb": {
+						"MembershipStatus": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset": {
 						"SpanAccess": {},
 						"SpanScope":  {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split": {
+						"SplitObjective": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities": {
 						"ID": {},
@@ -130,7 +136,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"ConnectionClass": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb": {
-						"JobID": {},
+						"JobID":      {},
+						"ScheduleID": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb": {
 						"ConstraintValidity":           {},
@@ -151,8 +158,9 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"FormatCode": {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/privilege": {
-						"Kind":       {},
-						"ObjectType": {},
+						"KindInternalKey": {},
+						"KindDisplayName": {},
+						"ObjectType":      {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants": {
 						"ConstraintType": {},
@@ -183,10 +191,16 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"TxnEpoch":       {},
 						"TxnSeq":         {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/util/admission": {
+						"WorkKind": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/util/hlc": {
 						"ClockTimestamp":  {},
 						"LegacyTimestamp": {},
 						"Timestamp":       {},
+					},
+					"github.com/cockroachdb/pebble": {
+						"FormatMajorVersion": {},
 					},
 					"github.com/cockroachdb/pebble/internal/humanize": {
 						"FormattedString": {},

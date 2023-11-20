@@ -96,6 +96,8 @@ func registerMultiTenantFairness(r registry.Registry) {
 			Owner:             registry.OwnerAdmissionControl,
 			Benchmark:         true,
 			Leases:            registry.MetamorphicLeases,
+			CompatibleClouds:  registry.AllExceptAWS,
+			Suites:            registry.Suites(registry.Weekly),
 			Tags:              registry.Tags(`weekly`),
 			NonReleaseBlocker: false,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -142,7 +144,6 @@ func runMultiTenantFairness(
 	}
 
 	t.L().Printf("starting cockroach securely (<%s)", time.Minute)
-	c.Put(ctx, t.Cockroach(), "./cockroach")
 	c.Start(ctx, t.L(),
 		option.DefaultStartOptsNoBackups(),
 		install.MakeClusterSettings(install.SecureOption(true)),

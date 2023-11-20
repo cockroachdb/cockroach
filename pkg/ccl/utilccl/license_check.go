@@ -9,7 +9,6 @@
 package utilccl
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"sync/atomic"
@@ -32,7 +31,7 @@ import (
 )
 
 var enterpriseLicense = settings.RegisterStringSetting(
-	settings.TenantWritable,
+	settings.SystemVisible,
 	"enterprise.license",
 	"the encoded cluster license",
 	"",
@@ -253,6 +252,7 @@ func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
 	return license, nil
 }
 
+// GetLicenseType returns the license type.
 func GetLicenseType(st *cluster.Settings) (string, error) {
 	license, err := getLicense(st)
 	if err != nil {
@@ -261,6 +261,17 @@ func GetLicenseType(st *cluster.Settings) (string, error) {
 		return "None", nil
 	}
 	return license.Type.String(), nil
+}
+
+// GetLicenseUsage returns the license usage.
+func GetLicenseUsage(st *cluster.Settings) (string, error) {
+	license, err := getLicense(st)
+	if err != nil {
+		return "", err
+	} else if license == nil {
+		return "", nil
+	}
+	return license.Usage.String(), nil
 }
 
 // decode attempts to read a base64 encoded License.
@@ -318,36 +329,12 @@ func check(
 		}
 	}
 
-	if l.ClusterID == nil {
-		if strings.EqualFold(l.OrganizationName, org) {
-			return nil
-		}
-		if !withDetails {
-			return errEnterpriseRequired
-		}
-		return pgerror.Newf(pgcode.CCLValidLicenseRequired,
-			"license valid only for %q", l.OrganizationName)
+	if strings.EqualFold(l.OrganizationName, org) {
+		return nil
 	}
-
-	for _, c := range l.ClusterID {
-		if cluster == c {
-			return nil
-		}
-	}
-
-	// no match, so compose an error message.
 	if !withDetails {
 		return errEnterpriseRequired
 	}
-	var matches bytes.Buffer
-	for i, c := range l.ClusterID {
-		if i > 0 {
-			matches.WriteString(", ")
-		}
-		matches.WriteString(c.String())
-	}
 	return pgerror.Newf(pgcode.CCLValidLicenseRequired,
-		"license for cluster(s) %s is not valid for cluster %s",
-		matches.String(), cluster.String(),
-	)
+		"license valid only for %q", l.OrganizationName)
 }

@@ -97,6 +97,10 @@ func (c coordinatedResumer) OnFailOrCancel(
 	return err
 }
 
+func (c coordinatedResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func TestStreamReplicationProducerJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -104,9 +108,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	ctx := context.Background()
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			// Test fails within a test tenant. More investigation
-			// is required. Tracked with #76378.
-			DefaultTestTenant: base.TODOTestTenantDisabled,
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},

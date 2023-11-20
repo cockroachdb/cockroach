@@ -396,7 +396,7 @@ CREATE TEMP TABLE t2 (temp int);
 
 	for _, tableName := range []string{"t", "t2"} {
 		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
-		lease := leaseManager.names.get(
+		lease, _ := leaseManager.names.get(
 			context.Background(),
 			tableDesc.GetParentID(),
 			tableDesc.GetParentSchemaID(),
@@ -440,17 +440,17 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check that the cache has been updated.
-	if leaseManager.names.get(
+	if lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
 		"test",
 		s.Clock().Now(),
-	) != nil {
+	); lease != nil {
 		t.Fatalf("old name still in cache")
 	}
 
-	lease := leaseManager.names.get(
+	lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
@@ -494,7 +494,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
-	if lease := leaseManager.names.get(
+	if lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
@@ -509,7 +509,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	leaseManager.ExpireLeases(s.Clock())
 
 	// Check the name no longer resolves.
-	if lease := leaseManager.names.get(
+	if lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
@@ -556,7 +556,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// There is a cache entry.
-	lease := leaseManager.names.get(
+	lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
@@ -577,7 +577,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check the name resolves to the new lease.
-	newLease := leaseManager.names.get(context.Background(), tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
+	newLease, _ := leaseManager.names.get(context.Background(), tableDesc.GetParentID(), tableDesc.GetParentSchemaID(), tableName, s.Clock().Now())
 	if newLease == nil {
 		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.GetParentID(), tableName)
 	}
@@ -621,13 +621,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 
 	// Check that we cannot get the table by a different name.
-	if leaseManager.names.get(
+	if lease, _ := leaseManager.names.get(
 		context.Background(),
 		tableDesc.GetParentID(),
 		tableDesc.GetParentSchemaID(),
 		"tEsT",
 		s.Clock().Now(),
-	) != nil {
+	); lease != nil {
 		t.Fatalf("lease manager incorrectly found table with different case")
 	}
 }
@@ -992,7 +992,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 			// monotonically increasing expiration. This prevents two leases
 			// from having the same expiration due to randomness, as the
 			// leases are checked for having a different expiration.
-			LeaseJitterFraction.Override(ctx, &serverArgs.SV, 0)
+			LeaseJitterFraction.Override(ctx, &serverArgs.Settings.SV, 0)
 
 			srv, sqlDB, _ := serverutils.StartServer(t, serverArgs)
 			defer srv.Stopper().Stop(context.Background())
@@ -1567,4 +1567,35 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, descs, 3)
 	require.Equal(t, numRequests, 1)
+}
+
+// TestSessionLeasingClusterSetting sanity testing for the new
+// experimental_use_session_based_leasing cluster setting and interfaces used
+// to consume it.
+func TestSessionLeasingClusterSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	// Validate all settings can be set and the provider works correctly.
+	for idx, setting := range []string{"off", "dual_write", "drain", "session"} {
+		_, err := sqlDB.Exec("SET CLUSTER SETTING sql.catalog.experimental_use_session_based_leasing=$1::STRING", setting)
+		require.NoError(t, err)
+		lm := srv.LeaseManager().(*Manager)
+
+		// Validate that the mode we just set is active and the provider handles
+		// it properly.
+		require.True(t, lm.isSessionBasedLeasingModeActive(SessionBasedLeasingMode(idx)))
+		require.Equal(t, lm.getSessionBasedLeasingMode(), SessionBasedLeasingMode(idx))
+		// Validate that the previous minimums are active and forwards ones are not.
+		for mode := SessionBasedLeasingOff; mode <= SessionBasedLeasingMode(idx); mode++ {
+			require.True(t, lm.isSessionBasedLeasingModeActive(mode))
+		}
+		for mode := SessionBasedLeasingMode(idx) + 1; mode <= SessionBasedOnly; mode++ {
+			require.False(t, lm.isSessionBasedLeasingModeActive(mode))
+		}
+	}
 }

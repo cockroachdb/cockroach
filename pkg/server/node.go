@@ -127,13 +127,6 @@ This metric is thus not an indicator of KV health.`,
 		Unit:        metric.Unit_COUNT,
 	}
 
-	metaDiskStalls = metric.Metadata{
-		Name:        "engine.stalls",
-		Help:        "Number of disk stalls detected on this node",
-		Measurement: "Disk stalls detected",
-		Unit:        metric.Unit_COUNT,
-	}
-
 	metaInternalBatchRPCMethodCount = metric.Metadata{
 		Name:        "rpc.method.%s.recv",
 		Help:        "Number of %s requests processed",
@@ -225,7 +218,7 @@ This metric is thus not an indicator of KV health.`,
 var (
 	// graphiteEndpoint is host:port, if any, of Graphite metrics server.
 	graphiteEndpoint = settings.RegisterStringSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		"external.graphite.endpoint",
 		"if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port",
 		"",
@@ -233,7 +226,7 @@ var (
 
 	// graphiteInterval is how often metrics are pushed to Graphite, if enabled.
 	graphiteInterval = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.ApplicationLevel,
 		graphiteIntervalKey,
 		"the interval at which metrics are pushed to Graphite (if enabled)",
 		10*time.Second,
@@ -257,10 +250,9 @@ var (
 )
 
 type nodeMetrics struct {
-	Latency    metric.IHistogram
-	Success    *metric.Counter
-	Err        *metric.Counter
-	DiskStalls *metric.Counter
+	Latency metric.IHistogram
+	Success *metric.Counter
+	Err     *metric.Counter
 
 	BatchCount                    *metric.Counter
 	MethodCounts                  [kvpb.NumMethods]*metric.Counter
@@ -286,7 +278,6 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) nodeMe
 		}),
 		Success:                       metric.NewCounter(metaExecSuccess),
 		Err:                           metric.NewCounter(metaExecError),
-		DiskStalls:                    metric.NewCounter(metaDiskStalls),
 		BatchCount:                    metric.NewCounter(metaInternalBatchRPCCount),
 		BatchRequestsBytes:            metric.NewCounter(metaBatchRequestsBytes),
 		BatchResponsesBytes:           metric.NewCounter(metaBatchResponsesBytes),
@@ -461,23 +452,25 @@ func GetBootstrapSchema(
 func bootstrapCluster(
 	ctx context.Context, engines []storage.Engine, initCfg initServerCfg,
 ) (*initState, error) {
+	// We expect all the stores to be empty at this point, except for
+	// the store cluster version key. Assert so.
+	//
+	// TODO(jackson): Eventually we should be able to avoid opening the
+	// engines altogether until here.
+	if err := assertEnginesEmpty(engines); err != nil {
+		return nil, err
+	}
+
+	// We use our binary version to bootstrap the cluster.
+	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.latestVersion}
+	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, bootstrapVersion); err != nil {
+		return nil, err
+	}
+
 	clusterID := uuid.MakeV4()
 	// TODO(andrei): It'd be cool if this method wouldn't do anything to engines
 	// other than the first one, and let regular node startup code deal with them.
-	var bootstrapVersion clusterversion.ClusterVersion
 	for i, eng := range engines {
-		cv := eng.MinVersion()
-		if cv.Major == 0 {
-			return nil, errors.Errorf("missing bootstrap version")
-		}
-
-		// bootstrapCluster requires matching cluster versions on all engines.
-		if i == 0 {
-			bootstrapVersion.Version = cv
-		} else if bootstrapVersion.Version != cv {
-			return nil, errors.Errorf("found cluster versions %s and %s", bootstrapVersion, cv)
-		}
-
 		sIdent := roachpb.StoreIdent{
 			ClusterID: clusterID,
 			NodeID:    kvstorage.FirstNodeID,
@@ -499,23 +492,24 @@ func bootstrapCluster(
 				DefaultSystemZoneConfig: &initCfg.defaultSystemZoneConfig,
 				Codec:                   keys.SystemSQLCodec,
 			}
-			if initCfg.testingKnobs.Server != nil {
-				knobs := initCfg.testingKnobs.Server.(*TestingKnobs)
-				// If BinaryVersionOverride is set, and our `binaryMinSupportedVersion`
-				// is at its default value, we must populate the cluster with initial
-				// data from the `binaryMinSupportedVersion`. This cluster will then run
-				// the necessary upgrades until `BinaryVersionOverride` before being
-				// ready to use in the test.
-				if knobs.BinaryVersionOverride != (roachpb.Version{}) {
-					if initCfg.binaryMinSupportedVersion.Equal(
-						clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)) {
-						initialValuesOpts.OverrideKey = clusterversion.BinaryMinSupportedVersionKey
-					}
-				}
-				if knobs.BootstrapVersionKeyOverride != 0 {
-					initialValuesOpts.OverrideKey = initCfg.testingKnobs.Server.(*TestingKnobs).BootstrapVersionKeyOverride
+			for _, v := range bootstrap.VersionsWithInitialValues() {
+				if initCfg.latestVersion == clusterversion.ByKey(v) {
+					initialValuesOpts.OverrideKey = v
+					break
 				}
 			}
+			if initialValuesOpts.OverrideKey == 0 {
+				if initCfg.latestVersion.Less(clusterversion.MinSupported.Version()) {
+					// As an exception, we tolerate tests creating older versions; we just
+					// use the minimum supported version.
+					// TODO(radu): should we make sure there are no upgrades for versions
+					// earlier than this still registered?
+					initialValuesOpts.OverrideKey = clusterversion.MinSupported
+				} else {
+					return nil, errors.AssertionFailedf("cannot bootstrap at version %s", initCfg.latestVersion)
+				}
+			}
+
 			initialValues, tableSplits, err := initialValuesOpts.GenerateInitialValues()
 			if err != nil {
 				return nil, err
@@ -540,7 +534,9 @@ func bootstrapCluster(
 		}
 	}
 
-	return inspectEngines(ctx, engines, initCfg.binaryVersion, initCfg.binaryMinSupportedVersion)
+	// Note that we wrote initcfg.binaryVersion, that will always be the version
+	// that inspectEngines determines.
+	return inspectEngines(ctx, engines, initCfg.latestVersion, initCfg.minSupportedVersion)
 }
 
 // NewNode returns a new instance of Node.
@@ -638,7 +634,7 @@ func (n *Node) start(
 		Locality:        locality,
 		LocalityAddress: localityAddress,
 		ClusterName:     clusterName,
-		ServerVersion:   n.storeCfg.Settings.Version.BinaryVersion(),
+		ServerVersion:   n.storeCfg.Settings.Version.LatestVersion(),
 		BuildTag:        build.GetInfo().Tag,
 		StartedAt:       n.startedAt,
 		HTTPAddress:     util.MakeUnresolvedAddr(httpAddr.Network(), httpAddr.String()),
@@ -757,7 +753,7 @@ func (n *Node) start(
 	allEngines = append(allEngines, state.uninitializedEngines...)
 	for _, e := range allEngines {
 		t := e.Type()
-		log.Infof(ctx, "started with engine type %v", t)
+		log.Infof(ctx, "started with engine type %v", &t)
 	}
 	log.Infof(ctx, "started with attributes %v", attrs.Attrs)
 	return nil
@@ -1394,23 +1390,23 @@ func (n *Node) getLocalityComparison(
 ) roachpb.LocalityComparisonType {
 	gossip := n.storeCfg.Gossip
 	if gossip == nil {
-		log.VEventf(ctx, 2, "gossip is not configured")
+		log.VInfof(ctx, 2, "gossip is not configured")
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
 	gatewayNodeDesc, err := gossip.GetNodeDescriptor(gatewayNodeID)
 	if err != nil {
-		log.VEventf(ctx, 2,
+		log.VInfof(ctx, 2,
 			"failed to perform look up for node descriptor %v", err)
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
-	comparisonResult, regionErr, zoneErr := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
-	if regionErr != nil {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross region %v", regionErr)
+	comparisonResult, regionValid, zoneValid := n.Descriptor.Locality.CompareWithLocality(gatewayNodeDesc.Locality)
+	if !regionValid {
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross region")
 	}
-	if zoneErr != nil {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross zone %v", zoneErr)
+	if !zoneValid {
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross zone")
 	}
 
 	return comparisonResult
@@ -2236,7 +2232,7 @@ func (n *Node) TenantSettings(
 
 	// Send the setting overrides for one precedence level.
 	const firstPrecedenceLevel = kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES
-	allOverrides, allCh := settingsWatcher.GetAllTenantOverrides()
+	allOverrides, allCh := settingsWatcher.GetAllTenantOverrides(ctx)
 
 	// Inject the current storage logical version as an override; as the
 	// tenant server needs this to start up.
@@ -2255,7 +2251,7 @@ func (n *Node) TenantSettings(
 	// Then send the initial setting overrides for the other precedence
 	// level. This is the payload that will let the tenant client
 	// connector signal readiness.
-	tenantOverrides, tenantCh := settingsWatcher.GetTenantOverrides(args.TenantID)
+	tenantOverrides, tenantCh := settingsWatcher.GetTenantOverrides(ctx, args.TenantID)
 	if err := sendSettings(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
 		return err
 	}
@@ -2283,7 +2279,7 @@ func (n *Node) TenantSettings(
 			// All-tenant overrides have changed, send them again.
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
-			allOverrides, allCh = settingsWatcher.GetAllTenantOverrides()
+			allOverrides, allCh = settingsWatcher.GetAllTenantOverrides(ctx)
 			if err := sendSettings(kvpb.TenantSettingsEvent_ALL_TENANTS_OVERRIDES, allOverrides, false /* incremental */); err != nil {
 				return err
 			}
@@ -2292,7 +2288,7 @@ func (n *Node) TenantSettings(
 			// Tenant-specific overrides have changed, send them again.
 			// TODO(multitenant): We can optimize this by only sending the delta since the last
 			// update, with Incremental set to true.
-			tenantOverrides, tenantCh = settingsWatcher.GetTenantOverrides(args.TenantID)
+			tenantOverrides, tenantCh = settingsWatcher.GetTenantOverrides(ctx, args.TenantID)
 			if err := sendSettings(kvpb.TenantSettingsEvent_TENANT_SPECIFIC_OVERRIDES, tenantOverrides, false /* incremental */); err != nil {
 				return err
 			}

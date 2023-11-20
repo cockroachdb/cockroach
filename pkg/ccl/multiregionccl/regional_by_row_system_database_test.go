@@ -28,15 +28,10 @@ func TestRegionalByRowTablesInTheSystemDatabase(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{})
+	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{})
 	defer cleanup()
 	defer tc.Stopper().Stop(ctx)
 
-	// Allow the tenant to make itself multi-region.
-	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `
-ALTER TENANT ALL
-SET CLUSTER SETTING
-sql.virtual_cluster.feature_access.multiregion.enabled = true;`)
 	tenant, tenantDB := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
 		TenantName:  "test",
 		TenantID:    serverutils.TestTenantID(),

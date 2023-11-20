@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -28,9 +27,11 @@ import (
 // SinkClient is an interface to an external sink, where messages are written
 // into batches as they arrive and once ready are flushed out.
 type SinkClient interface {
-	MakeResolvedPayload(body []byte, topic string) (SinkPayload, error)
-	// Batches can only hold messages for one unique topic
 	MakeBatchBuffer(topic string) BatchBuffer
+	// FlushResolvedPayload flushes the resolved payload to the sink. It takes
+	// an iterator over the set of topics in case the client chooses to emit
+	// the payload to multiple topics.
+	FlushResolvedPayload(context.Context, []byte, func(func(topic string) error) error, retry.Options) error
 	Flush(context.Context, SinkPayload) error
 	Close() error
 }
@@ -199,17 +200,12 @@ func (s *batchingSink) EmitResolvedTimestamp(
 	if err != nil {
 		return err
 	}
-	payload, err := s.client.MakeResolvedPayload(data, "")
-	if err != nil {
-		return err
-	}
-
+	// Flush the buffered rows.
 	if err = s.Flush(ctx); err != nil {
 		return err
 	}
-	return retry.WithMaxAttempts(ctx, s.retryOpts, s.retryOpts.MaxRetries+1, func() error {
-		return s.client.Flush(ctx, payload)
-	})
+
+	return s.client.FlushResolvedPayload(ctx, data, s.topicNamer.Each, s.retryOpts)
 }
 
 // Close implements the Sink interface.
@@ -402,11 +398,12 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 	for {
 		select {
 		case req := <-s.eventCh:
-			if err := s.pacer.Pace(ctx); err != nil {
-				if pacerLogEvery.ShouldLog() {
-					log.Errorf(ctx, "automatic sink batcher pacing: %v", err)
-				}
-			}
+			// Swallow pacer error -- it happens only if context is canceled,
+			// and that's handled below.
+			// TODO(yevgeniy): rework this function: this function should simply
+			// return an error, and not rely on "handleError".
+			// It's hard to reason about this functions correctness otherwise.
+			_ = s.pacer.Pace(ctx)
 
 			switch r := req.(type) {
 			case *rowEvent:

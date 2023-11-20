@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
@@ -70,7 +70,7 @@ const (
 )
 
 var changeOwnPasswordEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"sql.auth.change_own_password.enabled",
 	"controls whether a user is allowed to change their own password, even if they have no other privileges",
 	false,
@@ -215,8 +215,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 		return err
 	}
 	if isAdmin {
-		if err := params.p.RequireAdminRole(params.ctx, "ALTER ROLE admin"); err != nil {
+		if hasAdmin, err := params.p.HasAdminRole(params.ctx); err != nil {
 			return err
+		} else if !hasAdmin {
+			return pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to alter another admin")
 		}
 	}
 
@@ -287,8 +290,11 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 	// modifying their own defaults unless they have CREATEROLE. This is analogous
 	// to our restriction that prevents a user from modifying their own password.
 	if n.AllRoles {
-		if err := p.RequireAdminRole(ctx, "ALTER ROLE ALL"); err != nil {
+		if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
 			return nil, err
+		} else if !hasAdmin {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to ALTER ROLE ALL ... SET")
 		}
 	} else {
 		canAlterRoleSet, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE)
@@ -421,9 +427,6 @@ func (p *planner) processSetOrResetClause(
 }
 
 func (n *alterRoleSetNode) startExec(params runParams) error {
-	databaseRoleSettingsHasRoleIDCol := params.p.ExecCfg().Settings.Version.IsActive(params.ctx,
-		clusterversion.V23_1DatabaseRoleSettingsHasRoleIDColumn)
-
 	var opName string
 	if n.isRole {
 		sqltelemetry.IncIAMAlterCounter(sqltelemetry.Role)
@@ -447,12 +450,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
 
-	var upsertQuery = fmt.Sprintf(
-		`UPSERT INTO %s (database_id, role_name, settings) VALUES ($1, $2, $3)`,
-		sessioninit.DatabaseRoleSettingsTableName,
-	)
-	if databaseRoleSettingsHasRoleIDCol {
-		upsertQuery = fmt.Sprintf(`
+	var upsertQuery = fmt.Sprintf(`
 UPSERT INTO %s (database_id, role_name, settings, role_id)
 VALUES ($1, $2, $3, (
 	SELECT CASE $2
@@ -460,9 +458,8 @@ VALUES ($1, $2, $3, (
 		ELSE (SELECT user_id FROM system.users WHERE username = $2)
 	END
 ))`,
-			sessioninit.DatabaseRoleSettingsTableName, username.EmptyRole, username.EmptyRoleID,
-		)
-	}
+		sessioninit.DatabaseRoleSettingsTableName, username.EmptyRole, username.EmptyRoleID,
+	)
 
 	// Instead of inserting an empty settings array, this function will make
 	// sure the row is deleted instead.
@@ -607,7 +604,17 @@ func (n *alterRoleSetNode) getRoleName(
 		return false, username.SQLUsername{}, err
 	}
 	if isAdmin {
-		if err := params.p.RequireAdminRole(params.ctx, "ALTER ROLE admin"); err != nil {
+		if hasAdmin, err := params.p.HasAdminRole(params.ctx); err != nil {
+			return false, username.SQLUsername{}, err
+		} else if !hasAdmin {
+			return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to alter another admin")
+		}
+
+		// Note that admins implicitly have the REPAIRCLUSTERMETADATA privilege.
+		if err := params.p.CheckPrivilege(
+			params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA,
+		); err != nil {
 			return false, username.SQLUsername{}, err
 		}
 	}

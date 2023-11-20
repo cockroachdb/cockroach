@@ -270,7 +270,7 @@ num=5
 
 query
 ----
-num locks: 1, bytes returned: 81, resume reason: RESUME_UNKNOWN, resume span: <nil>
+num locks: 1, bytes returned: 85, resume reason: RESUME_UNKNOWN, resume span: <nil>
  locks:
   range_id=3 key="a" holder=00000000-0000-0000-0000-000000000003 durability=Replicated duration=2s
    waiters:

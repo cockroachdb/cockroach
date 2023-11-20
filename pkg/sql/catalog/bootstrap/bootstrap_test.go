@@ -11,15 +11,13 @@
 package bootstrap
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,23 +37,16 @@ func TestSupportedReleases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	expected := make(map[roachpb.Version]struct{})
-	earliest := clusterversion.ByKey(clusterversion.BinaryMinSupportedVersionKey)
-	latest := clusterversion.ByKey(clusterversion.BinaryVersionKey)
-	var incumbent roachpb.Version
-	for _, v := range clusterversion.ListBetween(earliest, latest) {
-		if v.Major != incumbent.Major && v.Minor != incumbent.Minor {
-			incumbent = roachpb.Version{
-				Major: v.Major,
-				Minor: v.Minor,
-			}
-			expected[incumbent] = struct{}{}
-		}
+	// Verify that the current version has an entry.
+	require.Contains(t, initialValuesFactoryByKey, clusterversion.Latest)
+
+	// Verify that all previously supported versions have an entry.
+	for _, key := range clusterversion.SupportedPreviousReleases() {
+		require.Contains(t, initialValuesFactoryByKey, key)
 	}
-	expected[latest] = struct{}{}
-	actual := make(map[roachpb.Version]struct{})
+
+	// Verify that all entries work.
 	for k := range initialValuesFactoryByKey {
-		actual[clusterversion.ByKey(k)] = struct{}{}
 		opts := InitialValuesOpts{
 			DefaultZoneConfig:       zonepb.DefaultZoneConfigRef(),
 			DefaultSystemZoneConfig: zonepb.DefaultZoneConfigRef(),
@@ -68,10 +59,6 @@ func TestSupportedReleases(t *testing.T) {
 		_, _, err = opts.GenerateInitialValues()
 		require.NoErrorf(t, err, "error generating initial values for non-system codec in version %s", k)
 	}
-	require.Truef(t, reflect.DeepEqual(actual, expected),
-		"expected supported releases %v, actual %v\n"+
-			"see comments in test definition if this message appears",
-		expected, actual)
 }
 
 func TestInitialValuesToString(t *testing.T) {
@@ -80,24 +67,18 @@ func TestInitialValuesToString(t *testing.T) {
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			codec := keys.SystemSQLCodec
+			var tenantID uint64
 			switch d.Cmd {
 			case "system":
-				break
-
 			case "tenant":
-				const dummyTenantID = 12345
-				codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(dummyTenantID))
-
+				tenantID = 12345
 			default:
 				t.Fatalf("unexpected command %q", d.Cmd)
 			}
 			var expectedHash string
 			d.ScanArgs(t, "hash", &expectedHash)
-			ms := MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
-			result := InitialValuesToString(ms)
-			h := sha256.Sum256([]byte(result))
-			if actualHash := hex.EncodeToString(h[:]); expectedHash != actualHash {
+			initialValues, actualHash := GetAndHashInitialValuesToString(tenantID)
+			if expectedHash != actualHash {
 				t.Errorf(`Unexpected hash value %s for %s.
 If you're seeing this error message, this means that the bootstrapped system
 schema has changed. Assuming that this is expected:
@@ -109,7 +90,8 @@ schema has changed. Assuming that this is expected:
   hardcoded literals in the main development branch as well as any subsequent
   release branches that need to be updated also.`, actualHash, d.Cmd)
 			}
-			return result
+
+			return initialValues
 		})
 	})
 }
@@ -157,4 +139,31 @@ func makeMetadataSchema(tenantID uint64) MetadataSchema {
 		codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	}
 	return MakeMetadataSchema(codec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+}
+
+// TestSystemDatabaseSchemaBootstrapVersionBumped serves as a reminder to bump
+// systemschema.SystemDatabaseSchemaBootstrapVersion whenever a new upgrade
+// creates or modifies the schema of system tables. We unfortunately cannot
+// programmatically determine if an upgrade should bump the version so by
+// adding a test failure when the initial values change, the programmer and
+// code reviewers are reminded to manually check whether the version should
+// be bumped.
+func TestSystemDatabaseSchemaBootstrapVersionBumped(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// If you need to update this value (i.e. failed this test), check whether
+	// you need to bump systemschema.SystemDatabaseSchemaBootstrapVersion too.
+	const prevSystemHash = "7d089e4c69d8d6b164b3d1a04e0f3ad5f487f9138c9585bd00b37f397691a090"
+	_, curSystemHash := GetAndHashInitialValuesToString(0 /* tenantID */)
+
+	if prevSystemHash != curSystemHash {
+		t.Fatalf(
+			`Check whether you need to bump systemschema.SystemDatabaseSchemaBootstrapVersion
+and then update prevSystemHash to %q.
+The current value of SystemDatabaseSchemaBootstrapVersion is %s.`,
+			curSystemHash,
+			systemschema.SystemDatabaseSchemaBootstrapVersion,
+		)
+	}
 }

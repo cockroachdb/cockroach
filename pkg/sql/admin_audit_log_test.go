@@ -104,7 +104,7 @@ func TestAdminAuditLogRegularUser(t *testing.T) {
 
 	db.Exec(t, `CREATE USER testuser`)
 
-	testuser := s.ApplicationLayer().SQLConnForUser(t, "testuser", "")
+	testuser := s.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 
 	if _, err := testuser.Exec(`SELECT 1`); err != nil {
 		t.Fatal(err)
@@ -221,7 +221,7 @@ func TestAdminAuditLogMultipleTransactions(t *testing.T) {
 
 	db.Exec(t, `CREATE USER testuser`)
 
-	testuser := s.ApplicationLayer().SQLConnForUser(t, "testuser", "")
+	testuser := s.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
 
 	db.Exec(t, `GRANT admin TO testuser`)
 

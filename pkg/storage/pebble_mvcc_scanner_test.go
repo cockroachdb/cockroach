@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -82,8 +83,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 
 	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
-	iter, err := reader.NewMVCCIterator(
-		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
+	iter, err := reader.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("d")})
 	require.NoError(t, err)
 	defer iter.Close()
 
@@ -131,6 +131,8 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 
 func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// This test has been observed to trip the disk-stall detector under -race.
+	skip.UnderRace(t, "large copies and memfs mutexes can cause excessive delays within VFS stack")
 
 	eng := createTestPebbleEngine()
 	defer eng.Close()
@@ -149,8 +151,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 
 	reader := eng.NewReadOnly(StandardDurability)
 	defer reader.Close()
-	iter, err := reader.NewMVCCIterator(
-		MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})
+	iter, err := reader.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: keys[0], UpperBound: roachpb.Key("e")})
 	require.NoError(t, err)
 	defer iter.Close()
 
@@ -223,14 +224,14 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		defer batch.Close()
 		for i := 0; i < 10; i++ {
 			key := makeKey(nil, i)
-			require.NoError(t, MVCCPut(context.Background(), batch, key, ts1, val, MVCCWriteOptions{Txn: &txn1}))
+			_, err := MVCCPut(context.Background(), batch, key, ts1, val, MVCCWriteOptions{Txn: &txn1})
+			require.NoError(t, err)
 		}
 		require.NoError(t, batch.Commit(true))
 	}()
 
 	// iterator that can span over all the written keys.
-	iter, err := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind,
-		IterOptions{LowerBound: makeKey(nil, 0), UpperBound: makeKey(nil, 11)})
+	iter, err := eng.NewMVCCIterator(context.Background(), MVCCKeyAndIntentsIterKind, IterOptions{LowerBound: makeKey(nil, 0), UpperBound: makeKey(nil, 11)})
 	require.NoError(t, err)
 	defer iter.Close()
 

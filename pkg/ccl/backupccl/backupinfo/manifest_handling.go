@@ -91,7 +91,7 @@ const (
 // WriteMetadataSST controls if we write the experimental new format BACKUP
 // metadata file.
 var WriteMetadataSST = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.bulkio.write_metadata_sst.enabled",
 	"write experimental new format BACKUP metadata file",
 	util.ConstantWithMetamorphicTestBool("write-metadata-sst", false),
@@ -102,7 +102,7 @@ var WriteMetadataSST = settings.RegisterBoolSetting(
 // descriptors. This new format of metadata is written in addition to the
 // `BACKUP_MANIFEST` file, and is expected to be its replacement in the future.
 var WriteMetadataWithExternalSSTsEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"backup.write_metadata_with_external_ssts.enabled",
 	"write BACKUP metadata along with supporting SST files",
 	util.ConstantWithMetamorphicTestBool("backup.write_metadata_with_external_ssts.enabled", true),
@@ -152,7 +152,7 @@ func ReadBackupManifestFromURI(
 		return backuppb.BackupManifest{}, 0, err
 	}
 	defer exportStore.Close()
-	return ReadBackupManifestFromStore(ctx, mem, exportStore, encryption, kmsEnv)
+	return ReadBackupManifestFromStore(ctx, mem, exportStore, uri, encryption, kmsEnv)
 }
 
 // ReadBackupManifestFromStore reads and unmarshalls a BackupManifest from the
@@ -161,6 +161,7 @@ func ReadBackupManifestFromStore(
 	ctx context.Context,
 	mem *mon.BoundAccount,
 	exportStore cloud.ExternalStorage,
+	storeURI string,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (backuppb.BackupManifest, int64, error) {
@@ -213,6 +214,7 @@ func ReadBackupManifestFromStore(
 		}
 	}
 	manifest.Dir = exportStore.Conf()
+	manifest.Dir.URI = storeURI
 	return manifest, memSize, nil
 }
 

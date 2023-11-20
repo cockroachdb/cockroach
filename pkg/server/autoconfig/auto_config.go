@@ -45,6 +45,11 @@ func (r *autoConfigRunner) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile is a part of the Resumer interface.
+func (r *autoConfigRunner) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // EnvironmentID aliases autoconfigpb.EnvironmentID
 type EnvironmentID = autoconfigpb.EnvironmentID
 

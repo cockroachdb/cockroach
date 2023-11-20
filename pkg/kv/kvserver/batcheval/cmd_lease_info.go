@@ -34,8 +34,9 @@ func declareKeysLeaseInfo(
 	latchSpans *spanset.SpanSet,
 	_ *lockspanset.LockSpanSet,
 	_ time.Duration,
-) {
+) error {
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLeaseKey(rs.GetRangeID())})
+	return nil
 }
 
 // LeaseInfo returns information about the lease holder for the range.

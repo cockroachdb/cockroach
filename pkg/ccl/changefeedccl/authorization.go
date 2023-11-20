@@ -31,22 +31,19 @@ func checkPrivilegesForDescriptor(
 	ctx context.Context, p sql.PlanHookState, desc catalog.Descriptor,
 ) (hasSelect bool, hasChangefeed bool, err error) {
 	if desc.GetObjectType() != privilege.Table {
-		return false, false, errors.AssertionFailedf("expected descriptor %d to be a table descriptor. instead found: %s ", desc.GetID(), desc.GetObjectType())
+		return false, false, errors.AssertionFailedf("expected descriptor %d to be a table descriptor, found: %s ", desc.GetID(), desc.GetObjectType())
 	}
 
-	hasSelect, hasChangefeed = true, true
-	if err = p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-		if !sql.IsInsufficientPrivilegeError(err) {
-			return false, false, err
-		}
-		hasSelect = false
+	hasSelect, err = p.HasPrivilege(ctx, desc, privilege.SELECT, p.User())
+	if err != nil {
+		return false, false, err
 	}
-	if err = p.CheckPrivilege(ctx, desc, privilege.CHANGEFEED); err != nil {
-		if !sql.IsInsufficientPrivilegeError(err) {
-			return false, false, err
-		}
-		hasChangefeed = false
+
+	hasChangefeed, err = p.HasPrivilege(ctx, desc, privilege.CHANGEFEED, p.User())
+	if err != nil {
+		return false, false, err
 	}
+
 	return hasSelect, hasChangefeed, nil
 }
 

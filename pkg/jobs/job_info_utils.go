@@ -17,6 +17,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
@@ -27,11 +28,26 @@ const bundleChunkSize = 1 << 20 // 1 MiB
 const finalChunkSuffix = "#_final"
 
 // WriteChunkedFileToJobInfo will break up data into chunks of a fixed size, and
-// gzip compress them before writing them to the job_info table
+// gzip compress them before writing them to the job_info table. This method
+// clears any existing chunks with the same filename before writing the new
+// chunks and so if the caller wishes to preserve history they must use a
+// unique filename.
 func WriteChunkedFileToJobInfo(
-	ctx context.Context, filename string, data []byte, txn isql.Txn, jobID jobspb.JobID,
+	ctx context.Context,
+	filename string,
+	data []byte,
+	txn isql.Txn,
+	jobID jobspb.JobID,
+	cv clusterversion.Handle,
 ) error {
-	jobInfo := InfoStorageForJob(txn, jobID)
+	finalChunkName := filename + finalChunkSuffix
+	jobInfo := InfoStorageForJob(txn, jobID, cv)
+
+	// Clear any existing chunks with the same filename before writing new chunks.
+	// We clear all rows that with info keys in [filename, filename#_final~).
+	if err := jobInfo.DeleteRange(ctx, filename, finalChunkName+"~"); err != nil {
+		return err
+	}
 
 	var chunkCounter int
 	var chunkName string
@@ -46,7 +62,7 @@ func WriteChunkedFileToJobInfo(
 			chunk = chunk[:chunkSize]
 		} else {
 			// This is the last chunk we will write, assign it a sentinel file name.
-			chunkName = filename + finalChunkSuffix
+			chunkName = finalChunkName
 		}
 		data = data[len(chunk):]
 		var err error
@@ -71,12 +87,12 @@ func WriteChunkedFileToJobInfo(
 // ReadChunkedFileToJobInfo will stitch together all the chunks corresponding to
 // the filename and return the uncompressed data of the file.
 func ReadChunkedFileToJobInfo(
-	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID,
+	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID, cv clusterversion.Handle,
 ) ([]byte, error) {
 	buf := bytes.NewBuffer([]byte{})
 	// Iterate over all the chunks of the requested file and return the unzipped
 	// chunks of data.
-	jobInfo := InfoStorageForJob(txn, jobID)
+	jobInfo := InfoStorageForJob(txn, jobID, cv)
 	var lastInfoKey string
 	if err := jobInfo.Iterate(ctx, filename,
 		func(infoKey string, value []byte) error {

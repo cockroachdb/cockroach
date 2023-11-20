@@ -50,7 +50,7 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) (numE
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {
-			iter, err := rangefeed.NewCatchUpIterator(eng, span, opts.ts, nil, nil)
+			iter, err := rangefeed.NewCatchUpIterator(ctx, eng, span, opts.ts, nil, nil)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -234,7 +234,7 @@ func setupMVCCPebble(b testing.TB, dir string, lBaseMaxBytes int64, readOnly boo
 func setupData(
 	ctx context.Context, b *testing.B, emk engineMaker, opts benchDataOptions,
 ) (storage.Engine, string) {
-	verStr := fmt.Sprintf("v%s", clusterversion.TestingBinaryVersion.String())
+	verStr := fmt.Sprintf("v%s", clusterversion.Latest.String())
 	orderStr := "linear"
 	if opts.randomKeyOrder {
 		orderStr = "random"
@@ -310,7 +310,7 @@ func setupData(
 		value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
 		value.InitChecksum(key)
 		ts := hlc.Timestamp{WallTime: int64((pos + 1) * 5)}
-		if err := storage.MVCCPut(ctx, batch, key, ts, value, storage.MVCCWriteOptions{}); err != nil {
+		if _, err := storage.MVCCPut(ctx, batch, key, ts, value, storage.MVCCWriteOptions{}); err != nil {
 			b.Fatal(err)
 		}
 	}

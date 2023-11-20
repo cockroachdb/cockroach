@@ -161,7 +161,6 @@ go_test(
         "trace_test.go",
         ":mock_logsink",  # keep
     ],
-    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":log"],
     deps = [
@@ -193,6 +192,7 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_net//trace",
+        "@org_golang_x_sys//unix",
     ],
 )
 

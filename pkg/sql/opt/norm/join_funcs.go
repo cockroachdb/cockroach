@@ -295,7 +295,7 @@ func (c *CustomFuncs) CanMapJoinOpFilter(
 		return false
 	}
 
-	allowCompositeEncoding := !memo.CanBeCompositeSensitive(c.mem.Metadata(), src)
+	allowCompositeEncoding := !memo.CanBeCompositeSensitive(src)
 
 	// For CanMapJoinOpFilter to be true, each column in src must map to at
 	// least one column in dst.
@@ -339,7 +339,7 @@ func (c *CustomFuncs) MapJoinOpFilter(
 		return src.Condition
 	}
 
-	allowCompositeEncoding := !memo.CanBeCompositeSensitive(c.mem.Metadata(), src)
+	allowCompositeEncoding := !memo.CanBeCompositeSensitive(src)
 
 	// Map each column in src to one column in dst. We choose an arbitrary column
 	// (the one with the smallest ColumnID) if there are multiple choices.

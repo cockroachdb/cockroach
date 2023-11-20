@@ -20,7 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -33,7 +35,7 @@ import (
 // to take this action.
 func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *mtinfopb.TenantInfo) error {
 	const op = "gc"
-	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op, execCfg.Settings); err != nil {
 		return err
 	}
 	if err := rejectIfSystemTenant(info.ID, op); err != nil {
@@ -133,7 +135,7 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	if !p.extendedEvalCtx.TxnIsSingleStmt {
 		return errors.Errorf("gc_tenant cannot be used inside a multi-statement transaction")
 	}
-	if err := p.RequireAdminRole(ctx, "gc tenant"); err != nil {
+	if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTERMETADATA); err != nil {
 		return err
 	}
 	info, err := GetTenantRecordByID(ctx, p.InternalSQLTxn(), roachpb.MustMakeTenantID(tenID), p.ExecCfg().Settings)

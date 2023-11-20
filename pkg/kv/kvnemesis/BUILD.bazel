@@ -27,6 +27,7 @@ go_library(
         "//pkg/kv/kvnemesis/kvnemesisutil",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/concurrency",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/liveness",
@@ -57,7 +58,7 @@ go_library(
 
 go_test(
     name = "kvnemesis_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "applier_test.go",
         "engine_test.go",
@@ -67,7 +68,6 @@ go_test(
         "operations_test.go",
         "validator_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":kvnemesis"],
     deps = [

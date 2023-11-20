@@ -20,28 +20,16 @@ import (
 
 const jiraBaseURL = "https://cockroachlabs.atlassian.net/"
 
-// TODO(rai): use some "junk" project for the dry-run issues
+// TODO(rail): use some "junk" project for the dry-run issues
 const dryRunProject = "REL"
-const sreDryRunProject = "RE"
 
 // Jira uses Wiki syntax, see https://jira.atlassian.com/secure/WikiRendererHelpAction.jspa?section=all
 const trackingIssueTemplate = `
 * Version: *{{ .Version }}*
 * SHA: [{{ .SHA }}|https://github.com/cockroachlabs/release-staging/commit/{{ .SHA }}]
-* Tag: [{{ .Tag }}|https://github.com/cockroachlabs/release-staging/releases/tag/{{ .Tag }}]
-* SRE issue: [{{ .SREIssue }}]
+* Build ID / Tag: [{{ .Tag }}|https://github.com/cockroachlabs/release-staging/releases/tag/{{ .Tag }}]
 * Deployment status: _fillmein_
 * Publish Cockroach Release: _fillmein_
-`
-const sreIssueTemplate = `
-Could you deploy the Docker image with the following tag to the release qualification CC cluster?
-
-* Version: {{ .Version }}
-* Build ID: {{ .Tag }}
-
-Please follow [this playbook|https://github.com/cockroachlabs/production/wiki/Deploy-release-qualification-versions]
-
-Thank you\!
 `
 
 type jiraClient struct {
@@ -49,14 +37,8 @@ type jiraClient struct {
 }
 
 type trackingIssueTemplateArgs struct {
-	Version  string
-	SHA      string
-	Tag      string
-	SREIssue string
-}
-
-type sreIssueTemplateArgs struct {
 	Version string
+	SHA     string
 	Tag     string
 }
 
@@ -155,14 +137,11 @@ func createJiraIssue(client *jiraClient, issue *jira.Issue) (jiraIssue, error) {
 // See example ticket:
 // - https://cockroachlabs.atlassian.net/browse/REL-3
 // - https://cockroachlabs.atlassian.net/rest/api/2/issue/REL-3
-func createTrackingIssue(
-	client *jiraClient, release releaseInfo, sreIssue jiraIssue, dryRun bool,
-) (jiraIssue, error) {
+func createTrackingIssue(client *jiraClient, release releaseInfo, dryRun bool) (jiraIssue, error) {
 	templateArgs := trackingIssueTemplateArgs{
-		Version:  release.nextReleaseVersion,
-		Tag:      release.buildInfo.Tag,
-		SHA:      release.buildInfo.SHA,
-		SREIssue: sreIssue.Key,
+		Version: release.nextReleaseVersion,
+		Tag:     release.buildInfo.Tag,
+		SHA:     release.buildInfo.SHA,
 	}
 	description, err := templateToText(templateArgs, trackingIssueTemplate)
 	if err != nil {
@@ -176,42 +155,6 @@ func createTrackingIssue(
 	issue := newIssue(&jiraIssue{
 		ProjectKey:  projectKey,
 		TypeName:    "CRDB Release",
-		Summary:     summary,
-		Description: description,
-	})
-	return createJiraIssue(client, issue)
-}
-
-// createSREIssue creates an SREOPS ticket to request release candidate qualification.
-// See example ticket:
-// - https://cockroachlabs.atlassian.net/browse/SREOPS-4037
-// - https://cockroachlabs.atlassian.net/rest/api/2/issue/SREOPS-4037
-// TODO(celia): [Future "week 0" work] We'll eventually want the ability to specify
-//
-//	a qualification partition & friendly ID:
-//
-// During the stability period, release managers may be qualifying multiple candidates
-// at the same time. If that's the case, release managers will want the ability to
-// explicitly specify which partition to use, so that we don't "overwrite" the
-// qualification of one release candidate by pushing a second release candidate
-// to the same cluster. Tracked in: https://cockroachlabs.atlassian.net/browse/RE-83
-func createSREIssue(client *jiraClient, release releaseInfo, dryRun bool) (jiraIssue, error) {
-	templateArgs := sreIssueTemplateArgs{
-		Version: release.nextReleaseVersion,
-		Tag:     release.buildInfo.Tag,
-	}
-	description, err := templateToText(templateArgs, sreIssueTemplate)
-	if err != nil {
-		return jiraIssue{}, fmt.Errorf("cannot parse SRE issue template: %w", err)
-	}
-	projectKey := "SREOPS"
-	summary := fmt.Sprintf("Deploy %s to release qualification cluster", release.nextReleaseVersion)
-	if dryRun {
-		projectKey = sreDryRunProject
-	}
-	issue := newIssue(&jiraIssue{
-		ProjectKey:  projectKey,
-		TypeName:    "Task",
 		Summary:     summary,
 		Description: description,
 	})

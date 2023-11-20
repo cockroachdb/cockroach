@@ -65,14 +65,18 @@ func TestRefreshError(t *testing.T) {
 				},
 				ReadTimestamp: ts2,
 			}
-			if err := storage.MVCCPut(ctx, db, k, txn.ReadTimestamp, v, storage.MVCCWriteOptions{Txn: txn}); err != nil {
+			if _, err := storage.MVCCPut(
+				ctx, db, k, txn.ReadTimestamp, v, storage.MVCCWriteOptions{Txn: txn},
+			); err != nil {
 				t.Fatal(err)
 			}
 
 			if resolveIntent {
 				intent := roachpb.MakeLockUpdate(txn, roachpb.Span{Key: k})
 				intent.Status = roachpb.COMMITTED
-				if _, _, _, err := storage.MVCCResolveWriteIntent(ctx, db, nil, intent, storage.MVCCResolveWriteIntentOptions{}); err != nil {
+				if _, _, _, _, err := storage.MVCCResolveWriteIntent(
+					ctx, db, nil, intent, storage.MVCCResolveWriteIntentOptions{},
+				); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -137,7 +141,8 @@ func TestRefreshTimestampBounds(t *testing.T) {
 	ts3 := hlc.Timestamp{WallTime: 3}
 
 	// Write to a key at time ts2.
-	require.NoError(t, storage.MVCCPut(ctx, db, k, ts2, v, storage.MVCCWriteOptions{}))
+	_, err := storage.MVCCPut(ctx, db, k, ts2, v, storage.MVCCWriteOptions{})
+	require.NoError(t, err)
 
 	for _, tc := range []struct {
 		from, to hlc.Timestamp

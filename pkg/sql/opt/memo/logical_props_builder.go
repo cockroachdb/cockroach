@@ -1109,6 +1109,10 @@ func (b *logicalPropsBuilder) buildExportProps(export *ExportExpr, rel *props.Re
 	b.buildBasicProps(export, export.Columns, rel)
 }
 
+func (b *logicalPropsBuilder) buildCallProps(c *CallExpr, rel *props.Relational) {
+	b.buildBasicProps(c, opt.ColList{}, rel)
+}
+
 func (b *logicalPropsBuilder) buildTopKProps(topK *TopKExpr, rel *props.Relational) {
 	// TopK has the same logical properties as limit.
 	b.buildLimitOrTopKProps(topK, rel, topK.K, true /* haveConstLimit */)
@@ -1512,6 +1516,25 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	}
 }
 
+func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relational) {
+	BuildSharedProps(lock, &rel.Shared, b.evalCtx)
+
+	private := lock.Private().(*LockPrivate)
+	inputProps := lock.Child(0).(RelExpr).Relational()
+
+	rel.OutputCols = inputProps.OutputCols.Copy()
+	rel.NotNullCols = inputProps.NotNullCols.Copy()
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	rel.Cardinality = inputProps.Cardinality
+	if private.Locking.WaitPolicy == tree.LockWaitSkipLocked {
+		// SKIP LOCKED can act like a filter.
+		rel.Cardinality = rel.Cardinality.AsLowAs(0)
+	}
+	if !b.disableStats {
+		b.sb.buildLock(lock, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildCreateTableProps(ct *CreateTableExpr, rel *props.Relational) {
 	BuildSharedProps(ct, &rel.Shared, b.evalCtx)
 }
@@ -1563,7 +1586,7 @@ func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *p
 				// then x is functionally determined by the columns that appear in the
 				// expression.
 				if !scalar.VolatilitySet.HasVolatile() &&
-					!CanBeCompositeSensitive(b.mem.Metadata(), eq.Right) {
+					!CanBeCompositeSensitive(eq.Right) {
 					outerCols := getOuterCols(eq.Right)
 					if !outerCols.Contains(leftVar.Col) {
 						scalar.FuncDeps.AddSynthesizedCol(getOuterCols(eq.Right), leftVar.Col)
@@ -1916,7 +1939,7 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 			// This does not necessarily hold for "composite" types like decimals or
 			// collated strings. For example if d is a decimal, d::TEXT can have
 			// different values for equal values of d, like 1 and 1.0.
-			if !CanBeCompositeSensitive(md, expr) {
+			if !CanBeCompositeSensitive(expr) {
 				fd.AddSynthesizedCol(from, colID)
 			}
 		}
@@ -2809,7 +2832,7 @@ func deriveWithUses(r opt.Expr) props.WithUsesMap {
 // This property is used to determine when a scalar expression can be copied,
 // with outer column variable references changed to refer to other columns that
 // are known to be equal to the original columns.
-func CanBeCompositeSensitive(md *opt.Metadata, e opt.Expr) bool {
+func CanBeCompositeSensitive(e opt.Expr) bool {
 	// check is a recursive function which returns the following:
 	//  - isCompositeInsensitive as defined above.
 	//  - isCompositeIdentical is a stronger property, which says that for equal

@@ -260,25 +260,17 @@ const buildFileTemplate = `load("@io_bazel_rules_go//go:def.bzl", "go_test")
 go_test(
     name = "{{ .TestRuleName }}_test",
     size = "enormous",
-    srcs = ["generated_test.go"],{{ if .SqliteLogicTest }}
-    args = ["-test.timeout=7195s"],{{ else }}
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),{{ end }}
+    srcs = ["generated_test.go"],
     data = [
         "//c-deps:libgeos",  # keep{{ if .SqliteLogicTest }}
         "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CockroachGoTestserverTest }}
         "//pkg/cmd/cockroach-short",  # keep{{ end }}{{ if .CclLogicTest }}
-        "//pkg/ccl/logictestccl:testdata",  # keep{{ end }}{{ if .LogicTest }}
+        "//pkg/ccl/logictestccl:testdata",  # keep{{ end }}{{ if .CockroachGoTestserverTest }}
+        "//pkg/sql/logictest:cockroach_predecessor_version",  # keep{{ end }}{{ if .LogicTest }}
         "//pkg/sql/logictest:testdata",  # keep{{ end }}{{ if .ExecBuildLogicTest }}
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
     ],
-    exec_properties = {{ if eq .TestRuleName "cockroach-go-testserver-upgrade-to-master" }}{
-        "dockerNetwork": "standard",
-        {{ else }}{
-        {{ end }}"Pool": "large",
-    },
+    exec_properties = {"Pool": "large"},
     shard_count = {{ if gt .TestCount 48 }}48{{ else }}{{ .TestCount }}{{end}},
     tags = [{{ if .Ccl }}
         "ccl_test",{{ end }}

@@ -22,7 +22,6 @@ go_test(
     name = "optfmt_test",
     size = "small",
     srcs = ["main_test.go"],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":optfmt_lib"],
     deps = [

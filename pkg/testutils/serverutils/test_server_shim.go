@@ -20,6 +20,7 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
@@ -47,14 +49,26 @@ import (
 // If you see this message, the test server was configured to route SQL queries
 // to a virtual cluster (secondary tenant). If you are only seeing a test
 // failure when this message appears, there may be a problem specific to cluster
-// virtualization or multi-tenancy.
+// virtualization or multi-tenancy. A virtual cluster can be started either as a
+// shared process or as an external process. The problem may be specific to one
+// of these modes, so it is important to note which mode was used from the log
+// message.
 //
 // To investigate, consider using "COCKROACH_TEST_TENANT=true" to force-enable
 // just the virtual cluster in all runs (or, alternatively, "false" to
 // force-disable), or use "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true"
 // to disable all random test variables altogether.`
 
-const defaultTestTenantMessage = `automatically injected virtual cluster under test; see comment at top of test_server_shim.go for details.`
+var defaultTestTenantMessage = func(sharedProcess bool) string {
+	processModeMessage := "an external process"
+	if sharedProcess {
+		processModeMessage = "a shared process"
+	}
+	return fmt.Sprintf(
+		`automatically injected %s virtual cluster under test; see comment at top of test_server_shim.go for details.`,
+		processModeMessage,
+	)
+}
 
 var PreventStartTenantError = errors.New("attempting to manually start a virtual cluster while " +
 	"DefaultTestTenant is set to TestTenantProbabilisticOnly")
@@ -73,10 +87,7 @@ var PreventStartTenantError = errors.New("attempting to manually start a virtual
 func ShouldStartDefaultTestTenant(
 	t TestLogger, baseArg base.DefaultTestTenantOptions,
 ) (retval base.DefaultTestTenantOptions) {
-	// Explicit cases for enabling or disabling the default test tenant.
-	if baseArg.TestTenantAlwaysEnabled() {
-		return baseArg
-	}
+	// Explicit case for disabling the default test tenant.
 	if baseArg.TestTenantAlwaysDisabled() {
 		if issueNum, label := baseArg.IssueRef(); issueNum != 0 {
 			t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
@@ -91,27 +102,51 @@ func ShouldStartDefaultTestTenant(
 		return base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461)
 	}
 
-	// Obey the env override if present.
-	if str, present := envutil.EnvString("COCKROACH_TEST_TENANT", 0); present {
-		v, err := strconv.ParseBool(str)
-		if err != nil {
-			panic(err)
+	// If the test tenant is explicitly enabled and a process mode selected, then
+	// we are done.
+	if !baseArg.TestTenantNoDecisionMade() {
+		return baseArg
+	}
+
+	// Determine if the default test tenant should be run as a shared process.
+	// TODO(herko): We should add an environment variable override for this.
+	// See also: https://github.com/cockroachdb/cockroach/issues/113294
+	var shared bool
+	switch {
+	case baseArg.SharedProcessMode():
+		shared = true
+	case baseArg.ExternalProcessMode():
+		shared = false
+	default:
+		// If no explicit process mode was selected, then randomly select one.
+		rng, _ := randutil.NewTestRand()
+		shared = rng.Intn(2) == 0
+	}
+
+	// Explicit case for enabling the default test tenant, but with a
+	// probabilistic selection made for running as a shared or external process.
+	if baseArg.TestTenantAlwaysEnabled() {
+		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
+	}
+
+	if decision, override := testTenantDecisionFromEnvironment(baseArg, shared); override {
+		if decision.TestTenantAlwaysEnabled() {
+			t.Log(defaultTestTenantMessage(decision.SharedProcessMode()) + "\n(override via COCKROACH_TEST_TENANT)")
 		}
-		if v {
-			t.Log(defaultTestTenantMessage + "\n(override via COCKROACH_TEST_TENANT)")
-			return base.InternalNonDefaultDecision(baseArg, true)
-		}
-		return base.InternalNonDefaultDecision(baseArg, false)
+		return decision
 	}
 
 	if globalDefaultSelectionOverride.isSet {
 		override := globalDefaultSelectionOverride.value
+		if override.TestTenantNoDecisionMade() {
+			panic("programming error: global override does not contain a final decision")
+		}
 		if override.TestTenantAlwaysDisabled() {
 			if issueNum, label := override.IssueRef(); issueNum != 0 {
 				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
 			}
 		} else {
-			t.Log(defaultTestTenantMessage + "\n(override via TestingSetDefaultTenantSelectionOverride)")
+			t.Log(defaultTestTenantMessage(shared) + "\n(override via TestingSetDefaultTenantSelectionOverride)")
 		}
 		return override
 	}
@@ -121,12 +156,56 @@ func ShouldStartDefaultTestTenant(
 	// more often than not and that is what we want.
 	enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
 	if enabled && t != nil {
-		t.Log(defaultTestTenantMessage)
+		t.Log(defaultTestTenantMessage(shared))
 	}
 	if enabled {
-		return base.InternalNonDefaultDecision(baseArg, true)
+		return base.InternalNonDefaultDecision(baseArg, true /* enable */, shared /* shared */)
 	}
-	return base.InternalNonDefaultDecision(baseArg, false)
+	return base.InternalNonDefaultDecision(baseArg, false /* enable */, false /* shared */)
+}
+
+const (
+	// COCKROACH_TEST_TENANT controls whether a secondary tenant
+	// is used by a TestServer-based test.
+	//
+	// - false disables the use of tenants;
+	//
+	// - true forces the use of tenants, randomly deciding between
+	//   an external or shared process tenant;
+	//
+	// - shared forces the use of a tenant, always starting a
+	//   shared process tenant;
+	//
+	// - external forces the use of a tenant, always starting a
+	//   separate process tenant.
+	testTenantEnabledEnvVar = "COCKROACH_TEST_TENANT"
+
+	testTenantModeEnabledShared   = "shared"
+	testTenantModeEnabledExternal = "external"
+)
+
+func testTenantDecisionFromEnvironment(
+	baseArg base.DefaultTestTenantOptions, shared bool,
+) (base.DefaultTestTenantOptions, bool) {
+	if str, present := envutil.EnvString(testTenantEnabledEnvVar, 0); present {
+		v, err := strconv.ParseBool(str)
+		if err == nil {
+			if v {
+				return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */), true
+			}
+			return base.InternalNonDefaultDecision(baseArg, false /* enabled */, false /* shared */), true
+		}
+
+		switch str {
+		case testTenantModeEnabledShared:
+			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, true /* shared */), true
+		case testTenantModeEnabledExternal:
+			return base.InternalNonDefaultDecision(baseArg, true /* enabled */, false /* shared */), true
+		default:
+			panic(fmt.Sprintf("invalid value for %s: %s", testTenantEnabledEnvVar, str))
+		}
+	}
+	return baseArg, false
 }
 
 // globalDefaultSelectionOverride is used when an entire package needs
@@ -231,7 +310,7 @@ func StartServer(
 	t TestFataler, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
 	s := StartServerOnly(t, params)
-	goDB := s.ApplicationLayer().SQLConn(t, params.UseDatabase)
+	goDB := s.ApplicationLayer().SQLConn(t, DBName(params.UseDatabase))
 	kvDB := s.ApplicationLayer().DB()
 	return s, goDB, kvDB
 }
@@ -243,7 +322,7 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 			"from the package's TestMain()")
 	}
 	tcfg := params.DefaultTestTenant
-	if !(tcfg.TestTenantAlwaysEnabled() || tcfg.TestTenantAlwaysDisabled()) {
+	if tcfg.TestTenantNoDecisionMade() {
 		return nil, errors.AssertionFailedf("programming error: DefaultTestTenant does not contain a decision\n(maybe call ShouldStartDefaultTestTenant?)")
 	}
 
@@ -310,14 +389,14 @@ func StartTenant(
 		t.Fatalf("%+v", err)
 	}
 
-	goDB := tenant.SQLConn(t, params.UseDatabase)
+	goDB := tenant.SQLConn(t, DBName(params.UseDatabase))
 	return tenant, goDB
 }
 
 func StartSharedProcessTenant(
 	t TestFataler, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
-	tenant, goDB, err := ts.StartSharedProcessTenant(context.Background(), params)
+	tenant, goDB, err := ts.TenantController().StartSharedProcessTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -360,8 +439,8 @@ func GetJSONProtoWithAdminOption(
 	if err != nil {
 		return err
 	}
-	u := ts.AdminURL().String()
-	fullURL := u + path
+	u := ts.AdminURL()
+	fullURL := u.WithPath(path).String()
 	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	return httputil.GetJSON(httpClient, fullURL, response)
 }
@@ -380,8 +459,8 @@ func GetJSONProtoWithAdminAndTimeoutOption(
 		return err
 	}
 	httpClient.Timeout += additionalTimeout
-	u := ts.AdminURL().String()
-	fullURL := u + path
+	u := ts.AdminURL()
+	fullURL := u.WithPath(path).String()
 	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	log.Infof(context.Background(), "set HTTP client timeout to: %s", httpClient.Timeout)
 	return httputil.GetJSON(httpClient, fullURL, response)

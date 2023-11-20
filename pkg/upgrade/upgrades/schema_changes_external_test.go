@@ -245,8 +245,8 @@ func testMigrationWithFailures(
 
 	// We're going to be migrating from the minimum supported version to the
 	// "next" version. We'll be injecting the migration for the next version.
-	startKey := clusterversion.BinaryMinSupportedVersionKey
-	startCV := clusterversion.ByKey(startKey)
+	startKey := clusterversion.MinSupported
+	startCV := startKey.Version()
 	endCV := startCV
 	endCV.Internal += 2
 
@@ -341,7 +341,6 @@ func testMigrationWithFailures(
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
 							BinaryVersionOverride:          startCV,
-							BootstrapVersionKeyOverride:    startKey,
 						},
 						JobsTestingKnobs: jobsKnobs,
 						SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -366,6 +365,7 @@ func testMigrationWithFailures(
 										endCV,
 										upgrade.NoPrecondition,
 										migrationFunc,
+										upgrade.RestoreActionNotRequired("test"),
 									), true
 								}
 								panic("unexpected version")

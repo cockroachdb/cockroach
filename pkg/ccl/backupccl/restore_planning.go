@@ -93,7 +93,7 @@ var allowedDebugPauseOnValues = map[string]struct{}{
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
 var featureRestoreEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"feature.restore.enabled",
 	"set to true to enable restore, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
@@ -1077,10 +1077,17 @@ func resolveOptionsForRestoreJobDescription(
 		SkipMissingViews:                 opts.SkipMissingViews,
 		SkipMissingUDFs:                  opts.SkipMissingUDFs,
 		Detached:                         opts.Detached,
+		SkipLocalitiesCheck:              opts.SkipLocalitiesCheck,
+		DebugPauseOn:                     opts.DebugPauseOn,
+		IncludeAllSecondaryTenants:       opts.IncludeAllSecondaryTenants,
+		AsTenant:                         opts.AsTenant,
+		ForceTenantID:                    opts.ForceTenantID,
 		SchemaOnly:                       opts.SchemaOnly,
 		VerifyData:                       opts.VerifyData,
 		UnsafeRestoreIncompatibleVersion: opts.UnsafeRestoreIncompatibleVersion,
+		ExecutionLocality:                opts.ExecutionLocality,
 		ExperimentalOnline:               opts.ExperimentalOnline,
+		RemoveRegions:                    opts.RemoveRegions,
 	}
 
 	if opts.EncryptionPassphrase != nil {
@@ -1223,6 +1230,11 @@ func restorePlanHook(
 		return nil, nil, nil, false, err
 	}
 
+	if restoreStmt.Options.RemoveRegions && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V23_2) {
+		return nil, nil, nil, false,
+			errors.Newf("to set the remove_regions option, cluster version must be >= %s", clusterversion.V23_2.String())
+	}
+
 	if !restoreStmt.Options.SchemaOnly && restoreStmt.Options.VerifyData {
 		return nil, nil, nil, false,
 			errors.New("to set the verify_backup_table_data option, the schema_only option must be set")
@@ -1347,6 +1359,12 @@ func restorePlanHook(
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
+	}
+
+	if restoreStmt.Options.ExperimentalOnline && !restoreStmt.Targets.TenantID.IsSet() {
+		// TODO(ssd): Disable this once it is less annoying to
+		// disable it in tests.
+		log.Warningf(ctx, "running non-tenant online RESTORE; this is dangerous and will only work if you know exactly what you are doing")
 	}
 
 	var newTenantID *roachpb.TenantID
@@ -1634,7 +1652,7 @@ func checkBackupManifestVersionCompatability(
 
 	// We support restoring a backup that was taken on a cluster with a cluster
 	// version >= the earliest binary version that we can interoperate with.
-	minimumRestoreableVersion := version.BinaryMinSupportedVersion()
+	minimumRestoreableVersion := version.MinSupportedVersion()
 	currentActiveVersion := version.ActiveVersion(ctx)
 
 	for i := range mainBackupManifests {
@@ -1844,8 +1862,13 @@ func doRestorePlan(
 	err = checkBackupManifestVersionCompatability(ctx, p.ExecCfg().Settings.Version,
 		mainBackupManifests, restoreStmt.Options.UnsafeRestoreIncompatibleVersion)
 	if err != nil {
-
 		return err
+	}
+
+	if restoreStmt.Options.ExperimentalOnline {
+		if err := checkManifestsForOnlineCompat(ctx, mainBackupManifests); err != nil {
+			return err
+		}
 	}
 
 	if restoreStmt.DescriptorCoverage == tree.AllDescriptors {
@@ -1857,10 +1880,10 @@ func doRestorePlan(
 		// Validate that we aren't in the middle of an upgrade. To avoid unforseen
 		// issues, we want to avoid full cluster restores if it is possible that an
 		// upgrade is in progress. We also check this during Resume.
-		binaryVersion := p.ExecCfg().Settings.Version.BinaryVersion()
+		latestVersion := p.ExecCfg().Settings.Version.LatestVersion()
 		clusterVersion := p.ExecCfg().Settings.Version.ActiveVersion(ctx).Version
-		if clusterVersion.Less(binaryVersion) {
-			return clusterRestoreDuringUpgradeErr(clusterVersion, binaryVersion)
+		if clusterVersion.Less(latestVersion) {
+			return clusterRestoreDuringUpgradeErr(clusterVersion, latestVersion)
 		}
 	}
 
@@ -2029,6 +2052,14 @@ func doRestorePlan(
 		}
 	}
 
+	if restoreStmt.Options.RemoveRegions {
+		for _, t := range tablesByID {
+			if t.LocalityConfig.GetRegionalByRow() != nil {
+				return errors.Newf("cannot perform a remove_regions RESTORE with region by row enabled table %s in BACKUP target", t.Name)
+			}
+		}
+	}
+
 	if !restoreStmt.Options.SkipLocalitiesCheck {
 		if err := checkClusterRegions(ctx, p, typesByID); err != nil {
 			return err
@@ -2071,6 +2102,15 @@ func doRestorePlan(
 		}
 	}
 
+	// If we are stripping localities, wipe tables of their LocalityConfig before we allocate
+	// descriptor rewrites - as validation in remapTables compares these tables with the non-mr
+	// database and fails otherwise
+	if restoreStmt.Options.RemoveRegions {
+		for _, t := range filteredTablesByID {
+			t.TableDesc().LocalityConfig = nil
+		}
+	}
+
 	descriptorRewrites, err := allocateDescriptorRewrites(
 		ctx,
 		p,
@@ -2093,6 +2133,13 @@ func doRestorePlan(
 	} else {
 		fromDescription = from
 	}
+
+	if restoreStmt.Options.ExperimentalOnline {
+		if err := checkRewritesAreNoops(descriptorRewrites); err != nil {
+			return err
+		}
+	}
+
 	description, err := restoreJobDescription(
 		ctx,
 		p,
@@ -2187,6 +2234,7 @@ func doRestorePlan(
 		SkipLocalitiesCheck: restoreStmt.Options.SkipLocalitiesCheck,
 		ExecutionLocality:   execLocality,
 		ExperimentalOnline:  restoreStmt.Options.ExperimentalOnline,
+		RemoveRegions:       restoreStmt.Options.RemoveRegions,
 	}
 
 	jr := jobs.Record{

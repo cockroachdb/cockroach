@@ -1,0 +1,47 @@
+parse
+SHOW FUNCTIONS FROM db.sc
+----
+SHOW FUNCTIONS FROM db.sc
+SHOW FUNCTIONS FROM db.sc -- fully parenthesized
+SHOW FUNCTIONS FROM db.sc -- literals removed
+SHOW FUNCTIONS FROM _._ -- identifiers removed
+
+parse
+SHOW FUNCTIONS FROM sc
+----
+SHOW FUNCTIONS FROM sc
+SHOW FUNCTIONS FROM sc -- fully parenthesized
+SHOW FUNCTIONS FROM sc -- literals removed
+SHOW FUNCTIONS FROM _ -- identifiers removed
+
+parse
+SHOW FUNCTIONS
+----
+SHOW FUNCTIONS
+SHOW FUNCTIONS -- fully parenthesized
+SHOW FUNCTIONS -- literals removed
+SHOW FUNCTIONS -- identifiers removed
+
+parse
+SHOW PROCEDURES FROM db.sc
+----
+SHOW PROCEDURES FROM db.sc
+SHOW PROCEDURES FROM db.sc -- fully parenthesized
+SHOW PROCEDURES FROM db.sc -- literals removed
+SHOW PROCEDURES FROM _._ -- identifiers removed
+
+parse
+SHOW PROCEDURES FROM sc
+----
+SHOW PROCEDURES FROM sc
+SHOW PROCEDURES FROM sc -- fully parenthesized
+SHOW PROCEDURES FROM sc -- literals removed
+SHOW PROCEDURES FROM _ -- identifiers removed
+
+parse
+SHOW PROCEDURES
+----
+SHOW PROCEDURES
+SHOW PROCEDURES -- fully parenthesized
+SHOW PROCEDURES -- literals removed
+SHOW PROCEDURES -- identifiers removed

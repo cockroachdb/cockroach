@@ -95,9 +95,9 @@ func (p *planner) getCurrentEncodedVersionSettingValue(
 						return errors.AssertionFailedf("no value found for version setting")
 					}
 
-					localRawVal := []byte(s.Get(&st.SV))
+					localVal := s.GetInternal(&st.SV)
 					if err := checkClusterSettingValuesAreEquivalent(
-						localRawVal, kvRawVal,
+						localVal.Encode(), kvRawVal,
 					); err != nil {
 						// NB: errors.Wrapf(nil, ...) returns nil.
 						// nolint:errwrap
@@ -284,7 +284,7 @@ func planShowClusterSetting(
 				}
 			}
 
-			v := p.newContainerValuesNode(columns, 0)
+			v := p.newContainerValuesNode(columns, 1)
 			if _, err := v.rows.AddRow(ctx, tree.Datums{d}); err != nil {
 				v.rows.Close(ctx)
 				return nil, err

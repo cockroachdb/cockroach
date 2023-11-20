@@ -322,7 +322,7 @@ func getFirstStoreReplica(
 	t *testing.T, s serverutils.TestServerInterface, key roachpb.Key,
 ) (*kvserver.Store, *kvserver.Replica) {
 	t.Helper()
-	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	store, err := s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	var repl *kvserver.Replica
 	testutils.SucceedsSoon(t, func() error {
@@ -390,7 +390,7 @@ func thresholdFromTrace(t *testing.T, traceString string) hlc.Timestamp {
 	return thresh
 }
 
-func setAndWaitForTenantReadOnlyClusterSetting(
+func setAndWaitForSystemVisibleClusterSetting(
 	t *testing.T,
 	settingName settings.SettingName,
 	systemTenantRunner *sqlutils.SQLRunner,

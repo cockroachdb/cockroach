@@ -427,6 +427,7 @@ func collectASTs(stmts statements.Statements) []tree.NodeFormatter {
 
 func joinASTs(stmts []tree.NodeFormatter) string {
 	var sb strings.Builder
+	var fmtCtx *tree.FmtCtx
 	for i, stmt := range stmts {
 		if i > 0 {
 			sb.WriteString("\n\n")
@@ -438,7 +439,16 @@ func joinASTs(stmts []tree.NodeFormatter) string {
 			UseTabs:   false,
 			Simplify:  true,
 		}
-		sb.WriteString(cfg.Pretty(stmt))
+		p, err := cfg.Pretty(stmt)
+		if err != nil {
+			// Use simple printing if pretty-printing fails.
+			if fmtCtx == nil {
+				fmtCtx = tree.NewFmtCtx(tree.FmtParsable)
+			}
+			stmt.Format(fmtCtx)
+			p = fmtCtx.CloseAndGetString()
+		}
+		sb.WriteString(p)
 		sb.WriteString(";")
 	}
 	return sb.String()

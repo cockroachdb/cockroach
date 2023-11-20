@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -30,7 +29,7 @@ import (
 
 const externalConnectionOp = "CREATE EXTERNAL CONNECTION"
 
-type createExternalConectionNode struct {
+type createExternalConnectionNode struct {
 	n *tree.CreateExternalConnection
 }
 
@@ -38,10 +37,10 @@ type createExternalConectionNode struct {
 func (p *planner) CreateExternalConnection(
 	ctx context.Context, n *tree.CreateExternalConnection,
 ) (planNode, error) {
-	return &createExternalConectionNode{n: n}, nil
+	return &createExternalConnectionNode{n: n}, nil
 }
 
-func (c *createExternalConectionNode) startExec(params runParams) error {
+func (c *createExternalConnectionNode) startExec(params runParams) error {
 	return params.p.createExternalConnection(params, c.n)
 }
 
@@ -69,12 +68,6 @@ func (p *planner) createExternalConnection(
 	params runParams, n *tree.CreateExternalConnection,
 ) error {
 	txn := p.InternalSQLTxn()
-
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODODelete_V22_2SystemExternalConnectionsTable) {
-		return pgerror.Newf(pgcode.FeatureNotSupported,
-			"version %v must be finalized to create an External Connection",
-			clusterversion.ByKey(clusterversion.TODODelete_V22_2SystemExternalConnectionsTable))
-	}
 
 	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject,
 		privilege.EXTERNALCONNECTION); err != nil {
@@ -136,18 +129,17 @@ func (p *planner) createExternalConnection(
 	ex.SetConnectionDetails(*exConn.ConnectionProto())
 	ex.SetConnectionType(exConn.ConnectionType())
 	ex.SetOwner(p.User())
-	if p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V23_1ExternalConnectionsTableHasOwnerIDColumn) {
-		row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			`SELECT user_id FROM system.users WHERE username = $1`,
-			p.User(),
-		)
-		if err != nil {
-			return errors.Wrap(err, "failed to get owner ID for External Connection")
-		}
-		ownerID := tree.MustBeDOid(row[0]).Oid
-		ex.SetOwnerID(ownerID)
+
+	row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT user_id FROM system.users WHERE username = $1`,
+		p.User(),
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to get owner ID for External Connection")
 	}
+	ownerID := tree.MustBeDOid(row[0]).Oid
+	ex.SetOwnerID(ownerID)
 
 	// Create the External Connection and persist it in the
 	// `system.external_connections` table.
@@ -176,6 +168,6 @@ func logAndSanitizeExternalConnectionURI(ctx context.Context, externalConnection
 	return nil
 }
 
-func (c *createExternalConectionNode) Next(_ runParams) (bool, error) { return false, nil }
-func (c *createExternalConectionNode) Values() tree.Datums            { return nil }
-func (c *createExternalConectionNode) Close(_ context.Context)        {}
+func (c *createExternalConnectionNode) Next(_ runParams) (bool, error) { return false, nil }
+func (c *createExternalConnectionNode) Values() tree.Datums            { return nil }
+func (c *createExternalConnectionNode) Close(_ context.Context)        {}

@@ -4,18 +4,12 @@ go_test(
     name = "multiregion-9node-3region-3azs-tenant_test",
     size = "enormous",
     srcs = ["generated_test.go"],
-    args = select({
-        "//build/toolchains:use_ci_timeouts": ["-test.timeout=895s"],
-        "//conditions:default": ["-test.timeout=3595s"],
-    }),
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/ccl/logictestccl:testdata",  # keep
     ],
-    exec_properties = {
-        "Pool": "large",
-    },
-    shard_count = 15,
+    exec_properties = {"Pool": "large"},
+    shard_count = 16,
     tags = [
         "ccl_test",
         "cpu:4",

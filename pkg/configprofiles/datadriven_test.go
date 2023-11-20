@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/configprofiles"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -31,10 +30,6 @@ import (
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// We need this to avoid a race condition in TestServer.
-	// See: #104500.
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 
@@ -77,7 +72,7 @@ func TestDataDriven(t *testing.T) {
 				// We need to force the connection to the system tenant,
 				// because at least one of the config profiles changes the
 				// default tenant.
-				sysTenantDB := s.SystemLayer().SQLConn(t, "defaultdb")
+				sysTenantDB := s.SystemLayer().SQLConn(t, serverutils.DBName("defaultdb"))
 				db = sqlutils.MakeSQLRunner(sysTenantDB)
 				res.WriteString("server started\n")
 
@@ -118,7 +113,7 @@ AND   status = 'succeeded'`).Scan(&numTasksCompleted)
 					t.Fatalf("%s: must use profile before sql", d.Pos)
 				}
 				testutils.SucceedsSoon(t, func() error {
-					goDB := s.SystemLayer().SQLConn(t, "cluster:"+d.Input+"/defaultdb")
+					goDB := s.SystemLayer().SQLConn(t, serverutils.DBName("cluster:"+d.Input+"/defaultdb"))
 					return goDB.Ping()
 				})
 				return "ok"

@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/descmetadata",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/settings",
         "//pkg/sql/catalog/descpb",
@@ -22,7 +23,6 @@ go_library(
 go_test(
     name = "descmetadata_test",
     srcs = ["main_test.go"],
-    args = ["-test.timeout=295s"],
     deps = [
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

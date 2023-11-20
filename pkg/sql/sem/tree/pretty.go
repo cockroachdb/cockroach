@@ -157,13 +157,13 @@ func (p *PrettyCfg) bracketKeyword(
 }
 
 // Pretty pretty prints stmt with default options.
-func Pretty(stmt NodeFormatter) string {
+func Pretty(stmt NodeFormatter) (string, error) {
 	cfg := DefaultPrettyCfg()
 	return cfg.Pretty(stmt)
 }
 
 // Pretty pretty prints stmt with specified options.
-func (p *PrettyCfg) Pretty(stmt NodeFormatter) string {
+func (p *PrettyCfg) Pretty(stmt NodeFormatter) (string, error) {
 	doc := p.Doc(stmt)
 	return pretty.Pretty(doc, p.LineWidth, p.UseTabs, p.TabWidth, p.Case)
 }

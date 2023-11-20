@@ -16,7 +16,6 @@ go_library(
 go_test(
     name = "router_test",
     srcs = ["event_router_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":router"],
     deps = [
         "//pkg/obsservice/obslib",

@@ -55,15 +55,16 @@ apt-get install --yes \
   python2 \
   python3 \
   sudo \
-  unzip
+  unzip \
+  zip
 
 # Enable support for executing binaries of all architectures via qemu emulation
 # (necessary for building arm64 Docker images)
 apt-get install --yes qemu binfmt-support qemu-user-static
 
 # Verify that both of the platforms we support Docker for can be built.
-docker run --attach=stdout --attach=stderr --platform=linux/amd64 --rm --pull=always registry.access.redhat.com/ubi8/ubi-minimal uname -p
-docker run --attach=stdout --attach=stderr --platform=linux/arm64 --rm --pull=always registry.access.redhat.com/ubi8/ubi-minimal uname -p
+docker run --attach=stdout --attach=stderr --platform=linux/amd64 --rm --pull=always registry.access.redhat.com/ubi9/ubi-minimal uname -p
+docker run --attach=stdout --attach=stderr --platform=linux/arm64 --rm --pull=always registry.access.redhat.com/ubi9/ubi-minimal uname -p
 
 case $ARCH in
     x86_64) WHICH=x86_64; SHASUM=97bf730372f9900b2dfb9206fccbcf92f5c7f3b502148b832e77451aa0f9e0e6 ;;
@@ -76,10 +77,12 @@ EOF
 tar --strip-components=1 -C /usr -xzf /tmp/cmake.tar.gz
 rm -f /tmp/cmake.tar.gz
 
+# NB: The Go version should match up to the version required by managed-service.
+# CRDB builds use Bazel and therefore have no dependency on the globally-installed Go CLI.
 if [[ $ARCH = x86_64 ]]; then
-    curl -fsSL https://dl.google.com/go/go1.20.7.linux-amd64.tar.gz > /tmp/go.tgz
+    curl -fsSL https://dl.google.com/go/go1.21.3.linux-amd64.tar.gz > /tmp/go.tgz
     sha256sum -c - <<EOF
-f0a87f1bcae91c4b69f8dc2bc6d7e6bfcd7524fceec130af525058c0c17b1b44  /tmp/go.tgz
+1241381b2843fae5a9707eec1f8fb2ef94d827990582c7c7c32f5bdfbfd420c8  /tmp/go.tgz
 EOF
     tar -C /usr/local -zxf /tmp/go.tgz && rm /tmp/go.tgz
     # Explicitly symlink the pinned version to /usr/bin.

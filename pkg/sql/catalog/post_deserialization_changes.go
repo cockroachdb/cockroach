@@ -31,6 +31,11 @@ func (c *PostDeserializationChanges) Add(change PostDeserializationChangeType) {
 	c.s.Add(int(change))
 }
 
+// Len returns length of the set of changes.
+func (c PostDeserializationChanges) Len() int {
+	return c.s.Len()
+}
+
 // ForEach calls f for every change in the set of changes.
 func (c PostDeserializationChanges) ForEach(f func(change PostDeserializationChangeType)) {
 	c.s.ForEach(func(i int) { f(PostDeserializationChangeType(i)) })
@@ -127,4 +132,8 @@ const (
 	// FixSecondaryIndexEncodingType indicates that a secondary index had its
 	// encoding type fixed, so it is not incorrectly marked as a primary index.
 	FixSecondaryIndexEncodingType
+
+	// GrantExecuteOnFunctionToPublicRole indicates that EXECUTE was granted
+	// to the public role for a function.
+	GrantExecuteOnFunctionToPublicRole
 )

@@ -126,7 +126,8 @@ func createRangeData(
 	})
 
 	for _, pk := range ps {
-		require.NoError(t, storage.MVCCPut(ctx, eng, pk.Key, pk.Timestamp, value, storage.MVCCWriteOptions{LocalTimestamp: localTS}))
+		_, err := storage.MVCCPut(ctx, eng, pk.Key, pk.Timestamp, value, storage.MVCCWriteOptions{LocalTimestamp: localTS})
+		require.NoError(t, err)
 	}
 	for _, rk := range rs {
 		require.NoError(t, eng.PutMVCCRangeKey(rk, storage.MVCCValue{}))
@@ -162,7 +163,8 @@ func verifyIterateReplicaKeySpans(
 		"pretty",
 	})
 
-	require.NoError(t, IterateReplicaKeySpans(desc, readWriter, replicatedOnly, replicatedSpansFilter,
+	require.NoError(t, IterateReplicaKeySpans(context.Background(), desc, readWriter, replicatedOnly,
+		replicatedSpansFilter,
 		func(iter storage.EngineIterator, span roachpb.Span, keyType storage.IterKeyType) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
@@ -355,7 +357,7 @@ func TestIterateMVCCReplicaKeySpansSpansSet(t *testing.T) {
 		var rangeStart roachpb.Key
 		var actualKeys []storage.MVCCKey
 		var actualRanges []storage.MVCCRangeKey
-		err := IterateMVCCReplicaKeySpans(&desc, readWriter, IterateOptions{
+		err := IterateMVCCReplicaKeySpans(context.Background(), &desc, readWriter, IterateOptions{
 			CombineRangesAndPoints: false,
 			Reverse:                reverse,
 		}, func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
@@ -464,11 +466,12 @@ func TestReplicaDataIteratorGlobalRangeKey(t *testing.T) {
 				if replicatedOnly {
 					expectedSpans = MakeReplicatedKeySpans(&desc)
 				} else {
-					expectedSpans = makeAllKeySpans(&desc)
+					expectedSpans = MakeAllKeySpans(&desc)
 				}
 
 				var actualSpans []roachpb.Span
-				require.NoError(t, IterateReplicaKeySpans(&desc, snapshot, replicatedOnly, ReplicatedSpansAll,
+				require.NoError(t, IterateReplicaKeySpans(
+					context.Background(), &desc, snapshot, replicatedOnly, ReplicatedSpansAll,
 					func(iter storage.EngineIterator, span roachpb.Span, keyType storage.IterKeyType) error {
 						// We should never see any point keys.
 						require.Equal(t, storage.IterKeyTypeRangesOnly, keyType)
@@ -500,7 +503,7 @@ func TestReplicaKeyRanges(t *testing.T) {
 		StartKey: roachpb.RKeyMin,
 		EndKey:   roachpb.RKeyMax,
 	}
-	checkOrdering(t, makeAllKeySpans(&desc))
+	checkOrdering(t, MakeAllKeySpans(&desc))
 	checkOrdering(t, MakeReplicatedKeySpans(&desc))
 	checkOrdering(t, makeReplicatedKeySpansExceptLockTable(&desc))
 }
@@ -554,7 +557,7 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 
 	for _, desc := range descs {
 		var keyBuf roachpb.Key
-		keySpans := makeAllKeySpans(&desc)
+		keySpans := MakeAllKeySpans(&desc)
 		for i := 0; i < numKeysPerRange; i++ {
 			keyBuf = append(keyBuf[:0], keySpans[i%len(keySpans)].Key...)
 			keyBuf = append(keyBuf, 0, 0, 0, 0)
@@ -575,7 +578,8 @@ func benchReplicaEngineDataIterator(b *testing.B, numRanges, numKeysPerRange, va
 
 	for i := 0; i < b.N; i++ {
 		for _, desc := range descs {
-			err := IterateReplicaKeySpans(&desc, snapshot, false /* replicatedOnly */, ReplicatedSpansAll,
+			err := IterateReplicaKeySpans(
+				context.Background(), &desc, snapshot, false /* replicatedOnly */, ReplicatedSpansAll,
 				func(iter storage.EngineIterator, _ roachpb.Span, _ storage.IterKeyType) error {
 					var err error
 					for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
@@ -692,7 +696,7 @@ func TestIterateMVCCReplicaKeySpans(t *testing.T) {
 				t.Run("sequential", func(t *testing.T) {
 					var actualSpans []roachpb.Span
 					var actualPoints []roachpb.Key
-					require.NoError(t, IterateMVCCReplicaKeySpans(&d.desc, snapshot,
+					require.NoError(t, IterateMVCCReplicaKeySpans(context.Background(), &d.desc, snapshot,
 						IterateOptions{CombineRangesAndPoints: false, Reverse: reverse},
 						func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
 							if keyType == storage.IterKeyTypePointsOnly {
@@ -734,7 +738,8 @@ func TestIterateMVCCReplicaKeySpans(t *testing.T) {
 				t.Run("combined", func(t *testing.T) {
 					var actualSpans []roachpb.Span
 					var actualPoints []roachpb.Key
-					require.NoError(t, IterateMVCCReplicaKeySpans(&d.desc, snapshot, IterateOptions{CombineRangesAndPoints: true, Reverse: reverse},
+					require.NoError(t, IterateMVCCReplicaKeySpans(
+						context.Background(), &d.desc, snapshot, IterateOptions{CombineRangesAndPoints: true, Reverse: reverse},
 						func(iter storage.MVCCIterator, span roachpb.Span, keyType storage.IterKeyType) error {
 							actualSpans = append(actualSpans, span.Clone())
 							_, r := iter.HasPointAndRange()

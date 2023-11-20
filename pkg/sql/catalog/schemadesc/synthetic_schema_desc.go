@@ -127,6 +127,11 @@ func (p synthetic) GetObjectType() privilege.ObjectType {
 	return privilege.Schema
 }
 
+// GetObjectTypeString implements the Object interface.
+func (p synthetic) GetObjectTypeString() string {
+	return string(privilege.Schema)
+}
+
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
 func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
 	return catprivilege.MakeDefaultPrivileges(makeSyntheticDefaultPrivilegeDescriptor())

@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -49,6 +50,8 @@ type ReplicaDataIteratorOptions struct {
 type ReplicaMVCCDataIterator struct {
 	ReplicaDataIteratorOptions
 
+	// ctx is used for creating MVCCIterator.
+	ctx      context.Context
 	reader   storage.Reader
 	curIndex int
 	spans    []roachpb.Span
@@ -58,9 +61,9 @@ type ReplicaMVCCDataIterator struct {
 	err error
 }
 
-// makeAllKeySpans returns all key spans for the given Range, in
+// MakeAllKeySpans returns all key spans for the given Range, in
 // sorted order.
-func makeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
+func MakeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
 		ReplicatedBySpan:      d.RSpan(),
 		ReplicatedByRangeID:   true,
@@ -68,18 +71,66 @@ func makeAllKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	})
 }
 
+// MakeAllKeySpanSet is similar to makeAllKeySpans, except it creates a SpanSet
+// instead of a slice of spans. Note that lock table spans are skipped.
+func MakeAllKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
+	spans := Select(d.RangeID, SelectOpts{
+		ReplicatedBySpan:      d.RSpan(),
+		ReplicatedByRangeID:   true,
+		UnreplicatedByRangeID: true,
+		// NB: We don't need to add lock table spans. The caller is expected to add
+		// these.
+		ReplicatedSpansFilter: ReplicatedSpansExcludeLocks,
+	})
+	ss := spanset.New()
+	for _, span := range spans {
+		// Declaring non-MVCC access to the MVCC user keyspan is equivalent to
+		// declaring access at all timestamps.
+		ss.AddNonMVCC(spanset.SpanReadWrite, span)
+	}
+	ss.SortAndDedup()
+	if err := ss.Validate(); err != nil {
+		panic(err)
+	}
+	return ss
+}
+
 // MakeReplicatedKeySpans returns all key spans that are fully Raft
 // replicated for the given Range, in lexicographically sorted order:
 //
 // 1. Replicated range-id local key span.
 // 2. "Local" key span (range descriptor, etc)
-// 3. Lock-table key spans.
-// 4. User key span.
+// 3 and 4. Lock-table key spans.
+// 5. User key span.
 func MakeReplicatedKeySpans(d *roachpb.RangeDescriptor) []roachpb.Span {
 	return Select(d.RangeID, SelectOpts{
 		ReplicatedBySpan:    d.RSpan(),
 		ReplicatedByRangeID: true,
 	})
+}
+
+// MakeReplicatedKeySpanSet is similar to MakeReplicatedKeySpans, except it
+// creates a SpanSet instead of a slice of spans. Note that lock table spans
+// are skipped.
+func MakeReplicatedKeySpanSet(d *roachpb.RangeDescriptor) *spanset.SpanSet {
+	spans := Select(d.RangeID, SelectOpts{
+		ReplicatedBySpan:    d.RSpan(),
+		ReplicatedByRangeID: true,
+		// NB: We don't need to add lock table spans. The caller is expected to add
+		// these.
+		ReplicatedSpansFilter: ReplicatedSpansExcludeLocks,
+	})
+	ss := spanset.New()
+	for _, span := range spans {
+		// Declaring non-MVCC access to the MVCC user keyspan is equivalent to
+		// declaring access at all timestamps.
+		ss.AddNonMVCC(spanset.SpanReadWrite, span)
+	}
+	ss.SortAndDedup()
+	if err := ss.Validate(); err != nil {
+		panic(err)
+	}
+	return ss
 }
 
 // makeReplicatedKeySpansExceptLockTable returns all key spans that are fully Raft
@@ -151,7 +202,10 @@ func makeRangeLocalKeySpan(sp roachpb.RSpan) roachpb.Span {
 // TODO(erikgrinaker): ReplicaMVCCDataIterator does not support MVCC range keys.
 // This should be deprecated in favor of e.g. IterateReplicaKeySpans.
 func NewReplicaMVCCDataIterator(
-	d *roachpb.RangeDescriptor, reader storage.Reader, opts ReplicaDataIteratorOptions,
+	ctx context.Context,
+	d *roachpb.RangeDescriptor,
+	reader storage.Reader,
+	opts ReplicaDataIteratorOptions,
 ) *ReplicaMVCCDataIterator {
 	if !reader.ConsistentIterators() {
 		panic("ReplicaMVCCDataIterator needs a Reader that provides ConsistentIterators")
@@ -162,6 +216,7 @@ func NewReplicaMVCCDataIterator(
 	}
 	ri := &ReplicaMVCCDataIterator{
 		ReplicaDataIteratorOptions: opts,
+		ctx:                        ctx,
 		reader:                     reader,
 		spans:                      spans,
 	}
@@ -184,13 +239,11 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 			return
 		}
 		var err error
-		ri.it, err = ri.reader.NewMVCCIterator(
-			ri.IterKind,
-			storage.IterOptions{
-				LowerBound: ri.spans[ri.curIndex].Key,
-				UpperBound: ri.spans[ri.curIndex].EndKey,
-				KeyTypes:   ri.KeyTypes,
-			})
+		ri.it, err = ri.reader.NewMVCCIterator(ri.ctx, ri.IterKind, storage.IterOptions{
+			LowerBound: ri.spans[ri.curIndex].Key,
+			UpperBound: ri.spans[ri.curIndex].EndKey,
+			KeyTypes:   ri.KeyTypes,
+		})
 		if err != nil {
 			ri.err = err
 			return
@@ -322,6 +375,7 @@ func (ri *ReplicaMVCCDataIterator) HasPointAndRange() (bool, bool) {
 //
 // Must use a reader with consistent iterators.
 func IterateReplicaKeySpans(
+	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
 	replicatedOnly bool,
@@ -352,7 +406,7 @@ func IterateReplicaKeySpans(
 	for _, span := range spans {
 		for _, keyType := range keyTypes {
 			err := func() error {
-				iter, err := reader.NewEngineIterator(storage.IterOptions{
+				iter, err := reader.NewEngineIterator(ctx, storage.IterOptions{
 					KeyTypes:   keyType,
 					LowerBound: span.Key,
 					UpperBound: span.EndKey,
@@ -418,6 +472,7 @@ type IterateOptions struct {
 // way to IterateReplicaKeySpans, but uses MVCCIterator and gives additional
 // options to create reverse iterators and to combine keys are ranges.
 func IterateMVCCReplicaKeySpans(
+	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	reader storage.Reader,
 	options IterateOptions,
@@ -443,11 +498,12 @@ func IterateMVCCReplicaKeySpans(
 	for _, span := range spans {
 		for _, keyType := range keyTypes {
 			err := func() error {
-				iter, err := reader.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
-					LowerBound: span.Key,
-					UpperBound: span.EndKey,
-					KeyTypes:   keyType,
-				})
+				iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyAndIntentsIterKind,
+					storage.IterOptions{
+						LowerBound: span.Key,
+						UpperBound: span.EndKey,
+						KeyTypes:   keyType,
+					})
 				if err != nil {
 					return err
 				}

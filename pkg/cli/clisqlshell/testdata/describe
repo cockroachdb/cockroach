@@ -122,8 +122,8 @@ List of schemas:
  WHERE TRUE AND n.nspname LIKE 'p%'
 ORDER BY 1
 Name,Owner
-pg_catalog,NULL
-pg_extension,NULL
+pg_catalog,node
+pg_extension,node
 public,admin
 
 cli
@@ -157,8 +157,8 @@ List of schemas:
  WHERE TRUE AND n.nspname LIKE 'p%'
 ORDER BY 1
 Name,Owner,Access privileges,Description
-pg_catalog,NULL,,
-pg_extension,NULL,,
+pg_catalog,node,,
+pg_extension,node,,
 public,admin,,
 
 cli
@@ -172,10 +172,10 @@ List of schemas:
  WHERE TRUE
 ORDER BY 1
 Name,Owner
-crdb_internal,NULL
-information_schema,NULL
-pg_catalog,NULL
-pg_extension,NULL
+crdb_internal,node
+information_schema,node
+pg_catalog,node
+pg_extension,node
 public,admin
 
 cli
@@ -191,10 +191,10 @@ List of schemas:
  WHERE TRUE
 ORDER BY 1
 Name,Owner,Access privileges,Description
-crdb_internal,NULL,,
-information_schema,NULL,,
-pg_catalog,NULL,,
-pg_extension,NULL,,
+crdb_internal,node,,
+information_schema,node,,
+pg_catalog,node,,
+pg_extension,node,,
 public,admin,,
 
 subtest end

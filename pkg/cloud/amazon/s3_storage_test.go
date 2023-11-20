@@ -515,7 +515,8 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 	q.Add(cloud.AuthParam, cloud.AuthParamImplicit)
 	q.Add(S3RegionParam, "us-east-1")
 
-	bucket := "invalid-bucket"
+	// Very long, very random bucket name, that hopefully nobody will ever create.
+	bucket := "VIBK1H88MOJ665V2RAPVH6X3TWUS0HCWTW5A27AFPPLHMABKH7X445K86K1BP2"
 	u := url.URL{
 		Scheme:   "s3",
 		Host:     bucket,

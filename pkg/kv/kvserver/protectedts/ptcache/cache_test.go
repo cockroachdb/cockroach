@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -159,17 +160,14 @@ func TestRefresh(t *testing.T) {
 	}
 	srv := serverutils.StartServerOnly(t,
 		base.TestServerArgs{
-			// Disable span configs to avoid measuring protected timestamp lookups
-			// performed by the AUTO SPAN CONFIG RECONCILIATION job.
-			DisableSpanConfigs: true,
-
-			// It's not possible to create secondary tenants when span
-			// configs are disabled.
-			DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
-
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: st.requestFilter,
+				},
+				// Disable span configs to avoid measuring protected timestamp lookups
+				// performed by the AUTO SPAN CONFIG RECONCILIATION job.
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true,
 				},
 				ProtectedTS: ptsKnobs,
 			},
@@ -298,7 +296,7 @@ func TestStart(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	setup := func() (serverutils.TestServerInterface, *ptcache.Cache) {
+	setup := func() (serverutils.ApplicationLayerInterface, *ptcache.Cache, func()) {
 		srv := serverutils.StartServerOnly(t,
 			base.TestServerArgs{
 				Knobs: base.TestingKnobs{
@@ -317,25 +315,26 @@ func TestStart(t *testing.T) {
 			DB:       execCfg.InternalDB,
 			Storage:  p,
 		})
-		return srv, c
+		return s, c, func() { srv.Stopper().Stop(ctx) }
 	}
 
 	t.Run("double start", func(t *testing.T) {
 		defer log.Scope(t).Close(t)
 
-		srv, c := setup()
-		defer srv.Stopper().Stop(ctx)
-		require.NoError(t, c.Start(ctx, srv.Stopper()))
-		require.EqualError(t, c.Start(ctx, srv.Stopper()),
+		s, c, cleanup := setup()
+		defer cleanup()
+		require.NoError(t, c.Start(ctx, s.AppStopper()))
+		require.EqualError(t, c.Start(ctx, s.AppStopper()),
 			"cannot start a Cache more than once")
 	})
 
 	t.Run("already stopped", func(t *testing.T) {
 		defer log.Scope(t).Close(t)
 
-		srv, c := setup()
-		srv.Stopper().Stop(ctx)
-		require.EqualError(t, c.Start(ctx, srv.Stopper()),
+		s, c, cleanup := setup()
+		defer cleanup()
+		s.AppStopper().Stop(ctx)
+		require.EqualError(t, c.Start(ctx, s.AppStopper()),
 			stop.ErrUnavailable.Error())
 	})
 }

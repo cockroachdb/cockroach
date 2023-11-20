@@ -22,7 +22,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/stats",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv/kvclient/rangefeed",
@@ -52,9 +51,9 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
-        "//pkg/util/log/logcrash",
         "//pkg/util/mon",
         "//pkg/util/protoutil",
+        "//pkg/util/sentryutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -82,8 +81,8 @@ go_test(
         "simple_linear_regression_test.go",
         "stats_cache_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":stats"],
+    shard_count = 8,
     deps = [
         "//pkg/base",
         "//pkg/jobs",

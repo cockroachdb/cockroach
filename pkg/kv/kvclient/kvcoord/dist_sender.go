@@ -250,7 +250,7 @@ const (
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.range_descriptor_cache.size",
 	"maximum number of entries in the range descriptor cache",
 	1e6,
@@ -261,11 +261,32 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 // senderConcurrencyLimit controls the maximum number of asynchronous send
 // requests.
 var senderConcurrencyLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.dist_sender.concurrency_limit",
 	"maximum number of asynchronous send requests",
 	max(defaultSenderConcurrency, int64(64*runtime.GOMAXPROCS(0))),
 	settings.NonNegativeInt,
+)
+
+// FollowerReadsUnhealthy controls whether we will send follower reads to nodes
+// that are not considered healthy. By default, we will sort these nodes behind
+// healthy nodes.
+var FollowerReadsUnhealthy = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.dist_sender.follower_reads_unhealthy.enabled",
+	"send follower reads to unhealthy nodes",
+	true,
+)
+
+// sortByLocalityFirst controls whether we sort by locality before sorting by
+// latency. If it is set to false we will only look at the latency values.
+// TODO(baptist): Remove this in 25.1 once we have validated that we don't need
+// to fall back to the previous behavior of only sorting by latency.
+var sortByLocalityFirst = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.dist_sender.sort_locality_first.enabled",
+	"sort followers by locality before sorting by latency",
+	true,
 )
 
 func max(a, b int64) int64 {
@@ -502,6 +523,11 @@ type DistSender struct {
 	// nodeDescs provides information on the KV nodes that DistSender may
 	// consider routing requests to.
 	nodeDescs NodeDescStore
+	// nodeIDGetter provides access to the local KV node ID if it's available
+	// (0 otherwise). The default implementation uses the Gossip network if it's
+	// available, but custom implementation can be provided via
+	// DistSenderConfig.NodeIDGetter.
+	nodeIDGetter func() roachpb.NodeID
 	// metrics stored DistSender-related metrics.
 	metrics DistSenderMetrics
 	// rangeCache caches replica metadata for key ranges.
@@ -537,6 +563,9 @@ type DistSender struct {
 	// LatencyFunc is used to estimate the latency to other nodes.
 	latencyFunc LatencyFunc
 
+	// HealthFunc returns true if the node is alive and not draining.
+	healthFunc atomic.Pointer[HealthFunc]
+
 	onRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
 
 	// locality is the description of the topography of the server on which the
@@ -568,6 +597,10 @@ type DistSenderConfig struct {
 	Settings  *cluster.Settings
 	Clock     *hlc.Clock
 	NodeDescs NodeDescStore
+	// NodeIDGetter, if set, provides non-gossip based implementation for
+	// obtaining the local KV node ID. The DistSender uses the node ID to
+	// preferentially route requests to a local replica (if one exists).
+	NodeIDGetter func() roachpb.NodeID
 	// nodeDescriptor, if provided, is used to describe which node the
 	// DistSender lives on, for instance when deciding where to send RPCs.
 	// Usually it is filled in from the Gossip network on demand.
@@ -611,10 +644,22 @@ type DistSenderConfig struct {
 // DistSenderContext or the fields within is optional. For omitted values, sane
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig) *DistSender {
+	nodeIDGetter := cfg.NodeIDGetter
+	if nodeIDGetter == nil {
+		// Fallback to gossip-based implementation if other is not provided.
+		nodeIDGetter = func() roachpb.NodeID {
+			g, ok := cfg.NodeDescs.(*gossip.Gossip)
+			if !ok {
+				return 0
+			}
+			return g.NodeID.Get()
+		}
+	}
 	ds := &DistSender{
 		st:            cfg.Settings,
 		clock:         cfg.Clock,
 		nodeDescs:     cfg.NodeDescs,
+		nodeIDGetter:  nodeIDGetter,
 		metrics:       makeDistSenderMetrics(),
 		kvInterceptor: cfg.KVInterceptor,
 		locality:      cfg.Locality,
@@ -696,12 +741,32 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		ds.onRangeSpanningNonTxnalBatch = cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch
 	}
 
+	// Placeholder function until we inject the real health function in using
+	// SetHealthFunc.
+	// TODO(baptist): Restructure the code to allow injecting the correct
+	// HealthFunc at construction time.
+	healthFunc := HealthFunc(func(id roachpb.NodeID) bool {
+		return true
+	})
+	ds.healthFunc.Store(&healthFunc)
+
 	return ds
+}
+
+// SetHealthFunc is called after construction due to the circular dependency
+// between DistSender and NodeLiveness.
+func (ds *DistSender) SetHealthFunc(healthFn HealthFunc) {
+	ds.healthFunc.Store(&healthFn)
 }
 
 // LatencyFunc returns the LatencyFunc of the DistSender.
 func (ds *DistSender) LatencyFunc() LatencyFunc {
 	return ds.latencyFunc
+}
+
+// HealthFunc returns the HealthFunc of the DistSender.
+func (ds *DistSender) HealthFunc() HealthFunc {
+	return *ds.healthFunc.Load()
 }
 
 // DisableFirstRangeUpdates disables updates of the first range via
@@ -778,22 +843,6 @@ func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
 	return ds.firstRangeProvider.GetFirstRangeDescriptor()
 }
 
-// getNodeID attempts to return the local node ID. It returns 0 if the DistSender
-// does not have access to the Gossip network.
-func (ds *DistSender) getNodeID() roachpb.NodeID {
-	// Today, secondary tenants don't run in process with KV instances, so they
-	// don't have access to the Gossip network. The DistSender uses the node ID to
-	// preferentially route requests to a local replica (if one exists). Not
-	// knowing the node ID, and thus not being able to take advantage of this
-	// optimization is okay, given tenants not running in-process with KV
-	// instances have no such optimization to take advantage of to begin with.
-	g, ok := ds.nodeDescs.(*gossip.Gossip)
-	if !ok {
-		return 0
-	}
-	return g.NodeID.Get()
-}
-
 // CountRanges returns the number of ranges that encompass the given key span.
 func (ds *DistSender) CountRanges(ctx context.Context, rs roachpb.RSpan) (int64, error) {
 	var count int64
@@ -859,7 +908,7 @@ func (ds *DistSender) getRoutingInfo(
 func (ds *DistSender) initAndVerifyBatch(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
 	// Attach the local node ID to each request.
 	if ba.GatewayNodeID == 0 {
-		ba.GatewayNodeID = ds.getNodeID()
+		ba.GatewayNodeID = ds.nodeIDGetter()
 	}
 
 	// Attach a clock reading from the local node to help stabilize HLCs across
@@ -1124,7 +1173,11 @@ func (ds *DistSender) incrementBatchCounters(ba *kvpb.BatchRequest) {
 }
 
 type response struct {
-	reply     *kvpb.BatchResponse
+	reply *kvpb.BatchResponse
+	// positions argument describes how the given batch request corresponds to
+	// the original, un-truncated one, and allows us to combine the response
+	// later via BatchResponse.Combine. (nil positions should be used when the
+	// original batch request is fully contained within a single range.)
 	positions []int
 	pErr      *kvpb.Error
 }
@@ -1444,8 +1497,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// Take the fast path if this batch fits within a single range.
 	if !ri.NeedAnother(rs) {
 		resp := ds.sendPartialBatch(
-			ctx, ba, rs, isReverse, withCommit, batchIdx, ri.Token(), nil, /* positions */
+			ctx, ba, rs, isReverse, withCommit, batchIdx, ri.Token(),
 		)
+		// resp.positions remains nil since the original batch is fully
+		// contained within a single range.
 		return resp.reply, resp.pErr
 	}
 
@@ -1529,6 +1584,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		for _, responseCh := range responseChs {
 			resp := <-responseCh
 			if resp.pErr != nil {
+				// Re-map the error index within this partial batch back to its
+				// position in the encompassing batch.
+				if resp.pErr.Index != nil && resp.pErr.Index.Index != -1 && resp.positions != nil {
+					resp.pErr.Index.Index = int32(resp.positions[resp.pErr.Index.Index])
+				}
 				if pErr == nil {
 					pErr = resp.pErr
 					// Update the error's transaction with any new information from
@@ -1642,8 +1702,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// Sent the batch asynchronously.
 		} else {
 			resp := ds.sendPartialBatch(
-				ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(), positions,
+				ctx, curRangeBatch, curRangeRS, isReverse, withCommit, batchIdx, ri.Token(),
 			)
+			resp.positions = positions
 			responseCh <- resp
 			if resp.pErr != nil {
 				return
@@ -1744,9 +1805,9 @@ func (ds *DistSender) sendPartialBatchAsync(
 		},
 		func(ctx context.Context) {
 			ds.metrics.AsyncSentCount.Inc(1)
-			responseCh <- ds.sendPartialBatch(
-				ctx, ba, rs, isReverse, withCommit, batchIdx, routing, positions,
-			)
+			resp := ds.sendPartialBatch(ctx, ba, rs, isReverse, withCommit, batchIdx, routing)
+			resp.positions = positions
+			responseCh <- resp
 		},
 	); err != nil {
 		ds.metrics.AsyncThrottledCount.Inc(1)
@@ -1784,11 +1845,7 @@ func slowRangeRPCReturnWarningStr(s *redact.StringBuilder, dur time.Duration, at
 // request are limited to the range's key span. The rs argument corresponds to
 // the span encompassing the key ranges of all requests in the truncated batch.
 // It should be entirely contained within the range descriptor of the supplied
-// routing token. The positions argument describes how the given batch request
-// corresponds to the original, un-truncated one, and allows us to combine the
-// response later via BatchResponse.Combine. (nil positions argument should be
-// used when the original batch request is fully contained within a single
-// range.)
+// routing token.
 //
 // The send occurs in a retry loop to handle send failures. On failure to send
 // to any replicas, we backoff and retry by refetching the range descriptor. If
@@ -1804,7 +1861,6 @@ func (ds *DistSender) sendPartialBatch(
 	withCommit bool,
 	batchIdx int,
 	routingTok rangecache.EvictionToken,
-	positions []int,
 ) response {
 	if batchIdx == 1 {
 		ds.metrics.PartialBatchCount.Inc(2) // account for first batch
@@ -1867,7 +1923,7 @@ func (ds *DistSender) sendPartialBatch(
 			if !intersection.Equal(rs) {
 				log.Eventf(ctx, "range shrunk; sub-dividing the request")
 				reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
-				return response{reply: reply, positions: positions, pErr: pErr}
+				return response{reply: reply, pErr: pErr}
 			}
 		}
 
@@ -1925,18 +1981,12 @@ func (ds *DistSender) sendPartialBatch(
 
 		// If sending succeeded, return immediately.
 		if reply.Error == nil {
-			return response{reply: reply, positions: positions}
+			return response{reply: reply}
 		}
 
 		// Untangle the error from the received response.
 		pErr = reply.Error
 		reply.Error = nil // scrub the response error
-
-		// Re-map the error index within this partial batch back
-		// to its position in the encompassing batch.
-		if pErr.Index != nil && pErr.Index.Index != -1 && positions != nil {
-			pErr.Index.Index = int32(positions[pErr.Index.Index])
-		}
 
 		log.VErrEventf(ctx, 2, "reply error %s: %s", ba, pErr)
 
@@ -1974,7 +2024,7 @@ func (ds *DistSender) sendPartialBatch(
 			// with unknown mapping to our truncated reply).
 			log.VEventf(ctx, 1, "likely split; will resend. Got new descriptors: %s", tErr.Ranges)
 			reply, pErr = ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, withCommit, batchIdx)
-			return response{reply: reply, positions: positions, pErr: pErr}
+			return response{reply: reply, pErr: pErr}
 		}
 		break
 	}
@@ -2235,7 +2285,7 @@ func (ds *DistSender) sendToReplicas(
 		// First order by latency, then move the leaseholder to the front of the
 		// list, if it is known.
 		if !ds.dontReorderReplicas {
-			replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
+			replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.HealthFunc(), ds.latencyFunc, ds.locality)
 		}
 
 		idx := -1
@@ -2254,7 +2304,7 @@ func (ds *DistSender) sendToReplicas(
 	case kvpb.RoutingPolicy_NEAREST:
 		// Order by latency.
 		log.VEvent(ctx, 2, "routing to nearest replica; leaseholder not required")
-		replicas.OptimizeReplicaOrder(ds.getNodeID(), ds.latencyFunc, ds.locality)
+		replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.HealthFunc(), ds.latencyFunc, ds.locality)
 
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
@@ -2374,7 +2424,7 @@ func (ds *DistSender) sendToReplicas(
 				(desc.Generation == 0 && routing.LeaseSeq() == 0),
 		}
 
-		comparisonResult := ds.getLocalityComparison(ctx, ds.getNodeID(), ba.Replica.NodeID)
+		comparisonResult := ds.getLocalityComparison(ctx, ds.nodeIDGetter(), ba.Replica.NodeID)
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(comparisonResult, int64(ba.Size()))
 
 		br, err = transport.SendNext(ctx, ba)
@@ -2651,12 +2701,12 @@ func (ds *DistSender) getLocalityComparison(
 		return roachpb.LocalityComparisonType_UNDEFINED
 	}
 
-	comparisonResult, regionErr, zoneErr := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
-	if regionErr != nil {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross region %v", regionErr)
+	comparisonResult, regionValid, zoneValid := gatewayNodeDesc.Locality.CompareWithLocality(destinationNodeDesc.Locality)
+	if !regionValid {
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross region")
 	}
-	if zoneErr != nil {
-		log.VEventf(ctx, 5, "unable to determine if the given nodes are cross zone %v", zoneErr)
+	if !zoneValid {
+		log.VInfof(ctx, 5, "unable to determine if the given nodes are cross zone")
 	}
 	return comparisonResult
 }

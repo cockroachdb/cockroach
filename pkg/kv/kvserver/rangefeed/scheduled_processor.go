@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -44,6 +45,9 @@ type ScheduledProcessor struct {
 	reg registry
 	rts resolvedTimestamp
 
+	// processCtx is the annotated background context used for process(). It is
+	// stored here to avoid reconstructing it on every call.
+	processCtx   context.Context
 	requestQueue chan request
 	eventC       chan *event
 	// If true, processor is not processing data anymore and waiting for registrations
@@ -65,10 +69,11 @@ func NewScheduledProcessor(cfg Config) *ScheduledProcessor {
 	cfg.SetDefaults()
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
 	p := &ScheduledProcessor{
-		Config:    cfg,
-		scheduler: NewClientScheduler(cfg.Scheduler),
-		reg:       makeRegistry(cfg.Metrics),
-		rts:       makeResolvedTimestamp(),
+		Config:     cfg,
+		scheduler:  cfg.Scheduler.NewClientScheduler(),
+		reg:        makeRegistry(cfg.Metrics),
+		rts:        makeResolvedTimestamp(),
+		processCtx: cfg.AmbientContext.AnnotateCtx(context.Background()),
 
 		requestQueue: make(chan request, 20),
 		eventC:       make(chan *event, cfg.EventChanCap),
@@ -95,7 +100,7 @@ func (p *ScheduledProcessor) Start(
 
 	// Note that callback registration must be performed before starting resolved
 	// timestamp init because resolution posts resolvedTS event when it is done.
-	if err := p.scheduler.Register(p.process); err != nil {
+	if err := p.scheduler.Register(p.process, p.Priority); err != nil {
 		p.cleanup()
 		return err
 	}
@@ -115,13 +120,15 @@ func (p *ScheduledProcessor) Start(
 	} else {
 		p.initResolvedTS(ctx)
 	}
+
+	p.Metrics.RangeFeedProcessorsScheduler.Inc(1)
 	return nil
 }
 
 // process is a scheduler callback that is processing scheduled events and
 // requests.
 func (p *ScheduledProcessor) process(e processorEventType) processorEventType {
-	ctx := p.Config.AmbientContext.AnnotateCtx(context.Background())
+	ctx := p.processCtx
 	if e&RequestQueued != 0 {
 		p.processRequests(ctx)
 	}
@@ -153,8 +160,6 @@ func (p *ScheduledProcessor) processRequests(ctx context.Context) {
 
 // Transform and route pending events.
 func (p *ScheduledProcessor) processEvents(ctx context.Context) {
-	// TODO(oleg): maybe limit max count and allow returning some data for
-	// further processing on next iteration.
 	// Only process as much data as was present at the start of the processing
 	// run to avoid starving other processors.
 	for max := len(p.eventC); max > 0; max-- {
@@ -174,7 +179,9 @@ func (p *ScheduledProcessor) processEvents(ctx context.Context) {
 }
 
 func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
-	if !p.txnPushActive && p.rts.IsInit() {
+	// NB: Len() check avoids hlc.Clock.Now() mutex acquisition in the common
+	// case, which can be a significant source of contention.
+	if !p.txnPushActive && p.rts.IsInit() && p.rts.intentQ.Len() > 0 {
 		now := p.Clock.Now()
 		before := now.Add(-p.PushTxnsAge.Nanoseconds(), 0)
 		oldTxns := p.rts.intentQ.Before(before)
@@ -206,19 +213,20 @@ func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
 
 func (p *ScheduledProcessor) processStop() {
 	p.cleanup()
+	p.Metrics.RangeFeedProcessorsScheduler.Dec(1)
 }
 
 func (p *ScheduledProcessor) cleanup() {
-	// Cleanup is called when all registrations were already disconnected prior to
-	// triggering processor stop (or before we accepted first registration if we
-	// failed to start).
-	// However, we want some defence in depth if lifecycle bug will allow shutdown
-	// before registrations are disconnected and drained. To handle that we will
-	// perform disconnect so that registrations have a chance to stop their work
-	// loop and terminate. This would at least trigger a warning that we are using
-	// memory budget already released by processor.
+	// Cleanup is normally called when all registrations are disconnected and
+	// unregistered or were not created yet (processor start failure).
+	// However, there's a case where processor is stopped by replica action while
+	// registrations are still active. In that case registrations won't have a
+	// chance to unregister themselves after their work loop terminates because
+	// processor is already disconnected from scheduler.
+	// To avoid leaking any registry resources and metrics, processor performs
+	// explicit registry termination in that case.
 	pErr := kvpb.NewError(&kvpb.NodeUnavailableError{})
-	p.reg.DisconnectWithErr(all, pErr)
+	p.reg.DisconnectAllOnShutdown(pErr)
 
 	// Unregister callback from scheduler
 	p.scheduler.Unregister()
@@ -285,7 +293,7 @@ func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 func (p *ScheduledProcessor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchUpIterConstructor CatchUpIteratorConstructor,
+	catchUpIter *CatchUpIterator,
 	withDiff bool,
 	stream Stream,
 	disconnectFn func(),
@@ -298,7 +306,7 @@ func (p *ScheduledProcessor) Register(
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
+		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff,
 		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
 	)
 
@@ -308,14 +316,6 @@ func (p *ScheduledProcessor) Register(
 		}
 		if !p.Span.AsRawSpanWithNoLocals().Contains(r.span) {
 			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
-		}
-
-		// Construct the catchUpIter before notifying the registration that it
-		// has been registered. Note that if the catchUpScan is never run, then
-		// the iterator constructed here will be closed in disconnect.
-		if err := r.maybeConstructCatchUpIter(); err != nil {
-			r.disconnect(kvpb.NewError(err))
-			return nil
 		}
 
 		// Add the new registration to the registry.
@@ -575,19 +575,37 @@ func (p *ScheduledProcessor) Filter() *Filter {
 // is guaranteed that only single request is modifying processor at any given
 // time. It is advisable to use provided processor reference for operations
 // rather than using one within closure itself.
-// If request can't be queued or processor stoppedC is closed then default
-// value is returned.
+//
+// If the processor is stopped concurrently with the request queueing, it may or
+// may not be processed. If the request is ever processed, its return value is
+// guaranteed to be returned here. Otherwise, the zero value is returned and the
+// request is never processed.
 func runRequest[T interface{}](
 	p *ScheduledProcessor, f func(ctx context.Context, p *ScheduledProcessor) T,
 ) (r T) {
 	result := make(chan T, 1)
 	p.enqueueRequest(func(ctx context.Context) {
 		result <- f(ctx, p)
+		// Assert that we never process requests after stoppedC is closed. This is
+		// necessary to coordinate catchup iter ownership and avoid double-closing.
+		if buildutil.CrdbTestBuild {
+			select {
+			case <-p.stoppedC:
+				log.Fatalf(ctx, "processing request on stopped processor")
+			default:
+			}
+		}
 	})
 	select {
 	case r = <-result:
 		return r
 	case <-p.stoppedC:
+		// If the request was processed concurrently with a stop, there's a 50%
+		// chance we didn't take the result branch. Check again.
+		select {
+		case r = <-result:
+		default:
+		}
 		return r
 	}
 }

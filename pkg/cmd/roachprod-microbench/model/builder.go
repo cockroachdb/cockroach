@@ -123,11 +123,16 @@ func (b *Builder) resolveMetric(value *benchfmt.Value, units benchfmt.UnitMetada
 	if metricName == "" {
 		metricName = unit
 	}
+	better := units.GetBetter(unit)
+	// If the unit is not known, assume that lower values are better (-1).
+	if better == 0 {
+		better = -1
+	}
 	metric := &Metric{
 		Name:             metricName,
 		Unit:             unit,
 		Assumption:       units.GetAssumption(unit),
-		Better:           units.GetBetter(unit),
+		Better:           better,
 		BenchmarkEntries: make(map[string]*BenchmarkEntry),
 	}
 	b.metricMap[unit] = metric

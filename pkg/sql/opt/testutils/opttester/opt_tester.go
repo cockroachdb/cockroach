@@ -106,6 +106,7 @@ var (
 		"columns":         memo.ExprFmtHideColumns,
 		"all":             memo.ExprFmtHideAll,
 		"notvisibleindex": memo.ExprFmtHideNotVisibleIndexInfo,
+		"fastpathchecks":  memo.ExprFmtHideFastPathChecks,
 	}
 )
 
@@ -302,6 +303,7 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().OptimizerHoistUncorrelatedEqualitySubqueries = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedComputedColumnFiltersDerivation = true
 	ot.evalCtx.SessionData().OptimizerUseImprovedJoinElimination = true
+	ot.evalCtx.SessionData().OptimizerUseProvidedOrderingFix = true
 
 	return ot
 }

@@ -49,12 +49,12 @@ func TestSpanConfigClient(t *testing.T) {
 	ctx := context.Background()
 
 	maybeInlineURL := h.MaybeGenerateInlineURL(t)
-	client, err := streamclient.NewSpanConfigStreamClient(ctx, maybeInlineURL)
+	client, err := streamclient.NewSpanConfigStreamClient(ctx, maybeInlineURL, nil)
 	defer func() {
 		require.NoError(t, client.Close(ctx))
 	}()
 	require.NoError(t, err)
-	sub, err := client.SetupSpanConfigsStream(ctx, testTenantName)
+	sub, err := client.SetupSpanConfigsStream(testTenantName)
 	require.NoError(t, err)
 
 	rf := replicationtestutils.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})

@@ -300,11 +300,9 @@ func TestSQLWatcherMultiple(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	ts := tc.Server(0 /* idx */)
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
-	sdb := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t, ""))
+	sdb := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
 	sdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	sdb.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 	sdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-	sdb.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(

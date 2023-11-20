@@ -13,3 +13,5 @@ COMMENT ON DATABASE data IS 'database comment string';
 INSERT INTO system.locations ("localityKey", "localityValue", latitude, longitude) VALUES ('city', 'nyc', 10, 10);
 
 ALTER TABLE data.bank CONFIGURE ZONE USING gc.ttlseconds = 3600;
+
+CREATE FUNCTION add(x INT, y INT) RETURNS INT LANGUAGE SQL AS 'SELECT x+y';

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -68,13 +67,12 @@ func TestBootstrapCluster(t *testing.T) {
 	ctx := context.Background()
 	e := storage.NewDefaultInMemForTesting()
 	defer e.Close()
-	require.NoError(t, kvstorage.WriteClusterVersion(ctx, e, clusterversion.TestingClusterVersion))
 
 	initCfg := initServerCfg{
-		binaryMinSupportedVersion: clusterversion.TestingBinaryMinSupportedVersion,
-		binaryVersion:             clusterversion.TestingBinaryVersion,
-		defaultSystemZoneConfig:   *zonepb.DefaultZoneConfigRef(),
-		defaultZoneConfig:         *zonepb.DefaultSystemZoneConfigRef(),
+		minSupportedVersion:     clusterversion.MinSupported.Version(),
+		latestVersion:           clusterversion.Latest.Version(),
+		defaultSystemZoneConfig: *zonepb.DefaultZoneConfigRef(),
+		defaultZoneConfig:       *zonepb.DefaultSystemZoneConfigRef(),
 	}
 	if _, err := bootstrapCluster(ctx, []storage.Engine{e}, initCfg); err != nil {
 		t.Fatal(err)
@@ -253,13 +251,11 @@ func TestCorruptedClusterID(t *testing.T) {
 	defer e.Close()
 
 	cv := clusterversion.TestingClusterVersion
-	require.NoError(t, kvstorage.WriteClusterVersion(ctx, e, cv))
-
 	initCfg := initServerCfg{
-		binaryMinSupportedVersion: clusterversion.TestingBinaryMinSupportedVersion,
-		binaryVersion:             clusterversion.TestingBinaryVersion,
-		defaultSystemZoneConfig:   *zonepb.DefaultZoneConfigRef(),
-		defaultZoneConfig:         *zonepb.DefaultSystemZoneConfigRef(),
+		minSupportedVersion:     clusterversion.MinSupported.Version(),
+		latestVersion:           clusterversion.Latest.Version(),
+		defaultSystemZoneConfig: *zonepb.DefaultZoneConfigRef(),
+		defaultZoneConfig:       *zonepb.DefaultSystemZoneConfigRef(),
 	}
 	if _, err := bootstrapCluster(ctx, []storage.Engine{e}, initCfg); err != nil {
 		t.Fatal(err)
@@ -713,7 +709,7 @@ func TestNodeBatchRequestPProfLabels(t *testing.T) {
 		return labels
 	}()
 
-	gr := kvpb.NewGet(roachpb.Key("a"), false)
+	gr := kvpb.NewGet(roachpb.Key("a"))
 	pr := kvpb.NewPut(gr.Header().Key, roachpb.Value{})
 	ba.Add(gr, pr)
 
@@ -748,7 +744,7 @@ func TestNodeBatchRequestMetricsInc(t *testing.T) {
 	ba.RangeID = 1
 	ba.Replica.StoreID = 1
 
-	gr := kvpb.NewGet(roachpb.Key("a"), false)
+	gr := kvpb.NewGet(roachpb.Key("a"))
 	pr := kvpb.NewPut(gr.Header().Key, roachpb.Value{})
 	ba.Add(gr, pr)
 

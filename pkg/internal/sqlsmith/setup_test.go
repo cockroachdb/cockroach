@@ -18,9 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -40,15 +38,12 @@ var (
 func TestSetups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	for name, setup := range sqlsmith.Setups {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 			srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer srv.Stopper().Stop(ctx)
-			sql.SecondaryTenantSplitAtEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
-			sql.SecondaryTenantScatterEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
 
 			rnd, _ := randutil.NewTestRand()
 
@@ -69,13 +64,10 @@ func TestSetups(t *testing.T) {
 func TestGenerateParse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
 
 	rnd, seed := randutil.NewTestRand()
 	t.Log("seed:", seed)
@@ -123,7 +115,10 @@ func TestGenerateParse(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v: %v", stmt, err)
 		}
-		stmt = sqlsmith.TestingPrettyCfg.Pretty(parsed.AST)
+		stmt, err = sqlsmith.TestingPrettyCfg.Pretty(parsed.AST)
+		if err != nil {
+			t.Fatal(err)
+		}
 		fmt.Print("STMT: ", i, "\n", stmt, ";\n\n")
 		if *flagExec {
 			db.Exec(t, `SET statement_timeout = '9s'`)

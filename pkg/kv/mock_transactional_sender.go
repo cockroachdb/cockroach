@@ -201,6 +201,11 @@ func (m *MockTransactionalSender) ReleaseSavepoint(context.Context, SavepointTok
 	panic("unimplemented")
 }
 
+// CanUseSavepoint is part of the kv.TxnSender interface.
+func (m *MockTransactionalSender) CanUseSavepoint(context.Context, SavepointToken) bool {
+	panic("unimplemented")
+}
+
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
 
@@ -221,7 +226,7 @@ func (m *MockTransactionalSender) Active() bool {
 func (m *MockTransactionalSender) DisablePipelining() error { return nil }
 
 // Step is part of the TxnSender interface.
-func (m *MockTransactionalSender) Step(_ context.Context) error {
+func (m *MockTransactionalSender) Step(context.Context, bool) error {
 	// At least one test (e.g sql/TestPortalsDestroyedOnTxnFinish) requires
 	// the ability to run simple statements that do not access storage,
 	// and that requires a non-panicky Step().

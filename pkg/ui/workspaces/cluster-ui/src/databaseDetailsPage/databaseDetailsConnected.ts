@@ -14,7 +14,8 @@ import { Dispatch } from "redux";
 import { databaseNameCCAttr } from "src/util/constants";
 import { getMatchParamByName } from "src/util/query";
 import { AppState } from "../store";
-import { actions as databaseDetailsActions } from "../store/databaseDetails";
+import { databaseDetailsReducer } from "../store/databaseDetails";
+const databaseDetailsActions = databaseDetailsReducer.actions;
 import {
   actions as localStorageActions,
   LocalStorageKeys,
@@ -37,7 +38,7 @@ import {
   selectDatabaseDetailsTablesSortSetting,
   selectDatabaseDetailsViewModeSetting,
 } from "../store/databaseDetails/databaseDetails.selectors";
-import { combineLoadingErrors, deriveTableDetailsMemoized } from "../databases";
+import { deriveTableDetailsMemoized } from "../databases";
 import {
   selectDropUnusedIndexDuration,
   selectIndexRecommendationsEnabled,
@@ -56,11 +57,8 @@ const mapStateToProps = (
   return {
     loading: !!databaseDetails[database]?.inFlight,
     loaded: !!databaseDetails[database]?.valid,
-    lastError: combineLoadingErrors(
-      databaseDetails[database]?.lastError,
-      databaseDetails[database]?.data?.maxSizeReached,
-      null,
-    ),
+    requestError: databaseDetails[database]?.lastError,
+    queryError: databaseDetails[database]?.data?.results?.error,
     name: database,
     showNodeRegionsColumn: Object.keys(nodeRegions).length > 1 && !isTenant,
     viewMode: selectDatabaseDetailsViewModeSetting(state),

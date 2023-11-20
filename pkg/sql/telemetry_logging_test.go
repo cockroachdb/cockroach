@@ -1135,7 +1135,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		},
 		{
 			"zig-zag-join",
-			"SELECT * FROM t@{FORCE_ZIGZAG} WHERE t.j @> '{\"a\":\"b\"}' AND t.j @> '{\"c\":\"d\"}';",
+			"SET enable_zigzag_join = true; SELECT * FROM t@{FORCE_ZIGZAG} WHERE t.j @> '{\"a\":\"b\"}' AND t.j @> '{\"c\":\"d\"}'; RESET enable_zigzag_join;",
 			`"SELECT * FROM \"\".\"\".t@{FORCE_ZIGZAG} WHERE (t.j @> ‹'{\"a\":\"b\"}'›) AND (t.j @> ‹'{\"c\":\"d\"}'›)"`,
 			1,
 			map[string]int{"InnerJoin": 1},

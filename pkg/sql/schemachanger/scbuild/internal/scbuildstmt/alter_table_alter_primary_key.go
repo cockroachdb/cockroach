@@ -450,7 +450,7 @@ func fallBackIfDescColInRowLevelTTLTables(b BuildCtx, tableID catid.DescID, t al
 
 	// It's a row-level-ttl table. Ensure it has no non-descending
 	// key columns, and there is no inbound/outbound foreign keys.
-	if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_2TTLAllowDescPK) {
+	if !b.ClusterSettings().Version.IsActive(b, clusterversion.V23_2) {
 		for _, col := range t.Columns {
 			if indexColumnDirection(col.Direction) != catenumpb.IndexColumn_ASC {
 				panic(scerrors.NotImplementedErrorf(t.n, "non-ascending ordering on PRIMARY KEYs are not supported"))
@@ -488,6 +488,41 @@ func mustRetrieveColumnElem(
 		panic(errors.AssertionFailedf("programming error: cannot find a Column element for column ID %v", columnID))
 	}
 	return column
+}
+
+func retrieveColumnElemAndStatus(
+	b BuildCtx, tableID catid.DescID, columnID catid.ColumnID,
+) (scpb.Status, scpb.TargetStatus, *scpb.Column) {
+	elems := b.QueryByID(tableID).FilterColumn().Filter(func(
+		_ scpb.Status, _ scpb.TargetStatus, e *scpb.Column,
+	) bool {
+		return e.ColumnID == columnID
+	}).MustHaveZeroOrOne()
+
+	if elems.Size() == 1 {
+		current, target, elem := elems.Get(0)
+		return current, target, elem.(*scpb.Column)
+	}
+	return scpb.Status_UNKNOWN, scpb.InvalidTarget, nil
+}
+
+func retrieveIndexColumnElemAndStatus(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID, columnID catid.ColumnID,
+) (scpb.Status, scpb.TargetStatus, *scpb.IndexColumn) {
+	elems := b.QueryByID(tableID).FilterIndexColumn().Filter(func(
+		_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn,
+	) bool {
+		if e.IndexID == indexID && e.ColumnID == columnID {
+			return true
+		}
+		return false
+	}).MustHaveZeroOrOne()
+
+	if elems.Size() == 1 {
+		current, target, elem := elems.Get(0)
+		return current, target, elem.(*scpb.IndexColumn)
+	}
+	return scpb.Status_UNKNOWN, scpb.InvalidTarget, nil
 }
 
 func mustRetrieveColumnNameElem(
@@ -703,6 +738,9 @@ func recreateAllSecondaryIndexes(
 			}
 		}
 		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns, false /* inUseTempIDs */)
+		if b.ClusterSettings().Version.IsActive(b, clusterversion.V23_1) {
+			in.secondary.RecreateSourceIndexID = out.indexID()
+		}
 		out.apply(b.Drop)
 		in.apply(b.Add)
 		temp.apply(b.AddTransient)

@@ -15,6 +15,9 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -27,8 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -54,12 +58,14 @@ func getStreamer(
 		s.AppStopper(),
 		kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState),
 		cluster.MakeTestingClusterSettings(),
+		nil, /* sd */
 		lock.WaitPolicy(0),
 		limitBytes,
 		acc,
 		nil, /* kvPairsRead */
 		nil, /* batchRequestsIssued */
 		lock.None,
+		lock.Unreplicated,
 	)
 }
 
@@ -91,7 +97,7 @@ func TestStreamerLimitations(t *testing.T) {
 		defer streamer.Close(ctx)
 		streamer.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		k := append(s.Codec().TenantPrefix(), roachpb.Key("key")...)
-		get := kvpb.NewGet(k, false /* forUpdate */)
+		get := kvpb.NewGet(k)
 		reqs := []kvpb.RequestUnion{{
 			Value: &kvpb.RequestUnion_Get{
 				Get: get.(*kvpb.GetRequest),
@@ -110,12 +116,14 @@ func TestStreamerLimitations(t *testing.T) {
 				s.AppStopper(),
 				kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID()),
 				cluster.MakeTestingClusterSettings(),
+				nil, /* sd */
 				lock.WaitPolicy(0),
 				math.MaxInt64, /* limitBytes */
 				nil,           /* acc */
 				nil,           /* kvPairsRead */
 				nil,           /* batchRequestsIssued */
 				lock.None,
+				lock.Unreplicated,
 			)
 		})
 	})
@@ -246,9 +254,7 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
 	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
+	defer s.Stopper().Stop(context.Background())
 
 	// The initial estimate for TargetBytes argument for each asynchronous
 	// request by the Streamer will be numRowsPerRange x InitialAvgResponseSize,
@@ -311,9 +317,7 @@ func TestStreamerWideRows(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
 	})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
+	defer s.Stopper().Stop(context.Background())
 
 	const blobSize = 10 * kvstreamer.InitialAvgResponseSize
 	const numRows = 2
@@ -417,7 +421,6 @@ func TestStreamerEmptyScans(t *testing.T) {
 
 	ts := srv.ApplicationLayer()
 	codec := ts.Codec()
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
 
 	// Create a dummy table for which we know the encoding of valid keys.
 	// Although not strictly necessary, we set up two column families since with
@@ -487,9 +490,7 @@ func TestStreamerMultiRangeScan(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &s.ApplicationLayer().ClusterSettings().SV, true)
+	defer s.Stopper().Stop(context.Background())
 
 	rng, _ := randutil.NewTestRand()
 	numRows := rng.Intn(100) + 2
@@ -547,4 +548,59 @@ func TestStreamerMultiRangeScan(t *testing.T) {
 	}
 	expected += "}"
 	require.Equal(t, expected, result)
+}
+
+// TestStreamerVaryingResponseSizes verifies that the Streamer handles the
+// responses of vastly variable sizes reasonably well. It is a regression test
+// for #113729.
+func TestStreamerVaryingResponseSizes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStress(t, "the test is too memory intensive")
+	skip.UnderRace(t, "the test is too memory intensive")
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	runner := sqlutils.MakeSQLRunner(db)
+	// Create a table with 10 ranges, with 3k rows in each. Within each range,
+	// first 1k rows are relatively small, then next 1k rows are medium, and
+	// the last 1k rows are large.
+	runner.Exec(t, `
+CREATE TABLE t (
+	k INT PRIMARY KEY,
+	v STRING,
+	blob STRING,
+	INDEX t_v_idx (v ASC)
+);
+
+INSERT INTO t SELECT 3000 * (i // 1000) + i % 1000, '1', repeat('a', 600 + i % 200) FROM generate_series(1, 10000) AS g(i);
+INSERT INTO t SELECT 3000 * (i // 1000) + i % 1000 + 1000, '1', repeat('a', 3000 + i % 1000) FROM generate_series(1, 10000) AS g(i);
+INSERT INTO t SELECT 3000 * (i // 1000) + i % 1000 + 2000, '1', repeat('a', 20000 + i) FROM generate_series(1, 10000) AS g(i);
+
+ALTER TABLE t SPLIT AT SELECT generate_series(1, 30000, 3000);
+`)
+
+	// The meat of the test - run the query that performs an index join to fetch
+	// all rows via the streamer, both in the OutOfOrder and InOrder modes. Each
+	// time assert that the number of BatchRequests issued is in double digits
+	// (if not, then the streamer was extremely suboptimal).
+	kvGRPCCallsRegex := regexp.MustCompile(`KV gRPC calls: (\d+,)`)
+	for inOrder := range []bool{false, true} {
+		runner.Exec(t, `SET streamer_always_maintain_ordering = $1;`, inOrder)
+		for i := 0; i < 2; i++ {
+			var gRPCCalls int
+			var err error
+			rows := runner.QueryStr(t, `EXPLAIN ANALYZE SELECT length(blob) FROM t@t_v_idx WHERE v = '1';`)
+			for _, row := range rows {
+				if matches := kvGRPCCallsRegex.FindStringSubmatch(row[0]); len(matches) > 0 {
+					gRPCCalls, err = strconv.Atoi(strings.ReplaceAll(matches[1], ",", ""))
+					require.NoError(t, err)
+					break
+				}
+			}
+			require.Greater(t, 100, gRPCCalls, rows)
+		}
+	}
 }

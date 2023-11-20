@@ -13,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb",
     visibility = ["//visibility:public"],
     deps = [
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_redact//interfaces",
     ],
@@ -20,10 +21,15 @@ go_library(
 
 proto_library(
     name = "admissionpb_proto",
-    srcs = ["io_threshold.proto"],
+    srcs = [
+        "admission_stats.proto",
+        "io_threshold.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+    deps = [
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
 )
 
 go_proto_library(
@@ -32,13 +38,14 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb",
     proto = ":admissionpb_proto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto"],
+    deps = [
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )
 
 go_test(
     name = "admissionpb_test",
     srcs = ["io_threshold_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":admissionpb"],
     deps = ["@com_github_stretchr_testify//require"],
 )

@@ -1,4 +1,3 @@
-# tenant-cluster-setting-override-opt: sql.virtual_cluster.feature_access.multiregion.enabled=true
 # knob-opt: sync-event-log
 # LogicTest: multiregion-9node-3region-3azs-tenant
 
@@ -13,7 +12,7 @@ AS $$
  name,
  survival_goal
  FROM crdb_internal.databases
- WHERE name IN ('system', 'alter_survive_db', 'survive_zone_db')
+ WHERE name IN ('system', 'alter_survive_db', 'create_survive_db', 'survive_zone_db')
  ORDER BY name;
 $$;
 
@@ -74,6 +73,29 @@ SELECT get_db_survival_goal()
 # Make sure system db survival goal is downgraded.
 statement ok
 ALTER DATABASE alter_survive_db SURVIVE ZONE FAILURE;
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,zone)
+(survive_zone_db,zone)
+(system,zone)
+
+# Make sure a database created with a surival goal upgrades the systemdb.
+statement ok
+CREATE DATABASE create_survive_db PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2", "ca-central-1" SURVIVE REGION FAILURE;
+
+query T nosort
+SELECT get_db_survival_goal()
+----
+(alter_survive_db,zone)
+(create_survive_db,region)
+(survive_zone_db,zone)
+(system,region)
+
+# Make sure dropping the database downgrades the survival goal.
+statement ok
+DROP DATABASE create_survive_db;
 
 query T nosort
 SELECT get_db_survival_goal()

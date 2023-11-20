@@ -27,7 +27,6 @@ go_test(
         "issues_test.go",
         "render_test.go",
     ],
-    args = ["-test.timeout=55s"],
     data = glob(["testdata/**"]),
     embed = [":issues"],
     deps = [

@@ -177,7 +177,7 @@ export const filterTransactions = (
       const app = t.stats_data.app;
       const isInternal = app.startsWith(internalAppNamePrefix);
 
-      if (filters.app && filters.app != "All") {
+      if (filters.app && filters.app !== "All") {
         const apps = filters.app.split(",");
         let showInternal = false;
         if (apps.includes(internalAppNamePrefix)) {
@@ -205,7 +205,7 @@ export const filterTransactions = (
     .filter((t: Transaction) => {
       // The transaction must contain at least one value of the regions list
       // (if the list is not empty).
-      if (regions.length == 0) return true;
+      if (regions.length === 0) return true;
 
       return getStatementsByFingerprintId(
         t.stats_data.statement_fingerprint_ids,
@@ -217,7 +217,7 @@ export const filterTransactions = (
     .filter((t: Transaction) => {
       // The transaction must contain at least one value of the nodes list
       // (if the list is not empty).
-      if (nodes.length == 0) return true;
+      if (nodes.length === 0) return true;
 
       // If the cluster is a tenant cluster we don't care about nodes.
       if (isTenant) return true;

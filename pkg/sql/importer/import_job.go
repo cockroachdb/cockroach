@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -99,7 +98,7 @@ func (r *importResumer) DumpTraceAfterRun() bool {
 var _ jobs.Resumer = &importResumer{}
 
 var processorsPerNode = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"bulkio.import.processors_per_node",
 	"number of input processors to run on each sql instance", 1,
 	settings.PositiveInt,
@@ -277,13 +276,10 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 					return errors.Wrap(err, "checking if existing table is empty")
 				}
 				details.Tables[i].WasEmpty = len(res) == 0
-				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODODelete_V22_2Start) {
-					// Update the descriptor in the job record and in the database with the ImportStartTime
-					details.Tables[i].Desc.ImportStartWallTime = details.Walltime
-					err := bindImportStartTime(ctx, p, tblDesc.GetID(), details.Walltime)
-					if err != nil {
-						return err
-					}
+				// Update the descriptor in the job record and in the database with the ImportStartTime
+				details.Tables[i].Desc.ImportStartWallTime = details.Walltime
+				if err := bindImportStartTime(ctx, p, tblDesc.GetID(), details.Walltime); err != nil {
+					return err
 				}
 			}
 		}
@@ -1479,6 +1475,11 @@ func (r *importResumer) OnFailOrCancel(
 	return nil
 }
 
+// CollectProfile is a part of the Resumer interface.
+func (r *importResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 // dropTables implements the OnFailOrCancel logic.
 func (r *importResumer) dropTables(
 	ctx context.Context, txn isql.Txn, descsCol *descs.Collection, execCfg *sql.ExecutorConfig,
@@ -1491,8 +1492,6 @@ func (r *importResumer) dropTables(
 	if !details.PrepareComplete {
 		return nil
 	}
-
-	useDeleteRange := storage.CanUseMVCCRangeTombstones(ctx, r.settings)
 
 	var tableWasEmpty bool
 	var intoTable catalog.TableDescriptor
@@ -1530,46 +1529,22 @@ func (r *importResumer) dropTables(
 		// it was rolled back to its pre-IMPORT state, and instead provide a manual
 		// admin knob (e.g. ALTER TABLE REVERT TO SYSTEM TIME) if anything goes wrong.
 		ts := hlc.Timestamp{WallTime: details.Walltime}.Prev()
-		if useDeleteRange {
-			predicates := kvpb.DeleteRangePredicates{StartTime: ts}
-			if err := sql.DeleteTableWithPredicate(
-				ctx,
-				execCfg.DB,
-				execCfg.Codec,
-				&execCfg.Settings.SV,
-				execCfg.DistSender,
-				intoTable,
-				predicates, sql.RevertTableDefaultBatchSize); err != nil {
-				return errors.Wrap(err, "rolling back IMPORT INTO in non empty table via DeleteRange")
-			}
-		} else {
-			// disallowShadowingBelow=writeTS used to write means no existing keys could
-			// have been covered by a key imported and the table was offline to other
-			// writes, so even if GC has run it would not have GC'ed any keys to which
-			// we need to revert, so we can safely ignore the target-time GC check.
-			const ignoreGC = true
-			if err := sql.RevertTables(ctx, txn.KV().DB(), execCfg, []catalog.TableDescriptor{intoTable}, ts, ignoreGC,
-				sql.RevertTableDefaultBatchSize); err != nil {
-				return errors.Wrap(err, "rolling back partially completed IMPORT via RevertRange")
-			}
+		predicates := kvpb.DeleteRangePredicates{StartTime: ts}
+		if err := sql.DeleteTableWithPredicate(
+			ctx,
+			execCfg.DB,
+			execCfg.Codec,
+			&execCfg.Settings.SV,
+			execCfg.DistSender,
+			intoTable,
+			predicates, sql.RevertTableDefaultBatchSize); err != nil {
+			return errors.Wrap(err, "rolling back IMPORT INTO in non empty table via DeleteRange")
 		}
 	} else if tableWasEmpty {
-		if useDeleteRange {
-			if err := gcjob.DeleteAllTableData(
-				ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, intoTable,
-			); err != nil {
-				return errors.Wrap(err, "rolling back IMPORT INTO in empty table via DeleteRange")
-			}
-		} else {
-			// Set a DropTime on the table descriptor to differentiate it from an
-			// older-format (v1.1) descriptor. This enables ClearTableData to use a
-			// RangeClear for faster data removal, rather than removing by chunks.
-			intoTable.TableDesc().DropTime = int64(1)
-			if err := gcjob.ClearTableData(
-				ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, &execCfg.Settings.SV, intoTable,
-			); err != nil {
-				return errors.Wrapf(err, "rolling back IMPORT INTO in empty table via ClearRange")
-			}
+		if err := gcjob.DeleteAllTableData(
+			ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, intoTable,
+		); err != nil {
+			return errors.Wrap(err, "rolling back IMPORT INTO in empty table via DeleteRange")
 		}
 	}
 

@@ -236,9 +236,32 @@ message GetRequest {
   // The desired key-level locking mode used during this get. When set to None
   // (the default), no key-level locking mode is used - meaning that the get
   // does not acquire a lock. When set to any other strength, a lock of that
-  // strength is acquired with the Unreplicated durability (i.e. best-effort)
-  // the key, if it exists.
-  kv.kvserver.concurrency.lock.Strength key_locking = 2;
+  // strength is acquired with the associated durability guarantees on the key,
+  // if it exists.
+  kv.kvserver.concurrency.lock.Strength key_locking_strength = 2;
+
+  // KeyLockingDurability denotes the durability with which locks, if any are
+  // acquired, should be acquired with. It should only be set in conjunction
+  // with a non-None KeyLockingStrength.
+  //
+  // Unreplicated locks are kept in-memory on the leaseholder of the locked key.
+  // As such, their existence until a transaction commits is best-effort. They
+  // are susceptible to things like lease transfers and node crashes. However,
+  // they are faster to acquire and resolve when compared to replicated locks.
+  // This makes them an appealing choice when locks are not required for
+  // correctness. This includes things like (non-exhaustive list):
+  // 1. Transactions that run under serializable isolation level.
+  // 2. Implicit SFU for weaker isolation levels, where we know we will
+  // subsequently perform a (replicated) intent write on the key being locked.
+  //
+  // Replicated locks on the other hand, once acquired, are guaranteed to exist
+  // until the transaction finalizes (commits or aborts). They are not
+  // susceptible to things like lease transfers, range {splits,merges}, memory
+  // limits, node crashes etc. Replication adds a performance penalty for lock
+  // acquisition and resolution; as such, they should only be used by
+  // transactions that need guaranteed locks for correctness (read:
+  // read-committed or snapshot isolation transactions).
+  kv.kvserver.concurrency.lock.Durability key_locking_durability = 3;
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -457,9 +480,10 @@ message DeleteRangeRequest {
   // considers empty spans equivalent to being covered by an MVCC range
   // tombstone, so it will omit the write across an entirely empty span too.
   bool idempotent_tombstone = 7;
-  // If enabled and DeleteRangeRequest is deleting the whole range with a range
-  // tombstone, GCHint on replica will be updated to notify mvcc gc queue
-  // that this range would benefit from optimized GC process.
+  // If enabled, and a span is deleted using a range tombstone, then the GCHint
+  // on the corresponding Range will be updated. The hint instructs MVCC GC
+  // queue to delete this data as soon as it can, and helps optimizing GC for
+  // bulk deletions.
   bool update_range_delete_gc_hint = 8 [(gogoproto.customname) = "UpdateRangeDeleteGCHint"];
 
   DeleteRangePredicates predicates = 6 [(gogoproto.nullable) = false];
@@ -609,14 +633,37 @@ message ScanRequest {
   // The desired key-level locking mode used during this scan. When set to None
   // (the default), no key-level locking mode is used - meaning that the scan
   // does not acquire any locks. When set to any other strength, a lock of that
-  // strength is acquired with the Unreplicated durability (i.e. best-effort) on
-  // each of the keys scanned by the request, subject to any key limit applied
-  // to the batch which limits the number of keys returned.
+  // strength is acquired with the associated durability guarantees on each of
+  // the keys scanned by the request, subject to any key limit applied to the
+  // batch which limits the number of keys returned.
   //
   // NOTE: the locks acquire with this strength are point locks on each of the
   // keys returned by the request, not a single range lock over the entire span
   // scanned by the request.
-  kv.kvserver.concurrency.lock.Strength key_locking = 5;
+  kv.kvserver.concurrency.lock.Strength key_locking_strength = 5;
+
+  // KeyLockingDurability denotes the durability with which locks, if any are
+  // acquired, should be acquired with. It should only be set in conjunction
+  // with a non-None KeyLockingStrength.
+  //
+  // Unreplicated locks are kept in-memory on the leaseholder of the locked key.
+  // As such, their existence until a transaction commits is best-effort. They
+  // are susceptible to things like lease transfers and node crashes. However,
+  // they are faster to acquire and resolve when compared to replicated locks.
+  // This makes them an appealing choice when locks are not required for
+  // correctness. This includes things like (non-exhaustive list):
+  // 1. Transactions that run under serializable isolation level.
+  // 2. Implicit SFU for weaker isolation levels, where we know we will
+  // subsequently perform a (replicated) intent write on the key being locked.
+  //
+  // Replicated locks on the other hand, once acquired, are guaranteed to exist
+  // until the transaction finalizes (commits or aborts). They are not
+  // susceptible to things like lease transfers, range {splits,merges}, memory
+  // limits, node crashes etc. Replication adds a performance penalty for lock
+  // acquisition and resolution; as such, they should only be used by
+  // transactions that need guaranteed locks for correctness (read:
+  // read-committed or snapshot isolation transactions).
+  kv.kvserver.concurrency.lock.Durability key_locking_durability = 6;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -674,14 +721,37 @@ message ReverseScanRequest {
   // The desired key-level locking mode used during this scan. When set to None
   // (the default), no key-level locking mode is used - meaning that the scan
   // does not acquire any locks. When set to any other strength, a lock of that
-  // strength is acquired with the Unreplicated durability (i.e. best-effort) on
-  // each of the keys scanned by the request, subject to any key limit applied
-  // to the batch which limits the number of keys returned.
+  // strength is acquired with the associated durability guarantees on each of
+  // the keys scanned by the request, subject to any key limit applied to the
+  // batch which limits the number of keys returned.
   //
   // NOTE: the locks acquire with this strength are point locks on each of the
   // keys returned by the request, not a single range lock over the entire span
   // scanned by the request.
-  kv.kvserver.concurrency.lock.Strength key_locking = 5;
+  kv.kvserver.concurrency.lock.Strength key_locking_strength = 5;
+
+  // KeyLockingDurability denotes the durability with which locks, if any are
+  // acquired, should be acquired with. It should only be set in conjunction
+  // with a non-None KeyLockingStrength.
+  //
+  // Unreplicated locks are kept in-memory on the leaseholder of the locked key.
+  // As such, their existence until a transaction commits is best-effort. They
+  // are susceptible to things like lease transfers and node crashes. However,
+  // they are faster to acquire and resolve when compared to replicated locks.
+  // This makes them an appealing choice when locks are not required for
+  // correctness. This includes things like (non-exhaustive list):
+  // 1. Transactions that run under serializable isolation level.
+  // 2. Implicit SFU for weaker isolation levels, where we know we will
+  // subsequently perform a (replicated) intent write on the key being locked.
+  //
+  // Replicated locks on the other hand, once acquired, are guaranteed to exist
+  // until the transaction finalizes (commits or aborts). They are not
+  // susceptible to things like lease transfers, range {splits,merges}, memory
+  // limits, node crashes etc. Replication adds a performance penalty for lock
+  // acquisition and resolution; as such, they should only be used by
+  // transactions that need guaranteed locks for correctness (read:
+  // read-committed or snapshot isolation transactions).
+  kv.kvserver.concurrency.lock.Durability key_locking_durability = 6;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -882,12 +952,16 @@ message EndTxnRequest {
   // reliably for these transactions - a TransactionStatusError might be
   // returned instead if 1PC execution fails.
   bool require_1pc = 6 [(gogoproto.customname) = "Require1PC"];
+  // Disables the transaction from attempting 1 phase commit. Cannot be used in
+  // conjunction with the Require1PC flag.
+  bool disable_1pc = 11 [(gogoproto.customname) = "Disable1PC"];
   // True to indicate that lock spans should be resolved with poison=true.
   // This is used when the transaction is being aborted independently of the
   // main thread of client operation, as in the case of an asynchronous abort
   // from the TxnCoordSender on a failed heartbeat. It should only be set to
   // true when commit=false.
   bool poison = 9;
+
   reserved 7, 8, 10;
 }
 
@@ -908,6 +982,18 @@ message EndTxnResponse {
   // The commit timestamp of the STAGING transaction record written
   // by the request. Only set if the transaction record was staged.
   util.hlc.Timestamp staging_timestamp = 5 [(gogoproto.nullable) = false];
+  // ReplicatedLocksReleasedOnCommit, if non-empty, indicate that replicated
+  // locks with strength Shared or Exclusive were released in the referenced key
+  // spans when committing this transaction. Notably, this field is left unset
+  // if only write intents were resolved. The field is also left unset for
+  // transactions that aborted.
+  //
+  // The caller must bump the timestamp cache across these spans to the
+  // transaction's commit timestamp. Doing so ensures that the released locks
+  // (acquired by the now committed transaction) continue to provide protection
+  // against other writers up to the commit timestamp, even after the locks have
+  // been released.
+  repeated Span replicated_locks_released_on_commit = 6 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
@@ -1409,6 +1495,17 @@ message ResolveIntentRequest {
 // ResolveIntent() method.
 message ResolveIntentResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ReplicatedLocksReleasedCommitTimestamp, if non-empty, indicates that a
+  // replicated lock with strength Shared or Exclusive was released by a
+  // transaction who committed at this timestamp. Notably, this field is left
+  // unset if only a write intent was resolved. The field is also left unset for
+  // transactions that aborted.
+  //
+  // The caller must bump the timestamp cache across the resolution span to this
+  // commit timestamp. Doing so ensures that the released lock (acquired by a
+  // now committed transaction) continues to provide protection against other
+  // writers up to the commit timestamp, even after the lock has been released.
+  util.hlc.Timestamp replicated_locks_released_commit_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentRangeRequest is arguments to the ResolveIntentRange() method.
@@ -1453,6 +1550,17 @@ message ResolveIntentRangeRequest {
 // ResolveIntent() method.
 message ResolveIntentRangeResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // ReplicatedLocksReleasedCommitTimestamp, if non-empty, indicates that at
+  // least one replicated lock with strength Shared or Exclusive was released by
+  // a transaction who committed at this timestamp. Notably, this field is left
+  // unset if only a write intent was resolved. The field is also left unset for
+  // transactions that aborted.
+  //
+  // The caller must bump the timestamp cache across the resolution span to this
+  // commit timestamp. Doing so ensures that the released lock (acquired by a
+  // now committed transaction) continues to provide protection against other
+  // writers up to the commit timestamp, even after the lock has been released.
+  util.hlc.Timestamp replicated_locks_released_commit_timestamp = 2 [(gogoproto.nullable) = false];
 }
 
 // A MergeRequest contains arguments to the Merge() method. It
@@ -1998,13 +2106,13 @@ message AddSSTableRequest {
   // is likely non-empty. See AddSSTableResponse.FollowingLikelyNonEmptySpanStart.
   bool return_following_likely_non_empty_span_start = 9;
 
-  // RemoteFile indicates that the span indicated by the request start and end 
+  // RemoteFile indicates that the span indicated by the request start and end
   // key of the file specified should be added. Data cannot be set if RemoteFile
   // is non-empty, and many other request parameters such as collision/shadow
   // checking, write-at-request-timestamp, or ingest-as-writes are unsupported.
   //
   // TODO(dt, msbutler, bilal): This is unsupported.
-  // TOOD(dt, msbutler, bilal): support sst_timestamp_to_request_timestamp.
+  // TODO(dt, msbutler, bilal): support sst_timestamp_to_request_timestamp.
   // TODO(msbutler): rename to ExternalFile.
   message  RemoteFile {
     string locator = 1;
@@ -2012,8 +2120,8 @@ message AddSSTableRequest {
     uint64 backing_file_size = 3;
   }
   RemoteFile remote_file = 10 [(gogoproto.nullable) = false];
-  
-  // AddSSTableRequest_PrefixReplacement is used to represent a prefix to be 
+
+  // AddSSTableRequest_PrefixReplacement is used to represent a prefix to be
   // replaced and the prefix with which to replace it.
   message PrefixReplacement {
     bytes from = 1;
@@ -2022,7 +2130,7 @@ message AddSSTableRequest {
 
   // PrefixReplacement is used to that keys in the sst with the prefix specified
   // in "from" should instead appear to have that prefix replaced by "to", when
-  // during iteration, seeking, or other reads. For example, an SST containing 
+  // during iteration, seeking, or other reads. For example, an SST containing
   // keys a1, a2, and a3 when added with PrefixReplacement={From: a, To:x} would
   // produce the same results for subsequent operations as adding an SST with
   // the keys x1, x2, x3 instead. The implementaiton may however elect to defer
@@ -2032,8 +2140,8 @@ message AddSSTableRequest {
   PrefixReplacement prefix_replacement = 11 [(gogoproto.nullable) = false];
 
   // IgnoreKeysAboveTimestamp is used when ingesting an SSTable that contains
-  // keys, including mvcc revisions of keys, captured over a time range, to 
-  // indicate that readers of that sstable should read it "as of" a the fixed 
+  // keys, including mvcc revisions of keys, captured over a time range, to
+  // indicate that readers of that sstable should read it "as of" a the fixed
   // time, ignoring any keys with later timestamps.
   //
   // TODO(dt,msbutler,bilal): This is unsupported.
@@ -2825,6 +2933,9 @@ message BoundedStalenessHeader {
 // request.
 message AdmissionHeader {
   // Priority is utilized within a tenant. See admission.WorkPriority.
+  //
+  // TODO(sumeer): Use gogoproto.customtype to make this
+  // admissionpb.WorkPriority.
   int32 priority = 1;
   // CreateTime is equivalent to Time.UnixNano() at the creation time of this
   // request or a parent request. See admission.WorkInfo.Priority for details.
@@ -3485,7 +3596,9 @@ message ScanStats {
   // NumGets, NumScans, and NumReverseScans tracks the number of Gets, Scans,
   // and ReverseScans, respectively, that were actually evaluated as part of the
   // BatchResponse. These don't include requests that were not evaluated due to
-  // reaching the BatchResponse's limits or an error.
+  // reaching the BatchResponse's limits or an error. NumScans also tracks the
+  // number of ExportRequests evaluated (including ones that resulted in an
+  // error).
   uint64 num_gets = 17;
   uint64 num_scans = 18;
   uint64 num_reverse_scans = 19;

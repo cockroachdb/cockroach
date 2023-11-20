@@ -13,7 +13,6 @@ go_library(
 go_test(
     name = "bazel_test",
     srcs = ["bazel_test.go"],
-    args = ["-test.timeout=295s"],
     embed = [":bazel"],  # keep
     deps = [
         "@com_github_stretchr_testify//require",

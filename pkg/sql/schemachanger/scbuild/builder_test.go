@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -50,6 +51,7 @@ import (
 func TestBuildDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer ccl.TestingEnableEnterprise()() // allow usage of partitions and zone configs
 
 	ctx := context.Background()
 
@@ -84,6 +86,7 @@ func TestBuildDataDriven(t *testing.T) {
 					fn(
 						sctestdeps.NewTestDependencies(
 							sctestdeps.WithDescriptors(descriptorCatalog),
+							sctestdeps.WithSystemDatabaseDescriptor(),
 							sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
 							sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
 							sctestdeps.WithSessionData(
@@ -116,7 +119,6 @@ func TestBuildDataDriven(t *testing.T) {
 				s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 				defer s.Stopper().Stop(ctx)
 				tt := s.ApplicationLayer()
-				sql.SecondaryTenantZoneConfigsEnabled.Override(ctx, &tt.ClusterSettings().SV, true)
 				tdb := sqlutils.MakeSQLRunner(sqlDB)
 				datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 					return run(ctx, t, depsType.name, d, tt, s.NodeID(), tdb, depsType.dependenciesWrapper)

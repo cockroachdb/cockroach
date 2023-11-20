@@ -42,9 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -65,7 +64,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -73,7 +71,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -1696,11 +1693,10 @@ func TestImportRowLimit(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Also create a pgx connection so we can check notices.
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := tc.ApplicationLayer(0).PGUrl(
 		t,
-		tc.ApplicationLayer(0).AdvSQLAddr(),
-		"TestImportRowLimit",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestImportRowLimit"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanup()
 	config, err := pgx.ParseConfig(pgURL.String())
@@ -2937,106 +2933,6 @@ func TestExportImportRoundTrip(t *testing.T) {
 		}
 		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s`, test.tbl), sqlDB.QueryStr(t, test.expected))
 	}
-}
-
-// TestImportRetriesBreakerOpenFailure tests that errors resulting from open
-// breakers on the coordinator node are retried.
-func TestImportRetriesBreakerOpenFailure(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderShort(t)
-	skip.UnderRace(t, "takes >1min under race")
-
-	const nodes = 3
-	numFiles := nodes + 2
-	rowsPerFile := 1
-
-	ctx := context.Background()
-	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		ExternalIODir:     datapathutils.TestDataPath(t, "csv")}})
-	defer tc.Stopper().Stop(ctx)
-
-	aboutToRunDSP := make(chan struct{})
-	allowRunDSP := make(chan struct{})
-	for i := 0; i < tc.NumServers(); i++ {
-		tc.Server(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
-				r := raw.(*importResumer)
-				r.testingKnobs.beforeRunDSP = func() error {
-					select {
-					case aboutToRunDSP <- struct{}{}:
-					case <-time.After(testutils.DefaultSucceedsSoonDuration):
-						return errors.New("timed out on aboutToRunDSP")
-					}
-					select {
-					case <-allowRunDSP:
-					case <-time.After(testutils.DefaultSucceedsSoonDuration):
-						return errors.New("timed out on allowRunDSP")
-					}
-					return nil
-				}
-				return r
-			})
-	}
-
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	setSmallIngestBufferSizes(t, sqlDB)
-	sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-	var tableID int64
-	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
-
-	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
-		testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerFile)
-		fileListStr := strings.Join(testFiles.files, ", ")
-		redactedFileListStr := strings.ReplaceAll(fileListStr, "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")
-		query := fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, fileListStr)
-		sqlDB.Exec(t, query)
-		return jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
-			Username:      username.RootUserName(),
-			Description:   fmt.Sprintf(`IMPORT INTO defaultdb.public.t(a, b) CSV DATA (%s)`, redactedFileListStr),
-			DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
-		})
-	})
-
-	// On the first attempt, we trip the node 3 breaker between distsql planning
-	// and actually running the plan.
-	select {
-	case <-aboutToRunDSP:
-	case <-time.After(testutils.DefaultSucceedsSoonDuration):
-		t.Fatal("timed out on aboutToRunDSP")
-	}
-	{
-		b, ok := tc.Server(0).NodeDialer().(*nodedialer.Dialer).GetCircuitBreaker(roachpb.NodeID(3), rpc.DefaultClass)
-		require.True(t, ok)
-		undo := circuit.TestingSetTripped(b, errors.New("boom"))
-		defer undo()
-	}
-
-	timeout := testutils.DefaultSucceedsSoonDuration
-	select {
-	case allowRunDSP <- struct{}{}:
-	case <-time.After(timeout):
-		t.Fatalf("timed out on allowRunDSP attempt 1")
-	}
-
-	// The failure above should be retried. We expect this to succeed even if we
-	// don't reset the breaker because node 3 should no longer be included in
-	// the plan.
-	select {
-	case <-aboutToRunDSP:
-	case <-time.After(timeout):
-		t.Fatalf("timed out on aboutToRunDSP")
-	}
-	select {
-	case allowRunDSP <- struct{}{}:
-	case <-time.After(timeout):
-		t.Fatalf("timed out on allowRunDSP")
-	}
-	require.NoError(t, g.Wait())
 }
 
 // TODO(adityamaru): Tests still need to be added incrementally as
@@ -4753,7 +4649,9 @@ func TestImportDefaultNextVal(t *testing.T) {
 					if util.RaceEnabled {
 						expectedVal = test.seqToNumNextval[seqName].expectedImportChunkAllocsUnderRace
 					}
-					require.Equal(t, expectedVal, seqVal)
+					// The seqVal may have advanced further due to retries, so it may be
+					// greater than the expectedVal.
+					require.LessOrEqual(t, expectedVal, seqVal)
 				}
 			})
 		}
@@ -5278,6 +5176,10 @@ func (d fakeResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error)
 	if d.FailOrCancel != nil {
 		return d.FailOrCancel(ctx)
 	}
+	return nil
+}
+
+func (d fakeResumer) CollectProfile(_ context.Context, _ interface{}) error {
 	return nil
 }
 
@@ -6384,7 +6286,6 @@ func TestImportPgDumpSchemas(t *testing.T) {
 	baseDir := datapathutils.TestDataPath(t, "pgdump")
 	mkArgs := func() base.TestServerArgs {
 		s := cluster.MakeTestingClusterSettings()
-		storage.MVCCRangeTombstonesEnabledInMixedClusters.Override(ctx, &s.SV, true)
 		return base.TestServerArgs{
 			Settings:      s,
 			ExternalIODir: baseDir,
@@ -6410,7 +6311,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		// Check that we have imported 4 schemas.
 		expectedSchemaNames := [][]string{{"bar"}, {"baz"}, {"foo"}, {"public"}}
 		sqlDB.CheckQueryResults(t,
-			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner IS NOT NULL ORDER BY schema_name`,
+			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner != 'node' ORDER BY schema_name`,
 			expectedSchemaNames)
 
 		// Check that we have a test table in each schema with the expected content.
@@ -6489,7 +6390,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE schemadb.public.test`)
 		}
 		sqlDB.CheckQueryResults(t,
-			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner <> 'NULL' ORDER BY schema_name`,
+			`SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner <> 'node' ORDER BY schema_name`,
 			[][]string{{"bar"}, {"public"}})
 	})
 
@@ -6597,7 +6498,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		}
 
 		// As a final sanity check that the schemas have been removed.
-		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner IS NOT NULL`,
+		sqlDB.CheckQueryResults(t, `SELECT schema_name FROM [SHOW SCHEMAS] WHERE owner != 'node'`,
 			[][]string{{"public"}})
 
 		// Check that the database descriptor has been updated with the removed schemas.
@@ -6885,8 +6786,9 @@ func TestImportClientDisconnect(t *testing.T) {
 	// Make credentials for the new connection.
 	runner.Exec(t, `CREATE USER testuser`)
 	runner.Exec(t, `GRANT admin TO testuser`)
-	pgURL, cleanup := sqlutils.PGUrl(t, tc.ApplicationLayer(0).AdvSQLAddr(),
-		"TestImportClientDisconnect-testuser", url.User("testuser"))
+	pgURL, cleanup := tc.ApplicationLayer(0).PGUrl(t,
+		serverutils.CertsDirPrefix("TestImportClientDisconnect-testuser"), serverutils.User("testuser"),
+	)
 	defer cleanup()
 	runner.Exec(t, "CREATE TABLE foo (k INT PRIMARY KEY, v STRING)")
 
@@ -7118,7 +7020,9 @@ func TestImportRowErrorLargeRows(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
 	// Our input file has an 8MB row
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.raft.command.max_size = '4MiB'`)
+	for _, l := range []serverutils.ApplicationLayerInterface{tc.Server(0), tc.Server(0).SystemLayer()} {
+		kvserverbase.MaxCommandSize.Override(ctx, &l.ClusterSettings().SV, 4<<20)
+	}
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 	sqlDB.Exec(t, "CREATE TABLE simple (s string)")
 	defer sqlDB.Exec(t, "DROP table simple")

@@ -24,7 +24,6 @@ go_test(
         "fast_test.go",
         "sparse_test.go",
     ],
-    args = ["-test.timeout=55s"],
     embed = [":intsets"],
     deps = ["//pkg/util/randutil"],
 )

@@ -54,12 +54,14 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 				Name: fmt.Sprintf(
 					"unoptimized-query-oracle/disable-rules=%s/%s", disableRuleSpec.disableRules, setupName,
 				),
-				Owner:           registry.OwnerSQLQueries,
-				NativeLibs:      registry.LibGEOS,
-				Timeout:         time.Hour * 1,
-				RequiresLicense: true,
-				Tags:            nil,
-				Cluster:         clusterSpec,
+				Owner:            registry.OwnerSQLQueries,
+				NativeLibs:       registry.LibGEOS,
+				Timeout:          time.Hour * 1,
+				RequiresLicense:  true,
+				Tags:             nil,
+				Cluster:          clusterSpec,
+				CompatibleClouds: registry.AllExceptAWS,
+				Suites:           registry.Suites(registry.Nightly),
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runQueryComparison(ctx, t, c, &queryComparisonTest{
 						name:      "unoptimized-query-oracle",

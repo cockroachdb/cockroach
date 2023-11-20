@@ -159,7 +159,8 @@ func runTC(queueBuild func(string, map[string]string)) {
 
 		if testTarget == "//pkg/sql/logictest:logictest_test" ||
 			testTarget == "//pkg/kv/kvserver:kvserver_test" ||
-			testTarget == "//pkg/ccl/backupccl:backupccl_test" {
+			testTarget == "//pkg/ccl/backupccl:backupccl_test" ||
+			testTarget == "//pkg/ccl/streamingccl/streamingest:streamingest_test" {
 			// Stress heavy with reduced parallelism (to avoid overloading the
 			// machine, see https://github.com/cockroachdb/cockroach/pull/10966).
 			parallelism /= 2
@@ -172,14 +173,13 @@ func runTC(queueBuild func(string, map[string]string)) {
 		// Run non-race build.
 		bazelFlags, ok := opts["env.EXTRA_BAZEL_FLAGS"]
 		if ok {
-			opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("%s --test_sharding_strategy=disabled --jobs %d", bazelFlags, parallelism)
+			opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("%s --test_sharding_strategy=disabled", bazelFlags)
 		} else {
-			opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("--test_sharding_strategy=disabled --jobs %d", parallelism)
+			opts["env.EXTRA_BAZEL_FLAGS"] = "--test_sharding_strategy=disabled"
 		}
 
 		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
 			maxRuns, maxTime, maxFails, parallelism)
-		queueBuildThenWait(buildID, opts)
 
 		// Run non-race build with deadlock detection.
 		opts["env.TAGS"] = "deadlock"
@@ -194,7 +194,6 @@ func runTC(queueBuild func(string, map[string]string)) {
 		opts["env.EXTRA_BAZEL_FLAGS"] = fmt.Sprintf("%s --@io_bazel_rules_go//go/config:race --test_env=GORACE=halt_on_error=1", extraBazelFlags)
 		opts["env.STRESSFLAGS"] = fmt.Sprintf("-maxruns %d -maxtime %s -maxfails %d -p %d",
 			maxRuns, maxTime, maxFails, noParallelism)
-		opts["env.TAGS"] = "race"
 		queueBuildThenWait(buildID, opts)
 		delete(opts, "env.TAGS")
 	}

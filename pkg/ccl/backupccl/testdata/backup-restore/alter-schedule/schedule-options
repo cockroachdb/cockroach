@@ -44,7 +44,7 @@ alter backup schedule $fullID set schedule option on_previous_running = 'start';
 ----
 
 query-sql
-select on_error, on_wait
+select on_execution_failure, on_previous_running
 from [show schedules for backup]
 where id in ($fullID, $incID)
 order by backup_type asc;
@@ -57,7 +57,7 @@ alter backup schedule $fullID set schedule option on_previous_running = 'skip';
 ----
 
 query-sql
-select on_error, on_wait
+select on_execution_failure, on_previous_running
 from [show schedules for backup]
 where id in ($fullID, $incID)
 order by backup_type asc;
@@ -70,7 +70,7 @@ alter backup schedule $fullID set schedule option on_previous_running = 'wait';
 ----
 
 query-sql
-select on_error, on_wait
+select on_execution_failure, on_previous_running
 from [show schedules for backup]
 where id in ($fullID, $incID)
 order by backup_type asc;
@@ -116,7 +116,7 @@ let $fullID $incID
 with schedules as (show schedules) select id from schedules where label='datatest3' order by command->>'backup_type' asc;
 ----
 
-exec-sql user=testuser expect-error-regex=(only users with the admin role are allowed to updates_cluster_last_backup_time_metric)
+exec-sql user=testuser expect-error-regex=(only users with the admin role are allowed to change updates_cluster_last_backup_time_metric)
 alter backup schedule $fullID set schedule option updates_cluster_last_backup_time_metric = '1';
 ----
 regex matches error

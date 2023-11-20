@@ -60,6 +60,10 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	return n.run(ctx, execCtx)
 }
 
+func (n *newSchemaChangeResumer) CollectProfile(_ context.Context, _ interface{}) error {
+	return nil
+}
+
 func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	execCfg := execCtx.ExecCfg()

@@ -61,7 +61,6 @@ go_test(
         "rangefeed_mock_test.go",
         ":mock_rangefeed",  # keep
     ],
-    args = ["-test.timeout=295s"],
     embed = [":rangefeed"],
     deps = [
         "//pkg/base",
@@ -78,7 +77,6 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigptsreader",
-        "//pkg/sql",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/storage",
         "//pkg/testutils",

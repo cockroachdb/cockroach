@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -52,7 +53,7 @@ var (
 	flagRSGTime                    = flag.Duration("rsg", 0, "random syntax generator test duration")
 	flagRSGGoRoutines              = flag.Int("rsg-routines", 1, "number of Go routines executing random statements in each RSG test")
 	flagRSGExecTimeout             = flag.Duration("rsg-exec-timeout", 35*time.Second, "timeout duration when executing a statement")
-	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 40*time.Second, "timeout duration when executing a statement for random column changes")
+	flagRSGExecColumnChangeTimeout = flag.Duration("rsg-exec-column-change-timeout", 50*time.Second, "timeout duration when executing a statement for random column changes")
 )
 
 func verifyFormat(sql string) error {
@@ -296,6 +297,9 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.HasPrefix(s, "SET SESSION CHARACTERISTICS AS TRANSACTION") {
 			return errors.New("setting session characteristics is unsupported")
 		}
+		if strings.HasPrefix(s, "DROP DATABASE") {
+			return errors.New("dropping the database is likely to timeout since it needs to drop a lot of dependent objects")
+		}
 		if strings.Contains(s, "READ ONLY") || strings.Contains(s, "read_only") {
 			return errors.New("READ ONLY settings are unsupported")
 		}
@@ -305,7 +309,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.Contains(s, "EXPERIMENTAL SCRUB DATABASE SYSTEM") {
 			return errors.New("See #43693")
 		}
-		// Recreate the database on every run in case it was dropped or renamed in
+		// Recreate the database on every run in case it was renamed in
 		// a previous run. Should always succeed.
 		if err := db.exec(t, ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
 			return err
@@ -489,21 +493,40 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	numTables := *flagRSGGoRoutines
 	roots := []string{
 		"alter_table_cmd",
+	}
+
+	// The goroutines will use round-robin to pick the next table to modify.
+	tableIDMu := syncutil.Mutex{}
+	tableID := 0
+	incrementTableID := func() int {
+		tableIDMu.Lock()
+		defer tableIDMu.Unlock()
+		tableID++
+		if tableID >= numTables {
+			tableID = 0
+		}
+		return tableID
 	}
 
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
 			return err
 		}
-		return db.exec(t, ctx, `
-			CREATE DATABASE ident;
-			CREATE TABLE ident.ident (ident decimal);
-		`)
+		if err := db.exec(t, ctx, `CREATE DATABASE ident;`); err != nil {
+			return err
+		}
+		for i := 0; i < numTables; i++ {
+			if err := db.exec(t, ctx, fmt.Sprintf(`CREATE TABLE ident.ident%d (ident decimal);`, i)); err != nil {
+				return err
+			}
+		}
+		return nil
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		n := r.Intn(len(roots))
-		s := fmt.Sprintf("ALTER TABLE ident.ident %s", r.Generate(roots[n], 500))
+		s := fmt.Sprintf("ALTER TABLE ident.ident%d %s", incrementTableID(), r.Generate(roots[n], 500))
 		// Execute with a resettable timeout, where we allow up to N go-routines worth
 		// of resets. This should be the maximum theoretical time we can get
 		// stuck behind other work.
@@ -643,6 +666,7 @@ var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
 func TestRandomSyntaxSQLSmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	defer ccl.TestingEnableEnterprise()() // allow usage of partitions
 
 	var smither *sqlsmith.Smither
 
@@ -808,8 +832,6 @@ func testRandomSyntax(
 	}
 	srv, rawDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
-	sql.SecondaryTenantSplitAtEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
-	sql.SecondaryTenantScatterEnabled.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, true)
 	db := &verifyFormatDB{db: rawDB}
 	err := db.exec(t, ctx, "SET CLUSTER SETTING schemachanger.job.max_retry_backoff='1s'")
 	require.NoError(t, err)

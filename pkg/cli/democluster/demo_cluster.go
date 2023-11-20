@@ -425,31 +425,49 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			c.adminPassword = demoPassword
 		}
 
-		if c.demoCtx.Multitenant && !c.demoCtx.Insecure {
-			// Also create the user/password for the secondary tenant.
-			ts := c.tenantServers[0]
-			tctx := ts.AnnotateCtx(ctx)
-			ieTenant := ts.InternalExecutor().(isql.Executor)
-			_, err = ieTenant.Exec(tctx, "tenant-password", nil,
-				fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", demoUsername, demoPassword))
-			if err != nil {
-				return err
+		if c.demoCtx.Multitenant {
+			if !c.demoCtx.Insecure {
+				// Also create the user/password for the secondary tenant.
+				ts := c.tenantServers[0]
+				tctx := ts.AnnotateCtx(ctx)
+				ieTenant := ts.InternalExecutor().(isql.Executor)
+				_, err = ieTenant.Exec(tctx, "tenant-password", nil,
+					fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", demoUsername, demoPassword))
+				if err != nil {
+					return err
+				}
+				_, err = ieTenant.Exec(tctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
+				if err != nil {
+					return err
+				}
 			}
-			_, err = ieTenant.Exec(tctx, "tenant-grant", nil, fmt.Sprintf("GRANT admin TO %s", demoUsername))
-			if err != nil {
-				return err
-			}
-		}
 
-		if c.demoCtx.Multitenant && !c.demoCtx.DisableServerController {
-			// Select the default tenant.
 			ie := c.firstServer.InternalExecutor().(isql.Executor)
-			// Choose the tenant to use when no tenant is specified on a
-			// connection or web URL.
-			if _, err := ie.Exec(ctx, "default-tenant", nil,
-				`SET CLUSTER SETTING `+multitenant.DefaultClusterSelectSettingName+` = $1`,
-				demoTenantName); err != nil {
+
+			// Grant full capabilities.
+			_, err = ie.Exec(ctx, "tenant-grant-capabilities", nil, fmt.Sprintf("ALTER VIRTUAL CLUSTER %s GRANT ALL CAPABILITIES", demoTenantName))
+			if err != nil {
 				return err
+			}
+
+			if !c.demoCtx.DisableServerController {
+				// Select the default tenant.
+				// Choose the tenant to use when no tenant is specified on a
+				// connection or web URL.
+				if _, err := ie.Exec(ctx, "default-tenant", nil,
+					`SET CLUSTER SETTING `+multitenant.DefaultClusterSelectSettingName+` = $1`,
+					demoTenantName); err != nil {
+					return err
+				}
+			}
+
+			for _, s := range []string{
+				string(sql.RestrictAccessToSystemInterface.Name()),
+				string(sql.TipUserAboutSystemInterface.Name()),
+			} {
+				if _, err := ie.Exec(ctx, "restrict-system-interface", nil, fmt.Sprintf(`SET CLUSTER SETTING %s = true`, s)); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -534,7 +552,7 @@ func (c *transientCluster) startTenantService(
 		}
 
 		var err error
-		ts, err = c.servers[serverIdx].StartTenant(ctx, args)
+		ts, err = c.servers[serverIdx].TenantController().StartTenant(ctx, args)
 		if err != nil {
 			return err
 		}
@@ -547,7 +565,7 @@ func (c *transientCluster) startTenantService(
 		}))
 	} else {
 		var err error
-		ts, _, err = c.servers[serverIdx].StartSharedProcessTenant(ctx,
+		ts, _, err = c.servers[serverIdx].TenantController().StartSharedProcessTenant(ctx,
 			base.TestSharedProcessTenantArgs{
 				TenantID:   roachpb.MustMakeTenantID(secondaryTenantID),
 				TenantName: demoTenantName,
@@ -701,7 +719,6 @@ func (c *transientCluster) startNodeAsync(
 
 				// Don't block if we are shutting down.
 			case <-ctx.Done():
-			case <-s.Stopper().ShouldQuiesce():
 			case <-c.stopper.ShouldQuiesce():
 			case <-timeoutCh:
 			}
@@ -736,7 +753,12 @@ func (c *transientCluster) waitForRPCAddrReadinessOrError(
 	case <-ctx.Done():
 		return errors.CombineErrors(ctx.Err(), errors.Newf("server %d startup aborted due to context cancellation", idx))
 	case <-c.servers[idx].Stopper().ShouldQuiesce():
-		return errors.Newf("server %d stopped prematurely", idx)
+		select {
+		case err := <-errCh:
+			return err
+		case <-time.After(30 * time.Second):
+		}
+		return errors.Newf("server %d stopped prematurely without returning error", idx)
 	case <-c.stopper.ShouldQuiesce():
 		return errors.Newf("demo cluster stopped prematurely while starting server %d", idx)
 	}
@@ -802,7 +824,7 @@ func (c *transientCluster) waitForSQLReadiness(
 		case <-ctx.Done():
 			return errors.CombineErrors(errors.Newf("context cancellation while waiting for server %d to become ready", idx), ctx.Err())
 		case <-c.servers[idx].Stopper().ShouldQuiesce():
-			return errors.Newf("server %s shut down prematurely", idx)
+			return errors.Newf("server %d shut down prematurely", idx)
 		case <-c.stopper.ShouldQuiesce():
 			return errors.Newf("demo cluster shut down prematurely while waiting for server %d to become ready", idx)
 		default:
@@ -929,12 +951,15 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.Addr = fmt.Sprintf("127.0.0.1:%d", rpcPort)
 		args.SQLAddr = fmt.Sprintf("127.0.0.1:%d", sqlPort)
 		if !demoCtx.DisableServerController {
-			// The code in NewDemoCluster put the KV ports higher
-			// so we need to subtract the number of nodes to get
-			// back to the "good" ports.
-			// We reduce NumNodes by 1 because the server controller
-			// uses 1-based indexing for servers.
-			args.SecondaryTenantPortOffset = -(demoCtx.NumNodes + 1)
+			// The code in NewDemoCluster put the KV ports higher so
+			// we need to subtract the number of nodes to get back
+			// to the "good" ports.
+			//
+			// We reduce lower bound of the port range by 1 because
+			// the server controller uses 1-based indexing for
+			// servers.
+			args.ApplicationInternalRPCPortMin = rpcPort - (demoCtx.NumNodes + 1)
+			args.ApplicationInternalRPCPortMax = args.ApplicationInternalRPCPortMin + 1024
 		}
 	}
 	if httpPort := demoCtx.httpPort(serverIdx, forSystemTenant); httpPort != 0 {
@@ -1041,6 +1066,13 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 	if err := c.drainAndShutdown(ctx, c.servers[serverIdx].adminClient); err != nil {
 		return err
 	}
+
+	select {
+	case <-c.servers[serverIdx].Stopper().IsStopped():
+	case <-time.After(10 * time.Second):
+		return errors.Errorf("server stopper not stopped after 10 seconds")
+	}
+
 	c.servers[serverIdx].TestServerInterface = nil
 	c.servers[serverIdx].adminClient = nil
 	if c.demoCtx.Multitenant {
@@ -1822,7 +1854,12 @@ func (c *transientCluster) runWorkload(
 
 // EnableEnterprise enables enterprise features if available in this build.
 func (c *transientCluster) EnableEnterprise(ctx context.Context) (func(), error) {
-	db, err := gosql.Open("postgres", c.connURL)
+	purl, err := c.getNetworkURLForServer(ctx, 0, true /* includeAppName */, forSystemTenant)
+	if err != nil {
+		return nil, err
+	}
+	connURL := purl.ToPQ().String()
+	db, err := gosql.Open("postgres", connURL)
 	if err != nil {
 		return nil, err
 	}

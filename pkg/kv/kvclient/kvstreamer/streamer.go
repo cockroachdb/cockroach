@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -220,12 +221,24 @@ func (r Result) Release(ctx context.Context) {
 type Streamer struct {
 	distSender *kvcoord.DistSender
 	stopper    *stop.Stopper
+	// sd can be nil in tests.
+	sd *sessiondata.SessionData
 
 	mode          OperationMode
 	hints         Hints
 	maxKeysPerRow int32
-	budget        *budget
-	keyLocking    lock.Strength
+	// eagerMemUsageLimitBytes determines the maximum memory used from the
+	// budget at which point the streamer stops sending non-head-of-the-line
+	// requests eagerly.
+	eagerMemUsageLimitBytes int64
+	// headOfLineOnlyFraction controls the fraction of the available streamer's
+	// memory budget that will be used to set the TargetBytes limit on
+	// head-of-the-line request in case the "eager" memory usage limit has been
+	// exceeded. In such case, only head-of-the-line request will be sent.
+	headOfLineOnlyFraction float64
+	budget                 *budget
+	lockStrength           lock.Strength
+	lockDurability         lock.Durability
 
 	streamerStatistics
 
@@ -326,7 +339,7 @@ type streamerStatistics struct {
 // this setting is chosen arbitrarily as 1/8th of the default value for the
 // senderConcurrencyLimit.
 var streamerConcurrencyLimit = settings.RegisterIntSetting(
-	settings.TenantWritable,
+	settings.ApplicationLevel,
 	"kv.streamer.concurrency_limit",
 	"maximum number of asynchronous requests by a single streamer",
 	max(128, int64(8*runtime.GOMAXPROCS(0))),
@@ -355,6 +368,8 @@ func max(a, b int64) int64 {
 // to interact with the account only after canceling the Streamer (because
 // memory accounts are not thread-safe).
 //
+// sd can be nil in tests in which case some reasonable defaults will be used.
+//
 // kvPairsRead should be incremented atomically with the sum of NumKeys
 // parameters of all received responses.
 //
@@ -365,21 +380,31 @@ func NewStreamer(
 	stopper *stop.Stopper,
 	txn *kv.Txn,
 	st *cluster.Settings,
+	sd *sessiondata.SessionData,
 	lockWaitPolicy lock.WaitPolicy,
 	limitBytes int64,
 	acc *mon.BoundAccount,
 	kvPairsRead *int64,
 	batchRequestsIssued *int64,
-	keyLocking lock.Strength,
+	lockStrength lock.Strength,
+	lockDurability lock.Durability,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
 	}
+	// sd can be nil in tests.
+	headOfLineOnlyFraction := 0.8
+	if sd != nil {
+		headOfLineOnlyFraction = sd.StreamerHeadOfLineOnlyFraction
+	}
 	s := &Streamer{
-		distSender: distSender,
-		stopper:    stopper,
-		budget:     newBudget(acc, limitBytes),
-		keyLocking: keyLocking,
+		distSender:             distSender,
+		stopper:                stopper,
+		sd:                     sd,
+		headOfLineOnlyFraction: headOfLineOnlyFraction,
+		budget:                 newBudget(acc, limitBytes),
+		lockStrength:           lockStrength,
+		lockDurability:         lockDurability,
 	}
 
 	if kvPairsRead == nil {
@@ -422,12 +447,29 @@ func (s *Streamer) Init(
 	mode OperationMode, hints Hints, maxKeysPerRow int, diskBuffer ResultDiskBuffer,
 ) {
 	s.mode = mode
+	// s.sd can be nil in tests, so use almost all the budget eagerly then.
+	eagerFraction := 0.9
 	if mode == OutOfOrder {
 		s.requestsToServe = newOutOfOrderRequestsProvider()
 		s.results = newOutOfOrderResultsBuffer(s.budget)
+		if s.sd != nil {
+			eagerFraction = s.sd.StreamerOutOfOrderEagerMemoryUsageFraction
+		}
 	} else {
 		s.requestsToServe = newInOrderRequestsProvider()
 		s.results = newInOrderResultsBuffer(s.budget, diskBuffer)
+		if s.sd != nil {
+			eagerFraction = s.sd.StreamerInOrderEagerMemoryUsageFraction
+		}
+	}
+	s.eagerMemUsageLimitBytes = int64(math.Ceil(float64(s.budget.limitBytes) * eagerFraction))
+	// Ensure some reasonable lower bound.
+	const minEagerMemUsage = 10 << 10 // 10KiB
+	if s.eagerMemUsageLimitBytes <= 0 {
+		// Protect from overflow.
+		s.eagerMemUsageLimitBytes = math.MaxInt64
+	} else if s.eagerMemUsageLimitBytes < minEagerMemUsage {
+		s.eagerMemUsageLimitBytes = minEagerMemUsage
 	}
 	if !hints.UniqueRequests {
 		panic(errors.AssertionFailedf("only unique requests are currently supported"))
@@ -738,21 +780,31 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 // returned once all enqueued requests have been responded to.
 //
 // Calling GetResults() invalidates the results returned on the previous call.
-func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
+func (s *Streamer) GetResults(ctx context.Context) (retResults []Result, retErr error) {
 	log.VEvent(ctx, 2, "GetResults")
-	defer log.VEvent(ctx, 2, "exiting GetResults")
+	defer func() {
+		log.VEventf(ctx, 2, "exiting GetResults (%d results, err=%v)", len(retResults), retErr)
+	}()
 	for {
 		results, allComplete, err := s.results.get(ctx)
 		if len(results) > 0 || allComplete || err != nil {
 			return results, err
 		}
 		log.VEvent(ctx, 2, "waiting in GetResults")
-		s.results.wait()
-		// Check whether the Streamer has been canceled or closed while we were
-		// waiting for the results.
-		if err = ctx.Err(); err != nil {
+		if err = s.results.wait(ctx); err != nil {
 			s.results.setError(err)
 			return nil, err
+		}
+		if buildutil.CrdbTestBuild {
+			// Check whether the Streamer has been canceled or closed while we
+			// were	waiting for the results.
+			//
+			// Note that this check is done within wait() call above in non-test
+			// builds.
+			if err = ctx.Err(); err != nil {
+				s.results.setError(err)
+				return nil, err
+			}
 		}
 	}
 }
@@ -837,26 +889,28 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 	defer log.VEvent(ctx, 2, "exiting coordinator main loop")
 	defer w.s.waitGroup.Done()
 	for {
-		if err := w.waitForRequests(ctx); err != nil {
-			w.s.results.setError(err)
+		if shouldExit := w.waitForRequests(ctx); shouldExit {
 			return
 		}
 
-		var atLeastBytes int64
-		// The higher the value of priority is, the lower the actual priority of
-		// spilling. Use the maximum value by default.
-		spillingPriority := math.MaxInt64
 		w.s.requestsToServe.Lock()
-		if !w.s.requestsToServe.emptyLocked() {
-			// If we already have minTargetBytes set on the first request to be
-			// issued, then use that.
-			atLeastBytes = w.s.requestsToServe.nextLocked().minTargetBytes
-			// The first request has the highest urgency among all current
-			// requests to serve, so we use its priority to spill everything
-			// with less urgency when necessary to free up the budget.
-			spillingPriority = w.s.requestsToServe.nextLocked().priority()
-		}
+		// The coordinator goroutine is the only one that removes requests from
+		// w.s.requestsToServe, so we can keep the reference to next request
+		// without holding the lock.
+		//
+		// Note that it's possible that by the time we get into
+		// issueRequestsForAsyncProcessing() another request with higher urgency
+		// is added; however, this is not a problem - we wait for available
+		// budget here on a best-effort basis.
+		nextReq := w.s.requestsToServe.nextLocked()
 		w.s.requestsToServe.Unlock()
+		// If we already have minTargetBytes set on the first request to be
+		// issued, then use that.
+		atLeastBytes := nextReq.minTargetBytes
+		// The first request has the highest urgency among all current requests
+		// to serve, so we use its priority to spill everything with less
+		// urgency when necessary to free up the budget.
+		spillingPriority := nextReq.priority()
 
 		avgResponseSize, shouldExit := w.getAvgResponseSize()
 		if shouldExit {
@@ -913,7 +967,8 @@ func (w *workerCoordinator) logStatistics(ctx context.Context) {
 }
 
 // waitForRequests blocks until there is at least one request to be served.
-func (w *workerCoordinator) waitForRequests(ctx context.Context) error {
+// Boolean indicating whether the coordinator should exit is returned.
+func (w *workerCoordinator) waitForRequests(ctx context.Context) (shouldExit bool) {
 	w.s.requestsToServe.Lock()
 	defer w.s.requestsToServe.Unlock()
 	if w.s.requestsToServe.emptyLocked() {
@@ -921,21 +976,21 @@ func (w *workerCoordinator) waitForRequests(ctx context.Context) error {
 		// Check if the Streamer has been canceled or closed while we were
 		// waiting.
 		if ctx.Err() != nil {
-			return ctx.Err()
+			w.s.results.setError(ctx.Err())
+			return true
 		}
 		w.s.mu.Lock()
-		shouldExit := w.s.results.error() != nil || w.s.mu.done
+		shouldExit = w.s.results.error() != nil || w.s.mu.done
 		w.s.mu.Unlock()
 		if shouldExit {
-			return nil
+			return true
 		}
-		if buildutil.CrdbTestBuild {
-			if w.s.requestsToServe.emptyLocked() {
-				panic(errors.AssertionFailedf("unexpectedly zero requests to serve after waiting "))
-			}
+		if w.s.requestsToServe.emptyLocked() {
+			w.s.results.setError(errors.AssertionFailedf("unexpectedly zero requests to serve after waiting"))
+			return true
 		}
 	}
-	return nil
+	return false
 }
 
 func (w *workerCoordinator) getAvgResponseSize() (avgResponseSize int64, shouldExit bool) {
@@ -1049,6 +1104,30 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	)
 	var budgetIsExhausted bool
 	for !w.s.requestsToServe.emptyLocked() && maxNumRequestsToIssue > 0 && !budgetIsExhausted {
+		if !headOfLine && w.s.budget.mu.acc.Used() > w.s.eagerMemUsageLimitBytes {
+			// The next batch is not head-of-the-line, and the budget has used
+			// up more than eagerMemUsageLimitBytes bytes. At this point, we
+			// stop issuing "eager" requests, so we just exit.
+			//
+			// This exit will not lead to the streamer deadlocking because we
+			// already have at least one batch to serve, and at some point we'll
+			// get into this loop with headOfLine=true, so we'll always be
+			// issuing at least one batch, eventually.
+			//
+			// This behavior is helpful to prevent pathological behavior
+			// observed in #113729. Namely, if we issue too many batches eagerly
+			// in the InOrder mode, the buffered responses might consume most of
+			// our memory budget, and at some point we might regress to
+			// processing requests one batch with a single Get / Scan request at
+			// a time. We don't want to just drop already received responses
+			// (we've already discarded the original singleRangeBatches anyway),
+			// so this mechanism allows us to preserve a fraction of the budget
+			// to processing head-of-the-line batches.
+			//
+			// Similar pattern can occur in the OutOfOrder mode too although the
+			// degradation is not as severe as in the InOrder mode.
+			return nil
+		}
 		singleRangeReqs := w.s.requestsToServe.nextLocked()
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		// minTargetBytes is the minimum TargetBytes limit with which it makes
@@ -1113,6 +1192,18 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 		// significantly in size.
 		if targetBytes < singleRangeReqs.minTargetBytes {
 			targetBytes = singleRangeReqs.minTargetBytes
+		}
+		if headOfLine && w.s.budget.mu.acc.Used() > w.s.eagerMemUsageLimitBytes {
+			// Given that the eager memory usage limit has already been
+			// exceeded, we won't issue any more requests for now, so rather
+			// than use the estimate on the response size, this head-of-the-line
+			// batch will use most of the available budget, as controlled by the
+			// session variable.
+			if headOfLineOnly := int64(float64(availableBudget) * w.s.headOfLineOnlyFraction); headOfLineOnly > targetBytes {
+				targetBytes = headOfLineOnly
+				// Ensure that we won't issue any more requests for now.
+				budgetIsExhausted = true
+			}
 		}
 		if targetBytes+responsesOverhead > availableBudget {
 			// We don't have enough budget to account for both the TargetBytes
@@ -1466,7 +1557,7 @@ func calculateFootprint(
 			}
 			if get.ResumeSpan != nil {
 				// This Get wasn't completed.
-				fp.resumeReqsMemUsage += requestSize(get.ResumeSpan.Key, get.ResumeSpan.EndKey)
+				fp.resumeReqsMemUsage += getRequestSize(get.ResumeSpan.Key)
 				fp.numIncompleteGets++
 			} else {
 				// This Get was completed.
@@ -1501,7 +1592,7 @@ func calculateFootprint(
 			}
 			if scan.ResumeSpan != nil {
 				// This Scan wasn't completed.
-				fp.resumeReqsMemUsage += requestSize(scan.ResumeSpan.Key, scan.ResumeSpan.EndKey)
+				fp.resumeReqsMemUsage += scanRequestSize(scan.ResumeSpan.Key, scan.ResumeSpan.EndKey)
 				fp.numIncompleteScans++
 			}
 		}
@@ -1609,7 +1700,6 @@ func processSingleRangeResults(
 			get := response
 			if get.ResumeSpan != nil {
 				// This Get wasn't completed.
-				log.VEvent(ctx, 2, "incomplete Get")
 				continue
 			}
 			// This Get was completed.
@@ -1642,7 +1732,6 @@ func processSingleRangeResults(
 				// multiple ranges and the last range has no data in it - we
 				// want to be able to set scanComplete field on such an empty
 				// Result).
-				log.VEvent(ctx, 2, "incomplete Scan")
 				continue
 			}
 			result := Result{
@@ -1744,7 +1833,8 @@ func buildResumeSingleRangeBatch(
 			newGet := gets[0]
 			gets = gets[1:]
 			newGet.req.SetSpan(*get.ResumeSpan)
-			newGet.req.KeyLocking = s.keyLocking
+			newGet.req.KeyLockingStrength = s.lockStrength
+			newGet.req.KeyLockingDurability = s.lockDurability
 			newGet.union.Get = &newGet.req
 			resumeReq.reqs[resumeReqIdx].Value = &newGet.union
 			resumeReq.positions = append(resumeReq.positions, position)
@@ -1772,7 +1862,8 @@ func buildResumeSingleRangeBatch(
 			scans = scans[1:]
 			newScan.req.SetSpan(*scan.ResumeSpan)
 			newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
-			newScan.req.KeyLocking = s.keyLocking
+			newScan.req.KeyLockingStrength = s.lockStrength
+			newScan.req.KeyLockingDurability = s.lockDurability
 			newScan.union.Scan = &newScan.req
 			resumeReq.reqs[resumeReqIdx].Value = &newScan.union
 			resumeReq.positions = append(resumeReq.positions, position)

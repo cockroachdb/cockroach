@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -972,26 +973,59 @@ func (ex *connExecutor) execStmtInOpenState(
 	// gets enabled once for all SQL statements executed "underneath".
 	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 	prevSeqNum := ex.state.mu.txn.GetReadSeqNum()
+	delegatedFromOuterTxn := ex.executorType == executorTypeInternal && ex.extraTxnState.fromOuterTxn
+	var origTs hlc.Timestamp
 	defer func() {
 		_ = ex.state.mu.txn.ConfigureStepping(ctx, prevSteppingMode)
 
 		// If this is an internal executor that is running on behalf of an outer
 		// txn, then we need to step back the txn so that the outer executor uses
 		// the proper sequence number.
-		if ex.executorType == executorTypeInternal && ex.extraTxnState.fromOuterTxn {
-			err := ex.state.mu.txn.SetReadSeqNum(prevSeqNum)
-			retEv, retPayload, retErr = makeErrEvent(err)
+		if delegatedFromOuterTxn {
+			if err := ex.state.mu.txn.SetReadSeqNum(prevSeqNum); err != nil {
+				retEv, retPayload, retErr = makeErrEvent(err)
+			}
 		}
 	}()
 
 	// Then we create a sequencing point.
 	//
-	// This is not the only place where a sequencing point is
-	// placed. There are also sequencing point after every stage of
-	// constraint checks and cascading actions at the _end_ of a
-	// statement's execution.
-	if err := ex.state.mu.txn.Step(ctx); err != nil {
+	// This is not the only place where a sequencing point is placed. There are
+	// also sequencing point after every stage of constraint checks and cascading
+	// actions at the _end_ of a statement's execution.
+	//
+	// If this is an internal executor running on behalf of an outer txn, then we
+	// also need to make sure the external read timestamp is not bumped. Normally,
+	// that happens whenever a READ COMMITTED txn is stepped.
+	//
+	// Under test builds, we add a few extra assertions to ensure that the
+	// external read timestamp does not change if it shouldn't, and that we use
+	// the correct isolation level for internal operations.
+	if buildutil.CrdbTestBuild {
+		if delegatedFromOuterTxn {
+			origTs = ex.state.mu.txn.ReadTimestamp()
+		} else if ex.executorType == executorTypeInternal {
+			if level := ex.state.mu.txn.IsoLevel(); level != isolation.Serializable {
+				return nil, nil, errors.AssertionFailedf(
+					"internal operation is not using SERIALIZABLE isolation; found=%s",
+					level,
+				)
+			}
+		}
+	}
+	if err := ex.state.mu.txn.Step(ctx, !delegatedFromOuterTxn /* allowReadTimestampStep */); err != nil {
 		return makeErrEvent(err)
+	}
+	if buildutil.CrdbTestBuild && delegatedFromOuterTxn {
+		newTs := ex.state.mu.txn.ReadTimestamp()
+		if newTs != origTs {
+			// This should never happen. If it does, it means that the internal
+			// executor incorrectly moved the txn's read timestamp forward.
+			return nil, nil, errors.AssertionFailedf(
+				"internal executor advanced the txn read timestamp. origTs=%s, newTs=%s",
+				origTs, newTs,
+			)
+		}
 	}
 
 	if isPausablePortal() {
@@ -1404,12 +1438,21 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 
 	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 
-	// We need to step the transaction before committing if it has stepping
-	// enabled. If it doesn't have stepping enabled, then we just set the
-	// stepping mode back to what it was.
+	// We need to step the transaction's internal read sequence before committing
+	// if it has stepping enabled. If it doesn't have stepping enabled, then we
+	// just set the stepping mode back to what it was.
+	//
+	// Even if we do step the transaction's internal read sequence, we do not
+	// advance its external read timestamp (applicable only to read committed
+	// transactions). This is because doing so is not needed before committing,
+	// and it would cause the transaction to commit at a higher timestamp than
+	// necessary. On heavily contended workloads like the one from #109628, this
+	// can cause unnecessary write-write contention between transactions by
+	// inflating the contention footprint of each transaction (i.e. the duration
+	// measured in MVCC time that the transaction holds locks).
 	prevSteppingMode := ex.state.mu.txn.ConfigureStepping(ctx, kv.SteppingEnabled)
 	if prevSteppingMode == kv.SteppingEnabled {
-		if err := ex.state.mu.txn.Step(ctx); err != nil {
+		if err := ex.state.mu.txn.Step(ctx, false /* allowReadTimestampStep */); err != nil {
 			return err
 		}
 	} else {
@@ -1968,8 +2011,8 @@ func populateQueryLevelStats(
 			if costController := cfg.DistSQLSrv.TenantCostController; costController != nil {
 				if costCfg := costController.GetCostConfig(); costCfg != nil {
 					networkEgressRUEstimate := costCfg.PGWireEgressCost(topLevelStats.networkEgressEstimate)
-					ih.queryLevelStatsWithErr.Stats.RUEstimate += int64(networkEgressRUEstimate)
-					ih.queryLevelStatsWithErr.Stats.RUEstimate += int64(cpuStats.EndCollection(ctx))
+					ih.queryLevelStatsWithErr.Stats.RUEstimate += float64(networkEgressRUEstimate)
+					ih.queryLevelStatsWithErr.Stats.RUEstimate += cpuStats.EndCollection(ctx)
 				}
 			}
 		}
@@ -2256,19 +2299,8 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		err = planner.resumeFlowForPausablePortal(recv)
 	} else {
 		evalCtx := planner.ExtendedEvalContext()
-		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner,
-			planner.txn, distribute)
-		planCtx.stmtType = recv.stmtType
-		// Skip the diagram generation since on this "main" query path we can get it
-		// via the statement bundle.
-		planCtx.skipDistSQLDiagramGeneration = true
-		if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
-			planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)
-		} else if planner.instrumentation.ShouldSaveFlows() {
-			planCtx.saveFlows = planCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeMainQuery)
-		}
-		planCtx.associateNodeWithComponents = planner.instrumentation.getAssociateNodeWithComponentsFn()
-		planCtx.collectExecStats = planner.instrumentation.ShouldCollectExecStats()
+		planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
+		planCtx.setUpForMainQuery(ctx, planner, recv)
 
 		var evalCtxFactory func(usedConcurrently bool) *extendedEvalContext
 		if len(planner.curPlan.subqueryPlans) != 0 ||
@@ -2993,7 +3025,7 @@ func payloadHasError(payload fsm.EventPayload) bool {
 	return hasErr
 }
 
-func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
+func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr error) {
 	if ex.extraTxnState.shouldExecuteOnTxnFinish {
 		ex.extraTxnState.shouldExecuteOnTxnFinish = false
 		txnStart := ex.extraTxnState.txnFinishClosure.txnStartTime
@@ -3019,10 +3051,11 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
 				ex.sessionData(),
 				ev.txnID,
 				transactionFingerprintID,
+				txnErr,
 			)
 		}
 
-		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart)
+		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart, txnErr)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to record transaction stats: %s", err)
@@ -3109,6 +3142,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	ev txnEvent,
 	implicit bool,
 	txnStart time.Time,
+	txnErr error,
 ) error {
 	recordingStart := timeutil.Now()
 	defer func() {
@@ -3175,17 +3209,46 @@ func (ex *connExecutor) recordTransactionFinish(
 		// TODO(107318): add asoftime or ishistorical
 		// TODO(107318): add readonly
 		SessionData: ex.sessionData(),
+		TxnErr:      txnErr,
 	}
 
 	if ex.server.cfg.TestingKnobs.OnRecordTxnFinish != nil {
 		ex.server.cfg.TestingKnobs.OnRecordTxnFinish(ex.executorType == executorTypeInternal, ex.phaseTimes, ex.planner.stmt.SQL)
 	}
 
+	ex.maybeRecordRetrySerializableContention(ev.txnID, transactionFingerprintID, txnErr)
+
 	return ex.statsCollector.RecordTransaction(
 		ctx,
 		transactionFingerprintID,
 		recordedTxnStats,
 	)
+}
+
+// Records a SERIALIZATION_CONFLICT contention event to the contention registry event
+// store if we have a known conflicting txn meta for a serialization conflict error.
+func (ex *connExecutor) maybeRecordRetrySerializableContention(
+	txnID uuid.UUID, txnFingerprintID appstatspb.TransactionFingerprintID, txnErr error,
+) {
+	if !contention.EnableSerializationConflictEvents.Get(&ex.server.cfg.Settings.SV) {
+		return
+	}
+
+	var retryErr *kvpb.TransactionRetryWithProtoRefreshError
+	if txnErr != nil && errors.As(txnErr, &retryErr) && retryErr.ConflictingTxn != nil {
+		contentionEvent := contentionpb.ExtendedContentionEvent{
+			ContentionType: contentionpb.ContentionType_SERIALIZATION_CONFLICT,
+			BlockingEvent: kvpb.ContentionEvent{
+				Key:     retryErr.ConflictingTxn.Key,
+				TxnMeta: *retryErr.ConflictingTxn,
+				// Duration is not relevant for SERIALIZATION conflicts.
+			},
+			WaitingTxnID:            txnID,
+			WaitingTxnFingerprintID: txnFingerprintID,
+			// Waiting statement fields are not relevant at this stage.
+		}
+		ex.server.cfg.ContentionRegistry.AddContentionEvent(contentionEvent)
+	}
 }
 
 // logTraceAboveThreshold logs a span's recording. It is used when txn or stmt threshold tracing is enabled.

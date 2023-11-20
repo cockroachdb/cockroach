@@ -545,7 +545,9 @@ func (b *Bytes) String() string {
 // elementsAsBytes unsafely casts b.elements[:n] to []byte.
 func (b *Bytes) elementsAsBytes(n int) []byte {
 	var bytes []byte
+	//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
 	elementsHeader := (*reflect.SliceHeader)(unsafe.Pointer(&b.elements))
+	//lint:ignore SA1019 SliceHeader is deprecated, but no clear replacement
 	bytesHeader := (*reflect.SliceHeader)(unsafe.Pointer(&bytes))
 	bytesHeader.Data = elementsHeader.Data
 	bytesHeader.Len = int(ElementSize) * n

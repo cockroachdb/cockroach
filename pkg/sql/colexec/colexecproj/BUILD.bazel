@@ -44,7 +44,6 @@ go_test(
         "main_test.go",
         "projection_ops_test.go",
     ],
-    args = ["-test.timeout=295s"],
     embed = [":colexecproj"],  # keep
     deps = [
         "//pkg/col/coldata",

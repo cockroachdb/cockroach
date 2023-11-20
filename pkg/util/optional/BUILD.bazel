@@ -20,7 +20,6 @@ go_test(
         "duration_test.go",
         "uint_test.go",
     ],
-    args = ["-test.timeout=55s"],
     deps = [
         ":optional",
         "@com_github_stretchr_testify//require",

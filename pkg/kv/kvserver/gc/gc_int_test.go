@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -56,7 +55,6 @@ func init() {
 
 func TestEndToEndGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer ccl.TestingEnableEnterprise()()
 
 	for _, d := range []struct {
 		// Using range tombstones to remove data will promote full range deletions
@@ -105,7 +103,7 @@ func TestEndToEndGC(t *testing.T) {
 				defer s.Stopper().Stop(ctx)
 
 				statusServer := s.SystemLayer().StatusServer().(serverpb.StatusServer)
-				systemSqlDb := s.SystemLayer().SQLConn(t, "system")
+				systemSqlDb := s.SystemLayer().SQLConn(t, serverutils.DBName("system"))
 
 				execOrFatal := func(t *testing.T, db *gosql.DB, stmt string, args ...interface{}) {
 					t.Helper()

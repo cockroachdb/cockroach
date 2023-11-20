@@ -424,8 +424,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
 
-		{`CALL foo`, 17511, `call procedure`, ``},
-
 		{`CREATE AGGREGATE a`, 74775, `create aggregate`, ``},
 		{`CREATE CAST a`, 0, `create cast`, ``},
 		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`, ``},
@@ -738,7 +736,7 @@ func BenchmarkParse(b *testing.B) {
 		},
 		{
 			"tpcc-delivery",
-			`SELECT no_o_id FROM new_order WHERE no_w_id = $1 AND no_d_id = $2 ORDER BY no_o_id ASC LIMIT 1`,
+			`SELECT no_o_id FROM new_order WHERE no_w_id = $1 AND no_d_id = $2 ORDER BY no_o_id ASC LIMIT 1 FOR UPDATE`,
 		},
 		{
 			"account",

@@ -200,11 +200,6 @@ type BaseConfig struct {
 	// instantiate stores.
 	StorageEngine enginepb.EngineType
 
-	// SpanConfigsDisabled disables the use of the span configs infrastructure.
-	//
-	// Environment Variable: COCKROACH_DISABLE_SPAN_CONFIGS
-	SpanConfigsDisabled bool
-
 	// TestingKnobs is used for internal test controls only.
 	TestingKnobs base.TestingKnobs
 
@@ -236,6 +231,10 @@ type BaseConfig struct {
 	SharedStorage string
 	*cloud.ExternalStorageAccessor
 
+	// SecondaryCache is the size of the secondary cache used for each store, to
+	// store blocks from disaggregated shared storage. For use with SharedStorage.
+	SecondaryCache base.SizeSpec
+
 	// StartDiagnosticsReporting starts the asynchronous goroutine that
 	// checks for CockroachDB upgrades and periodically reports
 	// diagnostics to Cockroach Labs.
@@ -247,6 +246,12 @@ type BaseConfig struct {
 	// other service (typically, the serverController) will accept and
 	// route requests instead.
 	DisableHTTPListener bool
+
+	// DisableSQLServer disables starting the SQL service for the given test. This
+	// also disables all upgrades as they rely on SQL and typically reduces test
+	// start time significantly. This flag can only be used in tests that don't
+	// issue any SQL commands.
+	DisableSQLServer bool
 
 	// DisableSQLListener prevents this server from starting a TCP
 	// listener for the SQL service. Instead, it is expected that some
@@ -262,6 +267,12 @@ type BaseConfig struct {
 	// AutoConfigProvider provides auto-configuration tasks to apply on
 	// the cluster during server initialization.
 	AutoConfigProvider acprovider.Provider
+
+	// RPCListenerFactory provides an alternate implementation of
+	// ListenAndUpdateAddrs for use when creating gPRC
+	// listeners. This is set by in-memory tenants if the user has
+	// specified port range preferences.
+	RPCListenerFactory RPCListenerFactory
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
@@ -485,6 +496,9 @@ type SQLConfig struct {
 	// The tenant that the SQL server runs on the behalf of.
 	TenantID roachpb.TenantID
 
+	// If set, will to be called at server startup to obtain the tenant id.
+	DelayedSetTenantID func(context.Context) (roachpb.TenantID, error)
+
 	// TempStorageConfig is used to configure temp storage, which stores
 	// ephemeral data when processing large queries.
 	TempStorageConfig base.TempStorageConfig
@@ -647,9 +661,6 @@ func (cfg *Config) String() string {
 	if cfg.Linearizable {
 		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
 	}
-	if !cfg.SpanConfigsDisabled {
-		fmt.Fprintln(w, "span configs enabled\t", !cfg.SpanConfigsDisabled)
-	}
 	_ = w.Flush()
 
 	return buf.String()
@@ -791,6 +802,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 			addCfgOpt(storage.MaxSize(sizeInBytes))
 			addCfgOpt(storage.CacheSize(cfg.CacheSize))
+			addCfgOpt(storage.RemoteStorageFactory(cfg.ExternalStorageAccessor))
 
 			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
 		} else {
@@ -823,6 +835,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if sharedStorage != nil {
 				addCfgOpt(storage.SharedStorage(sharedStorage))
 			}
+			addCfgOpt(storage.SecondaryCache(storage.SecondaryCacheBytes(cfg.SecondaryCache, du)))
 			// If the spec contains Pebble options, set those too.
 			if spec.PebbleOptions != "" {
 				addCfgOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
@@ -931,7 +944,6 @@ func (cfg *BaseConfig) InsecureWebAccess() bool {
 }
 
 func (cfg *Config) readSQLEnvironmentVariables() {
-	cfg.SpanConfigsDisabled = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_SPAN_CONFIGS", cfg.SpanConfigsDisabled)
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
 }
 

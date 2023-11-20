@@ -17,6 +17,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"net/http"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -65,11 +66,7 @@ type TestServerInterface interface {
 
 	// ApplicationLayerInterface is implemented by TestServerInterface
 	// for backward-compatibility with existing test code.
-	//
-	// It is CURRENTLY equivalent to .SystemLayer() however this is
-	// a misdesign and results in poor test semantics.
-	//
-	// See: https://go.crdb.dev/p/testserver-api-problem
+	// It is equivalent to the result of calling .ApplicationLayer().
 	//
 	// New tests should spell out their intent clearly by calling the
 	// .ApplicationLayer() (preferred) or .SystemLayer() methods
@@ -178,26 +175,24 @@ type ApplicationLayerInterface interface {
 	// The concrete type is *nodedialer.Dialer.
 	NodeDialer() interface{}
 
-	// SQLConn returns a handle to the server's SQL interface, opened
-	// with the 'root' user.
+	// SQLConn returns a handle to the server's SQL interface, opened with the
+	// 'root' user if no user option is passed. If no database name option is
+	// passed, DefaultDatabaseName is used.
 	// The connection is closed automatically when the server is stopped.
 	// Beware that each call returns a separate, new connection object.
-	//
-	// For the second argument use catalogkeys.DefaultDatabaseName or
-	// catconstants.SystemDatabaseName when in doubt. An empty
-	// string results in DefaultDatabaseName being used.
-	SQLConn(t TestFataler, dbName string) *gosql.DB
+	SQLConn(t TestFataler, opts ...SQLConnOption) *gosql.DB
 
-	// SQLConnE is like SQLConn but it allows the test to check the error.
-	SQLConnE(dbName string) (*gosql.DB, error)
+	// SQLConnE is like SQLConn, but it allows the test to check the error.
+	SQLConnE(opts ...SQLConnOption) (*gosql.DB, error)
 
-	// SQLConnForUser is like SQLConn but allows the test to specify a
-	// username.
-	SQLConnForUser(t TestFataler, userName, dbName string) *gosql.DB
+	// PGUrl returns a postgres connection URL for the server's SQL interface
+	// similar to the URL that SQLConn uses to open a SQL connection. The SQLConn
+	// method should be preferred and this method only should be used when the
+	// test needs to open a connection with special options, or in a specific way.
+	PGUrl(t TestFataler, opts ...SQLConnOption) (url.URL, func())
 
-	// SQLConnForUserE is like SQLConnForUser but it allows the test to
-	// check the error.
-	SQLConnForUserE(userName, dbName string) (*gosql.DB, error)
+	// PGUrlE is like PGUrl, but it allows the test to check the error.
+	PGUrlE(opts ...SQLConnOption) (url.URL, func(), error)
 
 	// DB returns a handle to the cluster's KV interface.
 	DB() *kv.DB
@@ -224,7 +219,7 @@ type ApplicationLayerInterface interface {
 	// HTTPAuthServer returns the authserver.Server as an interface{}.
 	HTTPAuthServer() interface{}
 
-	// HTTPserver returns the server.httpServer as an interface{}.
+	// HTTPServer returns the server.httpServer as an interface{}.
 	HTTPServer() interface{}
 
 	// SQLLoopbackListener returns the *netutil.LoopbackListener as an interface{}.

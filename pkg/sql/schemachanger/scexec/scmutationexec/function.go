@@ -40,7 +40,8 @@ func (i *immediateVisitor) CreateFunctionDescriptor(
 		params,
 		op.Function.ReturnType.Type,
 		op.Function.ReturnSet,
-		&catpb.PrivilegeDescriptor{Version: catpb.Version21_2},
+		op.Function.IsProcedure,
+		&catpb.PrivilegeDescriptor{Version: catpb.Version23_2},
 	)
 	mut.State = descpb.DescriptorState_ADD
 	i.CreateDescriptor(&mut)

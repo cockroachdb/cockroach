@@ -60,6 +60,7 @@ export interface DiagnosticsViewDispatchProps {
 
 export interface DiagnosticsViewOwnProps {
   statementFingerprint?: string;
+  planGists?: string[];
 }
 
 export type DiagnosticsViewProps = DiagnosticsViewOwnProps &
@@ -80,6 +81,7 @@ const NavButton: React.FC = props => (
 
 export const EmptyDiagnosticsView = ({
   statementFingerprint,
+  planGists,
   showDiagnosticsViewLink,
   activateDiagnosticsRef,
 }: DiagnosticsViewProps): React.ReactElement => {
@@ -94,6 +96,7 @@ export const EmptyDiagnosticsView = ({
             onClick={() =>
               activateDiagnosticsRef?.current?.showModalFor(
                 statementFingerprint,
+                planGists,
               )
             }
           >
@@ -272,6 +275,7 @@ export class DiagnosticsView extends React.Component<
       activateDiagnosticsRef,
       currentScale,
       onChangeTimeScale,
+      planGists,
     } = this.props;
 
     const readyToRequestDiagnostics = diagnosticsReports.every(
@@ -329,6 +333,7 @@ export class DiagnosticsView extends React.Component<
               onClick={() =>
                 activateDiagnosticsRef?.current?.showModalFor(
                   statementFingerprint,
+                  planGists,
                 )
               }
               disabled={!readyToRequestDiagnostics}

@@ -162,7 +162,7 @@ func TestShowCreateTable(t *testing.T) {
 		{
 			CreateStatement: `CREATE TABLE %s (
 	pk int8 PRIMARY KEY
-) WITH (ttl_expire_after = '10 minutes')`,
+) WITH (ttl_expire_after = '10 minutes', ttl_job_cron = '@hourly')`,
 			Expect: `CREATE TABLE public.%[1]s (
 	pk INT8 NOT NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
