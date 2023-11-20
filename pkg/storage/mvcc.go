@@ -5916,9 +5916,11 @@ func MVCCAcquireLock(
 			// number, our newer sequence number could then be rolled back and
 			// we would forget that the lock held at the older sequence number
 			// had been and still should be held.
-			log.VEventf(ctx, 3, "skipping lock acquisition for txn %s on key %s "+
-				"with strength %s; found existing lock with strength %s and sequence %d",
-				txn, key.String(), str.String(), iterStr.String(), foundLock.Txn.Sequence)
+			if log.ExpensiveLogEnabled(ctx, 3) {
+				log.VEventf(ctx, 3, "skipping lock acquisition for txn %s on key %s "+
+					"with strength %s; found existing lock with strength %s and sequence %d",
+					txn, key, str, iterStr, foundLock.Txn.Sequence)
+			}
 			return nil
 		}
 
