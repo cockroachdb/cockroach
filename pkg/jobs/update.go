@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -98,10 +97,31 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 		}
 	}()
 
+	const loadJobQuery = `
+WITH
+  latestpayload AS (
+    SELECT job_id, value
+    FROM system.job_info AS payload
+    WHERE info_key = 'legacy_payload' AND job_id = $1
+    ORDER BY written DESC LIMIT 1
+  ),
+  latestprogress AS (
+    SELECT job_id, value
+    FROM system.job_info AS progress
+    WHERE info_key = 'legacy_progress' AND job_id = $1
+    ORDER BY written DESC LIMIT 1
+  )
+SELECT status, payload.value AS payload, progress.value AS progress,
+       claim_session_id, COALESCE(last_run, created), COALESCE(num_runs, 0)
+FROM system.jobs AS j
+INNER JOIN latestpayload AS payload ON j.id = payload.job_id
+LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
+WHERE id = $1
+`
 	row, err := u.txn.QueryRowEx(
 		ctx, "select-job", u.txn.KV(),
-		sessiondata.RootUserSessionDataOverride,
-		getSelectStmtForJobUpdate(j.session != nil), j.ID(),
+		sessiondata.NodeUserSessionDataOverride,
+		loadJobQuery, j.ID(),
 	)
 	if err != nil {
 		return err
@@ -135,31 +155,24 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 		log.VInfof(ctx, 1, "job %d: update called with no session ID", j.ID())
 	}
 
+	lastRun, ok := row[4].(*tree.DTimestamp)
+	if !ok {
+		return errors.AssertionFailedf("expected timestamp last_run, but got %T", lastRun)
+	}
+	numRuns, ok := row[5].(*tree.DInt)
+	if !ok {
+		return errors.AssertionFailedf("expected int num_runs, but got %T", numRuns)
+	}
+
 	md := JobMetadata{
 		ID:       j.ID(),
 		Status:   status,
 		Payload:  payload,
 		Progress: progress,
-	}
-
-	offset := 0
-	if j.session != nil {
-		offset = 1
-	}
-	var lastRun *tree.DTimestamp
-	var ok bool
-	lastRun, ok = row[3+offset].(*tree.DTimestamp)
-	if !ok {
-		return errors.AssertionFailedf("expected timestamp last_run, but got %T", lastRun)
-	}
-	var numRuns *tree.DInt
-	numRuns, ok = row[4+offset].(*tree.DInt)
-	if !ok {
-		return errors.AssertionFailedf("expected int num_runs, but got %T", numRuns)
-	}
-	md.RunStats = &RunStats{
-		NumRuns: int(*numRuns),
-		LastRun: lastRun.Time,
+		RunStats: &RunStats{
+			NumRuns: int(*numRuns),
+			LastRun: lastRun.Time,
+		},
 	}
 
 	var ju JobUpdater
@@ -197,6 +210,11 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 	if ju.md.Status != "" {
 		addSetter("status", ju.md.Status)
 	}
+	if ju.md.RunStats != nil {
+		runStats = ju.md.RunStats
+		addSetter("last_run", ju.md.RunStats.LastRun)
+		addSetter("num_runs", ju.md.RunStats.NumRuns)
+	}
 
 	var payloadBytes []byte
 	if ju.md.Payload != nil {
@@ -219,12 +237,6 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 		}
 	}
 
-	if ju.md.RunStats != nil {
-		runStats = ju.md.RunStats
-		addSetter("last_run", ju.md.RunStats.LastRun)
-		addSetter("num_runs", ju.md.RunStats.NumRuns)
-	}
-
 	if len(setters) != 0 {
 		updateStmt := fmt.Sprintf(
 			"UPDATE system.jobs SET %s WHERE id = $1",
@@ -232,7 +244,7 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 		)
 		n, err := u.txn.ExecEx(
 			ctx, "job-update", u.txn.KV(),
-			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			sessiondata.NodeUserSessionDataOverride,
 			updateStmt, params...,
 		)
 		if err != nil {
@@ -245,11 +257,7 @@ func (u Updater) update(ctx context.Context, updateFn UpdateFn) (retErr error) {
 		}
 	}
 
-	// Insert the job payload and details into the system.jobs_info table if the
-	// associated cluster version is active.
-	//
-	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
-	// table, now that we are outside the compatibility window for 22.2.
+	// Insert the job payload and progress into the system.jobs_info table.
 	infoStorage := j.InfoStorage(u.txn)
 	if payloadBytes != nil {
 		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
@@ -366,34 +374,4 @@ func (u Updater) Update(ctx context.Context, updateFn UpdateFn) error {
 
 func (u Updater) now() time.Time {
 	return u.j.registry.clock.Now().GoTime()
-}
-
-// getSelectStmtForJobUpdate constructs the select statement used in Job.update.
-func getSelectStmtForJobUpdate(hasSession bool) string {
-	const (
-		selectWithoutSession = `
-WITH
-	latestpayload AS (SELECT job_id, value FROM system.job_info AS payload WHERE info_key = 'legacy_payload' AND job_id = $1 ORDER BY written DESC LIMIT 1),
-	latestprogress AS (SELECT job_id, value FROM system.job_info AS progress WHERE info_key = 'legacy_progress' AND job_id = $1 ORDER BY written DESC LIMIT 1)
-	SELECT
-		status, payload.value AS payload, progress.value AS progress`
-
-		sessionColumn = `, claim_session_id`
-
-		backoffColumns = ", COALESCE(last_run, created), COALESCE(num_runs, 0)"
-
-		from = `
-	FROM system.jobs AS j
-	INNER JOIN latestpayload AS payload ON j.id = payload.job_id
-	LEFT JOIN latestprogress AS progress ON j.id = progress.job_id
-	WHERE id = $1`
-	)
-
-	stmt := selectWithoutSession
-	if hasSession {
-		stmt += sessionColumn
-	}
-	stmt += backoffColumns
-	stmt += from
-	return stmt
 }
