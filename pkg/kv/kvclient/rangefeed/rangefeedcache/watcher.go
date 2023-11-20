@@ -64,12 +64,13 @@ import (
 // react to the row-level events as they arrive can hijack the translateEvent
 // function to trigger some non-blocking action.
 type Watcher struct {
-	name             redact.SafeString
-	clock            *hlc.Clock
-	rangefeedFactory *rangefeed.Factory
-	spans            []roachpb.Span
-	bufferSize       int
-	withPrevValue    bool
+	name                   redact.SafeString
+	clock                  *hlc.Clock
+	rangefeedFactory       *rangefeed.Factory
+	spans                  []roachpb.Span
+	bufferSize             int
+	withPrevValue          bool
+	withRowTSInInitialScan bool
 
 	started int32 // accessed atomically
 
@@ -168,20 +169,22 @@ func NewWatcher(
 	bufferSize int,
 	spans []roachpb.Span,
 	withPrevValue bool,
+	withRowTSInInitialScan bool,
 	translateEvent TranslateEventFunc,
 	onUpdate OnUpdateFunc,
 	knobs *TestingKnobs,
 ) *Watcher {
 	w := &Watcher{
-		name:             name,
-		clock:            clock,
-		rangefeedFactory: rangeFeedFactory,
-		spans:            spans,
-		bufferSize:       bufferSize,
-		withPrevValue:    withPrevValue,
-		translateEvent:   translateEvent,
-		onUpdate:         onUpdate,
-		restartErrCh:     make(chan error),
+		name:                   name,
+		clock:                  clock,
+		rangefeedFactory:       rangeFeedFactory,
+		spans:                  spans,
+		bufferSize:             bufferSize,
+		withPrevValue:          withPrevValue,
+		withRowTSInInitialScan: withRowTSInInitialScan,
+		translateEvent:         translateEvent,
+		onUpdate:               onUpdate,
+		restartErrCh:           make(chan error),
 	}
 	if knobs != nil {
 		w.knobs = *knobs
@@ -310,7 +313,7 @@ func (s *Watcher) Run(ctx context.Context) error {
 		// where a higher admission-pri makes sense.
 		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithDiff(s.withPrevValue),
-		rangefeed.WithRowTimestampInInitialScan(true),
+		rangefeed.WithRowTimestampInInitialScan(s.withRowTSInInitialScan),
 		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
 			// TODO(irfansharif): Consider if there are other errors which we
 			// want to treat as permanent. This was cargo culted from the

@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -96,7 +95,7 @@ func (d *decoder) decode(
 
 func (d *decoder) translateEvent(
 	ctx context.Context, ev *kvpb.RangeFeedValue,
-) rangefeedbuffer.Event {
+) (hasEvent bool, event tenantcapabilities.Update) {
 	deleted := !ev.Value.IsPresent()
 	var value roachpb.Value
 	// The event corresponds to a deletion. The capabilities being deleted must
@@ -105,7 +104,7 @@ func (d *decoder) translateEvent(
 		// There's nothing for us to do if this event corresponds to a deletion
 		// tombstone being removed (GC).
 		if !ev.PrevValue.IsPresent() {
-			return nil
+			return false, event
 		}
 
 		value = ev.PrevValue
@@ -122,15 +121,12 @@ func (d *decoder) translateEvent(
 		// This should never happen: the rangefeed should only ever deliver valid SQL rows.
 		err = errors.NewAssertionErrorWithWrappedErrf(err, "failed to decode row %v", ev.Key)
 		logcrash.ReportOrPanic(ctx, &d.st.SV, "%w", err)
-		return nil
+		return false, event
 	}
-
-	return &bufferEvent{
-		update: tenantcapabilities.Update{
-			Entry:   entry,
-			Deleted: deleted,
-		},
-		ts: ev.Value.Timestamp,
+	return true, tenantcapabilities.Update{
+		Entry:     entry,
+		Deleted:   deleted,
+		Timestamp: ev.Value.Timestamp,
 	}
 }
 

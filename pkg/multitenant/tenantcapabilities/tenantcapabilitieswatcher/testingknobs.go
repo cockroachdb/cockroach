@@ -12,7 +12,6 @@ package tenantcapabilitieswatcher
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 )
 
@@ -24,9 +23,7 @@ type TestingKnobs struct {
 
 	// WatcherUpdatesInterceptor, if set, is called each time the Watcher
 	// receives a set of updates.
-	WatcherUpdatesInterceptor func(
-		updateType rangefeedcache.UpdateType, updates []tenantcapabilities.Update,
-	)
+	WatcherUpdatesInterceptor func(update tenantcapabilities.Update)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
