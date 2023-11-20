@@ -431,6 +431,17 @@ func (p *planner) AlterPrimaryKey(
 			}
 		}
 
+		// If keySuffix has a column that is not one of the key column in new
+		// primary index, we should rewrite the index as well.
+		// This can happen for unique index on some column `col` with keySuffix
+		// `rowid` and the new PK is on a column other than `rowid`, in which case
+		// such an index should be rewritten bc otherwise it would contain
+		// keySuffixColumn `rowid` that is not part of the key columns in the (new)
+		// primary key.
+		if !idx.CollectKeySuffixColumnIDs().SubsetOf(catalog.MakeTableColSet(newPrimaryIndexDesc.KeyColumnIDs...)) {
+			return true, nil
+		}
+
 		return !idx.IsUnique() || idx.GetType() == descpb.IndexDescriptor_INVERTED, nil
 	}
 	var indexesToRewrite []catalog.Index
