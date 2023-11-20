@@ -1304,6 +1304,7 @@ func TestStreamingMismatchedMRDatabase(t *testing.T) {
 	c.SrcTenantSQL.Exec(t, "CREATE TABLE many.x (id INT PRIMARY KEY, n INT)")
 	c.SrcTenantSQL.Exec(t, "INSERT INTO many.x VALUES (1, 1)")
 
+	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
 
