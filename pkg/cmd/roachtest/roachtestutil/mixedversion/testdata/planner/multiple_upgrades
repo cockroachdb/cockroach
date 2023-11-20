@@ -1,0 +1,66 @@
+# Test that we are able to generate valid test plans with multiple
+# upgrades.
+
+mixed-version-test predecessors=(22.1.8, 22.2.3, 23.1.4) num_upgrades=3
+----
+ok
+
+in-mixed-version name=(mixed-version 1)
+----
+ok
+
+workload name=bank
+----
+ok
+
+plan
+----
+mixed-version test plan for upgrading from "v22.1.8" to "v22.2.3" to "v23.1.4" to "<current>":
+├── start cluster at version "v22.1.8" (1)
+├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (2)
+├── run "initialize bank workload" (3)
+├── run "bank workload" (4)
+├── upgrade cluster from "v22.1.8" to "v22.2.3"
+│   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (5)
+│   ├── upgrade nodes :1-4 from "v22.1.8" to "v22.2.3"
+│   │   ├── restart node 2 with binary version v22.2.3 (6)
+│   │   ├── restart node 4 with binary version v22.2.3 (7)
+│   │   ├── restart node 1 with binary version v22.2.3 (8)
+│   │   ├── run "mixed-version 1" (9)
+│   │   └── restart node 3 with binary version v22.2.3 (10)
+│   ├── finalize upgrade by resetting `preserve_downgrade_option` (11)
+│   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (12)
+├── upgrade cluster from "v22.2.3" to "v23.1.4"
+│   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (13)
+│   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.4"
+│   │   ├── restart node 3 with binary version v23.1.4 (14)
+│   │   ├── restart node 1 with binary version v23.1.4 (15)
+│   │   ├── run "mixed-version 1" (16)
+│   │   ├── restart node 4 with binary version v23.1.4 (17)
+│   │   └── restart node 2 with binary version v23.1.4 (18)
+│   ├── finalize upgrade by resetting `preserve_downgrade_option` (19)
+│   ├── run "mixed-version 1" (20)
+│   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (21)
+└── upgrade cluster from "v23.1.4" to "<current>"
+   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (22)
+   ├── upgrade nodes :1-4 from "v23.1.4" to "<current>"
+   │   ├── restart node 4 with binary version <current> (23)
+   │   ├── run "mixed-version 1" (24)
+   │   ├── restart node 1 with binary version <current> (25)
+   │   ├── restart node 2 with binary version <current> (26)
+   │   └── restart node 3 with binary version <current> (27)
+   ├── downgrade nodes :1-4 from "<current>" to "v23.1.4"
+   │   ├── restart node 1 with binary version v23.1.4 (28)
+   │   ├── restart node 3 with binary version v23.1.4 (29)
+   │   ├── restart node 4 with binary version v23.1.4 (30)
+   │   ├── run "mixed-version 1" (31)
+   │   └── restart node 2 with binary version v23.1.4 (32)
+   ├── upgrade nodes :1-4 from "v23.1.4" to "<current>"
+   │   ├── restart node 2 with binary version <current> (33)
+   │   ├── run "mixed-version 1" (34)
+   │   ├── restart node 3 with binary version <current> (35)
+   │   ├── restart node 1 with binary version <current> (36)
+   │   └── restart node 4 with binary version <current> (37)
+   ├── finalize upgrade by resetting `preserve_downgrade_option` (38)
+   ├── run "mixed-version 1" (39)
+   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (40)
