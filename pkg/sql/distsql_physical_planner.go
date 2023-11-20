@@ -259,6 +259,20 @@ func (dsp *DistSQLPlanner) GetSQLInstanceInfo(
 	return dsp.nodeDescs.GetNodeDescriptor(roachpb.NodeID(sqlInstanceID))
 }
 
+// ReplicaOracleConfig returns the DSP's replicaoracle.Config.
+func (dsp *DistSQLPlanner) ReplicaOracleConfig(loc roachpb.Locality) replicaoracle.Config {
+	return replicaoracle.Config{
+		NodeDescs:   dsp.nodeDescs,
+		NodeID:      roachpb.NodeID(dsp.gatewaySQLInstanceID),
+		Locality:    loc,
+		Settings:    dsp.st,
+		Clock:       dsp.clock,
+		RPCContext:  dsp.rpcCtx,
+		LatencyFunc: dsp.distSender.LatencyFunc(),
+		HealthFunc:  dsp.distSender.HealthFunc(),
+	}
+}
+
 // ConstructAndSetSpanResolver constructs and sets the planner's
 // SpanResolver if it is unset. It's a no-op otherwise.
 func (dsp *DistSQLPlanner) ConstructAndSetSpanResolver(
