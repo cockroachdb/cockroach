@@ -167,7 +167,7 @@ vectorized: true
     └── • scan
           missing stats
           table: child_rbr@child_rbr_pkey
-          spans: FULL SCAN
+          spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
 
 query IIIIITI
 SELECT *
@@ -200,7 +200,7 @@ vectorized: true
         └── • scan
               missing stats
               table: child_rbr@child_rbr_pkey
-              spans: FULL SCAN
+              spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
 
 query IIIIITI rowsort
 SELECT *
