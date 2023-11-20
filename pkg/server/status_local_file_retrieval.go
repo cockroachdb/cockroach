@@ -127,7 +127,11 @@ func stacksLocal(req *serverpb.StacksRequest) (*serverpb.JSONResponse, error) {
 // getLocalFiles retrieves the requested files for the local node. This method
 // returns a gRPC error to the caller.
 func getLocalFiles(
-	req *serverpb.GetFilesRequest, heapProfileDirName string, goroutineDumpDirName string,
+	req *serverpb.GetFilesRequest,
+	heapProfileDirName string,
+	goroutineDumpDirName string,
+	statFileFn func(string) (os.FileInfo, error),
+	readFileFn func(string) ([]byte, error),
 ) (*serverpb.GetFilesResponse, error) {
 	var dir string
 	switch req.Type {
@@ -154,10 +158,13 @@ func getLocalFiles(
 		}
 
 		for _, path := range filepaths {
-			fileinfo, _ := os.Stat(path)
+			fileinfo, err := statFileFn(path)
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, err.Error())
+			}
 			var contents []byte
 			if !req.ListOnly {
-				contents, err = os.ReadFile(path)
+				contents, err = readFileFn(path)
 				if err != nil {
 					return nil, status.Errorf(codes.Internal, err.Error())
 				}
