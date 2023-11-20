@@ -171,6 +171,9 @@ func (s *schemaChange) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
+	if err := s.setClusterSettings(ctx, pool); err != nil {
+		return workload.QueryLoad{}, err
+	}
 	seqNum, err := s.initSeqNum(ctx, pool)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -250,6 +253,13 @@ func (s *schemaChange) Ops(
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
 	return ql, nil
+}
+
+// setClusterSettings configures any settings required for the workload ahead
+// of starting workers.
+func (s *schemaChange) setClusterSettings(ctx context.Context, pool *workload.MultiConnPool) error {
+	_, err := pool.Get().Exec(ctx, `SET CLUSTER SETTING sql.defaults.super_regions.enabled = 'on'`)
+	return errors.WithStack(err)
 }
 
 // initSeqName returns the smallest available sequence number to be

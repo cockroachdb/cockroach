@@ -1,0 +1,17 @@
+# Test that OnStartup hooks run concurrently
+
+on-startup name=(startup 1)
+----
+ok
+
+on-startup name=(startup 2)
+----
+ok
+
+on-startup name=(startup 3)
+----
+ok
+
+require-concurrent-hooks steps=(startup 1, startup 2, startup 3)
+----
+ok

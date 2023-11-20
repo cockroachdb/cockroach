@@ -1,0 +1,17 @@
+# Test that AfterUpgradeFinalized hooks run concurrently
+
+on-startup name=(startup 1)
+----
+ok
+
+after-upgrade-finalized name=(after 1)
+----
+ok
+
+after-upgrade-finalized name=(after 2)
+----
+ok
+
+require-concurrent-hooks steps=(after 1, after 2)
+----
+ok

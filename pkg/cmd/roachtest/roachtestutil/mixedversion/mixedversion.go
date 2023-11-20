@@ -114,6 +114,12 @@ const (
 	// a test run.
 	rollbackIntermediateUpgradesProbability = 0.3
 
+	// rollbackFinalUpgradeProbability is the probability that we will
+	// attempt to rollback the upgrade to the "current" version. We
+	// should be apply extra scrutiny to this upgrade which is why we
+	// perform the rollback on most test runs.
+	rollbackFinalUpgradeProbability = 0.9
+
 	// numNodesInFixtures is the number of nodes expected to exist in a
 	// cluster that can use the test fixtures in
 	// `pkg/cmd/roachtest/fixtures`.
