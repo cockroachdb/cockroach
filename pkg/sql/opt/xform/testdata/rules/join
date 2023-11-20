@@ -13027,6 +13027,7 @@ explain
            │    │    │    ├── columns: u85353.a:6 u85353.b:7
            │    │    │    └── scan u85353@b_idx
            │    │    │         ├── columns: u85353.b:7 u85353.rowid:10!null
+           │    │    │         ├── constraint: /9/7/10: [/0 - /7]
            │    │    │         ├── flags: force-index=b_idx
            │    │    │         ├── key: (10)
            │    │    │         └── fd: (10)-->(7)
