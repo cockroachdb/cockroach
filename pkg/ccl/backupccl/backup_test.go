@@ -4054,21 +4054,23 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		}
 	}
 
-	// Corrupt one of the files in the backup.
-	f, err := os.OpenFile(filepath.Join(dir, backupManifest.Files[0].Path), os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
-	defer f.Close()
-	// mess with some bytes.
-	if _, err := f.Seek(-65, io.SeekEnd); err != nil {
-		t.Fatalf("%+v", err)
-	}
-	if _, err := f.Write([]byte{'1', '2', '3'}); err != nil {
-		t.Fatalf("%+v", err)
-	}
-	if err := f.Sync(); err != nil {
-		t.Fatalf("%+v", err)
+	// Corrupt all of the files in the backup.
+	for i := range backupManifest.Files {
+		f, err := os.OpenFile(filepath.Join(dir, backupManifest.Files[i].Path), os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		defer f.Close()
+		// mess with some bytes.
+		if _, err := f.Seek(-65, io.SeekEnd); err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if _, err := f.Write([]byte{'1', '2', '3'}); err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if err := f.Sync(); err != nil {
+			t.Fatalf("%+v", err)
+		}
 	}
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
