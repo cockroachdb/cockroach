@@ -71,7 +71,7 @@ describe("filterStatementsData", () => {
     filterAndCheckStmts(stmtsRaw, {}, "giraffe", expectedIDs);
   });
 
-  it("should show non-internal statements when no app filters are applied", () => {
+  it("should show internal statements when no app filters are applied", () => {
     const stmtsRaw = [
       { id: 1, app: "hello" },
       { id: 2, app: "$ internal hello" },
@@ -86,7 +86,7 @@ describe("filterStatementsData", () => {
     );
 
     const filters: Filters = {};
-    const expected = [1, 4, 5];
+    const expected = [1, 2, 3, 4, 5];
     filterAndCheckStmts(stmtsRaw, filters, null, expected);
   });
 
