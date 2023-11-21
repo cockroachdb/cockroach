@@ -436,8 +436,15 @@ func (c *CustomFuncs) FilterIsTrivial(item *memo.FiltersItem, scanPrivate *memo.
 		return false
 	}
 	filterCons := item.ScalarProps().Constraints.Constraint(0)
+	return c.ConstraintIsTrivial(filterCons, scanPrivate)
+}
 
-	// Check whether any of the table's check constraints implies the filter.
+// ConstraintIsTrivial returns true if the given constraint is implied by the
+// table's check constraints. This is best-effort, so false negatives are
+// possible.
+func (c *CustomFuncs) ConstraintIsTrivial(
+	cons *constraint.Constraint, scanPrivate *memo.ScanPrivate,
+) bool {
 	checkConstraintFilters := c.CheckConstraintFilters(scanPrivate.Table)
 	for i := range checkConstraintFilters {
 		if !checkConstraintFilters[i].ScalarProps().TightConstraints {
@@ -447,8 +454,8 @@ func (c *CustomFuncs) FilterIsTrivial(item *memo.FiltersItem, scanPrivate *memo.
 		if optionalConstraints == nil || optionalConstraints.Length() != 1 {
 			continue
 		}
-		cons := optionalConstraints.Constraint(0)
-		if filterCons.Contains(c.f.evalCtx, cons) {
+		optionalConstraint := optionalConstraints.Constraint(0)
+		if cons.Contains(c.f.evalCtx, optionalConstraint) {
 			return true
 		}
 	}
