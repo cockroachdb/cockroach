@@ -22,6 +22,9 @@ const (
 	// descJSONQuery returns the JSONified version of all descriptors in the
 	// current database joined with system.namespace.
 	//
+	// NOTE:descJSONQuery injects "virtual" system.namespace entries for function
+	// descriptors as they do not have "proper" namespace entries.
+	//
 	// id::int | schema_id::int | name::text | descriptor::json
 	descJSONQuery = `SELECT
 		descriptor.id,
@@ -29,7 +32,24 @@ const (
 		namespace.name AS name,
 		crdb_internal.pb_to_json('desc', descriptor) AS descriptor
 	FROM system.descriptor
-	JOIN system.namespace ON namespace.id = descriptor.id
+	JOIN (
+		SELECT * FROM system.namespace
+			UNION
+		SELECT
+			"parentID",
+			"parentSchemaID",
+			(json_each).@1 AS name,
+			(json_array_elements((json_each).@2->'signatures')->'id')::INT8 AS id
+		FROM (
+			SELECT
+				ns."parentID",
+				ns.id AS "parentSchemaID",
+				json_each(crdb_internal.pb_to_json('desc', descriptor)->'schema'->'functions')
+			FROM system.descriptor
+			JOIN system.namespace ns ON ns.id = descriptor.id
+			WHERE crdb_internal.pb_to_json('desc', descriptor) ? 'schema'
+		)
+	) namespace ON namespace.id = descriptor.id
 	WHERE "parentID" = (SELECT id FROM system.namespace WHERE name = current_database() AND "parentID" = 0)
 	`
 
@@ -48,6 +68,13 @@ const (
 	//
 	// id::int | schema_id::int | name::text | descriptor::json | member::json
 	enumMemberDescsQuery = `SELECT *, jsonb_array_elements(descriptor->'enumMembers') AS member FROM enums`
+
+	// functionDescsQuery returns the JSONified version of all function descriptors in the current database.
+	//
+	// [descJSONQuery] must be bound to the name "descriptors".
+	//
+	// id::int | schema_id::int | name::text | descriptor::json
+	functionDescsQuery = `SELECT id, schema_id, name, descriptor->'function' AS descriptor FROM descriptors WHERE descriptor ? 'function'`
 
 	regionsFromClusterQuery = `SELECT * FROM [SHOW REGIONS FROM CLUSTER]`
 )
