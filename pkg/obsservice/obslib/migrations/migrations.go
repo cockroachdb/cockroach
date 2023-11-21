@@ -14,8 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 )
 
@@ -37,8 +37,10 @@ func RunDBMigrations(ctx context.Context, connCfg *pgx.ConnConfig) error {
 	if connCfg.Database == "" {
 		return errors.AssertionFailedf("expected database name to be set")
 	}
+	log.Info(ctx, "Attempting to open a DB connection")
 	db := stdlib.OpenDB(*connCfg)
 	defer db.Close()
+	log.Info(ctx, "DB connection successful")
 	// We need to create the database by hand; Goose expects the database to exist.
 	if _, err := db.ExecContext(ctx, "CREATE DATABASE IF NOT EXISTS "+connCfg.Database); err != nil {
 		return err

@@ -1483,7 +1483,6 @@ GO_TARGETS = [
     "//pkg/obs:obs",
     "//pkg/obsservice/cmd/obsservice:obsservice",
     "//pkg/obsservice/cmd/obsservice:obsservice_lib",
-    "//pkg/obsservice/obslib/httpproxy:httpproxy",
     "//pkg/obsservice/obslib/ingest:ingest",
     "//pkg/obsservice/obslib/ingest:ingest_test",
     "//pkg/obsservice/obslib/migrations:migrations",
