@@ -1194,7 +1194,8 @@ func (s *statusServer) GetFiles(
 		return status.GetFiles(ctx, req)
 	}
 
-	return getLocalFiles(req, s.sqlServer.cfg.HeapProfileDirName, s.sqlServer.cfg.GoroutineDumpDirName)
+	return getLocalFiles(req, s.sqlServer.cfg.HeapProfileDirName, s.sqlServer.cfg.GoroutineDumpDirName,
+		os.Stat, os.ReadFile)
 }
 
 // checkFilePattern checks if a pattern is acceptable for the GetFiles call.
