@@ -4949,7 +4949,34 @@ func MVCCResolveWriteIntent(
 		if err != nil {
 			return false, 0, nil, false, err
 		}
-		ok = ok || outcome != lockNoop
+		switch outcome {
+		case lockNoop:
+			// Do nothing.
+		case lockClearedBySingleDelete:
+			// Single deletes rely on subtle invariants and logic. We can detect
+			// misuse if the local store's internal state could result in
+			// nondeterministic behavior if we write a single delete. This
+			// doesn't guard against writes to the key committed to the engine
+			// after we opened ltIter but before the single delete is applied,
+			// and it also doesn't guarantee the single delete will be okay on
+			// other replicas' engines.
+			if ok, err := ltIter.CanDeterministicallySingleDelete(); err != nil {
+				return false, 0, nil, false, errors.Wrap(err, "validating single delete invariant")
+			} else if !ok {
+				err := errors.AssertionFailedf("deleting by single delete is unsafe")
+				if key, keyErr := ltIter.EngineKey(); keyErr != nil {
+					err = errors.WithSecondaryError(err, keyErr)
+				} else {
+					err = errors.Wrapf(err, "resolving lock key %s", key)
+				}
+				log.Fatalf(ctx, "intent resolution: %v", err)
+			}
+			ok = true
+		case lockClearedByDelete, lockOverwritten:
+			ok = true
+		default:
+			panic("unreachable")
+		}
 	}
 	numBytes = int64(rw.BufferedSize() - beforeBytes)
 	return ok, numBytes, nil, replLocksReleased, nil
@@ -5694,11 +5721,36 @@ func MVCCResolveWriteIntentRange(
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", lastResolvedKey, err)
 		}
-		if outcome != lockNoop && !lastResolvedKeyOk {
-			// We only count the first successfully resolved lock/intent on a
-			// given key towards the returned key count and key limit.
-			lastResolvedKeyOk = true
-			numKeys++
+
+		switch outcome {
+		case lockNoop:
+			// Do nothing.
+		case lockClearedBySingleDelete:
+			// Single deletes rely on subtle invariants and logic. We can detect
+			// misuse if the local store's internal state could result in
+			// nondeterministic behavior if we write a single delete. This
+			// doesn't guard against writes to the key committed to the engine
+			// after we opened ltIter but before the single delete is applied,
+			// and it also doesn't guarantee the single delete will be okay on
+			// other replicas' engines.
+			if ok, err := ltIter.CanDeterministicallySingleDelete(); err != nil {
+				return 0, 0, nil, 0, false, errors.Wrap(err, "validating single delete invariant")
+			} else if !ok {
+				log.Fatalf(ctx, "resolving lock key %s: %+v", ltKey,
+					errors.AssertionFailedf("deleting by single delete is unsafe"))
+			}
+
+			// Fallthrough to update numKeys and lastResolvedKeyOk if necessary.
+			fallthrough
+		case lockClearedByDelete, lockOverwritten:
+			if !lastResolvedKeyOk {
+				// We only count the first successfully resolved lock/intent on a
+				// given key towards the returned key count and key limit.
+				lastResolvedKeyOk = true
+				numKeys++
+			}
+		default:
+			panic("unreachable")
 		}
 		numBytes += int64(rw.BufferedSize() - beforeBytes)
 	}
