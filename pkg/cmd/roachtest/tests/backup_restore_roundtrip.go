@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -149,6 +148,7 @@ func backupRestoreRoundTrip(
 		if err != nil {
 			return err
 		}
+		defer stopBackgroundCommands()
 
 		for i := 0; i < numFullBackups; i++ {
 			allNodes := labeledNodes{Nodes: roachNodes, Version: clusterupgrade.CurrentVersion().String()}
@@ -320,30 +320,14 @@ func (u *CommonTestUtils) CloseConnections() {
 }
 
 func workloadWithCancel(m cluster.Monitor, fn func(ctx context.Context) error) func() {
-	cancel := make(chan struct{})
-	done := make(chan struct{})
 
-	m.Go(func(ctx context.Context) error {
-		childCtx, childCancel := context.WithCancel(ctx)
-		go func() {
-			defer close(done)
-			_ = fn(childCtx)
-		}()
-
-		select {
-		case <-done:
-			childCancel()
-			return errors.New("workload unexpectedly completed before cancellation")
-		case <-ctx.Done():
-			childCancel()
-			return nil
-		case <-cancel:
-			childCancel()
+	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+		err := fn(ctx)
+		if ctx.Err() != nil {
+			// Workload context was cancelled as a normal part of test shutdown.
 			return nil
 		}
+		return err
 	})
-
-	return func() {
-		close(cancel)
-	}
+	return cancelWorkload
 }
