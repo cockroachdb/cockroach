@@ -3728,6 +3728,110 @@ func (og *operationGenerator) dropSchema(ctx context.Context, tx pgx.Tx) (*opStm
 	return stmt, nil
 }
 
+func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// TODO(chrisseto): Allow referencing sequences as well. Currently, `DROP
+	// SEQUENCE CASCADE` will break if we allow sequences. It may also be good to
+	// reference sequences with next_val or something.
+	tables, err := Collect(ctx, og, tx, pgx.RowTo[string], `SELECT quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type != 'sequence'`)
+	if err != nil {
+		return nil, err
+	}
+
+	enumQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"enums", enumDescsQuery},
+		{"enum_members", enumMemberDescsQuery},
+	}, `SELECT
+				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
+				quote_literal(member->>'logicalRepresentation') AS value,
+				COALESCE(member->>'direction' = 'REMOVE', false) AS dropping
+			FROM enum_members
+		`)
+
+	enums, err := Collect(ctx, og, tx, pgx.RowToMap, enumQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	// Roll some variables to ensure we have variance in the types of references
+	// that we aside from being bound by what we could make references to.
+	useBodyRefs := og.randIntn(2) == 0
+	useParamRefs := og.randIntn(2) == 0
+	useReturnRefs := og.randIntn(2) == 0
+
+	var droppingEnums []string
+	var possibleBodyReferences []string
+	var possibleParamReferences []string
+	var possibleReturnReferences []string
+
+	for i, enum := range enums {
+		if enum["dropping"].(bool) {
+			droppingEnums = append(droppingEnums, enum["name"].(string))
+			continue
+		}
+		possibleReturnReferences = append(possibleReturnReferences, enum["name"].(string))
+		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf(`enum_%d %s`, i, enum["name"]))
+		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`(%s::%s IS NULL)`, enum["value"], enum["name"]))
+	}
+
+	for _, table := range tables {
+		possibleReturnReferences = append(possibleReturnReferences, fmt.Sprintf(`SETOF %s`, table))
+		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`((SELECT count(*) FROM %s LIMIT 0) = 0)`, table))
+	}
+
+	// TODO(chrisseto): There's no randomization across STRICT, VOLATILE,
+	// IMMUTABLE, STABLE, STRICT, and [NOT] LEAKPROOF. That's likely not relevant
+	// to the schema workload but may become a nice to have.
+	stmt, expectedCode, err := Generate[*tree.CreateRoutine](og.params.rng, og.produceError(), []GenerationCase{
+		// 1. Nothing special, fully self contained function.
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+		// 2. 1 or more table or type references spread across parameters, return types, or the function body.
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $$ SELECT NULL WHERE { BodyRefs } $$`},
+		// 3. Reference a table that does not exist.
+		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT * FROM "ThisTableDoesNotExist" $$`},
+		// 4. Reference a UDT that does not exist.
+		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 "ThisTypeDoesNotExist") RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+		// 5. Reference an Enum that's in the process of being dropped
+		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } (IN p1 { DroppingEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
+	}, template.FuncMap{
+		"UniqueName": func() *tree.Name {
+			name := tree.Name(fmt.Sprintf("udf_%d", og.newUniqueSeqNum()))
+			return &name
+		},
+		"DroppingEnum": func() (string, error) {
+			return PickOne(og.params.rng, droppingEnums)
+		},
+		"ParamRefs": func() (string, error) {
+			refs, err := PickAtLeast(og.params.rng, 1, possibleParamReferences)
+			if useParamRefs && err == nil {
+				return strings.Join(refs, ", "), nil
+			}
+			return "", nil //nolint:returnerrcheck
+		},
+		"ReturnRefs": func() (string, error) {
+			ref, err := PickOne(og.params.rng, possibleReturnReferences)
+			if useReturnRefs && err == nil {
+				return ref, nil
+			}
+			return "VOID", nil //nolint:returnerrcheck
+		},
+		"BodyRefs": func() (string, error) {
+			refs, err := PickAtLeast(og.params.rng, 1, possibleBodyReferences)
+			if useBodyRefs && err == nil {
+				return strings.Join(refs, " AND "), nil
+			}
+			return "TRUE", nil //nolint:returnerrcheck
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	}), nil
+}
+
 func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *opStmt, err error) {
 	const maxTablesForSelect = 3
 	const maxColumnsForSelect = 16
