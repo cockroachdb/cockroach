@@ -3835,6 +3835,47 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	}), nil
 }
 
+func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')'
+			FROM functions
+			JOIN LATERAL (
+				SELECT
+					COALESCE(array_agg(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname)), '{}') AS funcargs
+				FROM pg_catalog.pg_type
+				JOIN LATERAL (
+					SELECT unnest(proargtypes) AS oid FROM pg_catalog.pg_proc WHERE oid = (id + 100000)
+				) args ON args.oid = pg_type.oid
+			) funcargs ON TRUE
+			`,
+	)
+
+	functions, err := Collect(ctx, og, tx, pgx.RowTo[string], q)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, expectedCode, err := Generate[*tree.DropRoutine](og.params.rng, og.produceError(), []GenerationCase{
+		{pgcode.UndefinedFunction, `DROP FUNCTION "NoSuchFunction"`},
+		{pgcode.SuccessfulCompletion, `DROP FUNCTION IF EXISTS "NoSuchFunction"`},
+		{pgcode.SuccessfulCompletion, `DROP FUNCTION { Function }`},
+	}, template.FuncMap{
+		"Function": func() (string, error) {
+			return PickOne(og.params.rng, functions)
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	}), nil
+}
+
 func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *opStmt, err error) {
 	const maxTablesForSelect = 3
 	const maxColumnsForSelect = 16
