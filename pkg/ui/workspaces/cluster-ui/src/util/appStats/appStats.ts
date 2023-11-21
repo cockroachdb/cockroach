@@ -315,7 +315,7 @@ export function statementKey(stmt: ExecutionStatistics): string {
 export function transactionScopedStatementKey(
   stmt: ExecutionStatistics,
 ): string {
-  return statementKey(stmt) + stmt.txn_fingerprint_ids?.toString();
+  return statementKey(stmt) + stmt.txn_fingerprint_ids?.toString() + stmt.app;
 }
 
 export const generateStmtDetailsToID = (
