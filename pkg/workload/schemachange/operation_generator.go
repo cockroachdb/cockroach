@@ -2021,37 +2021,53 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (*opStmt,
 	return stmt, nil
 }
 
-func (og *operationGenerator) dropTypeValue(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
-	enum, exists, err := og.randEnum(ctx, tx, og.pctExisting(true))
+func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	query := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"enums", enumDescsQuery},
+		{"enum_members", enumMemberDescsQuery},
+	}, `SELECT
+				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
+				quote_literal(member->>'logicalRepresentation') AS value,
+				COALESCE(member->>'direction' = 'REMOVE', false) AS dropping,
+				COALESCE(json_array_length(descriptor->'referencingDescriptorIds') > 0, false) AS has_references
+			FROM enum_members
+	`)
+
+	enumMembers, err := Collect(ctx, og, tx, pgx.RowToMap, query)
 	if err != nil {
 		return nil, err
 	}
 
-	validValue := false
-	value := "IrrelevantEnumValue"
+	// TODO(chrisseto): We're currently missing cases around enum members being
+	// referenced as it's quite difficult to tell if an individual member is
+	// referenced. Unreferenced members can be dropped but referenced members may
+	// not. For now, we skip over all enums where the type itself is being
+	// referenced.
 
-	if exists {
-		value, validValue, err = og.randEnumValue(ctx, tx, og.pctExisting(true), enum)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	valueDropping := false
-	if validValue {
-		valueDropping, err = og.enumValueIsBeingRemoved(ctx, tx, enum.String(), value)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	stmt := makeOpStmt(OpStmtDDL)
-	stmt.expectedExecErrors.addAll(codesWithConditions{
-		{pgcode.UndefinedObject, !exists || !validValue},
-		{pgcode.ObjectNotInPrerequisiteState, valueDropping},
+	stmt, code, err := Generate[*tree.AlterType](og.params.rng, og.produceError(), []GenerationCase{
+		// Fail to drop values from a type that doesn't exist.
+		{pgcode.UndefinedObject, `ALTER TYPE "EnumThatDoesntExist" DROP VALUE 'IrrelevantValue'`},
+		// Fail to drop a value that is in the process of being dropped.
+		{pgcode.ObjectNotInPrerequisiteState, `{ with (EnumValue true false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
+		// Fail to drop types that don't exist.
+		{pgcode.UndefinedObject, `{ with (EnumValue false false) } ALTER TYPE { .name } DROP VALUE 'ValueThatDoesntExist' { end }`},
+		// Successful drop of an enum value.
+		{pgcode.SuccessfulCompletion, `{ with (EnumValue false false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
+	}, template.FuncMap{
+		"EnumValue": func(dropping, referenced bool) (map[string]any, error) {
+			return PickOne(og.params.rng, util.Filter(enumMembers, func(enum map[string]any) bool {
+				return enum["has_references"].(bool) == referenced && enum["dropping"].(bool) == dropping
+			}))
+		},
 	})
-	stmt.sql = fmt.Sprintf(`ALTER TYPE %s DROP VALUE '%s'`, enum, value)
-	return stmt, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return newOpStmt(stmt, codesWithConditions{
+		{code, true},
+	}), nil
 }
 
 func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
