@@ -629,7 +629,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	if !isPausablePortal() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
 		ctx = ih.Setup(
 			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-			stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.state.priority,
+			stmt.StmtNoConstants, os.ImplicitTxn.Get(),
+			// This goroutine is the only one that can modify
+			// txnState.mu.priority, so we don't need to get a mutex here.
+			ex.state.mu.priority,
 			ex.extraTxnState.shouldCollectTxnExecutionStats,
 		)
 	} else {
@@ -805,7 +808,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			ctx,
 			ex.executorType,
 			int(ex.state.mu.autoRetryCounter),
-			ex.extraTxnState.txnCounter,
+			int(ex.extraTxnState.txnCounter),
 			0, /* rowsAffected */
 			ex.state.mu.stmtCount,
 			0, /* bulkJobId */
@@ -2422,7 +2425,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			ctx,
 			ex.executorType,
 			int(ex.state.mu.autoRetryCounter),
-			ex.extraTxnState.txnCounter,
+			int(ex.extraTxnState.txnCounter.Load()),
 			0, /* rowsAffected */
 			0, /* stmtCount */
 			0, /* bulkJobId */
@@ -3203,7 +3206,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RowsRead:                ex.extraTxnState.rowsRead,
 		RowsWritten:             ex.extraTxnState.rowsWritten,
 		BytesRead:               ex.extraTxnState.bytesRead,
-		Priority:                ex.state.priority,
+		Priority:                ex.state.mu.priority,
 		// TODO(107318): add isolation level
 		// TODO(107318): add qos
 		// TODO(107318): add asoftime or ishistorical

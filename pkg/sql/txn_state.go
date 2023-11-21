@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -58,6 +59,12 @@ type txnState struct {
 		// txnStart records the time that txn started.
 		txnStart time.Time
 
+		// The transaction's priority.
+		priority roachpb.UserPriority
+
+		// The transaction's isolation level.
+		isolationLevel isolation.Level
+
 		// stmtCount keeps track of the number of statements that the transaction
 		// has executed.
 		stmtCount int
@@ -94,18 +101,12 @@ type txnState struct {
 	// This must be constant for the lifetime of a SQL transaction.
 	sqlTimestamp time.Time
 
-	// The transaction's priority.
-	priority roachpb.UserPriority
-
-	// The transaction's isolation level.
-	isolationLevel isolation.Level
-
 	// The transaction's read only state.
-	readOnly bool
+	readOnly atomic.Bool
 
 	// Set to true when the current transaction is using a historical timestamp
 	// through the use of AS OF SYSTEM TIME.
-	isHistorical bool
+	isHistorical atomic.Bool
 
 	// injectedTxnRetryCounter keeps track of how many errors have been
 	// injected in this transaction with the inject_retry_errors_enabled
@@ -191,7 +192,7 @@ func (ts *txnState) resetForNewSQLTxn(
 ) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
-	ts.isHistorical = false
+	ts.isHistorical.Swap(false)
 	ts.injectedTxnRetryCounter = 0
 
 	// Create a context for this transaction. It will include a root span that
@@ -335,7 +336,7 @@ func (ts *txnState) setHistoricalTimestamp(
 		return err
 	}
 	ts.sqlTimestamp = historicalTimestamp.GoTime()
-	ts.isHistorical = true
+	ts.isHistorical.Swap(true)
 	return nil
 }
 
@@ -356,7 +357,7 @@ func (ts *txnState) setPriorityLocked(userPriority roachpb.UserPriority) error {
 	if err := ts.mu.txn.SetUserPriority(userPriority); err != nil {
 		return err
 	}
-	ts.priority = userPriority
+	ts.mu.priority = userPriority
 	return nil
 }
 
@@ -370,7 +371,7 @@ func (ts *txnState) setIsolationLevelLocked(level isolation.Level) error {
 	if err := ts.mu.txn.SetIsoLevel(level); err != nil {
 		return err
 	}
-	ts.isolationLevel = level
+	ts.mu.isolationLevel = level
 	return nil
 }
 
@@ -379,12 +380,12 @@ func (ts *txnState) setReadOnlyMode(mode tree.ReadWriteMode) error {
 	case tree.UnspecifiedReadWriteMode:
 		return nil
 	case tree.ReadOnly:
-		ts.readOnly = true
+		ts.readOnly.Swap(true)
 	case tree.ReadWrite:
-		if ts.isHistorical {
+		if ts.isHistorical.Load() {
 			return tree.ErrAsOfSpecifiedWithReadWrite
 		}
-		ts.readOnly = false
+		ts.readOnly.Swap(false)
 	default:
 		return errors.AssertionFailedf("unknown read mode: %s", errors.Safe(mode))
 	}
