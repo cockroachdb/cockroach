@@ -6884,6 +6884,41 @@ func TestCheckpointFrequency(t *testing.T) {
 	require.False(t, js.progressUpdatesSkipped)
 }
 
+func TestFlushJitter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Test the logic around applying jitter to the flush logic.
+	// The more involved test that would try to capture flush times would likely
+	// be pretty flaky due to the fact that flush times do not happen at exactly
+	// min_flush_frequency period, and thus it would be hard to tell if the
+	// difference is due to jitter or not.  Just verify nextFlushWithJitter function
+	// works as expected with controlled time source.
+	const flushFrequency time.Duration = 100 * time.Millisecond
+	ts := timeutil.NewManualTime(timeutil.Now())
+
+	const numIters = 100
+	t.Run("disable", func(t *testing.T) {
+		const disableJitter = 0.0
+		for i := 0; i < numIters; i++ {
+			next := nextFlushWithJitter(ts, flushFrequency, disableJitter)
+			require.Equal(t, ts.Now().Add(flushFrequency), next)
+			ts.AdvanceTo(next)
+		}
+	})
+	t.Run("enable", func(t *testing.T) {
+		const jitter = 0.1
+		for i := 0; i < numIters; i++ {
+			next := nextFlushWithJitter(ts, flushFrequency, jitter)
+			// next flush should be at least flushFrequency into the future.
+			require.LessOrEqual(t, ts.Now().Add(flushFrequency), next, t)
+			// and jitter should be at most 10% more than flushFrequency (10ms)
+			require.Less(t, next.Sub(ts.Now()), flushFrequency+flushFrequency/10)
+			ts.AdvanceTo(next)
+		}
+	})
+}
+
 func TestChangefeedOrderingWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
