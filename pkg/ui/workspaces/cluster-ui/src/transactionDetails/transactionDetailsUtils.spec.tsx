@@ -208,15 +208,21 @@ describe("getTxnQueryString", () => {
 });
 
 describe("getStatementsForTransaction", () => {
+  // These are the statements we'll throw in with the expected statements
+  // that should be filtered out.
+  // We'll use txn ids in the range [1,10] when testing this function.
+  // ALthough some of the mocked statements below will have ids in that range,
+  // the app name will never match the given transactions.
   const extraStmts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i =>
     mockStmtStats({
       id: Long.fromInt(i),
       key: {
         key_data: {
-          transaction_fingerprint_id: Long.fromInt(9999999999),
+          transaction_fingerprint_id: Long.fromInt(i),
+          app: "aaaaaaaaaaaaaaaaaa",
         },
       },
-      txn_fingerprint_ids: [Long.fromInt(9999999999)],
+      txn_fingerprint_ids: [Long.fromInt(i)],
     }),
   );
 
@@ -224,25 +230,29 @@ describe("getStatementsForTransaction", () => {
     {
       txnID: 1,
       stmtIDs: [2, 4, 6, 8],
+      app: "cockroach",
     },
     {
       txnID: 2,
       stmtIDs: [1],
+      app: "myApp",
     },
     {
       txnID: 3,
       stmtIDs: [],
+      app: "hello-world",
     },
     {
       txnID: 3,
       stmtIDs: [4, 5, 6],
       useArrayProp: true,
+      app: "$ internal-my-app",
     },
   ].map(tc => {
     const txnID = Long.fromInt(tc.txnID);
 
     const txn = mockTxnStats({
-      stats_data: { transaction_fingerprint_id: txnID },
+      stats_data: { transaction_fingerprint_id: txnID, app: tc.app },
     });
 
     const stmts = tc.stmtIDs.map(id =>
@@ -252,6 +262,7 @@ describe("getStatementsForTransaction", () => {
         key: {
           key_data: {
             transaction_fingerprint_id: !tc.useArrayProp ? txnID : null,
+            app: tc.app,
           },
         },
       }),
@@ -260,14 +271,14 @@ describe("getStatementsForTransaction", () => {
   });
 
   it.each(testCases)(
-    "should return the list of stmts that have txn ids matching the provided txn",
-    (txn: Txn, stmts: Stmt[]) => {
+    "should return the list of stmts that have txn ids matching the provided txn AND same app name",
+    (txn: Txn, expectedStmts: Stmt[]) => {
       const stmtsRes = getStatementsForTransaction(
         txn,
-        shuffle([...extraStmts, ...stmts]),
+        shuffle([...extraStmts, ...expectedStmts]),
       );
 
-      expect(stmtsRes.length).toEqual(stmts.length);
+      expect(stmtsRes.length).toEqual(expectedStmts.length);
     },
   );
 

@@ -89,7 +89,7 @@ export const getTxnQueryString = (
 
 /**
  * getStatementsForTransaction returns the list of stmts with transaction ids
- * matching the txn id of the provided txn.
+ * matching and app name matching that of the provided txn.
  * @param txn Txn for which we will find matching stmts.
  * @param stmts List of available stmts.
  */
@@ -103,7 +103,8 @@ export const getStatementsForTransaction = (
 
   return stmts.filter(
     s =>
-      s.key.key_data?.transaction_fingerprint_id?.toString() === txnIDString ||
-      s.txn_fingerprint_ids?.map(t => t.toString()).includes(txnIDString),
+      (s.key.key_data?.transaction_fingerprint_id?.toString() === txnIDString ||
+        s.txn_fingerprint_ids?.map(t => t.toString()).includes(txnIDString)) &&
+      s.key.key_data.app === txn.stats_data.app,
   );
 };
