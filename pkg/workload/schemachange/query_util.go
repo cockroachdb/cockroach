@@ -49,6 +49,13 @@ const (
 	// id::int | schema_id::int | name::text | descriptor::json | member::json
 	enumMemberDescsQuery = `SELECT *, jsonb_array_elements(descriptor->'enumMembers') AS member FROM enums`
 
+	// functionDescsQuery returns the JSONified version of all function descriptors in the current database.
+	//
+	// [descJSONQuery] must be bound to the name "descriptors".
+	//
+	// id::int | schema_id::int | name::text | descriptor::json
+	functionDescsQuery = `SELECT id, schema_id, name, descriptor->'function' AS descriptor FROM descriptors WHERE descriptor ? 'function'`
+
 	regionsFromClusterQuery = `SELECT * FROM [SHOW REGIONS FROM CLUSTER]`
 )
 
