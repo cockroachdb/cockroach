@@ -592,11 +592,7 @@ func onCastTypeCheckHook(from, to types.Family) {
 		f()
 		return
 	}
-	panic(errors.AssertionFailedf(
-		"no cast counter found for cast from %s to %s",
-		// Family names are always safe for redacting.
-		redact.Safe(from.Name()), redact.Safe(to.Name()),
-	))
+	panic(errors.AssertionFailedf("no cast counter found for cast from %s to %s", from.Name(), to.Name()))
 }
 
 func isArrayExpr(expr Expr) bool {

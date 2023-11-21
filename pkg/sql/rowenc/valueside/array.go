@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // encodeArray produces the value encoding for an array.
@@ -239,9 +238,7 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 	case types.TupleFamily:
 		return encoding.Tuple, nil
 	default:
-		return 0, errors.AssertionFailedf(
-			"no known encoding type for %s", redact.Safe(t.Family().Name()),
-		)
+		return 0, errors.AssertionFailedf("no known encoding type for %s", t.Family().Name())
 	}
 }
 func checkElementType(paramType *types.T, elemType *types.T) error {
