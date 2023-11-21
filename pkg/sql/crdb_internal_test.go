@@ -876,14 +876,10 @@ func TestIsAtLeastVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Settings: cluster.MakeTestingClusterSettings(),
-		},
-	})
-	defer tc.Stopper().Stop(context.Background())
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
-	db := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	db := sqlutils.MakeSQLRunner(conn)
 	for _, tc := range []struct {
 		version  string
 		expected string
@@ -906,15 +902,12 @@ func TestTxnContentionEventsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Start the cluster. (One node is sufficient; the outliers system
+	// Start the server. (One node is sufficient; the outliers system
 	// is currently in-memory only.)
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ServerConn(0)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 	testTxnContentionEventsTableHelper(t, ctx, conn, sqlDB)
 	testTxnContentionEventsTableWithDroppedInfo(t, ctx, conn, sqlDB)
 }
@@ -924,16 +917,13 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-	sqlDB := tc.ServerConn(0)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '10ms'")
 	require.NoError(t, err)
 	rangeKey := "/Local/Range/Table/106/1/-1704619207610523008/RangeDescriptor"
 	rangeKeyEscaped := fmt.Sprintf("\"%s\"", rangeKey)
-	tc.Server(0).SQLServer().(*sql.Server).GetExecutorConfig().ContentionRegistry.AddContentionEvent(contentionpb.ExtendedContentionEvent{
+	s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.AddContentionEvent(contentionpb.ExtendedContentionEvent{
 		BlockingEvent: kvpb.ContentionEvent{
 			Key: roachpb.Key(rangeKey),
 			TxnMeta: enginepb.TxnMeta{
@@ -1669,18 +1659,18 @@ func TestVirtualPTSTableDeprecated(t *testing.T) {
 	ptsKnobs := &protectedts.TestingKnobs{}
 	ptsKnobs.DisableProtectedTimestampForMultiTenant = true
 	testServerArgs.Knobs.ProtectedTS = ptsKnobs
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: testServerArgs})
-	defer tc.Stopper().Stop(ctx2)
+	srv, conn, _ := serverutils.StartServer(t, testServerArgs)
+	defer srv.Stopper().Stop(ctx2)
+	s := srv.ApplicationLayer()
 
-	s := tc.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 	internalDB := s.InternalDB().(isql.DB)
 	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
 
 	t.Run("nil-targets", func(t *testing.T) {
 		rec := &ptpb.Record{
 			ID:        uuid.MakeV4().GetBytes(),
-			Timestamp: tc.Server(0).Clock().Now(),
+			Timestamp: s.Clock().Now(),
 			Mode:      ptpb.PROTECT_AFTER,
 			DeprecatedSpans: []roachpb.Span{
 				{
@@ -1709,11 +1699,11 @@ func TestVirtualPTSTable(t *testing.T) {
 
 	ctx2 := context.Background()
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx2)
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx2)
+	s := srv.ApplicationLayer()
 
-	s := tc.Server(0)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 	internalDB := s.InternalDB().(isql.DB)
 	ptm := ptstorage.New(s.ClusterSettings(), nil)
 
@@ -1759,7 +1749,7 @@ func TestVirtualPTSTable(t *testing.T) {
 		rec := jobsprotectedts.MakeRecord(
 			uuid.MakeV4(),
 			int64(job.ID()),
-			tc.Server(0).Clock().Now(),
+			s.Clock().Now(),
 			[]roachpb.Span{},
 			jobsprotectedts.Jobs,
 			tableTargets(),
@@ -1803,7 +1793,7 @@ func TestVirtualPTSTable(t *testing.T) {
 		rec := jobsprotectedts.MakeRecord(
 			uuid.MakeV4(),
 			int64(sj.ScheduleID()),
-			tc.Server(0).Clock().Now(),
+			s.Clock().Now(),
 			[]roachpb.Span{},
 			jobsprotectedts.Schedules,
 			tableTargets(),
@@ -1840,7 +1830,7 @@ func TestVirtualPTSTable(t *testing.T) {
 
 		rec := ptpb.Record{
 			ID:        uuid.MakeV4().GetBytes(),
-			Timestamp: tc.Server(0).Clock().Now(),
+			Timestamp: s.Clock().Now(),
 			Mode:      ptpb.PROTECT_AFTER,
 			MetaType:  "foo",
 			Meta:      []byte("bar"),
@@ -1859,7 +1849,7 @@ func TestVirtualPTSTable(t *testing.T) {
 	t.Run("last-updated", func(t *testing.T) {
 		rec := ptpb.Record{
 			ID:        uuid.MakeV4().GetBytes(),
-			Timestamp: tc.Server(0).Clock().Now(),
+			Timestamp: s.Clock().Now(),
 			Mode:      ptpb.PROTECT_AFTER,
 			MetaType:  "foo",
 			Meta:      []byte("bar"),

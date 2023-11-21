@@ -124,17 +124,15 @@ func TestMaxDiskSpillUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testClusterArgs := base.TestClusterArgs{
-		ReplicationMode: base.ReplicationAuto,
-	}
-	distSQLKnobs := &execinfra.TestingKnobs{}
-	distSQLKnobs.ForceDiskSpill = true
-	testClusterArgs.ServerArgs.Knobs.DistSQL = distSQLKnobs
-	tc := testcluster.StartTestCluster(t, 1, testClusterArgs)
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
-
-	conn := tc.Conns[0]
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				ForceDiskSpill: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
 
 	_, err := conn.ExecContext(ctx, `
 CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS g(i)
@@ -254,11 +252,11 @@ func TestContentionTimeOnWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
-	runner := sqlutils.MakeSQLRunner(tc.Conns[0])
+	runner := sqlutils.MakeSQLRunner(conn)
 	runner.Exec(t, "CREATE TABLE t (k INT PRIMARY KEY, v INT)")
 
 	// The test involves three goroutines:
@@ -287,7 +285,7 @@ func TestContentionTimeOnWrites(t *testing.T) {
 				close(sem)
 			}
 		}()
-		txn, err := tc.Conns[0].Begin()
+		txn, err := conn.Begin()
 		if err != nil {
 			errCh <- err
 			return
