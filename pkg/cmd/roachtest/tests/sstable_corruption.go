@@ -130,7 +130,6 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	{
-		workloadErr := make(chan error, 1)
 		const timeout = 10 * time.Minute
 		m := c.NewMonitor(ctx)
 		// Run a workload to try to get the node to notice corruption and crash.
@@ -145,30 +144,20 @@ func runSSTableCorruption(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			// If the workload returned because of context cancelation, it
 			// means the node died as expected.
-			if ctx.Err() == nil {
-				workloadErr <- err
+			if ctx.Err() != nil {
+				return nil
 			}
-			return nil
+			return err
 		})
 
 		t.L().Printf("waiting for monitor to observe error...")
-		deathChan := make(chan error, 1)
-		go func() {
-			// Errors here can only come from node deaths, as the workload
-			// function never returns an error.
-			deathChan <- m.WaitE()
-		}()
-
-		select {
-		case err := <-deathChan:
-			t.L().Printf("monitor observed: %v", err)
-			// success
-		case <-workloadErr:
-			if workloadErr != nil {
-				t.Fatalf("workload returned error: %v", workloadErr)
-			}
+		err := m.WaitE()
+		// err should be non-nil, either through a workload-observed error, or
+		// a node death.
+		if err == nil {
 			t.Fatalf("workload ran for %s without observing node crash", timeout)
 		}
+		t.L().Printf("monitor observed error: %s", err.Error())
 	}
 
 	// Exempt corrupted nodes from roachtest harness' post-test liveness checks.
