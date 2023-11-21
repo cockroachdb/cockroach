@@ -2630,30 +2630,28 @@ func TestHistoricalAcquireDroppedDescriptor(t *testing.T) {
 	seenDrop := make(chan error)
 	recvSeenDrop := seenDrop
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				SQLLeaseManager: &lease.ManagerTestingKnobs{
-					TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
-						_, _, name, state, err := descpb.GetDescriptorMetadata(descriptor)
-						if err != nil {
-							t.Fatal(err)
-						}
-						if name != typeName || seenDrop == nil {
-							return
-						}
-						if state == descpb.DescriptorState_DROP {
-							close(seenDrop)
-							seenDrop = nil
-						}
-					},
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
+				TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
+					_, _, name, state, err := descpb.GetDescriptorMetadata(descriptor)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if name != typeName || seenDrop == nil {
+						return
+					}
+					if state == descpb.DescriptorState_DROP {
+						close(seenDrop)
+						seenDrop = nil
+					}
 				},
 			},
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(ctx)
 
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb := sqlutils.MakeSQLRunner(conn)
 	tdb.Exec(t, "CREATE TYPE "+typeName+" AS ENUM ('a')")
 	var now string
 	tdb.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&now)
@@ -2787,13 +2785,11 @@ func TestDropDescriptorRacesWithAcquisition(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: testingKnobs,
-		},
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: testingKnobs,
 	})
-	defer tc.Stopper().Stop(ctx)
-	db := tc.ServerConn(0)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Create our table. This will not acquire a lease.
 	{
@@ -2831,7 +2827,7 @@ func TestDropDescriptorRacesWithAcquisition(t *testing.T) {
 	require.NoError(t, <-readFromFooErr)
 	require.NoError(t, <-dropErrChan)
 
-	tc.Server(0).LeaseManager().(*lease.Manager).VisitLeases(func(
+	s.LeaseManager().(*lease.Manager).VisitLeases(func(
 		desc catalog.Descriptor, takenOffline bool, refCount int, expiration tree.DTimestamp,
 	) (wantMore bool) {
 		t.Log(desc, takenOffline, refCount, expiration)
@@ -2986,6 +2982,9 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 	// Set the lease duration such that the next lease acquisition will
 	// require the lease to be reacquired.
 	lease.LeaseDuration.Override(ctx, &params.Settings.SV, 0)
+	// Leasing setting used above conflict with disabling replication when
+	// starting the single server, so skip those.
+	params.PartOfCluster = true
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: func(ctx context.Context, req *kvpb.BatchRequest) *kvpb.Error {
 			filterMu.Lock()
@@ -3007,20 +3006,19 @@ func TestLeaseTxnDeadlineExtension(t *testing.T) {
 		},
 	}
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ServerConn(0)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
 	// Setup tables for the test.
-	_, err := conn.Exec(`
+	_, err := sqlDB.Exec(`
 CREATE TABLE t1(val int);
 	`)
 	require.NoError(t, err)
 	// Validates that transaction deadlines can move forward into
 	// the future after lease expiry.
 	t.Run("validate-lease-txn-deadline-ext", func(t *testing.T) {
-		conn, err := tc.ServerConn(0).Conn(ctx)
+		conn, err := sqlDB.Conn(ctx)
 		require.NoError(t, err)
-		descModConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		descModConn := sqlutils.MakeSQLRunner(sqlDB)
 		waitChan := make(chan error)
 		resumeChan := make(chan struct{})
 		go func() {
@@ -3080,9 +3078,9 @@ SELECT * FROM T1;`)
 	// if the lease can't be renewed, for example if the descriptor gets
 	// modified.
 	t.Run("validate-lease-txn-deadline-ext-blocked", func(t *testing.T) {
-		conn, err := tc.ServerConn(0).Conn(ctx)
+		conn, err := sqlDB.Conn(ctx)
 		require.NoError(t, err)
-		descModConn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		descModConn := sqlutils.MakeSQLRunner(sqlDB)
 		waitChan := make(chan error)
 		resumeChan := make(chan struct{})
 		go func() {
