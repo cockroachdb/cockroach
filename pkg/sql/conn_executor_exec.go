@@ -650,7 +650,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	if !isPausablePortal() || portal.pauseInfo.execStmtInOpenState.ihWrapper == nil {
 		ctx = ih.Setup(
 			ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
-			stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.state.priority,
+			stmt.StmtNoConstants, os.ImplicitTxn.Get(),
+			// This goroutine is the only one that can modify
+			// txnState.mu.priority, so we don't need to get a mutex here.
+			ex.state.mu.priority,
 			ex.extraTxnState.shouldCollectTxnExecutionStats,
 		)
 	} else {
@@ -826,7 +829,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			ctx,
 			ex.executorType,
 			int(ex.state.mu.autoRetryCounter),
-			ex.extraTxnState.txnCounter,
+			int(ex.extraTxnState.txnCounter.Load()),
 			0, /* rowsAffected */
 			ex.state.mu.stmtCount,
 			0, /* bulkJobId */
@@ -1273,7 +1276,7 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 			if err := ex.state.setReadOnlyMode(tree.ReadOnly); err != nil {
 				return err
 			}
-			p.extendedEvalCtx.TxnReadOnly = ex.state.readOnly
+			p.extendedEvalCtx.TxnReadOnly = ex.state.readOnly.Load()
 			return nil
 		}
 		if *p.extendedEvalCtx.AsOfSystemTime == *asOf {
@@ -1795,7 +1798,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						ctx,
 						ex.executorType,
 						int(ex.state.mu.autoRetryCounter),
-						ex.extraTxnState.txnCounter,
+						int(ex.extraTxnState.txnCounter.Load()),
 						ppInfo.dispatchToExecutionEngine.rowsAffected,
 						ex.state.mu.stmtCount,
 						bulkJobId,
@@ -1822,7 +1825,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				ctx,
 				ex.executorType,
 				int(ex.state.mu.autoRetryCounter),
-				ex.extraTxnState.txnCounter,
+				int(ex.extraTxnState.txnCounter.Load()),
 				nonBulkJobNumRows,
 				ex.state.mu.stmtCount,
 				bulkJobId,
@@ -2508,7 +2511,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			ctx,
 			ex.executorType,
 			int(ex.state.mu.autoRetryCounter),
-			ex.extraTxnState.txnCounter,
+			int(ex.extraTxnState.txnCounter.Load()),
 			0, /* rowsAffected */
 			0, /* stmtCount */
 			0, /* bulkJobId */
@@ -2524,7 +2527,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 
 	// We're in the NoTxn state, so no statements were executed earlier. Bump the
 	// txn counter for logging.
-	ex.extraTxnState.txnCounter++
+	ex.extraTxnState.txnCounter.Add(1)
 	ast := parserStmt.AST
 	switch s := ast.(type) {
 	case *tree.BeginTransaction:
@@ -3295,7 +3298,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		RowsRead:                ex.extraTxnState.rowsRead,
 		RowsWritten:             ex.extraTxnState.rowsWritten,
 		BytesRead:               ex.extraTxnState.bytesRead,
-		Priority:                ex.state.priority,
+		Priority:                ex.state.mu.priority,
 		// TODO(107318): add isolation level
 		// TODO(107318): add qos
 		// TODO(107318): add asoftime or ishistorical
@@ -3315,7 +3318,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	if ex.extraTxnState.shouldLogToTelemetry {
 
 		ex.planner.logTransaction(ctx,
-			ex.extraTxnState.txnCounter,
+			int(ex.extraTxnState.txnCounter.Load()),
 			transactionFingerprintID,
 			&recordedTxnStats,
 			ex.extraTxnState.telemetrySkippedTxns,
