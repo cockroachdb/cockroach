@@ -3897,6 +3897,100 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 	}), nil
 }
 
+func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+			quote_ident(schema_id::REGNAMESPACE::TEXT) AS schema,
+			quote_ident(name) AS name,
+			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) as qualified_name
+	FROM functions`)
+
+	functions, err := Collect(ctx, og, tx, pgx.RowToMap, q)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, expectedCode, err := Generate[*tree.AlterRoutineRename](og.params.rng, og.produceError(), []GenerationCase{
+		{pgcode.UndefinedFunction, `ALTER FUNCTION "NoSuchFunction" RENAME TO "IrrelevantFunctionName"`},
+		{pgcode.DuplicateFunction, `{ with ExistingFunction } ALTER FUNCTION { .qualified_name } RENAME TO { ConflictingName . } { end }`},
+		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { ExistingFunction | .qualified_name } RENAME TO { UniqueName }`},
+	}, template.FuncMap{
+		"UniqueName": func() *tree.Name {
+			name := tree.Name(fmt.Sprintf("udf_%d", og.newUniqueSeqNum()))
+			return &name
+		},
+		"ExistingFunction": func() (map[string]any, error) {
+			return PickOne(og.params.rng, functions)
+		},
+		"ConflictingName": func(existing map[string]any) (string, error) {
+			// Find another function within the same schema. Fun fact: Renaming a
+			// function to itself (as of writing) will result in a conflict the same
+			// way as any other existing function.
+			selected, err := PickOne(og.params.rng, util.Filter(functions, func(other map[string]any) bool {
+				return other["schema"] == existing["schema"]
+			}))
+			if err != nil {
+				return "", err
+			}
+			return selected["name"].(string), nil
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	}), nil
+}
+
+func (og *operationGenerator) alterFunctionSetSchema(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	functionsQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) FROM functions`)
+
+	schemasQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+	}, `SELECT quote_ident(name) FROM descriptors WHERE descriptor ? 'schema'`)
+
+	functions, err := Collect(ctx, og, tx, pgx.RowTo[string], functionsQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	schemas, err := Collect(ctx, og, tx, pgx.RowTo[string], schemasQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, expectedCode, err := Generate[*tree.AlterRoutineSetSchema](og.params.rng, og.produceError(), []GenerationCase{
+		{pgcode.UndefinedFunction, `ALTER FUNCTION "NoSuchFunction" SET SCHEMA "IrrelevantSchema"`},
+		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { Function } SET SCHEMA "NoSuchSchema"`},
+		// NB: It's considered valid to set a function's schema to the schema it already exists within.
+		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { Function } SET SCHEMA { Schema }`},
+	}, template.FuncMap{
+		"Function": func() (string, error) {
+			return PickOne(og.params.rng, functions)
+		},
+		"Schema": func() (string, error) {
+			return PickOne(og.params.rng, schemas)
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	}), nil
+}
+
 func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *opStmt, err error) {
 	const maxTablesForSelect = 3
 	const maxColumnsForSelect = 16
