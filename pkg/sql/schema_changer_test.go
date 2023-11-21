@@ -57,7 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -6718,31 +6717,30 @@ func TestClockSyncErrorsAreNotPermanent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var tc serverutils.TestClusterInterface
+	var s serverutils.TestServerInterface
+	var conn *gosql.DB
 	ctx := context.Background()
 	var updatedClock int64 // updated with atomics
-	tc = testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				DistSQL: &execinfra.TestingKnobs{
-					RunBeforeBackfillChunk: func(sp roachpb.Span) error {
-						if atomic.AddInt64(&updatedClock, 1) > 1 {
-							return nil
-						}
-						clock := tc.Server(0).Clock()
-						now := clock.Now()
-						farInTheFuture := now.Add(time.Hour.Nanoseconds(), 0)
+	s, conn, _ = serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+					if atomic.AddInt64(&updatedClock, 1) > 1 {
+						return nil
+					}
+					clock := s.ApplicationLayer().Clock()
+					now := clock.Now()
+					farInTheFuture := now.Add(time.Hour.Nanoseconds(), 0)
 
-						return clock.UpdateAndCheckMaxOffset(ctx, farInTheFuture.UnsafeToClockTimestamp())
-					},
+					return clock.UpdateAndCheckMaxOffset(ctx, farInTheFuture.UnsafeToClockTimestamp())
 				},
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer s.Stopper().Stop(ctx)
 
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb := sqlutils.MakeSQLRunner(conn)
 	tdb.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY)`)
 	// Before the commit which added this test, the below command would fail
 	// due to a permanent error.

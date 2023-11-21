@@ -20,9 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/assert"
@@ -81,14 +81,10 @@ func TestScanBatchSize(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderMetamorphic(t, "This test doesn't work with metamorphic batch sizes.")
 
-	testClusterArgs := base.TestClusterArgs{
-		ReplicationMode: base.ReplicationAuto,
-	}
-	tc := testcluster.StartTestCluster(t, 1, testClusterArgs)
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
-	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Until we propagate the estimated row count hint in the KV projection
@@ -157,10 +153,9 @@ func TestCFetcherLimitsOutputBatch(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderMetamorphic(t, "This test doesn't work with metamorphic batch sizes.")
 
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ReplicationMode: base.ReplicationAuto})
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
 	// Until we propagate the estimated row count hint in the KV projection
 	// pushdown case, this test is expected to fail if the direct scans are
