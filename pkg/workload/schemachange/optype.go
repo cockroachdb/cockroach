@@ -89,6 +89,10 @@ const (
 	alterDatabaseAddSuperRegion  // ALTER DATABASE <db> ADD SUPER REGION <region> VALUES ...
 	alterDatabaseDropSuperRegion // ALTER DATABASE <db> DROP SUPER REGION <region>
 
+	// ALTER FUNCTION ...
+	alterFunctionRename    // ALTER FUNCTION <function> RENAME TO <name>
+	alterFunctionSetSchema // ALTER FUNCTION <function> SET SCHEMA <schema>
+
 	// ALTER TABLE <table> ...
 
 	alterTableAddColumn               // ALTER TABLE <table> ADD [COLUMN] <column> <type>
@@ -138,9 +142,7 @@ const (
 	// alterDefaultPrivileges
 	// alterFunctionDepExtension
 	// alterFunctionOptions
-	// alterFunctionRename
 	// alterFunctionSetOwner
-	// alterFunctionSetSchema
 	// alterIndex
 	// alterIndexPartitionBy
 	// alterIndexVisible
@@ -210,6 +212,8 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterDatabaseDropSuperRegion:      (*operationGenerator).alterDatabaseDropSuperRegion,
 	alterDatabasePrimaryRegion:        (*operationGenerator).primaryRegion,
 	alterDatabaseSurvivalGoal:         (*operationGenerator).survive,
+	alterFunctionRename:               (*operationGenerator).alterFunctionRename,
+	alterFunctionSetSchema:            (*operationGenerator).alterFunctionSetSchema,
 	alterTableAddColumn:               (*operationGenerator).addColumn,
 	alterTableAddConstraint:           (*operationGenerator).addConstraint,
 	alterTableAddConstraintForeignKey: (*operationGenerator).addForeignKeyConstraint,
@@ -271,6 +275,8 @@ var opWeights = []int{
 	createTypeEnum:                    1,
 	createSchema:                      1,
 	createFunction:                    1,
+	alterFunctionSetSchema:            1,
+	alterFunctionRename:               1,
 	alterTableDropColumn:              0,
 	alterTableDropColumnDefault:       1,
 	alterTableDropNotNull:             1,
