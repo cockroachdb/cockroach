@@ -1396,9 +1396,9 @@ func (p *Pebble) makeMetricEtcEventListener(ctx context.Context) pebble.EventLis
 					// up.
 					log.MakeProcessUnavailable()
 
-					log.Fatalf(ctx, "file write stall detected: %s", info)
+					log.Fatalf(ctx, "disk stall detected: %s", info)
 				} else {
-					p.async(func() { log.Errorf(ctx, "file write stall detected: %s", info) })
+					p.async(func() { log.Errorf(ctx, "disk stall detected: %s", info) })
 				}
 				return
 			}
