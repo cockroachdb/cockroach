@@ -94,7 +94,7 @@ func init() {
 			case from == types.EnumFamily && to == types.EnumFamily:
 				c = sqltelemetry.EnumCastCounter
 			default:
-				c = sqltelemetry.CastOpCounter(from.Name(), to.Name())
+				c = sqltelemetry.CastOpCounter(string(from.Name()), string(to.Name()))
 			}
 			tree.OnCastTypeCheck[tree.CastCounterType{From: from, To: to}] = func() {
 				telemetry.Inc(c)
