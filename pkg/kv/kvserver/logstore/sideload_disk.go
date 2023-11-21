@@ -189,6 +189,7 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 			return nil
 		}
 		if index < from {
+			// TODO(pavelkalinnikov): these files may never be removed. Clean them up.
 			return nil
 		}
 		// index is in [from, to)
@@ -213,6 +214,8 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 		// Not worth trying to figure out which one, just try to delete.
 		err := ss.eng.Remove(ss.dir)
 		if err != nil && !oserror.IsNotExist(err) {
+			// TODO(pavelkalinnikov): this is possible because deletedAll can be left
+			// true despite existence of files with index < from which are skipped.
 			log.Infof(ctx, "unable to remove sideloaded dir %s: %v", ss.dir, err)
 			err = nil // handled
 		}
