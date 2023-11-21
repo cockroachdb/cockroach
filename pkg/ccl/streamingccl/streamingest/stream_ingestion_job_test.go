@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"net/url"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
@@ -34,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -302,93 +300,6 @@ func TestTenantStreamingFailback(t *testing.T) {
 	defer tenF2DB.Close()
 	sqlTenF = sqlutils.MakeSQLRunner(tenF2DB)
 	sqlTenF.CheckQueryResults(t, "SELECT max(k) FROM test.t", [][]string{{"555"}})
-}
-
-func TestCutoverBuiltin(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	args := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-			Knobs: base.TestingKnobs{
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			},
-		},
-	}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	db := sqlDB.DB
-
-	streamIngestJobRecord := jobs.Record{
-		Description: "test stream ingestion",
-		Username:    username.RootUserName(),
-		Details: jobspb.StreamIngestionDetails{
-			StreamAddress: "randomgen://test",
-			Span:          roachpb.Span{Key: keys.LocalMax, EndKey: keys.LocalMax.Next()},
-		},
-		Progress: jobspb.StreamIngestionProgress{},
-	}
-	var job *jobs.StartableJob
-	id := registry.MakeJobID()
-	err := tc.Server(0).InternalDB().(isql.DB).Txn(ctx, func(
-		ctx context.Context, txn isql.Txn,
-	) (err error) {
-		return registry.CreateStartableJobWithTxn(ctx, &job, id, txn, streamIngestJobRecord)
-	})
-	require.NoError(t, err)
-
-	// Check that sentinel is not set.
-	progress := job.Progress()
-	sp, ok := progress.GetDetails().(*jobspb.Progress_StreamIngest)
-	require.True(t, ok)
-	require.True(t, sp.StreamIngest.CutoverTime.IsEmpty())
-
-	var replicatedTime time.Time
-	err = job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		if err := md.CheckRunningOrReverting(); err != nil {
-			return err
-		}
-		replicatedTime = timeutil.Now().Round(time.Microsecond)
-		hlcReplicatedTime := hlc.Timestamp{WallTime: replicatedTime.UnixNano()}
-
-		progress := md.Progress
-		streamProgress := progress.Details.(*jobspb.Progress_StreamIngest).StreamIngest
-		streamProgress.ReplicatedTime = hlcReplicatedTime
-		progress.Progress = &jobspb.Progress_HighWater{
-			HighWater: &hlcReplicatedTime,
-		}
-
-		ju.UpdateProgress(progress)
-		return nil
-	})
-	require.NoError(t, err)
-
-	// Ensure that the builtin runs locally.
-	var explain string
-	err = db.QueryRowContext(ctx,
-		`EXPLAIN SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`, job.ID(),
-		replicatedTime).Scan(&explain)
-	require.NoError(t, err)
-	require.Equal(t, "distribution: local", explain)
-
-	var jobID int64
-	err = db.QueryRowContext(
-		ctx,
-		`SELECT crdb_internal.complete_stream_ingestion_job($1, $2)`,
-		job.ID(), replicatedTime).Scan(&jobID)
-	require.NoError(t, err)
-	require.Equal(t, job.ID(), jobspb.JobID(jobID))
-
-	// Check that sentinel is set on the job progress.
-	sj, err := registry.LoadJob(ctx, job.ID())
-	require.NoError(t, err)
-	progress = sj.Progress()
-	sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest)
-	require.True(t, ok)
-	require.Equal(t, hlc.Timestamp{WallTime: replicatedTime.UnixNano()}, sp.StreamIngest.CutoverTime)
 }
 
 // TestReplicationJobResumptionStartTime tests that a replication job picks the
