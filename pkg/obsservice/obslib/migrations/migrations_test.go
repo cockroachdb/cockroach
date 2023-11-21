@@ -1,0 +1,64 @@
+// Copyright 2023 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+
+package migrations
+
+import (
+	"fmt"
+	"os"
+	"regexp"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
+)
+
+// TestMigrationHaveColumns test that all migrations created for
+// events have the required columns.
+func TestMigrationHaveRequiredColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Required columns with any amount of space required for alignment (\s+).
+	requiredColumns := []string{
+		`timestamp\s+TIMESTAMP NOT NULL`,
+		`event_id\s+BYTES NOT NULL DEFAULT uuid_v4()`,
+		`org_id\s+BYTES NOT NULL,`,
+		`cluster_id\s+BYTES NOT NULL`,
+		`instance_id\s+INT NOT NULL`,
+	}
+
+	migrations, err := os.ReadDir("./sqlmigrations")
+	require.NoError(t, err, "error while reading migrations directory")
+
+	// Add migrations that don't need to contain the required columns and
+	// can be skipped from this check.
+	var ignoreMigrations []string
+
+	for _, migration := range migrations {
+		if slices.Contains(ignoreMigrations, migration.Name()) {
+			return
+		}
+		b, err := os.ReadFile(fmt.Sprintf("./sqlmigrations/%s", migration.Name()))
+		if err != nil {
+			require.NoError(t, err, fmt.Sprintf("error while reading migration %v", migration.Name()))
+		}
+		migrationContent := string(b)
+		for _, column := range requiredColumns {
+			r := regexp.MustCompile(column)
+			require.Equal(
+				t,
+				1,
+				len(r.FindAllString(migrationContent, 1)),
+				fmt.Sprintf("migration %v missing column: %v", migration.Name(), column),
+			)
+		}
+	}
+}
