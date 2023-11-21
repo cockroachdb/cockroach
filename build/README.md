@@ -1,6 +1,6 @@
 # Docker Deploy
 
-Installing docker is a prerequisite. The instructions differ depending on the
+Installing Docker is a prerequisite. The instructions differ depending on the
 environment. Docker is comprised of two parts: the daemon server which runs on
 Linux and accepts commands, and the client which is a Go program capable of
 running on MacOS, all Unix variants and Windows.
@@ -33,11 +33,24 @@ running CockroachDB. It is based on RedHat's `ubi9/ubi-minimal` image and
 contains only the main CockroachDB binary, libgeos libraries, and licenses. To
 fetch this image, run `docker pull cockroachdb/cockroach` in the usual fashion.
 
-To build the image yourself, use the Dockerfile in the `deploy` directory after
-fetching a cross-built version of `cockroach` from CI, or by building yourself
-using `./dev build cockroach geos --cross{=linuxarm}`. Copy the `cockroach`,
-`libgeos.so`, and `libgeos_c.so` files into `build/deploy` then run
-`docker build` in that directory.
+To build the image yourself:
+
+1. Fetch a cross-built version of `cockroach` from CI, or build one yourself
+   using `./dev build cockroach geos --cross[=linuxarm]`.
+
+1. Copy the necessary files into the `build/deploy` directory.
+
+    ```sh
+    cp ./artifacts/{cockroach,libgeos.so,libgeos_c.so} ./build/deploy
+    cp -r ./licenses ./build/deploy
+    ```
+
+1. Build the CockroachDB Docker image.
+
+    ```sh
+    cd ./build/deploy
+    docker build -t localhost/cockroach:latest .
+    ```
 
 # Updating toolchains
 
