@@ -51,6 +51,8 @@ const numFullBackups = 5
 type roundTripSpecs struct {
 	name                 string
 	metamorphicRangeSize bool
+	mock                 bool
+	skip                 string
 }
 
 func registerBackupRestoreRoundTrip(r registry.Registry) {
@@ -64,6 +66,11 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			name:                 "backup-restore/small-ranges",
 			metamorphicRangeSize: true,
 		},
+		{
+			name: "backup-restore/mock",
+			mock: true,
+			skip: "used only for debugging",
+		},
 	} {
 		sp := sp
 		r.Add(registry.TestSpec{
@@ -75,8 +82,9 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			RequiresLicense:   true,
 			CompatibleClouds:  registry.OnlyGCE,
 			Suites:            registry.Suites(registry.Nightly),
+			Skip:              sp.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				backupRestoreRoundTrip(ctx, t, c, sp.metamorphicRangeSize)
+				backupRestoreRoundTrip(ctx, t, c, sp)
 			},
 		})
 	}
@@ -85,9 +93,9 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 // backup-restore/round-trip tests that a round trip of creating a backup and
 // restoring the created backup create the same objects.
 func backupRestoreRoundTrip(
-	ctx context.Context, t test.Test, c cluster.Cluster, metamorphicRangeSize bool,
+	ctx context.Context, t test.Test, c cluster.Cluster, sp roundTripSpecs,
 ) {
-	if c.Cloud() != spec.GCE {
+	if c.Cloud() != spec.GCE && !c.IsLocal() {
 		t.Skip("uses gs://cockroachdb-backup-testing; see https://github.com/cockroachdb/cockroach/issues/105968")
 	}
 	pauseProbability := 0.2
@@ -107,7 +115,7 @@ func backupRestoreRoundTrip(
 	m := c.NewMonitor(ctx, roachNodes)
 
 	m.Go(func(ctx context.Context) error {
-		testUtils, err := newCommonTestUtils(ctx, t, c, roachNodes)
+		testUtils, err := newCommonTestUtils(ctx, t, c, roachNodes, sp.mock)
 		if err != nil {
 			return err
 		}
@@ -132,7 +140,7 @@ func backupRestoreRoundTrip(
 		if err := testUtils.setClusterSettings(ctx, t.L(), testRNG); err != nil {
 			return err
 		}
-		if metamorphicRangeSize {
+		if sp.metamorphicRangeSize {
 			if err := testUtils.setMaxRangeSizeAndDependentSettings(ctx, t, testRNG, dbs); err != nil {
 				return err
 			}
@@ -210,9 +218,12 @@ func startBackgroundWorkloads(
 	// numWarehouses is picked as a number that provides enough work
 	// for the cluster used in this test without overloading it,
 	// which can make the backups take much longer to finish.
-	const numWarehouses = 100
+	numWarehouses := 100
+	if testUtils.mock {
+		numWarehouses = 10
+	}
 	tpccInit, tpccRun := tpccWorkloadCmd(l, testRNG, numWarehouses, roachNodes)
-	bankInit, bankRun := bankWorkloadCmd(l, testRNG, roachNodes)
+	bankInit, bankRun := bankWorkloadCmd(l, testRNG, roachNodes, testUtils.mock)
 
 	err := c.RunE(ctx, workloadNode, bankInit.String())
 	if err != nil {
