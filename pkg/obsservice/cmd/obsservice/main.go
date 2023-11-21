@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/obsutil"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/process"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/produce"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
@@ -55,6 +57,9 @@ var termSignal os.Signal = unix.SIGTERM
 // TODO(maryliag): make performance testing to decide on the final value.
 var maxMemoryBytes int = 500 * 1024 * 1024 // 500Mb
 
+// defaultSinkDBName is the sink database name used for DB migrations, writes, etc.
+var defaultSinkDBName = "obsservice"
+
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "obsservice",
@@ -65,18 +70,28 @@ from one or more CockroachDB clusters.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
 
-		// TODO(abarganier): migrate DB migrations over to target storage for aggregated outputs
-		//connCfg, err := pgxpool.ParseConfig(sinkPGURL)
-		//if err != nil {
-		//	return errors.Wrapf(err, "invalid --sink-pgurl (%s)", sinkPGURL)
-		//}
-		//if connCfg.ConnConfig.Database == "" {
-		//	fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
-		//	connCfg.ConnConfig.Database = defaultSinkDBName
-		//}
-		//if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
-		//	return errors.Wrap(err, "failed to run DB migrations")
-		//}
+		if !noDB {
+			connCfg, err := pgxpool.ParseConfig(sinkPGURL)
+			if err != nil {
+				return errors.Wrapf(err, "invalid --sink-pgurl (%s)", sinkPGURL)
+			}
+			if connCfg.ConnConfig.Database != defaultSinkDBName {
+				if connCfg.ConnConfig.Database != "" {
+					log.Warningf(ctx,
+						"--sink-pgurl string contains a database name (%s) other than 'obsservice' - overriding",
+						connCfg.ConnConfig.Database)
+				}
+				// We don't want to accidentally write things to the wrong DB in the event that
+				// one is accidentally provided in the --sink-pgurl (as is common with defaultdb).
+				// Always override to defaultSinkDBName.
+				connCfg.ConnConfig.Database = defaultSinkDBName
+			}
+			if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
+				return errors.Wrap(err, "failed to run DB migrations")
+			}
+		} else {
+			log.Info(ctx, "--no-db flag indicated, skipping DB migrations")
+		}
 
 		signalCh := make(chan os.Signal, 1)
 		signal.Notify(signalCh, drainSignals...)
@@ -162,6 +177,7 @@ from one or more CockroachDB clusters.`,
 var (
 	otlpAddr  string
 	httpAddr  string
+	noDB      bool
 	sinkPGURL string
 )
 
@@ -189,6 +205,13 @@ func main() {
 		"postgresql://root@localhost:26257?sslmode=disable",
 		"PGURL for the sink cluster. If the url does not include a database name, "+
 			"then \"obsservice\" will be used.")
+
+	RootCmd.PersistentFlags().BoolVar(
+		&noDB,
+		"no-db",
+		false,
+		"Disables usage of the external sink DB indicated by the --sink-pgurl flag at startup. "+
+			"Intended for testing purposes only.")
 
 	if err := RootCmd.Execute(); err != nil {
 		exit.WithCode(exit.UnspecifiedError())
