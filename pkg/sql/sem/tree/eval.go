@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -1410,7 +1411,10 @@ func cmpOpFixups(
 				return o.Volatility
 			}
 		}
-		panic(errors.AssertionFailedf("could not find cmp op %s(%s,%s)", op, t, t))
+		panic(errors.AssertionFailedf(
+			"could not find cmp op %s(%s,%s)",
+			redact.Safe(op.String()), t.SQLStringForError(), t.SQLStringForError(),
+		))
 	}
 
 	// Array equality comparisons.
