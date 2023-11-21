@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
-// InstallLogFileSink installs a file sink for telemetry logging tests.
+// InstallLogFileSink installs a file sink for logging tests.
 func InstallLogFileSink(sc *log.TestLogScope, t *testing.T, channel logpb.Channel) func() {
 	// Enable logging channels.
 	log.TestingResetActive()
@@ -31,6 +31,8 @@ func InstallLogFileSink(sc *log.TestLogScope, t *testing.T, channel logpb.Channe
 		cfg.Sinks.FileGroups["telemetry"] = &fileSinkConfig
 	case logpb.Channel_SENSITIVE_ACCESS:
 		cfg.Sinks.FileGroups["sql-audit"] = &fileSinkConfig
+	case logpb.Channel_SQL_EXEC:
+		cfg.Sinks.FileGroups["sql-exec"] = &fileSinkConfig
 	default:
 		panic("unrecognized logging channel")
 	}
