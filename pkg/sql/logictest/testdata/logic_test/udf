@@ -1,9 +1,3 @@
-# Set the distsql_workmem to the default production value because metamorphic
-# values may be too low for the legacy schema changer.
-onlyif config local-legacy-schema-changer
-statement ok
-SET distsql_workmem = '64MiB'
-
 statement ok
 CREATE TABLE ab (
   a INT PRIMARY KEY,
