@@ -453,6 +453,12 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 			return
 		}
 
+		// Make a best-effort check to avoid generating trivial constrained scans
+		// that actually scan the entire table.
+		if c.IsConstraintImpliedByCheckConstraints(combinedConstraint, scanPrivate) {
+			return
+		}
+
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
 		newScanPrivate.Distribution.Regions = nil

@@ -2609,7 +2609,8 @@ project
       ├── fd: ()-->(3)
       ├── scan t114250
       │    ├── columns: x:1!null z:3!null
-      │    └── constraint: /1/2: [/1 - /4]
+      │    └── check constraint expressions
+      │         └── (x:1 > 0) AND (x:1 < 5) [outer=(1), constraints=(/1: [/1 - /4]; tight)]
       └── filters
            └── z:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
 
