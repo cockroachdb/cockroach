@@ -16,8 +16,11 @@ import {
 import { mockTxnStats, Txn, Stmt, mockStmtStats } from "../api/testUtils";
 import { shuffle } from "lodash";
 import Long from "long";
+import { unset } from "../util";
 
 describe("getTxnFromSqlStatsTxns", () => {
+  // Each transaction will be mocked with an exec count of 1.
+  // We will verify that we aggregated the expected number of transactions.
   it.each([
     [
       [
@@ -31,7 +34,7 @@ describe("getTxnFromSqlStatsTxns", () => {
       ],
       "3", // fingerprint id
       ["cockroach", "my_app"], // app name
-      3, // Expected idx.
+      3, // Expected count
     ],
     [
       [
@@ -44,7 +47,7 @@ describe("getTxnFromSqlStatsTxns", () => {
       ],
       "3", // fingerprint id
       ["cockroach", "my_app"], // app name
-      3, // Expected idx.
+      2, // Expected count.
     ],
     [
       [
@@ -56,28 +59,59 @@ describe("getTxnFromSqlStatsTxns", () => {
       ],
       "2", // fingerprint id
       null, // app names
+      2, // Expected idx.
+    ],
+    [
+      [
+        { id: 1, app: "aaaaaa" },
+        { id: 2, app: "bbbbbb" },
+        { id: 2, app: "cccccc" },
+        { id: 3, app: "dddddd" },
+        { id: 4, app: "dddddd" },
+      ],
+      "3", // fingerprint id
+      ["dddddd"], // app names
       1, // Expected idx.
     ],
+    // Test unset app name. The '(unset)' app name should be explicitly
+    // provided to the function instead of the empty string.
+    [
+      [
+        { id: 1, app: "aaaaaa" },
+        { id: 3, app: "cccccc" },
+        { id: 4, app: "" },
+        { id: 4, app: "" },
+        { id: 5, app: "" },
+      ],
+      "4", // fingerprint id
+      [unset], // app names
+      2, // Expected idx.
+    ],
   ])(
-    "should return the first txn with the fingerprint ID and app name specified",
+    "should return the txn aggregated by fingerprint ID and app names",
     (
       txnsToMock,
       fingerprintID: string,
       apps: string[] | null,
-      expectedIdx: number,
+      expectedCount: number,
     ) => {
       const txns = txnsToMock.map((txn: { id: number; app: string }) =>
         mockTxnStats({
           stats_data: {
             transaction_fingerprint_id: Long.fromInt(txn.id),
             app: txn.app,
+            stats: {
+              count: Long.fromNumber(1),
+            },
           },
         }),
       );
 
-      const expectedTxn = txns[expectedIdx];
       const txn = getTxnFromSqlStatsTxns(txns, fingerprintID, apps);
-      expect(txn).toEqual(expectedTxn);
+      expect(txn.stats_data.transaction_fingerprint_id.toString()).toEqual(
+        fingerprintID,
+      );
+      expect(txn.stats_data.stats.count.toNumber()).toEqual(expectedCount);
     },
   );
 
@@ -208,33 +242,45 @@ describe("getTxnQueryString", () => {
 });
 
 describe("getStatementsForTransaction", () => {
+  // These are the statements we'll throw in with the expected statements
+  // that should be filtered out.
+  // We'll use txn ids in the range [1,10] when testing this function.
+  // Although some of the mocked statements below will have ids in that range,
+  // the app name will never match the given transactions.
   const extraStmts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i =>
     mockStmtStats({
       id: Long.fromInt(i),
       key: {
         key_data: {
-          transaction_fingerprint_id: Long.fromInt(9999999999),
+          transaction_fingerprint_id: Long.fromInt(i),
+          app: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         },
       },
-      txn_fingerprint_ids: [Long.fromInt(9999999999)],
+      txn_fingerprint_ids: [Long.fromInt(i)],
     }),
   );
 
+  // The statements specified in each test case will be assigned the txn id in the test
+  //  and also be randomly be assigned one of the app names in the provided apps list.
   const testCases = [
     {
       txnID: 1,
-      stmtIDs: [2, 4, 6, 8],
+      apps: ["cockroach", "myApp"],
+      stmtIDs: [2, 4, 6, 8, 10, 12],
     },
     {
       txnID: 2,
+      apps: ["myApp"],
       stmtIDs: [1],
     },
     {
       txnID: 3,
+      apps: ["hello-world"],
       stmtIDs: [],
     },
     {
       txnID: 3,
+      apps: ["$ internal-my-app"],
       stmtIDs: [4, 5, 6],
       useArrayProp: true,
     },
@@ -242,9 +288,10 @@ describe("getStatementsForTransaction", () => {
     const txnID = Long.fromInt(tc.txnID);
 
     const txn = mockTxnStats({
-      stats_data: { transaction_fingerprint_id: txnID },
+      stats_data: { transaction_fingerprint_id: txnID, app: tc.apps[0] },
     });
 
+    const randomApp = tc.apps?.[Math.floor(Math.random() * tc.apps.length)];
     const stmts = tc.stmtIDs.map(id =>
       mockStmtStats({
         id: Long.fromInt(id),
@@ -252,22 +299,26 @@ describe("getStatementsForTransaction", () => {
         key: {
           key_data: {
             transaction_fingerprint_id: !tc.useArrayProp ? txnID : null,
+            app: randomApp,
           },
         },
       }),
     );
-    return [txn, stmts];
+    return [txn, tc.apps, stmts];
   });
 
   it.each(testCases)(
-    "should return the list of stmts that have txn ids matching the provided txn",
-    (txn: Txn, stmts: Stmt[]) => {
+    "should return the list of stmts that have txn ids matching the provided txn and one of the app names",
+    (txn: Txn, apps: string[], expectedStmts: Stmt[]) => {
       const stmtsRes = getStatementsForTransaction(
-        txn,
-        shuffle([...extraStmts, ...stmts]),
+        txn?.stats_data?.transaction_fingerprint_id?.toString(),
+        apps,
+        shuffle([...extraStmts, ...expectedStmts]),
       );
 
-      expect(stmtsRes.length).toEqual(stmts.length);
+      expect(stmtsRes.length).toEqual(expectedStmts.length);
+      const expectedStmtIDs = new Set(expectedStmts.map(s => s.id.toString()));
+      stmtsRes.forEach(s => expect(expectedStmtIDs.has(s.id.toString())));
     },
   );
 
@@ -278,7 +329,13 @@ describe("getStatementsForTransaction", () => {
   ])(
     "should return empty array when given invalid params",
     (txn: Txn | null, stmts: Stmt[] | null) => {
-      expect(getStatementsForTransaction(txn, stmts)).toEqual([]);
+      expect(
+        getStatementsForTransaction(
+          txn?.stats_data.transaction_fingerprint_id.toString(),
+          [txn?.stats_data.app],
+          stmts,
+        ),
+      ).toEqual([]);
     },
   );
 });
