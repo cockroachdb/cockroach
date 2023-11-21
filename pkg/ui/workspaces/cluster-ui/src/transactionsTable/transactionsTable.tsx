@@ -154,7 +154,7 @@ export function makeTransactionsColumns(
               item.stats_data.statement_fingerprint_ids,
               statements,
             ) || "Transaction query unavailable.",
-          appName: item.stats_data.app,
+          appName: item.stats_data.app ? item.stats_data.app : unset,
           transactionFingerprintId:
             item.stats_data.transaction_fingerprint_id.toString(),
           search,
