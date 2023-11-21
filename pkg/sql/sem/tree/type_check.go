@@ -593,7 +593,9 @@ func onCastTypeCheckHook(from, to types.Family) {
 		return
 	}
 	panic(errors.AssertionFailedf(
-		"no cast counter found for cast from %s to %s", from.Name(), to.Name(),
+		"no cast counter found for cast from %s to %s",
+		// Family names are always safe for redacting.
+		redact.Safe(from.Name()), redact.Safe(to.Name()),
 	))
 }
 

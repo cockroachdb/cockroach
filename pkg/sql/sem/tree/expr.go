@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Expr represents an expression.
@@ -488,8 +489,10 @@ func MemoizeComparisonExprOp(node *ComparisonExpr) {
 
 	fn, ok := CmpOps[fOp.Symbol].LookupImpl(leftRet, rightRet)
 	if !ok {
-		panic(errors.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed",
-			AsStringWithFlags(node, FmtShowTypes)))
+		panic(errors.AssertionFailedf("lookup for ComparisonExpr %s's CmpOp failed (%s(%s,%s))",
+			AsStringWithFlags(node, FmtShowTypes), redact.Safe(fOp.String()),
+			leftRet.SQLStringForError(), rightRet.SQLStringForError(),
+		))
 	}
 	node.Op = fn
 }
@@ -1111,8 +1114,10 @@ func (node *BinaryExpr) memoizeOp() {
 	leftRet, rightRet := node.Left.(TypedExpr).ResolvedType(), node.Right.(TypedExpr).ResolvedType()
 	fn, ok := BinOps[node.Operator.Symbol].LookupImpl(leftRet, rightRet)
 	if !ok {
-		panic(errors.AssertionFailedf("lookup for BinaryExpr %s's BinOp failed",
-			AsStringWithFlags(node, FmtShowTypes)))
+		panic(errors.AssertionFailedf("lookup for BinaryExpr %s's BinOp failed (%s(%s,%s))",
+			AsStringWithFlags(node, FmtShowTypes), redact.Safe(node.Operator.String()),
+			leftRet.SQLStringForError(), rightRet.SQLStringForError(),
+		))
 	}
 	node.Op = fn
 }
