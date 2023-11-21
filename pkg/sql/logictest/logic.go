@@ -1424,9 +1424,16 @@ func (t *logicTest) newCluster(
 		defaultTestTenant = base.TestTenantProbabilisticOnly
 	}
 
+	// Ensure that the server has at least 320MiB of SQL memory budget. We've
+	// seen cases when the default of 256MiB is insufficient.
+	const maxSQLMemoryLimitLowerBound = 320 << 20 /* 320MiB */
+	maxSQLMemoryLimit := serverArgs.MaxSQLMemoryLimit
+	if maxSQLMemoryLimit <= maxSQLMemoryLimitLowerBound {
+		maxSQLMemoryLimit = maxSQLMemoryLimitLowerBound
+	}
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			SQLMemoryPoolSize: serverArgs.MaxSQLMemoryLimit,
+			SQLMemoryPoolSize: maxSQLMemoryLimit,
 			DefaultTestTenant: defaultTestTenant,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
@@ -4012,8 +4019,8 @@ var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_C
 // want to specify for the test clusters to be created with.
 type TestServerArgs struct {
 	// MaxSQLMemoryLimit determines the value of --max-sql-memory startup
-	// argument for the server. If unset, then the default limit of 256MiB will
-	// be used.
+	// argument for the server. This value will always be bumped to at least
+	// 320MiB (including when unset).
 	MaxSQLMemoryLimit int64
 	// If set, mutations.MaxBatchSize, row.getKVBatchSize, and other values
 	// randomized via the metamorphic testing will be overridden to use the
