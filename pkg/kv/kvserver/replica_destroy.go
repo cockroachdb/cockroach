@@ -84,6 +84,10 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	// is set on creation and never changes over the lifetime of a Replica. Also,
 	// the replica is always contained in its descriptor. So this code below should
 	// be removable.
+	//
+	// TODO(pavelkalinnikov): coming back in 2023, the above may still happen if:
+	// (1) state machine syncs, (2) OS crashes before (3) sideloaded was able to
+	// sync the files removal. The files should be cleaned up on restart.
 	if r.raftMu.sideloaded != nil {
 		if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
 			return err
