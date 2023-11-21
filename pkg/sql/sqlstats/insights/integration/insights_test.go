@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -923,4 +924,64 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 
 		return nil
 	}, 1*time.Second)
+}
+
+// TestExportStatementInsights test detecting Insights with the flag to
+// export to obsservice enabled.
+func TestExportStatementInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const appName = "TestExportStatementInsights"
+
+	ctx := context.Background()
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+
+	sqlConn.CheckQueryResults(t, fmt.Sprintf(`
+		SELECT count(*)
+		FROM crdb_internal.cluster_execution_insights
+		WHERE app_name = '%s'
+		`, appName), [][]string{{"0"}})
+
+	sqlConn.Exec(t, fmt.Sprintf("SET application_name = '%s'", appName))
+	sqlConn.Exec(t, "SELECT pg_sleep(0.11)")
+	sqlConn.Exec(t, "SELECT pg_sleep(0.11) WHERE 1=1")
+	sqlConn.Exec(t, "SET application_name = 'randomIgnore'")
+
+	testutils.SucceedsSoon(t, func() error {
+		var insightsCount int
+		row := sqlConn.QueryRow(t, fmt.Sprintf(`
+		SELECT count(*)
+		FROM crdb_internal.cluster_execution_insights
+		WHERE app_name = '%s'
+		`, appName))
+		row.Scan(&insightsCount)
+		if insightsCount != 2 {
+			return errors.Newf("waiting for slow executions to complete")
+		}
+		return nil
+	})
+
+	// Enable export to Observability Service.
+	sqlConn.Exec(t, "SET CLUSTER SETTING sql.insights.export.enabled = true")
+
+	sqlConn.Exec(t, fmt.Sprintf("SET application_name = '%s'", appName))
+	sqlConn.Exec(t, "SELECT pg_sleep(0.11)")
+	sqlConn.Exec(t, "SELECT pg_sleep(0.11) WHERE 1=1")
+	sqlConn.Exec(t, "SET application_name = 'randomIgnore'")
+
+	testutils.SucceedsSoon(t, func() error {
+		var insightsCount int
+		row := sqlConn.QueryRow(t, fmt.Sprintf(`
+		SELECT count(*)
+		FROM crdb_internal.cluster_execution_insights
+		WHERE app_name = '%s'
+		`, appName))
+		row.Scan(&insightsCount)
+		if insightsCount != 4 {
+			return errors.Newf("waiting for slow executions to complete")
+		}
+		return nil
+	})
 }

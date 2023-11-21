@@ -1175,6 +1175,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 		expectedTxnsTable  string
 		reqs               []serverpb.CombinedStatementsStatsRequest
 		isEmpty            bool
+		returnInternal     bool
 	}
 
 	ie := srv.InternalExecutor().(*sql.InternalExecutor)
@@ -1213,6 +1214,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 			reqs: []serverpb.CombinedStatementsStatsRequest{
 				{FetchMode: createTxnFetchMode(0)},
 			},
+			returnInternal: false,
 		},
 		{
 			name:               "all tables have data in selected range",
@@ -1226,6 +1228,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 					End:   defaultMockInsertedAggTs.Unix(),
 				},
 			},
+			returnInternal: false,
 		},
 		{
 			name:         "all tables have data but no start range is provided",
@@ -1239,6 +1242,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 				{},
 				{End: defaultMockInsertedAggTs.Unix()},
 			},
+			returnInternal: false,
 		},
 		{
 			name:               "all tables have data but not in the selected range",
@@ -1249,7 +1253,8 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 				{Start: defaultMockInsertedAggTs.Add(time.Hour).Unix()},
 				{End: defaultMockInsertedAggTs.Truncate(time.Hour * 2).Unix()},
 			},
-			isEmpty: true,
+			isEmpty:        true,
+			returnInternal: false,
 		},
 		{
 			name:         "activity table has data in range with specified sort, fetchmode=txns",
@@ -1266,6 +1271,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(4)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(5)},
 			},
+			returnInternal: false,
 		},
 		{
 			name:               "activity table has data in range with specified sort, fetchmode=stmts",
@@ -1281,6 +1287,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(4)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(5)},
 			},
+			returnInternal: false,
 		},
 		{
 			name:               "activity table has data in range, but selected sort is not on it, fetchmode=txns",
@@ -1299,6 +1306,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(13)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createTxnFetchMode(14)},
 			},
+			returnInternal: false,
 		},
 		{
 			name:               "activity table has data in range, but selected sort is not on it, fetchmode=stmts",
@@ -1317,6 +1325,23 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(13)},
 				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(14)},
 			},
+			returnInternal: false,
+		},
+		{
+			name:               "activity table has data in range with specified sort, fetchmode=stmts",
+			tableSetupFn:       defaultMockOneEach,
+			expectedStmtsTable: server.CrdbInternalStmtStatsPersisted,
+			expectedTxnsTable:  "",
+			// These sort options do exist on the activity table.
+			reqs: []serverpb.CombinedStatementsStatsRequest{
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(0)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(1)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(2)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(3)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(4)},
+				{Start: defaultMockInsertedAggTs.Unix(), FetchMode: createStmtFetchMode(5)},
+			},
+			returnInternal: true,
 		},
 	}
 
@@ -1334,6 +1359,7 @@ func TestCombinedStatementUsesCorrectSourceTable(t *testing.T) {
 			}()
 
 			for _, r := range tc.reqs {
+				conn.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.stats.response.show_internal.enabled=%v", tc.returnInternal))
 				resp, err := client.CombinedStatementStats(ctx, &r)
 				require.NoError(t, err)
 

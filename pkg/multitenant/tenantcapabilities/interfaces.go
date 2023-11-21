@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // Reader provides access to the global tenant capability state. The global
@@ -94,7 +95,8 @@ func (e Entry) Ready() bool {
 // Update represents an update to the global tenant capability state.
 type Update struct {
 	Entry
-	Deleted bool // whether the entry was deleted or not
+	Deleted   bool // whether the entry was deleted or not
+	Timestamp hlc.Timestamp
 }
 
 func (u Update) String() string {

@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -47,7 +48,6 @@ func newFailedStmt(stmt *Statement) *Statement {
 
 func TestRegistry(t *testing.T) {
 	ctx := context.Background()
-
 	session := Session{ID: clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))}
 
 	t.Run("slow detection", func(t *testing.T) {
@@ -62,10 +62,10 @@ func TestRegistry(t *testing.T) {
 			newStmtWithProblemAndCauses(statement, Problem_SlowExecution, nil)
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		store := newStore(st)
+		store := newStore(st, obs.NoopEventsExporter{})
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement)
-		registry.ObserveTransaction(session.ID, transaction)
+		registry.ObserveTransaction(ctx, session.ID, transaction)
 
 		expected := []*Insight{{
 			Session:     session,
@@ -100,7 +100,7 @@ func TestRegistry(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		store := newStore(st)
+		store := newStore(st, obs.NoopEventsExporter{})
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement)
 		// Transaction status is set during transaction stats recorded based on
@@ -108,7 +108,7 @@ func TestRegistry(t *testing.T) {
 		// it with the test. The insights integration tests will verify that this
 		// field is set properly.
 		transaction.Status = Transaction_Failed
-		registry.ObserveTransaction(session.ID, transaction)
+		registry.ObserveTransaction(ctx, session.ID, transaction)
 
 		expected := []*Insight{{
 			Session:     session,
@@ -142,10 +142,10 @@ func TestRegistry(t *testing.T) {
 		}
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 0)
-		store := newStore(st)
+		store := newStore(st, obs.NoopEventsExporter{})
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement)
-		registry.ObserveTransaction(session.ID, transaction)
+		registry.ObserveTransaction(ctx, session.ID, transaction)
 
 		var actual []*Insight
 		store.IterateInsights(
@@ -166,10 +166,10 @@ func TestRegistry(t *testing.T) {
 			FingerprintID:    appstatspb.StmtFingerprintID(100),
 			LatencyInSeconds: 0.5,
 		}
-		store := newStore(st)
+		store := newStore(st, obs.NoopEventsExporter{})
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement2)
-		registry.ObserveTransaction(session.ID, transaction)
+		registry.ObserveTransaction(ctx, session.ID, transaction)
 
 		var actual []*Insight
 		store.IterateInsights(
@@ -199,12 +199,12 @@ func TestRegistry(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		store := newStore(st)
+		store := newStore(st, obs.NoopEventsExporter{})
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveStatement(otherSession.ID, otherStatement)
-		registry.ObserveTransaction(session.ID, transaction)
-		registry.ObserveTransaction(otherSession.ID, otherTransaction)
+		registry.ObserveTransaction(ctx, session.ID, transaction)
+		registry.ObserveTransaction(ctx, otherSession.ID, otherTransaction)
 
 		expected := []*Insight{{
 			Session:     session,
@@ -250,11 +250,11 @@ func TestRegistry(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		store := newStore(st)
+		store := newStore(st, obs.NoopEventsExporter{})
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveStatement(session.ID, siblingStatement)
-		registry.ObserveTransaction(session.ID, transaction)
+		registry.ObserveTransaction(ctx, session.ID, transaction)
 
 		expected := []*Insight{
 			{
@@ -281,14 +281,14 @@ func TestRegistry(t *testing.T) {
 	t.Run("txn with no stmts", func(t *testing.T) {
 		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		st := cluster.MakeTestingClusterSettings()
-		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
-		require.NotPanics(t, func() { registry.ObserveTransaction(session.ID, transaction) })
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st, obs.NoopEventsExporter{}))
+		require.NotPanics(t, func() { registry.ObserveTransaction(ctx, session.ID, transaction) })
 	})
 
 	t.Run("txn with high accumulated contention without high single stmt contention", func(t *testing.T) {
 		transaction := &Transaction{ID: uuid.FastMakeV4()}
 		st := cluster.MakeTestingClusterSettings()
-		store := newStore(st)
+		store := newStore(st, obs.NoopEventsExporter{})
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		contentionDuration := 10 * time.Second
 		statement := &Statement{
@@ -300,7 +300,7 @@ func TestRegistry(t *testing.T) {
 		txnHighContention := &Transaction{ID: uuid.FastMakeV4(), Contention: &contentionDuration}
 
 		registry.ObserveStatement(session.ID, statement)
-		registry.ObserveTransaction(session.ID, txnHighContention)
+		registry.ObserveTransaction(ctx, session.ID, txnHighContention)
 
 		expected := []*Insight{
 			{
@@ -353,12 +353,12 @@ func TestRegistry(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		store := newStore(st)
+		store := newStore(st, obs.NoopEventsExporter{})
 		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statementNotIgnored)
 		registry.ObserveStatement(session.ID, statementIgnoredSet)
 		registry.ObserveStatement(session.ID, statementIgnoredExplain)
-		registry.ObserveTransaction(session.ID, transaction)
+		registry.ObserveTransaction(ctx, session.ID, transaction)
 
 		expected := []*Insight{
 			{

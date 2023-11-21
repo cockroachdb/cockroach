@@ -37,7 +37,6 @@ ok
 
 updates
 ----
-Complete Update
 update: ten=11 name=bar state=add service=external cap={default}
 update: ten=15 name=woo state=add service=none cap={can_admin_unsplit:true}
 

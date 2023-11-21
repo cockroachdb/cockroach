@@ -248,6 +248,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 		bufferSize,
 		[]roachpb.Span{settingsTableSpan},
 		false, // withPrevValue
+		true,  // withRowTSInInitialScan
 		func(ctx context.Context, kv *kvpb.RangeFeedValue) rangefeedbuffer.Event {
 			return s.handleKV(ctx, kv)
 		},

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -49,6 +50,9 @@ type Watcher struct {
 		store      map[roachpb.TenantID]*watcherEntry
 		byName     map[roachpb.TenantName]roachpb.TenantID
 		allTenants []tenantcapabilities.Entry
+
+		// lastUpdate is the timestamp of the last update.
+		lastUpdate map[roachpb.TenantID]hlc.Timestamp
 
 		// anyChangeCh is closed on any change to the set of
 		// tenants.
@@ -108,6 +112,7 @@ func New(
 		knobs:            watcherKnobs,
 	}
 	w.initialScan.ch = make(chan struct{})
+	w.mu.lastUpdate = make(map[roachpb.TenantID]hlc.Timestamp)
 	w.mu.store = make(map[roachpb.TenantID]*watcherEntry)
 	w.mu.byName = make(map[roachpb.TenantName]roachpb.TenantID)
 	w.mu.anyChangeCh = make(chan struct{})
@@ -231,9 +236,10 @@ func (w *Watcher) startRangeFeed(ctx context.Context) error {
 		w.rangeFeedFactory,
 		int(w.bufferMemLimit/tenantInfoEntrySize), /* bufferSize */
 		[]roachpb.Span{tenantsTableSpan},
-		true, /* withPrevValue */
-		w.decoder.translateEvent,
-		w.handleUpdate,
+		true,  /* withPrevValue */
+		false, /* withRowTSInInitialScan */
+		w.handleIncrementalUpdate,
+		w.handleRangefeedCacheEvent,
 		rfcTestingKnobs,
 	)
 	if err := rangefeedcache.Start(ctx, w.stopper, rfc, w.onError); err != nil {
@@ -276,41 +282,37 @@ func (w *Watcher) onError(err error) {
 	}
 }
 
-func (w *Watcher) handleUpdate(ctx context.Context, u rangefeedcache.Update) {
-	var updates []tenantcapabilities.Update
-	for _, ev := range u.Events {
-		update := ev.(*bufferEvent).update
-		updates = append(updates, update)
-	}
-
-	if fn := w.knobs.WatcherUpdatesInterceptor; fn != nil {
-		fn(u.Type, updates)
-	}
-
+func (w *Watcher) handleRangefeedCacheEvent(ctx context.Context, u rangefeedcache.Update) {
 	switch u.Type {
 	case rangefeedcache.CompleteUpdate:
 		log.Info(ctx, "received results of a full table scan for tenant capabilities")
-		w.handleCompleteUpdate(ctx, updates)
 		if !w.initialScan.done {
 			w.initialScan.done = true
 			close(w.initialScan.ch)
+		} else {
+			// If initial scan was already done, this is
+			// the result of a rangefeed restart. We may
+			// need to clean up deleted data.
+			//
+			// We configure our rangefeed to emit scan
+			// events at their read timestamp. If the last
+			// timestamp we have saved is below the scan
+			// timestamp, then that item can't have been
+			// included in the scan and must have been
+			// deleted.
+			w.removeEntriesBeforeTimestamp(ctx, u.Timestamp)
 		}
 	case rangefeedcache.IncrementalUpdate:
-		w.handleIncrementalUpdate(ctx, updates)
+		// We ignore incremental updates because we handle
+		// them in the translate event callback to provide
+		// faster cache updates.
 	default:
 		err := errors.AssertionFailedf("unknown update type: %v", u.Type)
 		logcrash.ReportOrPanic(ctx, &w.st.SV, "%w", err)
 	}
-
-	if len(updates) > 0 {
-		w.onAnyChange()
-	}
 }
 
-func (w *Watcher) onAnyChange() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
+func (w *Watcher) onAnyChangeLocked() {
 	entries := make([]tenantcapabilities.Entry, 0, len(w.mu.store))
 	for _, v := range w.mu.store {
 		if v.Entry != nil {
@@ -323,75 +325,86 @@ func (w *Watcher) onAnyChange() {
 	w.mu.anyChangeCh = make(chan struct{})
 }
 
-func (w *Watcher) handleCompleteUpdate(ctx context.Context, updates []tenantcapabilities.Update) {
-	// Populate a fresh store with the supplied updates.
-	// A Complete update indicates that the initial table scan is complete. This
-	// happens when the rangefeed is first established, or if it's restarted for
-	// some reason. Either way, we want to throw away any accumulated state so
-	// far, and reconstruct it using the result of the scan.
-	freshStore := make(map[roachpb.TenantID]*watcherEntry)
-	byName := make(map[roachpb.TenantName]roachpb.TenantID)
-	for i := range updates {
-		up := &updates[i]
-		if log.V(2) {
-			log.Infof(ctx, "adding initial tenant entry to cache: %+v", up.Entry)
-		}
-		freshStore[up.TenantID] = &watcherEntry{
-			Entry:    &up.Entry,
-			changeCh: make(chan struct{}),
-		}
-		if up.Entry.Name != "" {
-			byName[up.Entry.Name] = up.TenantID
-		}
+// handleIncrementalUpdate is used as our rangefeedcache.Watcher
+// translate event callback. It is called for every rangefeed value
+// returned from the rangefeed or an initial scan. This allows us to
+// update our cache immediately rather than waiting for the closed
+// timestamp.
+//
+// It always returns nil since the event is already handled after the
+// callback.
+func (w *Watcher) handleIncrementalUpdate(
+	ctx context.Context, ev *kvpb.RangeFeedValue,
+) rangefeedbuffer.Event {
+	hasEvent, update := w.decoder.translateEvent(ctx, ev)
+	if !hasEvent {
+		return nil
+	}
+
+	if fn := w.knobs.WatcherUpdatesInterceptor; fn != nil {
+		fn(update)
 	}
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	tid := update.TenantID
+	ts := update.Timestamp
+	if prevTs, ok := w.mu.lastUpdate[tid]; ok && ts.Less(prevTs) {
+		// Skip updates which have an earlier timestamp to avoid
+		// regressing on the contents of an entry.
+		return nil
+	}
+	w.mu.lastUpdate[tid] = ts
 
-	// Notify any previous watchers that the state has changed.
-	for _, entry := range w.mu.store {
+	if entry := w.mu.store[tid]; entry != nil {
+		// Notify previous watchers, if any, that the entry is getting updated.
 		close(entry.changeCh)
 	}
 
-	w.mu.store = freshStore
-	w.mu.byName = byName
-}
-
-func (w *Watcher) handleIncrementalUpdate(
-	ctx context.Context, updates []tenantcapabilities.Update,
-) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	for i := range updates {
-		update := &updates[i]
-		tid := update.TenantID
-		if entry := w.mu.store[tid]; entry != nil {
-			// Notify previous watchers, if any, that the entry is getting updated.
-			close(entry.changeCh)
+	if update.Deleted {
+		w.removeEntryForTenantIDLocked(ctx, tid)
+	} else {
+		if log.V(2) {
+			log.Infof(ctx, "adding tenant entry to cache: %+v", update.Entry)
 		}
-
-		if update.Deleted {
-			if log.V(2) {
-				log.Infof(ctx, "removing tenant entry from cache: %+v", update.Entry)
-			}
-			if entry := w.mu.store[tid]; entry != nil {
-				delete(w.mu.byName, entry.Name)
-			}
-			delete(w.mu.store, tid)
-		} else {
-			if log.V(2) {
-				log.Infof(ctx, "adding tenant entry to cache: %+v", update.Entry)
-			}
-			w.mu.store[update.TenantID] = &watcherEntry{
-				Entry:    &update.Entry,
-				changeCh: make(chan struct{}),
-			}
-			if update.Entry.Name != "" {
-				w.mu.byName[update.Entry.Name] = update.TenantID
-			}
+		w.mu.store[update.TenantID] = &watcherEntry{
+			Entry:    &update.Entry,
+			changeCh: make(chan struct{}),
+		}
+		if update.Entry.Name != "" {
+			w.mu.byName[update.Entry.Name] = update.TenantID
 		}
 	}
+	w.onAnyChangeLocked()
+	return nil
+}
+
+func (w *Watcher) removeEntriesBeforeTimestamp(ctx context.Context, ts hlc.Timestamp) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var anyDeleted bool
+	for tid, prevTs := range w.mu.lastUpdate {
+		if prevTs.Less(ts) {
+			anyDeleted = true
+			w.removeEntryForTenantIDLocked(ctx, tid)
+		}
+	}
+	if anyDeleted {
+		w.onAnyChangeLocked()
+	}
+}
+
+func (w *Watcher) removeEntryForTenantIDLocked(ctx context.Context, tid roachpb.TenantID) {
+	if log.V(2) {
+		log.Infof(ctx, "removing tenant entry %d from cache", tid)
+	}
+	// Not finding the ID in the store is expected if we see a
+	// duplicate delete.
+	if entry, ok := w.mu.store[tid]; ok {
+		delete(w.mu.byName, entry.Name)
+	}
+	delete(w.mu.lastUpdate, tid)
+	delete(w.mu.store, tid)
 }
 
 func (w *Watcher) TestingRestart() {
@@ -420,14 +433,3 @@ func (w *Watcher) TestingFlushCapabilitiesState() (entries []tenantcapabilities.
 	})
 	return entries
 }
-
-type bufferEvent struct {
-	update tenantcapabilities.Update
-	ts     hlc.Timestamp
-}
-
-func (e *bufferEvent) Timestamp() hlc.Timestamp {
-	return e.ts
-}
-
-var _ rangefeedbuffer.Event = &bufferEvent{}

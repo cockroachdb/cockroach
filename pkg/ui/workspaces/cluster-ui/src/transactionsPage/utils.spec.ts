@@ -44,7 +44,7 @@ describe("getStatementsByFingerprintId", () => {
 const txData = data.transactions as Transaction[];
 
 describe("Filter transactions", () => {
-  it("show non internal if no filters applied", () => {
+  it("show internal if no filters applied", () => {
     const filter: Filters = {
       app: "",
       timeNumber: "0",
@@ -61,7 +61,7 @@ describe("Filter transactions", () => {
         nodeRegions,
         false,
       ).transactions.length,
-      4,
+      11,
     );
   });
 

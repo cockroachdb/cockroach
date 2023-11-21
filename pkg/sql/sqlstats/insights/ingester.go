@@ -69,7 +69,7 @@ func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stop
 		for {
 			select {
 			case events := <-i.eventBufferCh:
-				i.ingest(events) // note that injest clears the buffer
+				i.ingest(ctx, events) // note that injest clears the buffer
 				eventBufferPool.Put(events)
 			case <-stopper.ShouldQuiesce():
 				atomic.StoreUint64(&i.running, 0)
@@ -95,7 +95,7 @@ func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stop
 	})
 }
 
-func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
+func (i *concurrentBufferIngester) ingest(ctx context.Context, events *eventBuffer) {
 	for idx, e := range events {
 		// Because an eventBuffer is a fixed-size array, rather than a slice,
 		// we do not know how full it is until we hit a nil entry.
@@ -105,7 +105,7 @@ func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 		if e.statement != nil {
 			i.registry.ObserveStatement(e.sessionID, e.statement)
 		} else {
-			i.registry.ObserveTransaction(e.sessionID, e.transaction)
+			i.registry.ObserveTransaction(ctx, e.sessionID, e.transaction)
 		}
 		events[idx] = event{}
 	}
@@ -126,7 +126,7 @@ func (i *concurrentBufferIngester) ObserveStatement(
 }
 
 func (i *concurrentBufferIngester) ObserveTransaction(
-	sessionID clusterunique.ID, transaction *Transaction,
+	_ context.Context, sessionID clusterunique.ID, transaction *Transaction,
 ) {
 	if !i.registry.enabled() {
 		return

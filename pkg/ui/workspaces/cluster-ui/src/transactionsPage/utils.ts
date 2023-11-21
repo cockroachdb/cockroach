@@ -193,8 +193,7 @@ export const filterTransactions = (
           apps.includes(app)
         );
       } else {
-        // We don't want to show internal transactions by default.
-        return !isInternal;
+        return true;
       }
     })
     .filter(

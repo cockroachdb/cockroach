@@ -215,6 +215,11 @@ func activityTablesHaveFullData(
 		return false, nil
 	}
 
+	// Top Activity table doesn't store internal data.
+	if SQLStatsShowInternal.Get(&settings.SV) {
+		return false, nil
+	}
+
 	if (limit > 0 && !isLimitOnActivityTable(limit)) || !isSortOptionOnActivityTable(order) {
 		return false, nil
 	}
