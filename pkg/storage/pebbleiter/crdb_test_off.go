@@ -24,3 +24,9 @@ type Iterator = *pebble.Iterator
 func MaybeWrap(iter *pebble.Iterator) Iterator {
 	return iter
 }
+
+// CanDeterministicallySingleDelete wraps
+// pebble.CanDeterministicallySingleDelete.
+func CanDeterministicallySingleDelete(it Iterator) (bool, error) {
+	return pebble.CanDeterministicallySingleDelete(it)
+}
