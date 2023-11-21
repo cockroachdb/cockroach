@@ -335,7 +335,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					var key string
 					d.ScanArgs(t, "key", &key)
 
-					locks = append(locks, roachpb.MakeLock(&txn.TxnMeta, roachpb.Key(key), lock.Intent))
+					str := lock.Intent
+					if d.HasArg("str") {
+						str = scanLockStrength(t, d)
+					}
+					locks = append(locks, roachpb.MakeLock(&txn.TxnMeta, roachpb.Key(key), str))
 				}
 
 				opName := fmt.Sprintf("handle lock conflict error %s", reqName)
