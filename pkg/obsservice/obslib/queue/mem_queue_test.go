@@ -20,8 +20,8 @@ import (
 func TestMemoryQueue_Enqueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sizeFn := func(e *testElement) (int, error) {
-		return e.Size(), nil
+	sizeFn := func(e *testElement) int {
+		return e.Size()
 	}
 
 	tests := []struct {
@@ -85,8 +85,8 @@ func TestMemoryQueue_Enqueue(t *testing.T) {
 func TestMemoryQueue_Dequeue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sizeFn := func(e *testElement) (int, error) {
-		return e.Size(), nil
+	sizeFn := func(e *testElement) int {
+		return e.Size()
 	}
 
 	element1 := newTestEl(10)

@@ -21,7 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/obsutil"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/process"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/produce"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/queue"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/router"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/transform"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/validate"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
@@ -47,6 +52,10 @@ var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM}
 // termSignal is the signal that causes an idempotent graceful
 // shutdown (i.e. second occurrence does not incur hard shutdown).
 var termSignal os.Signal = unix.SIGTERM
+
+// maxMemoryBytes is the max memory bytes to be used by memory queue.
+// TODO(maryliag): make performance testing to decide on the final value.
+var maxMemoryBytes int = 500 * 1024 * 1024 // 500Mb
 
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
@@ -83,11 +92,19 @@ from one or more CockroachDB clusters.`,
 
 		stopper := stop.NewStopper()
 
+		stmtInsightsPipeline, stmtInsightsProcessor, err := makeStatementInsightsPipeline()
+		if err != nil {
+			return errors.Wrapf(err, "failed to create Statement Insights Pipeline")
+		}
 		// Run the event ingestion in the background.
 		eventRouter := router.NewEventRouter(map[obspb.EventType]obslib.EventConsumer{
 			obspb.EventlogEvent:               &obsutil.StdOutConsumer{},
-			obspb.StatementInsightsStatsEvent: &obsutil.StdOutConsumer{},
+			obspb.StatementInsightsStatsEvent: stmtInsightsPipeline,
 		})
+		err = stmtInsightsProcessor.Start(ctx, stopper)
+		if err != nil {
+			return errors.Wrapf(err, "failed to start Statement Insights Processor")
+		}
 		ingester := ingest.MakeEventIngester(ctx, eventRouter, nil)
 
 		// Instantiate the net listener & gRPC server.
@@ -236,4 +253,38 @@ func handleSignalDuringShutdown(sig os.Signal) {
 
 	// Block while we wait for the signal to be delivered.
 	select {}
+}
+
+func makeStatementInsightsPipeline() (
+	obslib.EventConsumer,
+	*process.MemQueueProcessor[*obspb.StatementInsightsStatistics],
+	error,
+) {
+	memQueue := queue.NewMemoryQueue[*obspb.StatementInsightsStatistics](
+		maxMemoryBytes, func(statistics *obspb.StatementInsightsStatistics) int {
+			return statistics.Size()
+		}, "StmtInsightsStatisticsMemQueue")
+	memQueueProducer := produce.NewMemQueueProducer[*obspb.StatementInsightsStatistics](memQueue)
+	insightsTransformer := &transform.StmtInsightTransformer{}
+	insightsValidator := &validate.StmtInsightValidator{}
+
+	producerGroup, err := produce.NewProducerGroup[*obspb.StatementInsightsStatistics](
+		"StmtInsightsStatisticsProducerGroup",
+		obslib.Observability,
+		insightsTransformer,
+		[]validate.Validator[*obspb.StatementInsightsStatistics]{insightsValidator},
+		[]produce.EventProducer[*obspb.StatementInsightsStatistics]{memQueueProducer})
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// TODO: replace process.InsightsStdoutProcessor for a real Insights processor
+	// and delete the file process/stdout.go
+	processor, err := process.NewMemQueueProcessor[*obspb.StatementInsightsStatistics](memQueue, &process.InsightsStdoutProcessor{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return producerGroup, processor, nil
 }

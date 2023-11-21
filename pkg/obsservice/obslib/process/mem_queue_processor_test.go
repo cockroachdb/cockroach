@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testStrSizeFn = queue.SizeFn[string](func(s string) (int, error) {
-	return len(s), nil
+var testStrSizeFn = queue.SizeFn[string](func(s string) int {
+	return len(s)
 })
 
 func TestMemQueueProcessor(t *testing.T) {
