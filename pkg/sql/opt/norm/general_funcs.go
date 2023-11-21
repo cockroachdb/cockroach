@@ -853,7 +853,7 @@ func (c *CustomFuncs) ExtractUnboundConditions(
 // return filters for all constant computed columns, regardless of the order of
 // their dependencies.
 //
-// As with checkConstraintFilters, ComputedColFilters do not really filter any
+// As with CheckConstraintFilters, ComputedColFilters do not really filter any
 // rows, they are rather facts or guarantees about the data. Treating them as
 // filters may allow some indexes to be constrained and used. Consider the
 // following example:

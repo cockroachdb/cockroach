@@ -424,3 +424,88 @@ func (c *CustomFuncs) addConjuncts(
 func (c *CustomFuncs) ForDuplicateRemoval(private *memo.OrdinalityPrivate) (ok bool) {
 	return private.ForDuplicateRemoval
 }
+
+// FilterIsTrivial returns true if the given filter is implied by the table's
+// check constraints. This is best-effort, so false negatives are possible.
+func (c *CustomFuncs) FilterIsTrivial(item *memo.FiltersItem, scanPrivate *memo.ScanPrivate) bool {
+	// Attempt to retrieve a constraint that tightly describes the filter.
+	if !item.ScalarProps().TightConstraints {
+		return false
+	}
+	if item.ScalarProps().Constraints == nil || item.ScalarProps().Constraints.Length() != 1 {
+		return false
+	}
+	filterCons := item.ScalarProps().Constraints.Constraint(0)
+
+	// Check whether any of the table's check constraints implies the filter.
+	checkConstraintFilters := c.CheckConstraintFilters(scanPrivate.Table)
+	for i := range checkConstraintFilters {
+		if !checkConstraintFilters[i].ScalarProps().TightConstraints {
+			continue
+		}
+		optionalConstraints := checkConstraintFilters[i].ScalarProps().Constraints
+		if optionalConstraints == nil || optionalConstraints.Length() != 1 {
+			continue
+		}
+		cons := optionalConstraints.Constraint(0)
+		if filterCons.Contains(c.f.evalCtx, cons) {
+			return true
+		}
+	}
+	return false
+}
+
+// CheckConstraintFilters generates all filters that we can derive from the
+// check constraints. These are constraints that have been validated and are
+// non-nullable. We only use non-nullable check constraints because they
+// behave differently from filters on NULL. Check constraints are satisfied
+// when their expression evaluates to NULL, while filters are not.
+//
+// For example, the check constraint a > 1 is satisfied if a is NULL but the
+// equivalent filter a > 1 is not.
+//
+// These filters do not really filter any rows, they are rather facts or
+// guarantees about the data but treating them as filters may allow some
+// indexes to be constrained and used. Consider the following example:
+//
+// CREATE TABLE abc (
+//
+//	a INT PRIMARY KEY,
+//	b INT NOT NULL,
+//	c STRING NOT NULL,
+//	CHECK (a < 10 AND a > 1),
+//	CHECK (b < 10 AND b > 1),
+//	CHECK (c in ('first', 'second')),
+//	INDEX secondary (b, a),
+//	INDEX tertiary (c, b, a))
+//
+// Now consider the query: SELECT a, b WHERE a > 5
+//
+// Notice that the filter provided previously wouldn't let the optimizer use
+// the secondary or tertiary indexes. However, given that we can use the
+// constraints on a, b and c, we can actually use the secondary and tertiary
+// indexes. In fact, for the above query we can do the following:
+//
+// select
+//
+//	├── columns: a:1(int!null) b:2(int!null)
+//	├── scan abc@tertiary
+//	│		├── columns: a:1(int!null) b:2(int!null)
+//	│		└── constraint: /3/2/1: [/'first'/2/6 - /'first'/9/9] [/'second'/2/6 - /'second'/9/9]
+//	└── filters
+//	      └── gt [type=bool]
+//	          ├── variable: a [type=int]
+//	          └── const: 5 [type=int]
+//
+// Similarly, the secondary index could also be used. All such index scans
+// will be added to the memo group.
+func (c *CustomFuncs) CheckConstraintFilters(tabID opt.TableID) memo.FiltersExpr {
+	md := c.mem.Metadata()
+	tabMeta := md.TableMeta(tabID)
+	if tabMeta.Constraints == nil {
+		return memo.FiltersExpr{}
+	}
+	filters := *tabMeta.Constraints.(*memo.FiltersExpr)
+	// Limit slice capacity to allow the caller to append if necessary.
+	return filters[:len(filters):len(filters)]
+}

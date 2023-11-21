@@ -343,7 +343,7 @@ func (c *CustomFuncs) GetOptionalFiltersAndFilterColumns(
 	explicitFilters memo.FiltersExpr, scanPrivate *memo.ScanPrivate,
 ) (optionalFilters memo.FiltersExpr, filterColumns opt.ColSet) {
 
-	optionalFilters = c.checkConstraintFilters(scanPrivate.Table)
+	optionalFilters = c.CheckConstraintFilters(scanPrivate.Table)
 	computedColFilters := c.ComputedColFilters(scanPrivate, explicitFilters, optionalFilters)
 	optionalFilters = append(optionalFilters, computedColFilters...)
 
@@ -727,7 +727,7 @@ func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
 // partitionValuesFilters constructs filters with the purpose of
 // constraining an index scan using the partition values similar to
 // the filters added from the check constraints (see
-// checkConstraintFilters). It returns two sets of filters, one to
+// CheckConstraintFilters). It returns two sets of filters, one to
 // create the partition spans, and one to create the spans for all
 // the in between ranges that are not part of any partitions.
 //
@@ -823,7 +823,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 	// Generate implicit filters from constraints and computed columns as
 	// optional filters to help constrain an index scan.
-	optionalFilters := c.checkConstraintFilters(scanPrivate.Table)
+	optionalFilters := c.CheckConstraintFilters(scanPrivate.Table)
 	computedColFilters := c.ComputedColFilters(scanPrivate, filters, optionalFilters)
 	optionalFilters = append(optionalFilters, computedColFilters...)
 

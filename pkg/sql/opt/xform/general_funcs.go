@@ -116,61 +116,6 @@ func (c *CustomFuncs) remapJoinColsInScalarExpr(
 	return c.e.f.RemapCols(scalar, colMap)
 }
 
-// checkConstraintFilters generates all filters that we can derive from the
-// check constraints. These are constraints that have been validated and are
-// non-nullable. We only use non-nullable check constraints because they
-// behave differently from filters on NULL. Check constraints are satisfied
-// when their expression evaluates to NULL, while filters are not.
-//
-// For example, the check constraint a > 1 is satisfied if a is NULL but the
-// equivalent filter a > 1 is not.
-//
-// These filters do not really filter any rows, they are rather facts or
-// guarantees about the data but treating them as filters may allow some
-// indexes to be constrained and used. Consider the following example:
-//
-// CREATE TABLE abc (
-//
-//	a INT PRIMARY KEY,
-//	b INT NOT NULL,
-//	c STRING NOT NULL,
-//	CHECK (a < 10 AND a > 1),
-//	CHECK (b < 10 AND b > 1),
-//	CHECK (c in ('first', 'second')),
-//	INDEX secondary (b, a),
-//	INDEX tertiary (c, b, a))
-//
-// Now consider the query: SELECT a, b WHERE a > 5
-//
-// Notice that the filter provided previously wouldn't let the optimizer use
-// the secondary or tertiary indexes. However, given that we can use the
-// constraints on a, b and c, we can actually use the secondary and tertiary
-// indexes. In fact, for the above query we can do the following:
-//
-// select
-//
-//	├── columns: a:1(int!null) b:2(int!null)
-//	├── scan abc@tertiary
-//	│		├── columns: a:1(int!null) b:2(int!null)
-//	│		└── constraint: /3/2/1: [/'first'/2/6 - /'first'/9/9] [/'second'/2/6 - /'second'/9/9]
-//	└── filters
-//	      └── gt [type=bool]
-//	          ├── variable: a [type=int]
-//	          └── const: 5 [type=int]
-//
-// Similarly, the secondary index could also be used. All such index scans
-// will be added to the memo group.
-func (c *CustomFuncs) checkConstraintFilters(tabID opt.TableID) memo.FiltersExpr {
-	md := c.e.mem.Metadata()
-	tabMeta := md.TableMeta(tabID)
-	if tabMeta.Constraints == nil {
-		return memo.FiltersExpr{}
-	}
-	filters := *tabMeta.Constraints.(*memo.FiltersExpr)
-	// Limit slice capacity to allow the caller to append if necessary.
-	return filters[:len(filters):len(filters)]
-}
-
 func (c *CustomFuncs) initIdxConstraintForIndex(
 	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
 ) (ic *idxconstraint.Instance) {
@@ -663,7 +608,7 @@ func (c *CustomFuncs) getKnownScanConstraint(
 	} else {
 		// Build a constraint set with the check constraints of the underlying
 		// table.
-		filters := c.checkConstraintFilters(sp.Table)
+		filters := c.CheckConstraintFilters(sp.Table)
 		instance := c.initIdxConstraintForIndex(
 			nil, /* requiredFilters */
 			filters,
