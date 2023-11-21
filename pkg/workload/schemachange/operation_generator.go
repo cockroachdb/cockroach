@@ -3868,6 +3868,35 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	}), nil
 }
 
+func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) FROM functions`)
+
+	functions, err := Collect(ctx, og, tx, pgx.RowTo[string], q)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, expectedCode, err := Generate[*tree.DropRoutine](og.params.rng, og.produceError(), []GenerationCase{
+		{pgcode.UndefinedFunction, `DROP FUNCTION "NoSuchFunction"`},
+		{pgcode.SuccessfulCompletion, `DROP FUNCTION IF EXISTS "NoSuchFunction"`},
+		{pgcode.SuccessfulCompletion, `DROP FUNCTION { Function }`},
+	}, template.FuncMap{
+		"Function": func() (string, error) {
+			return PickOne(og.params.rng, functions)
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	}), nil
+}
+
 func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *opStmt, err error) {
 	const maxTablesForSelect = 3
 	const maxColumnsForSelect = 16
