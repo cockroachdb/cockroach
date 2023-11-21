@@ -124,6 +124,7 @@ const (
 
 	// DROP ...
 
+	dropFunction // DROP FUNCTION <function>
 	dropIndex    // DROP INDEX <index>@<table>
 	dropSchema   // DROP SCHEMA <schema>
 	dropSequence // DROP SEQUENCE <sequence>
@@ -178,7 +179,6 @@ const (
 	// createStatsOptions
 	// createType
 	// dropDatabase
-	// dropFunction
 	// dropOwnedBy
 	// dropRole     // DROP ROLE <role>
 	// dropType     // DROP TYPE <type>
@@ -234,6 +234,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	createTableAs:                     (*operationGenerator).createTableAs,
 	createTypeEnum:                    (*operationGenerator).createEnum,
 	createView:                        (*operationGenerator).createView,
+	dropFunction:                      (*operationGenerator).dropFunction,
 	dropIndex:                         (*operationGenerator).dropIndex,
 	dropSchema:                        (*operationGenerator).dropSchema,
 	dropSequence:                      (*operationGenerator).dropSequence,
@@ -279,7 +280,8 @@ var opWeights = []int{
 	dropTable:                         1,
 	dropView:                          1,
 	alterTypeDropValue:                0, // Disabled and tracked with #114844, #113859, and #115612.
-	dropSchema:                        1,
+	dropFunction:                      1,
+	dropSchema:                        0, // TODO Make a tracking issue
 	alterTableRenameColumn:            1,
 	renameIndex:                       1,
 	renameSequence:                    1,
