@@ -39,7 +39,8 @@ import {
   FixFingerprintHexValue,
   Duration,
   formatNumberForDisplay,
-  unset,
+  queryByName,
+  appNamesAttr,
 } from "src/util";
 import { UIConfigState } from "../store";
 import LoadingError from "../sqlActivity/errorComponent";
@@ -98,6 +99,7 @@ const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 const insightsTableCx = classNames.bind(insightTableStyles);
+import { unset } from "src/util";
 
 type Statement =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -138,6 +140,7 @@ interface TState {
   latestTransactionText: string;
   txnDetails: Transaction | null;
   statements: Statement[] | null;
+  appsAsStr: string | null;
 }
 
 function statementsRequestFromProps(
@@ -159,14 +162,17 @@ export class TransactionDetails extends React.Component<
   constructor(props: TransactionDetailsProps) {
     super(props);
 
+    const appsAsStr = queryByName(this.props.location, appNamesAttr) || null;
     const txnDetails = getTxnFromSqlStatsMemoized(
       this.props.txnStatsResp?.data,
       this.props.match,
-      this.props.location,
+      appsAsStr,
     );
 
+    const apps = appsAsStr?.split(",").map(s => s.trim());
     const stmts = getStatementsForTransaction(
-      txnDetails,
+      txnDetails?.stats_data?.transaction_fingerprint_id.toString(),
+      apps,
       this.props.txnStatsResp?.data?.statements,
     );
 
@@ -183,6 +189,7 @@ export class TransactionDetails extends React.Component<
       latestTransactionText: getTxnQueryString(txnDetails, stmts),
       txnDetails,
       statements: stmts,
+      appsAsStr,
     };
 
     // In case the user selected a option not available on this page,
@@ -195,14 +202,16 @@ export class TransactionDetails extends React.Component<
   }
 
   setTxnDetails = (): void => {
+    const appsAsStr = queryByName(this.props.location, appNamesAttr) || null;
     const txnDetails = getTxnFromSqlStatsMemoized(
       this.props.txnStatsResp?.data,
       this.props.match,
-      this.props.location,
+      appsAsStr,
     );
 
     const statements = getStatementsForTransaction(
-      txnDetails,
+      txnDetails?.stats_data?.transaction_fingerprint_id.toString(),
+      appsAsStr?.split(",").map(s => s.trim()),
       this.props.txnStatsResp?.data?.statements,
     );
 
@@ -221,6 +230,7 @@ export class TransactionDetails extends React.Component<
         latestTransactionText: transactionText,
         txnDetails,
         statements,
+        appsAsStr,
       });
     }
   };
@@ -257,7 +267,8 @@ export class TransactionDetails extends React.Component<
     if (
       prevProps.transactionFingerprintId !==
         this.props.transactionFingerprintId ||
-      prevProps.txnStatsResp !== this.props.txnStatsResp
+      prevProps.txnStatsResp !== this.props.txnStatsResp ||
+      prevProps.location?.search !== this.props.location?.search
     ) {
       this.setTxnDetails();
     }
@@ -289,6 +300,11 @@ export class TransactionDetails extends React.Component<
     const error = this.props.txnStatsResp?.error;
     const { latestTransactionText, statements } = this.state;
     const transactionStats = transaction?.stats_data?.stats;
+    const visibleApps = Array.from(
+      new Set(
+        statements.map(s => (s.key.key_data.app ? s.key.key_data.app : unset)),
+      ),
+    )?.join(", ");
 
     return (
       <div>
@@ -475,11 +491,7 @@ export class TransactionDetails extends React.Component<
                         />
                         <SummaryCardItem
                           label="Application name"
-                          value={
-                            transaction?.stats_data?.app?.length > 0
-                              ? transaction?.stats_data?.app
-                              : unset
-                          }
+                          value={visibleApps}
                         />
                         <SummaryCardItem
                           label="Fingerprint ID"
