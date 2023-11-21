@@ -33,6 +33,15 @@ const (
 	WHERE "parentID" = (SELECT id FROM system.namespace WHERE name = current_database() AND "parentID" = 0)
 	`
 
+	// tableDescQuery returns the JSONified version of all table descriptors in
+	// the current database. Views and sequences are NOT included in the result
+	// set.
+	//
+	// [descJSONQuery] must be bound to the name "descriptors".
+	//
+	// id::int | schema_id::int | name::text | descriptor::json
+	tableDescQuery = ` SELECT * FROM descriptors WHERE descriptor ? 'table' AND NOT (descriptor->'table' ? 'viewQuery' OR descriptor->'table' ? 'sequenceOpts') `
+
 	// enumDescsQuery returns the JSONified version of all enum descriptors in
 	// the current database.
 	//
