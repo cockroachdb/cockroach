@@ -17,7 +17,7 @@ import (
 
 // SizeFn returns the size, in bytes, of type T. Used for the MemoryQueue
 // to determine the size of enqueued/dequeued elements.
-type SizeFn[T any] func(T) (int, error)
+type SizeFn[T any] func(T) int
 
 // MemoryQueue is a FIFO, in-memory event queue designed for use by the
 // observability service for buffering events awaiting processing.
@@ -71,10 +71,7 @@ func (q *MemoryQueue[T]) Alias() string {
 // If buffering the provided element would exceed the configured
 // max size, an error is returned and the element is not buffered.
 func (q *MemoryQueue[T]) Enqueue(e T) error {
-	size, err := q.sizeFn(e)
-	if err != nil {
-		return errors.Wrap(err, "sizing element")
-	}
+	size := q.sizeFn(e)
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.mu.curSize+size > q.mu.maxSize {
@@ -104,10 +101,7 @@ func (q *MemoryQueue[T]) Dequeue() (T, bool) {
 	if !ok {
 		panic(errors.AssertionFailedf("unable to assert type on Dequeue() for %s queue: %v", q.alias, e.Value))
 	}
-	size, err := q.sizeFn(ret)
-	if err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(err, "sizing element on dequeue for %q", q.alias))
-	}
+	size := q.sizeFn(ret)
 	// TODO(abarganier): Gauge metric(s) to track queue size & length.
 	q.mu.curSize = q.mu.curSize - size
 	return ret, true
