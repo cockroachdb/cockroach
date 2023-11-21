@@ -42,7 +42,9 @@ exporters:
   metrics, will be served on.
 - `--sink-pgurl` is the address which the obsservice will use to write data to after processing. 
   It will also be used to run migrations found in `pkg/obsservice/obslib/migrations/sqlmigrations`
-  on startup. 
+  on startup. TIP: Use the `sslrootcert` query parameter in the pgurl string to point to a root certificate.
+- `--no-db` will prevent the obsservice from attempting to connect to the `--sink-pgurl` at startup.
+  This is meant for testing purposes only.
 
 ## Building & Pushing a Docker Image
 
@@ -71,10 +73,12 @@ I231113 22:25:02.716505 1 main/main.go:112  [-] 1  Listening for OTLP connection
 
 You can use environment variables to control things like the OTLP listen address.
 ```shell
-$ docker run -e OTLP_ADDR=localhost:7171 -e HTTP_ADDR=localhost:8082 --platform=linux/amd64 obsservice:latest
-I231113 22:25:02.716505 1 main/main.go:112  [-] 1  Listening for OTLP connections on localhost:7171.
-Listening for HTTP requests on http://localhost:8082.
+$ docker run -e OTLP_ADDR=0.0.0.0:7171 -e HTTP_ADDR=0.0.0.0:8082 -e SINK_PGURL="postgresql://myuser@myhost:26257?foo=bar" --platform=linux/amd64 obsservice:latest
+I231113 22:25:02.716505 1 main/main.go:112  [-] 1  Listening for OTLP connections on 0.0.0.0:7171.
+Listening for HTTP requests on http://0.0.0.0:8082.
 ```
+
+You can find the supported environment variables in `pkg/obsservice/cmd/obsservice/Dockerfile`.
 
 With the image created, you can [push it to GCR](https://cockroachlabs.atlassian.net/wiki/spaces/OI/pages/3249472038/Pushing+an+Antenna+Docker+Image+to+GCR).
 
@@ -88,17 +92,13 @@ image. It's probably not best practice to use `./dev build --cross` and then cop
 
 ## Functionality
 
-In the current fledgling state, the Obs Service does a couple of things:
-
-1. The Obs Service serves the DB Console.
-
-2. The Obs Service reverse-proxies some HTTP routes to
-   CRDB (`/_admin/`, `/_status/`, `/ts/`, `/api/v2/`).
-
-3. The Obs Service exposes the OTLP Logs gRPC service and is able to ingest
+1. The Obs Service exposes the OTLP Logs gRPC service and is able to ingest
    events received through calls to this RPC service. Only insecure gRPC
    connections are supported at the moment. Events are ingested into the
    Obs Service for aggregation and eventual storage. 
+2. The Obs Service provides a pluggable framework to define asynchronous event processing
+   pipelines. Events can be routed, transformed, validated, enqueued, consumed,
+   processed, and stored.
 
 ## Event ingestion
 
