@@ -1438,7 +1438,7 @@ func IsOIDUserDefinedType(o oid.Oid) bool {
 	return catid.IsOIDUserDefined(o)
 }
 
-var familyNames = map[Family]string{
+var familyNames = map[Family]redact.SafeString{
 	AnyFamily:            "any",
 	ArrayFamily:          "array",
 	BitFamily:            "bit",
@@ -1475,7 +1475,7 @@ var familyNames = map[Family]string{
 //
 // TODO(radu): investigate whether anything breaks if we use
 // enumvalue_customname and use String() instead.
-func (f Family) Name() string {
+func (f Family) Name() redact.SafeString {
 	ret, ok := familyNames[f]
 	if !ok {
 		panic(errors.AssertionFailedf("unexpected Family: %d", f))
@@ -1564,7 +1564,7 @@ func (t *T) Name() string {
 		return t.TypeMeta.Name.Basename()
 
 	default:
-		return fam.Name()
+		return string(fam.Name())
 	}
 }
 
