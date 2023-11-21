@@ -415,7 +415,7 @@ func (expr *NumVal) ResolveAsType(
 		dInt := MustBeDInt(d)
 		return IntToOid(dInt)
 	default:
-		return nil, errors.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, errors.AssertionFailedf("could not resolve %T %v into a %s", expr, expr, typ.SQLStringForError())
 	}
 }
 
@@ -624,7 +624,7 @@ func (expr *StrVal) ResolveAsType(
 			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
-		return nil, errors.AssertionFailedf("attempt to type byte array literal to %T", typ)
+		return nil, errors.AssertionFailedf("attempt to type byte array literal to %s", typ.SQLStringForError())
 	}
 
 	// Typing a string literal constant into some value type.
