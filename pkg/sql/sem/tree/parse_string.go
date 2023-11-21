@@ -111,7 +111,7 @@ func ParseAndRequireString(
 	case types.VoidFamily:
 		d = DVoidDatum
 	default:
-		return nil, false, errors.AssertionFailedf("unknown type %s (%T)", t, t)
+		return nil, false, errors.AssertionFailedf("unknown type %s", t.SQLStringForError())
 	}
 	if err != nil {
 		return d, dependsOnContext, err

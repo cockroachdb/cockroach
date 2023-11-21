@@ -1940,6 +1940,9 @@ func (t *T) SQLString() string {
 // SQLStringForError returns a version of SQLString that will preserve safe
 // information during redaction. It is suitable for usage in error messages.
 func (t *T) SQLStringForError() redact.RedactableString {
+	if t == nil {
+		return "<nil>"
+	}
 	if t.UserDefined() {
 		// Show the redacted SQLString output with an un-redacted prefix to indicate
 		// that the type is user defined (and possibly enum or record).
