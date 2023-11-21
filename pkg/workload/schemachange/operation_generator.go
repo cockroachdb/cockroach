@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -33,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
@@ -1957,37 +1958,59 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (*opStmt,
 	return stmt, nil
 }
 
-func (og *operationGenerator) dropTypeValue(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
-	enum, exists, err := og.randEnum(ctx, tx, og.pctExisting(true))
+func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// Query for all enum values returning:
+	// * name - the escaped fully qualified type name.
+	// * value - the escaped enum value.
+	// * droppping - a bool indicating if this value is being actively dropped.
+	//   has_references - a bool indicating if this *type* is referenced by other
+	//   descriptors.
+	query := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"enums", enumDescsQuery},
+		{"enum_members", enumMemberDescsQuery},
+	}, `SELECT
+				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
+				quote_literal(member->>'logicalRepresentation') AS value,
+				COALESCE(member->>'direction' = 'REMOVE', false) AS dropping,
+				COALESCE(json_array_length(descriptor->'referencingDescriptorIds') > 0, false) AS has_references
+			FROM enum_members
+	`)
+
+	enumMembers, err := Collect(ctx, og, tx, pgx.RowToMap, query)
 	if err != nil {
 		return nil, err
 	}
 
-	validValue := false
-	value := "IrrelevantEnumValue"
+	// TODO(chrisseto): We're currently missing cases around enum members being
+	// referenced as it's quite difficult to tell if an individual member is
+	// referenced. Unreferenced members can be dropped but referenced members may
+	// not. For now, we skip over all enums where the type itself is being
+	// referenced.
 
-	if exists {
-		value, validValue, err = og.randEnumValue(ctx, tx, og.pctExisting(true), enum)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	valueDropping := false
-	if validValue {
-		valueDropping, err = og.enumValueIsBeingRemoved(ctx, tx, enum.String(), value)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	stmt := makeOpStmt(OpStmtDDL)
-	stmt.expectedExecErrors.addAll(codesWithConditions{
-		{pgcode.UndefinedObject, !exists || !validValue},
-		{pgcode.ObjectNotInPrerequisiteState, valueDropping},
+	stmt, code, err := Generate[*tree.AlterType](og.params.rng, og.produceError(), []GenerationCase{
+		// Fail to drop values from a type that doesn't exist.
+		{pgcode.UndefinedObject, `ALTER TYPE "EnumThatDoesntExist" DROP VALUE 'IrrelevantValue'`},
+		// Fail to drop a value that is in the process of being dropped.
+		{pgcode.ObjectNotInPrerequisiteState, `{ with (EnumValue true false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
+		// Fail to drop values that don't exist.
+		{pgcode.UndefinedObject, `{ with (EnumValue false false) } ALTER TYPE { .name } DROP VALUE 'ValueThatDoesntExist' { end }`},
+		// Successful drop of an enum value.
+		{pgcode.SuccessfulCompletion, `{ with (EnumValue false false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
+	}, template.FuncMap{
+		"EnumValue": func(dropping, referenced bool) (map[string]any, error) {
+			return PickOne(og.params.rng, util.Filter(enumMembers, func(enum map[string]any) bool {
+				return enum["has_references"].(bool) == referenced && enum["dropping"].(bool) == dropping
+			}))
+		},
 	})
-	stmt.sql = fmt.Sprintf(`ALTER TYPE %s DROP VALUE '%s'`, enum, value)
-	return stmt, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return newOpStmt(stmt, codesWithConditions{
+		{code, true},
+	}), nil
 }
 
 func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -3250,50 +3273,6 @@ ORDER BY random()
 	return &typeName, true, nil
 }
 
-func (og *operationGenerator) randEnumValue(
-	ctx context.Context, tx pgx.Tx, pctExisting int, enum *tree.TypeName,
-) (value string, exists bool, err error) {
-	const q = `SELECT unnest(values) FROM [SHOW ENUMS] WHERE schema = $1 AND name = $2`
-
-	rows, err := tx.Query(ctx, q, enum.Schema(), enum.Object())
-	if err != nil {
-		return "", false, err
-	}
-
-	defer rows.Close()
-
-	var values []string
-	for rows.Next() {
-		var v string
-		if err := rows.Scan(&v); err != nil {
-			return "", false, err
-		}
-		values = append(values, v)
-	}
-
-	if rows.Err() != nil {
-		return "", false, rows.Err()
-	}
-
-	if og.randIntn(100) >= pctExisting || len(values) == 0 {
-		valueSet := make(map[string]bool, len(values))
-		for _, v := range values {
-			valueSet[v] = true
-		}
-
-		// It's pretty unlikely that we'll generate conflicting values but better
-		// safe than sorry.
-		for {
-			nonExistentValue := og.randString(5, 5)
-			if !valueSet[nonExistentValue] {
-				return nonExistentValue, false, nil
-			}
-		}
-	}
-
-	return values[og.randIntn(len(values))], true, nil
-}
-
 // randTable returns a schema name along with a table name
 func (og *operationGenerator) randTable(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
@@ -3727,21 +3706,6 @@ func (og *operationGenerator) produceError() bool {
 // randIntn returns an int in the range [0,topBound). It panics if topBound <= 0.
 func (og *operationGenerator) randIntn(topBound int) int {
 	return og.params.rng.Intn(topBound)
-}
-
-// randString return a random string that matches the regex `[a-z_]{min,max}`.
-// It panics if min < 0 or min > max.
-func (og *operationGenerator) randString(min, max int) string {
-	if min < 0 || min > max {
-		panic("invalid arguments to randString")
-	}
-
-	// Use a more restricted alphabet here so we generate strings that are safe
-	// for values or identifiers.
-	const alphabet = "abcdefghijklmnopqrstuvwxyz_"
-
-	length := og.randIntn(max) + min
-	return randutil.RandString(og.params.rng, length, alphabet)
 }
 
 func (og *operationGenerator) newUniqueSeqNum() int64 {

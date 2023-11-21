@@ -18,6 +18,40 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+const (
+	// descJSONQuery returns the JSONified version of all descriptors in the
+	// current database joined with system.namespace.
+	//
+	// id::int | schema_id::int | name::text | descriptor::json
+	descJSONQuery = `SELECT
+		descriptor.id,
+		"parentSchemaID" AS schema_id,
+		namespace.name AS name,
+		crdb_internal.pb_to_json('desc', descriptor) AS descriptor
+	FROM system.descriptor
+	JOIN system.namespace ON namespace.id = descriptor.id
+	WHERE "parentID" = (SELECT id FROM system.namespace WHERE name = current_database() AND "parentID" = 0)
+	`
+
+	// enumDescsQuery returns the JSONified version of all enum descriptors in
+	// the current database.
+	//
+	// [descJSONQuery] must be bound to the name "descriptors".
+	//
+	// id::int | schema_id::int | name::text | descriptor::json
+	enumDescsQuery = `SELECT id, schema_id, name, descriptor->'type' AS descriptor FROM descriptors WHERE descriptor ? 'type'`
+
+	// enumDescsQuery returns the JSONified version of all enum members, along
+	// with their enum descriptors, in the current database.
+	//
+	// [enumDescsQuery] must be bound to the name "enums".
+	//
+	// id::int | schema_id::int | name::text | descriptor::json | member::json
+	enumMemberDescsQuery = `SELECT *, jsonb_array_elements(descriptor->'enumMembers') AS member FROM enums`
+
+	regionsFromClusterQuery = `SELECT * FROM [SHOW REGIONS FROM CLUSTER]`
+)
+
 type CTE struct {
 	As    string
 	Query string
