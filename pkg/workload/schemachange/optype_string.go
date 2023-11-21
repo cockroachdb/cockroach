@@ -46,12 +46,13 @@ func _() {
 	_ = x[createTableAs-35]
 	_ = x[createView-36]
 	_ = x[createFunction-37]
-	_ = x[dropFunction-38]
-	_ = x[dropIndex-39]
-	_ = x[dropSchema-40]
-	_ = x[dropSequence-41]
-	_ = x[dropTable-42]
-	_ = x[dropView-43]
+	_ = x[commentOn-38]
+	_ = x[dropFunction-39]
+	_ = x[dropIndex-40]
+	_ = x[dropSchema-41]
+	_ = x[dropSequence-42]
+	_ = x[dropTable-43]
+	_ = x[dropView-44]
 }
 
 func (i opType) String() string {
@@ -132,6 +133,8 @@ func (i opType) String() string {
 		return "createView"
 	case createFunction:
 		return "createFunction"
+	case commentOn:
+		return "commentOn"
 	case dropFunction:
 		return "dropFunction"
 	case dropIndex:
