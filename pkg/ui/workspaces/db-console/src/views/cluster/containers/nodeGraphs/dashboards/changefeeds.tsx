@@ -117,7 +117,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Max Checkpoint Latency"
+      title="Max Checkpoint Lag"
       isKvGraph={false}
       tooltip={`The most any changefeed's persisted checkpoint is behind the present.
           Larger values indicate issues with successfully ingesting or emitting
