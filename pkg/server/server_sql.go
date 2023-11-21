@@ -1681,31 +1681,6 @@ func (s *SQLServer) preStart(
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos)
 
-	// Start scheduled jobs daemon.
-	jobs.StartJobSchedulerDaemon(
-		ctx,
-		stopper,
-		s.metricsRegistry,
-		&scheduledjobs.JobExecutionConfig{
-			Settings:     s.execCfg.Settings,
-			DB:           s.execCfg.InternalDB,
-			TestingKnobs: knobs.JobsTestingKnobs,
-			PlanHookMaker: func(ctx context.Context, opName string, txn *kv.Txn, user username.SQLUsername) (interface{}, func()) {
-				// This is a hack to get around a Go package dependency cycle. See comment
-				// in sql/jobs/registry.go on planHookMaker.
-				return sql.NewInternalPlanner(
-					opName,
-					txn,
-					user,
-					&sql.MemoryMetrics{},
-					s.execCfg,
-					sql.NewInternalSessionData(ctx, s.execCfg.Settings, opName),
-				)
-			},
-		},
-		scheduledjobs.ProdJobSchedulerEnv,
-	)
-
 	scheduledlogging.Start(
 		ctx, stopper, s.execCfg.InternalDB, s.execCfg.Settings,
 		s.execCfg.CaptureIndexUsageStatsKnobs,
@@ -1747,6 +1722,33 @@ func (s *SQLServer) preStart(
 	s.waitForActiveAutoConfigEnvironments(ctx)
 
 	return nil
+}
+
+func (s *SQLServer) startJobScheduler(ctx context.Context, knobs base.TestingKnobs) {
+	// Start scheduled jobs daemon.
+	jobs.StartJobSchedulerDaemon(
+		ctx,
+		s.stopper,
+		s.metricsRegistry,
+		&scheduledjobs.JobExecutionConfig{
+			Settings:     s.execCfg.Settings,
+			DB:           s.execCfg.InternalDB,
+			TestingKnobs: knobs.JobsTestingKnobs,
+			PlanHookMaker: func(ctx context.Context, opName string, txn *kv.Txn, user username.SQLUsername) (interface{}, func()) {
+				// This is a hack to get around a Go package dependency cycle. See comment
+				// in sql/jobs/registry.go on planHookMaker.
+				return sql.NewInternalPlanner(
+					opName,
+					txn,
+					user,
+					&sql.MemoryMetrics{},
+					s.execCfg,
+					sql.NewInternalSessionData(ctx, s.execCfg.Settings, opName),
+				)
+			},
+		},
+		scheduledjobs.ProdJobSchedulerEnv,
+	)
 }
 
 // waitForActiveAutoConfigEnvironments waits until the set of
