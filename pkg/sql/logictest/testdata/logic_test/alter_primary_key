@@ -243,7 +243,7 @@ CREATE TABLE t (
   v JSONB,
   INDEX i1 (w), -- will get rewritten.
   INDEX i2 (y), -- will get rewritten.
-  UNIQUE INDEX i3 (z) STORING (y), -- will not be rewritten.
+  UNIQUE INDEX i3 (z) STORING (y), -- will be rewritten.
   UNIQUE INDEX i4 (z), -- will be rewritten.
   UNIQUE INDEX i5 (w) STORING (y), -- will be rewritten.
   INVERTED INDEX i6 (v), -- will be rewritten.
@@ -268,9 +268,9 @@ t  CREATE TABLE public.t (
      v JSONB NULL,
      crdb_internal_z_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(z))), 4:::INT8)) VIRTUAL,
      CONSTRAINT t_pkey PRIMARY KEY (y ASC),
-     UNIQUE INDEX i3 (z ASC) STORING (y),
      INDEX i1 (w ASC),
      INDEX i2 (y ASC),
+     UNIQUE INDEX i3 (z ASC) STORING (y),
      UNIQUE INDEX i4 (z ASC),
      UNIQUE INDEX i5 (w ASC) STORING (y),
      INVERTED INDEX i6 (v),
@@ -279,21 +279,21 @@ t  CREATE TABLE public.t (
      FAMILY fam_0_x_y_z_w_v (x, y, z, w, v)
    )
 
-# Test that the indexes we expect got rewritten. All but i3 should have been rewritten,
-# so all but i3's indexID should be larger than 7.
+# Test that the indexes we expect got rewritten. All should have been rewritten,
+# so all indexID should be larger than 7.
 
 query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
-4   i3
 9   t_pkey
 11  i1
 13  i2
-15  i4
-17  i5
-19  i6
-21  i7
-23  t_x_key
+15  i3
+17  i4
+19  i5
+21  i6
+23  i7
+25  t_x_key
 
 # Make sure that each index can index join against the new primary key;
 
@@ -1918,3 +1918,49 @@ t_99303  CREATE TABLE public.t_99303 (
            UNIQUE INDEX t_99303_i_key (i ASC) WHERE i > 0:::INT8,
            UNIQUE INDEX t_99303_i_key1 (i ASC)
          )
+
+subtest end
+
+# This subtest ensures that if we ALTER PK on a table with unique secondary
+# indexes on the new-pk-cols, then ALTER PK rewrites those unique secondary
+# indexes so that they have no reference to old-pk-cols anymore (previously,
+# before the ALTER PK, old-pk-cols are in their keySuffixColumn). This ensures
+# subsequent dropping of old-pk-cols will not impact any of these unique
+# secondary indexes.
+subtest 114436
+
+statement ok
+CREATE TABLE t_114436 (j INT NOT NULL, UNIQUE INDEX idx (j));
+
+statement ok
+ALTER TABLE t_114436 ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement ok
+ALTER TABLE t_114436 DROP COLUMN IF EXISTS rowid;
+
+query TTT
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t_114436] ORDER BY 1,2,3
+----
+idx j ASC
+t_114436_pkey j ASC
+
+# Repeat the same thing but on a non-rowid column this time.
+statement ok
+DROP TABLE t_114436;
+
+statement ok
+CREATE TABLE t_114436 (i INT PRIMARY KEY, j INT NOT NULL, UNIQUE INDEX idx (j));
+
+statement ok
+ALTER TABLE t_114436 ALTER PRIMARY KEY USING COLUMNS (j);
+
+statement ok
+ALTER TABLE t_114436 DROP COLUMN i;
+
+query TTT
+SELECT index_name, column_name, direction FROM [SHOW INDEXES FROM t_114436] ORDER BY 1,2,3
+----
+idx j ASC
+t_114436_pkey j ASC
+
+subtest end
