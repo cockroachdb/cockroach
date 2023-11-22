@@ -334,6 +334,16 @@ func getMaxConcurrentCompactions() int {
 var l0SubLevelCompactionConcurrency = envutil.EnvOrDefaultInt(
 	"COCKROACH_L0_SUB_LEVEL_CONCURRENCY", 2)
 
+// assertSingleDeleteSafety configures whether or not to perform verification
+// that SINGLEDELs are deterministic when applied to the local Engine during
+// intent resolution. See call sites of CanDeterministicallySingleDelete. See
+// cockroach#114421 for the motivation.
+//
+// An environment variable is provided for disabling these assertions in case
+// conditions under which false positives or severe peformance regressions are
+// possible.
+var assertSingleDeleteSafety = envutil.EnvOrDefaultBool("COCKROACH_SINGLEDEL_ASSERT", true)
+
 // MakeValue returns the inline value.
 func MakeValue(meta enginepb.MVCCMetadata) roachpb.Value {
 	return roachpb.Value{RawBytes: meta.RawBytes}
@@ -4926,7 +4936,7 @@ func MVCCResolveWriteIntent(
 		if err := ltIter.ValueProto(&buf.meta); err != nil {
 			return false, 0, nil, false, errors.Wrap(err, "unmarshaling lock table value")
 		}
-		var strOk bool
+		var outcome lockResolutionOutcome
 		if str == lock.Intent {
 			// Intent resolution requires an MVCC iterator to look up the MVCC
 			// version associated with the intent. Create one.
@@ -4941,15 +4951,46 @@ func MVCCResolveWriteIntent(
 				}
 				defer iter.Close()
 			}
-			strOk, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, &buf.meta, buf)
+			outcome, err = mvccResolveWriteIntent(ctx, rw, iter, ms, intent, &buf.meta, buf)
 		} else {
-			strOk, err = mvccReleaseLockInternal(ctx, rw, ms, intent, str, &buf.meta, buf)
-			replLocksReleased = replLocksReleased || strOk
+			outcome, err = mvccReleaseLockInternal(ctx, rw, ms, intent, str, &buf.meta, buf)
+			replLocksReleased = replLocksReleased || outcome != lockNoop
 		}
 		if err != nil {
 			return false, 0, nil, false, err
 		}
-		ok = ok || strOk
+		switch outcome {
+		case lockNoop:
+			// Do nothing.
+		case lockClearedBySingleDelete:
+			ok = true
+			if !assertSingleDeleteSafety {
+				continue
+			}
+
+			// Single deletes rely on subtle invariants and logic. We can detect
+			// misuse if the local store's internal state could result in
+			// nondeterministic behavior if we write a single delete. This
+			// doesn't guard against writes to the key committed to the engine
+			// after we opened ltIter but before the single delete is applied,
+			// and it also doesn't guarantee the single delete will be okay on
+			// other replicas' engines.
+			if isDeterministic, err := ltIter.CanDeterministicallySingleDelete(); err != nil {
+				return false, 0, nil, false, errors.Wrap(err, "validating single delete invariant")
+			} else if !isDeterministic {
+				err := errors.AssertionFailedf("deleting by single delete is unsafe")
+				if key, keyErr := ltIter.EngineKey(); keyErr != nil {
+					err = errors.WithSecondaryError(err, keyErr)
+				} else {
+					err = errors.Wrapf(err, "resolving lock key %s", key)
+				}
+				log.Fatalf(ctx, "intent resolution: %v", err)
+			}
+		case lockClearedByDelete, lockOverwritten:
+			ok = true
+		default:
+			panic("unreachable")
+		}
 	}
 	numBytes = int64(rw.BufferedSize() - beforeBytes)
 	return ok, numBytes, nil, replLocksReleased, nil
@@ -5049,11 +5090,20 @@ func (h singleDelOptimizationHelper) onAbortLock() bool {
 	return false
 }
 
+type lockResolutionOutcome int8
+
+const (
+	lockNoop lockResolutionOutcome = iota
+	lockOverwritten
+	lockClearedBySingleDelete
+	lockClearedByDelete
+)
+
 // mvccResolveWriteIntent is the core logic for resolving an intent. The
 // function accepts instructions for how to resolve the intent (encoded in the
-// LockUpdate), and the current value of the intent (meta). Returns whether the
-// provided intent was resolved (true) or whether the resolution was a no-op
-// (false).
+// LockUpdate), and the current value of the intent (meta). Returns how the
+// provided intent was resolved (a no-op, rewriting the intent, writing a
+// SingleDelete key, or writing a Delete key).
 //
 // REQUIRES: intent and meta refer to the same intent on the same key.
 // REQUIRES: iter surfaces range keys via IterKeyTypePointsAndRanges.
@@ -5066,9 +5116,9 @@ func mvccResolveWriteIntent(
 	intent roachpb.LockUpdate,
 	meta *enginepb.MVCCMetadata,
 	buf *putBuffer,
-) (bool, error) {
+) (outcome lockResolutionOutcome, err error) {
 	if meta.Txn == nil || meta.Txn.ID != intent.Txn.ID {
-		return false, errors.Errorf("txn does not match: %v != %v", meta.Txn, intent.Txn)
+		return lockNoop, errors.Errorf("txn does not match: %v != %v", meta.Txn, intent.Txn)
 	}
 
 	metaKey := MakeMVCCMetadataKey(intent.Key)
@@ -5145,7 +5195,6 @@ func mvccResolveWriteIntent(
 	// If only part of the intent history was rolled back, but the intent still
 	// remains, the rolledBackVal is set to a non-nil value.
 	var rolledBackVal *MVCCValue
-	var err error
 	buf.newMeta = *meta
 	newMeta := &buf.newMeta
 	if len(intent.IgnoredSeqNums) > 0 {
@@ -5161,7 +5210,7 @@ func mvccResolveWriteIntent(
 		// old meta (meta) and the new meta (newMeta).
 		removeIntent, rolledBackVal, err = mvccMaybeRewriteIntentHistory(ctx, writer, intent.IgnoredSeqNums, newMeta, latestKey)
 		if err != nil {
-			return false, err
+			return lockNoop, err
 		}
 
 		if removeIntent {
@@ -5188,7 +5237,7 @@ func mvccResolveWriteIntent(
 	// to a larger timestamp, and if the rollback code did not modify or mark
 	// the intent for removal.
 	if inProgress && !pushed && rolledBackVal == nil {
-		return false, nil
+		return lockNoop, nil
 	}
 
 	// If we're committing, or if the commit timestamp of the intent has been moved forward, and if
@@ -5208,7 +5257,7 @@ func mvccResolveWriteIntent(
 		// Assert that the intent timestamp never regresses. The logic above should
 		// not allow this, regardless of the input to this function.
 		if newTimestamp.Less(metaTimestamp) {
-			return false, errors.AssertionFailedf("timestamp regression (%s -> %s) "+
+			return lockNoop, errors.AssertionFailedf("timestamp regression (%s -> %s) "+
 				"during intent resolution, commit=%t pushed=%t rolledBackVal=%t",
 				metaTimestamp, newTimestamp, commit, pushed, rolledBackVal != nil)
 		}
@@ -5225,28 +5274,28 @@ func mvccResolveWriteIntent(
 			iter.SeekGE(oldKey)
 			valid, err := iter.Valid()
 			if err != nil {
-				return false, err
+				return lockNoop, err
 			} else if valid {
 				if hasPoint, hasRange := iter.HasPointAndRange(); hasRange && !hasPoint {
 					// If the seek lands on a bare range key, attempt to step to a point.
 					iter.Next()
 					if valid, err = iter.Valid(); err != nil {
-						return false, err
+						return lockNoop, err
 					} else if valid {
 						valid, _ = iter.HasPointAndRange()
 					}
 				}
 			}
 			if !valid || !iter.UnsafeKey().Equal(oldKey) {
-				return false, errors.Errorf("existing intent value missing: %s", oldKey)
+				return lockNoop, errors.Errorf("existing intent value missing: %s", oldKey)
 			}
 			v, err := iter.UnsafeValue()
 			if err != nil {
-				return false, err
+				return lockNoop, err
 			}
 			oldValue, err := DecodeMVCCValue(v)
 			if err != nil {
-				return false, err
+				return lockNoop, err
 			}
 			// Special case: If mvccMaybeRewriteIntentHistory rolled back to a value
 			// in the intent history and wrote that at oldKey, iter would not be able
@@ -5277,13 +5326,13 @@ func mvccResolveWriteIntent(
 			newMeta.Deleted = newValue.IsTombstone()
 
 			if err = writer.PutMVCC(newKey, newValue); err != nil {
-				return false, err
+				return lockNoop, err
 			}
 			if err = writer.ClearMVCC(oldKey, ClearOptions{
 				ValueSizeKnown: true,
 				ValueSize:      uint32(len(v)),
 			}); err != nil {
-				return false, err
+				return lockNoop, err
 			}
 
 			// If there is a value under the intent as it moves timestamps, then
@@ -5296,14 +5345,14 @@ func mvccResolveWriteIntent(
 			// the (old) meta's timestamp, and for any MVCC range tombstones.
 			iter.Next()
 			if valid, err := iter.Valid(); err != nil {
-				return false, err
+				return lockNoop, err
 			} else if valid {
 				if hasPoint, hasRange := iter.HasPointAndRange(); hasPoint {
 					if unsafeKey := iter.UnsafeKey(); unsafeKey.Key.Equal(oldKey.Key) {
 						if !hasRange || iter.RangeKeys().Versions[0].Timestamp.Less(unsafeKey.Timestamp) {
 							prevValLen, prevValIsTombstone, err := iter.MVCCValueLenAndIsTombstone()
 							if err != nil {
-								return false, err
+								return lockNoop, err
 							}
 							prevIsValue = !prevValIsTombstone
 							prevValSize = int64(prevValLen)
@@ -5321,17 +5370,23 @@ func mvccResolveWriteIntent(
 			// overwriting a newer epoch (see comments above). The pusher's job isn't
 			// to do anything to update the intent but to move the timestamp forward,
 			// even if it can.
+			outcome = lockOverwritten
 			metaKeySize, metaValSize, err = buf.putLockMeta(
 				writer, metaKey.Key, lock.Intent, newMeta, true /* alreadyExists */)
 		} else {
+			outcome = lockClearedByDelete
+			useSingleDelete := canSingleDelHelper.onCommitLock()
+			if useSingleDelete {
+				outcome = lockClearedBySingleDelete
+			}
 			metaKeySize, metaValSize, err = buf.clearLockMeta(
-				writer, metaKey.Key, lock.Intent, canSingleDelHelper.onCommitLock(), meta.Txn.ID, ClearOptions{
+				writer, metaKey.Key, lock.Intent, useSingleDelete, meta.Txn.ID, ClearOptions{
 					ValueSizeKnown: true,
 					ValueSize:      uint32(origMetaValSize),
 				})
 		}
 		if err != nil {
-			return false, err
+			return lockNoop, err
 		}
 
 		// Update stat counters related to resolving the intent.
@@ -5350,8 +5405,8 @@ func mvccResolveWriteIntent(
 			Key:       intent.Key,
 			Timestamp: intent.Txn.WriteTimestamp,
 		})
-
-		return true, nil
+		// outcome is set up above.
+		return outcome, nil
 	}
 
 	// Otherwise, we're deleting the intent, which includes deleting the
@@ -5371,7 +5426,7 @@ func mvccResolveWriteIntent(
 		ValueSizeKnown: true,
 		ValueSize:      uint32(meta.ValBytes),
 	}); err != nil {
-		return false, err
+		return lockNoop, err
 	}
 
 	// Log the logical MVCC operation.
@@ -5395,13 +5450,13 @@ func mvccResolveWriteIntent(
 		var hasPoint, hasRange bool
 		iter.SeekGE(nextKey)
 		if ok, err = iter.Valid(); err != nil {
-			return false, err
+			return lockNoop, err
 		} else if ok {
 			// If the seek lands on a bare range key, attempt to step to a point.
 			if hasPoint, hasRange = iter.HasPointAndRange(); hasRange && !hasPoint {
 				iter.Next()
 				if ok, err = iter.Valid(); err != nil {
-					return false, err
+					return lockNoop, err
 				} else if ok {
 					hasPoint, hasRange = iter.HasPointAndRange()
 					ok = hasPoint
@@ -5413,11 +5468,11 @@ func mvccResolveWriteIntent(
 			if !unsafeNextKey.IsValue() {
 				// Should never see an intent for this key since we seeked to a
 				// particular timestamp.
-				return false, errors.Errorf("expected an MVCC value key: %s", unsafeNextKey)
+				return lockNoop, errors.Errorf("expected an MVCC value key: %s", unsafeNextKey)
 			}
 			nextValueLen, nextValueIsTombstone, err = iter.MVCCValueLenAndIsTombstone()
 			if err != nil {
-				return false, err
+				return lockNoop, err
 			}
 			// If a non-tombstone point key is covered by a range tombstone, then
 			// synthesize a point tombstone at the lowest range tombstone covering it.
@@ -5436,20 +5491,26 @@ func mvccResolveWriteIntent(
 
 	if !ok {
 		// If there is no other version, we should just clean up the key entirely.
+		outcome = lockClearedByDelete
+		useSingleDelete := canSingleDelHelper.onAbortLock()
+		if useSingleDelete {
+			outcome = lockClearedBySingleDelete
+		}
 		_, _, err := buf.clearLockMeta(
-			writer, metaKey.Key, lock.Intent, canSingleDelHelper.onAbortLock(), meta.Txn.ID, ClearOptions{
+			writer, metaKey.Key, lock.Intent, useSingleDelete, meta.Txn.ID, ClearOptions{
 				ValueSizeKnown: true,
 				ValueSize:      uint32(origMetaValSize),
 			})
 		if err != nil {
-			return false, err
+			return lockNoop, err
 		}
 		// Clear stat counters attributable to the intent we're aborting.
 		if ms != nil {
 			ms.Add(updateStatsOnClear(
 				intent.Key, origMetaKeySize, origMetaValSize, 0, 0, meta, nil, 0))
 		}
-		return true, nil
+		// outcome is set above before the clearLockMeta call.
+		return outcome, nil
 	}
 
 	// Update the keyMetadata with the next version.
@@ -5458,13 +5519,18 @@ func mvccResolveWriteIntent(
 		KeyBytes: MVCCVersionTimestampSize,
 		ValBytes: int64(nextValueLen),
 	}
+	outcome = lockClearedByDelete
+	useSingleDelete := canSingleDelHelper.onAbortLock()
+	if useSingleDelete {
+		outcome = lockClearedBySingleDelete
+	}
 	metaKeySize, metaValSize, err := buf.clearLockMeta(
-		writer, metaKey.Key, lock.Intent, canSingleDelHelper.onAbortLock(), meta.Txn.ID, ClearOptions{
+		writer, metaKey.Key, lock.Intent, useSingleDelete, meta.Txn.ID, ClearOptions{
 			ValueSizeKnown: true,
 			ValueSize:      uint32(origMetaValSize),
 		})
 	if err != nil {
-		return false, err
+		return lockNoop, err
 	}
 
 	// Update stat counters with older version.
@@ -5472,8 +5538,8 @@ func mvccResolveWriteIntent(
 		ms.Add(updateStatsOnClear(intent.Key, origMetaKeySize, origMetaValSize, metaKeySize,
 			metaValSize, meta, &buf.newMeta, unsafeNextKey.Timestamp.WallTime))
 	}
-
-	return true, nil
+	// outcome is set above before the clearLockMeta call.
+	return outcome, nil
 }
 
 // mvccMaybeRewriteIntentHistory rewrites the intent to reveal the latest
@@ -5662,21 +5728,48 @@ func MVCCResolveWriteIntentRange(
 			return 0, 0, nil, 0, false, errors.Wrap(err, "unmarshaling lock table value")
 		}
 		beforeBytes := rw.BufferedSize()
-		var ok bool
+		var outcome lockResolutionOutcome
 		if ltKey.Strength == lock.Intent {
-			ok, err = mvccResolveWriteIntent(ctx, rw, mvccIter, ms, intent, &buf.meta, buf)
+			outcome, err = mvccResolveWriteIntent(ctx, rw, mvccIter, ms, intent, &buf.meta, buf)
 		} else {
-			ok, err = mvccReleaseLockInternal(ctx, rw, ms, intent, ltKey.Strength, &buf.meta, buf)
-			replLocksReleased = replLocksReleased || ok
+			outcome, err = mvccReleaseLockInternal(ctx, rw, ms, intent, ltKey.Strength, &buf.meta, buf)
+			replLocksReleased = replLocksReleased || outcome != lockNoop
 		}
 		if err != nil {
 			log.Warningf(ctx, "failed to resolve intent for key %q: %+v", lastResolvedKey, err)
 		}
-		if ok && !lastResolvedKeyOk {
-			// We only count the first successfully resolved lock/intent on a
-			// given key towards the returned key count and key limit.
-			lastResolvedKeyOk = true
-			numKeys++
+
+		switch outcome {
+		case lockNoop:
+			// Do nothing.
+		case lockClearedBySingleDelete:
+			if assertSingleDeleteSafety {
+				// Single deletes rely on subtle invariants and logic. We can
+				// detect misuse if the local store's internal state could
+				// result in nondeterministic behavior if we write a single
+				// delete. This doesn't guard against writes to the key
+				// committed to the engine after we opened ltIter but before the
+				// single delete is applied, and it also doesn't guarantee the
+				// single delete will be okay on other replicas' engines.
+				if ok, err := ltIter.CanDeterministicallySingleDelete(); err != nil {
+					return 0, 0, nil, 0, false, errors.Wrap(err, "validating single delete invariant")
+				} else if !ok {
+					log.Fatalf(ctx, "resolving lock key %s: %+v", ltKey,
+						errors.AssertionFailedf("deleting by single delete is unsafe"))
+				}
+			}
+
+			// Fallthrough to update numKeys and lastResolvedKeyOk if necessary.
+			fallthrough
+		case lockClearedByDelete, lockOverwritten:
+			if !lastResolvedKeyOk {
+				// We only count the first successfully resolved lock/intent on a
+				// given key towards the returned key count and key limit.
+				lastResolvedKeyOk = true
+				numKeys++
+			}
+		default:
+			panic("unreachable")
 		}
 		numBytes += int64(rw.BufferedSize() - beforeBytes)
 	}
@@ -5880,13 +5973,13 @@ func mvccReleaseLockInternal(
 	str lock.Strength,
 	meta *enginepb.MVCCMetadata,
 	buf *putBuffer,
-) (bool, error) {
+) (lockResolutionOutcome, error) {
 	finalized := update.Status.IsFinalized()
 	rolledBack := meta.Txn.Epoch < update.Txn.Epoch ||
 		(meta.Txn.Epoch == update.Txn.Epoch && enginepb.TxnSeqIsIgnored(meta.Txn.Sequence, update.IgnoredSeqNums))
 	release := finalized || rolledBack
 	if !release {
-		return false, nil
+		return lockNoop, nil
 	}
 
 	canSingleDelHelper := singleDelOptimizationHelper{
@@ -5906,7 +5999,7 @@ func mvccReleaseLockInternal(
 		ValueSize:      uint32(meta.Size()),
 	})
 	if err != nil {
-		return false, err
+		return lockNoop, err
 	}
 
 	// Update MVCC stats.
@@ -5916,7 +6009,10 @@ func mvccReleaseLockInternal(
 		ms.Add(updateStatsOnReleaseLock(origKeySize, origValSize, meta))
 	}
 
-	return true, nil
+	if txnDidNotUpdateMeta {
+		return lockClearedBySingleDelete, nil
+	}
+	return lockClearedByDelete, nil
 
 }
 
