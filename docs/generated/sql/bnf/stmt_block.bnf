@@ -323,8 +323,8 @@ analyze_target ::=
 
 func_application ::=
 	func_application_name '(' ')'
-	| func_application_name '(' expr_list opt_sort_clause ')'
-	| func_application_name '(' 'ALL' expr_list opt_sort_clause ')'
+	| func_application_name '(' expr_list opt_sort_clause_no_index ')'
+	| func_application_name '(' 'ALL' expr_list opt_sort_clause_no_index ')'
 	| func_application_name '(' 'DISTINCT' expr_list ')'
 	| func_application_name '(' '*' ')'
 
@@ -999,6 +999,10 @@ func_application_name ::=
 
 expr_list ::=
 	( a_expr ) ( ( ',' a_expr ) )*
+
+opt_sort_clause_no_index ::=
+	sort_clause_no_index
+	| 
 
 db_object_name ::=
 	simple_db_object_name
@@ -2061,6 +2065,9 @@ func_name ::=
 iconst32 ::=
 	'ICONST'
 
+sort_clause_no_index ::=
+	'ORDER' 'BY' sortby_no_index_list
+
 simple_db_object_name ::=
 	db_object_name_component
 
@@ -2776,6 +2783,9 @@ type_function_name ::=
 	'identifier'
 	| unreserved_keyword
 	| type_func_name_keyword
+
+sortby_no_index_list ::=
+	( sortby ) ( ( ',' sortby | ',' sortby_index ) )*
 
 type_func_name_crdb_extra_keyword ::=
 	'FAMILY'
@@ -4537,7 +4547,7 @@ single_sort_clause ::=
 	| 'ORDER' 'BY' sortby_index ',' sortby_list
 
 window_specification ::=
-	'(' opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause ')'
+	'(' opt_existing_window_name opt_partition_clause opt_sort_clause_no_index opt_frame_clause ')'
 
 window_name ::=
 	name
