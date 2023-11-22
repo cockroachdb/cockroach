@@ -59,9 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1689,7 +1687,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// the first place, as a special case.
 		publishDescriptors := func(ctx context.Context, txn descs.Txn) error {
 			return r.publishDescriptors(
-				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, nil, p.ExecCfg().NodeInfo.LogicalClusterID(),
+				ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(), details, p.ExecCfg().NodeInfo.LogicalClusterID(),
 			)
 		}
 		if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -1814,23 +1812,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return errors.Wrap(err, "inserting table statistics")
 	}
 
-	var devalidateIndexes map[descpb.ID][]descpb.IndexID
-	if toValidate := len(details.RevalidateIndexes); toValidate > 0 {
-		status := jobs.RunningStatus(fmt.Sprintf("re-validating %d indexes", toValidate))
-		if err := r.job.NoTxn().RunningStatus(ctx, status); err != nil {
-			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
-		}
-		bad, err := revalidateIndexes(ctx, p.ExecCfg(), r.job, details.TableDescs, details.RevalidateIndexes)
-		if err != nil {
-			return err
-		}
-		devalidateIndexes = bad
-	}
-
 	publishDescriptors := func(ctx context.Context, txn descs.Txn) (err error) {
 		return r.publishDescriptors(
 			ctx, p.ExecCfg().JobRegistry, p.ExecCfg().JobsKnobs(), txn, p.User(),
-			details, devalidateIndexes, p.ExecCfg().NodeInfo.LogicalClusterID(),
+			details, p.ExecCfg().NodeInfo.LogicalClusterID(),
 		)
 	}
 	if err := r.execCfg.InternalDB.DescsTxn(ctx, publishDescriptors); err != nil {
@@ -1959,92 +1944,6 @@ func (r *restoreResumer) validateJobIsResumable(execConfig *sql.ExecutorConfig) 
 // TODO(msbutler): delete in 23.1
 func isSystemUserRestore(details jobspb.RestoreDetails) bool {
 	return details.DescriptorCoverage == tree.SystemUsers || details.RestoreSystemUsers
-}
-
-func revalidateIndexes(
-	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	job *jobs.Job,
-	tables []*descpb.TableDescriptor,
-	indexIDs []jobspb.RestoreDetails_RevalidateIndex,
-) (map[descpb.ID][]descpb.IndexID, error) {
-	indexIDsByTable := make(map[descpb.ID]map[descpb.IndexID]struct{})
-	for _, idx := range indexIDs {
-		if indexIDsByTable[idx.TableID] == nil {
-			indexIDsByTable[idx.TableID] = make(map[descpb.IndexID]struct{})
-		}
-		indexIDsByTable[idx.TableID][idx.IndexID] = struct{}{}
-	}
-
-	// We don't actually need the 'historical' read the way the schema change does
-	// since our table is offline.
-	runner := descs.NewHistoricalInternalExecTxnRunner(hlc.Timestamp{}, func(ctx context.Context, fn descs.InternalExecFn) error {
-		return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-			return fn(ctx, txn)
-		}, isql.WithPriority(admissionpb.BulkNormalPri))
-	})
-
-	invalidIndexes := make(map[descpb.ID][]descpb.IndexID)
-
-	for _, tbl := range tables {
-		indexes := indexIDsByTable[tbl.ID]
-		if len(indexes) == 0 {
-			continue
-		}
-		tableDesc := tabledesc.NewBuilder(tbl).BuildExistingMutableTable()
-
-		var forward, inverted []catalog.Index
-		for _, idx := range tableDesc.AllIndexes() {
-			if _, ok := indexes[idx.GetID()]; ok {
-				switch idx.GetType() {
-				case descpb.IndexDescriptor_FORWARD:
-					forward = append(forward, idx)
-				case descpb.IndexDescriptor_INVERTED:
-					inverted = append(inverted, idx)
-				}
-			}
-		}
-		if len(forward) > 0 {
-			if err := sql.ValidateForwardIndexes(
-				ctx,
-				job,
-				tableDesc.MakePublic(),
-				forward,
-				runner,
-				false, /* withFirstMutationPublic */
-				true,  /* gatherAllInvalid */
-				sessiondata.NoSessionDataOverride,
-				execCfg.ProtectedTimestampManager,
-			); err != nil {
-				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
-					invalidIndexes[tableDesc.ID] = invalid.Indexes
-				} else {
-					return nil, err
-				}
-			}
-		}
-		if len(inverted) > 0 {
-			if err := sql.ValidateInvertedIndexes(
-				ctx,
-				execCfg.Codec,
-				job,
-				tableDesc.MakePublic(),
-				inverted,
-				runner,
-				false, /* withFirstMutationPublic */
-				true,  /* gatherAllInvalid */
-				sessiondata.NoSessionDataOverride,
-				execCfg.ProtectedTimestampManager,
-			); err != nil {
-				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
-					invalidIndexes[tableDesc.ID] = append(invalidIndexes[tableDesc.ID], invalid.Indexes...)
-				} else {
-					return nil, err
-				}
-			}
-		}
-	}
-	return invalidIndexes, nil
 }
 
 // ReportResults implements JobResultsReporter interface.
@@ -2212,7 +2111,6 @@ func (r *restoreResumer) publishDescriptors(
 	txn descs.Txn,
 	user username.SQLUsername,
 	details jobspb.RestoreDetails,
-	devalidateIndexes map[descpb.ID][]descpb.IndexID,
 	clusterID uuid.UUID,
 ) (err error) {
 	if details.DescriptorsPublished {
@@ -2265,21 +2163,6 @@ func (r *restoreResumer) publishDescriptors(
 		if mutTable.GetDeclarativeSchemaChangerState() != nil {
 			newTables = append(newTables, mutTable.TableDesc())
 			continue
-		}
-
-		badIndexes := devalidateIndexes[mutTable.ID]
-		for _, badIdx := range badIndexes {
-			found, err := catalog.MustFindIndexByID(mutTable, badIdx)
-			if err != nil {
-				return err
-			}
-			newIdx := found.IndexDescDeepCopy()
-			mutTable.RemovePublicNonPrimaryIndex(found.Ordinal())
-			if err := mutTable.AddIndexMutationMaybeWithTempIndex(
-				&newIdx, descpb.DescriptorMutation_ADD,
-			); err != nil {
-				return err
-			}
 		}
 
 		version := r.settings.Version.ActiveVersion(ctx)
