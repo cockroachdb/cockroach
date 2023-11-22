@@ -75,6 +75,49 @@ type (
 		to             *clusterupgrade.Version
 		sequentialStep sequentialRunStep
 	}
+
+	// mutator describes the interface to be implemented by different
+	// `mutators`.
+	//
+	// Mutators exist as a way to introduce optional behaviour to
+	// upgrade tests in order to increase coverage of certain areas of
+	// the database and of the upgrade machinery itself.
+	mutator interface {
+		// Name returns the unique name of this mutator. This allows the
+		// test runner to log which mutators are active and test authors
+		// to opt-out of mutators that are incompatible with a test, if
+		// necessary.
+		Name() string
+		// Probability returns the probability that this mutator will run
+		// in any given test run. Every mutator should run under some
+		// probability. Making this an explicit part of the interface
+		// makes that more prominent.
+		Probability() float64
+		// Generate takes a test plan and a RNG and returns the list of
+		// mutations that should be applied to the plan.
+		Generate(*rand.Rand, *TestPlan) []mutation
+	}
+
+	// mutationOp encodes the operation to be performed by a mutation.
+	mutationOp int
+
+	// mutation describes a change to an upgrade test plan. The change
+	// is relative to a `reference` step (i.e., a step that exists in
+	// the original plan). `op` encodes the operation to be
+	// performed. If a new step is being added to the plan, `impl`
+	// includes its implementation.
+	mutation struct {
+		reference *singleStep
+		impl      singleStepProtocol
+		op        mutationOp
+	}
+
+	// stepSelector provides a high level API for mutator
+	// implementations to select the steps in the test plan that they
+	// wish to mutate.
+	stepSelector struct {
+		selectedSteps []*singleStep
+	}
 )
 
 const (
@@ -100,6 +143,11 @@ const (
 	LastUpgradeStage
 	RunningUpgradeMigrationsStage
 	AfterUpgradeFinalizedStage
+
+	mutationInsertBefore = mutationOp(iota)
+	mutationInsertAfter
+	mutationInsertConcurrent
+	mutationRemove
 )
 
 // Plan returns the TestPlan used to upgrade the cluster from the
@@ -383,6 +431,151 @@ func (up *upgradePlan) Add(steps []testStep) {
 	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
 }
 
+// forEachSingleStep iterates over every step in the test plan and
+// calls the given function `f` for every `singleStep` in the plan
+// (i.e., each step that actually performs an action in the test).
+func (plan *TestPlan) forEachSingleStep(f func(*singleStep)) {
+	var iterateOverSteps func([]testStep)
+	iterateOverSteps = func(steps []testStep) {
+		for _, step := range steps {
+			switch s := step.(type) {
+			case sequentialRunStep:
+				iterateOverSteps(s.steps)
+			case concurrentRunStep:
+				iterateOverSteps(s.delayedSteps)
+			case delayedStep:
+				iterateOverSteps([]testStep{s.step})
+			default:
+				ss := s.(*singleStep)
+				f(ss)
+			}
+		}
+	}
+
+	iterateOverSteps(plan.setup.clusterSetup)
+	for _, upgrade := range plan.setup.upgrades {
+		iterateOverSteps(upgrade.sequentialStep.steps)
+	}
+
+	iterateOverSteps(plan.initSteps)
+	for _, upgrade := range plan.upgrades {
+		iterateOverSteps(upgrade.sequentialStep.steps)
+	}
+}
+
+// newStepSelector creates a `stepSelector` instance that can be used
+// to by mutators to find a specific step or set of steps. The
+// returned selector will match every singleStep in the test plan.
+func (plan *TestPlan) newStepSelector() *stepSelector {
+	var result []*singleStep
+	plan.forEachSingleStep(func(ss *singleStep) {
+		result = append(result, ss)
+	})
+
+	return &stepSelector{
+		selectedSteps: result,
+	}
+}
+
+// Filter returns a new selector that only applies to steps that match
+// the predicate given.
+func (ss *stepSelector) Filter(predicate func(*singleStep) bool) *stepSelector {
+	var result []*singleStep
+	for _, s := range ss.selectedSteps {
+		if predicate(s) {
+			result = append(result, s)
+		}
+	}
+
+	return &stepSelector{selectedSteps: result}
+}
+
+// RandomStep returns a new selector that selects a single step,
+// randomly chosen from the list of selected steps in the original
+// selector.
+func (ss *stepSelector) RandomStep(rng *rand.Rand) *stepSelector {
+	if len(ss.selectedSteps) > 0 {
+		chosenStep := ss.selectedSteps[rng.Intn(len(ss.selectedSteps))]
+		return &stepSelector{selectedSteps: []*singleStep{chosenStep}}
+	}
+
+	return ss
+}
+
+func (ss *stepSelector) insert(impl singleStepProtocol, opGen func() mutationOp) []mutation {
+	var mutations []mutation
+	for _, s := range ss.selectedSteps {
+		mutations = append(mutations, mutation{
+			reference: s,
+			impl:      impl,
+			op:        opGen(),
+		})
+	}
+
+	return mutations
+}
+
+// Insert creates mutations to insert a step with the given
+// implementation randomly around each selected step (before, after,
+// or concurrently).
+func (ss *stepSelector) Insert(rng *rand.Rand, impl singleStepProtocol) []mutation {
+	possibleInserts := []mutationOp{
+		mutationInsertBefore,
+		mutationInsertAfter,
+		mutationInsertConcurrent,
+	}
+
+	return ss.insert(impl, func() mutationOp {
+		return possibleInserts[rng.Intn(len(possibleInserts))]
+	})
+}
+
+// InsertSequential creates mutations to insert a step with the given
+// implementation sequentially relative to each selected step. The new
+// step might be inserted before or after selected steps.
+func (ss *stepSelector) InsertSequential(rng *rand.Rand, impl singleStepProtocol) []mutation {
+	possibleInserts := []mutationOp{
+		mutationInsertBefore,
+		mutationInsertAfter,
+	}
+
+	return ss.insert(impl, func() mutationOp {
+		return possibleInserts[rng.Intn(len(possibleInserts))]
+	})
+}
+
+func (ss *stepSelector) InsertBefore(impl singleStepProtocol) []mutation {
+	return ss.insert(impl, func() mutationOp {
+		return mutationInsertBefore
+	})
+}
+
+func (ss *stepSelector) InsertAfter(impl singleStepProtocol) []mutation {
+	return ss.insert(impl, func() mutationOp {
+		return mutationInsertAfter
+	})
+}
+
+func (ss *stepSelector) InsertConcurrent(impl singleStepProtocol) []mutation {
+	return ss.insert(impl, func() mutationOp {
+		return mutationInsertConcurrent
+	})
+}
+
+// Remove creates mutations to remove the steps currently selected by
+// the selector.
+func (ss *stepSelector) Remove() []mutation {
+	var mutations []mutation
+	for _, s := range ss.selectedSteps {
+		mutations = append(mutations, mutation{
+			reference: s,
+			op:        mutationRemove,
+		})
+	}
+
+	return mutations
+}
+
 // assignIDs iterates over each `singleStep` in the test plan, and
 // assigns them a unique numeric ID. These IDs are not necessary for
 // correctness, but are nice to have when debugging failures and
@@ -394,37 +587,13 @@ func (plan *TestPlan) assignIDs() {
 		return currentID
 	}
 
-	var assignIDsToSteps func([]testStep)
-	assignIDsToSteps = func(steps []testStep) {
-		for _, step := range steps {
-			switch s := step.(type) {
-			case sequentialRunStep:
-				assignIDsToSteps(s.steps)
-			case concurrentRunStep:
-				assignIDsToSteps(s.delayedSteps)
-			case delayedStep:
-				assignIDsToSteps([]testStep{s.step})
-			default:
-				ss := s.(*singleStep)
-				stepID := nextID()
-				if _, ok := ss.impl.(startStep); ok && plan.startClusterID == 0 {
-					plan.startClusterID = stepID
-				}
-
-				ss.ID = stepID
-			}
+	plan.forEachSingleStep(func(ss *singleStep) {
+		stepID := nextID()
+		if _, ok := ss.impl.(startStep); ok && plan.startClusterID == 0 {
+			plan.startClusterID = stepID
 		}
-	}
-
-	assignIDsToSteps(plan.setup.clusterSetup)
-	for _, upgrade := range plan.setup.upgrades {
-		assignIDsToSteps(upgrade.sequentialStep.steps)
-	}
-
-	assignIDsToSteps(plan.initSteps)
-	for _, upgrade := range plan.upgrades {
-		assignIDsToSteps(upgrade.sequentialStep.steps)
-	}
+		ss.ID = stepID
+	})
 }
 
 // allUpgrades returns a list of all upgrades encoded in this test
