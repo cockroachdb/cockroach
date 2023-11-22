@@ -1467,7 +1467,7 @@ func IsOIDUserDefinedType(o oid.Oid) bool {
 	return catid.IsOIDUserDefined(o)
 }
 
-var familyNames = map[Family]string{
+var familyNames = map[Family]redact.SafeString{
 	AnyFamily:            "any",
 	ArrayFamily:          "array",
 	BitFamily:            "bit",
@@ -1506,7 +1506,7 @@ var familyNames = map[Family]string{
 //
 // TODO(radu): investigate whether anything breaks if we use
 // enumvalue_customname and use String() instead.
-func (f Family) Name() string {
+func (f Family) Name() redact.SafeString {
 	ret, ok := familyNames[f]
 	if !ok {
 		panic(errors.AssertionFailedf("unexpected Family: %d", f))
@@ -1595,7 +1595,7 @@ func (t *T) Name() string {
 		return t.TypeMeta.Name.Basename()
 
 	default:
-		return fam.Name()
+		return string(fam.Name())
 	}
 }
 
@@ -1975,6 +1975,9 @@ func (t *T) SQLString() string {
 // SQLStringForError returns a version of SQLString that will preserve safe
 // information during redaction. It is suitable for usage in error messages.
 func (t *T) SQLStringForError() redact.RedactableString {
+	if t == nil {
+		return "<nil>"
+	}
 	if t.UserDefined() {
 		// Show the redacted SQLString output with an un-redacted prefix to indicate
 		// that the type is user defined (and possibly enum or record).
