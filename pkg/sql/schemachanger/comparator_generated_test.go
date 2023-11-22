@@ -1258,6 +1258,11 @@ func TestSchemaChangeComparator_plpgsql_cursor(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/plpgsql_cursor"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_plpgsql_unsupported(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/plpgsql_unsupported"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_poison_after_push(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/poison_after_push"
