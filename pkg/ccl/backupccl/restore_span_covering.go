@@ -107,8 +107,7 @@ var _ backupManifestFileIterator = &sstFileIterator{}
 
 // createIntroducedSpanFrontier creates a span frontier that tracks the end time
 // of the latest incremental backup of each introduced span in the backup chain.
-// See ReintroducedSpans( ) for more information. Note: this function assumes
-// that manifests are sorted in increasing EndTime.
+// Note: this function assumes that manifests are sorted in increasing EndTime.
 func createIntroducedSpanFrontier(
 	manifests []backuppb.BackupManifest, asOf hlc.Timestamp,
 ) (*spanUtils.Frontier, error) {
