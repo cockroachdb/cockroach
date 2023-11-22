@@ -373,7 +373,7 @@ func backup(
 			progCh,
 			tracingAggCh,
 			backupSpecs,
-		), "exporting %d ranges", errors.Safe(numTotalSpans))
+		), "running distributed backup to export %d ranges", errors.Safe(numTotalSpans))
 	}
 
 	if err := ctxgroup.GoAndWait(

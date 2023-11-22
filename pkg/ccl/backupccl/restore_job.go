@@ -329,7 +329,7 @@ func restore(
 	countSpansCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
 		defer close(spanCh)
-		return generateAndSendImportSpans(
+		return errors.Wrap(generateAndSendImportSpans(
 			ctx,
 			dataToRestore.getSpans(),
 			backupManifests,
@@ -337,7 +337,7 @@ func restore(
 			backupLocalityMap,
 			filter,
 			spanCh,
-		)
+		), "generate and send import spans")
 	}
 
 	// Count number of import spans.
@@ -368,9 +368,9 @@ func restore(
 		progressLogger := jobs.NewChunkProgressLogger(job, numImportSpans, job.FractionCompleted(), progressTracker.updateJobCallback)
 
 		jobProgressLoop := func(ctx context.Context) error {
-			ctx, progressSpan := tracing.ChildSpan(ctx, "progress-log")
+			ctx, progressSpan := tracing.ChildSpan(ctx, "progress-loop")
 			defer progressSpan.Finish()
-			return progressLogger.Loop(ctx, requestFinishedCh)
+			return errors.Wrap(progressLogger.Loop(ctx, requestFinishedCh), "job progress loop")
 		}
 		tasks = append(tasks, jobProgressLoop)
 	}
@@ -422,7 +422,7 @@ func restore(
 	runRestore := func(ctx context.Context) error {
 		if details.ExperimentalOnline {
 			log.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
-			return sendAddRemoteSSTs(
+			return errors.Wrap(sendAddRemoteSSTs(
 				ctx,
 				execCtx,
 				job,
@@ -432,7 +432,7 @@ func restore(
 				backupLocalityInfo,
 				progCh,
 				genSpan,
-			)
+			), "sending remote AddSSTable requests")
 		}
 		md := restoreJobMetadata{
 			jobID:              job.ID(),
@@ -446,20 +446,17 @@ func restore(
 			numImportSpans:     numImportSpans,
 			execLocality:       details.ExecutionLocality,
 		}
-		return distRestore(
+		return errors.Wrap(distRestore(
 			ctx,
 			execCtx,
 			md,
 			progCh,
 			tracingAggCh,
-		)
+		), "running distributed restore")
 	}
 	tasks = append(tasks, runRestore)
 
 	if err := ctxgroup.GoAndWait(restoreCtx, tasks...); err != nil {
-		// This leaves the data that did get imported in case the user wants to
-		// retry.
-		// TODO(dan): Build tooling to allow a user to restart a failed restore.
 		return emptyRowCount, errors.Wrapf(err, "importing %d ranges", numImportSpans)
 	}
 	// progress go routines should be shutdown, but use lock just to be safe.
