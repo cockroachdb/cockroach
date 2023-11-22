@@ -157,10 +157,13 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	ist := replicationtestutils.InitialSplitTester{}
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
+		InspectInitialSplitter: ist.GenInitialSplitterInspector(t)}
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
-
+	ist.MaybeSetSplitOnRetry(t, c.Rng, c.DestCluster)
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
@@ -195,6 +198,9 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	srcTime = c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
+
+	// We should only observe one set of initial splits, as no replanning error occured.
+	require.Equal(t, 1, ist.InitialSplitCount)
 }
 
 func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
@@ -688,6 +694,8 @@ func TestStreamingAutoReplan(t *testing.T) {
 	turnOffReplanning := make(chan struct{})
 	var alreadyReplanned atomic.Bool
 
+	ist := replicationtestutils.InitialSplitTester{}
+
 	// Track the number of unique addresses that we're connected to.
 	clientAddresses := make(map[string]struct{})
 	var addressesMu syncutil.Mutex
@@ -705,12 +713,14 @@ func TestStreamingAutoReplan(t *testing.T) {
 				alreadyReplanned.Swap(true)
 			}
 		},
+		InspectInitialSplitter: ist.GenInitialSplitterInspector(t),
 	}
 	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
 	// Don't allow for replanning until the new nodes and scattered table have been created.
 	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
 	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_frequency", time.Millisecond*500)
+	ist.MaybeSetSplitOnRetry(t, c.Rng, c.DestCluster)
 
 	// Don't allow inter node lag replanning to affect the test.
 	serverutils.SetClusterSetting(t, c.DestCluster, "physical_replication.consumer.node_lag_replanning_threshold", 0)
@@ -748,6 +758,11 @@ func TestStreamingAutoReplan(t *testing.T) {
 	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
 
 	require.Greater(t, len(clientAddresses), 1)
+	expectedInitialSplits := 1
+	if ist.SplitOnRetry {
+		expectedInitialSplits = 2
+	}
+	require.Equal(t, expectedInitialSplits, ist.InitialSplitCount)
 }
 
 // TestStreamingReplanOnLag asserts that the c2c job retries if a node lags far
@@ -765,6 +780,8 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	retryErrorChan := make(chan error)
 	turnOffReplanning := make(chan struct{})
 	var alreadyReplanned atomic.Bool
+
+	ist := replicationtestutils.InitialSplitTester{}
 
 	// Track the number of unique addresses that we're connected to, to ensure
 	// that all destination nodes participate in the replication stream.
@@ -792,11 +809,13 @@ func TestStreamingReplanOnLag(t *testing.T) {
 			}
 			return false
 		},
+		InspectInitialSplitter: ist.GenInitialSplitterInspector(t),
 	}
 	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
 	// Don't allow for replanning based on node participation.
 	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0)
+	ist.MaybeSetSplitOnRetry(t, c.Rng, c.DestCluster)
 
 	replicationtestutils.CreateScatteredTable(t, c, 3)
 
@@ -821,6 +840,11 @@ func TestStreamingReplanOnLag(t *testing.T) {
 
 	cutoverTime := c.DestSysServer.Clock().Now()
 	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
+	expectedInitialSplits := 1
+	if ist.SplitOnRetry {
+		expectedInitialSplits = 2
+	}
+	require.Equal(t, expectedInitialSplits, ist.InitialSplitCount)
 }
 
 // TestProtectedTimestampManagement tests the active protected
