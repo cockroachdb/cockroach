@@ -5468,7 +5468,7 @@ var crdbInternalCatalogCommentsTable = virtualSchemaTable{
 		ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
 	) error {
 		h := makeOidHasher()
-		all, err := p.Descriptors().GetAllComments(ctx, p.Txn())
+		all, err := p.Descriptors().GetAllComments(ctx, p.Txn(), dbContext)
 		if err != nil {
 			return err
 		}

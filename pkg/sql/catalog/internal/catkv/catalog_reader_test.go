@@ -121,8 +121,15 @@ func TestDataDriven(t *testing.T) {
 				return h.doCatalogQuery(ctx, q)
 
 			case "scan_all_comments":
+				db := h.argDesc(ctx, "db_id", catalog.Database).(catalog.DatabaseDescriptor)
 				q := func(ctx context.Context, txn *kv.Txn, cr catkv.CatalogReader) (nstree.Catalog, error) {
-					return cr.ScanAllComments(ctx, txn)
+					return cr.ScanAllComments(ctx, txn, db)
+				}
+				return h.doCatalogQuery(ctx, q)
+
+			case "scan_all_comments_nil_db":
+				q := func(ctx context.Context, txn *kv.Txn, cr catkv.CatalogReader) (nstree.Catalog, error) {
+					return cr.ScanAllComments(ctx, txn, nil)
 				}
 				return h.doCatalogQuery(ctx, q)
 

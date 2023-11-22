@@ -407,7 +407,7 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 	schema: vtable.InformationSchemaColumns,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		allComments, err := p.Descriptors().GetAllComments(ctx, p.Txn())
+		allComments, err := p.Descriptors().GetAllComments(ctx, p.Txn(), dbContext)
 		if err != nil {
 			return err
 		}
