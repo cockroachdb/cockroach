@@ -817,6 +817,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
+	// TODO(yang): Does this codec _need_ to come from the leaseMgr?
 	codec := tf.leaseMgr.Codec()
 	start := timeutil.Now()
 	span := roachpb.Span{Key: codec.TablePrefix(keys.DescriptorTableID)}
