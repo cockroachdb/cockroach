@@ -1667,3 +1667,31 @@ RESET prepared_statements_cache_size
 
 statement error EXPLAIN ANALYZE can only be used as a top-level statement
 PREPARE p AS EXPLAIN ANALYZE SELECT 1
+
+# Regression test for #114867 to make sure that a statement that uses an enum
+# can be re-prepared after a schema change.
+subtest reprepare_statement_with_enum
+
+statement ok
+CREATE TYPE color AS ENUM ('red', 'blue', 'green');
+CREATE TABLE test_114867 (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    colors color[] DEFAULT ARRAY[]::color[]
+)
+
+statement ok
+PREPARE s_114867 AS INSERT INTO test_114867(colors) VALUES (ARRAY[$1::text]::color[]);
+EXECUTE s_114867('red')
+
+statement ok
+TRUNCATE TABLE test_114867 CASCADE
+
+statement ok
+EXECUTE s_114867('red')
+
+query T
+SELECT colors FROM test_114867
+----
+{red}
+
+subtest end
