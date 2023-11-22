@@ -1729,6 +1729,13 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ppInfo.dispatchToExecutionEngine.cleanup.appendFunc(namedFunc{
 				fName: "log statement",
 				f: func() {
+					if planner.extendedEvalCtx.Annotations == nil {
+						// This is a safety check in case resetPlanner() was
+						// executed, but then we never set the annotations on
+						// the planner. Formatting the stmt for logging requires
+						// non-nil annotations.
+						planner.extendedEvalCtx.Annotations = &planner.semaCtx.Annotations
+					}
 					planner.maybeLogStatement(
 						ctx,
 						ex.executorType,
