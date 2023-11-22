@@ -72,6 +72,7 @@ type leaseFields struct {
 	version      descpb.DescriptorVersion
 	instanceID   base.SQLInstanceID
 	expiration   tree.DTimestamp
+	sessionID    []byte
 }
 
 type writer interface {
@@ -80,7 +81,7 @@ type writer interface {
 }
 
 type sessionBasedLeasingModeReader interface {
-	isSessionBasedLeasingModeActive(minimumMode SessionBasedLeasingMode) bool
+	sessionBasedLeasingModeAtLeast(minimumMode SessionBasedLeasingMode) bool
 	getSessionBasedLeasingMode() SessionBasedLeasingMode
 }
 
