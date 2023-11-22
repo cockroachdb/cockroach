@@ -374,10 +374,6 @@ func (t *testLeaseAcquirer) AcquireFreshestFromStore(ctx context.Context, id des
 	return nil
 }
 
-func (t *testLeaseAcquirer) Codec() keys.SQLCodec {
-	panic("should not be called")
-}
-
 type testLeasedDescriptor struct {
 	lease.LeasedDescriptor
 	timestamp hlc.Timestamp
