@@ -1,0 +1,28 @@
+# This test ensures 1) the user can set a cutover before the initial scan completes; 2) cannot set a
+# cutover time before the replicatedStartTime.
+
+create-replication-clusters
+----
+
+exec-sql as=destination-system
+SET CLUSTER SETTING jobs.debug.pausepoints = 'stream_ingestion.before_ingestion';
+----
+
+let $pre as=source-system
+SELECT clock_timestamp()::timestamp::string
+----
+
+start-replication-stream
+----
+
+job as=destination-system wait-for-state=paused
+----
+
+query-sql as=destination-system regex-error=(.*before earliest safe cutover.*)
+ALTER TENANT "destination" COMPLETE REPLICATION TO SYSTEM TIME '$pre'
+----
+
+exec-sql as=destination-system
+ALTER TENANT "destination" COMPLETE REPLICATION TO LATEST
+----
+

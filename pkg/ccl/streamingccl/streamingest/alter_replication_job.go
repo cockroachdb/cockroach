@@ -267,10 +267,10 @@ func alterTenantJobCutover(
 	if alterTenantStmt.Cutover.Latest {
 		replicatedTime := replicationutils.ReplicatedTimeFromProgress(&progress)
 		if replicatedTime.IsEmpty() {
-			return hlc.Timestamp{},
-				errors.Newf("replicated tenant %q has not yet recorded a safe replication time", tenantName)
+			cutoverTime = details.ReplicationStartTime
+		} else {
+			cutoverTime = replicatedTime
 		}
-		cutoverTime = replicatedTime
 	}
 
 	// TODO(ssd): We could use the replication manager here, but
