@@ -68,7 +68,7 @@ func TestCPUProfiler(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			p := makeProfiler(
-				newProfileStore(dumpStore, cpuProfFileNamePrefix, HeapFileNameSuffix, s),
+				newProfileStore(dumpStore, cpuProfFileNamePrefix, heapFileNameSuffix, s),
 				func() int64 { return cpuUsageCombined.Get(sv) },
 				func() time.Duration { return cpuProfileInterval.Get(sv) },
 			)

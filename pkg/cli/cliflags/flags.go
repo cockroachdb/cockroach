@@ -384,8 +384,8 @@ shell. This flag may be specified multiple times.`,
 	TableDisplayFormat = FlagInfo{
 		Name: "format",
 		Description: `
-Selects how to display table rows in results. Possible values: tsv,
-csv, table, records, sql, raw, html. If left unspecified, defaults to
+Selects how to display table rows in results. Possible values: tsv, csv,
+table, records, ndjson, json, sql, html, raw. If left unspecified, defaults to
 tsv for non-interactive sessions and table for interactive sessions.`,
 	}
 

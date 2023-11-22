@@ -39,7 +39,7 @@ var (
 		settings.ApplicationLevel,
 		"server.mem_profile.total_dump_size_limit",
 		"maximum combined disk size of preserved memory profiles",
-		128<<20, // 128MiB
+		256<<20, // 256MiB
 	)
 )
 
@@ -53,7 +53,7 @@ func init() {
 		settings.ApplicationLevel,
 		"server.heap_profile.total_dump_size_limit",
 		"use server.mem_profile.total_dump_size_limit instead",
-		128<<20, // 128MiB
+		256<<20, // 256MiB
 		settings.Retired,
 	)
 }

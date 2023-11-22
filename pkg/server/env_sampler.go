@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -38,6 +39,7 @@ type sampleEnvironmentCfg struct {
 	cpuProfileDirName    string
 	runtime              *status.RuntimeStatSampler
 	sessionRegistry      *sql.SessionRegistry
+	rootMemMonitor       *mon.BytesMonitor
 }
 
 // startSampleEnvironment starts a periodic loop that samples the environment and,
@@ -51,6 +53,7 @@ func startSampleEnvironment(
 	cpuProfileDirName string,
 	runtimeSampler *status.RuntimeStatSampler,
 	sessionRegistry *sql.SessionRegistry,
+	rootMemMonitor *mon.BytesMonitor,
 ) error {
 	cfg := sampleEnvironmentCfg{
 		st:                   settings,
@@ -61,6 +64,7 @@ func startSampleEnvironment(
 		cpuProfileDirName:    cpuProfileDirName,
 		runtime:              runtimeSampler,
 		sessionRegistry:      sessionRegistry,
+		rootMemMonitor:       rootMemMonitor,
 	}
 	// Immediately record summaries once on server startup.
 
@@ -90,6 +94,7 @@ func startSampleEnvironment(
 	// Initialize a heap profiler if we have an output directory
 	// specified.
 	var heapProfiler *profiler.HeapProfiler
+	var memMonitoringProfiler *profiler.MemoryMonitoringProfiler
 	var nonGoAllocProfiler *profiler.NonGoAllocProfiler
 	var statsProfiler *profiler.StatsProfiler
 	var queryProfiler *profiler.ActiveQueryProfiler
@@ -111,6 +116,10 @@ func startSampleEnvironment(
 			heapProfiler, err = profiler.NewHeapProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
 				return errors.Wrap(err, "starting heap profiler worker")
+			}
+			memMonitoringProfiler, err = profiler.NewMemoryMonitoringProfiler(ctx, cfg.heapProfileDirName, cfg.st)
+			if err != nil {
+				return errors.Wrap(err, "starting memory monitoring profiler worker")
 			}
 			nonGoAllocProfiler, err = profiler.NewNonGoAllocProfiler(ctx, cfg.heapProfileDirName, cfg.st)
 			if err != nil {
@@ -190,6 +199,7 @@ func startSampleEnvironment(
 					}
 					if heapProfiler != nil {
 						heapProfiler.MaybeTakeProfile(ctx, cfg.runtime.GoAllocBytes.Value())
+						memMonitoringProfiler.MaybeTakeMemoryMonitoringDump(ctx, cfg.runtime.GoAllocBytes.Value(), cfg.rootMemMonitor, cfg.st)
 						nonGoAllocProfiler.MaybeTakeProfile(ctx, cfg.runtime.CgoTotalBytes.Value())
 						statsProfiler.MaybeTakeProfile(ctx, cfg.runtime.RSSBytes.Value(), curStats, cgoStats)
 					}

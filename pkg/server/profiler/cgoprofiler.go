@@ -32,11 +32,11 @@ type NonGoAllocProfiler struct {
 	profiler
 }
 
-// JemallocFileNamePrefix is the prefix of jemalloc profile dumps.
-const JemallocFileNamePrefix = "jeprof"
+// jemallocFileNamePrefix is the prefix of jemalloc profile dumps.
+const jemallocFileNamePrefix = "jeprof"
 
-// JemallocFileNameSuffix is the file name extension of jemalloc profile dumps.
-const JemallocFileNameSuffix = ".jeprof"
+// jemallocFileNameSuffix is the file name extension of jemalloc profile dumps.
+const jemallocFileNameSuffix = ".jeprof"
 
 // NewNonGoAllocProfiler creates a NonGoAllocProfiler. dir is the
 // directory in which profiles are to be stored.
@@ -51,7 +51,7 @@ func NewNonGoAllocProfiler(
 
 	hp := &NonGoAllocProfiler{
 		profiler: makeProfiler(
-			newProfileStore(dumpStore, JemallocFileNamePrefix, JemallocFileNameSuffix, st),
+			newProfileStore(dumpStore, jemallocFileNamePrefix, jemallocFileNameSuffix, st),
 			zeroFloor,
 			envMemprofInterval,
 		),
@@ -71,8 +71,9 @@ func (o *NonGoAllocProfiler) MaybeTakeProfile(ctx context.Context, curNonGoAlloc
 	o.maybeTakeProfile(ctx, curNonGoAlloc, takeJemallocProfile)
 }
 
-// takeJemallocProfile returns true if and only if the jemalloc dump was taken successfully or jemalloc was not enabled.
-func takeJemallocProfile(ctx context.Context, path string) (success bool) {
+// takeJemallocProfile returns true if and only if the jemalloc dump was taken
+// successfully or jemalloc was not enabled.
+func takeJemallocProfile(ctx context.Context, path string, _ ...interface{}) (success bool) {
 	if jemallocHeapDump == nil {
 		return true
 	}
