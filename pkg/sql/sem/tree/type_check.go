@@ -616,7 +616,12 @@ func (expr *CastExpr) TypeCheck(
 		return nil, err
 	}
 	expr.Type = exprType
-	canElideCast := true
+
+	// Do not elide casts for placeholders, since if the statement gets re-prepared,
+	// the cast may be needed to infer the placeholder type.
+	_, isPlaceholder := expr.Expr.(*Placeholder)
+	canElideCast := !isPlaceholder
+
 	switch {
 	case isConstant(expr.Expr):
 		c := expr.Expr.(Constant)
