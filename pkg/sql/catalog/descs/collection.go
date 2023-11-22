@@ -727,13 +727,14 @@ func (tc *Collection) GetAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, 
 	return ret.Catalog, nil
 }
 
-// GetAllComments gets all comments for all descriptors. This method never
-// returns the underlying catalog, since it will be incomplete and only
+// GetAllComments gets all comments for all descriptors in the given database.
+// This method never returns the underlying catalog, since it will be incomplete and only
 // contain comments.
+// If the dbContext is nil, we return the database-level comments.
 func (tc *Collection) GetAllComments(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.CommentCatalog, error) {
-	kvComments, err := tc.cr.ScanAllComments(ctx, txn)
+	kvComments, err := tc.cr.ScanAllComments(ctx, txn, db)
 	if err != nil {
 		return nil, err
 	}

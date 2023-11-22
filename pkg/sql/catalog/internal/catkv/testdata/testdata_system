@@ -478,135 +478,16 @@ reset
 
 # Scanning all comments after resetting should only
 # give us comments
-scan_all_comments
+scan_all_comments db_id=100
 ----
 catalog:
-  "001":
-    namespace: (0, 0, "system")
-  "003":
-    namespace: (1, 29, "descriptor")
-  "004":
-    namespace: (1, 29, "users")
-  "005":
-    namespace: (1, 29, "zones")
-  "006":
-    namespace: (1, 29, "settings")
-  "007":
-    namespace: (1, 29, "descriptor_id_seq")
-  "008":
-    namespace: (1, 29, "tenants")
-  "009":
-    namespace: (1, 29, "region_liveness")
-  "011":
-    namespace: (1, 29, "lease")
-  "012":
-    namespace: (1, 29, "eventlog")
-  "013":
-    namespace: (1, 29, "rangelog")
-  "014":
-    namespace: (1, 29, "ui")
-  "015":
-    namespace: (1, 29, "jobs")
-  "019":
-    namespace: (1, 29, "web_sessions")
-  "020":
-    namespace: (1, 29, "table_statistics")
-  "021":
-    namespace: (1, 29, "locations")
-  "023":
-    namespace: (1, 29, "role_members")
-  "024":
-    namespace: (1, 29, "comments")
-  "025":
-    namespace: (1, 29, "replication_constraint_stats")
-  "026":
-    namespace: (1, 29, "replication_critical_localities")
-  "027":
-    namespace: (1, 29, "replication_stats")
-  "028":
-    namespace: (1, 29, "reports_meta")
-  "029":
-    namespace: (1, 0, "public")
-  "030":
-    namespace: (1, 29, "namespace")
-  "031":
-    namespace: (1, 29, "protected_ts_meta")
-  "032":
-    namespace: (1, 29, "protected_ts_records")
-  "033":
-    namespace: (1, 29, "role_options")
-  "034":
-    namespace: (1, 29, "statement_bundle_chunks")
-  "035":
-    namespace: (1, 29, "statement_diagnostics_requests")
-  "036":
-    namespace: (1, 29, "statement_diagnostics")
-  "037":
-    namespace: (1, 29, "scheduled_jobs")
-  "039":
-    namespace: (1, 29, "sqlliveness")
-  "040":
-    namespace: (1, 29, "migrations")
-  "041":
-    namespace: (1, 29, "join_tokens")
-  "042":
-    namespace: (1, 29, "statement_statistics")
-  "043":
-    namespace: (1, 29, "transaction_statistics")
-  "044":
-    namespace: (1, 29, "database_role_settings")
-  "045":
-    namespace: (1, 29, "tenant_usage")
-  "046":
-    namespace: (1, 29, "sql_instances")
-  "047":
-    namespace: (1, 29, "span_configurations")
-  "048":
-    namespace: (1, 29, "role_id_seq")
-  "050":
-    namespace: (1, 29, "tenant_settings")
-  "051":
-    namespace: (1, 29, "privileges")
-  "052":
-    namespace: (1, 29, "external_connections")
-  "053":
-    namespace: (1, 29, "job_info")
-  "054":
-    namespace: (1, 29, "span_stats_unique_keys")
-  "055":
-    namespace: (1, 29, "span_stats_buckets")
-  "056":
-    namespace: (1, 29, "span_stats_samples")
-  "057":
-    namespace: (1, 29, "span_stats_tenant_boundaries")
-  "058":
-    namespace: (1, 29, "task_payloads")
-  "059":
-    namespace: (1, 29, "tenant_tasks")
-  "060":
-    namespace: (1, 29, "statement_activity")
-  "061":
-    namespace: (1, 29, "transaction_activity")
-  "062":
-    namespace: (1, 29, "tenant_id_seq")
-  "063":
-    namespace: (1, 29, "mvcc_statistics")
-  "064":
-    namespace: (1, 29, "transaction_execution_insights")
-  "065":
-    namespace: (1, 29, "statement_execution_insights")
   "100":
     comments:
       database: this is the default database
-    namespace: (0, 0, "defaultdb")
   "101":
     comments:
       schema: this is the public schema
     namespace: (100, 0, "public")
-  "102":
-    namespace: (0, 0, "postgres")
-  "103":
-    namespace: (102, 0, "public")
   "104":
     comments:
       schema: this is a schema
@@ -626,5 +507,5 @@ catalog:
       index_2: this is an index
     namespace: (100, 101, "mv")
 trace:
-- Scan /NamespaceTable/30/1
+- Scan /NamespaceTable/30/1/100
 - Scan /Table/24/1
