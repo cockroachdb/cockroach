@@ -98,7 +98,7 @@ from one or more CockroachDB clusters.`,
 
 		stopper := stop.NewStopper()
 
-		stmtInsightsPipeline, stmtInsightsProcessor, err := makeStatementInsightsPipeline()
+		stmtInsightsPipeline, stmtInsightsProcessor, err := makeStatementInsightsPipeline(sinkPGURL)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Statement Insights Pipeline")
 		}
@@ -240,11 +240,9 @@ func handleSignalDuringShutdown(sig os.Signal) {
 	select {}
 }
 
-func makeStatementInsightsPipeline() (
-	obslib.EventConsumer,
-	*process.MemQueueProcessor[*obspb.StatementInsightsStatistics],
-	error,
-) {
+func makeStatementInsightsPipeline(
+	sinkPGURL string,
+) (obslib.EventConsumer, *process.MemQueueProcessor[*obspb.StatementInsightsStatistics], error) {
 	memQueue := queue.NewMemoryQueue[*obspb.StatementInsightsStatistics](
 		maxMemoryBytes, func(statistics *obspb.StatementInsightsStatistics) int {
 			return statistics.Size()
@@ -264,9 +262,8 @@ func makeStatementInsightsPipeline() (
 		return nil, nil, err
 	}
 
-	// TODO: replace process.InsightsStdoutProcessor for a real Insights processor
-	// and delete the file process/stdout.go
-	processor, err := process.NewMemQueueProcessor[*obspb.StatementInsightsStatistics](memQueue, &process.InsightsStdoutProcessor{})
+	processor, err := process.NewMemQueueProcessor[*obspb.StatementInsightsStatistics](
+		memQueue, &process.StmtInsightsProcessor{SinkPGURL: sinkPGURL})
 	if err != nil {
 		return nil, nil, err
 	}

@@ -6,6 +6,7 @@ go_library(
         "log_record_to_event.go",
         "stmt_insight_transformer.go",
         "transformer.go",
+        "transformer_utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/transform",
     visibility = ["//visibility:public"],
@@ -15,5 +16,6 @@ go_library(
         "//pkg/obsservice/obspb/opentelemetry-proto/logs/v1:logs",
         "//pkg/obsservice/obspb/opentelemetry-proto/resource/v1:resource",
         "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
     ],
 )
