@@ -1409,6 +1409,13 @@ func TestTenantLogic_plpgsql_cursor(
 	runLogicTest(t, "plpgsql_cursor")
 }
 
+func TestTenantLogic_plpgsql_unsupported(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "plpgsql_unsupported")
+}
+
 func TestTenantLogic_poison_after_push(
 	t *testing.T,
 ) {

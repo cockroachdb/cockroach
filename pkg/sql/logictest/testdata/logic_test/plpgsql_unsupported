@@ -1,0 +1,10 @@
+# LogicTest: !local-mixed-23.1
+
+statement error pq: unimplemented: RECORD type for PL/pgSQL variables is not yet supported.*
+CREATE OR REPLACE PROCEDURE foo() AS $$
+  DECLARE
+    x RECORD;
+  BEGIN
+    RAISE NOTICE 'x: %', x;
+  END
+$$ LANGUAGE plpgsql;
