@@ -98,7 +98,9 @@ type (
 		// Probability returns the probability that this mutator will run
 		// in any given test run. Every mutator should run under some
 		// probability. Making this an explicit part of the interface
-		// makes that more prominent.
+		// makes that more prominent. Note that tests are able to override
+		// this probability for specific mutator implementations as
+		// needed.
 		Probability() float64
 		// Generate takes a test plan and a RNG and returns the list of
 		// mutations that should be applied to the plan.
@@ -242,7 +244,7 @@ func (p *testPlanner) Plan() *TestPlan {
 	// Probabilistically enable some of of the mutators on the base test
 	// plan generated above.
 	for _, mut := range planMutators {
-		if p.prng.Float64() < mut.Probability() {
+		if p.mutatorEnabled(mut) {
 			mutations := mut.Generate(p.prng, testPlan)
 			testPlan.applyMutations(p.prng, mutations)
 			testPlan.enabledMutators = append(testPlan.enabledMutators, mut)
@@ -458,6 +460,15 @@ func (p *testPlanner) clusterSettings() []install.ClusterSettingOption {
 
 func (p *testPlanner) newRNG() *rand.Rand {
 	return rngFromRNG(p.prng)
+}
+
+func (p *testPlanner) mutatorEnabled(mut mutator) bool {
+	probability := mut.Probability()
+	if p, ok := p.options.overriddenMutatorProbabilities[mut.Name()]; ok {
+		probability = p
+	}
+
+	return p.prng.Float64() < probability
 }
 
 func newUpgradePlan(from, to *clusterupgrade.Version) *upgradePlan {
