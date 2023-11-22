@@ -1427,8 +1427,10 @@ func (u *sqlSymUnion) beginTransaction() *tree.BeginTransaction {
 %type <bool> distinct_clause opt_with_data
 %type <tree.DistinctOn> distinct_on_clause
 %type <tree.NameList> opt_column_list insert_column_list opt_stats_columns query_stats_cols
-%type <tree.OrderBy> sort_clause single_sort_clause opt_sort_clause
-%type <[]*tree.Order> sortby_list
+// Note that "no index" variants exist to disable custom ORDER BY <index> syntax
+// in some places like function calls.
+%type <tree.OrderBy> sort_clause sort_clause_no_index single_sort_clause opt_sort_clause opt_sort_clause_no_index
+%type <[]*tree.Order> sortby_list sortby_no_index_list
 %type <tree.IndexElemList> index_params create_as_params
 %type <tree.NameList> name_list privilege_list
 %type <[]int32> opt_array_bounds
@@ -12552,8 +12554,24 @@ opt_sort_clause:
     $$.val = tree.OrderBy(nil)
   }
 
+opt_sort_clause_no_index:
+  sort_clause_no_index
+  {
+    $$.val = $1.orderBy()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.OrderBy(nil)
+  }
+
 sort_clause:
   ORDER BY sortby_list
+  {
+    $$.val = tree.OrderBy($3.orders())
+  }
+
+sort_clause_no_index:
+  ORDER BY sortby_no_index_list
   {
     $$.val = tree.OrderBy($3.orders())
   }
@@ -12592,6 +12610,20 @@ sortby_list:
     $$.val = append($1.orders(), $3.order())
   }
 | sortby_list ',' sortby_index
+  {
+    $$.val = append($1.orders(), $3.order())
+  }
+
+sortby_no_index_list:
+  sortby
+  {
+    $$.val = []*tree.Order{$1.order()}
+  }
+| sortby_no_index_list ',' sortby
+  {
+    $$.val = append($1.orders(), $3.order())
+  }
+| sortby_no_index_list ',' sortby_index
   {
     $$.val = append($1.orders(), $3.order())
   }
@@ -14710,7 +14742,7 @@ d_expr:
     if err != nil { return setErr(sqllex, err) }
     $$.val = d
   }
-| func_application_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex, $1.resolvableFuncRef().String() + "(...) SCONST") }
+| func_application_name '(' expr_list opt_sort_clause_no_index ')' SCONST { return unimplemented(sqllex, $1.resolvableFuncRef().String() + "(...) SCONST") }
 | typed_literal
   {
     $$.val = $1.expr()
@@ -14801,13 +14833,13 @@ func_application:
   {
     $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRef()}
   }
-| func_application_name '(' expr_list opt_sort_clause ')'
+| func_application_name '(' expr_list opt_sort_clause_no_index ')'
   {
     $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRef(), Exprs: $3.exprs(), OrderBy: $4.orderBy(), AggType: tree.GeneralAgg}
   }
-| func_application_name '(' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex, "variadic") }
-| func_application_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause ')' { return unimplemented(sqllex, "variadic") }
-| func_application_name '(' ALL expr_list opt_sort_clause ')'
+| func_application_name '(' VARIADIC a_expr opt_sort_clause_no_index ')' { return unimplemented(sqllex, "variadic") }
+| func_application_name '(' expr_list ',' VARIADIC a_expr opt_sort_clause_no_index ')' { return unimplemented(sqllex, "variadic") }
+| func_application_name '(' ALL expr_list opt_sort_clause_no_index ')'
   {
     $$.val = &tree.FuncExpr{Func: $1.resolvableFuncRef(), Type: tree.AllFuncType, Exprs: $4.exprs(), OrderBy: $5.orderBy(), AggType: tree.GeneralAgg}
   }
@@ -15205,7 +15237,7 @@ over_clause:
 
 window_specification:
   '(' opt_existing_window_name opt_partition_clause
-    opt_sort_clause opt_frame_clause ')'
+    opt_sort_clause_no_index opt_frame_clause ')'
   {
     $$.val = &tree.WindowDef{
       RefName: tree.Name($2),
