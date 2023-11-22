@@ -39,6 +39,7 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 	for j := 1; !done(); j++ {
 		c.Wipe(ctx, false /* preserveCerts */, node)
+		c.Put(ctx, t.Cockroach(), test.DefaultCockroachPath)
 
 		// The first 2 iterations we start the cockroach node and kill it right
 		// away. The 3rd iteration we let cockroach run so that we can check after
