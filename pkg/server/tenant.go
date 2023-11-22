@@ -863,6 +863,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}
 	s.eventsExporter.SetNodeInfo(obs.NodeInfo{
 		ClusterID:     clusterID,
+		TenantID:      int64(s.rpcContext.TenantID.InternalValue),
 		NodeID:        int32(instanceID),
 		BinaryVersion: build.BinaryVersion(),
 	})

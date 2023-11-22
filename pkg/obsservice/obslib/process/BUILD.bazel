@@ -5,7 +5,8 @@ go_library(
     srcs = [
         "mem_queue_processor.go",
         "processor.go",
-        "stdout.go",
+        "processor_utils.go",
+        "stmt_insights_processor.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/obsservice/obslib/process",
     visibility = ["//visibility:public"],
@@ -14,9 +15,12 @@ go_library(
         "//pkg/obsservice/obslib/queue",
         "//pkg/obsservice/obslib/validate",
         "//pkg/obsservice/obspb",
+        "//pkg/sql/sem/tree",
         "//pkg/util/log",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgx_v5//pgxpool",
+        "@com_github_jackc_pgx_v5//stdlib",
     ],
 )
 

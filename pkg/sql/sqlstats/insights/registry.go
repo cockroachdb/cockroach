@@ -242,9 +242,12 @@ func (s *Statement) CopyTo(
 	other.User = t.User
 	other.UserPriority = t.UserPriority
 
-	other.TransactionID, err = t.ID.MarshalJSON()
+	txnID, err := t.ID.MarshalJSON()
 	if err != nil {
 		log.Errorf(ctx, "marshalling transaction insights ID for Insights exporter")
+	} else {
+		other.TransactionID = txnID
+		other.ID = txnID
 	}
 	other.SessionID, err = session.ID.MarshalJSON()
 	if err != nil {
