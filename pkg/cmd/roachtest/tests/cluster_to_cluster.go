@@ -1752,7 +1752,8 @@ func destClusterSettings(t test.Test, db *sqlutils.SQLRunner, additionalDuration
 	db.ExecMultiple(t, `SET CLUSTER SETTING cross_cluster_replication.enabled = true;`,
 		`SET CLUSTER SETTING kv.rangefeed.enabled = true;`,
 		`SET CLUSTER SETTING stream_replication.replan_flow_threshold = 0.1;`,
-		`SET CLUSTER SETTING physical_replication.consumer.node_lag_replanning_threshold = '5m';`)
+		`SET CLUSTER SETTING physical_replication.consumer.node_lag_replanning_threshold = '5m';`,
+		`SET CLUSTER SETTING physical_replication.consumer.split_on_job_retry.enabled = true;`)
 
 	if additionalDuration != 0 {
 		replanFrequency := additionalDuration / 2
