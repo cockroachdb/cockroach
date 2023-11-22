@@ -480,6 +480,11 @@ func (i *LockTableIterator) Stats() IteratorStats {
 	return i.iter.Stats()
 }
 
+// CanDeterministicallySingleDelete implements the EngineIterator interface.
+func (i *LockTableIterator) CanDeterministicallySingleDelete() (ok bool, err error) {
+	return i.iter.CanDeterministicallySingleDelete()
+}
+
 //gcassert:inline
 func isLockTableKey(key roachpb.Key) bool {
 	return bytes.HasPrefix(key, keys.LocalRangeLockTablePrefix)
