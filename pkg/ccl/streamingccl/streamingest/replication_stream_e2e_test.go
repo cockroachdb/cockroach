@@ -1143,6 +1143,11 @@ func TestTenantStreamingRetryLoadJob(t *testing.T) {
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 
+	// Inject an error to fail the resumer.
+	mu.Lock()
+	knobLoadErr = errors.Newf("test error")
+	mu.Unlock()
+
 	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
 	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
 	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
@@ -1150,24 +1155,13 @@ func TestTenantStreamingRetryLoadJob(t *testing.T) {
 	srcTime := c.SrcCluster.Server(0).Clock().Now()
 	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
 
-	c.SrcSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", producerJobID))
-	jobutils.WaitForJobToPause(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
-
-	// Write a bit more to be verified at the end.
-	c.SrcTenantSQL.Exec(t, "INSERT INTO d.t2 VALUES (3);")
-
-	// Inject an error to fail the resumer.
-	mu.Lock()
-	knobLoadErr = errors.Newf("test error")
-	mu.Unlock()
-
-	// Resume ingestion.
-	c.SrcSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", producerJobID))
-	jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
-
 	// Wait for the resumer to see the error and clear it, after this it should
 	// succeed resuming.
 	<-knobDoneCh
+	require.NoError(t, knobLoadErr)
+
+	// Write a bit more to be verified at the end.
+	c.SrcTenantSQL.Exec(t, "INSERT INTO d.t2 VALUES (3);")
 
 	// Verify the job succeeds now.
 	srcTime = c.SrcCluster.Server(0).Clock().Now()
