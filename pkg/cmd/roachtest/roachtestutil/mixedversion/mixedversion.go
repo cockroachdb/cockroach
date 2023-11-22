@@ -98,6 +98,7 @@ const (
 	backgroundLabel   = "start background hooks"
 	mixedVersionLabel = "run mixed-version hooks"
 	afterTestLabel    = "run after test hooks"
+	genericLabel      = "run following steps" // used by mutators to group steps
 
 	// runWhileMigratingProbability is the probability that a
 	// mixed-version hook will run after all nodes in the cluster have
@@ -927,6 +928,7 @@ type delayedStep struct {
 // before each step starts, see notes on `delayedStep`.
 type concurrentRunStep struct {
 	label        string
+	rng          *rand.Rand
 	delayedSteps []testStep
 }
 
@@ -936,7 +938,7 @@ func newConcurrentRunStep(label string, steps []testStep, rng *rand.Rand) concur
 		delayedSteps = append(delayedSteps, delayedStep{delay: randomDelay(rng), step: step})
 	}
 
-	return concurrentRunStep{label: label, delayedSteps: delayedSteps}
+	return concurrentRunStep{label: label, delayedSteps: delayedSteps, rng: rng}
 }
 
 func (s concurrentRunStep) Description() string {

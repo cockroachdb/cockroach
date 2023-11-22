@@ -608,6 +608,20 @@ func Test_stepSelectorMutations(t *testing.T) {
 	}
 }
 
+func Test_mutationApplicationOrder(t *testing.T) {
+	mutations := []mutation{
+		{op: mutationInsertBefore},
+		{op: mutationRemove},
+		{op: mutationInsertAfter},
+	}
+
+	require.Equal(t, []mutation{
+		{op: mutationInsertBefore},
+		{op: mutationInsertAfter},
+		{op: mutationRemove},
+	}, mutationApplicationOrder(mutations))
+}
+
 // requireConcurrentHooks asserts that there is a concurrent step with
 // user-provided hooks of the given names.
 func requireConcurrentHooks(t *testing.T, steps []testStep, names ...string) error {
