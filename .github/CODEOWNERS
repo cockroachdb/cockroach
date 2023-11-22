@@ -177,7 +177,7 @@
 /pkg/server/decommission*.go             @cockroachdb/kv-prs      @cockroachdb/server-prs
 /pkg/server/drain*.go                    @cockroachdb/kv-prs      @cockroachdb/server-prs
 /pkg/server/dumpstore/                   @cockroachdb/obs-inf-prs @cockroachdb/server-prs
-/pkg/server/external_storage*.go         @cockroachdb/sql-queries-prs @cockroachdb/server-prs
+/pkg/server/external_storage*.go         @cockroachdb/disaster-recovery @cockroachdb/server-prs
 /pkg/server/fanout*.go                   @cockroachdb/obs-inf-prs @cockroachdb/server-prs
 /pkg/server/diagnostics/                 @cockroachdb/obs-inf-prs
 /pkg/server/dumpstore/                   @cockroachdb/obs-inf-prs @cockroachdb/server-prs
@@ -531,7 +531,7 @@
 /pkg/security/               @cockroachdb/prodsec @cockroachdb/server-prs
 /pkg/security/clientsecopts/ @cockroachdb/sql-foundations @cockroachdb/prodsec
 #!/pkg/settings/             @cockroachdb/unowned
-/pkg/spanconfig/                         @cockroachdb/kv-prs @cockroachdb/sql-foundations 
+/pkg/spanconfig/                         @cockroachdb/kv-prs @cockroachdb/sql-foundations
 /pkg/spanconfig/spanconfigbounds/        @cockroachdb/sql-foundations
 /pkg/spanconfig/spanconfigjob/           @cockroachdb/sql-foundations
 /pkg/spanconfig/spanconfigkvaccessor/    @cockroachdb/kv-prs
