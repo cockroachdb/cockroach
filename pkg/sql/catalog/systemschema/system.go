@@ -156,6 +156,17 @@ const (
   FAMILY       "primary" ("descID", version, "nodeID", expiration, crdb_region)
 );`
 
+	// LeaseTableSchema_V24_1 is the future session based leasing table format.
+	LeaseTableSchema_V24_1 = `CREATE TABLE system.lease (
+  "descID"     INT8,
+  version      INT8,
+  "nodeID"     INT8,
+  "sessionID"   BYTES NOT NULL,
+  crdb_region  BYTES NOT NULL,
+  CONSTRAINT   "primary" PRIMARY KEY (crdb_region, "descID",  version, "sessionID", "nodeID"),
+  FAMILY       "primary" ("descID", version, "nodeID", "sessionID", crdb_region)
+);`
+
 	// system.eventlog contains notable events from the cluster.
 	//
 	// This data is also exported to the Observability Service. This table might
@@ -1713,6 +1724,43 @@ var (
 // `TestSystemTableLiterals` which checks that they do indeed match, and has
 // suggestions on writing and maintaining them.
 var (
+	// LeaseTable_V24_1 is the descriptor for the leases table with the future
+	// session based leasing tables format.
+	LeaseTable_V24_1 = func() SystemTable {
+		return makeSystemTable(
+			LeaseTableSchema_V24_1,
+			systemTable(
+				catconstants.LeaseTableName,
+				keys.LeaseTableID,
+				[]descpb.ColumnDescriptor{
+					{Name: "descID", ID: 1, Type: types.Int},
+					{Name: "version", ID: 2, Type: types.Int},
+					{Name: "nodeID", ID: 3, Type: types.Int},
+					{Name: "sessionID", ID: 4, Type: types.Bytes},
+					{Name: "crdb_region", ID: 5, Type: types.Bytes},
+				},
+				[]descpb.ColumnFamilyDescriptor{
+					{
+						Name:        "primary",
+						ID:          0,
+						ColumnNames: []string{"descID", "version", "nodeID", "sessionID", "crdb_region"},
+						ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
+					},
+				},
+				descpb.IndexDescriptor{
+					Name:           "primary",
+					ID:             3,
+					Unique:         true,
+					KeyColumnNames: []string{"crdb_region", "descID", "version", "sessionID", "nodeID"},
+					KeyColumnDirections: []catenumpb.IndexColumn_Direction{
+						catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
+						catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
+					},
+					KeyColumnIDs: []descpb.ColumnID{5, 1, 2, 4, 3},
+				},
+			))
+	}
+
 	// LeaseTable is the descriptor for the leases table.
 	LeaseTable = func() SystemTable {
 		return makeSystemTable(
