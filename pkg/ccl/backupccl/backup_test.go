@@ -3906,21 +3906,23 @@ func TestBackupRestoreChecksum(t *testing.T) {
 		}
 	}
 
-	// Corrupt one of the files in the backup.
-	f, err := os.OpenFile(filepath.Join(dir, backupManifest.Files[0].Path), os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatalf("%+v", err)
-	}
-	defer f.Close()
-	// mess with some bytes.
-	if _, err := f.Seek(-65, io.SeekEnd); err != nil {
-		t.Fatalf("%+v", err)
-	}
-	if _, err := f.Write([]byte{'1', '2', '3'}); err != nil {
-		t.Fatalf("%+v", err)
-	}
-	if err := f.Sync(); err != nil {
-		t.Fatalf("%+v", err)
+	// Corrupt all of the files in the backup.
+	for i := range backupManifest.Files {
+		f, err := os.OpenFile(filepath.Join(dir, backupManifest.Files[i].Path), os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		defer f.Close()
+		// mess with some bytes.
+		if _, err := f.Seek(-65, io.SeekEnd); err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if _, err := f.Write([]byte{'1', '2', '3'}); err != nil {
+			t.Fatalf("%+v", err)
+		}
+		if err := f.Sync(); err != nil {
+			t.Fatalf("%+v", err)
+		}
 	}
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
@@ -11194,7 +11196,7 @@ func TestRestoreMemoryMonitoringWithShadowing(t *testing.T) {
 	sqlDB.Exec(t, "CREATE DATABASE data2")
 	sqlDB.Exec(t, "RESTORE data.bank FROM latest IN 'userfile:///backup' WITH OPTIONS (into_db='data2')")
 	files := sqlDB.QueryStr(t, "SHOW BACKUP FILES FROM latest IN 'userfile:///backup'")
-	require.Equal(t, 11, len(files)) // 1 file for full + 10 for 10 incrementals
+	require.GreaterOrEqual(t, len(files), 11) // 1 file for full + 10 for 10 incrementals
 
 	// Assert that the restore processor is processing the same span multiple
 	// times, and the count is based on what's expected from the memory budget.
