@@ -36,8 +36,8 @@ type kvWriter struct {
 	// previously.
 	expiryBasedWriter bootstrap.KVWriter
 
-	settingsWatcher   *settingswatcher.SettingsWatcher
-	sessionModeReader sessionBasedLeasingModeReader
+	settingsWatcher    *settingswatcher.SettingsWatcher
+	sessionBasedReader sessionBasedLeasingModeReader
 }
 
 func newKVWriter(
@@ -52,7 +52,7 @@ func newKVWriter(
 		sessionBasedWriter: bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable_V24_1())),
 		expiryBasedWriter:  bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable())),
 		settingsWatcher:    settingsWatcher,
-		sessionModeReader:  sessionModeReader,
+		sessionBasedReader: sessionModeReader,
 	}
 }
 
@@ -77,14 +77,14 @@ func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 		// 1) Session Based Off => Only expiry based leases are written.
 		// 2) Dual-Write => Both session and expiry based leases will be written.
 		// 3) Session Only => Only session based leases will get written.
-		if w.sessionModeReader.sessionBasedLeasingModeAtLeast(SessionBasedDualWrite) &&
+		if w.sessionBasedReader.sessionBasedLeasingModeAtLeast(SessionBasedDualWrite) &&
 			l.sessionID != nil {
 			err := w.sessionBasedWriter.Insert(ctx, b, false /*kvTrace*/, leaseAsSessionBasedDatum(l)...)
 			if err != nil {
 				return err
 			}
 		}
-		if !w.sessionModeReader.sessionBasedLeasingModeAtLeast(SessionBasedOnly) {
+		if !w.sessionBasedReader.sessionBasedLeasingModeAtLeast(SessionBasedOnly) {
 			err := w.expiryBasedWriter.Insert(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
 			if err != nil {
 				return err
@@ -104,14 +104,14 @@ func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 		// 1) Session Based Off => Only expiry based leases are deleted.
 		// 2) Dual-Write => Both session and expiry based leases will be deleted.
 		// 3) Session Only => Only session based leases will get deleted.
-		if w.sessionModeReader.sessionBasedLeasingModeAtLeast(SessionBasedDualWrite) &&
+		if w.sessionBasedReader.sessionBasedLeasingModeAtLeast(SessionBasedDualWrite) &&
 			l.sessionID != nil {
 			err := w.sessionBasedWriter.Delete(ctx, b, false /*kvTrace*/, leaseAsSessionBasedDatum(l)...)
 			if err != nil {
 				return err
 			}
 		}
-		if !w.sessionModeReader.sessionBasedLeasingModeAtLeast(SessionBasedOnly) {
+		if !w.sessionBasedReader.sessionBasedLeasingModeAtLeast(SessionBasedOnly) {
 			err := w.expiryBasedWriter.Delete(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
 			if err != nil {
 				return err

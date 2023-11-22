@@ -158,13 +158,13 @@ const (
 
 	// LeaseTableSchema_V24_1 is the future session based leasing table format.
 	LeaseTableSchema_V24_1 = `CREATE TABLE system.lease (
-  "descID"     INT8,
-  version      INT8,
-  "nodeID"     INT8,
-  "sessionID"   BYTES NOT NULL,
-  crdb_region  BYTES NOT NULL,
-  CONSTRAINT   "primary" PRIMARY KEY (crdb_region, "descID",  version, "sessionID", "nodeID"),
-  FAMILY       "primary" ("descID", version, "nodeID", "sessionID", crdb_region)
+  desc_id          INT8,
+  version          INT8,
+  sql_instance_id  INT8,
+  session_id       BYTES NOT NULL,
+  crdb_region      BYTES NOT NULL,
+  CONSTRAINT       "primary" PRIMARY KEY (crdb_region, desc_id, version, session_id),
+  FAMILY           "primary" (desc_id, version, sql_instance_id, session_id, crdb_region)
 );`
 
 	// system.eventlog contains notable events from the cluster.
@@ -1733,17 +1733,17 @@ var (
 				catconstants.LeaseTableName,
 				keys.LeaseTableID,
 				[]descpb.ColumnDescriptor{
-					{Name: "descID", ID: 1, Type: types.Int},
+					{Name: "desc_id", ID: 1, Type: types.Int},
 					{Name: "version", ID: 2, Type: types.Int},
-					{Name: "nodeID", ID: 3, Type: types.Int},
-					{Name: "sessionID", ID: 4, Type: types.Bytes},
+					{Name: "sql_instance_id", ID: 3, Type: types.Int},
+					{Name: "session_id", ID: 4, Type: types.Bytes},
 					{Name: "crdb_region", ID: 5, Type: types.Bytes},
 				},
 				[]descpb.ColumnFamilyDescriptor{
 					{
 						Name:        "primary",
 						ID:          0,
-						ColumnNames: []string{"descID", "version", "nodeID", "sessionID", "crdb_region"},
+						ColumnNames: []string{"desc_id", "version", "sql_instance_id", "session_id", "crdb_region"},
 						ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5},
 					},
 				},
@@ -1751,12 +1751,11 @@ var (
 					Name:           "primary",
 					ID:             3,
 					Unique:         true,
-					KeyColumnNames: []string{"crdb_region", "descID", "version", "sessionID", "nodeID"},
+					KeyColumnNames: []string{"crdb_region", "desc_id", "version", "session_id"},
 					KeyColumnDirections: []catenumpb.IndexColumn_Direction{
-						catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
-						catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
+						catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC,
 					},
-					KeyColumnIDs: []descpb.ColumnID{5, 1, 2, 4, 3},
+					KeyColumnIDs: []descpb.ColumnID{5, 1, 2, 4},
 				},
 			))
 	}

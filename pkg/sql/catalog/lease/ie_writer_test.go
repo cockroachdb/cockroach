@@ -42,11 +42,11 @@ VALUES ($1, $2, $3, $4, $5)`
 	if mode == SessionBasedOnly {
 		deleteLease = `
 DELETE FROM %s
-      WHERE (crdb_region, "descID", version, "nodeID", "sessionID")
+      WHERE (crdb_region, desc_id, version, sql_instance_id, session_id)
             = ($1, $2, $3, $4, $5);`
 		insertLease = `
 INSERT
-  INTO %s (crdb_region, "descID", version, "nodeID", "sessionID")
+  INTO %s (crdb_region, desc_id, version, sql_instance_id, session_id)
 VALUES ($1, $2, $3, $4, $5)`
 	}
 	return &ieWriter{
