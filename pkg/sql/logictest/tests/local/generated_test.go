@@ -1527,6 +1527,13 @@ func TestLogic_plpgsql_cursor(
 	runLogicTest(t, "plpgsql_cursor")
 }
 
+func TestLogic_plpgsql_unsupported(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "plpgsql_unsupported")
+}
+
 func TestLogic_poison_after_push(
 	t *testing.T,
 ) {
