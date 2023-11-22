@@ -2666,6 +2666,9 @@ func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir
 func (c *clusterImpl) WipeForReuse(
 	ctx context.Context, l *logger.Logger, newClusterSpec spec.ClusterSpec,
 ) error {
+	if c.IsLocal() {
+		return errors.New("cluster reuse is disabled for local clusters as the destroy/create loop is much cheaper")
+	}
 	l.PrintfCtx(ctx, "Using existing cluster: %s (arch=%q). Wiping", c.name, c.arch)
 	if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
 		return err
