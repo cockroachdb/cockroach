@@ -53,7 +53,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 
 	restartCluster := func(ctx context.Context, c cluster.Cluster, t test.Test) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, numNodes-1))
-		c.Start(ctx, t.L(), maybeUseMemoryBudget(t, 35), install.MakeClusterSettings(), c.Range(1, numNodes-1))
+		c.Start(ctx, t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), c.Range(1, numNodes-1))
 	}
 
 	// checkConcurrency returns an error if at least one node of the cluster
