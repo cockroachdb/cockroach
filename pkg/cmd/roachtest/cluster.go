@@ -2666,9 +2666,17 @@ func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir
 func (c *clusterImpl) WipeForReuse(
 	ctx context.Context, l *logger.Logger, newClusterSpec spec.ClusterSpec,
 ) error {
+	if c.IsLocal() {
+		return errors.New("cluster reuse is disabled for local clusters to guarantee a clean slate for each test")
+	}
 	l.PrintfCtx(ctx, "Using existing cluster: %s (arch=%q). Wiping", c.name, c.arch)
 	if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
 		return err
+	}
+	// We remove the cockroach binaries here instead of in c.Wipe as some tests
+	// rely on the assumption that cockroach binaries are not wiped in c.Wipe.
+	if err := c.RunE(ctx, c.All(), fmt.Sprintf("rm -f %s", test.DefaultCockroachPath)); err != nil {
+		return errors.Wrapf(err, "failed to remove cockroach binary")
 	}
 	if err := c.RunE(ctx, c.All(), fmt.Sprintf("rm -rf %s %s", perfArtifactsDir, goCoverArtifactsDir)); err != nil {
 		return errors.Wrapf(err, "failed to remove perf/gocover artifacts dirs")
