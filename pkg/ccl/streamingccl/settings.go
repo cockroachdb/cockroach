@@ -115,6 +115,13 @@ var InterNodeLag = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+var SplitOnRetry = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"physical_replication.consumer.split_on_job_retry",
+	"controls whether we issue admin splits on the partition spans after a job level retry",
+	false,
+)
+
 // DumpFrontierEntries controls the frequency at which we persist the entries in
 // the frontier to the `system.job_info` table.
 //

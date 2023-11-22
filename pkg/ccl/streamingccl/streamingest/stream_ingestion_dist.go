@@ -201,13 +201,16 @@ func startDistIngestion(
 		return rw.Err()
 	}
 
-	// We now attempt to create initial splits. We currently do
-	// this once during initial planning to avoid re-splitting on
-	// resume since it isn't clear to us at the moment whether
-	// re-splitting is always going to be useful.
-	if !streamProgress.InitialSplitComplete {
+	// We now attempt to issue splits over the topology if we've never done so
+	// (i.e. we're beginning the c2c job), or if we allow splits after a job level
+	// retry.
+	if !streamProgress.InitialSplitComplete || streamingccl.SplitOnRetry.Get(&execCtx.ExecCfg().Settings.SV) {
 		codec := execCtx.ExtendedEvalContext().Codec
-		splitter := &dbSplitAndScatter{db: execCtx.ExecCfg().DB}
+		splitter := &dbSplitAndScatter{
+			db: execCtx.ExecCfg().DB,
+			// If we've already created initial splits, don't issue scatters.
+			noopScatter: streamProgress.InitialSplitComplete,
+		}
 		if err := createInitialSplits(ctx, codec, splitter, planner.initialTopology, details.DestinationTenantID); err != nil {
 			return err
 		}
@@ -250,7 +253,8 @@ type splitAndScatterer interface {
 }
 
 type dbSplitAndScatter struct {
-	db *kv.DB
+	db          *kv.DB
+	noopScatter bool
 }
 
 func (s *dbSplitAndScatter) split(
@@ -260,6 +264,9 @@ func (s *dbSplitAndScatter) split(
 }
 
 func (s *dbSplitAndScatter) scatter(ctx context.Context, scatterKey roachpb.Key) error {
+	if s.noopScatter {
+		return nil
+	}
 	_, pErr := kv.SendWrapped(ctx, s.db.NonTransactionalSender(), &kvpb.AdminScatterRequest{
 		RequestHeader: kvpb.RequestHeaderFromSpan(roachpb.Span{
 			Key:    scatterKey,
