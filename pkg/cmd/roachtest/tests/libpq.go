@@ -72,6 +72,11 @@ func registerLibPQ(r registry.Registry) {
 			fmt.Sprintf("GOPATH=%s go install github.com/jstemmer/go-junit-report@latest", goPath),
 		)
 		require.NoError(t, err)
+		// It's safer to clean up dependencies this way than it is to give the cluster
+		// wipe root access.
+		defer func() {
+			c.Run(ctx, c.All(), "go clean -modcache")
+		}()
 
 		err = repeatGitCloneE(
 			ctx,
