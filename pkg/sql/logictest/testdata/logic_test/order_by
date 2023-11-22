@@ -357,7 +357,7 @@ CREATE TABLE unrelated(x INT); SELECT * FROM unrelated ORDER BY PRIMARY KEY kv
 statement ok
 PREPARE a AS (TABLE kv) ORDER BY PRIMARY KEY kv
 
-statement error ORDER BY INDEX in window definition is not supported
+statement error pq: at or near "primary": syntax error
 SELECT avg(k) OVER (ORDER BY PRIMARY KEY kv) FROM kv
 
 statement ok
