@@ -1,5 +1,13 @@
 # LogicTest: cockroach-go-testserver-upgrade-to-master
 
+# This test verifies that when a cluster is upgraded, it preserves the TTL
+# job configuration on a table.
+
+query T
+SELECT version FROM [SHOW CLUSTER SETTING version]
+----
+23.1
+
 statement ok
 CREATE TABLE tbl (
   id INT PRIMARY KEY
@@ -7,8 +15,10 @@ CREATE TABLE tbl (
 
 upgrade all
 
+# Verify that the cluster version upgrades have begun. Note that the first
+# cluster upgrade is the one that repairs all descriptors.
 query B retry
-SELECT version LIKE '%23.1-%' FROM [SHOW CLUSTER SETTING version]
+SELECT version LIKE '%23.2-%' FROM [SHOW CLUSTER SETTING version]
 ----
 true
 
