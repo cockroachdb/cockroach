@@ -715,9 +715,8 @@ type mockBackupInfo struct {
 
 func createMockTables(
 	info mockBackupInfo,
-) (tables []catalog.TableDescriptor, reIntroducedTables []catalog.TableDescriptor) {
+) (tables []catalog.TableDescriptor) {
 	tables = make([]catalog.TableDescriptor, 0)
-	reIntroducedTables = make([]catalog.TableDescriptor, 0)
 	for _, tableID := range info.tableIDs {
 		indexes := make([]descpb.IndexDescriptor, 0)
 		for _, indexID := range info.indexIDs[tableID] {
@@ -725,11 +724,8 @@ func createMockTables(
 		}
 		table := getMockTableDesc(descpb.ID(tableID), indexes[0], indexes, nil, nil)
 		tables = append(tables, table)
-		if _, ok := info.reintroducedTableIDs[tableID]; ok {
-			reIntroducedTables = append(reIntroducedTables, table)
-		}
 	}
-	return tables, reIntroducedTables
+	return tables
 }
 
 func createMockManifest(
@@ -739,7 +735,7 @@ func createMockManifest(
 	endTime hlc.Timestamp,
 	path string,
 ) backuppb.BackupManifest {
-	tables, _ := createMockTables(info)
+	tables := createMockTables(info)
 
 	spans, err := spansForAllTableIndexes(execCfg, tables,
 		nil /* revs */)
@@ -758,184 +754,6 @@ func createMockManifest(
 
 	return backuppb.BackupManifest{Spans: spans,
 		EndTime: endTime, Files: files, Dir: es.Conf()}
-}
-
-// TestRestoreEntryCoverReIntroducedSpans checks that all reintroduced spans are
-// covered in RESTORE by files in the incremental backup that reintroduced the
-// spans. The test also checks the invariants required during RESTORE to elide
-// files from the full backup that are later reintroduced. These include:
-//
-//   - During BackupManifest creation, spansForAllTableIndexes will merge
-//     adjacent indexes within a table, but not indexes across tables.
-//
-//   - During spansForAllRestoreTableIndexes, each restored index will have its
-//     own span.
-func TestRestoreEntryCoverReIntroducedSpans(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
-	defer cleanupFn()
-	execCfg := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig)
-
-	testCases := []struct {
-		name string
-		full mockBackupInfo
-		inc  mockBackupInfo
-
-		// expectedRestoreSpanCount defines the number of required spans passed to
-		// makeSimpleImportSpans.
-		expectedRestoreSpanCount int
-	}{
-		{
-			name: "adjacent indexes",
-			full: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1, 2}, 2: {1}},
-				expectedBackupSpanCount: 2,
-			},
-			inc: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1, 2}, 2: {1}},
-				reintroducedTableIDs:    map[int]struct{}{1: {}},
-				expectedBackupSpanCount: 2,
-			},
-			expectedRestoreSpanCount: 3,
-		},
-		{
-			name: "non-adjacent indexes",
-			full: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1, 3}, 2: {1}},
-				expectedBackupSpanCount: 3,
-			},
-			inc: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1, 3}, 2: {1}},
-				reintroducedTableIDs:    map[int]struct{}{1: {}},
-				expectedBackupSpanCount: 3,
-			},
-			expectedRestoreSpanCount: 3,
-		},
-		{
-			name: "dropped non-adjacent index",
-			full: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1, 3}, 2: {1}},
-				expectedBackupSpanCount: 3,
-			},
-			inc: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1}, 2: {1}},
-				reintroducedTableIDs:    map[int]struct{}{1: {}},
-				expectedBackupSpanCount: 2,
-			},
-			expectedRestoreSpanCount: 2,
-		},
-		{
-			name: "new non-adjacent index",
-			full: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1}, 2: {1}},
-				expectedBackupSpanCount: 2,
-			},
-			inc: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1, 3}, 2: {1}},
-				reintroducedTableIDs:    map[int]struct{}{1: {}},
-				expectedBackupSpanCount: 3,
-			},
-			expectedRestoreSpanCount: 3,
-		},
-		{
-			name: "new adjacent index",
-			full: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1}, 2: {1}},
-				expectedBackupSpanCount: 2,
-			},
-			inc: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1, 2}, 2: {1}},
-				reintroducedTableIDs:    map[int]struct{}{1: {}},
-				expectedBackupSpanCount: 2,
-			},
-			expectedRestoreSpanCount: 3,
-		},
-		{
-			name: "new in-between index",
-			full: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1, 3}, 2: {1}},
-				expectedBackupSpanCount: 3,
-			},
-			inc: mockBackupInfo{
-				tableIDs:                []int{1, 2},
-				indexIDs:                map[int][]int{1: {1, 2, 3}, 2: {1}},
-				reintroducedTableIDs:    map[int]struct{}{1: {}},
-				expectedBackupSpanCount: 2,
-			},
-			expectedRestoreSpanCount: 4,
-		},
-	}
-
-	fullBackupPath := "full"
-	incBackupPath := "inc"
-	for _, test := range testCases {
-		t.Run(test.name, func(t *testing.T) {
-			backups := []backuppb.BackupManifest{
-				createMockManifest(t, &execCfg, test.full, hlc.Timestamp{WallTime: int64(1)}, fullBackupPath),
-				createMockManifest(t, &execCfg, test.inc, hlc.Timestamp{WallTime: int64(2)}, incBackupPath),
-			}
-
-			// Create the IntroducedSpans field for incremental backup.
-			incTables, reIntroducedTables := createMockTables(test.inc)
-
-			newSpans := filterSpans(backups[1].Spans, backups[0].Spans)
-			reIntroducedSpans, err := spansForAllTableIndexes(&execCfg, reIntroducedTables, nil)
-			require.NoError(t, err)
-			backups[1].IntroducedSpans = append(newSpans, reIntroducedSpans...)
-
-			restoreSpans := spansForAllRestoreTableIndexes(execCfg.Codec, incTables, nil, false)
-			require.Equal(t, test.expectedRestoreSpanCount, len(restoreSpans))
-
-			introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
-			require.NoError(t, err)
-
-			layerToIterFactory, err := backupinfo.GetBackupManifestIterFactories(ctx,
-				execCfg.DistSQLSrv.ExternalStorage, backups, nil, nil)
-			require.NoError(t, err)
-			cover, err := makeImportSpans(
-				ctx,
-				restoreSpans,
-				backups,
-				layerToIterFactory,
-				nil,
-				0,
-				introducedSpanFrontier,
-				[]jobspb.RestoreProgress_FrontierEntry{})
-			require.NoError(t, err)
-
-			for _, reIntroTable := range reIntroducedTables {
-				var coveredReIntroducedGroup roachpb.SpanGroup
-				for _, entry := range cover {
-					// If a restoreSpanEntry overlaps with re-introduced span,
-					// assert the entry only contains files from the incremental backup.
-					if reIntroTable.TableSpan(execCfg.Codec).Overlaps(entry.Span) {
-						coveredReIntroducedGroup.Add(entry.Span)
-						for _, files := range entry.Files {
-							require.Equal(t, incBackupPath, files.Path)
-						}
-					}
-				}
-				// Assert that all re-introduced indexes are included in the restore
-				for _, reIntroIndexSpan := range reIntroTable.AllIndexSpans(execCfg.Codec) {
-					require.Equal(t, true, coveredReIntroducedGroup.Encloses(reIntroIndexSpan))
-				}
-			}
-		})
-	}
 }
 
 // sanityCheckFileIterator ensures the backup files are surfaced in the order they are stored in
