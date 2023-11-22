@@ -79,8 +79,8 @@ exp,benchmark
 5,ORMQueries/hasura_column_descriptions_modified
 4,ORMQueries/information_schema._pg_index_position
 4,ORMQueries/introspection_description_join
-3,ORMQueries/liquibase_migrations
-7,ORMQueries/liquibase_migrations_on_multiple_dbs
+4,ORMQueries/liquibase_migrations
+8,ORMQueries/liquibase_migrations_on_multiple_dbs
 5,ORMQueries/npgsql_fields
 5,ORMQueries/npgsql_types
 4,ORMQueries/pg_attribute
