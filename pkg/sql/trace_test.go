@@ -51,6 +51,7 @@ func TestTrace(t *testing.T) {
 		"request range lease",
 		"range lookup",
 		"local proposal",
+		"admissionWorkQueueWait",
 	}
 
 	testData := []struct {

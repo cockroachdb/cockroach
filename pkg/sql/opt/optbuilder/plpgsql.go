@@ -188,6 +188,12 @@ func (b *plpgsqlBuilder) init(
 				"collation for PL/pgSQL variables is not yet supported",
 			))
 		}
+		if types.IsRecordType(typ) {
+			panic(unimplemented.NewWithIssueDetail(114874,
+				"RECORD variable",
+				"RECORD type for PL/pgSQL variables is not yet supported",
+			))
+		}
 	}
 }
 
