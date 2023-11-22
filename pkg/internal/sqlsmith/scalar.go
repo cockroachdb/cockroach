@@ -204,7 +204,13 @@ func makeConstDatum(s *Smither, typ *types.T) tree.Datum {
 		if typ.Width() > 0 {
 			sv = util.TruncateString(sv, int(typ.Width()))
 		}
-		datum = tree.NewDString(sv)
+		if typ.Family() == types.RefCursorFamily {
+			// REFCURSOR is not compatible with the other string-like types, so make
+			// sure not to lose the type of the datum.
+			datum = tree.NewDRefCursor(sv)
+		} else {
+			datum = tree.NewDString(sv)
+		}
 	}
 	return datum
 }
