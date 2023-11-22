@@ -94,7 +94,7 @@ func distRestore(
 	if md.encryption != nil && md.encryption.Mode == jobspb.EncryptionMode_KMS {
 		kms, err := cloud.KMSFromURI(ctx, md.encryption.KMSInfo.Uri, md.kmsEnv)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating KMS")
 		}
 		defer func() {
 			err := kms.Close()
@@ -276,7 +276,7 @@ func distRestore(
 
 	p, planCtx, err := makePlan(ctx, dsp)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "making distSQL plan")
 	}
 
 	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
@@ -322,7 +322,7 @@ func distRestore(
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
 		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
-		return rowResultWriter.Err()
+		return errors.Wrap(rowResultWriter.Err(), "running distSQL flow")
 	})
 
 	g.GoCtx(replanner)

@@ -452,19 +452,19 @@ func runGenerativeSplitAndScatter(
 		backups, layerToFileIterFactory, err := makeBackupMetadata(ctx,
 			flowCtx, spec)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "making backup metadata")
 		}
 		introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, spec.EndTime)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "making introduced span frontier")
 		}
 		backupLocalityMap, err := makeBackupLocalityMap(spec.BackupLocalityInfo, spec.User())
 		if err != nil {
-			return err
+			return errors.Wrap(err, "making backup locality map")
 		}
 		checkpointFrontier, err := loadCheckpointFrontier(spec.Spans, spec.CheckpointedSpans)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "loading checkpoint frontier")
 		}
 		filter, err := makeSpanCoveringFilter(
 			checkpointFrontier,
@@ -473,9 +473,9 @@ func runGenerativeSplitAndScatter(
 			spec.TargetSize,
 			spec.UseFrontierCheckpointing)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to make span covering filter")
 		}
-		return generateAndSendImportSpans(
+		return errors.Wrap(generateAndSendImportSpans(
 			ctx,
 			spec.Spans,
 			backups,
@@ -483,7 +483,7 @@ func runGenerativeSplitAndScatter(
 			backupLocalityMap,
 			filter,
 			restoreSpanEntriesCh,
-		)
+		), "generating and sending import spans")
 	})
 
 	restoreEntryChunksCh := make(chan restoreEntryChunk, chunkSplitAndScatterWorkers)
@@ -503,7 +503,7 @@ func runGenerativeSplitAndScatter(
 				chunk.splitKey = entry.Span.Key
 				select {
 				case <-ctx.Done():
-					return ctx.Err()
+					return errors.Wrap(ctx.Err(), "grouping restore span entries into chunks")
 				case restoreEntryChunksCh <- chunk:
 				}
 				chunk = restoreEntryChunk{}
@@ -514,7 +514,7 @@ func runGenerativeSplitAndScatter(
 		if len(chunk.entries) > 0 {
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return errors.Wrap(ctx.Err(), "sending restore entry chunk")
 			case restoreEntryChunksCh <- chunk:
 			}
 		}
@@ -587,7 +587,7 @@ func runGenerativeSplitAndScatter(
 
 				select {
 				case <-ctx.Done():
-					return ctx.Err()
+					return errors.Wrap(ctx.Err(), "sending scattered chunk")
 				case importSpanChunksCh <- sc:
 				}
 			}
@@ -599,7 +599,7 @@ func runGenerativeSplitAndScatter(
 	// it can close importSpanChunksCh.
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(importSpanChunksCh)
-		return g2.Wait()
+		return errors.Wrap(g2.Wait(), "waiting for chunkSplitAndScatter workers")
 	})
 
 	// This group of goroutines takes chunks that have already been split and
@@ -638,7 +638,7 @@ func runGenerativeSplitAndScatter(
 
 					select {
 					case <-ctx.Done():
-						return ctx.Err()
+						return errors.Wrap(ctx.Err(), "sending scattered entry")
 					case doneScatterCh <- scatteredEntry:
 					}
 				}
