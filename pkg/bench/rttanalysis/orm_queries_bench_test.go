@@ -18,6 +18,7 @@ import (
 
 func BenchmarkORMQueries(b *testing.B) { reg.Run(b) }
 func init() {
+	liquibaseSetup, liquibaseReset := buildNDatabasesWithMTables(15, 40)
 	reg.Register("ORMQueries", []RoundTripBenchTestCase{
 		{
 			Name:  "django column introspection 1 table",
@@ -524,6 +525,152 @@ END;
 		ORDER BY typ.oid, att.attnum;
 		`,
 		},
+
+		{
+			Name:  `liquibase migrations`,
+			Setup: buildNTables(40),
+			Stmt: `SELECT
+  NULL AS table_cat,
+  n.nspname AS table_schem,
+  c.relname AS table_name,
+  CASE n.nspname ~ '^pg_' OR n.nspname = 'information_schema'
+  WHEN true
+  THEN CASE
+  WHEN n.nspname = 'pg_catalog' OR n.nspname = 'information_schema'
+  THEN CASE c.relkind
+  WHEN 'r' THEN 'SYSTEM TABLE'
+  WHEN 'v' THEN 'SYSTEM VIEW'
+  WHEN 'i' THEN 'SYSTEM INDEX'
+  ELSE NULL
+  END
+  WHEN n.nspname = 'pg_toast'
+  THEN CASE c.relkind
+  WHEN 'r' THEN 'SYSTEM TOAST TABLE'
+  WHEN 'i' THEN 'SYSTEM TOAST INDEX'
+  ELSE NULL
+  END
+  ELSE CASE c.relkind
+  WHEN 'r' THEN 'TEMPORARY TABLE'
+  WHEN 'p' THEN 'TEMPORARY TABLE'
+  WHEN 'i' THEN 'TEMPORARY INDEX'
+  WHEN 'S' THEN 'TEMPORARY SEQUENCE'
+  WHEN 'v' THEN 'TEMPORARY VIEW'
+  ELSE NULL
+  END
+  END
+  WHEN false
+  THEN CASE c.relkind
+  WHEN 'r' THEN 'TABLE'
+  WHEN 'p' THEN 'PARTITIONED TABLE'
+  WHEN 'i' THEN 'INDEX'
+  WHEN 'P' THEN 'PARTITIONED INDEX'
+  WHEN 'S' THEN 'SEQUENCE'
+  WHEN 'v' THEN 'VIEW'
+  WHEN 'c' THEN 'TYPE'
+  WHEN 'f' THEN 'FOREIGN TABLE'
+  WHEN 'm' THEN 'MATERIALIZED VIEW'
+  ELSE NULL
+  END
+  ELSE NULL
+  END
+    AS table_type,
+  d.description AS remarks,
+  '' AS type_cat,
+  '' AS type_schem,
+  '' AS type_name,
+  '' AS self_referencing_col_name,
+  '' AS ref_generation
+FROM
+  pg_catalog.pg_namespace AS n,
+  pg_catalog.pg_class AS c
+  LEFT JOIN pg_catalog.pg_description AS d ON
+      c.oid = d.objoid AND d.objsubid = 0 AND d.classoid = 'pg_class':::STRING::REGCLASS
+WHERE
+  c.relnamespace = n.oid
+  AND n.nspname LIKE 'reporting'
+  AND c.relname LIKE 'databasechangelog'
+  AND (
+      false
+      OR (c.relkind = 'r' AND n.nspname !~ '^pg_' AND n.nspname != 'information_schema')
+      OR (c.relkind = 'p' AND n.nspname !~ '^pg_' AND n.nspname != 'information_schema')
+    )
+ORDER BY
+  table_type, table_schem, table_name`,
+		},
+
+		{
+			Name: `liquibase migrations on multiple dbs`,
+			// 15 databases, each with 40 tables.
+			Setup: liquibaseSetup,
+			Reset: liquibaseReset,
+			Stmt: `SELECT
+  NULL AS table_cat,
+  n.nspname AS table_schem,
+  c.relname AS table_name,
+  CASE n.nspname ~ '^pg_' OR n.nspname = 'information_schema'
+  WHEN true
+  THEN CASE
+  WHEN n.nspname = 'pg_catalog' OR n.nspname = 'information_schema'
+  THEN CASE c.relkind
+  WHEN 'r' THEN 'SYSTEM TABLE'
+  WHEN 'v' THEN 'SYSTEM VIEW'
+  WHEN 'i' THEN 'SYSTEM INDEX'
+  ELSE NULL
+  END
+  WHEN n.nspname = 'pg_toast'
+  THEN CASE c.relkind
+  WHEN 'r' THEN 'SYSTEM TOAST TABLE'
+  WHEN 'i' THEN 'SYSTEM TOAST INDEX'
+  ELSE NULL
+  END
+  ELSE CASE c.relkind
+  WHEN 'r' THEN 'TEMPORARY TABLE'
+  WHEN 'p' THEN 'TEMPORARY TABLE'
+  WHEN 'i' THEN 'TEMPORARY INDEX'
+  WHEN 'S' THEN 'TEMPORARY SEQUENCE'
+  WHEN 'v' THEN 'TEMPORARY VIEW'
+  ELSE NULL
+  END
+  END
+  WHEN false
+  THEN CASE c.relkind
+  WHEN 'r' THEN 'TABLE'
+  WHEN 'p' THEN 'PARTITIONED TABLE'
+  WHEN 'i' THEN 'INDEX'
+  WHEN 'P' THEN 'PARTITIONED INDEX'
+  WHEN 'S' THEN 'SEQUENCE'
+  WHEN 'v' THEN 'VIEW'
+  WHEN 'c' THEN 'TYPE'
+  WHEN 'f' THEN 'FOREIGN TABLE'
+  WHEN 'm' THEN 'MATERIALIZED VIEW'
+  ELSE NULL
+  END
+  ELSE NULL
+  END
+    AS table_type,
+  d.description AS remarks,
+  '' AS type_cat,
+  '' AS type_schem,
+  '' AS type_name,
+  '' AS self_referencing_col_name,
+  '' AS ref_generation
+FROM
+  pg_catalog.pg_namespace AS n,
+  pg_catalog.pg_class AS c
+  LEFT JOIN pg_catalog.pg_description AS d ON
+      c.oid = d.objoid AND d.objsubid = 0 AND d.classoid = 'pg_class':::STRING::REGCLASS
+WHERE
+  c.relnamespace = n.oid
+  AND n.nspname LIKE 'reporting'
+  AND c.relname LIKE 'databasechangelog'
+  AND (
+      false
+      OR (c.relkind = 'r' AND n.nspname !~ '^pg_' AND n.nspname != 'information_schema')
+      OR (c.relkind = 'p' AND n.nspname !~ '^pg_' AND n.nspname != 'information_schema')
+    )
+ORDER BY
+  table_type, table_schem, table_name`,
+		},
 	})
 }
 
@@ -533,4 +680,18 @@ func buildNTables(n int) string {
 		b.WriteString(fmt.Sprintf("CREATE TABLE t%d(a int primary key, b int);\n", i))
 	}
 	return b.String()
+}
+
+func buildNDatabasesWithMTables(amtDbs int, amtTbls int) (string, string) {
+	b := strings.Builder{}
+	reset := strings.Builder{}
+	tbls := buildNTables(amtTbls)
+	for i := 0; i < amtDbs; i++ {
+		db := fmt.Sprintf("d%d", i)
+		b.WriteString(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;\n", db))
+		reset.WriteString(fmt.Sprintf("DROP DATABASE %s;\n", db))
+		b.WriteString(fmt.Sprintf("USE %s;\n", db))
+		b.WriteString(tbls)
+	}
+	return b.String(), reset.String()
 }
