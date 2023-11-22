@@ -628,3 +628,31 @@ func SSTMaker(t *testing.T, keyValues []roachpb.KeyValue) kvpb.RangeFeedSSTable 
 		WriteTS: batchTS,
 	}
 }
+
+// InitialSplitTester helps test expected behavior around initial splits: we
+// always split before the initial scan, and after a job level retry if we just
+// observed a replanning error and if
+// physical_replication.consumer.split_on_job_retry.enabled is set to true.
+type InitialSplitTester struct {
+	SplitOnRetry      bool
+	InitialSplitCount int
+}
+
+func (ist *InitialSplitTester) GenInitialSplitterInspector() func(noopScatter bool) error {
+	return func(noopScatter bool) error {
+		ist.InitialSplitCount++
+		if noopScatter && ist.InitialSplitCount < 2 {
+			return errors.New("noop scatter even though split count is less than 2")
+		}
+		return nil
+	}
+}
+
+func (ist *InitialSplitTester) MaybeSetSplitOnRetry(
+	t *testing.T, rng *rand.Rand, c *testcluster.TestCluster,
+) {
+	ist.SplitOnRetry = rng.Intn(2) == 1
+	if ist.SplitOnRetry {
+		serverutils.SetClusterSetting(t, c, "physical_replication.consumer.split_on_job_retry.enabled", true)
+	}
+}

@@ -42,6 +42,8 @@ import (
 type streamIngestionResumer struct {
 	job *jobs.Job
 
+	lastRetryableIngestionError error
+
 	mu struct {
 		syncutil.Mutex
 		// perNodeAggregatorStats is a per component running aggregate of trace
@@ -223,6 +225,7 @@ func ingestWithRetries(
 			break
 		}
 		status := redact.Sprintf("waiting before retrying error: %s", err)
+		resumer.lastRetryableIngestionError = err
 		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError, status)
 		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
 		if lastReplicatedTime.Less(newReplicatedTime) {
