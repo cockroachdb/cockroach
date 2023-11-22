@@ -57,11 +57,22 @@ var (
 const seed = 12345 // expectations are based on this seed
 
 func TestTestPlanner(t *testing.T) {
-	reset := setBuildVersion()
-	defer reset()
+	// Tests run from an empty list of mutators; the only way to add
+	// mutators is by using the `add-mutators` directive in the
+	// test. This allows the output to remain stable when new mutators
+	// are added, and also allows us to test mutators explicitly and in
+	// isolation.
+	resetMutators := func() { planMutators = nil }
+	resetBuildVersion := setBuildVersion()
+	defer func() {
+		resetBuildVersion()
+		resetMutators()
+	}()
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "planner"), func(t *testing.T, path string) {
+		resetMutators()
 		mvt := newTest()
+
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Cmd == "plan" {
 				plan, err := mvt.plan()
@@ -76,6 +87,20 @@ func TestTestPlanner(t *testing.T) {
 			}
 
 			switch d.Cmd {
+			case "add-mutators":
+				for _, arg := range d.CmdArgs {
+					var mut mutator
+					switch mutatorName := arg.Key; mutatorName {
+					case "concurrent_user_hooks_mutator":
+						mut = concurrentUserHooksMutator{}
+					case "remove_user_hooks_mutator":
+						mut = removeUserHooksMutator{}
+					default:
+						t.Fatalf("unknown mutator: %s", mutatorName)
+					}
+
+					planMutators = append(planMutators, mut)
+				}
 			case "mixed-version-test":
 				mvt = createDataDrivenMixedVersionTest(t, d.CmdArgs)
 			case "on-startup":
@@ -352,6 +377,24 @@ func createDataDrivenMixedVersionTest(t *testing.T, args []datadriven.CmdArg) *T
 			b, err := strconv.ParseBool(arg.Vals[0])
 			require.NoError(t, err)
 			isLocal = boolP(b)
+
+		case "mutator_probabilities":
+			if len(arg.Vals)%2 != 0 {
+				t.Fatalf("even number of values required for %s directive", arg.Key)
+			}
+
+			var j int
+			for j < len(arg.Vals) {
+				name, probStr := arg.Vals[j], arg.Vals[j+1]
+				prob, err := strconv.ParseFloat(probStr, 64)
+				require.NoError(t, err)
+				opts = append(opts, WithMutatorProbability(name, prob))
+
+				j += 2
+			}
+
+		case "disable_mutator":
+			opts = append(opts, DisableMutators(arg.Vals[0]))
 
 		default:
 			t.Errorf("unknown mixed-version-test option: %s", arg.Key)
@@ -682,6 +725,42 @@ NEXT_STEP:
 	}
 
 	return fmt.Errorf("no concurrent step that includes: %#v", names)
+}
+
+// concurrentUserHooksMutator is a test mutator that inserts a step
+// concurrently with every user-provided hook.
+type concurrentUserHooksMutator struct{}
+
+func (concurrentUserHooksMutator) Name() string         { return "concurrent_user_hooks_mutator" }
+func (concurrentUserHooksMutator) Probability() float64 { return 0.5 }
+
+func (concurrentUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
+	// Insert our `testSingleStep` implementation concurrently with every
+	// user-provided function.
+	return plan.
+		newStepSelector().
+		Filter(func(s *singleStep) bool {
+			_, ok := s.impl.(runHookStep)
+			return ok
+		}).
+		InsertConcurrent(&testSingleStep{})
+}
+
+// removeUserHooksMutator is a test mutator that removes every
+// user-provided hook from the plan.
+type removeUserHooksMutator struct{}
+
+func (removeUserHooksMutator) Name() string         { return "remove_user_hooks_mutator" }
+func (removeUserHooksMutator) Probability() float64 { return 0.5 }
+
+func (removeUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
+	return plan.
+		newStepSelector().
+		Filter(func(s *singleStep) bool {
+			_, ok := s.impl.(runHookStep)
+			return ok
+		}).
+		Remove()
 }
 
 func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {

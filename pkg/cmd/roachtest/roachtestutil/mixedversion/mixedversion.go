@@ -154,12 +154,13 @@ var (
 	defaultTestOptions = testOptions{
 		// We use fixtures more often than not as they are more likely to
 		// detect bugs, especially in migrations.
-		useFixturesProbability:  0.7,
-		upgradeTimeout:          clusterupgrade.DefaultUpgradeTimeout,
-		minUpgrades:             1,
-		maxUpgrades:             3,
-		minimumSupportedVersion: OldestSupportedVersion,
-		predecessorFunc:         randomPredecessorHistory,
+		useFixturesProbability:         0.7,
+		upgradeTimeout:                 clusterupgrade.DefaultUpgradeTimeout,
+		minUpgrades:                    1,
+		maxUpgrades:                    3,
+		minimumSupportedVersion:        OldestSupportedVersion,
+		predecessorFunc:                randomPredecessorHistory,
+		overriddenMutatorProbabilities: make(map[string]float64),
 	}
 
 	// OldestSupportedVersion is the oldest cockroachdb version
@@ -249,13 +250,14 @@ type (
 	// testOptions contains some options that can be changed by the user
 	// that expose some control over the generated test plan and behaviour.
 	testOptions struct {
-		useFixturesProbability  float64
-		upgradeTimeout          time.Duration
-		minUpgrades             int
-		maxUpgrades             int
-		minimumSupportedVersion *clusterupgrade.Version
-		predecessorFunc         predecessorFunc
-		settings                []install.ClusterSettingOption
+		useFixturesProbability         float64
+		upgradeTimeout                 time.Duration
+		minUpgrades                    int
+		maxUpgrades                    int
+		minimumSupportedVersion        *clusterupgrade.Version
+		predecessorFunc                predecessorFunc
+		settings                       []install.ClusterSettingOption
+		overriddenMutatorProbabilities map[string]float64
 	}
 
 	CustomOption func(*testOptions)
@@ -390,6 +392,23 @@ func ClusterSettingOption(opt ...install.ClusterSettingOption) CustomOption {
 // in case the test is more susceptible to fail due to known bugs.
 func AlwaysUseLatestPredecessors(opts *testOptions) {
 	opts.predecessorFunc = latestPredecessorHistory
+}
+
+// WithMutatorProbability allows tests to override the default
+// probability that a mutator will be applied to a test plan.
+func WithMutatorProbability(name string, probability float64) CustomOption {
+	return func(opts *testOptions) {
+		opts.overriddenMutatorProbabilities[name] = probability
+	}
+}
+
+// DisableMutators disables all mutators with the names passed.
+func DisableMutators(names ...string) CustomOption {
+	return func(opts *testOptions) {
+		for _, name := range names {
+			WithMutatorProbability(name, 0)(opts)
+		}
+	}
 }
 
 // NewTest creates a Test struct that users can use to create and run
