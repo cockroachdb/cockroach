@@ -13,9 +13,9 @@ package mixedversion
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -73,13 +73,11 @@ type testSingleStep struct {
 func (*testSingleStep) Description() string    { return "testSingleStep" }
 func (*testSingleStep) Background() shouldStop { return nil }
 
-func (tss *testSingleStep) Run(
-	_ context.Context, _ *logger.Logger, _ cluster.Cluster, _ *Helper,
-) error {
+func (tss *testSingleStep) Run(_ context.Context, _ *logger.Logger, _ *rand.Rand, _ *Helper) error {
 	return tss.runFunc()
 }
 
 func newTestStep(f func() error) *singleStep {
 	initialVersion := parseVersions([]string{predecessorVersion})[0]
-	return newSingleStep(newInitialContext(initialVersion, nodes), &testSingleStep{runFunc: f})
+	return newSingleStep(newInitialContext(initialVersion, nodes), &testSingleStep{runFunc: f}, newRand())
 }

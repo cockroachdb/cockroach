@@ -44,7 +44,6 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":mixedversion"],
     deps = [
-        "//pkg/cmd/roachtest/cluster",
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
