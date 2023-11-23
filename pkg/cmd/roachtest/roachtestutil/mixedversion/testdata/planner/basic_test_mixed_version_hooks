@@ -43,6 +43,6 @@ mixed-version test plan for upgrading from "v22.2.8" to "<current>":
    │   ├── restart node 1 with binary version <current> (13)
    │   ├── run "mixed-version 1" (14)
    │   └── restart node 3 with binary version <current> (15)
-   ├── finalize upgrade by resetting `preserve_downgrade_option` (16)
+   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (16)
    ├── run "mixed-version 2" (17)
    └── wait for nodes :1-4 to reach cluster version <current> (18)

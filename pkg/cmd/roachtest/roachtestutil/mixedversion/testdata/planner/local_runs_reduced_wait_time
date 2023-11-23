@@ -49,7 +49,7 @@ mixed-version test plan for upgrading from "v22.2.3" to "v23.1.4" to "v23.2.0" t
 │   │   ├── wait for 30s (15)
 │   │   ├── restart node 4 with binary version v23.1.4 (16)
 │   │   └── restart node 2 with binary version v23.1.4 (17)
-│   ├── finalize upgrade by resetting `preserve_downgrade_option` (18)
+│   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (18)
 │   └── wait for nodes :1-4 to reach cluster version '23.1' (19)
 ├── run "initialize bank workload" (20)
 ├── start background hooks concurrently
@@ -65,7 +65,7 @@ mixed-version test plan for upgrading from "v22.2.3" to "v23.1.4" to "v23.2.0" t
 │   │   ├── restart node 1 with binary version v23.2.0 (27)
 │   │   ├── restart node 2 with binary version v23.2.0 (28)
 │   │   └── restart node 3 with binary version v23.2.0 (29)
-│   ├── finalize upgrade by resetting `preserve_downgrade_option` (30)
+│   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (30)
 │   ├── wait for nodes :1-4 to reach cluster version '23.2' (31)
 │   └── run "validate upgrade" (32)
 └── upgrade cluster from "v23.2.0" to "<current>"
@@ -91,7 +91,7 @@ mixed-version test plan for upgrading from "v22.2.3" to "v23.1.4" to "v23.2.0" t
    │   ├── run "mixed-version 2" (49)
    │   ├── restart node 2 with binary version <current> (50)
    │   └── restart node 3 with binary version <current> (51)
-   ├── finalize upgrade by resetting `preserve_downgrade_option` (52)
+   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (52)
    ├── run "mixed-version 2" (53)
    ├── wait for nodes :1-4 to reach cluster version <current> (54)
    └── run "validate upgrade" (55)
