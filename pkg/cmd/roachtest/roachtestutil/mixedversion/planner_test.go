@@ -56,6 +56,12 @@ var (
 const seed = 12345 // expectations are based on this seed
 
 func TestTestPlanner(t *testing.T) {
+	// Make some test-only mutators available to the test.
+	mutatorsAvailable := append([]mutator{
+		concurrentUserHooksMutator{},
+		removeUserHooksMutator{},
+	}, planMutators...)
+
 	// Tests run from an empty list of mutators; the only way to add
 	// mutators is by using the `add-mutators` directive in the
 	// test. This allows the output to remain stable when new mutators
@@ -88,17 +94,20 @@ func TestTestPlanner(t *testing.T) {
 			switch d.Cmd {
 			case "add-mutators":
 				for _, arg := range d.CmdArgs {
-					var mut mutator
-					switch mutatorName := arg.Key; mutatorName {
-					case "concurrent_user_hooks_mutator":
-						mut = concurrentUserHooksMutator{}
-					case "remove_user_hooks_mutator":
-						mut = removeUserHooksMutator{}
-					default:
-						t.Fatalf("unknown mutator: %s", mutatorName)
+					mutatorName := arg.Key
+					var m mutator
+					for _, mut := range mutatorsAvailable {
+						if mutatorName == mut.Name() {
+							m = mut
+							break
+						}
 					}
 
-					planMutators = append(planMutators, mut)
+					if m == nil {
+						t.Errorf("unknown mutator: %s", mutatorName)
+					}
+
+					planMutators = append(planMutators, m)
 				}
 			case "mixed-version-test":
 				mvt = createDataDrivenMixedVersionTest(t, d.CmdArgs)
