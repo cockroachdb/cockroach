@@ -174,7 +174,9 @@ const (
 // planMutators includes a list of all known `mutator`
 // implementations. A subset of these mutations might be enabled in
 // any mixedversion test plan.
-var planMutators = []mutator{}
+var planMutators = []mutator{
+	preserveDowngradeOptionRandomizerMutator{},
+}
 
 // Plan returns the TestPlan used to upgrade the cluster from the
 // first to the final version in the `versions` field. The test plan

@@ -1,0 +1,110 @@
+# Tests the behaviour of the `preserve_downgrade_randomizer` mutator.
+
+add-mutators preserve_downgrade_option_randomizer
+----
+ok
+
+mixed-version-test predecessors=(21.2.29, 22.1.8, 22.2.3, 23.1.10, 23.2.4) num_upgrades=5 mutator_probabilities=(preserve_downgrade_option_randomizer, 1)
+----
+ok
+
+in-mixed-version name=(my mixed-version feature)
+----
+ok
+
+on-startup name=(do something)
+----
+ok
+
+plan debug=true
+----
+mixed-version test plan for upgrading from "v21.2.29" to "v22.1.8" to "v22.2.3" to "v23.1.10" to "v23.2.4" to "<current>" with mutators {preserve_downgrade_option_randomizer}:
+├── install fixtures for version "v21.2.29" (1) [stage=cluster-setup]
+├── start cluster at version "v21.2.29" (2) [stage=cluster-setup]
+├── wait for nodes :1-4 to reach cluster version '21.2' (3) [stage=cluster-setup]
+├── upgrade cluster from "v21.2.29" to "v22.1.8"
+│   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (4) [stage=init]
+│   ├── upgrade nodes :1-4 from "v21.2.29" to "v22.1.8"
+│   │   ├── restart node 3 with binary version v22.1.8 (5) [stage=last-upgrade]
+│   │   ├── restart node 2 with binary version v22.1.8 (6) [stage=last-upgrade]
+│   │   ├── wait for 1m0s (7) [stage=last-upgrade]
+│   │   ├── restart node 4 with binary version v22.1.8 (8) [stage=last-upgrade]
+│   │   └── restart node 1 with binary version v22.1.8 (9) [stage=last-upgrade]
+│   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (10) [stage=running-upgrade-migrations]
+│   └── wait for nodes :1-4 to reach cluster version '22.1' (11) [stage=running-upgrade-migrations]
+├── upgrade cluster from "v22.1.8" to "v22.2.3"
+│   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (12) [stage=init]
+│   ├── upgrade nodes :1-4 from "v22.1.8" to "v22.2.3"
+│   │   ├── restart node 1 with binary version v22.2.3 (13) [stage=temporary-upgrade]
+│   │   ├── restart node 3 with binary version v22.2.3 (14) [stage=temporary-upgrade]
+│   │   ├── restart node 4 with binary version v22.2.3 (15) [stage=temporary-upgrade]
+│   │   └── restart node 2 with binary version v22.2.3 (16) [stage=temporary-upgrade]
+│   ├── downgrade nodes :1-4 from "v22.2.3" to "v22.1.8"
+│   │   ├── restart node 1 with binary version v22.1.8 (17) [stage=rollback-upgrade]
+│   │   ├── restart node 3 with binary version v22.1.8 (18) [stage=rollback-upgrade]
+│   │   ├── restart node 4 with binary version v22.1.8 (19) [stage=rollback-upgrade]
+│   │   └── restart node 2 with binary version v22.1.8 (20) [stage=rollback-upgrade]
+│   ├── upgrade nodes :1-4 from "v22.1.8" to "v22.2.3"
+│   │   ├── restart node 4 with binary version v22.2.3 (21) [stage=last-upgrade]
+│   │   ├── restart node 1 with binary version v22.2.3 (22) [stage=last-upgrade]
+│   │   ├── restart node 2 with binary version v22.2.3 (23) [stage=last-upgrade]
+│   │   ├── restart node 3 with binary version v22.2.3 (24) [stage=last-upgrade]
+│   │   └── wait for 1m0s (25) [stage=last-upgrade]
+│   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (26) [stage=running-upgrade-migrations]
+│   └── wait for nodes :1-4 to reach cluster version '22.2' (27) [stage=running-upgrade-migrations]
+├── run "do something" (28) [stage=on-startup]
+├── upgrade cluster from "v22.2.3" to "v23.1.10"
+│   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (29) [stage=init]
+│   ├── upgrade nodes :1-4 from "v22.2.3" to "v23.1.10"
+│   │   ├── restart node 4 with binary version v23.1.10 (30) [stage=last-upgrade]
+│   │   ├── restart node 1 with binary version v23.1.10 (31) [stage=last-upgrade]
+│   │   ├── run "my mixed-version feature" (32) [stage=last-upgrade]
+│   │   ├── restart node 2 with binary version v23.1.10 (33) [stage=last-upgrade]
+│   │   └── restart node 3 with binary version v23.1.10 (34) [stage=last-upgrade]
+│   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (35) [stage=running-upgrade-migrations]
+│   └── wait for nodes :1-4 to reach cluster version '23.1' (36) [stage=running-upgrade-migrations]
+├── upgrade cluster from "v23.1.10" to "v23.2.4"
+│   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (37) [stage=init]
+│   ├── upgrade nodes :1-4 from "v23.1.10" to "v23.2.4"
+│   │   ├── restart node 3 with binary version v23.2.4 (38) [stage=temporary-upgrade]
+│   │   ├── run "my mixed-version feature" (39) [stage=temporary-upgrade]
+│   │   ├── restart node 2 with binary version v23.2.4 (40) [stage=temporary-upgrade]
+│   │   ├── restart node 4 with binary version v23.2.4 (41) [stage=temporary-upgrade]
+│   │   └── restart node 1 with binary version v23.2.4 (42) [stage=temporary-upgrade]
+│   ├── downgrade nodes :1-4 from "v23.2.4" to "v23.1.10"
+│   │   ├── restart node 2 with binary version v23.1.10 (43) [stage=rollback-upgrade]
+│   │   ├── restart node 4 with binary version v23.1.10 (44) [stage=rollback-upgrade]
+│   │   ├── run "my mixed-version feature" (45) [stage=rollback-upgrade]
+│   │   ├── restart node 3 with binary version v23.1.10 (46) [stage=rollback-upgrade]
+│   │   └── restart node 1 with binary version v23.1.10 (47) [stage=rollback-upgrade]
+│   ├── upgrade nodes :1-4 from "v23.1.10" to "v23.2.4"
+│   │   ├── restart node 4 with binary version v23.2.4 (48) [stage=last-upgrade]
+│   │   ├── restart node 1 with binary version v23.2.4 (49) [stage=last-upgrade]
+│   │   ├── run "my mixed-version feature" (50) [stage=last-upgrade]
+│   │   ├── restart node 3 with binary version v23.2.4 (51) [stage=last-upgrade]
+│   │   └── restart node 2 with binary version v23.2.4 (52) [stage=last-upgrade]
+│   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (53) [stage=running-upgrade-migrations]
+│   ├── run "my mixed-version feature" (54) [stage=running-upgrade-migrations]
+│   └── wait for nodes :1-4 to reach cluster version '23.2' (55) [stage=running-upgrade-migrations]
+└── upgrade cluster from "v23.2.4" to "<current>"
+   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (56) [stage=init]
+   ├── upgrade nodes :1-4 from "v23.2.4" to "<current>"
+   │   ├── restart node 2 with binary version <current> (57) [stage=temporary-upgrade]
+   │   ├── restart node 1 with binary version <current> (58) [stage=temporary-upgrade]
+   │   ├── restart node 3 with binary version <current> (59) [stage=temporary-upgrade]
+   │   ├── run "my mixed-version feature" (60) [stage=temporary-upgrade]
+   │   └── restart node 4 with binary version <current> (61) [stage=temporary-upgrade]
+   ├── downgrade nodes :1-4 from "<current>" to "v23.2.4"
+   │   ├── restart node 2 with binary version v23.2.4 (62) [stage=rollback-upgrade]
+   │   ├── restart node 3 with binary version v23.2.4 (63) [stage=rollback-upgrade]
+   │   ├── restart node 1 with binary version v23.2.4 (64) [stage=rollback-upgrade]
+   │   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (65) [stage=rollback-upgrade]
+   │   └── restart node 4 with binary version v23.2.4 (66) [stage=rollback-upgrade]
+   ├── upgrade nodes :1-4 from "v23.2.4" to "<current>"
+   │   ├── restart node 4 with binary version <current> (67) [stage=last-upgrade]
+   │   ├── restart node 1 with binary version <current> (68) [stage=last-upgrade]
+   │   ├── restart node 2 with binary version <current> (69) [stage=last-upgrade]
+   │   ├── restart node 3 with binary version <current> (70) [stage=last-upgrade]
+   │   └── run "my mixed-version feature" (71) [stage=last-upgrade]
+   ├── run "my mixed-version feature" (72) [stage=running-upgrade-migrations]
+   └── wait for nodes :1-4 to reach cluster version <current> (73) [stage=running-upgrade-migrations]
