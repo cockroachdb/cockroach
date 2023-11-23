@@ -85,6 +85,7 @@ The binaries are available at:
 
 Pull the docker image by:
   docker pull $gcr_repository:$build_name
+  docker pull $gcr_repository:$build_name-fips
 
 EOF
 

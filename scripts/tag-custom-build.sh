@@ -78,11 +78,13 @@ Build ID: $ID
 
 The binaries will be available at:
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-amd64.tgz
+  https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-amd64-fips.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-arm64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.darwin-10.9-amd64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.windows-6.2-amd64.zip
 
 Pull the docker image by:
   docker pull us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/cockroach-customized:$ID
+  docker pull us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/cockroach-customized:$ID-fips
 
 EOF
