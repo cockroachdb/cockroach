@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -202,6 +204,50 @@ func (o *followerReadOracle) useClosestOracle(
 // followerReadOraclePolicy is a leaseholder choosing policy that detects
 // whether a query can be used with a follower read.
 var followerReadOraclePolicy = replicaoracle.RegisterPolicy(newFollowerReadOracle)
+
+type bulkOracle struct {
+	cfg       replicaoracle.Config
+	locFilter roachpb.Locality
+}
+
+var _ replicaoracle.Oracle = bulkOracle{}
+
+// NewBulkOracle returns an oracle for planning bulk operations, which will plan
+// balancing randomly across all replicas (if follower reads are enabled).
+func NewBulkOracle(cfg replicaoracle.Config, locFilter roachpb.Locality) replicaoracle.Oracle {
+	return bulkOracle{cfg: cfg, locFilter: locFilter}
+}
+
+// ChoosePreferredReplica implements the replicaoracle.Oracle interface.
+func (r bulkOracle) ChoosePreferredReplica(
+	ctx context.Context,
+	_ *kv.Txn,
+	desc *roachpb.RangeDescriptor,
+	leaseholder *roachpb.ReplicaDescriptor,
+	_ roachpb.RangeClosedTimestampPolicy,
+	_ replicaoracle.QueryState,
+) (_ roachpb.ReplicaDescriptor, ignoreMisplannedRanges bool, _ error) {
+	if leaseholder != nil && !checkFollowerReadsEnabled(uuid.UUID{} /*not used*/, r.cfg.Settings) {
+		return *leaseholder, false, nil
+	}
+
+	replicas, err := kvcoord.NewReplicaSlice(ctx, r.cfg.NodeDescs, desc, nil, kvcoord.AllExtantReplicas)
+	if err != nil {
+		return roachpb.ReplicaDescriptor{}, false, sqlerrors.NewRangeUnavailableError(desc.RangeID, err)
+	}
+	if r.locFilter.NonEmpty() {
+		var matches []int
+		for i := range replicas {
+			if ok, _ := replicas[i].Locality.Matches(r.locFilter); ok {
+				matches = append(matches, i)
+			}
+		}
+		if len(matches) > 0 {
+			return replicas[matches[randutil.FastUint32()%uint32(len(matches))]].ReplicaDescriptor, true, nil
+		}
+	}
+	return replicas[randutil.FastUint32()%uint32(len(replicas))].ReplicaDescriptor, true, nil
+}
 
 func init() {
 	sql.ReplicaOraclePolicy = followerReadOraclePolicy
