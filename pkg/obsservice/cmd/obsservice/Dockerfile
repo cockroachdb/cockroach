@@ -7,7 +7,9 @@
 
 FROM --platform=linux/amd64 debian:stable-slim
 WORKDIR /bin
-ENV OTLP_ADDR=localhost:4317
-ENV HTTP_ADDR=localhost:8081
+ENV OTLP_ADDR=0.0.0.0:4317
+ENV HTTP_ADDR=0.0.0.0:8081
+ENV SINK_PGURL="postgresql://root@0.0.0.0:26257?sslmode=disable"
+ENV NO_DB=false
 COPY ./artifact_obsservice /bin/
-CMD /bin/artifact_obsservice --otlp-addr=$OTLP_ADDR --http-addr=$HTTP_ADDR
+CMD /bin/artifact_obsservice --otlp-addr=$OTLP_ADDR --http-addr=$HTTP_ADDR --sink-pgurl=$SINK_PGURL --no-db=$NO_DB

@@ -9,24 +9,12 @@ The Obs Service is developed as a library (in the `obslib` package) and a binary
 embed and extend the library (for example we imagine CockroachCloud doing so in
 the future).
 
-**Note**: Serving DB Console is no longer a core part of the planned utility of the
-Obs Service. However, as the functionality to serve the DB Console is maintained for
-now, in case it proves useful down the line.
-
 ## Building the Obs Service
 
 Build with
 
 ```shell
 ./dev build obsservice
-```
-
-which will include the DB Console UI served on the HTTP port.
-
-You can also build without the UI using:
-
-```shell
-./dev build pkg/obsservice/cmd/obsservice
 ```
 
 which will produce a binary in `./bin/obsservice`.
@@ -36,7 +24,7 @@ which will produce a binary in `./bin/obsservice`.
 Assuming you're already running a local CRDB instance:
 
 ```shell
-obsservice --otlp-addr=localhost:4317 --http-addr=localhost:8081 --crdb-http-url=http://localhost:8080 --ui-cert=certs/cert.pem --ui-cert-key=certs/key.pem --ca-cert=certs/ca.crt
+obsservice --otlp-addr=localhost:4317 --http-addr=localhost:8081 --sink-pgurl=postgresql://root@localhost:26257?sslmode=disable
 ```
 
 - `--otlp-addr` is the address on which the OTLP Logs gRPC service is exposed.
@@ -50,31 +38,13 @@ exporters:
     tls:
       insecure: true
 ```
-- `--http-addr` is the address on which the DB Console is served. NB: This feature may
-  be removed in the future. See note above in [header section](#CockroachDB-Observability-Service)
-- `--crdb-http-url` is CRDB's HTTP address. For a multi-node CRDB cluster, this
-  can point to a load-balancer. It can be either a HTTP or an HTTPS address,
-  depending on whether the CRDB cluster is running as `--insecure`.
-- `--ui-cert` and `--ui-cert-key` are the paths to the certificate
-  presented by the Obs Service to its HTTPS clients, and the private key
-  corresponding to the certificate. If no certificates are configured, the Obs
-  Service will not use TLS. Certificates need to be specified if the CRDB
-  cluster is not running in `--insecure` mode: i.e. the Obs Service will refuse
-  to forward HTTP requests over HTTPS. The reverse is allowed, though: the Obs
-  Service can be configured with certificates even if CRDB is running in
-  `--insecure`. In this case, the Obs Service will terminate TLS connections and
-  forward HTTPS requests over HTTP.
-
-  If configured with certificates, HTTP requests will be redirected to HTTPS.  
-
-  For testing, self-signed certificates can be generated, for example, with the
-  [`generate_cert.go`](https://go.dev/src/crypto/tls/generate_cert.go) utility in
-  the Golang standard library: `go run ./crypto/tls/generate_cert.go
-  --host=localhost`.
-- `--ca-cert` is the path to a certificate authority certificate file (perhaps
-  one created with `cockroach cert create-ca`). If specified, HTTP requests are
-  only proxied to CRDB nodes that present certificates signed by this CA. If not
-  specified, the system's CA list is used.
+- `--http-addr` is the address on which any HTTP-related endpoints, such as healthchecks or
+  metrics, will be served on.
+- `--sink-pgurl` is the address which the obsservice will use to write data to after processing. 
+  It will also be used to run migrations found in `pkg/obsservice/obslib/migrations/sqlmigrations`
+  on startup. TIP: Use the `sslrootcert` query parameter in the pgurl string to point to a root certificate.
+- `--no-db` will prevent the obsservice from attempting to connect to the `--sink-pgurl` at startup.
+  This is meant for testing purposes only.
 
 ## Building & Pushing a Docker Image
 
@@ -103,10 +73,12 @@ I231113 22:25:02.716505 1 main/main.go:112  [-] 1  Listening for OTLP connection
 
 You can use environment variables to control things like the OTLP listen address.
 ```shell
-$ docker run -e OTLP_ADDR=localhost:7171 -e HTTP_ADDR=localhost:8082 --platform=linux/amd64 obsservice:latest
-I231113 22:25:02.716505 1 main/main.go:112  [-] 1  Listening for OTLP connections on localhost:7171.
-Listening for HTTP requests on http://localhost:8082.
+$ docker run -e OTLP_ADDR=0.0.0.0:7171 -e HTTP_ADDR=0.0.0.0:8082 -e SINK_PGURL="postgresql://myuser@myhost:26257?foo=bar" --platform=linux/amd64 obsservice:latest
+I231113 22:25:02.716505 1 main/main.go:112  [-] 1  Listening for OTLP connections on 0.0.0.0:7171.
+Listening for HTTP requests on http://0.0.0.0:8082.
 ```
+
+You can find the supported environment variables in `pkg/obsservice/cmd/obsservice/Dockerfile`.
 
 With the image created, you can [push it to GCR](https://cockroachlabs.atlassian.net/wiki/spaces/OI/pages/3249472038/Pushing+an+Antenna+Docker+Image+to+GCR).
 
@@ -120,17 +92,13 @@ image. It's probably not best practice to use `./dev build --cross` and then cop
 
 ## Functionality
 
-In the current fledgling state, the Obs Service does a couple of things:
-
-1. The Obs Service serves the DB Console.
-
-2. The Obs Service reverse-proxies some HTTP routes to
-   CRDB (`/_admin/`, `/_status/`, `/ts/`, `/api/v2/`).
-
-3. The Obs Service exposes the OTLP Logs gRPC service and is able to ingest
+1. The Obs Service exposes the OTLP Logs gRPC service and is able to ingest
    events received through calls to this RPC service. Only insecure gRPC
    connections are supported at the moment. Events are ingested into the
    Obs Service for aggregation and eventual storage. 
+2. The Obs Service provides a pluggable framework to define asynchronous event processing
+   pipelines. Events can be routed, transformed, validated, enqueued, consumed,
+   processed, and stored.
 
 ## Event ingestion
 
