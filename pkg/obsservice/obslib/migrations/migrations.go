@@ -58,3 +58,8 @@ func RunDBMigrations(ctx context.Context, connCfg *pgx.ConnConfig) error {
 	}
 	return nil
 }
+
+// GetDBMigrations returns the list of migrations and is used for testing purposes.
+func GetDBMigrations() embed.FS {
+	return sqlMigrations
+}
