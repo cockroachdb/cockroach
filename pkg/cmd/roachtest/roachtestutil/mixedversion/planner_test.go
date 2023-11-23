@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
@@ -184,7 +183,6 @@ func TestDeterministicHookSeeds(t *testing.T) {
 		var (
 			// these variables are not used by the hook so they can be nil
 			ctx         = context.Background()
-			nilCluster  cluster.Cluster
 			emptyHelper = &Helper{}
 		)
 
@@ -195,26 +193,35 @@ func TestDeterministicHookSeeds(t *testing.T) {
 
 		// We can hardcode these paths since we are using a fixed seed in
 		// these tests.
-		firstRun := upgradeStep.steps[1].(sequentialRunStep).steps[3].(*singleStep).impl.(runHookStep)
+		firstRunStep := upgradeStep.steps[1].(sequentialRunStep).steps[2].(*singleStep)
+		firstRun := firstRunStep.impl.(runHookStep)
 		require.Equal(t, "do something", firstRun.hook.name)
-		require.NoError(t, firstRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+		require.NoError(t, firstRun.Run(ctx, nilLogger, firstRunStep.rng, emptyHelper))
 
-		secondRun := upgradeStep.steps[2].(sequentialRunStep).steps[2].(*singleStep).impl.(runHookStep)
+		secondRunStep := upgradeStep.steps[2].(sequentialRunStep).steps[1].(*singleStep)
+		secondRun := secondRunStep.impl.(runHookStep)
 		require.Equal(t, "do something", secondRun.hook.name)
-		require.NoError(t, secondRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+		require.NoError(t, secondRun.Run(ctx, nilLogger, secondRunStep.rng, emptyHelper))
 
-		thirdRun := upgradeStep.steps[3].(sequentialRunStep).steps[2].(*singleStep).impl.(runHookStep)
+		thirdRunStep := upgradeStep.steps[3].(sequentialRunStep).steps[3].(*singleStep)
+		thirdRun := thirdRunStep.impl.(runHookStep)
 		require.Equal(t, "do something", thirdRun.hook.name)
-		require.NoError(t, thirdRun.Run(ctx, nilLogger, nilCluster, emptyHelper))
+		require.NoError(t, thirdRun.Run(ctx, nilLogger, thirdRunStep.rng, emptyHelper))
 
-		require.Len(t, generatedData, 3)
+		fourthRunStep := upgradeStep.steps[5].(*singleStep)
+		fourthRun := fourthRunStep.impl.(runHookStep)
+		require.Equal(t, "do something", fourthRun.hook.name)
+		require.NoError(t, thirdRun.Run(ctx, nilLogger, fourthRunStep.rng, emptyHelper))
+
+		require.Len(t, generatedData, 4)
 		return generatedData
 	}
 
 	expectedData := [][]int{
-		{50, 22, 11, 95, 55},
-		{30, 17, 84, 24, 33},
-		{7, 95, 26, 31, 65},
+		{54, 55, 96, 41, 56},
+		{20, 83, 11, 72, 48},
+		{75, 36, 28, 56, 19},
+		{4, 46, 99, 71, 54},
 	}
 	const numRums = 50
 	for j := 0; j < numRums; j++ {
@@ -307,7 +314,6 @@ func newTest(options ...CustomOption) *Test {
 		fn(&testOptions)
 	}
 
-	prng := newRand()
 	return &Test{
 		ctx:             ctx,
 		logger:          nilLogger,
@@ -315,8 +321,8 @@ func newTest(options ...CustomOption) *Test {
 		options:         testOptions,
 		_arch:           archP(vm.ArchAMD64),
 		_isLocal:        boolP(false),
-		prng:            prng,
-		hooks:           &testHooks{prng: prng, crdbNodes: nodes},
+		prng:            newRand(),
+		hooks:           &testHooks{crdbNodes: nodes},
 		predecessorFunc: testPredecessorFunc,
 	}
 }
