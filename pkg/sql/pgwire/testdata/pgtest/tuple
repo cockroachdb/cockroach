@@ -127,6 +127,22 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+# Same as above, but using the text format (ParameterFormatCodes = [0] is for
+# text format).
+send
+Bind {"DestinationPortal": "p_valid_param_text", "PreparedStatement": "s_valid_param", "ParameterFormatCodes": [0], "Parameters": [{"text":"(t)"}], "ResultFormatCodes": [0]}
+Execute {"Portal": "p_valid_param_text"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"(t)"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 # empty parameter
 send
 Parse {"Name": "s_empty_param", "Query": "SELECT $1::r"}
