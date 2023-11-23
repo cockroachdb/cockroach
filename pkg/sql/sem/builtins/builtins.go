@@ -3912,7 +3912,7 @@ value if you rely on the HLC for accuracy.`,
 				diff := fuzzystrmatch.Difference(s, t)
 				return tree.NewDInt(tree.DInt(diff)), nil
 			},
-			Info:       "Convert two strings to their Soundex codes and then reports the number of matching code positions.",
+			Info:       "Convert two strings to their Soundex codes and report the number of matching code positions.",
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -3955,7 +3955,7 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
-	"metaphone":              makeBuiltin(
+	"metaphone": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}, {Name: "max_output_length", Typ: types.Int}},
@@ -3979,12 +3979,12 @@ value if you rely on the HLC for accuracy.`,
 				m := fuzzystrmatch.Metaphone(s, maxDefaultLen)
 				return tree.NewDString(m), nil
 			},
-			Info: 		"Compute 'sound-like' string from the input string.",
+			Info:       "Convert a string to its Metaphone code. Maximum input length is 255 characters",
 			Volatility: volatility.Immutable,
 		},
 	),
-	"dmetaphone":			makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
-	"dmetaphone_alt":		makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"dmetaphone":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"dmetaphone_alt": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
 
 	// JSON functions.
 	// The behavior of both the JSON and JSONB data types in CockroachDB is

@@ -36,10 +36,6 @@ func isVowel(c rune) bool {
 	return (getcode(c) & 1) != 0
 }
 
-func isFJMNR(c rune) bool {
-	return (getcode(c) & 2) != 0
-}
-
 func isCGPST(c rune) bool {
 	return (getcode(c) & 4) != 0
 }
