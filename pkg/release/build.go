@@ -280,22 +280,62 @@ var (
 )
 
 // Platform is an enumeration of the supported platforms for release.
-type Platform int
+type Platform string
 
 const (
 	// PlatformLinux is the Linux x86_64 target.
-	PlatformLinux Platform = iota
+	PlatformLinux Platform = "linux-amd64"
 	// PlatformLinuxFIPS is the Linux FIPS target.
-	PlatformLinuxFIPS
+	PlatformLinuxFIPS Platform = "linux-amd64-fips"
 	// PlatformLinuxArm is the Linux aarch64 target.
-	PlatformLinuxArm
+	PlatformLinuxArm Platform = "linux-arm64"
 	// PlatformMacOS is the Darwin x86_64 target.
-	PlatformMacOS
+	PlatformMacOS Platform = "darwin-amd64"
 	// PlatformMacOSArm is the Darwin aarch6 target.
-	PlatformMacOSArm
+	PlatformMacOSArm Platform = "darwin-arm64"
 	// PlatformWindows is the Windows (mingw) x86_64 target.
-	PlatformWindows
+	PlatformWindows Platform = "win-amd64"
 )
+
+type Platforms []Platform
+
+// String implements flag.Value interface
+func (p Platforms) String() string {
+	if len(p) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for i, platform := range p {
+		sb.WriteString(string(platform))
+		if i < len(p)-1 {
+			sb.WriteString(", ")
+		}
+	}
+	return sb.String()
+}
+
+// Set implements flag.Value interface
+func (p *Platforms) Set(v string) error {
+	switch Platform(v) {
+	case PlatformLinux, PlatformLinuxArm, PlatformLinuxFIPS, PlatformMacOS, PlatformMacOSArm, PlatformWindows:
+		*p = append(*p, Platform(v))
+		return nil
+	default:
+		return fmt.Errorf("unsupported platform `%s`", v)
+	}
+}
+
+// DefaultPlatforms returns a list of platforms supported by default.
+func DefaultPlatforms() Platforms {
+	return Platforms{
+		PlatformLinux,
+		PlatformLinuxFIPS,
+		PlatformLinuxArm,
+		PlatformMacOS,
+		PlatformMacOSArm,
+		PlatformWindows,
+	}
+}
 
 func getPathToBazelBin(execFn ExecFn, pkgDir string, configArgs []string) (string, error) {
 	args := []string{"info", "bazel-bin"}
