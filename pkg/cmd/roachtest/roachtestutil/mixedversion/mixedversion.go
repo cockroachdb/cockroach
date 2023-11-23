@@ -860,21 +860,21 @@ func (s restartWithNewBinaryStep) Run(
 	)
 }
 
-// finalizeUpgradeStep resets the `preserve_downgrade_option` cluster
+// allowUpgradeStep resets the `preserve_downgrade_option` cluster
 // setting, allowing the upgrade migrations to run and the cluster
 // version to eventually reach the binary version on the nodes.
-type finalizeUpgradeStep struct {
+type allowUpgradeStep struct {
 	crdbNodes option.NodeListOption
 	prng      *rand.Rand
 }
 
-func (s finalizeUpgradeStep) Background() shouldStop { return nil }
+func (s allowUpgradeStep) Background() shouldStop { return nil }
 
-func (s finalizeUpgradeStep) Description() string {
-	return "finalize upgrade by resetting `preserve_downgrade_option`"
+func (s allowUpgradeStep) Description() string {
+	return "allow upgrade to happen by resetting `preserve_downgrade_option`"
 }
 
-func (s finalizeUpgradeStep) Run(
+func (s allowUpgradeStep) Run(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper,
 ) error {
 	node, db := h.RandomDB(s.prng, s.crdbNodes)
