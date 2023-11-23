@@ -64,10 +64,10 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 			ctx := context.Background()
 			serverArgs := base.TestServerArgs{}
 			serverArgs.Settings = cluster.MakeClusterSettings()
-			LeaseEnableSessionBasedLeasing.Override(ctx, &serverArgs.Settings.SV, int64(mode))
 			srv, sqlDB, kvDB := serverutils.StartServer(t, serverArgs)
 			defer srv.Stopper().Stop(ctx)
 			s := srv.ApplicationLayer()
+			LeaseEnableSessionBasedLeasing.Override(ctx, &s.ClusterSettings().SV, int64(mode))
 
 			// Otherwise, we wouldn't get complete SSTs in our export under stress.
 			sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t)).Exec(
@@ -102,6 +102,7 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 				a: newInternalExecutorWriter(ie, "defaultdb.public.lease1", mode),
 				b: newKVWriter(codec, kvDB, lease2ID, settingsWatcher, modeReader),
 			}
+			require.Equal(t, modeReader.getSessionBasedLeasingMode(), mode)
 			start := kvDB.Clock().Now()
 			groups := generateWriteOps(2<<10, 1<<10)
 			for {
@@ -230,7 +231,7 @@ func generateWriteOps(n, numGroups int) func() (_ []writeOp, wantMore bool) {
 			version:      descpb.DescriptorVersion(rand.Intn(vals)),
 			instanceID:   base.SQLInstanceID(rand.Intn(vals)),
 			expiration:   *ts,
-			sessionID:    []byte(ts.String()),
+			sessionID:    []byte(ts.String() + "_session"),
 			regionPrefix: enum.One,
 		}
 		return lf
