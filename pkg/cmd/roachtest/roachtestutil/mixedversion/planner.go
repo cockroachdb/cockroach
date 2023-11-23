@@ -409,7 +409,7 @@ func (p *testPlanner) finalizeUpgradeSteps(
 	p.currentContext.Finalizing = true
 	p.currentContext.Stage = RunningUpgradeMigrationsStage
 	runMigrations := p.newSingleStep(
-		finalizeUpgradeStep{prng: p.newRNG(), crdbNodes: p.crdbNodes},
+		allowUpgradeStep{prng: p.newRNG(), crdbNodes: p.crdbNodes},
 	)
 	var mixedVersionStepsDuringMigrations []testStep
 	if scheduleHooks {
