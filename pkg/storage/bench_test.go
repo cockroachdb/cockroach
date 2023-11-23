@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1575,6 +1576,107 @@ func runBatchApplyBatchRepr(
 			b.Fatal(err)
 		}
 		batch.Close()
+	}
+
+	b.StopTimer()
+}
+
+func runMVCCCheckForAcquireLock(
+	ctx context.Context,
+	b *testing.B,
+	emk engineMaker,
+	useBatch bool,
+	heldOtherTxn bool,
+	heldSameTxn bool,
+	strength lock.Strength,
+) {
+	runMVCCAcquireLockCommon(ctx, b, emk, useBatch, heldOtherTxn, heldSameTxn, strength, true /* checkFor */)
+}
+
+func runMVCCAcquireLock(
+	ctx context.Context,
+	b *testing.B,
+	emk engineMaker,
+	useBatch bool,
+	heldOtherTxn bool,
+	heldSameTxn bool,
+	strength lock.Strength,
+) {
+	runMVCCAcquireLockCommon(ctx, b, emk, useBatch, heldOtherTxn, heldSameTxn, strength, false /* checkFor */)
+}
+
+func runMVCCAcquireLockCommon(
+	ctx context.Context,
+	b *testing.B,
+	emk engineMaker,
+	useBatch bool,
+	heldOtherTxn bool,
+	heldSameTxn bool,
+	strength lock.Strength,
+	checkFor bool,
+) {
+	if heldOtherTxn && heldSameTxn {
+		b.Fatalf("heldOtherTxn and heldSameTxn cannot both be true")
+	}
+
+	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
+	makeKey := func(i int) roachpb.Key {
+		// NOTE: we're appending to a buffer with sufficient capacity, so this does
+		// not allocate, but as a result, we need to watch out for aliasing bugs.
+		return encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i))
+	}
+	makeTxn := func(name string) roachpb.Transaction {
+		return roachpb.MakeTransaction(name, keyBuf, 0, 0, hlc.Timestamp{WallTime: 1}, 0, 0, 0)
+	}
+	txn1 := makeTxn("txn1")
+	txn2 := makeTxn("txn2")
+
+	loc := "acquire_lock"
+	if checkFor {
+		loc = "check_for_acquire_lock"
+	}
+	eng := emk(b, loc)
+	defer eng.Close()
+
+	for i := 0; i < b.N; i++ {
+		key := makeKey(i)
+		if heldOtherTxn || heldSameTxn {
+			txn := &txn1
+			if heldOtherTxn {
+				txn = &txn2
+			}
+			// Acquire a shared and an exclusive lock on the key.
+			err := MVCCAcquireLock(ctx, eng, txn, lock.Shared, key, nil, 0)
+			require.NoError(b, err)
+			err = MVCCAcquireLock(ctx, eng, txn, lock.Exclusive, key, nil, 0)
+			require.NoError(b, err)
+		}
+	}
+
+	rw := ReadWriter(eng)
+	if useBatch {
+		batch := eng.NewBatch()
+		defer batch.Close()
+		rw = batch
+	}
+	ms := &enginepb.MVCCStats{}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		key := makeKey(i)
+		txn := &txn1
+		var err error
+		if checkFor {
+			err = MVCCCheckForAcquireLock(ctx, rw, txn, strength, key, 0)
+		} else {
+			err = MVCCAcquireLock(ctx, rw, txn, strength, key, ms, 0)
+		}
+		if heldOtherTxn {
+			require.Error(b, err)
+		} else {
+			require.NoError(b, err)
+		}
 	}
 
 	b.StopTimer()

@@ -17,8 +17,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -512,6 +514,42 @@ func BenchmarkBatchApplyBatchRepr_Pebble(b *testing.B) {
 			}
 		})
 	}
+}
+
+func BenchmarkMVCCCheckForAcquireLock_Pebble(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	testutils.RunTrueAndFalse(b, "batch", func(b *testing.B, batch bool) {
+		testutils.RunTrueAndFalse(b, "heldOtherTxn", func(b *testing.B, heldOtherTxn bool) {
+			testutils.RunTrueAndFalse(b, "heldSameTxn", func(b *testing.B, heldSameTxn bool) {
+				if heldOtherTxn && heldSameTxn {
+					return // not possible
+				}
+				strs := []lock.Strength{lock.Shared, lock.Exclusive}
+				testutils.RunValues(b, "strength", strs, func(b *testing.B, strength lock.Strength) {
+					runMVCCCheckForAcquireLock(ctx, b, setupMVCCInMemPebble, batch, heldOtherTxn, heldSameTxn, strength)
+				})
+			})
+		})
+	})
+}
+
+func BenchmarkMVCCAcquireLock_Pebble(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	testutils.RunTrueAndFalse(b, "batch", func(b *testing.B, batch bool) {
+		testutils.RunTrueAndFalse(b, "heldOtherTxn", func(b *testing.B, heldOtherTxn bool) {
+			testutils.RunTrueAndFalse(b, "heldSameTxn", func(b *testing.B, heldSameTxn bool) {
+				if heldOtherTxn && heldSameTxn {
+					return // not possible
+				}
+				strs := []lock.Strength{lock.Shared, lock.Exclusive}
+				testutils.RunValues(b, "strength", strs, func(b *testing.B, strength lock.Strength) {
+					runMVCCAcquireLock(ctx, b, setupMVCCInMemPebble, batch, heldOtherTxn, heldSameTxn, strength)
+				})
+			})
+		})
+	})
 }
 
 func BenchmarkBatchBuilderPut(b *testing.B) {
