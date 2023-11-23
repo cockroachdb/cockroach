@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -46,7 +47,7 @@ func refreshTables(
 	tableIDs []descpb.ID,
 	tableDropTimes map[descpb.ID]int64,
 	indexDropTimes map[descpb.IndexID]int64,
-	jobID jobspb.JobID,
+	job *jobs.Job,
 	progress *jobspb.SchemaChangeGCProgress,
 ) (expired bool, earliestDeadline time.Time) {
 	earliestDeadline = maxDeadline
@@ -55,7 +56,7 @@ func refreshTables(
 		tableHasExpiredElem, tableIsMissing, deadline := updateStatusForGCElements(
 			ctx,
 			execCfg,
-			jobID,
+			job.ID(),
 			tableID,
 			tableDropTimes, indexDropTimes,
 			progress,
@@ -68,7 +69,7 @@ func refreshTables(
 	}
 
 	if expired || haveAnyMissing {
-		persistProgress(ctx, execCfg, jobID, progress, sql.RunningStatusWaitingGC)
+		persistProgress(ctx, execCfg, job, progress, sql.RunningStatusWaitingGC)
 	}
 
 	return expired, earliestDeadline
