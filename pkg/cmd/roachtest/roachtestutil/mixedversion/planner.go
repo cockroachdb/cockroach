@@ -269,17 +269,16 @@ func (p *testPlanner) clusterSetupSteps() []testStep {
 	if p.prng.Float64() < p.options.useFixturesProbability {
 		steps = []testStep{
 			p.newSingleStep(
-				installFixturesStep{version: initialVersion, crdbNodes: p.crdbNodes},
+				installFixturesStep{version: initialVersion},
 			),
 		}
 	}
 
 	return append(steps,
 		p.newSingleStep(startStep{
-			version:   initialVersion,
-			rt:        p.rt,
-			crdbNodes: p.crdbNodes,
-			settings:  p.clusterSettings(),
+			version:  initialVersion,
+			rt:       p.rt,
+			settings: p.clusterSettings(),
 		}),
 		p.newSingleStep(waitForStableClusterVersionStep{
 			nodes:          p.crdbNodes,
@@ -311,11 +310,7 @@ func (p *testPlanner) testStartSteps() []testStep {
 // of upgrading/downgrading.
 func (p *testPlanner) initUpgradeSteps() []testStep {
 	p.currentContext.Stage = InitUpgradeStage
-	return []testStep{
-		p.newSingleStep(
-			preserveDowngradeOptionStep{crdbNodes: p.crdbNodes},
-		),
-	}
+	return []testStep{p.newSingleStep(preserveDowngradeOptionStep{})}
 }
 
 // afterUpgradeSteps are the steps to be run once the nodes have been
@@ -409,7 +404,7 @@ func (p *testPlanner) finalizeUpgradeSteps(
 ) []testStep {
 	p.currentContext.Finalizing = true
 	p.currentContext.Stage = RunningUpgradeMigrationsStage
-	runMigrations := p.newSingleStep(allowUpgradeStep{crdbNodes: p.crdbNodes})
+	runMigrations := p.newSingleStep(allowUpgradeStep{})
 	var mixedVersionStepsDuringMigrations []testStep
 	if scheduleHooks {
 		mixedVersionStepsDuringMigrations = p.hooks.MixedVersionSteps(p.currentContext, p.prng, p.isLocal)
