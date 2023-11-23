@@ -174,7 +174,9 @@ const (
 // planMutators includes a list of all known `mutator`
 // implementations. A subset of these mutations might be enabled in
 // any mixedversion test plan.
-var planMutators = []mutator{}
+var planMutators = []mutator{
+	preserveDowngradeOptionRandomizerMutator{},
+}
 
 // Plan returns the TestPlan used to upgrade the cluster from the
 // first to the final version in the `versions` field. The test plan
@@ -950,7 +952,11 @@ func (plan *TestPlan) prettyPrintStep(
 		// Include debug information if we are in debug mode.
 		var debugInfo string
 		if debug {
-			debugInfo = fmt.Sprintf(" [stage=%s]", ss.context.Stage)
+			var finalizingStr string
+			if ss.context.Finalizing {
+				finalizingStr = ",finalizing"
+			}
+			debugInfo = fmt.Sprintf(" [stage=%s%s]", ss.context.Stage, finalizingStr)
 		}
 
 		out.WriteString(fmt.Sprintf(
