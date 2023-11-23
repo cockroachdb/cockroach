@@ -68,7 +68,7 @@ func TestMetaphone(t *testing.T) {
 		l := rand.Int31n(10)
 		b := make([]byte, l)
 		_, _ = crypto_rand.Read(b)
-	
+
 		_ = Metaphone(string(b), 4)
 	}
 
