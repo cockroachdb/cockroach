@@ -25,8 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
-// Helper is the struct passed to user-functions providing helper
-// functions that mixed-version tests can use.
+// Helper is the struct passed to `stepFunc`s (user-provided or
+// implemented by the framework) that provides helper functions that
+// mixed-version tests can use.
 type Helper struct {
 	Context *Context
 
