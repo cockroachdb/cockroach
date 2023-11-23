@@ -180,8 +180,11 @@ type Registry struct {
 	creationKnobs sync.Map
 }
 
+// UpdateJobWithTxn calls the Update method on an existing job with
+// jobID, using a transaction passed in the txn argument. Passing a
+// nil transaction means that a txn will be automatically created.
 func (r *Registry) UpdateJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, useReadLock bool, updateFunc UpdateFn,
+	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc UpdateFn,
 ) error {
 	job, err := r.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
@@ -884,15 +887,6 @@ func (r *Registry) LoadJobWithTxn(
 	return j, nil
 }
 
-// UpdateJobWithTxn calls the Update method on an existing job with jobID, using
-// a transaction passed in the txn argument. Passing a nil transaction means
-// that a txn will be automatically created. The useReadLock parameter will
-// have the update acquire an exclusive lock on the job row when reading. This
-// can help eliminate restarts in the face of concurrent updates at the cost of
-// locking the row from readers. Most updates of a job do not expect contention
-// and may do extra work and thus should not do locking. Cases where the job
-// is used to coordinate resources from multiple nodes may benefit from locking.
-
 // TODO (sajjad): make maxAdoptionsPerLoop a cluster setting.
 var maxAdoptionsPerLoop = envutil.EnvOrDefaultInt(`COCKROACH_JOB_ADOPTIONS_PER_PERIOD`, 10)
 
@@ -1292,7 +1286,7 @@ func (r *Registry) cancelRequested(ctx context.Context, txn isql.Txn, id jobspb.
 	if err != nil {
 		return err
 	}
-	return job.maybeWithTxn(txn).CancelRequested(ctx)
+	return job.WithTxn(txn).CancelRequested(ctx)
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).

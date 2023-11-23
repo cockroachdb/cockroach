@@ -63,42 +63,38 @@ func markIndexGCed(
 // initDetailsAndProgress sets up the job progress if not already populated and
 // validates that the job details is properly formatted.
 func initDetailsAndProgress(
-	ctx context.Context, execCfg *sql.ExecutorConfig, jobID jobspb.JobID,
+	ctx context.Context, execCfg *sql.ExecutorConfig, job *jobs.Job,
 ) (*jobspb.SchemaChangeGCDetails, *jobspb.SchemaChangeGCProgress, error) {
 	var details jobspb.SchemaChangeGCDetails
 	var progress *jobspb.SchemaChangeGCProgress
-	var job *jobs.Job
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		var err error
-		job, err = execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
-		if err != nil {
-			return err
-		}
-		details = job.Details().(jobspb.SchemaChangeGCDetails)
-		jobProgress := job.Progress()
-		progress = jobProgress.GetSchemaChangeGC()
-		return nil
+		return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			details = *md.Payload.GetSchemaChangeGC()
+			progress = md.Progress.GetSchemaChangeGC()
+			if err := validateDetails(&details); err != nil {
+				return err
+			}
+			if initializeProgress(&details, progress) {
+				if err := md.CheckRunningOrReverting(); err != nil {
+					return err
+				}
+				md.Progress.Details = jobspb.WrapProgressDetails(*progress)
+				ju.UpdateProgress(md.Progress)
+			}
+			return nil
+		})
 	}); err != nil {
 		return nil, nil, err
 	}
-	if err := validateDetails(&details); err != nil {
-		return nil, nil, err
-	}
-	if err := initializeProgress(ctx, execCfg, jobID, &details, progress); err != nil {
-		return nil, nil, err
-	}
+
 	return &details, progress, nil
 }
 
 // initializeProgress converts the details provided into a progress payload that
 // will be updated as the elements that need to be GC'd get processed.
 func initializeProgress(
-	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	jobID jobspb.JobID,
-	details *jobspb.SchemaChangeGCDetails,
-	progress *jobspb.SchemaChangeGCProgress,
-) error {
+	details *jobspb.SchemaChangeGCDetails, progress *jobspb.SchemaChangeGCProgress,
+) bool {
 	var update bool
 	if details.Tenant != nil && progress.Tenant == nil {
 		progress.Tenant = &jobspb.SchemaChangeGCProgress_TenantProgress{
@@ -120,19 +116,7 @@ func initializeProgress(
 			})
 		}
 	}
-
-	if update {
-		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-			job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
-			if err != nil {
-				return err
-			}
-			return job.WithTxn(txn).SetProgress(ctx, *progress)
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
+	return update
 }
 
 // Check if we are done GC'ing everything.
@@ -274,30 +258,24 @@ func validateDetails(details *jobspb.SchemaChangeGCDetails) error {
 func persistProgress(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	jobID jobspb.JobID,
+	job *jobs.Job,
 	progress *jobspb.SchemaChangeGCProgress,
 	runningStatus jobs.RunningStatus,
 ) {
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
-		if err != nil {
-			return err
-		}
-		if err := job.WithTxn(txn).SetProgress(ctx, *progress); err != nil {
-			return err
-		}
-		log.Infof(ctx, "updated progress payload: %+v", progress)
-		err = job.WithTxn(txn).RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return runningStatus, nil
+		return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			if err := md.CheckRunningOrReverting(); err != nil {
+				return err
+			}
+			md.Progress.RunningStatus = string(runningStatus)
+			md.Progress.Details = jobspb.WrapProgressDetails(*progress)
+			ju.UpdateProgress(md.Progress)
+			return nil
 		})
-		if err != nil {
-			return err
-		}
-		log.Infof(ctx, "updated running status: %+v", runningStatus)
-		return nil
 	}); err != nil {
 		log.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
 	}
+	log.Infof(ctx, "updated progress status: %s, payload: %+v", runningStatus, progress)
 }
 
 // getDropTimes returns the data stored in details as a map for convenience.
