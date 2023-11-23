@@ -63,6 +63,15 @@ func TestMetaphone(t *testing.T) {
 		},
 	}
 
+	// Run some random test cases to make sure we don't panic.
+	for i := 0; i < 1000; i++ {
+		l := rand.Int31n(10)
+		b := make([]byte, l)
+		_, _ = crypto_rand.Read(b)
+	
+		_ = Metaphone(string(b), 4)
+	}
+
 	for _, tc := range tt {
 		got := Metaphone(tc.Source, 4)
 		if tc.Expected != got {

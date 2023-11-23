@@ -13,7 +13,6 @@ package fuzzystrmatch
 import (
 	"strings"
 	"unicode"
-	"fmt"
 )
 
 // Special encodings
@@ -22,12 +21,13 @@ const TH = '0'
 
 /* Port from Postgres */
 var _codes = [26]int{1, 16, 4, 16, 9, 2, 4, 16, 9, 2, 0, 2, 2, 2, 1, 4, 0, 2, 4, 4, 1, 0, 0, 0, 8, 0}
+
 //					 a  b   c  d   e  f  g  h   i  j  k  l  m  n  o  p  q  r  s  t  u  v  w  x  y  z
 
 func getcode(c rune) int {
-	if (IsAlpha(c)) {
+	if IsAlpha(c) {
 		c = unicode.ToUpper(c)
-		return _codes[int(c - 'A')]
+		return _codes[int(c-'A')]
 	}
 	return 0
 }
@@ -52,18 +52,18 @@ func isBDH(c rune) bool {
 	return (getcode(c) & 16) != 0
 }
 
-// Iterator of a given string
+// Iterator on a string
 type Iterator struct {
 	src []rune
 	idx int
 }
 
 func (itr *Iterator) len() int {
-	return len(itr.src)
+	return itr.idx + 1
 }
 
 func (itr *Iterator) next(count int) bool {
-	if itr.idx + count >= len(itr.src) {
+	if itr.idx+count >= len(itr.src) {
 		return false
 	}
 	itr.idx += count
@@ -71,10 +71,10 @@ func (itr *Iterator) next(count int) bool {
 }
 
 func (itr *Iterator) letterAt(offset int, pred func(rune) bool) bool {
-	if itr.idx + offset < 0 || itr.idx + offset >= len(itr.src) {
+	if itr.idx+offset < 0 || itr.idx+offset >= len(itr.src) {
 		return false
-	} 
-	return pred(itr.src[itr.idx + offset])
+	}
+	return pred(itr.src[itr.idx+offset])
 }
 
 func (itr *Iterator) compareLetterAt(offset int, other rune) bool {
@@ -83,25 +83,25 @@ func (itr *Iterator) compareLetterAt(offset int, other rune) bool {
 	})
 }
 
-func (itr *Iterator) lookNextLetter() (rune, bool) {
-	if itr.idx + 1 >= itr.len() {
-		return rune(0), false
+func (itr *Iterator) lookNextLetter() rune {
+	if itr.idx+1 >= len(itr.src) {
+		return rune(0)
 	}
-	return itr.src[itr.idx + 1], true
+	return itr.src[itr.idx+1]
 }
 
-func (itr *Iterator) lookCurrLetter() (rune, bool) {
-	if itr.idx >= itr.len() {
-		return rune(0), false
+func (itr *Iterator) lookCurrLetter() rune {
+	if itr.idx >= len(itr.src) {
+		return rune(0)
 	}
-	return itr.src[itr.idx], true
+	return itr.src[itr.idx]
 }
 
-func (itr *Iterator) lookPrevLetter() (rune, bool) {
-	if itr.idx - 1 < 0 {
-		return rune(0), false
+func (itr *Iterator) lookPrevLetter() rune {
+	if itr.idx-1 < 0 {
+		return rune(0)
 	}
-	return itr.src[itr.idx - 1], true
+	return itr.src[itr.idx-1]
 }
 
 func (itr *Iterator) phonize(c rune) {
@@ -110,13 +110,7 @@ func (itr *Iterator) phonize(c rune) {
 }
 
 func Metaphone(source string, outlen int) string {
-	code := metaphone(source, outlen)
-	fmt.Printf("\tDEBUGGING %s -> %s\n", source, code)
-	return code
-}
-
-func metaphone(source string, outlen int) string {
-	source = strings.TrimLeftFunc(source, func (c rune) bool {
+	source = strings.TrimLeftFunc(source, func(c rune) bool {
 		return !IsAlpha(c)
 	})
 	if len(source) == 0 || outlen == 0 {
@@ -135,239 +129,230 @@ func metaphone(source string, outlen int) string {
 	}
 
 	// Handle the first letter
-	nextLetter, _ := itrSrc.lookNextLetter()
-	switch currLetter, _ := itrSrc.lookCurrLetter(); currLetter {
+	ok := true
+	nextLetter := itrSrc.lookNextLetter()
+	currLetter := itrSrc.lookCurrLetter()
+	switch currLetter {
+	case 'A':
 		// AE becomes E
-		case 'A':
-			if nextLetter == 'E' {
-				itrPhoned.phonize('E')
-				itrSrc.next(2)
-			} else {
-				// Preserve vowel at the beginning
-				itrPhoned.phonize('A')
-				itrSrc.next(1)
-			}
-		// [GKP]N becomes N
-		case 'G':
-		case 'K':
-		case 'P':
-			if nextLetter == 'N' {
-				itrPhoned.phonize('N')
-				itrSrc.next(2)
-			}
-		// WH becomes H, WR becomes R, W if followed by a vowel
-		case 'W':
-			if nextLetter == 'H' ||
-			   nextLetter == 'R' {
-				itrPhoned.phonize(nextLetter)
-			} else if isVowel(nextLetter) {
-				itrPhoned.phonize('W')
-			}
-			itrSrc.next(2)
-		// X becomes S
-		case 'X':
-			itrPhoned.phonize('S')
-			itrSrc.next(1)
-		// Vowels
-		// Note that we handle case 'A' already
-		case 'E':
-		case 'I':
-		case 'O':
-		case 'U':
-			itrPhoned.phonize(currLetter)
-			itrSrc.next(1)
-		default:
+		if nextLetter == 'E' {
+			itrPhoned.phonize('E')
+			ok = itrSrc.next(2)
+		} else {
+			// Preserve vowel at the beginning
+			itrPhoned.phonize('A')
+			ok = itrSrc.next(1)
+		}
+
+	// [GKP]N becomes N
+	case 'G', 'K', 'P':
+		if nextLetter == 'N' {
+			itrPhoned.phonize('N')
+			ok = itrSrc.next(2)
+		}
+
+	// WH becomes H, WR becomes R, W becomes W if followed by a vowel
+	case 'W':
+		if nextLetter == 'H' ||
+			nextLetter == 'R' {
+			itrPhoned.phonize(nextLetter)
+		} else if isVowel(nextLetter) {
+			itrPhoned.phonize('W')
+		}
+		ok = itrSrc.next(2)
+
+	// X becomes S
+	case 'X':
+		itrPhoned.phonize('S')
+		ok = itrSrc.next(1)
+
+	// Vowels
+	// Note that we handle case 'A' already
+	case 'E', 'I', 'O', 'U':
+		itrPhoned.phonize(currLetter)
+		ok = itrSrc.next(1)
+
+	default:
+
 	}
 
 	// On to the metaphoning
-	numSkipLetters := 0
-	for currLetter, err := itrSrc.lookCurrLetter(); !err && itrPhoned.len() < outlen; itrSrc.next(1) {
+	numSkipLetters := 0 // How many letters to skip because an earlier encoding handled multiple letters
+	for ; ok && itrPhoned.len() <= outlen; ok = itrSrc.next(numSkipLetters + 1) {
+		currLetter = itrSrc.lookCurrLetter()
+		nextLetter = itrSrc.lookNextLetter()
+		prevLetter := itrSrc.lookPrevLetter()
+
 		// Ignore non-alphas
 		if !IsAlpha(currLetter) {
 			continue
 		}
-		
-		nextLetter, _ = itrSrc.lookNextLetter()
-		prevLetter, _ := itrSrc.lookPrevLetter()
 		// Drop duplicates, except CC
 		if currLetter == prevLetter && currLetter != 'C' {
 			continue
 		}
 
 		switch currLetter {
-			// B becomes B unless in MB
-			case 'B':
-				if prevLetter != 'M' {
-					itrPhoned.phonize('B')
-				}
+		// B becomes B unless in MB
+		case 'B':
+			if prevLetter != 'M' {
+				itrPhoned.phonize('B')
+			}
 
-			case 'C':
-				// C[EIY]
-				if isEIY(nextLetter) {
-					// CIA
-					if nextLetter == 'I' && itrSrc.compareLetterAt(2, 'A') {
-						itrPhoned.phonize(SH)
-					} else if prevLetter == 'S' {
-						// SC[IEY]
-						// Dropped
-					} else {
-						itrPhoned.phonize('S')
-					}
-				} else if nextLetter == 'H' {
-					// e.g. School, Christ
-					if prevLetter == 'S' || itrSrc.compareLetterAt(2, 'R') {
-						itrPhoned.phonize('K')
-					} else {
-						itrPhoned.phonize(SH)
-					}
+		// SH if -CIA- or -CH, but not SCH, except SCHW (SCHW handled in case 'S')
+		// else S if -CE-, -CI- or -CY-
+		// else dropped if SCE-, -SCI-, -SCY- (handled in case 'S')
+		// else K
+		case 'C':
+			// C[EIY]
+			if isEIY(nextLetter) {
+				// CIA
+				if nextLetter == 'I' && itrSrc.compareLetterAt(2, 'A') {
+					itrPhoned.phonize(SH)
+				} else if prevLetter == 'S' {
+					// SC[EIY]
+					// Dropped
+				} else {
+					itrPhoned.phonize('S')
 				}
+			} else if nextLetter == 'H' {
+				// e.g. School, Christ
+				if prevLetter == 'S' || itrSrc.compareLetterAt(2, 'R') {
+					itrPhoned.phonize('K')
+				} else {
+					itrPhoned.phonize(SH)
+				}
+			}
+			numSkipLetters++
+
+		// D becomes J if in -DGE-, -DGI- or -DGY-
+		// else T
+		case 'D':
+			if nextLetter == 'G' && itrSrc.letterAt(2, isEIY) {
+				itrPhoned.phonize('J')
 				numSkipLetters++
-				
-			// D becomes J if in -DGE-, -DGI- or -DGY-
-			// else T
-			case 'D':
-				if nextLetter == 'G' && itrSrc.letterAt(2, isEIY) {
-					itrPhoned.phonize('J')
-					numSkipLetters++
-				} else {
-					itrPhoned.phonize('T')
-				}
+			} else {
+				itrPhoned.phonize('T')
+			}
 
-			// G becomes F if in -GH but not B--GH, D--GH, -H--GH
-			// else dropped if -GNED, -GN
-			// else dropped if -DGE-, -DGI- or -DGY- (handled in case 'D' already) 
-			// else J if in -GE-, -GI, -GY and not GG
-			// else K
-			case 'G':
-				if nextLetter == 'H' {
-					if !itrSrc.letterAt(3, isBDH) || itrSrc.compareLetterAt(4, 'H') {
-						itrPhoned.phonize('F')
-						numSkipLetters++
-					}
-				} else if nextLetter == 'N' {
-					if !itrSrc.letterAt(2, IsAlpha) || 
-					   (itrSrc.compareLetterAt(2, 'E') && itrSrc.compareLetterAt(3, 'D')) {
-						// Dropped
-					} else {
-						itrPhoned.phonize('F')
-					}
-				} else if isEIY(nextLetter) && prevLetter != 'G' {
-					itrPhoned.phonize('J')
-				} else {
-					itrPhoned.phonize('K')
-				}
-
-			// H becomes H if before a vowel and not after C,G,P,S,T
-			case 'H':
-				if (isVowel(nextLetter) && !isCGPST(prevLetter)) {
-					itrPhoned.phonize('H')
-				}
-
-			// K is dropped if after C, else K
-			case 'K':
-				if prevLetter != 'C' {
-					itrPhoned.phonize('K')
-				}
-
-			// P becomes F if before H, else P
-			case 'P':
-				if nextLetter == 'H' {
+		// G becomes F if in -GH but not B--GH, D--GH, -H--GH, -H---GH
+		// else dropped if -GNED, -GN
+		// else dropped if -DGE-, -DGI- or -DGY- (handled in case 'D' above)
+		// else J if in -GE-, -GI, -GY and not GG
+		// else K
+		case 'G':
+			if nextLetter == 'H' {
+				if !(itrSrc.letterAt(-3, isBDH) || itrSrc.compareLetterAt(-4, 'H')) {
 					itrPhoned.phonize('F')
-				} else {
-					itrPhoned.phonize('P')
+					numSkipLetters++
 				}
-
-			// Q becomes K
-			case 'Q':
+			} else if nextLetter == 'N' {
+				if !itrSrc.letterAt(2, IsAlpha) ||
+					(itrSrc.compareLetterAt(2, 'E') && itrSrc.compareLetterAt(3, 'D')) {
+					// Dropped
+				} else {
+					itrPhoned.phonize('K')
+				}
+			} else if isEIY(nextLetter) && prevLetter != 'G' {
+				itrPhoned.phonize('J')
+			} else {
 				itrPhoned.phonize('K')
+			}
 
-			// S becomes SH if in -SH-, -SIO- or -SIA- or -SCHW-
-			// else S
-			case 'S':
-				if nextLetter == 'I' && 
-				   (itrSrc.compareLetterAt(2, 'O') || itrSrc.compareLetterAt(2, 'A')) {
-					itrPhoned.phonize(SH)
-				} else if nextLetter == 'H' {
-					itrPhoned.phonize(SH)
-					numSkipLetters++
-				} else if nextLetter == 'C' &&
-						  itrSrc.compareLetterAt(2, 'H') &&
-						  itrSrc.compareLetterAt(3, 'W') {
-					itrPhoned.phonize(SH)
-					numSkipLetters += 2
-				} else {
-					itrPhoned.phonize('S')
-				}
+		// H becomes H if before a vowel and not after C,G,P,S,T
+		case 'H':
+			if isVowel(nextLetter) && !isCGPST(prevLetter) {
+				itrPhoned.phonize('H')
+			}
 
-			// T becomes SH if in -TIA- or -TIO- 
-			// else 'th' before H 
-			// else T
-			case 'T':
-				if nextLetter == 'I' && 
-				   (itrSrc.compareLetterAt(2, 'A') || itrSrc.compareLetterAt(2, 'O')) {
-					itrPhoned.phonize(SH)
-				} else if nextLetter == 'H' {
-					itrPhoned.phonize(TH)
-					numSkipLetters++
-				} else {
-					itrPhoned.phonize('T')
-				}
+		// K is dropped if after C, else K
+		case 'K':
+			if prevLetter != 'C' {
+				itrPhoned.phonize('K')
+			}
 
-			// V becomes F
-			case 'V':
+		// P becomes F if before H, else P
+		case 'P':
+			if nextLetter == 'H' {
 				itrPhoned.phonize('F')
-		
-			// W becomes W if before a vowel, else dropped
-			case 'W':
-				if (isVowel(nextLetter)) {
-					itrPhoned.phonize('W')
-				}
+			} else {
+				itrPhoned.phonize('P')
+			}
 
-			// X becomes KS
-			case 'X':
-				itrPhoned.phonize('K')
-				if itrPhoned.len() < outlen {
-					itrPhoned.phonize('S')
-				}
+		// Q becomes K
+		case 'Q':
+			itrPhoned.phonize('K')
 
-			// Y becomes Y if before a vowel
-			case 'Y':
-				if (isVowel(nextLetter)) {
-					itrPhoned.phonize('Y')
-				}
-
-			// Z becomes S
-			case 'Z':
+		// S becomes SH if in -SH-, -SIA- or -SIO- or -SCHW-
+		// else S
+		case 'S':
+			if nextLetter == 'I' &&
+				(itrSrc.compareLetterAt(2, 'A') || itrSrc.compareLetterAt(2, 'O')) {
+				itrPhoned.phonize(SH)
+			} else if nextLetter == 'H' {
+				itrPhoned.phonize(SH)
+				numSkipLetters++
+			} else if nextLetter == 'C' &&
+				itrSrc.compareLetterAt(2, 'H') &&
+				itrSrc.compareLetterAt(3, 'W') {
+				itrPhoned.phonize(SH)
+				numSkipLetters += 2
+			} else {
 				itrPhoned.phonize('S')
+			}
 
-			// No transformation
-			case 'F':
-			case 'J':
-			case 'L':
-			case 'M':
-			case 'N':
-			case 'R':
-				itrPhoned.phonize(currLetter);
-			default:
+		// T becomes SH if in -TIA- or -TIO-
+		// else TH before H
+		// else T
+		case 'T':
+			if nextLetter == 'I' &&
+				(itrSrc.compareLetterAt(2, 'A') || itrSrc.compareLetterAt(2, 'O')) {
+				itrPhoned.phonize(SH)
+			} else if nextLetter == 'H' {
+				itrPhoned.phonize(TH)
+				numSkipLetters++
+			} else {
+				itrPhoned.phonize('T')
+			}
 
-			itrSrc.next(numSkipLetters)
+		// V becomes F
+		case 'V':
+			itrPhoned.phonize('F')
+
+		// W becomes W if before a vowel, else dropped
+		case 'W':
+			if isVowel(nextLetter) {
+				itrPhoned.phonize('W')
+			}
+
+		// X becomes KS
+		case 'X':
+			itrPhoned.phonize('K')
+			if itrPhoned.len() < outlen {
+				itrPhoned.phonize('S')
+			}
+
+		// Y becomes Y if before a vowel
+		case 'Y':
+			if isVowel(nextLetter) {
+				itrPhoned.phonize('Y')
+			}
+
+		// Z becomes S
+		case 'Z':
+			itrPhoned.phonize('S')
+
+		// No transformation
+		case 'F', 'J', 'L', 'M', 'N', 'R':
+			itrPhoned.phonize(currLetter)
+		default:
+
 		}
 	}
 
-	return string(phoned)
-}
-
-// other utilities
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	result := string(phoned)
+	result = strings.TrimRightFunc(result, func(c rune) bool {
+		return !IsAlpha(c)
+	})
+	return result
 }

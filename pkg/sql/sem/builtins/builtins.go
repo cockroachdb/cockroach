@@ -3972,7 +3972,7 @@ value if you rely on the HLC for accuracy.`,
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 						"output exceeds maximum length of %d characters", maxDefaultLen)
 				}
-				if maxOutputLen < 0 {
+				if maxOutputLen <= 0 {
 					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 						"output length must be > 0")
 				}
