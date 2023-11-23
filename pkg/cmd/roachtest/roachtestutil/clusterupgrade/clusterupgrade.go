@@ -72,7 +72,13 @@ func (v *Version) String() string {
 // IsCurrent returns whether this version corresponds to the current
 // version being tested.
 func (v *Version) IsCurrent() bool {
-	return v.Version.Compare(&CurrentVersion().Version) == 0
+	return v.Equal(CurrentVersion())
+}
+
+// Equal compares the two versions, returning whether they represent
+// the same version.
+func (v *Version) Equal(other *Version) bool {
+	return v.Version.Compare(&other.Version) == 0
 }
 
 // AtLeast is a thin wrapper around `(*version.Version).AtLeast`,
