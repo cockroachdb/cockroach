@@ -269,6 +269,11 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
           <h3>Unable to find session</h3>
           There is no session with the id{" "}
           {getMatchParamByName(this.props.match, sessionAttr)}.
+          <br />
+          {`The session’s details may no longer be available because they were
+          removed from cache, which is controlled by the cluster settings
+          'sql.closed_session_cache.capacity' and
+          'sql.closed_session_cache.time_to_live'.`}
         </section>
       );
     }
