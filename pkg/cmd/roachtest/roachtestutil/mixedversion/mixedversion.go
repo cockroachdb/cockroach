@@ -726,8 +726,7 @@ func parseVersions(vs []string) []*clusterupgrade.Version {
 // `pkg/cmd/roachtest/fixtures` for a specific version into the nodes'
 // store dir.
 type installFixturesStep struct {
-	version   *clusterupgrade.Version
-	crdbNodes option.NodeListOption
+	version *clusterupgrade.Version
 }
 
 func (s installFixturesStep) Background() shouldStop { return nil }
@@ -739,16 +738,15 @@ func (s installFixturesStep) Description() string {
 func (s installFixturesStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	return clusterupgrade.InstallFixtures(ctx, l, h.runner.cluster, s.crdbNodes, s.version)
+	return clusterupgrade.InstallFixtures(ctx, l, h.runner.cluster, h.runner.crdbNodes, s.version)
 }
 
 // startStep is the step that starts the cluster from a specific
 // `version`.
 type startStep struct {
-	rt        test.Test
-	version   *clusterupgrade.Version
-	crdbNodes option.NodeListOption
-	settings  []install.ClusterSettingOption
+	rt       test.Test
+	version  *clusterupgrade.Version
+	settings []install.ClusterSettingOption
 }
 
 func (s startStep) Background() shouldStop { return nil }
@@ -760,7 +758,9 @@ func (s startStep) Description() string {
 // Run uploads the binary associated with the given version and starts
 // the cockroach binary on the nodes.
 func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
-	binaryPath, err := clusterupgrade.UploadCockroach(ctx, s.rt, l, h.runner.cluster, s.crdbNodes, s.version)
+	binaryPath, err := clusterupgrade.UploadCockroach(
+		ctx, s.rt, l, h.runner.cluster, h.runner.crdbNodes, s.version,
+	)
 	if err != nil {
 		return err
 	}
@@ -771,7 +771,7 @@ func (s startStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *H
 		install.BinaryOption(binaryPath),
 	)
 	return clusterupgrade.StartWithSettings(
-		ctx, l, h.runner.cluster, s.crdbNodes, startOpts, clusterSettings...,
+		ctx, l, h.runner.cluster, h.runner.crdbNodes, startOpts, clusterSettings...,
 	)
 }
 
@@ -801,10 +801,9 @@ func (s waitForStableClusterVersionStep) Run(
 }
 
 // preserveDowngradeOptionStep sets the `preserve_downgrade_option`
-// cluster setting to the binary version running in `node`.
-type preserveDowngradeOptionStep struct {
-	crdbNodes option.NodeListOption
-}
+// cluster setting to the binary version running in a random node in
+// the cluster.
+type preserveDowngradeOptionStep struct{}
 
 func (s preserveDowngradeOptionStep) Background() shouldStop { return nil }
 
@@ -815,7 +814,7 @@ func (s preserveDowngradeOptionStep) Description() string {
 func (s preserveDowngradeOptionStep) Run(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
 ) error {
-	node, db := h.RandomDB(rng, s.crdbNodes)
+	node, db := h.RandomDB(rng, h.runner.crdbNodes)
 	l.Printf("checking binary version (via node %d)", node)
 	bv, err := clusterupgrade.BinaryVersion(db)
 	if err != nil {
@@ -866,9 +865,7 @@ func (s restartWithNewBinaryStep) Run(
 // allowUpgradeStep resets the `preserve_downgrade_option` cluster
 // setting, allowing the upgrade migrations to run and the cluster
 // version to eventually reach the binary version on the nodes.
-type allowUpgradeStep struct {
-	crdbNodes option.NodeListOption
-}
+type allowUpgradeStep struct{}
 
 func (s allowUpgradeStep) Background() shouldStop { return nil }
 
