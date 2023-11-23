@@ -45,5 +45,5 @@ mixed-version test plan for upgrading from "v22.2.8" to "<current>" with mutator
    │   │   └── testSingleStep, after 30s delay (20) [stage=last-upgrade]
    │   ├── restart node 1 with binary version <current> (21) [stage=last-upgrade]
    │   └── restart node 3 with binary version <current> (22) [stage=last-upgrade]
-   ├── finalize upgrade by resetting `preserve_downgrade_option` (23) [stage=running-upgrade-migrations]
+   ├── allow upgrade to happen by resetting `preserve_downgrade_option` (23) [stage=running-upgrade-migrations]
    └── wait for nodes :1-4 to reach cluster version <current> (24) [stage=running-upgrade-migrations]
