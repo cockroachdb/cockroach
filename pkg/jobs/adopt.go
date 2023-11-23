@@ -147,10 +147,7 @@ COALESCE(last_run::timestamptz, created::timestamptz) + least(
 	processQueryWithBackoff = processQueryBase + ", " + canRunArgs +
 		" WHERE " + processQueryWhereBase + " AND " + canRunClause
 
-	// resumeQueryBaseCols selects NULL values for the payload and progress that
-	// will be read from the system.job_info table. This allows us to get results
-	// aligned with deprecatedResumeQueryBaseCols below.
-	resumeQueryBaseCols    = "status, NULL, NULL, crdb_internal.sql_liveness_is_alive(claim_session_id)"
+	resumeQueryBaseCols    = "status, crdb_internal.sql_liveness_is_alive(claim_session_id)"
 	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
 		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
 
@@ -276,7 +273,7 @@ func (r *Registry) resumeJob(
 		return errors.Errorf("job %d: status changed to %s which is not resumable`", jobID, status)
 	}
 
-	if isAlive := *row[3].(*tree.DBool); !isAlive {
+	if isAlive := *row[1].(*tree.DBool); !isAlive {
 		return errors.Errorf("job %d: claim with session id %s has expired", jobID, s.ID())
 	}
 
@@ -294,11 +291,11 @@ func (r *Registry) resumeJob(
 	//  - Ur(j): Remove jobID of j from adoptedJobs, enabling further resumers
 	//  - Up(n1->2): Update number of runs from 1 to 2
 	//  - Fl(j): Job j fails
-	if !(*row[4].(*tree.DBool)) {
+	if !(*row[2].(*tree.DBool)) {
 		return nil
 	}
 
-	createdBy, err := unmarshalCreatedBy(row[5], row[6])
+	createdBy, err := unmarshalCreatedBy(row[3], row[4])
 	if err != nil {
 		return err
 	}

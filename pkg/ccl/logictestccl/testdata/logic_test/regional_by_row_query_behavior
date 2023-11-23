@@ -1983,7 +1983,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES 
 │                   └── • scan
 │                         missing stats
 │                         table: regional_by_row_table_virt@regional_by_row_table_virt_pkey
-│                         spans: FULL SCAN (SOFT LIMIT)
+│                         spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
 │
 └── • constraint-check
     │
@@ -2162,7 +2162,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
 │                   └── • scan
 │                         missing stats
 │                         table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-│                         spans: FULL SCAN (SOFT LIMIT)
+│                         spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
 │
 └── • constraint-check
     │
@@ -2182,7 +2182,7 @@ SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b)
                     └── • scan
                           missing stats
                           table: regional_by_row_table_virt_partial@regional_by_row_table_virt_partial_pkey
-                          spans: FULL SCAN (SOFT LIMIT)
+                          spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
 
 query T retry
 SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2

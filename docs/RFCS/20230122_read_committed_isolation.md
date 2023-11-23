@@ -1500,7 +1500,7 @@ SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED;
 SET default_transaction_isolation = 'read committed';
 
 -- set default isolation level (connection parameter style)
-cockroach sql –url='postgres://root@hostname:26257/db?options=-c default_transaction_isolation=READ_COMMITED'
+cockroach sql -–url='postgres://root@hostname:26257/db?options=-c default_transaction_isolation=read%20committed'
 ```
 
 Like in PostgreSQL, READ UNCOMMITTED will also be accepted by all of these
@@ -1870,13 +1870,13 @@ insert into kv values (1, 5);
 | -------- | -------- |
 | `begin transaction isolation level read committed;` | |
 | | `begin transaction isolation level read committed;` |
-| `select * from kv where v=5;`<br>`k \| v`<br>`--+---`<br>`1 \| 5` | |
+| `select * from kv;`<br>`k \| v`<br>`--+---`<br>`1 \| 5` | |
 | | `insert into kv values (2, 6);` |
-| `select * from kv where v=5;`<br>`k \| v`<br>`--+---`<br>`1 \| 5` | |
+| `select * from kv;`<br>`k \| v`<br>`--+---`<br>`1 \| 5` | |
 | `insert into kv values (3, 7);` | |
-| `select * from kv where v=5;`<br>`k \| v`<br>`--+---`<br>`1 \| 5`<br>`3 \| 7` | |
+| `select * from kv;`<br>`k \| v`<br>`--+---`<br>`1 \| 5`<br>`3 \| 7` | |
 | | `commit;` |
-| `select * from kv where v=5;`<br>`k \| v`<br>`--+---`<br>`1 \| 5`<br>`2 \| 6`<br>`3 \| 7` | |
+| `select * from kv;`<br>`k \| v`<br>`--+---`<br>`1 \| 5`<br>`2 \| 6`<br>`3 \| 7` | |
 | `commit;` | |
 
 ### SELECT FOR UPDATE behavior
@@ -1918,7 +1918,7 @@ insert into kv values (0, 5), (1, 5), (2, 5), (3, 5), (4, 1);
 | | `update kv set v = 10 where k = 2;` |
 | | `update kv set v = 1 where k = 1;` |
 | | `update kv set k = 10 where k = 0;` |
-| `update kv set k = 100 where v >= 5;`<br>`... waits ...` | |
+| `update kv set v = 100 where v >= 5;`<br>`... waits ...` | |
 | | `commit;` |
 | `... waiting completes` | |
 | `select * from kv`<br>`k \| v`<br>`--+---`<br>`1 \| 1`<br>`2 \| 100`<br>`4 \| 100`<br>`5 \| 100`<br>`10 \| 100` | |

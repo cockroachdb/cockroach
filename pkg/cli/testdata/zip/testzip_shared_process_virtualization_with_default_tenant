@@ -93,6 +93,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] retrieving SQL data for crdb_internal.gossip_alerts... writing output: debug/nodes/1/crdb_internal.gossip_alerts.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness... writing output: debug/nodes/1/crdb_internal.gossip_liveness.txt... done
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/nodes/1/crdb_internal.gossip_nodes.txt... done
+[node 1] retrieving SQL data for crdb_internal.kv_session_based_leases... writing output: debug/nodes/1/crdb_internal.kv_session_based_leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/nodes/1/crdb_internal.leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/nodes/1/crdb_internal.node_build_info.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/nodes/1/crdb_internal.node_contention_events.txt... done
@@ -245,6 +246,7 @@ debug zip --concurrency=1 --cpu-profile-duration=1s /dev/null
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes... writing output: debug/cluster/test-tenant/nodes/1/crdb_internal.gossip_nodes.txt...
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes: last request failed: ERROR: unimplemented: operation is unsupported within a virtual cluster (SQLSTATE 0A000)
 [node 1] retrieving SQL data for crdb_internal.gossip_nodes: creating error output: debug/cluster/test-tenant/nodes/1/crdb_internal.gossip_nodes.txt.err.txt... done
+[node 1] retrieving SQL data for crdb_internal.kv_session_based_leases... writing output: debug/cluster/test-tenant/nodes/1/crdb_internal.kv_session_based_leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.leases... writing output: debug/cluster/test-tenant/nodes/1/crdb_internal.leases.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_build_info... writing output: debug/cluster/test-tenant/nodes/1/crdb_internal.node_build_info.txt... done
 [node 1] retrieving SQL data for crdb_internal.node_contention_events... writing output: debug/cluster/test-tenant/nodes/1/crdb_internal.node_contention_events.txt... done

@@ -998,6 +998,15 @@ func (m *ChangefeedEmittedBytes) AppendJSONFields(printComma bool, b redact.Reda
 		b = strconv.AppendInt(b, int64(m.EmittedBytes), 10)
 	}
 
+	if m.EmittedMessages != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"EmittedMessages\":"...)
+		b = strconv.AppendInt(b, int64(m.EmittedMessages), 10)
+	}
+
 	if m.LoggingInterval != 0 {
 		if printComma {
 			b = append(b, ',')

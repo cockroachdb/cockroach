@@ -247,7 +247,7 @@ func unsplitRangesForIndexes(
 func maybeUnsplitRanges(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	jobID jobspb.JobID,
+	job *jobs.Job,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
@@ -268,7 +268,7 @@ func maybeUnsplitRanges(
 	}
 
 	progress.RangesUnsplitDone = true
-	persistProgress(ctx, execCfg, jobID, progress, runningStatusGC(progress))
+	persistProgress(ctx, execCfg, job, progress, runningStatusGC(progress))
 
 	return nil
 }
@@ -299,11 +299,11 @@ func (r schemaChangeGCResumer) Resume(ctx context.Context, execCtx interface{}) 
 			return err
 		}
 	}
-	details, progress, err := initDetailsAndProgress(ctx, &execCfg, r.job.ID())
+	details, progress, err := initDetailsAndProgress(ctx, &execCfg, r.job)
 	if err != nil {
 		return err
 	}
-	if err := maybeUnsplitRanges(ctx, &execCfg, r.job.ID(), details, progress); err != nil {
+	if err := maybeUnsplitRanges(ctx, &execCfg, r.job, details, progress); err != nil {
 		return err
 	}
 
@@ -319,7 +319,7 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
-	persistProgress(ctx, &execCfg, r.job.ID(), progress,
+	persistProgress(ctx, &execCfg, r.job, progress,
 		sql.RunningStatusDeletingData)
 	if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
 		if err := fn(r.job.ID()); err != nil {
@@ -329,7 +329,7 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	if err := deleteData(ctx, &execCfg, details, progress); err != nil {
 		return err
 	}
-	persistProgress(ctx, &execCfg, r.job.ID(), progress, sql.RunningStatusWaitingForMVCCGC)
+	persistProgress(ctx, &execCfg, r.job, progress, sql.RunningStatusWaitingForMVCCGC)
 	r.job.MarkIdle(true)
 	return waitForGC(ctx, &execCfg, details, progress)
 }
@@ -460,7 +460,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 		if details.Tenant == nil {
 			remainingTables := getAllTablesWaitingForGC(details, progress)
 			expired, earliestDeadline = refreshTables(
-				ctx, &execCfg, remainingTables, tableDropTimes, indexDropTimes, r.job.ID(), progress,
+				ctx, &execCfg, remainingTables, tableDropTimes, indexDropTimes, r.job, progress,
 			)
 		} else {
 			var err error
@@ -473,7 +473,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 
 		if expired {
 			// Some elements have been marked as DELETING to save the progress.
-			persistProgress(ctx, &execCfg, r.job.ID(), progress, runningStatusGC(progress))
+			persistProgress(ctx, &execCfg, r.job, progress, runningStatusGC(progress))
 			if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
 				if err := fn(r.job.ID()); err != nil {
 					return err
@@ -482,7 +482,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 			if err := performGC(ctx, &execCfg, details, progress); err != nil {
 				return err
 			}
-			persistProgress(ctx, &execCfg, r.job.ID(), progress, sql.RunningStatusWaitingGC)
+			persistProgress(ctx, &execCfg, r.job, progress, sql.RunningStatusWaitingGC)
 
 			// Trigger immediate re-run in case of more expired elements.
 			timerDuration = 0

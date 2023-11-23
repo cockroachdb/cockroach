@@ -2790,6 +2790,7 @@ An event of type `changefeed_emitted_bytes` is an event representing the bytes e
 |--|--|--|
 | `JobId` | The job id for enterprise changefeeds. | no |
 | `EmittedBytes` | The number of bytes emitted. | no |
+| `EmittedMessages` | The number of messages emitted. | no |
 | `LoggingInterval` | The time period in nanoseconds between emitting telemetry events of this type (per-aggregator). | no |
 | `Closing` | Flag to indicate that the changefeed is closing. | no |
 

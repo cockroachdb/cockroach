@@ -999,10 +999,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 			}
 		}
 		if runStatus != "" && !desc.Dropped() {
-			if err := sc.job.WithTxn(txn).RunningStatus(
-				ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
-					return runStatus, nil
-				}); err != nil {
+			if err := sc.job.WithTxn(txn).RunningStatus(ctx, runStatus); err != nil {
 				return errors.Wrapf(err, "failed to update job status")
 			}
 		}
@@ -1239,11 +1236,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(
-				ctx context.Context, details jobspb.Details,
-			) (jobs.RunningStatus, error) {
-				return runStatus, nil
-			}); err != nil {
+			if err := sc.job.WithTxn(txn).RunningStatus(ctx, runStatus); err != nil {
 				return errors.Wrap(err, "failed to update job status")
 			}
 		}
@@ -1320,11 +1313,7 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(
-				ctx context.Context, details jobspb.Details,
-			) (jobs.RunningStatus, error) {
-				return runStatus, nil
-			}); err != nil {
+			if err := sc.job.WithTxn(txn).RunningStatus(ctx, runStatus); err != nil {
 				return errors.Wrap(err, "failed to update job status")
 			}
 		}

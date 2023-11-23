@@ -1,0 +1,67 @@
+# Test that we are able to create a basic mixedversion test, and that
+# the pretty printing functionality works as expected.
+
+in-mixed-version name=(mixed-version 1)
+----
+ok
+
+in-mixed-version name=(mixed-version 2)
+----
+ok
+
+workload name=bank
+----
+ok
+
+workload name=rand
+----
+ok
+
+background-command name=(csv server)
+----
+ok
+
+plan
+----
+mixed-version test plan for upgrading from "v22.2.8" to "<current>":
+├── install fixtures for version "v22.2.8" (1)
+├── start cluster at version "v22.2.8" (2)
+├── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (3)
+├── run startup hooks concurrently
+│   ├── run "initialize bank workload", after 100ms delay (4)
+│   └── run "initialize rand workload", after 50ms delay (5)
+├── start background hooks concurrently
+│   ├── run "bank workload", after 100ms delay (6)
+│   ├── run "rand workload", after 0s delay (7)
+│   └── run "csv server", after 100ms delay (8)
+└── upgrade cluster from "v22.2.8" to "<current>"
+   ├── prevent auto-upgrades by setting `preserve_downgrade_option` (9)
+   ├── upgrade nodes :1-4 from "v22.2.8" to "<current>"
+   │   ├── restart node 3 with binary version <current> (10)
+   │   ├── restart node 1 with binary version <current> (11)
+   │   ├── run mixed-version hooks concurrently
+   │   │   ├── run "mixed-version 1", after 50ms delay (12)
+   │   │   └── run "mixed-version 2", after 0s delay (13)
+   │   ├── restart node 4 with binary version <current> (14)
+   │   └── restart node 2 with binary version <current> (15)
+   ├── downgrade nodes :1-4 from "<current>" to "v22.2.8"
+   │   ├── restart node 4 with binary version v22.2.8 (16)
+   │   ├── restart node 1 with binary version v22.2.8 (17)
+   │   ├── run mixed-version hooks concurrently
+   │   │   ├── run "mixed-version 1", after 100ms delay (18)
+   │   │   └── run "mixed-version 2", after 100ms delay (19)
+   │   ├── restart node 2 with binary version v22.2.8 (20)
+   │   └── restart node 3 with binary version v22.2.8 (21)
+   ├── upgrade nodes :1-4 from "v22.2.8" to "<current>"
+   │   ├── restart node 1 with binary version <current> (22)
+   │   ├── restart node 2 with binary version <current> (23)
+   │   ├── run mixed-version hooks concurrently
+   │   │   ├── run "mixed-version 1", after 100ms delay (24)
+   │   │   └── run "mixed-version 2", after 50ms delay (25)
+   │   ├── restart node 4 with binary version <current> (26)
+   │   └── restart node 3 with binary version <current> (27)
+   ├── finalize upgrade by resetting `preserve_downgrade_option` (28)
+   ├── run mixed-version hooks concurrently
+   │   ├── run "mixed-version 1", after 50ms delay (29)
+   │   └── run "mixed-version 2", after 200ms delay (30)
+   └── wait for nodes :1-4 to all have the same cluster version (same as binary version of node 1) (31)

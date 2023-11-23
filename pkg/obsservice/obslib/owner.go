@@ -16,5 +16,5 @@ type OwnerTeam string
 
 const (
 	// ObsInfra is the Observability Infrastructure team.
-	ObsInfra OwnerTeam = "obs-infra"
+	Observability OwnerTeam = "observability"
 )

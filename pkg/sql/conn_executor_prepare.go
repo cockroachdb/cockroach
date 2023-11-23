@@ -268,6 +268,7 @@ func (ex *connExecutor) prepare(
 
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
+		p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 		flags, err = ex.populatePrepared(ctx, txn, placeholderHints, p, origin)
 		return err
 	}

@@ -399,7 +399,7 @@ func (n noopJobRegistry) CheckPausepoint(name string) error {
 }
 
 func (n noopJobRegistry) UpdateJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
+	ctx context.Context, jobID jobspb.JobID, txn isql.Txn, updateFunc jobs.UpdateFn,
 ) error {
 	return nil
 }

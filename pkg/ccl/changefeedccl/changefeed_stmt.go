@@ -1087,11 +1087,7 @@ func (b *changefeedResumer) setJobRunningStatus(
 	}
 
 	status := jobs.RunningStatus(fmt.Sprintf(fmtOrMsg, args...))
-	if err := b.job.NoTxn().RunningStatus(ctx,
-		func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
-			return status, nil
-		},
-	); err != nil {
+	if err := b.job.NoTxn().RunningStatus(ctx, status); err != nil {
 		log.Warningf(ctx, "failed to set running status: %v", err)
 	}
 
@@ -1657,8 +1653,7 @@ func maybeUpgradePreProductionReadyExpression(
 	}
 	details.Select = cdceval.AsStringUnredacted(newExpression)
 
-	const useReadLock = false
-	if err := jobExec.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, nil, useReadLock,
+	if err := jobExec.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, nil, /* txn */
 		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			payload := md.Payload
 			payload.Details = jobspb.WrapPayloadDetails(details)

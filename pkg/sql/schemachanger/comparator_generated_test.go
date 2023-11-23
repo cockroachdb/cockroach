@@ -1083,9 +1083,9 @@ func TestSchemaChangeComparator_mixed_version_udf_mutations(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_udf_mutations"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_mixed_version_upgrade_repair_descriptors(t *testing.T) {
+func TestSchemaChangeComparator_mixed_version_upgrade_preserve_ttl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_upgrade_repair_descriptors"
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_upgrade_preserve_ttl"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_multi_region(t *testing.T) {
@@ -1256,6 +1256,11 @@ func TestSchemaChangeComparator_plpgsql_builtins(t *testing.T) {
 func TestSchemaChangeComparator_plpgsql_cursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/plpgsql_cursor"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
+func TestSchemaChangeComparator_plpgsql_unsupported(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/plpgsql_unsupported"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_poison_after_push(t *testing.T) {

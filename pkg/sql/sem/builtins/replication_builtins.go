@@ -13,7 +13,6 @@ package builtins
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -55,28 +54,10 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := evalCtx.StreamManagerFactory.GetStreamIngestManager(ctx)
-				if err != nil {
-					return nil, err
-				}
-
-				ingestionJobID := jobspb.JobID(*args[0].(*tree.DInt))
-				cutoverTime := args[1].(*tree.DTimestampTZ).Time
-				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				err = mgr.CompleteStreamIngestion(ctx, ingestionJobID, cutoverTimestamp)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDInt(tree.DInt(ingestionJobID)), err
+				// Keeping this builtin as 'unimplemented' in order to reserve the oid.
+				return tree.DNull, errors.New("unimplemented")
 			},
-			Info: "This function can be used to signal a running stream ingestion job to complete. " +
-				"The job will eventually stop ingesting, revert to the specified timestamp and leave the " +
-				"cluster in a consistent state. The specified timestamp can only be specified up to the " +
-				"microsecond. " +
-				"This function does not wait for the job to reach a terminal state, " +
-				"but instead returns the job id as soon as it has signaled the job to complete. " +
-				"This builtin can be used in conjunction with `SHOW JOBS WHEN COMPLETE` to ensure that the " +
-				"job has left the cluster in a consistent state.",
+			Info:       "DEPRECATED, consider using `ALTER VIRTUAL CLUSTER <TENANT> COMPLETE REPLICATION TO SYSTEM TIME <TIME>`",
 			Volatility: volatility.Volatile,
 		},
 	),

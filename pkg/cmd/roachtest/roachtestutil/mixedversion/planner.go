@@ -245,7 +245,7 @@ func (p *testPlanner) finalizeUpgradeSteps(
 // having excessively long running times.
 func (p *testPlanner) shouldRollback(toVersion *clusterupgrade.Version) bool {
 	if toVersion.IsCurrent() {
-		return true
+		return p.prng.Float64() < rollbackFinalUpgradeProbability
 	}
 
 	return p.prng.Float64() < rollbackIntermediateUpgradesProbability

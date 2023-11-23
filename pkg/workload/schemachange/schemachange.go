@@ -35,6 +35,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/spf13/pflag"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // This workload executes batches of schema changes asynchronously. Each
@@ -150,7 +151,21 @@ func (s *schemaChange) Tables() []workload.Table {
 // Ops implements the workload.Opser interface.
 func (s *schemaChange) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
-) (workload.QueryLoad, error) {
+) (_ workload.QueryLoad, err error) {
+	// Initialize tracing ahead of everything else. The Ops function is used for
+	// managing the life cycle of this workload so we keep tracing localized to
+	// this function.
+	// NB: a noopSpanProcessor is provided here as there appears to be a bug in
+	// the OTeL SDK that causes Shutdown to error if no processors have been
+	// registered.
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(noopSpanProcessor{}))
+	tracer := tracerProvider.Tracer("schemachange")
+
+	// NB: The schemaChange.Ops span ends when this function returns, NOT when
+	// the workload is done.
+	ctx, span := tracer.Start(ctx, "schemaChange.Ops")
+	defer func() { EndSpan(span, err) }()
+
 	sqlDatabase, err := workload.SanitizeUrls(s, s.dbOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -169,6 +184,9 @@ func (s *schemaChange) Ops(
 	cfg.MaxConnIdleTime = time.Hour
 	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+	if err := s.setClusterSettings(ctx, pool); err != nil {
 		return workload.QueryLoad{}, err
 	}
 	seqNum, err := s.initSeqNum(ctx, pool)
@@ -192,9 +210,19 @@ func (s *schemaChange) Ops(
 
 	ql := workload.QueryLoad{
 		SQLDatabase: sqlDatabase,
-		Close: func(ctx context.Context) error {
+		Close: func(_ context.Context) error {
+			// Create a new context for shutting down the tracer provider. The
+			// provided context may be cancelled depending on why the workload is
+			// shutting down and we always want to provide a period of time to flush
+			// traces.
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
 			pool.Close()
-			return s.closeJSONLogFile()
+			closeErr := s.closeJSONLogFile()
+			shutdownErr := tracerProvider.Shutdown(ctx)
+
+			return errors.CombineErrors(closeErr, shutdownErr)
 		},
 	}
 
@@ -250,6 +278,13 @@ func (s *schemaChange) Ops(
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
 	return ql, nil
+}
+
+// setClusterSettings configures any settings required for the workload ahead
+// of starting workers.
+func (s *schemaChange) setClusterSettings(ctx context.Context, pool *workload.MultiConnPool) error {
+	_, err := pool.Get().Exec(ctx, `SET CLUSTER SETTING sql.defaults.super_regions.enabled = 'on'`)
+	return errors.WithStack(err)
 }
 
 // initSeqName returns the smallest available sequence number to be

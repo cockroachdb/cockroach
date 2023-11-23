@@ -64,7 +64,7 @@ type Job struct {
 	}
 }
 
-// CreatedByInfo encapsulates they type and the ID of the system which created
+// CreatedByInfo encapsulates the type and the ID of the system which created
 // this job.
 type CreatedByInfo struct {
 	Name string
@@ -279,28 +279,12 @@ func (u Updater) CheckStatus(ctx context.Context) error {
 	})
 }
 
-// CheckTerminalStatus returns true if the job is in a terminal status.
-func (u Updater) CheckTerminalStatus(ctx context.Context) bool {
-	err := u.Update(ctx, func(_ isql.Txn, md JobMetadata, _ *JobUpdater) error {
-		if !md.Status.Terminal() {
-			return &InvalidStatusError{md.ID, md.Status, "checking that job status is success", md.Payload.Error}
-		}
-		return nil
-	})
-
-	return err == nil
-}
-
 // RunningStatus updates the detailed status of a job currently in progress.
 // It sets the job's RunningStatus field to the value returned by runningStatusFn
 // and persists runningStatusFn's modifications to the job's details, if any.
-func (u Updater) RunningStatus(ctx context.Context, runningStatusFn RunningStatusFn) error {
+func (u Updater) RunningStatus(ctx context.Context, runningStatus RunningStatus) error {
 	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, ju *JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
-			return err
-		}
-		runningStatus, err := runningStatusFn(ctx, md.Progress.Details)
-		if err != nil {
 			return err
 		}
 		md.Progress.RunningStatus = string(runningStatus)
@@ -308,11 +292,6 @@ func (u Updater) RunningStatus(ctx context.Context, runningStatusFn RunningStatu
 		return nil
 	})
 }
-
-// RunningStatusFn is a callback that computes a job's running status
-// given its details. It is safe to modify details in the callback; those
-// modifications will be automatically persisted to the database record.
-type RunningStatusFn func(ctx context.Context, details jobspb.Details) (RunningStatus, error)
 
 // NonCancelableUpdateFn is a callback that computes a job's non-cancelable
 // status given its current one.

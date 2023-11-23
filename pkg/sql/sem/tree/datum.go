@@ -421,7 +421,7 @@ func GetBool(d Datum) (DBool, error) {
 	if d == DNull {
 		return DBool(false), nil
 	}
-	return false, errors.AssertionFailedf("cannot convert %s to type %s", d.ResolvedType(), types.Bool)
+	return false, errors.AssertionFailedf("cannot convert %s to type %s", d.ResolvedType().SQLStringForError(), types.Bool)
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -2790,7 +2790,7 @@ func TimeFromDatumForComparison(ctx CompareContext, d Datum) (time.Time, error) 
 	case *DTimeTZ:
 		return t.ToTime(), nil
 	default:
-		return time.Time{}, errors.AssertionFailedf("unexpected type: %v", t.ResolvedType())
+		return time.Time{}, errors.AssertionFailedf("unexpected type: %s", t.ResolvedType().SQLStringForError())
 	}
 }
 
@@ -4915,7 +4915,7 @@ func MustBeDArray(e Expr) *DArray {
 // not an array type.
 func (d *DArray) MaybeSetCustomOid(t *types.T) error {
 	if t.Family() != types.ArrayFamily {
-		return errors.AssertionFailedf("expected array type, got %s", t.SQLString())
+		return errors.AssertionFailedf("expected array type, got %s", t.SQLStringForError())
 	}
 	switch t.Oid() {
 	case oid.T_int2vector:
@@ -5107,7 +5107,10 @@ func (d *DArray) Append(v Datum) error {
 	// v.ResolvedType() must be the left-hand side because EquivalentOrNull
 	// only allows null tuple elements on the left-hand side.
 	if !v.ResolvedType().EquivalentOrNull(d.ParamTyp, true /* allowNullTupleEquivalence */) {
-		return errors.AssertionFailedf("cannot append %s to array containing %s", v.ResolvedType(), d.ParamTyp)
+		return errors.AssertionFailedf(
+			"cannot append %s to array containing %s",
+			v.ResolvedType().SQLStringForError(), d.ParamTyp.SQLStringForError(),
+		)
 	}
 	if d.Len() >= maxArrayLength {
 		return errors.WithStack(errArrayTooLongError)
@@ -5943,7 +5946,7 @@ func NewDRefCursor(d string) Datum {
 func NewDIntVectorFromDArray(d *DArray) Datum {
 	// Sanity: Validate the type of the array, since it should be int2.
 	if d.ParamTyp != types.Int2 {
-		panic(errors.AssertionFailedf("int2vector can only be made from int2 not %v", d.ParamTyp))
+		panic(errors.AssertionFailedf("int2vector can only be made from int2 not %s", d.ParamTyp.SQLStringForError()))
 	}
 	ret := new(DArray)
 	*ret = *d
@@ -6042,7 +6045,7 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 		}
 		return NewDEnum(e), nil
 	default:
-		return nil, errors.AssertionFailedf("unhandled type %v", t.SQLString())
+		return nil, errors.AssertionFailedf("unhandled type %s", t.SQLStringForError())
 	}
 }
 
@@ -6105,7 +6108,7 @@ func DatumTypeSize(t *types.T) (size uintptr, isVarlen bool) {
 		return bSzInfo.sz, bSzInfo.variable
 	}
 
-	panic(errors.AssertionFailedf("unknown type: %T", t))
+	panic(errors.AssertionFailedf("unknown type: %s", t.SQLStringForError()))
 }
 
 const (

@@ -91,7 +91,7 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPU
 	dumpStore := dumpstore.NewStore(dir, maxCombinedCPUProfFileSize, st)
 	cp := &CPUProfiler{
 		profiler: makeProfiler(
-			newProfileStore(dumpStore, cpuProfFileNamePrefix, HeapFileNameSuffix, st),
+			newProfileStore(dumpStore, cpuProfFileNamePrefix, heapFileNameSuffix, st),
 			func() int64 { return cpuUsageCombined.Get(&st.SV) },
 			func() time.Duration { return cpuProfileInterval.Get(&st.SV) },
 		),
@@ -110,7 +110,9 @@ func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int
 	cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCPUProfile)
 }
 
-func (cp *CPUProfiler) takeCPUProfile(ctx context.Context, path string) (success bool) {
+func (cp *CPUProfiler) takeCPUProfile(
+	ctx context.Context, path string, _ ...interface{},
+) (success bool) {
 	if err := debug.CPUProfileDo(cp.st, cluster.CPUProfileWithLabels, func() error {
 		// Try writing a CPU profile.
 		f, err := os.Create(path)

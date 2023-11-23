@@ -18,17 +18,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib"
-	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/httpproxy"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/ingest"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/migrations"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/obsutil"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/process"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/produce"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/queue"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/router"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/transform"
+	"github.com/cockroachdb/cockroach/pkg/obsservice/obslib/validate"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
-	_ "github.com/cockroachdb/cockroach/pkg/ui/distoss" // web UI init hooks
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
@@ -48,6 +53,13 @@ var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM}
 // shutdown (i.e. second occurrence does not incur hard shutdown).
 var termSignal os.Signal = unix.SIGTERM
 
+// maxMemoryBytes is the max memory bytes to be used by memory queue.
+// TODO(maryliag): make performance testing to decide on the final value.
+var maxMemoryBytes int = 500 * 1024 * 1024 // 500Mb
+
+// defaultSinkDBName is the sink database name used for DB migrations, writes, etc.
+var defaultSinkDBName = "obsservice"
+
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "obsservice",
@@ -57,37 +69,48 @@ from one or more CockroachDB clusters.`,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
-		cfg := httpproxy.ReverseHTTPProxyConfig{
-			HTTPAddr:      httpAddr,
-			TargetURL:     targetURL,
-			CACertPath:    caCertPath,
-			UICertPath:    uiCertPath,
-			UICertKeyPath: uiCertKeyPath,
-		}
 
-		// TODO(abarganier): migrate DB migrations over to target storage for aggregated outputs
-		//connCfg, err := pgxpool.ParseConfig(sinkPGURL)
-		//if err != nil {
-		//	return errors.Wrapf(err, "invalid --sink-pgurl (%s)", sinkPGURL)
-		//}
-		//if connCfg.ConnConfig.Database == "" {
-		//	fmt.Printf("No database explicitly provided in --sink-pgurl. Using %q.\n", defaultSinkDBName)
-		//	connCfg.ConnConfig.Database = defaultSinkDBName
-		//}
-		//if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
-		//	return errors.Wrap(err, "failed to run DB migrations")
-		//}
+		if !noDB {
+			connCfg, err := pgxpool.ParseConfig(sinkPGURL)
+			if err != nil {
+				return errors.Wrapf(err, "invalid --sink-pgurl (%s)", sinkPGURL)
+			}
+			if connCfg.ConnConfig.Database != defaultSinkDBName {
+				if connCfg.ConnConfig.Database != "" {
+					log.Warningf(ctx,
+						"--sink-pgurl string contains a database name (%s) other than 'obsservice' - overriding",
+						connCfg.ConnConfig.Database)
+				}
+				// We don't want to accidentally write things to the wrong DB in the event that
+				// one is accidentally provided in the --sink-pgurl (as is common with defaultdb).
+				// Always override to defaultSinkDBName.
+				connCfg.ConnConfig.Database = defaultSinkDBName
+			}
+			if err := migrations.RunDBMigrations(ctx, connCfg.ConnConfig); err != nil {
+				return errors.Wrap(err, "failed to run DB migrations")
+			}
+		} else {
+			log.Info(ctx, "--no-db flag indicated, skipping DB migrations")
+		}
 
 		signalCh := make(chan os.Signal, 1)
 		signal.Notify(signalCh, drainSignals...)
 
 		stopper := stop.NewStopper()
 
+		stmtInsightsPipeline, stmtInsightsProcessor, err := makeStatementInsightsPipeline()
+		if err != nil {
+			return errors.Wrapf(err, "failed to create Statement Insights Pipeline")
+		}
 		// Run the event ingestion in the background.
 		eventRouter := router.NewEventRouter(map[obspb.EventType]obslib.EventConsumer{
 			obspb.EventlogEvent:               &obsutil.StdOutConsumer{},
-			obspb.StatementInsightsStatsEvent: &obsutil.StdOutConsumer{},
+			obspb.StatementInsightsStatsEvent: stmtInsightsPipeline,
 		})
+		err = stmtInsightsProcessor.Start(ctx, stopper)
+		if err != nil {
+			return errors.Wrapf(err, "failed to start Statement Insights Processor")
+		}
 		ingester := ingest.MakeEventIngester(ctx, eventRouter, nil)
 
 		// Instantiate the net listener & gRPC server.
@@ -111,9 +134,6 @@ from one or more CockroachDB clusters.`,
 			return err
 		}
 		log.Infof(ctx, "Listening for OTLP connections on %s.\n", otlpAddr)
-
-		// Run the reverse HTTP proxy in the background.
-		httpproxy.NewReverseHTTPProxy(ctx, cfg).Start(ctx, stopper)
 
 		// Block until the process is signaled to terminate.
 		sig := <-signalCh
@@ -155,12 +175,10 @@ from one or more CockroachDB clusters.`,
 
 // Flags.
 var (
-	otlpAddr                  string
-	httpAddr                  string
-	targetURL                 string
-	caCertPath                string
-	uiCertPath, uiCertKeyPath string
-	sinkPGURL                 string
+	otlpAddr  string
+	httpAddr  string
+	noDB      bool
+	sinkPGURL string
 )
 
 func main() {
@@ -179,29 +197,6 @@ func main() {
 		"http-addr",
 		"localhost:8081",
 		"The address on which to listen for HTTP requests.")
-	RootCmd.PersistentFlags().StringVar(
-		&targetURL,
-		"crdb-http-url",
-		"http://localhost:8080",
-		"The base URL to which HTTP requests are proxied.")
-	RootCmd.PersistentFlags().StringVar(
-		&caCertPath,
-		"ca-cert",
-		"",
-		"Path to the certificate authority certificate file. If specified,"+
-			" HTTP requests are only proxied to CRDB nodes that present certificates signed by this CA."+
-			" If not specified, the system's CA list is used.")
-	RootCmd.PersistentFlags().StringVar(
-		&uiCertPath,
-		"ui-cert",
-		"",
-		"Path to the certificate used used by the Observability Service.")
-	RootCmd.PersistentFlags().StringVar(
-		&uiCertKeyPath,
-		"ui-cert-key",
-		"",
-		"Path to the private key used by the Observability Service. "+
-			"This is the key corresponding to the --ui-cert certificate.")
 
 	// Flags about connecting to the sink cluster.
 	RootCmd.PersistentFlags().StringVar(
@@ -210,6 +205,13 @@ func main() {
 		"postgresql://root@localhost:26257?sslmode=disable",
 		"PGURL for the sink cluster. If the url does not include a database name, "+
 			"then \"obsservice\" will be used.")
+
+	RootCmd.PersistentFlags().BoolVar(
+		&noDB,
+		"no-db",
+		false,
+		"Disables usage of the external sink DB indicated by the --sink-pgurl flag at startup. "+
+			"Intended for testing purposes only.")
 
 	if err := RootCmd.Execute(); err != nil {
 		exit.WithCode(exit.UnspecifiedError())
@@ -236,4 +238,38 @@ func handleSignalDuringShutdown(sig os.Signal) {
 
 	// Block while we wait for the signal to be delivered.
 	select {}
+}
+
+func makeStatementInsightsPipeline() (
+	obslib.EventConsumer,
+	*process.MemQueueProcessor[*obspb.StatementInsightsStatistics],
+	error,
+) {
+	memQueue := queue.NewMemoryQueue[*obspb.StatementInsightsStatistics](
+		maxMemoryBytes, func(statistics *obspb.StatementInsightsStatistics) int {
+			return statistics.Size()
+		}, "StmtInsightsStatisticsMemQueue")
+	memQueueProducer := produce.NewMemQueueProducer[*obspb.StatementInsightsStatistics](memQueue)
+	insightsTransformer := &transform.StmtInsightTransformer{}
+	insightsValidator := &validate.StmtInsightValidator{}
+
+	producerGroup, err := produce.NewProducerGroup[*obspb.StatementInsightsStatistics](
+		"StmtInsightsStatisticsProducerGroup",
+		obslib.Observability,
+		insightsTransformer,
+		[]validate.Validator[*obspb.StatementInsightsStatistics]{insightsValidator},
+		[]produce.EventProducer[*obspb.StatementInsightsStatistics]{memQueueProducer})
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// TODO: replace process.InsightsStdoutProcessor for a real Insights processor
+	// and delete the file process/stdout.go
+	processor, err := process.NewMemQueueProcessor[*obspb.StatementInsightsStatistics](memQueue, &process.InsightsStdoutProcessor{})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return producerGroup, processor, nil
 }

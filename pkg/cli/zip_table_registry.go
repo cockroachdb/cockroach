@@ -657,6 +657,15 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"deleted",
 		},
 	},
+	"crdb_internal.kv_session_based_leases": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"\"descID\"",
+			"version",
+			"\"nodeID\"",
+			"\"sessionID\"",
+			"crdb_region",
+		},
+	},
 	"crdb_internal.node_build_info": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",

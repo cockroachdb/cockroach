@@ -14,8 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 )
 
@@ -57,4 +57,9 @@ func RunDBMigrations(ctx context.Context, connCfg *pgx.ConnConfig) error {
 		return err
 	}
 	return nil
+}
+
+// GetDBMigrations returns the list of migrations and is used for testing purposes.
+func GetDBMigrations() embed.FS {
+	return sqlMigrations
 }

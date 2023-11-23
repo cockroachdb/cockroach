@@ -315,8 +315,7 @@ func (zc *debugZipContext) collectPerNodeData(
 				continue
 			}
 
-			fName := maybeAddProfileSuffix(file.Name)
-			name := prefix + "/heapprof/" + fName
+			name := prefix + "/heapprof/" + file.Name
 			fs := nodePrinter.start("retrieving %s", file.Name)
 			var oneprof *serverpb.GetFilesResponse
 			if fileErr := zc.runZipFn(ctx, fs, func(ctx context.Context) error {

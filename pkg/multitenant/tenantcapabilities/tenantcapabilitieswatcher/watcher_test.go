@@ -85,7 +85,11 @@ func TestDataDriven(t *testing.T) {
 
 		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+		// Make test faster.
+		// TODO(knz): Remove this after #111753 is merged.
+		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'`)
+		tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'`)
+		tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'`)
 
 		const dummyTableName = "dummy_system_tenants"
 		tdb.Exec(t, fmt.Sprintf("CREATE TABLE %s (LIKE system.tenants INCLUDING ALL)", dummyTableName))
@@ -97,10 +101,9 @@ func TestDataDriven(t *testing.T) {
 
 		mu := struct {
 			syncutil.Mutex
-			lastFrontierTS     hlc.Timestamp // serializes updates and update-state
-			receivedUpdates    []tenantcapabilities.Update
-			receivedUpdateType rangefeedcache.UpdateType
-			rangeFeedRunning   bool
+			lastFrontierTS   hlc.Timestamp // serializes updates and update-state
+			receivedUpdates  []tenantcapabilities.Update
+			rangeFeedRunning bool
 		}{}
 
 		errorInjectionCh := make(chan error)
@@ -139,11 +142,10 @@ func TestDataDriven(t *testing.T) {
 							<-restartAfterErrCh
 						},
 					},
-					WatcherUpdatesInterceptor: func(UpdateType rangefeedcache.UpdateType, updates []tenantcapabilities.Update) {
+					WatcherUpdatesInterceptor: func(update tenantcapabilities.Update) {
 						mu.Lock()
 						defer mu.Unlock()
-						mu.receivedUpdates = append(mu.receivedUpdates, updates...)
-						mu.receivedUpdateType = UpdateType
+						mu.receivedUpdates = append(mu.receivedUpdates, update)
 					},
 				},
 			})
@@ -186,7 +188,6 @@ func TestDataDriven(t *testing.T) {
 				mu.Lock()
 				receivedUpdates := mu.receivedUpdates
 				mu.receivedUpdates = mu.receivedUpdates[:0] // clear out buffer
-				updateType := mu.receivedUpdateType
 				mu.Unlock()
 
 				// De-duplicate updates. We want a stable sort here because the
@@ -197,9 +198,6 @@ func TestDataDriven(t *testing.T) {
 				})
 				var output strings.Builder
 				for i := range receivedUpdates {
-					if i == 0 {
-						output.WriteString(fmt.Sprintf("%s\n", updateType))
-					}
 					if i+1 != len(receivedUpdates) && receivedUpdates[i+1].TenantID.Equal(receivedUpdates[i].TenantID) {
 						continue // de-duplicate
 					}

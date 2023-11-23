@@ -24,10 +24,11 @@ import (
 	logspb "github.com/cockroachdb/cockroach/pkg/obsservice/obspb/opentelemetry-proto/collector/logs/v1"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 )
 
+// TODO(abarganier): Nuke the embedded obsservice code. We no longer use this.
 // startEmbeddedObsService creates the schema for the Observability Service (if
 // it doesn't exist already), starts the internal RPC service for event
 // ingestion and hooks up the event exporter to talk to the local service.
