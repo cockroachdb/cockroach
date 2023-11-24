@@ -46,13 +46,14 @@ func TestTxnMetricRecorder(t *testing.T) {
 	ctx := context.Background()
 
 	type metrics struct {
-		aborts, commits, commits1PC, parallelCommits, rollbacksFailed, duration, restarts int
+		aborts, commits, commits1PC, commitsReadOnly, parallelCommits, rollbacksFailed, duration, restarts int
 	}
 	check := func(t *testing.T, tm *txnMetricRecorder, m metrics) {
 		t.Helper()
 		assert.Equal(t, int64(m.aborts), tm.metrics.Aborts.Count(), "TxnMetrics.Aborts")
 		assert.Equal(t, int64(m.commits), tm.metrics.Commits.Count(), "TxnMetrics.Commits")
 		assert.Equal(t, int64(m.commits1PC), tm.metrics.Commits1PC.Count(), "TxnMetrics.Commits1PC")
+		assert.Equal(t, int64(m.commitsReadOnly), tm.metrics.CommitsReadOnly.Count(), "TxnMetrics.CommitsReadOnly")
 		assert.Equal(t, int64(m.parallelCommits), tm.metrics.ParallelCommits.Count(), "TxnMetrics.ParallelCommits")
 		assert.Equal(t, int64(m.rollbacksFailed), tm.metrics.RollbacksFailed.Count(), "TxnMetrics.RollbacksFailed")
 		// NOTE: histograms don't retain full precision, so we don't check the exact
@@ -133,6 +134,18 @@ func TestTxnMetricRecorder(t *testing.T) {
 		tm.closeLocked()
 
 		check(t, &tm, metrics{commits: 1, parallelCommits: 1, duration: 234})
+	})
+
+	t.Run("commit (read-only)", func(t *testing.T) {
+		txn := makeTxnProto()
+		tm, _, _ := makeMockTxnMetricRecorder(&txn)
+
+		// Acting as the TxnCoordSender, entering finalizeNonLockingTxnLocked
+		// and short-circuiting the commit before issuing the EndTxn request.
+		txn.Status = roachpb.COMMITTED
+		tm.setReadOnlyCommit()
+		tm.closeLocked()
+		check(t, &tm, metrics{commits: 1, commitsReadOnly: 1})
 	})
 
 	t.Run("abort", func(t *testing.T) {
