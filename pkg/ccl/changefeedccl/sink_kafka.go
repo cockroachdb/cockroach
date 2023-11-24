@@ -257,6 +257,16 @@ func (s *kafkaSink) Dial() error {
 		return err
 	}
 
+	if client != nil {
+		if err := client.RefreshMetadata(); err != nil {
+			// Now that we do not fetch metadata for all topics by default, we try
+			// RefreshMetadata manually to check for any connection error.
+			// TODO(wenyihu6): check if this is what we want
+			_ = client.Close()
+			return err
+		}
+	}
+
 	producer, err := s.newAsyncProducer(client)
 	if err != nil {
 		return err
