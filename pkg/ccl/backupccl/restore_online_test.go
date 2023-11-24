@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,6 +36,17 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 	defer cleanupFnRestored()
 	bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
+
+	// Wait for the download job to complete.
+	//
+	// TODO(adityamaru): Change to wait for successful completion once
+	// storage lands https://github.com/cockroachdb/pebble/pull/3067.
+	var downloadJobID jobspb.JobID
+	rSQLDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
+	jobutils.WaitForJobToFail(t, rSQLDB, downloadJobID)
+	var error string
+	rSQLDB.QueryRow(t, `SELECT error FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&error)
+	require.Contains(t, error, "not implemented")
 }
 
 func TestOnlineRestoreErrors(t *testing.T) {

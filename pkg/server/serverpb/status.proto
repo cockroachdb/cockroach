@@ -599,6 +599,20 @@ message EngineStatsResponse {
   repeated EngineStatsInfo stats = 1 [ (gogoproto.nullable) = false ];
 }
 
+message DownloadSpanRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+}
+
+message DownloadSpanResponse {
+  // ErrorsByNodeID contains any errors that occurred during fan-out calls to other nodes.
+  map<int32, string> errors_by_node_id = 1 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "ErrorsByNodeID",
+    (gogoproto.nullable) = false
+  ];
+}
+
 message TraceEvent {
   google.protobuf.Timestamp time = 1
       [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
@@ -2415,6 +2429,12 @@ service Status {
   rpc ProblemRanges(ProblemRangesRequest) returns (ProblemRangesResponse) {
     option (google.api.http) = {
       get : "/_status/problemranges"
+    };
+  }
+
+  rpc DownloadSpan(DownloadSpanRequest) returns (DownloadSpanResponse) {
+    option (google.api.http) = {
+      get : "/_status/downloadspans"
     };
   }
 

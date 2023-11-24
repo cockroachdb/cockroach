@@ -1106,6 +1106,10 @@ type Engine interface {
 
 	// GetStoreID is used to retrieve the configured store ID.
 	GetStoreID() (int32, error)
+
+	// Download informs the engine to download remote files corresponding to the
+	// given span.
+	Download(ctx context.Context, span roachpb.Span) error
 }
 
 // Batch is the interface for batch specific operations.
