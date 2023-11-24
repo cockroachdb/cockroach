@@ -431,11 +431,6 @@ func createJobsInBatchWithTxn(
 		return nil, err
 	}
 
-	// Insert the job payload and details into the system.job_info table if the
-	// associated cluster version is active.
-	//
-	// TODO(adityamaru): Stop writing the payload and details to the system.jobs
-	// table, now that we are outside the compatibility window for 22.2.
 	if err := batchJobWriteToJobInfo(ctx, txn, jobs, modifiedMicros); err != nil {
 		return nil, err
 	}
@@ -614,11 +609,6 @@ func (r *Registry) CreateJobWithTxn(
 			return err
 		}
 
-		// Insert the job payload and details into the system.job_info table if the
-		// associated cluster version is active.
-		//
-		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
-		// table, now that we are outside the compatibility window for 22.2.
 		infoStorage := j.InfoStorage(txn)
 		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
 			return err
@@ -738,11 +728,6 @@ func (r *Registry) CreateAdoptableJobWithTxn(
 			return err
 		}
 
-		// Insert the job payload and details into the system.job_info table if the
-		// associated cluster version is active.
-		//
-		// TODO(adityamaru): Stop writing the payload and details to the system.jobs
-		// table, now that we are outside the compatibility window for 22.2.
 		infoStorage := j.InfoStorage(txn)
 		if err := infoStorage.WriteLegacyPayload(ctx, payloadBytes); err != nil {
 			return err
