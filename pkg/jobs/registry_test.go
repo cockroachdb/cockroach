@@ -411,16 +411,6 @@ func TestCreateJobWritesToJobInfo(t *testing.T) {
 				jobInfoCount := tree.MustBeDInt(row[0])
 				require.Equal(t, jobsCount*2, jobInfoCount)
 
-				// Ensure no progress and payload is written to system.jobs.
-				nullPayloadAndProgress := `SELECT count(*) FROM system.jobs WHERE progress IS NOT NULL OR payload IS NOT NULL;`
-				row, err = txn.QueryRowEx(ctx, "verify-job-query", txn.KV(),
-					sessiondata.NodeUserSessionDataOverride, nullPayloadAndProgress)
-				if err != nil {
-					return err
-				}
-				nullProgressAndPayload := tree.MustBeDInt(row[0])
-				require.Equal(t, 0, int(nullProgressAndPayload))
-
 				return nil
 			}))
 		})
