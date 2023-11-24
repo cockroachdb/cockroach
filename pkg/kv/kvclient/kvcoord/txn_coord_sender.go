@@ -457,6 +457,7 @@ func (tc *TxnCoordSender) finalizeNonLockingTxnLocked(
 		// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
 		// Also so that the correct metric gets incremented.
 		tc.mu.txn.Status = roachpb.COMMITTED
+		tc.interceptorAlloc.txnMetricRecorder.readOnlyCommit = true
 	} else {
 		tc.mu.txn.Status = roachpb.ABORTED
 	}

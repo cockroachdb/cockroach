@@ -163,12 +163,12 @@ func (ba *BatchRequest) AppliesTimestampCache() bool {
 	return ba.hasFlag(appliesTSCache)
 }
 
-// IsAdmin returns true iff the BatchRequest contains an admin request.
+// IsAdmin returns true if the BatchRequest contains an admin request.
 func (ba *BatchRequest) IsAdmin() bool {
 	return ba.hasFlag(isAdmin)
 }
 
-// IsWrite returns true iff the BatchRequest contains a write.
+// IsWrite returns true if the BatchRequest contains a write.
 func (ba *BatchRequest) IsWrite() bool {
 	return ba.hasFlag(isWrite)
 }
@@ -178,44 +178,44 @@ func (ba *BatchRequest) IsReadOnly() bool {
 	return len(ba.Requests) > 0 && !ba.hasFlag(isWrite|isAdmin)
 }
 
-// IsReverse returns true iff the BatchRequest contains a reverse request.
+// IsReverse returns true if the BatchRequest contains a reverse request.
 func (ba *BatchRequest) IsReverse() bool {
 	return ba.hasFlag(isReverse)
 }
 
-// IsTransactional returns true iff the BatchRequest contains requests that can
+// IsTransactional returns true if the BatchRequest contains requests that can
 // be part of a transaction.
 func (ba *BatchRequest) IsTransactional() bool {
 	return ba.hasFlag(isTxn)
 }
 
-// IsAllTransactional returns true iff the BatchRequest contains only requests
+// IsAllTransactional returns true if the BatchRequest contains only requests
 // that can be part of a transaction.
 func (ba *BatchRequest) IsAllTransactional() bool {
 	return ba.hasFlagForAll(isTxn)
 }
 
-// IsLocking returns true iff the BatchRequest intends to acquire locks.
+// IsLocking returns true if the BatchRequest intends to acquire locks.
 func (ba *BatchRequest) IsLocking() bool {
 	return ba.hasFlag(isLocking)
 }
 
-// IsIntentWrite returns true iff the BatchRequest contains an intent write.
+// IsIntentWrite returns true if the BatchRequest contains an intent write.
 func (ba *BatchRequest) IsIntentWrite() bool {
 	return ba.hasFlag(isIntentWrite)
 }
 
-// IsUnsplittable returns true iff the BatchRequest an un-splittable request.
+// IsUnsplittable returns true if the BatchRequest an un-splittable request.
 func (ba *BatchRequest) IsUnsplittable() bool {
 	return ba.hasFlag(isUnsplittable)
 }
 
-// IsSingleRequest returns true iff the BatchRequest contains a single request.
+// IsSingleRequest returns true if the BatchRequest contains a single request.
 func (ba *BatchRequest) IsSingleRequest() bool {
 	return len(ba.Requests) == 1
 }
 
-// IsSingleSkipsLeaseCheckRequest returns true iff the batch contains a single
+// IsSingleSkipsLeaseCheckRequest returns true if the batch contains a single
 // request, and that request has the skipsLeaseCheck flag set.
 func (ba *BatchRequest) IsSingleSkipsLeaseCheckRequest() bool {
 	return ba.IsSingleRequest() && ba.hasFlag(skipsLeaseCheck)
@@ -225,7 +225,7 @@ func (ba *BatchRequest) isSingleRequestWithMethod(m Method) bool {
 	return ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == m
 }
 
-// IsSingleRequestLeaseRequest returns true iff the batch contains a single
+// IsSingleRequestLeaseRequest returns true if the batch contains a single
 // request, and that request is a RequestLease. Note that TransferLease requests
 // return false.
 // RequestLease requests are special because they're the only type of requests a
@@ -234,43 +234,43 @@ func (ba *BatchRequest) IsSingleRequestLeaseRequest() bool {
 	return ba.isSingleRequestWithMethod(RequestLease)
 }
 
-// IsSingleTransferLeaseRequest returns true iff the batch contains a single
+// IsSingleTransferLeaseRequest returns true if the batch contains a single
 // request, and that request is a TransferLease.
 func (ba *BatchRequest) IsSingleTransferLeaseRequest() bool {
 	return ba.isSingleRequestWithMethod(TransferLease)
 }
 
-// IsSingleLeaseInfoRequest returns true iff the batch contains a single
+// IsSingleLeaseInfoRequest returns true if the batch contains a single
 // request, and that request is a LeaseInfoRequest.
 func (ba *BatchRequest) IsSingleLeaseInfoRequest() bool {
 	return ba.isSingleRequestWithMethod(LeaseInfo)
 }
 
-// IsSingleProbeRequest returns true iff the batch is a single
+// IsSingleProbeRequest returns true if the batch is a single
 // Probe request.
 func (ba *BatchRequest) IsSingleProbeRequest() bool {
 	return ba.isSingleRequestWithMethod(Probe)
 }
 
-// IsSinglePushTxnRequest returns true iff the batch contains a single
+// IsSinglePushTxnRequest returns true if the batch contains a single
 // request, and that request is a PushTxn.
 func (ba *BatchRequest) IsSinglePushTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(PushTxn)
 }
 
-// IsSingleRecoverTxnRequest returns true iff the batch contains a single request,
+// IsSingleRecoverTxnRequest returns true if the batch contains a single request,
 // and that request is a RecoverTxnRequest.
 func (ba *BatchRequest) IsSingleRecoverTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(RecoverTxn)
 }
 
-// IsSingleHeartbeatTxnRequest returns true iff the batch contains a single
+// IsSingleHeartbeatTxnRequest returns true if the batch contains a single
 // request, and that request is a HeartbeatTxn.
 func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(HeartbeatTxn)
 }
 
-// IsSingleEndTxnRequest returns true iff the batch contains a single request,
+// IsSingleEndTxnRequest returns true if the batch contains a single request,
 // and that request is an EndTxnRequest.
 func (ba *BatchRequest) IsSingleEndTxnRequest() bool {
 	return ba.isSingleRequestWithMethod(EndTxn)
@@ -296,7 +296,7 @@ func (ba *BatchRequest) RequiresClosedTSOlderThanStorageSnapshot() bool {
 	return ba.hasFlag(requiresClosedTSOlderThanStorageSnapshot)
 }
 
-// IsSingleAbortTxnRequest returns true iff the batch contains a single request,
+// IsSingleAbortTxnRequest returns true if the batch contains a single request,
 // and that request is an EndTxnRequest(commit=false).
 func (ba *BatchRequest) IsSingleAbortTxnRequest() bool {
 	if ba.isSingleRequestWithMethod(EndTxn) {
@@ -305,7 +305,7 @@ func (ba *BatchRequest) IsSingleAbortTxnRequest() bool {
 	return false
 }
 
-// IsSingleCommitRequest returns true iff the batch contains a single request,
+// IsSingleCommitRequest returns true if the batch contains a single request,
 // and that request is an EndTxnRequest(commit=true).
 func (ba *BatchRequest) IsSingleCommitRequest() bool {
 	if ba.isSingleRequestWithMethod(EndTxn) {
@@ -314,37 +314,37 @@ func (ba *BatchRequest) IsSingleCommitRequest() bool {
 	return false
 }
 
-// IsSingleRefreshRequest returns true iff the batch contains a single request,
+// IsSingleRefreshRequest returns true if the batch contains a single request,
 // and that request is a RefreshRequest.
 func (ba *BatchRequest) IsSingleRefreshRequest() bool {
 	return ba.isSingleRequestWithMethod(Refresh)
 }
 
-// IsSingleSubsumeRequest returns true iff the batch contains a single request,
+// IsSingleSubsumeRequest returns true if the batch contains a single request,
 // and that request is an SubsumeRequest.
 func (ba *BatchRequest) IsSingleSubsumeRequest() bool {
 	return ba.isSingleRequestWithMethod(Subsume)
 }
 
-// IsSingleComputeChecksumRequest returns true iff the batch contains a single
+// IsSingleComputeChecksumRequest returns true if the batch contains a single
 // request, and that request is a ComputeChecksumRequest.
 func (ba *BatchRequest) IsSingleComputeChecksumRequest() bool {
 	return ba.isSingleRequestWithMethod(ComputeChecksum)
 }
 
-// IsSingleCheckConsistencyRequest returns true iff the batch contains a single
+// IsSingleCheckConsistencyRequest returns true if the batch contains a single
 // request, and that request is a CheckConsistencyRequest.
 func (ba *BatchRequest) IsSingleCheckConsistencyRequest() bool {
 	return ba.isSingleRequestWithMethod(CheckConsistency)
 }
 
-// IsSingleExportRequest returns true iff the batch contains a single
+// IsSingleExportRequest returns true if the batch contains a single
 // request, and that request is an ExportRequest.
 func (ba *BatchRequest) IsSingleExportRequest() bool {
 	return ba.isSingleRequestWithMethod(Export)
 }
 
-// RequiresConsensus returns true iff the batch contains a request that should
+// RequiresConsensus returns true if the batch contains a request that should
 // always force replication and proposal through raft, even if evaluation is
 // a no-op. The Barrier request requires consensus even though its evaluation
 // is a no-op.

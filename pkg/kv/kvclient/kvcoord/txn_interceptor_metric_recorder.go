@@ -34,6 +34,7 @@ type txnMetricRecorder struct {
 	txnStartNanos  int64
 	onePCCommit    bool
 	parallelCommit bool
+	readOnlyCommit bool
 }
 
 // SendLocked is part of the txnInterceptor interface.
@@ -91,6 +92,9 @@ func (m *txnMetricRecorder) closeLocked() {
 	}
 	if m.parallelCommit {
 		m.metrics.ParallelCommits.Inc(1)
+	}
+	if m.readOnlyCommit {
+		m.metrics.CommitsReadOnly.Inc(1)
 	}
 
 	if m.txnStartNanos != 0 {
