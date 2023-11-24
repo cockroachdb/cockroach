@@ -328,3 +328,44 @@ WHERE (
   (SELECT 'bar':::typ83496 FROM t83496 WHERE false)
   IS NOT DISTINCT FROM CASE WHEN NULL THEN NULL ELSE NULL END
 );
+
+# Issue #115054: ignore trailing whitespace in varchar
+statement ok
+CREATE TABLE t115054_1 (v varchar(2));
+
+statement ok
+INSERT INTO t115054_1 (v) VALUES ('c     ');
+
+statement ok
+INSERT INTO t115054_1 (v) VALUES (' c    ');
+
+statement ok
+INSERT INTO t115054_1 (v) VALUES ('cc    ');
+
+statement error pq: value too long for type VARCHAR\(2\)
+INSERT INTO t115054_1 (v) VALUES ('ccc   ');
+
+query T
+SELECT json_agg(v) FROM t115054_1
+----
+["c ", " c", "cc"]
+
+statement ok
+CREATE TABLE t115054_2 (v varchar);
+
+statement ok
+INSERT INTO t115054_2 (v) VALUES ('c     ');
+
+statement ok
+INSERT INTO t115054_2 (v) VALUES (' c    ');
+
+statement ok
+INSERT INTO t115054_2 (v) VALUES ('cc    ');
+
+statement ok
+INSERT INTO t115054_2 (v) VALUES ('ccc   ');
+
+query T
+SELECT json_agg(v) FROM t115054_2
+----
+["c     ", "  c   ", "cc    ", "ccc   "]
