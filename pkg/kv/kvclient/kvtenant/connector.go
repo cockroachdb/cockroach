@@ -880,6 +880,24 @@ func (c *connector) HotRangesV2(
 	return resp, nil
 }
 
+// DownloadSpan implements the serverpb.TenantStatusServer interface
+func (c *connector) DownloadSpan(
+	ctx context.Context, req *serverpb.DownloadSpanRequest,
+) (*serverpb.DownloadSpanResponse, error) {
+	if !roachpb.IsSystemTenantID(c.tenantID.InternalValue) {
+		return nil, status.Errorf(codes.PermissionDenied, "only the system tenant can issue download span requests")
+	}
+	var resp *serverpb.DownloadSpanResponse
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.DownloadSpan(ctx, req)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 // WithTxn implements the spanconfig.KVAccessor interface.
 func (c *connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("not applicable")
