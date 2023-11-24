@@ -73,7 +73,6 @@ var LeaseJitterFraction = settings.RegisterFloatSetting(
 	settings.Fraction)
 
 //go:generate stringer -type=SessionBasedLeasingMode
-
 type SessionBasedLeasingMode int64
 
 const (
