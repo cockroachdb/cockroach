@@ -6320,6 +6320,12 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		case oid.T_bpchar:
 			// bpchar types truncate trailing whitespace.
 			sv = strings.TrimRight(sv, " ")
+		case oid.T_varchar:
+			// varchar types truncate extra trailing whitespace when
+			// more characters than the varchar size are provided.
+			if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
+				sv = fmt.Sprintf("%-*v", typ.Width(), strings.TrimRight(sv, " "))
+			}
 		}
 		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
 			return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
@@ -6327,7 +6333,7 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				typ.SQLString())
 		}
 
-		if typ.Oid() == oid.T_bpchar || typ.Oid() == oid.T_char {
+		if typ.Oid() == oid.T_bpchar || typ.Oid() == oid.T_char || typ.Oid() == oid.T_varchar {
 			if _, ok := AsDString(inVal); ok {
 				return NewDString(sv), nil
 			} else if _, ok := inVal.(*DCollatedString); ok {
