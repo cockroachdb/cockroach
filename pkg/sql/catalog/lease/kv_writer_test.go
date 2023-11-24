@@ -60,7 +60,7 @@ func TestKVWriterMatchesIEWriter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	for _, mode := range []SessionBasedLeasingMode{SessionBasedLeasingOff, SessionBasedOnly} {
-		t.Run(fmt.Sprintf("Session based leasing mode: %v", mode), func(t *testing.T) {
+		t.Run(fmt.Sprintf("mode=%s", mode.String()), func(t *testing.T) {
 			ctx := context.Background()
 			serverArgs := base.TestServerArgs{}
 			serverArgs.Settings = cluster.MakeClusterSettings()
