@@ -29,5 +29,10 @@ go_test(
     size = "small",
     srcs = ["gcloud_test.go"],
     embed = [":gce"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "//pkg/roachprod/vm",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+    ],
 )

@@ -95,7 +95,7 @@ type ClusterSpec struct {
 	TerminateOnMigration bool
 	UbuntuVersion        vm.UbuntuVersion
 	// Use a spot instance or equivalent of a cloud provider.
-	UseSpot bool
+	UseSpotVMs bool
 	// FileSystem determines the underlying FileSystem
 	// to be used. The default is ext4.
 	FileSystem fileSystemType
@@ -429,7 +429,7 @@ func (s *ClusterSpec) RoachprodOpts(
 	case GCE:
 		providerOpts = getGCEOpts(machineType, zones, s.VolumeSize, ssdCount,
 			createVMOpts.SSDOpts.UseLocalSSD, s.RAID0, s.TerminateOnMigration,
-			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.UseSpot,
+			s.GCE.MinCPUPlatform, vm.ParseArch(createVMOpts.Arch), s.GCE.VolumeType, s.UseSpotVMs,
 		)
 	case Azure:
 		providerOpts = getAzureOpts(machineType, zones)
