@@ -6320,6 +6320,26 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		case oid.T_bpchar:
 			// bpchar types truncate trailing whitespace.
 			sv = strings.TrimRight(sv, " ")
+		case oid.T_varchar:
+			// varchar types truncate extra whitespace.
+			if utf8.RuneCountInString(sv) <= int(typ.Width()) {
+				break
+			}
+			availableRuneCount := typ.Width()
+			byteOffset := 0
+			for byteOffset = range sv {
+				if availableRuneCount--; availableRuneCount < 0 {
+					break
+				}
+			}
+			for i := byteOffset; i < len(sv); i++ {
+				if sv[i] != ' ' {
+					return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
+						"value too long for type %s",
+						typ.SQLString())
+				}
+			}
+			sv = sv[:byteOffset]
 		}
 		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
 			return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
