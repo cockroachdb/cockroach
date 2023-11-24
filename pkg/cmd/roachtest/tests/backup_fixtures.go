@@ -132,7 +132,7 @@ func (bd *backupDriver) prepareCluster(ctx context.Context) {
 		// For now, only run the test on the cloud provider that also stores the backup.
 		bd.t.Skip(fmt.Sprintf("test configured to run on %s", bd.sp.backup.cloud))
 	}
-	binaryPath, err := clusterupgrade.UploadVersion(ctx, bd.t, bd.t.L(), bd.c,
+	binaryPath, err := clusterupgrade.UploadCockroach(ctx, bd.t, bd.t.L(), bd.c,
 		bd.sp.hardware.getCRDBNodes(), clusterupgrade.MustParseVersion(bd.sp.backup.version))
 	require.NoError(bd.t, err)
 
