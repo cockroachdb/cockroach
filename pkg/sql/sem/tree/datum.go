@@ -6320,6 +6320,12 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		case oid.T_bpchar:
 			// bpchar types truncate trailing whitespace.
 			sv = strings.TrimRight(sv, " ")
+		case oid.T_varchar:
+			// varchar types truncate trailing whitespace when more
+			// characters than the varchar size are provided.
+			if utf8.RuneCountInString(sv) > int(typ.Width()) {
+				sv = strings.TrimRight(sv, " ")
+			}
 		}
 		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
 			return nil, pgerror.Newf(pgcode.StringDataRightTruncation,

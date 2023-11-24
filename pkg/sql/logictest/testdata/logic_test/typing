@@ -328,3 +328,23 @@ WHERE (
   (SELECT 'bar':::typ83496 FROM t83496 WHERE false)
   IS NOT DISTINCT FROM CASE WHEN NULL THEN NULL ELSE NULL END
 );
+
+# Issue #115054: ignore trailing whitespace in varchar
+statement ok
+CREATE TABLE t115054 (v varchar(2));
+
+statement ok
+INSERT INTO t115054 (v) VALUES ('c     ');
+
+statement ok
+INSERT INTO t115054 (v) VALUES (' c    ');
+
+statement ok
+INSERT INTO t115054 (v) VALUES ('cc    ');
+
+query T nosort
+SELECT * FROM t115054
+----
+c
+ c
+cc
