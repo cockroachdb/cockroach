@@ -1179,6 +1179,48 @@ func TestJitterCalculation(t *testing.T) {
 	}
 }
 
+// BenchmarkRunEmptyJob benchmarks how quickly we can create and wait
+// for a job that does no work.
+func BenchmarkRunEmptyJob(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	defer ResetConstructors()
+	RegisterConstructor(jobspb.TypeImport, func(job *Job, cs *cluster.Settings) Resumer {
+		return jobstest.FakeResumer{
+			OnResume: func(ctx context.Context) error {
+				return nil
+			},
+			FailOrCancel: func(ctx context.Context) error {
+				return nil
+			},
+		}
+	}, UsesTenantCostControl)
+
+	ctx := context.Background()
+
+	b.Run("run empty job", func(b *testing.B) {
+		s := serverutils.StartServerOnly(b, base.TestServerArgs{})
+		defer s.Stopper().Stop(ctx)
+		r := s.ApplicationLayer().JobRegistry().(*Registry)
+		idb := s.ApplicationLayer().InternalDB().(isql.DB)
+
+		for n := 0; n < b.N; n++ {
+			jobID := r.MakeJobID()
+			require.NoError(b, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+				_, err = r.CreateJobWithTxn(ctx, Record{
+					JobID:       jobID,
+					Description: "testing",
+					Username:    username.RootUserName(),
+					Details:     jobspb.ImportDetails{},
+					Progress:    jobspb.ImportProgress{},
+				}, jobID, txn)
+				return err
+			}))
+			require.NoError(b, r.Run(ctx, []jobspb.JobID{jobID}))
+		}
+	})
+}
+
 // TestRunWithoutLoop tests that Run calls will trigger the execution of a
 // job even when the adoption loop is set to infinitely slow and that the
 // observation of the completion of the job using the notification channel
