@@ -46,13 +46,14 @@ func TestTxnMetricRecorder(t *testing.T) {
 	ctx := context.Background()
 
 	type metrics struct {
-		aborts, commits, commits1PC, parallelCommits, rollbacksFailed, duration, restarts int
+		aborts, commits, commits1PC, commitsReadOnly, parallelCommits, rollbacksFailed, duration, restarts int
 	}
 	check := func(t *testing.T, tm *txnMetricRecorder, m metrics) {
 		t.Helper()
 		assert.Equal(t, int64(m.aborts), tm.metrics.Aborts.Count(), "TxnMetrics.Aborts")
 		assert.Equal(t, int64(m.commits), tm.metrics.Commits.Count(), "TxnMetrics.Commits")
 		assert.Equal(t, int64(m.commits1PC), tm.metrics.Commits1PC.Count(), "TxnMetrics.Commits1PC")
+		assert.Equal(t, int64(m.commitsReadOnly), tm.metrics.CommitsReadOnly.Count(), "TxnMetrics.CommitsReadOnly")
 		assert.Equal(t, int64(m.parallelCommits), tm.metrics.ParallelCommits.Count(), "TxnMetrics.ParallelCommits")
 		assert.Equal(t, int64(m.rollbacksFailed), tm.metrics.RollbacksFailed.Count(), "TxnMetrics.RollbacksFailed")
 		// NOTE: histograms don't retain full precision, so we don't check the exact
@@ -101,6 +102,48 @@ func TestTxnMetricRecorder(t *testing.T) {
 		tm.closeLocked()
 
 		check(t, &tm, metrics{commits: 1, commits1PC: 1, duration: 234})
+	})
+
+	t.Run("Commit readonly", func(t *testing.T) {
+		txn := makeTxnProto()
+		tp, mockSenderTp := makeMockTxnPipeliner(nil /* iter */)
+		tm, mockSenderTm, timeSource := makeMockTxnMetricRecorder(&txn)
+		ba := &kvpb.BatchRequest{}
+		ba.Header = kvpb.Header{Txn: txn.Clone()}
+		ba.Add(&kvpb.EndTxnRequest{Commit: true})
+		mockSenderTp.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			return br, nil
+		})
+		mockSenderTm.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+			// mimic logic to enter finalizeNonLockingTxnLocked on DistSender.
+			if ba.IsSingleEndTxnRequest() && !tp.hasAcquiredLocks() {
+				tm.setReadOnlyCommit()
+			}
+			// Simulate delay.
+			timeSource.Advance(123)
+
+			br := ba.CreateReply()
+			br.Txn = ba.Txn
+			br.Txn.Status = roachpb.COMMITTED
+			return br, nil
+		})
+		br, pErr := tp.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+		br, pErr = tm.SendLocked(ctx, ba)
+		require.Nil(t, pErr)
+		require.NotNil(t, br)
+
+		// Acting as TxnCoordSender.
+		txn.Update(br.Txn)
+		tm.closeLocked()
+		check(t, &tm, metrics{commits: 1, commitsReadOnly: 1, duration: 123})
 	})
 
 	t.Run("commit (parallel)", func(t *testing.T) {
