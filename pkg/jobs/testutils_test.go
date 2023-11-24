@@ -170,16 +170,15 @@ func registerScopedScheduledJobExecutor(name string, ex ScheduledJobExecutor) fu
 func addFakeJob(
 	t *testing.T, h *testHelper, scheduleID jobspb.ScheduleID, status Status, txn isql.Txn,
 ) jobspb.JobID {
-	payload := []byte("fake payload")
 	datums, err := txn.QueryRowEx(context.Background(), "fake-job", txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf(`
-INSERT INTO %s (created_by_type, created_by_id, status, payload)
-VALUES ($1, $2, $3, $4)
+INSERT INTO %s (created_by_type, created_by_id, status)
+VALUES ($1, $2, $3)
 RETURNING id`,
 			h.env.SystemJobsTableName(),
 		),
-		CreatedByScheduledJobs, scheduleID, status, payload,
+		CreatedByScheduledJobs, scheduleID, status,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, datums)

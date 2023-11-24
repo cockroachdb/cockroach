@@ -299,6 +299,10 @@ const (
 	// Do not add new versions to a patch release.
 	// *************************************************
 
+	// V24_1_DropPayloadAndProgressFromSystemJobsTable drop the unused payload and
+	// progress columns from system.jobs table.
+	V24_1_DropPayloadAndProgressFromSystemJobsTable
+
 	numKeys
 )
 
@@ -365,6 +369,8 @@ var versionTable = [numKeys]roachpb.Version{
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
 	// *************************************************
+
+	V24_1_DropPayloadAndProgressFromSystemJobsTable: {Major: 23, Minor: 2, Internal: 4},
 }
 
 // Latest is always the highest version key. This is the maximum logical cluster

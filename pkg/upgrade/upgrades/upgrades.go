@@ -170,6 +170,14 @@ var upgrades = []upgradebase.Upgrade{
 
 	newFirstUpgrade(clusterversion.V24_1Start.Version()),
 
+	upgrade.NewTenantUpgrade(
+		"drop unused payload and progress columns from system.jobs table",
+		clusterversion.V24_1_DropPayloadAndProgressFromSystemJobsTable.Version(),
+		upgrade.NoPrecondition,
+		dropPayloadProgressFromSystemJobs,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the system.jobs table"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
