@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -350,8 +351,13 @@ func makePlan(
 			}
 		}
 
+		oracle := physicalplan.DefaultReplicaChooser
+		if enableBalancedRangeDistribution.Get(&execCtx.ExecCfg().Settings.SV) {
+			oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(execCtx.ExecCfg().Locality), locFilter)
+		}
+
 		planCtx := dsp.NewPlanningCtxWithOracle(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
-			sql.DistributionType(distMode), physicalplan.DefaultReplicaChooser, locFilter)
+			sql.DistributionType(distMode), oracle, locFilter)
 		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
 		if err != nil {
 			return nil, nil, err
