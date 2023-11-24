@@ -67,7 +67,7 @@ func registerDatabaseDrop(r registry.Registry) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				path, err := clusterupgrade.UploadVersion(
+				path, err := clusterupgrade.UploadCockroach(
 					ctx, t, t.L(), c, c.All(), clusterupgrade.MustParseVersion(pred),
 				)
 				if err != nil {

@@ -79,7 +79,7 @@ func registerIndexBackfill(r registry.Registry) {
 							t.Fatal(err)
 						}
 
-						path, err := clusterupgrade.UploadVersion(
+						path, err := clusterupgrade.UploadCockroach(
 							ctx, t, t.L(), c, c.All(), clusterupgrade.MustParseVersion(pred),
 						)
 						if err != nil {

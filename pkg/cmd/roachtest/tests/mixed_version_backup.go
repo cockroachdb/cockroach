@@ -2293,7 +2293,7 @@ func (u *CommonTestUtils) resetCluster(
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
 
-	cockroachPath := clusterupgrade.BinaryPathForVersion(u.t, version)
+	cockroachPath := clusterupgrade.CockroachPathForVersion(u.t, version)
 	return clusterupgrade.StartWithSettings(
 		ctx, l, u.cluster, u.roachNodes, option.DefaultStartOptsNoBackups(),
 		install.BinaryOption(cockroachPath), install.SecureOption(true),
@@ -2485,7 +2485,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 			)
 			testRNG := mvt.RNG()
 
-			uploadVersion(ctx, t, c, workloadNode, clusterupgrade.CurrentVersion())
+			uploadCockroach(ctx, t, c, workloadNode, clusterupgrade.CurrentVersion())
 
 			dbs := []string{"bank", "tpcc"}
 			backupTest, err := newMixedVersionBackup(t, c, roachNodes, dbs)
