@@ -701,7 +701,7 @@ func (s startStep) Description() string {
 // Run uploads the binary associated with the given version and starts
 // the cockroach binary on the nodes.
 func (s startStep) Run(ctx context.Context, l *logger.Logger, c cluster.Cluster, h *Helper) error {
-	binaryPath, err := clusterupgrade.UploadVersion(ctx, s.rt, l, c, s.crdbNodes, s.version)
+	binaryPath, err := clusterupgrade.UploadCockroach(ctx, s.rt, l, c, s.crdbNodes, s.version)
 	if err != nil {
 		return err
 	}
