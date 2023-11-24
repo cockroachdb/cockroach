@@ -208,17 +208,17 @@ func (u *versionUpgradeTest) conn(ctx context.Context, t test.Test, i int) *gosq
 	return db
 }
 
-// uploadVersion is a thin wrapper around
-// `clusterupgrade.UploadVersion` that calls t.Fatal if that call
-// returns an error
-func uploadVersion(
+// uploadCockroach is a thin wrapper around
+// `clusterupgrade.UploadCockroach` that calls t.Fatal if that call
+// returns an error.
+func uploadCockroach(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
 	nodes option.NodeListOption,
 	newVersion *clusterupgrade.Version,
 ) string {
-	path, err := clusterupgrade.UploadVersion(ctx, t, t.L(), c, nodes, newVersion)
+	path, err := clusterupgrade.UploadCockroach(ctx, t, t.L(), c, nodes, newVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +266,7 @@ func uploadAndStartFromCheckpointFixture(
 		if err := clusterupgrade.InstallFixtures(ctx, t.L(), u.c, nodes, v); err != nil {
 			t.Fatal(err)
 		}
-		binary := uploadVersion(ctx, t, u.c, nodes, v)
+		binary := uploadCockroach(ctx, t, u.c, nodes, v)
 		startOpts := option.DefaultStartOpts()
 		if err := clusterupgrade.StartWithSettings(
 			ctx, t.L(), u.c, nodes, startOpts, install.BinaryOption(binary),
@@ -384,7 +384,7 @@ func makeVersionFixtureAndFatal(
 			name := clusterupgrade.CheckpointName(u.binaryVersion(ctx, t, 1).String())
 			u.c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
 
-			binaryPath := clusterupgrade.BinaryPathForVersion(t, fixtureVersion)
+			binaryPath := clusterupgrade.CockroachPathForVersion(t, fixtureVersion)
 			c.Run(ctx, c.All(), binaryPath, "debug", "pebble", "db", "checkpoint",
 				"{store-dir}", "{store-dir}/"+name)
 			// The `cluster-bootstrapped` marker can already be found within
