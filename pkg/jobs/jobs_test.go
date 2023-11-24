@@ -1430,28 +1430,6 @@ func TestJobLifecycle(t *testing.T) {
 			}
 		})
 
-		// TODO(adityamaru): Delete these tests once we drop the payload and
-		// progress columns from system.jobs.
-		t.Run("payload in system.jobs is irrelevant when marking job as successful", func(t *testing.T) {
-			job, _ := createDefaultJob()
-			if _, err := sqlDB.Exec(
-				`UPDATE system.jobs SET payload = 'garbage' WHERE id = $1`, job.ID(),
-			); err != nil {
-				t.Fatal(err)
-			}
-			require.NoError(t, job.Succeeded(ctx))
-		})
-
-		t.Run("payload in system.jobs is irrelevant when marking job as failed", func(t *testing.T) {
-			job, _ := createDefaultJob()
-			if _, err := sqlDB.Exec(
-				`UPDATE system.jobs SET payload = 'garbage' WHERE id = $1`, job.ID(),
-			); err != nil {
-				t.Fatal(err)
-			}
-			require.NoError(t, job.Failed(ctx, errors.New("boom")))
-		})
-
 		t.Run("internal errors are not swallowed if marking job as successful", func(t *testing.T) {
 			job, _ := createDefaultJob()
 			if _, err := sqlDB.Exec(

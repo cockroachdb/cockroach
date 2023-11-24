@@ -224,8 +224,6 @@ CREATE TABLE system.jobs (
 	id                INT8      DEFAULT unique_rowid(),
 	status            STRING    NOT NULL,
 	created           TIMESTAMP NOT NULL DEFAULT now(),
-	payload           BYTES,
-	progress          BYTES,
 	created_by_type   STRING,
 	created_by_id     INT,
 	claim_session_id  BYTES,
@@ -243,8 +241,7 @@ CREATE TABLE system.jobs (
   ) STORING(last_run, num_runs, claim_instance_id)
     WHERE ` + JobsRunStatsIdxPredicate + `,
   INDEX jobs_job_type_idx (job_type),
-	FAMILY fam_0_id_status_created_payload (id, status, created, payload, created_by_type, created_by_id, job_type),
-	FAMILY progress (progress),
+	FAMILY fam_0_id_status_created_payload (id, status, created, created_by_type, created_by_id, job_type),
 	FAMILY claim (claim_session_id, claim_instance_id, num_runs, last_run)
 );`
 
@@ -1923,8 +1920,6 @@ var (
 				{Name: "id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString},
 				{Name: "status", ID: 2, Type: types.String},
 				{Name: "created", ID: 3, Type: types.Timestamp, DefaultExpr: &nowString},
-				{Name: "payload", ID: 4, Type: types.Bytes, Nullable: true},
-				{Name: "progress", ID: 5, Type: types.Bytes, Nullable: true},
 				{Name: "created_by_type", ID: 6, Type: types.String, Nullable: true},
 				{Name: "created_by_id", ID: 7, Type: types.Int, Nullable: true},
 				{Name: "claim_session_id", ID: 8, Type: types.Bytes, Nullable: true},
@@ -1940,15 +1935,8 @@ var (
 					// that needed to be done.
 					Name:        "fam_0_id_status_created_payload",
 					ID:          0,
-					ColumnNames: []string{"id", "status", "created", "payload", "created_by_type", "created_by_id", "job_type"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 6, 7, 12},
-				},
-				{
-					Name:            "progress",
-					ID:              1,
-					ColumnNames:     []string{"progress"},
-					ColumnIDs:       []descpb.ColumnID{5},
-					DefaultColumnID: 5,
+					ColumnNames: []string{"id", "status", "created", "created_by_type", "created_by_id", "job_type"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 6, 7, 12},
 				},
 				{
 					Name:        "claim",
