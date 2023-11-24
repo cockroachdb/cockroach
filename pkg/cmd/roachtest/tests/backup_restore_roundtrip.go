@@ -96,8 +96,8 @@ func backupRestoreRoundTrip(
 	testRNG, seed := randutil.NewLockedPseudoRand()
 	t.L().Printf("random seed: %d", seed)
 
-	// Upload binaries and start cluster.
-	uploadVersion(ctx, t, c, c.All(), clusterupgrade.CurrentVersion())
+	// Upload cockroach and start cluster.
+	uploadCockroach(ctx, t, c, c.All(), clusterupgrade.CurrentVersion())
 
 	envOption := install.EnvOption([]string{
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
