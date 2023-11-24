@@ -88,8 +88,8 @@ func runMultiTenantUpgrade(
 	require.NoError(t, err)
 	predecessor := clusterupgrade.MustParseVersion(predecessorV)
 
-	currentBinary := uploadVersion(ctx, t, c, c.All(), clusterupgrade.CurrentVersion())
-	predecessorBinary := uploadVersion(ctx, t, c, c.All(), predecessor)
+	currentBinary := uploadCockroach(ctx, t, c, c.All(), clusterupgrade.CurrentVersion())
+	predecessorBinary := uploadCockroach(ctx, t, c, c.All(), predecessor)
 
 	kvNodes := c.Node(1)
 

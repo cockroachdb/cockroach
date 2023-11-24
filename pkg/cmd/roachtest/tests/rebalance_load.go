@@ -99,7 +99,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			predecessorVersionStr, err := release.LatestPredecessor(t.BuildVersion())
 			require.NoError(t, err)
 			predecessorVersion := clusterupgrade.MustParseVersion(predecessorVersionStr)
-			settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
+			settings.Binary = uploadCockroach(ctx, t, c, c.All(), predecessorVersion)
 			// Upgrade some (or all) of the first N-1 CRDB nodes. We ignore the last
 			// CRDB node (to leave at least one node on the older version), and the
 			// app node.
