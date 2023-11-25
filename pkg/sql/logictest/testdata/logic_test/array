@@ -1104,6 +1104,15 @@ SELECT array_replace(ARRAY[1,2,NULL,4], NULL::INT, 3), array_replace(NULL::INT[]
 
 # ARRAY_POSITION function
 
+query error unknown signature: array_position\(int, string\)
+SELECT array_position(2, 'wed'::text)
+
+query error unknown signature: array_position\(string, string\)
+SELECT array_position('1,wed', 'wed'::text)
+
+query error unknown signature: array_position\(string\[\], int\)
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 1);
+
 query I
 SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon')
 ----
@@ -1116,6 +1125,53 @@ NULL
 
 query I
 SELECT array_position(NULL::STRING[], 'abc')
+----
+NULL
+
+query error array_position\(\): initial position must not be null
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', null)
+
+query error unknown signature: array_position\(int, string, int\)
+SELECT array_position(2, 'wed'::text, 2)
+
+query error unknown signature: array_position\(string, string, int\)
+SELECT array_position('1,wed', 'wed'::text, 1)
+
+query error unknown signature: array_position\(string\[\], int, int\)
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 1, 1);
+
+query I
+SELECT array_position('{sun,mon,tue,wed,thu,fri,sat,mon}', 'mon'::TEXT, 2)
+----
+2
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', 3)
+----
+8
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'tue', 4)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'abc', 1)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'wed', 9)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'wed', 0)
+----
+4
+
+query I
+SELECT array_position(NULL::STRING[], 'abc', 1)
 ----
 NULL
 
