@@ -313,9 +313,7 @@ func validateArrayDimensions(nDimensions int, nElements int) error {
 	return nil
 }
 
-// DecodeDatum decodes bytes with specified type and format code into
-// a datum. If res is nil, then user defined types are not attempted
-// to be resolved.
+// DecodeDatum decodes bytes with specified type and format code into a datum.
 func DecodeDatum(
 	ctx context.Context, evalCtx *eval.Context, typ *types.T, code FormatCode, b []byte,
 ) (tree.Datum, error) {
@@ -469,9 +467,10 @@ func DecodeDatum(
 			}
 			return &tree.DTSVector{TSVector: ret}, nil
 		}
-		if typ.Family() == types.ArrayFamily {
-			// Arrays come in in their string form, so we parse them as such and later
-			// convert them to their actual datum form.
+		switch typ.Family() {
+		case types.ArrayFamily, types.TupleFamily:
+			// Arrays and tuples come in in their string form, so we parse them
+			// as such and later convert them to their actual datum form.
 			if err := validateStringBytes(b); err != nil {
 				return nil, err
 			}
