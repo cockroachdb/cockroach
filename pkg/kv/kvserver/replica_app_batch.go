@@ -59,6 +59,11 @@ type replicaAppBatch struct {
 	// changeRemovesReplica tracks whether the command in the batch (there must
 	// be only one) removes this replica from the range.
 	changeRemovesReplica bool
+	// changeTruncatesSideloadedFiles tracks whether the command in the batch
+	// (there must be only one) is a truncation request that removes at least one
+	// sideloaded storage file. Such commands may apply side effects only after
+	// their application to state machine is synced.
+	changeTruncatesSideloadedFiles bool
 
 	start                   time.Time // time at NewBatch()
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
@@ -410,12 +415,23 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// going to bother with a long-running migration.
 		apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
 		if apply {
+			// TODO(pavelkalinnikov): counting bytes may be unreliable because 0 bytes
+			// does not mean 0 files. Make the interface more robust.
+			if rmBytes, _, err := b.r.raftMu.sideloaded.BytesIfTruncatedFromTo(
+				ctx, 0, res.State.TruncatedState.Index,
+			); err != nil {
+				return errors.Wrap(err, "unable to count sideloaded files to remove")
+			} else if rmBytes != 0 {
+				b.changeTruncatesSideloadedFiles = true
+			}
 			if apply, err = handleTruncatedStateBelowRaftPreApply(
 				ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
 			); err != nil {
 				return errors.Wrap(err, "unable to handle truncated state")
 			}
 		} else {
+			// TODO(pavelkalinnikov): ensure that this truncation path makes sure the
+			// state is synced before removing sideloaded files.
 			b.r.store.raftTruncator.addPendingTruncation(
 				ctx, (*raftTruncatorReplica)(b.r), *res.State.TruncatedState, res.RaftExpectedFirstIndex,
 				res.RaftLogDelta)
@@ -554,21 +570,22 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// to disk. The atomicity guarantees of the batch, and the fact that the
 	// applied state is stored in this batch, ensure that if the batch ends up not
 	// being durably committed then the entries in this batch will be applied
-	// again upon startup. However, if we're removing the replica's data then we
-	// sync this batch as it is not safe to call postDestroyRaftMuLocked before
-	// ensuring that the replica's data has been synchronously removed. See
-	// handleChangeReplicasResult().
+	// again upon startup. However, there are a couple of exceptions.
 	//
-	// TODO(#38566, #113135): we should sync here also if the command truncates
-	// the log and removes at least one sideloaded entry. Sideloaded entries live
-	// in a separate special engine, and are removed as a side effect of applying
-	// this command, but not atomically with it.
+	// If we're removing the replica's data then we sync this batch as it is not
+	// safe to call postDestroyRaftMuLocked before ensuring that the replica's
+	// data has been synchronously removed. See handleChangeReplicasResult().
+	//
+	// We also sync the batch if the command truncates the log and removes at
+	// least one sideloaded entry. Sideloaded entries live in a separate special
+	// engine, and are removed as a side effect of applying this command, but not
+	// atomically with it.
 	//
 	// TODO(sep-raft-log): when the log and state machine engines are completely
 	// separated, we must either sync here unconditionally upon log truncation, or
 	// apply the side effects asynchronously when we are sure that the state
 	// machine engine has synced the application of this command.
-	sync := b.changeRemovesReplica
+	sync := b.changeRemovesReplica || b.changeTruncatesSideloadedFiles
 	if err := b.batch.Commit(sync); err != nil {
 		return errors.Wrapf(err, "unable to commit Raft entry batch")
 	}
