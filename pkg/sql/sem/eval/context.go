@@ -951,4 +951,12 @@ type StreamIngestManager interface {
 		tenantName roachpb.TenantName,
 		revertTo hlc.Timestamp,
 	) error
+
+	// SetupReaderCatalog replicates descriptors from one tenant to another
+	// to allow selects.
+	SetupReaderCatalog(
+		ctx context.Context,
+		from, to roachpb.TenantName,
+		asOf hlc.Timestamp,
+	) error
 }
