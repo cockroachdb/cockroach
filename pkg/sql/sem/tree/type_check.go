@@ -1269,7 +1269,10 @@ func (expr *FuncExpr) TypeCheck(
 		if procErr := procedureDoesNotExistErr(expr.Func.String(), semaCtx); procErr != nil {
 			return nil, procErr
 		}
-		return nil, pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig(expr, s.typedExprs, desired))
+		return nil, errors.WithHint(
+			pgerror.Newf(pgcode.UndefinedFunction, "unknown signature: %s", getFuncSig(expr, s.typedExprs, desired)),
+			"No function matches the given name and argument types. You might need to add explicit type casts.",
+		)
 	}
 
 	var favoredOverload QualifiedOverload
