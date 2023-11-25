@@ -591,4 +591,41 @@ var replicationBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Volatile,
 		},
 	),
+	"crdb_internal.setup_read_from_standby": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategoryClusterReplication,
+			Undocumented:     true,
+			DistsqlBlocklist: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "src_tenant", Typ: types.String},
+				{Name: "dst_tenant", Typ: types.String},
+				{Name: "ts", Typ: types.Decimal},
+			},
+			ReturnType: tree.FixedReturnType(types.Decimal),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				srcName := roachpb.TenantName(string(tree.MustBeDString(args[0])))
+				dstName := roachpb.TenantName(string(tree.MustBeDString(args[1])))
+				// TODO(dt): make this optional.
+				tsDec := tree.MustBeDDecimal(args[2])
+				readAsOf, err := hlc.DecimalToHLC(&tsDec.Decimal)
+				if err != nil {
+					return nil, err
+				}
+
+				mgr, err := evalCtx.StreamManagerFactory.GetStreamIngestManager(ctx)
+				if err != nil {
+					return nil, err
+				}
+
+				if err := mgr.SetupReaderCatalog(ctx, srcName, dstName, readAsOf); err != nil {
+					return nil, err
+				}
+				return &tsDec, err
+			},
+			Info:       "This function imports the catalog from the named tenant with reads of the underlying tables redirected to read from the named tenant as of the time it was imported.",
+			Volatility: volatility.Volatile,
+		},
+	),
 }

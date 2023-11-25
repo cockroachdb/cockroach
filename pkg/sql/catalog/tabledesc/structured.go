@@ -2331,6 +2331,13 @@ func (desc *Mutable) SetOffline(reason string) {
 	desc.OfflineReason = reason
 }
 
+func (desc *Mutable) SetExternalRowData(ext *descpb.ExternalRowData) {
+	// Do not set materialized views for sequences, they will
+	// handle this on their own.
+	desc.IsMaterializedView = !desc.IsSequence()
+	desc.External = ext
+}
+
 // IsLocalityRegionalByRow implements the TableDescriptor interface.
 func (desc *wrapper) IsLocalityRegionalByRow() bool {
 	return desc.LocalityConfig.GetRegionalByRow() != nil

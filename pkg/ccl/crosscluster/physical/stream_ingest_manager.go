@@ -17,10 +17,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -29,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -108,4 +122,181 @@ func getReplicationStatsAndStatus(
 
 func init() {
 	repstream.GetStreamIngestManagerHook = newStreamIngestManagerWithPrivilegesCheck
+}
+
+// SetupReaderCatalog implements streaming.StreamIngestManager interface.
+func (r *streamIngestManagerImpl) SetupReaderCatalog(
+	ctx context.Context, from, to roachpb.TenantName, asOf hlc.Timestamp,
+) error {
+	execCfg := r.evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+	var fromID, toID roachpb.TenantID
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		fromTenant, err := sql.GetTenantRecordByName(ctx, r.evalCtx.Settings, txn, from)
+		if err != nil {
+			return err
+		}
+		fromID, err = roachpb.MakeTenantID(fromTenant.ID)
+		if err != nil {
+			return err
+		}
+		toTenant, err := sql.GetTenantRecordByName(ctx, r.evalCtx.Settings, txn, to)
+		if err != nil {
+			return err
+		}
+		toID, err = roachpb.MakeTenantID(toTenant.ID)
+		if err != nil {
+			return err
+		}
+		if fromTenant.DataState != mtinfopb.DataStateReady {
+			if fromTenant.PhysicalReplicationConsumerJobID == 0 {
+				return errors.Newf("cannot copy catalog from tenant %s in state %s", from, fromTenant.DataState)
+			}
+			job, err := r.jobRegistry.LoadJobWithTxn(ctx, fromTenant.PhysicalReplicationConsumerJobID, txn)
+			if err != nil {
+				return errors.Wrap(err, "loading tenant replication job")
+			}
+			progress := job.Progress()
+			replicatedTime := replicationutils.ReplicatedTimeFromProgress(&progress)
+			if asOf.IsEmpty() {
+				asOf = replicatedTime
+			} else if replicatedTime.Less(asOf) {
+				return errors.Newf("timestamp is not replicated yet")
+			}
+		} else if asOf.IsEmpty() {
+			asOf = execCfg.Clock.Now()
+		}
+		if toTenant.ServiceMode != mtinfopb.ServiceModeNone {
+			return errors.Newf("tenant %s must have service stopped to enable reader mode",
+				toTenant.Name)
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if fromID.Equal(roachpb.SystemTenantID) || toID.Equal(roachpb.SystemTenantID) {
+		return errors.New("cannot revert the system tenant")
+	}
+
+	extracted, err := getCatalogForTenantAsOf(ctx, execCfg, fromID, asOf)
+	if err != nil {
+		return err
+	}
+
+	m := mon.NewUnlimitedMonitor(ctx, mon.Options{
+		Name:     "tenant_reader",
+		Res:      mon.MemoryResource,
+		Settings: execCfg.Settings,
+	})
+	// Inherit session data, so that we can run validation.
+	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(r.evalCtx.SessionDataStack)
+	writeDescs := descs.NewBareBonesCollectionFactory(execCfg.Settings, keys.MakeSQLCodec(toID)).
+		NewCollection(ctx, descs.WithMonitor(m), descs.WithDescriptorSessionDataProvider(dsdp))
+	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Reset any state between txn retries.
+		defer writeDescs.ReleaseAll(ctx)
+		// Resolve any existing descriptors within the tenant, which
+		// will be use to compute old values for writing.
+		existingDescriptors, err := writeDescs.GetAllFromStorageUnvalidated(ctx, txn)
+		if err != nil {
+			return err
+		}
+		b := txn.NewBatch()
+		if err := extracted.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			if desc.GetParentID() == keys.SystemDatabaseID ||
+				desc.GetID() == keys.SystemDatabaseID {
+				return nil
+			}
+			// If there is an existing descriptor with the same ID, we should
+			// determine the old bytes in storage for the upsert.
+			var existingRawBytes []byte
+			if existingDesc := existingDescriptors.LookupDescriptor(desc.GetID()); existingDesc != nil {
+				existingRawBytes = existingDesc.GetRawBytesInStorage()
+			}
+			var mut catalog.MutableDescriptor
+			switch t := desc.DescriptorProto().GetUnion().(type) {
+			case *descpb.Descriptor_Table:
+				t.Table.Version = 1
+				mutBuilder := tabledesc.NewBuilder(t.Table)
+				if existingRawBytes != nil {
+					mutBuilder.SetRawBytesInStorage(existingRawBytes)
+				}
+				mutTbl := mutBuilder.BuildCreatedMutable().(*tabledesc.Mutable)
+				mut = mutTbl
+				// Convert any physical tables into external row tables.
+				// Note: Materialized views will be converted, but their
+				// view definition will be wiped.
+				if mutTbl.IsPhysicalTable() {
+					mutTbl.ViewQuery = ""
+					mutTbl.SetExternalRowData(&descpb.ExternalRowData{TenantID: fromID, TableID: desc.GetID(), AsOf: asOf})
+				}
+			case *descpb.Descriptor_Database:
+				t.Database.Version = 1
+				mutBuilder := dbdesc.NewBuilder(t.Database)
+				if existingRawBytes != nil {
+					mutBuilder.SetRawBytesInStorage(existingRawBytes)
+				}
+				mut = mutBuilder.BuildCreatedMutable()
+			case *descpb.Descriptor_Schema:
+				t.Schema.Version = 1
+				mutBuilder := schemadesc.NewBuilder(t.Schema)
+				if existingRawBytes != nil {
+					mutBuilder.SetRawBytesInStorage(existingRawBytes)
+				}
+				mut = mutBuilder.BuildCreatedMutable()
+			case *descpb.Descriptor_Function:
+				t.Function.Version = 1
+				mutBuilder := funcdesc.NewBuilder(t.Function)
+				if existingRawBytes != nil {
+					mutBuilder.SetRawBytesInStorage(existingRawBytes)
+				}
+				mut = mutBuilder.BuildCreatedMutable()
+			case *descpb.Descriptor_Type:
+				t.Type.Version = 1
+				mutBuilder := typedesc.NewBuilder(t.Type)
+				if existingRawBytes != nil {
+					mutBuilder.SetRawBytesInStorage(existingRawBytes)
+				}
+				mut = mutBuilder.BuildCreatedMutable()
+			}
+			return errors.Wrapf(writeDescs.WriteDescToBatch(ctx, true, mut, b),
+				"unable to create replicated descriptor: %d %T", mut.GetID(), mut)
+		}); err != nil {
+			return err
+		}
+		if err := extracted.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+			if e.GetParentID() == keys.SystemDatabaseID ||
+				e.GetID() == keys.SystemDatabaseID {
+				return nil
+			}
+			return errors.Wrapf(writeDescs.UpsertNamespaceEntryToBatch(ctx, true, e, b), "namespace entry %v", e)
+		}); err != nil {
+			return err
+		}
+		return errors.Wrap(txn.Run(ctx, b), "running batch")
+	})
+}
+
+// getCatalogForTenantAsOf reads the descriptors from a given tenant
+// at the given timestamp.
+func getCatalogForTenantAsOf(
+	ctx context.Context, execCfg *sql.ExecutorConfig, tenantID roachpb.TenantID, asOf hlc.Timestamp,
+) (all nstree.Catalog, _ error) {
+	cf := descs.NewBareBonesCollectionFactory(execCfg.Settings, keys.MakeSQLCodec(tenantID))
+	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		err := txn.SetFixedTimestamp(ctx, asOf)
+		if err != nil {
+			return err
+		}
+		descs := cf.NewCollection(ctx)
+		defer descs.ReleaseAll(ctx)
+		all, err = descs.GetAllFromStorageUnvalidated(ctx, txn)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	return all, err
 }
