@@ -1119,6 +1119,41 @@ SELECT array_position(NULL::STRING[], 'abc')
 ----
 NULL
 
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', 2)
+----
+2
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', 3)
+----
+8
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'tue', 4)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'abc', 1)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'wed', 9)
+----
+NULL
+
+query I
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'wed', 0)
+----
+4
+
+query I
+SELECT array_position(NULL::STRING[], 'abc', 1)
+----
+NULL
+
 # ARRAY_POSITIONS function
 
 query TT
