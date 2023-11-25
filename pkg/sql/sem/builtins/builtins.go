@@ -3972,7 +3972,7 @@ value if you rely on the HLC for accuracy.`,
 				diff := fuzzystrmatch.Difference(s, t)
 				return tree.NewDInt(tree.DInt(diff)), nil
 			},
-			Info:       "Convert two strings to their Soundex codes and then reports the number of matching code positions.",
+			Info:       "Convert two strings to their Soundex codes and report the number of matching code positions.",
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -4012,10 +4012,39 @@ value if you rely on the HLC for accuracy.`,
 			Info: "Calculates the Levenshtein distance between two strings. The cost parameters specify how much to " +
 				"charge for each edit operation. Maximum input length is 255 characters.",
 			Volatility: volatility.Immutable,
-		}),
+		},
+	),
 	"levenshtein_less_equal": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
-	"metaphone":              makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
-	"dmetaphone_alt":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"metaphone": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategoryFuzzyStringMatching},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "source", Typ: types.String}, {Name: "max_output_length", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				const maxDefaultLen = 255
+				s := string(tree.MustBeDString(args[0]))
+				maxOutputLen := int(tree.MustBeDInt(args[1]))
+				if len(s) > maxDefaultLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"argument exceeds maximum length of %d characters", maxDefaultLen)
+				}
+				if maxOutputLen > maxDefaultLen {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"output exceeds maximum length of %d characters", maxDefaultLen)
+				}
+				if maxOutputLen <= 0 {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"output length must be > 0")
+				}
+				m := fuzzystrmatch.Metaphone(s, maxDefaultLen)
+				return tree.NewDString(m), nil
+			},
+			Info:       "Convert a string to its Metaphone code. Maximum input length is 255 characters",
+			Volatility: volatility.Immutable,
+		},
+	),
+	"dmetaphone":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
+	"dmetaphone_alt": makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 56820, Category: builtinconstants.CategoryFuzzyStringMatching}),
 
 	// JSON functions.
 	// The behavior of both the JSON and JSONB data types in CockroachDB is
