@@ -60,6 +60,11 @@ type replicaAppBatch struct {
 	// changeRemovesReplica tracks whether the command in the batch (there must
 	// be only one) removes this replica from the range.
 	changeRemovesReplica bool
+	// changeTruncatesSideloadedFiles tracks whether the command in the batch
+	// (there must be only one) is a truncation request that removes at least one
+	// sideloaded storage file. Such commands may apply side effects only after
+	// their application to state machine is synced.
+	changeTruncatesSideloadedFiles bool
 
 	start                   time.Time // time at NewBatch()
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
@@ -420,7 +425,26 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 				ctx, (*raftTruncatorReplica)(b.r), *res.State.TruncatedState, res.RaftExpectedFirstIndex,
 				res.RaftLogDelta)
 		}
-		if !apply {
+		if apply {
+			// This truncation command will apply synchronously in this batch.
+			// Determine if there are any sideloaded entries that will be removed as a
+			// side effect.
+			//
+			// We must sync state machine batch application if the command removes any
+			// sideloaded log entries. Not doing so can lead to losing the entries.
+			// See the usage of changeTruncatesSideloadedFiles flag at the other end.
+			//
+			// We only need to check sideloaded entries in this path. The loosely
+			// coupled truncation mechanism in the other branch already ensures
+			// enacting truncations only after state machine synced.
+			if has, err := b.r.raftMu.sideloaded.HasAnyEntry(
+				ctx, b.state.TruncatedState.Index, res.State.TruncatedState.Index+1, // include end Index
+			); err != nil {
+				return errors.Wrap(err, "failed searching for sideloaded entries")
+			} else if has {
+				b.changeTruncatesSideloadedFiles = true
+			}
+		} else {
 			// The truncated state was discarded, or we are queuing a pending
 			// truncation, so make sure we don't apply it to our in-memory state.
 			res.State.TruncatedState = nil
@@ -554,15 +578,16 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// to disk. The atomicity guarantees of the batch, and the fact that the
 	// applied state is stored in this batch, ensure that if the batch ends up not
 	// being durably committed then the entries in this batch will be applied
-	// again upon startup. However, if we're removing the replica's data then we
-	// sync this batch as it is not safe to call postDestroyRaftMuLocked before
-	// ensuring that the replica's data has been synchronously removed. See
-	// handleChangeReplicasResult().
+	// again upon startup. However, there are a couple of exceptions.
 	//
-	// TODO(#38566, #113135): we should sync here also if the command truncates
-	// the log and removes at least one sideloaded entry. Sideloaded entries live
-	// in a separate special engine, and are removed as a side effect of applying
-	// this command, but not atomically with it.
+	// If we're removing the replica's data then we sync this batch as it is not
+	// safe to call postDestroyRaftMuLocked before ensuring that the replica's
+	// data has been synchronously removed. See handleChangeReplicasResult().
+	//
+	// We also sync the batch if the command truncates the log and removes at
+	// least one sideloaded entry. Sideloaded entries live in a separate special
+	// engine, and are removed as a side effect of applying this command, but not
+	// atomically with it.
 	//
 	// TODO(#36262, #93248): once the legacy log truncation mechanism is removed,
 	// and the behaviour under "kv.raft_log.loosely_coupled_truncation.enabled"
@@ -575,7 +600,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// asynchronously when sure that the state machine engine has synced the
 	// application of this command. I.e. the loosely coupled truncation migration
 	// mentioned above likely needs to be done first.
-	sync := b.changeRemovesReplica
+	sync := b.changeRemovesReplica || b.changeTruncatesSideloadedFiles
 	if err := b.batch.Commit(sync); err != nil {
 		return errors.Wrapf(err, "unable to commit Raft entry batch")
 	}
