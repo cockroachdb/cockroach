@@ -54,3 +54,13 @@ query TTTI
 SELECT soundex('Anne'), soundex(NULL), difference('Anne', NULL), difference(NULL, 'Bob');
 ----
 A500  NULL  NULL  NULL
+
+query TT
+SELECT metaphone('GUMBO', 4), metaphone(NULL, 4);
+----
+KM  NULL
+
+query TTT
+SELECT metaphone('Night', 4), metaphone('Knight', 4), metaphone('Knives', 4);
+----
+NFT NFT NFS
