@@ -19,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1077,12 +1076,10 @@ func FormatRetriableExecutionErrorLogToStringArray(
 }
 
 // GetJobTraceID returns the current trace ID of the job from the job progress.
-func GetJobTraceID(
-	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
-) (tracingpb.TraceID, error) {
+func GetJobTraceID(ctx context.Context, db isql.DB, jobID jobspb.JobID) (tracingpb.TraceID, error) {
 	var traceID tracingpb.TraceID
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		jobInfo := InfoStorageForJob(txn, jobID, cv)
+		jobInfo := InfoStorageForJob(txn, jobID)
 		progressBytes, exists, err := jobInfo.GetLegacyProgress(ctx)
 		if err != nil {
 			return err
@@ -1106,14 +1103,14 @@ func GetJobTraceID(
 // LoadJobProgress returns the job progress from the info table. Note that the
 // progress can be nil if none is recorded.
 func LoadJobProgress(
-	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
+	ctx context.Context, db isql.DB, jobID jobspb.JobID,
 ) (*jobspb.Progress, error) {
 	var (
 		progressBytes []byte
 		exists        bool
 	)
 	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		infoStorage := InfoStorageForJob(txn, jobID, cv)
+		infoStorage := InfoStorageForJob(txn, jobID)
 		var err error
 		progressBytes, exists, err = infoStorage.GetLegacyProgress(ctx)
 		return err

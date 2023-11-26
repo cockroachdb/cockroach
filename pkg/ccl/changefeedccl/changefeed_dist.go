@@ -303,7 +303,7 @@ func startDistChangefeed(
 			finishedSetupFn = func(flowinfra.Flow) { resultsCh <- tree.Datums(nil) }
 		}
 
-		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID, execCfg.Settings.Version)
+		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, jobID)
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
