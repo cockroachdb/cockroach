@@ -327,6 +327,9 @@ func requireHasNoSSTs(t *testing.T, locations ...string) {
 // are wrapped with SucceedsSoon() because EXPERIMENTAL_RELOCATE can fail if
 // there are other replication changes happening.
 func ensureLeaseholder(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+	// Anything that is calling this to ensure *leaseholders* probably cares about
+	// the work going to the leaseholders as it did before follower reads.
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.balanced_distribution.enabled = false`)
 	for _, stmt := range []string{
 		`ALTER TABLE data.bank SPLIT AT VALUES (0)`,
 		`ALTER TABLE data.bank SPLIT AT VALUES (100)`,
