@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -175,9 +174,9 @@ func ReplicatedTimeFromProgress(p *jobspb.Progress) hlc.Timestamp {
 // LoadIngestionProgress loads the latest persisted stream ingestion progress.
 // The method returns nil if the progress does not exist yet.
 func LoadIngestionProgress(
-	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
+	ctx context.Context, db isql.DB, jobID jobspb.JobID,
 ) (*jobspb.StreamIngestionProgress, error) {
-	progress, err := jobs.LoadJobProgress(ctx, db, jobID, cv)
+	progress, err := jobs.LoadJobProgress(ctx, db, jobID)
 	if err != nil || progress == nil {
 		return nil, err
 	}
@@ -193,9 +192,9 @@ func LoadIngestionProgress(
 // LoadReplicationProgress loads the latest persisted stream replication progress.
 // The method returns nil if the progress does not exist yet.
 func LoadReplicationProgress(
-	ctx context.Context, db isql.DB, jobID jobspb.JobID, cv clusterversion.Handle,
+	ctx context.Context, db isql.DB, jobID jobspb.JobID,
 ) (*jobspb.StreamReplicationProgress, error) {
-	progress, err := jobs.LoadJobProgress(ctx, db, jobID, cv)
+	progress, err := jobs.LoadJobProgress(ctx, db, jobID)
 	if err != nil || progress == nil {
 		return nil, err
 	}

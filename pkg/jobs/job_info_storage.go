@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -31,19 +30,18 @@ import (
 type InfoStorage struct {
 	j   *Job
 	txn isql.Txn
-	cv  clusterversion.Handle
 }
 
 // InfoStorage returns a new InfoStorage with the passed in job and txn.
 func (j *Job) InfoStorage(txn isql.Txn) InfoStorage {
-	return InfoStorage{j: j, txn: txn, cv: j.registry.settings.Version}
+	return InfoStorage{j: j, txn: txn}
 }
 
 // InfoStorageForJob returns a new InfoStorage with the passed in
 // job ID and txn. It avoids loading the job record. The resulting
 // job_info writes will not check the job session ID.
-func InfoStorageForJob(txn isql.Txn, jobID jobspb.JobID, cv clusterversion.Handle) InfoStorage {
-	return InfoStorage{j: &Job{id: jobID}, txn: txn, cv: cv}
+func InfoStorageForJob(txn isql.Txn, jobID jobspb.JobID) InfoStorage {
+	return InfoStorage{j: &Job{id: jobID}, txn: txn}
 }
 
 func (i InfoStorage) checkClaimSession(ctx context.Context) error {
@@ -237,10 +235,7 @@ func (i InfoStorage) Write(ctx context.Context, infoKey string, value []byte) er
 	if value == nil {
 		return errors.AssertionFailedf("missing value (infoKey %q)", infoKey)
 	}
-	if err := i.write(ctx, infoKey, value); err != nil {
-		return MaybeGenerateForcedRetryableError(ctx, i.txn.KV(), err, i.cv)
-	}
-	return nil
+	return i.write(ctx, infoKey, value)
 }
 
 // Delete removes the info record for the provided infoKey.
