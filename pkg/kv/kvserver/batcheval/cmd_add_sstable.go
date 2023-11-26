@@ -144,6 +144,38 @@ func EvalAddSSTable(
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
 
+	// If this is a remote sst, just link it in and skip the rest of eval, since
+	// we do not do anything that touches the data inside an sst for remote ssts
+	// at the point of ingesting them.
+	if path := args.RemoteFile.Path; path != "" {
+		if len(args.Data) > 0 {
+			return result.Result{}, errors.AssertionFailedf("remote sst cannot include content")
+		}
+		log.VEventf(ctx, 1, "AddSSTable remote file %s in %s", path, args.RemoteFile.Locator)
+
+		// We have no idea if the SST being ingested contains keys that will shadow
+		// existing keys or not, so we need to force its mvcc stats to be estimates.
+		s := *args.MVCCStats
+		s.ContainsEstimates++
+		ms.Add(s)
+
+		return result.Result{
+			Replicated: kvserverpb.ReplicatedEvalResult{
+				AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
+					RemoteFileLoc:   args.RemoteFile.Locator,
+					RemoteFilePath:  path,
+					BackingFileSize: args.RemoteFile.BackingFileSize,
+					Span:            roachpb.Span{Key: start.Key, EndKey: end.Key},
+				},
+				// Since the remote SST could contain keys at any timestamp, consider it
+				// a history mutation.
+				MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+					Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
+				},
+			},
+		}, nil
+	}
+
 	if min := addSSTableCapacityRemainingLimit.Get(&cArgs.EvalCtx.ClusterSettings().SV); min > 0 {
 		cap, err := cArgs.EvalCtx.GetEngineCapacity()
 		if err != nil {
@@ -158,33 +190,6 @@ func EvalAddSSTable(
 				Required:  min,
 			}
 		}
-	}
-
-	if args.RemoteFile.Path != "" {
-		if len(args.Data) > 0 {
-			return result.Result{}, errors.AssertionFailedf(
-				"AddSSTable requests cannot add bytes and remote file at same time")
-		}
-		log.Infof(ctx, "AddSSTable of remote file: %s in %s", args.RemoteFile.Path, args.RemoteFile.Locator)
-		stats := *args.MVCCStats
-		stats.ContainsEstimates++
-
-		ms.Add(stats)
-
-		mvccHistoryMutation := &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
-			Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
-		}
-		return result.Result{
-			Replicated: kvserverpb.ReplicatedEvalResult{
-				AddSSTable: &kvserverpb.ReplicatedEvalResult_AddSSTable{
-					RemoteFileLoc:   args.RemoteFile.Locator,
-					RemoteFilePath:  args.RemoteFile.Path,
-					BackingFileSize: args.RemoteFile.BackingFileSize,
-					Span:            roachpb.Span{Key: start.Key, EndKey: end.Key},
-				},
-				MVCCHistoryMutation: mvccHistoryMutation,
-			},
-		}, nil
 	}
 
 	// Reject AddSSTable requests not writing at the request timestamp if requested.
