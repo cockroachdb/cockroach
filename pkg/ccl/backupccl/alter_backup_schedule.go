@@ -312,9 +312,15 @@ func processScheduleOptions(
 					"only users with the admin role are allowed to change %s", optUpdatesLastBackupMetric)
 			}
 
-			updatesLastBackupMetric, err := strconv.ParseBool(v)
-			if err != nil {
-				return errors.Wrapf(err, "unexpected value for %s: %s", k, v)
+			// If the option is specified it generally means to set it, unless it has
+			// a value and that value parses as false.
+			updatesLastBackupMetric := true
+			if v != "" {
+				var err error
+				updatesLastBackupMetric, err = strconv.ParseBool(v)
+				if err != nil {
+					return errors.Wrapf(err, "unexpected value for %s: %s", k, v)
+				}
 			}
 			s.fullArgs.UpdatesLastBackupMetric = updatesLastBackupMetric
 			if s.incArgs == nil {
