@@ -21,20 +21,6 @@ export default function (props: GraphDashboardProps) {
 
   return [
     <LineGraph
-      title="Replication Lag"
-      sources={storeSources}
-      tenantSource={tenantSource}
-      tooltip={`The time between the wall clock and replicated time of the replication stream.
-          This metric tracks how far behind the replication stream is relative to now. This metric is set to 0 during the initial scan.`}
-    >
-      <Axis units={AxisUnits.Duration} label="time">
-        <Metric
-          name="cr.node.physical_replication.frontier_lag_nanos"
-          title="Replication Lag"
-        />
-      </Axis>
-    </LineGraph>,
-    <LineGraph
       title="Logical Bytes"
       sources={storeSources}
       tenantSource={tenantSource}
