@@ -13,6 +13,7 @@ package profiler
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -98,7 +99,15 @@ func takeMemoryMonitoringDump(
 		return false
 	}
 	defer f.Close()
-	monitorStateCb := func(s mon.MonitorState) error {
+	if err = root.TraverseTree(getMonitorStateCb(f)); err != nil {
+		log.Warningf(ctx, "error traversing memory monitoring tree for dump %s: %v", path, err)
+		return false
+	}
+	return true
+}
+
+func getMonitorStateCb(f io.Writer) func(state mon.MonitorState) error {
+	return func(s mon.MonitorState) error {
 		if s.Used == 0 && s.ReservedUsed == 0 && s.ReservedReserved == 0 {
 			// Omit monitors that don't have any memory usage reported.
 			return nil
@@ -107,15 +116,10 @@ func takeMemoryMonitoringDump(
 		if s.ReservedUsed != 0 || s.ReservedReserved != 0 {
 			info += fmt.Sprintf(" (%s / %s)", humanize.IBytes(uint64(s.ReservedUsed)), humanize.IBytes(uint64(s.ReservedReserved)))
 		}
-		if _, err := f.WriteString(info); err != nil {
+		if _, err := f.Write([]byte(info)); err != nil {
 			return err
 		}
 		_, err := f.Write([]byte{'\n'})
 		return err
 	}
-	if err = root.TraverseTree(monitorStateCb); err != nil {
-		log.Warningf(ctx, "error traversing memory monitoring tree for dump %s: %v", path, err)
-		return false
-	}
-	return true
 }
