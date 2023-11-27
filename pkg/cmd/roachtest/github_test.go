@@ -128,12 +128,16 @@ func TestCreatePostRequest(t *testing.T) {
 		return failure{squashedErr: ref}
 	}
 
+	// TODO(radu): these tests should be converted to datadriven tests which
+	// output the full rendering of the github issue message along with the
+	// metadata.
 	testCases := []struct {
 		nonReleaseBlocker       bool
 		clusterCreationFailed   bool
 		loadTeamsFailed         bool
 		localSSD                bool
 		metamorphicBuild        bool
+		coverageBuild           bool
 		extraLabels             []string
 		arch                    vm.CPUArch
 		failure                 failure
@@ -143,6 +147,7 @@ func TestCreatePostRequest(t *testing.T) {
 		expectedSkipTestFailure bool
 		expectedParams          map[string]string
 	}{
+		// 1.
 		{
 			nonReleaseBlocker: true,
 			failure:           createFailure(errors.New("other")),
@@ -157,8 +162,10 @@ func TestCreatePostRequest(t *testing.T) {
 				"arch":             "amd64",
 				"localSSD":         "false",
 				"metamorphicBuild": "false",
+				"coverageBuild":    "false",
 			}),
 		},
+		// 2.
 		{
 			localSSD:         true,
 			metamorphicBuild: true,
@@ -175,9 +182,10 @@ func TestCreatePostRequest(t *testing.T) {
 				"arch":             "arm64",
 				"localSSD":         "true",
 				"metamorphicBuild": "true",
+				"coverageBuild":    "false",
 			}),
 		},
-		// Assert that release-blocker label doesn't exist when
+		// 3. Assert that release-blocker label doesn't exist when
 		// !nonReleaseBlocker and issue is an SSH flake. Also ensure that
 		// in the event of a failed cluster creation, nil `vmOptions` and
 		// `clusterImpl` are not dereferenced
@@ -191,29 +199,30 @@ func TestCreatePostRequest(t *testing.T) {
 				"ssd":              "0",
 				"cpu":              "4",
 				"metamorphicBuild": "false",
+				"coverageBuild":    "false",
 			}),
 		},
-		// Simulate failure loading TEAMS.yaml
+		// 4. Simulate failure loading TEAMS.yaml
 		{
 			nonReleaseBlocker: true,
 			loadTeamsFailed:   true,
 			failure:           createFailure(errors.New("other")),
 			expectedLabels:    []string{"C-test-failure"},
 		},
-		// Error during post test assertions
+		// 5. Error during post test assertions
 		{
 			nonReleaseBlocker: true,
 			failure:           createFailure(errDuringPostAssertions),
 			expectedLabels:    []string{"C-test-failure"},
 		},
-		// Error during dns operation.
+		// 6. Error during dns operation.
 		{
 			nonReleaseBlocker: true,
 			failure:           createFailure(gce.ErrDNSOperation),
 			expectedPost:      true,
 			expectedLabels:    []string{"T-testeng", "X-infra-flake"},
 		},
-		// Assert that extra labels in the test spec are added to the issue.
+		// 7. Assert that extra labels in the test spec are added to the issue.
 		{
 			extraLabels:    []string{"foo-label"},
 			failure:        createFailure(errors.New("other")),
@@ -228,13 +237,53 @@ func TestCreatePostRequest(t *testing.T) {
 				"arch":             "amd64",
 				"localSSD":         "false",
 				"metamorphicBuild": "false",
+				"coverageBuild":    "false",
+			}),
+		},
+		// 8. Verify that release-blocker label is not applied on metamorphic builds
+		// (for now).
+		{
+			metamorphicBuild: true,
+			failure:          createFailure(errors.New("other")),
+			expectedPost:     true,
+			expectedLabels:   []string{"C-test-failure", "B-metamorphic"},
+			expectedParams: prefixAll(map[string]string{
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "amd64",
+				"localSSD":         "false",
+				"metamorphicBuild": "true",
+				"coverageBuild":    "false",
+			}),
+		},
+		// 9. Verify that release-blocker label is not applied on coverage builds (for
+		// now).
+		{
+			extraLabels:    []string{"foo-label"},
+			coverageBuild:  true,
+			failure:        createFailure(errors.New("other")),
+			expectedPost:   true,
+			expectedLabels: []string{"C-test-failure", "B-coverage", "foo-label"},
+			expectedParams: prefixAll(map[string]string{
+				"cloud":            "gce",
+				"encrypted":        "false",
+				"fs":               "ext4",
+				"ssd":              "0",
+				"cpu":              "4",
+				"arch":             "amd64",
+				"localSSD":         "false",
+				"metamorphicBuild": "false",
+				"coverageBuild":    "true",
 			}),
 		},
 	}
 
 	reg := makeTestRegistry()
 	for idx, c := range testCases {
-		t.Run("", func(t *testing.T) {
+		t.Run(fmt.Sprintf("%d", idx+1), func(t *testing.T) {
 			clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))
 
 			testSpec := &registry.TestSpec{
@@ -278,10 +327,10 @@ func TestCreatePostRequest(t *testing.T) {
 
 			if c.loadTeamsFailed {
 				// Assert that if TEAMS.yaml cannot be loaded then function errors.
-				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild)
+				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild, c.coverageBuild)
 				assert.Error(t, err, "Expected an error in createPostRequest when loading teams fails, but got nil")
 			} else {
-				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild)
+				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild, c.coverageBuild)
 				assert.NoError(t, err, "Expected no error in createPostRequest")
 
 				r := &issues.Renderer{}
