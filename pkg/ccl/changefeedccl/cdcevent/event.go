@@ -116,7 +116,7 @@ func (r Row) ForEachUDTColumn() Iterator {
 func (r Row) DatumNamed(n string) (Iterator, error) {
 	idx, ok := r.EventDescriptor.colsByName[n]
 	if !ok {
-		return nil, errors.Errorf("No column with name %s in this row", n)
+		return nil, errors.AssertionFailedf("No column with name %s in this row", n)
 	}
 	return iter{r: r, cols: []int{idx}}, nil
 }
