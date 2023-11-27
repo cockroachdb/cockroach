@@ -407,7 +407,6 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	ctx := sf.Ctx()
 	updateFreq := streamingccl.JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
-		sf.updateLagMetric()
 		return nil
 	}
 	f := sf.frontier
@@ -491,16 +490,8 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedReplicatedTime = f.Frontier()
 	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
-	sf.updateLagMetric()
+	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
-}
-
-func (sf *streamIngestionFrontier) updateLagMetric() {
-	if !sf.persistedReplicatedTime.IsEmpty() {
-		// Only update the frontier lag if the replicated time has been updated,
-		// implying the initial scan has completed.
-		sf.metrics.FrontierLagNanos.Update(timeutil.Since(sf.persistedReplicatedTime.GoTime()).Nanoseconds())
-	}
 }
 
 // maybePersistFrontierEntries periodically persists the current state of the
