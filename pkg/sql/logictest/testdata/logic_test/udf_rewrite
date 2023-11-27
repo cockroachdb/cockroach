@@ -1,0 +1,224 @@
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+CREATE TYPE weekday AS ENUM ('monday', 'tuesday', 'wednesday', 'thursday', 'friday');
+
+statement ok
+CREATE TABLE t_rewrite (
+  v INT DEFAULT 0,
+  w weekday DEFAULT 'monday'::weekday
+);
+
+# Need to turn declarative schema changer off because function `get_body_str`
+# created below would resolve a descriptorless public schema "system.public"
+# which is not supported in declarative schema changer. Declarative schema
+# changer falls back to legacy schema changer, and the descriptor id counter is
+# increased twice. It cause the test to fail due to id inconsistency.
+skipif config local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = 'off'
+
+statement ok
+CREATE FUNCTION get_body_str(fn_name STRING) RETURNS STRING
+LANGUAGE SQL
+AS $$
+  SELECT crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor', descriptor, false
+  )->'function'->'functionBody'
+  FROM system.descriptor WHERE id = fn_name::regproc::int - 100000;
+$$;
+
+skipif config local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+subtest rewrite_sql
+
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS
+$$
+  SELECT nextval('seq');
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"SELECT nextval(106:::REGCLASS);"
+
+skipif config local-mixed-23.1
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS
+$$
+  INSERT INTO t_rewrite(v) VALUES (nextval('seq')) RETURNING v;
+$$ LANGUAGE SQL
+
+skipif config local-mixed-23.1
+query T
+SELECT get_body_str('f_rewrite');
+----
+"INSERT INTO test.public.t_rewrite(v) VALUES (nextval(106:::REGCLASS)) RETURNING v;"
+
+statement ok
+DROP FUNCTION f_rewrite();
+
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS weekday AS
+$$
+  SELECT 'wednesday'::weekday;
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"SELECT b'\\x80':::@100107;"
+
+skipif config local-mixed-23.1
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS weekday AS
+$$
+  UPDATE t_rewrite SET w = 'thursday'::weekday WHERE w = 'wednesday'::weekday RETURNING w;
+$$ LANGUAGE SQL
+
+skipif config local-mixed-23.1
+query T
+SELECT get_body_str('f_rewrite');
+----
+"UPDATE test.public.t_rewrite SET w = b'\\xa0':::@100107 WHERE w = b'\\x80':::@100107 RETURNING w;"
+
+subtest end
+
+subtest rewrite_plpgsql
+
+statement ok
+DROP FUNCTION IF EXISTS f_rewrite
+
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS
+$$
+  BEGIN
+    SELECT nextval('seq');
+  END
+$$ LANGUAGE PLPGSQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"BEGIN\nSELECT nextval('seq':::STRING);\nEND\n;"
+
+skipif config local-mixed-23.1
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS
+$$
+  BEGIN
+    INSERT INTO t_rewrite(v) VALUES (nextval('seq')) RETURNING v;
+  END
+$$ LANGUAGE PLPGSQL
+
+skipif config local-mixed-23.1
+query T
+SELECT get_body_str('f_rewrite');
+----
+"BEGIN\nINSERT INTO test.public.t_rewrite(v) VALUES (nextval('seq':::STRING)) RETURNING v;\nEND\n;"
+
+statement ok
+DROP FUNCTION f_rewrite();
+
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS weekday AS
+$$
+  BEGIN
+    SELECT 'wednesday'::weekday;
+  END
+$$ LANGUAGE PLPGSQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"BEGIN\nSELECT 'wednesday'::@100107;\nEND\n;"
+
+skipif config local-mixed-23.1
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS weekday AS
+$$
+  BEGIN
+    UPDATE t_rewrite SET w = 'thursday'::weekday WHERE w = 'wednesday'::weekday RETURNING w;
+  END
+$$ LANGUAGE PLPGSQL
+
+skipif config local-mixed-23.1
+query T
+SELECT get_body_str('f_rewrite');
+----
+"BEGIN\nUPDATE test.public.t_rewrite SET w = 'thursday'::@100107 WHERE w = 'wednesday'::@100107 RETURNING w;\nEND\n;"
+
+subtest end
+
+subtest rewrite_proc
+
+skipif config local-mixed-23.1
+statement ok
+CREATE OR REPLACE PROCEDURE p_rewrite() AS
+$$
+  INSERT INTO t_rewrite(v) VALUES (nextval('seq')) RETURNING v;
+$$ LANGUAGE SQL
+
+skipif config local-mixed-23.1
+query T
+SELECT get_body_str('p_rewrite');
+----
+"INSERT INTO test.public.t_rewrite(v) VALUES (nextval(106:::REGCLASS)) RETURNING v;"
+
+statement ok
+DROP PROCEDURE p_rewrite();
+
+skipif config local-mixed-23.1
+statement ok
+CREATE OR REPLACE PROCEDURE p_rewrite() AS
+$$
+  BEGIN
+    INSERT INTO t_rewrite(v) VALUES (nextval('seq')) RETURNING v;
+  END
+$$ LANGUAGE PLPGSQL
+
+skipif config local-mixed-23.1
+query T
+SELECT get_body_str('p_rewrite');
+----
+"BEGIN\nINSERT INTO test.public.t_rewrite(v) VALUES (nextval('seq':::STRING)) RETURNING v;\nEND\n;"
+
+statement ok
+DROP PROCEDURE p_rewrite();
+
+skipif config local-mixed-23.1
+statement ok
+CREATE OR REPLACE PROCEDURE p_rewrite() AS
+$$
+  UPDATE t_rewrite SET w = 'thursday'::weekday WHERE w = 'wednesday'::weekday RETURNING w;
+$$ LANGUAGE SQL
+
+skipif config local-mixed-23.1
+query T
+SELECT get_body_str('p_rewrite');
+----
+"UPDATE test.public.t_rewrite SET w = b'\\xa0':::@100107 WHERE w = b'\\x80':::@100107 RETURNING w;"
+
+statement ok
+DROP PROCEDURE p_rewrite();
+
+skipif config local-mixed-23.1
+statement ok
+CREATE OR REPLACE PROCEDURE p_rewrite() AS
+$$
+  BEGIN
+    UPDATE t_rewrite SET w = 'thursday'::weekday WHERE w = 'wednesday'::weekday RETURNING w;
+  END
+$$ LANGUAGE PLPGSQL
+
+skipif config local-mixed-23.1
+query T
+SELECT get_body_str('p_rewrite');
+----
+"BEGIN\nUPDATE test.public.t_rewrite SET w = 'thursday'::@100107 WHERE w = 'wednesday'::@100107 RETURNING w;\nEND\n;"
+
+subtest end
