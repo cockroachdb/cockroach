@@ -102,7 +102,9 @@ func setupProcessWideRoutes(
 		CPUProfileHandler(st, w, r)
 	}))
 	mux.HandleFunc("/debug/pprof/symbol", authzFunc(pprof.Symbol))
-	mux.HandleFunc("/debug/pprof/trace", authzFunc(pprof.Trace))
+	mux.HandleFunc("/debug/pprof/trace", authzFunc(func(w http.ResponseWriter, r *http.Request) {
+		TraceProfileHandler(st, w, r)
+	}))
 
 	// Cribbed straight from trace's `init()` method. See:
 	// https://github.com/golang/net/blob/master/trace/trace.go
