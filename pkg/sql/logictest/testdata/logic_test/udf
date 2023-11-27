@@ -742,3 +742,89 @@ statement error unknown function: public.LOWERCASE_HINT_ERROR_EXPLICIT_SCHEMA_FN
 SELECT public."LOWERCASE_HINT_ERROR_EXPLICIT_SCHEMA_FN"();
 
 subtest end
+
+subtest rewrite
+
+statement ok
+CREATE SEQUENCE seq;
+
+statement ok
+CREATE TYPE weekday AS ENUM ('monday', 'tuesday', 'wednesday', 'thursday', 'friday');
+
+statement ok
+CREATE TABLE t_rewrite (
+  v INT DEFAULT 0,
+  w weekday DEFAULT 'monday'::weekday
+);
+
+# Need to turn declarative schema changer off because function `get_body_str`
+# created below would resolve a descriptorless public schema "system.public"
+# which is not supported in declarative schema changer. Declarative schema
+# changer falls back to legacy schema changer, and the descriptor id counter is
+# increased twice. It cause the test to fail due to id inconsistency.
+skipif config local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = 'off'
+
+statement ok
+CREATE FUNCTION get_body_str(fn_name STRING) RETURNS STRING
+LANGUAGE SQL
+AS $$
+  SELECT crdb_internal.pb_to_json(
+    'cockroach.sql.sqlbase.Descriptor', descriptor, false
+  )->'function'->'functionBody'
+  FROM system.descriptor WHERE id = fn_name::regproc::int - 100000;
+$$;
+
+skipif config local-legacy-schema-changer
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS
+$$
+  SELECT nextval('seq');
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"SELECT nextval(149:::REGCLASS);"
+
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS INT AS
+$$
+  INSERT INTO t_rewrite(v) VALUES (nextval('seq')) RETURNING v;
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"INSERT INTO test.public.t_rewrite(v) VALUES (nextval(149:::REGCLASS)) RETURNING v;"
+
+statement ok
+DROP FUNCTION f_rewrite();
+
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS weekday AS
+$$
+  SELECT 'wednesday'::weekday;
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"SELECT b'\\x80':::@100150;"
+
+statement ok
+CREATE OR REPLACE FUNCTION f_rewrite() RETURNS weekday AS
+$$
+  UPDATE t_rewrite SET w = 'thursday'::weekday WHERE w = 'wednesday'::weekday RETURNING w;
+$$ LANGUAGE SQL
+
+query T
+SELECT get_body_str('f_rewrite');
+----
+"UPDATE test.public.t_rewrite SET w = b'\\xa0':::@100150 WHERE w = b'\\x80':::@100150 RETURNING w;"
+
+subtest end
