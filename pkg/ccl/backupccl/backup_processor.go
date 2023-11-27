@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
@@ -594,10 +595,22 @@ func runBackupProcessor(
 								}
 							}
 
+							const MaxSendErrReattempts = 12 // 5s each * 12 = 1min of retries.
+							// TODO(dt): I'd prefer to use kvcoord.IsSendError here but it is
+							// always false presumably due to wrapping/unwrapping in pErr in
+							// the distsender code.
+							if strings.Contains(exportRequestErr.Error(), "failed to send RPC") && span.attempts < MaxSendErrReattempts {
+								span.lastTried = timeutil.Now()
+								span.attempts++
+								todo <- []spanAndTime{span}
+								span = spanAndTime{}
+								continue
+							}
+
 							if recording != nil {
 								log.Errorf(ctx, "failed export request %s\n trace:\n%s", span.span, recording)
 							}
-							return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
+							return errors.Wrapf(exportRequestErr, "exporting %s (attempt %d)", span.span, span.attempts)
 						}
 
 						resp := rawResp.(*kvpb.ExportResponse)
