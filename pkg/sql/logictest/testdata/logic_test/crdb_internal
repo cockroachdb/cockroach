@@ -1309,11 +1309,10 @@ NULL 100 KiB
 
 # Sanity checks of the crdb_internal.node_memory_monitors table.
 
-# The root monitor has a standalone budget, so its 'used' field is zero.
-query BB
-SELECT used = 0, reserved_used > 0 FROM crdb_internal.node_memory_monitors WHERE name = 'root'
+query BBB
+SELECT used > 0, reserved_used > 0, used < reserved_used FROM crdb_internal.node_memory_monitors WHERE name = 'root'
 ----
-true true
+true true true
 
 query B
 SELECT used > 0 FROM crdb_internal.node_memory_monitors WHERE name = 'sql'
