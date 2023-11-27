@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -100,7 +101,6 @@ DROP TABLE splitmerge.t;
 }
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, c.All(),
 		mixedversion.AlwaysUseFixtures, mixedversion.AlwaysUseLatestPredecessors,
@@ -109,8 +109,15 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"setup schema changer workload",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 			node := h.RandomNode(rng, c.All())
+			workloadPath, err := clusterupgrade.UploadWorkload(
+				ctx, t, l, c, c.Node(node), h.Context.ToVersion,
+			)
+			if err != nil {
+				return errors.Wrap(err, "uploading workload binary")
+			}
+
 			l.Printf("executing workload init on node %d", node)
-			return c.RunE(ctx, c.Node(node), fmt.Sprintf("./workload init schemachange {pgurl%s}", c.All()))
+			return c.RunE(ctx, c.Node(node), fmt.Sprintf("%s init schemachange {pgurl%s}", workloadPath, c.All()))
 		})
 	mvt.InMixedVersion(
 		"run backup",
@@ -139,22 +146,27 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			// We currently only stage the `workload` binary built off the
-			// SHA being tested; therefore, we skip testing the schemachange
-			// workload if this is not an upgrade or downgrade involving the
-			// current cockroach binary.
-			// TODO(renato): stage different workload binaries for the
-			// releases being used in the test and use the appropriate
-			// binary in this step.
-			if !h.Context.ToVersion.IsCurrent() {
-				l.Printf("skipping this step -- only supported when current version is involved")
-				return nil
+			randomNode := h.RandomNode(rng, c.All())
+			// The schemachange workload is designed to work up to one
+			// version back. Therefore, we upload a compatible `workload`
+			// binary to `randomNode`, where the workload will run.
+			workloadPath, err := clusterupgrade.UploadWorkload(
+				ctx, t, l, c, c.Node(randomNode), h.Context.ToVersion,
+			)
+			if err != nil {
+				return errors.Wrap(err, "uploading workload binary")
 			}
 
-			l.Printf("running schema workload step")
-			runCmd := roachtestutil.NewCommand("./workload run schemachange").Flag("verbose", 1).Flag("max-ops", 10).Flag("concurrency", 2).Arg("{pgurl:1-%d}", len(c.All()))
-			randomNode := h.RandomNode(rng, c.All())
-			return c.RunE(ctx, option.NodeListOption{randomNode}, runCmd.String())
+			l.Printf("running schemachange workload")
+			runCmd := roachtestutil.
+				NewCommand("%s run schemachange", workloadPath).
+				Flag("verbose", 1).
+				Flag("max-ops", 10).
+				Flag("concurrency", 2).
+				Arg("{pgurl:1-%d}", len(c.All())).
+				String()
+
+			return c.RunE(ctx, c.Node(randomNode), runCmd)
 		},
 	)
 	mvt.AfterUpgradeFinalized(
