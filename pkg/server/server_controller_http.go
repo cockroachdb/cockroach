@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/server/serverorchestrator"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -171,7 +172,7 @@ func (c *serverController) attemptLoginToAllTenants() http.Handler {
 		for i, name := range tenantNames {
 			server, _, err := c.getServer(ctx, name)
 			if err != nil {
-				if errors.Is(err, errNoTenantServerRunning) {
+				if errors.Is(err, serverorchestrator.ErrNoTenantServerRunning) {
 					// Server has stopped after the call to
 					// getCurrentTenantNames(), or may not be fully started yet.
 					// This is OK. Just skip over it.
@@ -303,7 +304,7 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 		for _, name := range tenantNames {
 			server, _, err := c.getServer(ctx, name)
 			if err != nil {
-				if errors.Is(err, errNoTenantServerRunning) {
+				if errors.Is(err, serverorchestrator.ErrNoTenantServerRunning) {
 					// Server has stopped after the call to
 					// getCurrentTenantNames(), or may not be started yet. This
 					// is OK. Just skip over it.

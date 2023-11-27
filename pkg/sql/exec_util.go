@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/autoconfig/acprovider"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
+	"github.com/cockroachdb/cockroach/pkg/server/serverorchestrator"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1455,6 +1456,7 @@ type ExecutorConfig struct {
 	NodeDescs kvcoord.NodeDescStore
 
 	TenantCapabilitiesReader SystemTenantOnly[tenantcapabilities.Reader]
+	ServerOrchestrator       SystemTenantOnly[serverorchestrator.ServerOrchestrator]
 
 	// AutoConfigProvider informs the auto config runner job of new
 	// tasks to run.

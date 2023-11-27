@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
+	"github.com/cockroachdb/cockroach/pkg/server/serverorchestrator"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -420,6 +421,7 @@ type sqlServerArgs struct {
 	tenantTimeSeriesServer *ts.TenantServer
 
 	tenantCapabilitiesReader sql.SystemTenantOnly[tenantcapabilities.Reader]
+	serverOrchestrator       sql.SystemTenantOnly[serverorchestrator.ServerOrchestrator]
 }
 
 type monitorAndMetrics struct {
@@ -1035,6 +1037,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		EventsExporter:             cfg.eventsExporter,
 		NodeDescs:                  cfg.nodeDescs,
 		TenantCapabilitiesReader:   cfg.tenantCapabilitiesReader,
+		ServerOrchestrator:         cfg.serverOrchestrator,
 		AutoConfigProvider:         cfg.AutoConfigProvider,
 	}
 

@@ -405,7 +405,10 @@ func TestServerControllerMultiNodeTenantStartup(t *testing.T) {
 
 	t.Logf("starting tenant servers")
 	db := tc.ServerConn(0)
-	_, err := db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
+	_, err := db.Exec("CREATE TENANT hello")
+	require.NoError(t, err)
+
+	_, err = db.Exec("ALTER TENANT hello START SERVICE SHARED")
 	require.NoError(t, err)
 
 	// Pick a random node, try to run some SQL inside that tenant.

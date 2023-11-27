@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
+	"github.com/cockroachdb/cockroach/pkg/server/serverorchestrator"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -1037,8 +1038,8 @@ func (s *adminServer) tableDetailsHelper(
 				SELECT
 					sum((d->>'live_bytes')::INT8) AS live,
 					sum(
-						(d->>'key_bytes')::INT8 + 
-						(d->>'val_bytes')::INT8 + 
+						(d->>'key_bytes')::INT8 +
+						(d->>'val_bytes')::INT8 +
 						COALESCE((d->>'range_key_bytes')::INT8, 0) +
 						COALESCE((d->>'range_val_bytes')::INT8, 0) +
 						(d->>'sys_bytes')::INT8) AS total
@@ -1066,8 +1067,8 @@ func (s *adminServer) tableDetailsHelper(
 				SELECT
 					sum((d->>'live_bytes')::INT8) AS live,
 					sum(
-						(d->>'key_bytes')::INT8 + 
-						(d->>'val_bytes')::INT8 + 
+						(d->>'key_bytes')::INT8 +
+						(d->>'val_bytes')::INT8 +
 						COALESCE((d->>'range_key_bytes')::INT8, 0) +
 						COALESCE((d->>'range_val_bytes')::INT8, 0) +
 						(d->>'sys_bytes')::INT8) AS total
@@ -4048,7 +4049,7 @@ func (s *systemAdminServer) ListTenants(
 	for _, tenantName := range tenantNames {
 		server, _, err := s.server.serverController.getServer(ctx, tenantName)
 		if err != nil {
-			if errors.Is(err, errNoTenantServerRunning) {
+			if errors.Is(err, serverorchestrator.ErrNoTenantServerRunning) {
 				// The service for this tenant is not started yet. This is not
 				// an error - the services are started asynchronously. The
 				// client can try again later.

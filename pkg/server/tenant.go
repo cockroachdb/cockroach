@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
+	"github.com/cockroachdb/cockroach/pkg/server/serverorchestrator"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
@@ -1351,6 +1352,7 @@ func makeTenantSQLServerArgs(
 		rangeDescIteratorFactory: tenantConnect,
 		tenantTimeSeriesServer:   sTS,
 		tenantCapabilitiesReader: sql.EmptySystemTenantOnly[tenantcapabilities.Reader](),
+		serverOrchestrator:       sql.EmptySystemTenantOnly[serverorchestrator.ServerOrchestrator](),
 	}, nil
 }
 

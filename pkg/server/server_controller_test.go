@@ -54,7 +54,9 @@ func TestServerController(t *testing.T) {
 	require.Nil(t, d)
 	require.Error(t, err, `no tenant found with name "somename"`)
 
-	_, err = db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
+	_, err = db.Exec("CREATE TENANT hello")
+	require.NoError(t, err)
+	_, err = db.Exec("ALTER TENANT hello START SERVICE SHARED")
 	require.NoError(t, err)
 
 	_, _, err = sc.getServer(ctx, "hello")

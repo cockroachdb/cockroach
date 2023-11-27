@@ -14,8 +14,17 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverorchestrator"
 	"github.com/cockroachdb/errors"
 )
+
+// CheckRunningServer implements ServerOrchestrator.
+func (c *serverController) CheckRunningServer(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (<-chan struct{}, error) {
+	_, ch, err := c.getServer(ctx, tenantName)
+	return ch, err
+}
 
 // getServer retrieves a reference to the current server for the given
 // tenant name. The returned channel is closed if a new tenant is
@@ -34,17 +43,15 @@ func (c *serverController) getServer(
 			// If we have a server but it isn't ready yet,
 			// return the startedOrStopped entry for the
 			// channel for the caller to poll on.
-			return nil, e.startedOrStopped(), errors.Mark(errors.Newf("server for tenant %q not ready", tenantName), errNoTenantServerRunning)
+			return nil, e.startedOrStopped(), errors.Mark(
+				errors.Newf("server for tenant %q not ready", tenantName),
+				serverorchestrator.ErrTenantServerNotReady)
 		}
 	}
-	return nil, c.mu.newServerCh, errors.Mark(errors.Newf("no server for tenant %q", tenantName), errNoTenantServerRunning)
+	return nil, c.mu.newServerCh, errors.Mark(
+		errors.Newf("no server for tenant %q", tenantName),
+		serverorchestrator.ErrNoTenantServerRunning)
 }
-
-type noTenantServerRunning struct{}
-
-func (noTenantServerRunning) Error() string { return "no server for tenant" }
-
-var errNoTenantServerRunning error = noTenantServerRunning{}
 
 // getServers retrieves all the currently instantiated and running
 // in-memory servers.
