@@ -728,6 +728,12 @@ func backupPlanHook(
 			}
 		}
 
+		if executionLocality.NonEmpty() {
+			if err := requireEnterprise(p.ExecCfg(), "execution locality"); err != nil {
+				return err
+			}
+		}
+
 		var targetDescs []catalog.Descriptor
 		var completeDBs []descpb.ID
 		var requestedDBs []catalog.DatabaseDescriptor
