@@ -40,12 +40,14 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/gorilla/mux"
@@ -169,16 +171,16 @@ func registerRoutes(
 		{"logout/", a.authServer.ServeHTTP, false /* requiresAuth */, authserver.RegularRole, false},
 
 		// Directly register other endpoints in the api server.
-		{"sessions/", a.listSessions, true /* requiresAuth */, authserver.AdminRole, false},
-		{"nodes/", systemRoutes.listNodes, true, authserver.AdminRole, false},
+		{"sessions/", a.listSessions, true /* requiresAuth */, authserver.ViewClusterMetadataRole, false},
+		{"nodes/", systemRoutes.listNodes, true, authserver.ViewClusterMetadataRole, false},
 		// Any endpoint returning range information requires an admin user. This is because range start/end keys
 		// are sensitive info.
-		{"nodes/{node_id}/ranges/", systemRoutes.listNodeRanges, true, authserver.AdminRole, false},
-		{"ranges/hot/", a.listHotRanges, true, authserver.AdminRole, false},
-		{"ranges/{range_id:[0-9]+}/", a.listRange, true, authserver.AdminRole, false},
+		{"nodes/{node_id}/ranges/", systemRoutes.listNodeRanges, true, authserver.ViewClusterMetadataRole, false},
+		{"ranges/hot/", a.listHotRanges, true, authserver.ViewClusterMetadataRole, false},
+		{"ranges/{range_id:[0-9]+}/", a.listRange, true, authserver.ViewClusterMetadataRole, false},
 		{"health/", systemRoutes.health, false, authserver.RegularRole, false},
 		{"users/", a.listUsers, true, authserver.RegularRole, false},
-		{"events/", a.listEvents, true, authserver.AdminRole, false},
+		{"events/", a.listEvents, true, authserver.ViewClusterMetadataRole, false},
 		{"databases/", a.listDatabases, true, authserver.RegularRole, false},
 		{"databases/{database_name:[\\w.]+}/", a.databaseDetails, true, authserver.RegularRole, false},
 		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, authserver.RegularRole, false},
@@ -203,10 +205,25 @@ func registerRoutes(
 				http.Error(w, "Not Available on Tenants", http.StatusNotImplemented)
 			}))
 		}
+
+		// Tell the authz server how to connect to SQL.
+		authzAccessorFactory := func(ctx context.Context, opName string) (sql.AuthorizationAccessor, func()) {
+			txn := a.db.NewTxn(ctx, opName)
+			p, cleanup := sql.NewInternalPlanner(
+				opName,
+				txn,
+				username.RootUserName(),
+				&sql.MemoryMetrics{},
+				a.sqlServer.execCfg,
+				sql.NewInternalSessionData(ctx, a.sqlServer.execCfg.Settings, opName),
+			)
+			return p.(sql.AuthorizationAccessor), cleanup
+		}
+
 		if route.requiresAuth {
 			a.mux.Handle(apiconstants.APIV2Path+route.url, authMux)
 			if route.role != authserver.RegularRole {
-				handler = authserver.NewRoleAuthzMux(a.sqlServer.internalExecutor, route.role, handler)
+				handler = authserver.NewRoleAuthzMux(authzAccessorFactory, route.role, handler)
 			}
 			innerMux.Handle(apiconstants.APIV2Path+route.url, handler)
 		} else {

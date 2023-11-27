@@ -19,9 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -344,22 +345,21 @@ type APIRole int
 const (
 	// RegularRole is the default role for an APIv2 endpoint.
 	RegularRole APIRole = iota
-	// AdminRole is the role for an APIv2 endpoint that requires
-	// admin privileges.
-	AdminRole
-	// SuperUserRole is the role for an APIv2 endpoint that requires
-	// superuser privileges.
-	SuperUserRole
+	// ViewClusterMetadataRole is the role for an APIv2 endpoint that requires
+	// VIEWCLUSTERMETADATA privileges.
+	ViewClusterMetadataRole
 )
+
+type authzAccessorFactory func(ctx context.Context, opName string) (_ sql.AuthorizationAccessor, cleanup func())
 
 // roleAuthorizationMux enforces a role (eg. type of user) for an arbitrary
 // inner mux. Meant to be used under authenticationV2Mux. If the logged-in user
 // is not at least of `role` type, an HTTP 403 forbidden error is returned.
 // Otherwise, the request is passed onto the inner http.Handler.
 type roleAuthorizationMux struct {
-	ie    isql.Executor
-	role  APIRole
-	inner http.Handler
+	authzAccessorFactory authzAccessorFactory
+	role                 APIRole
+	inner                http.Handler
 }
 
 func (r *roleAuthorizationMux) getRoleForUser(
@@ -367,29 +367,20 @@ func (r *roleAuthorizationMux) getRoleForUser(
 ) (APIRole, error) {
 	if user.IsRootUser() {
 		// Shortcut.
-		return SuperUserRole, nil
+		return ViewClusterMetadataRole, nil
 	}
-	row, err := r.ie.QueryRowEx(
-		ctx, "check-is-admin", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: user},
-		"SELECT crdb_internal.is_admin()")
+
+	authzAccessor, cleanup := r.authzAccessorFactory(ctx, "check-privilege")
+	defer cleanup()
+
+	hasPriv, err := authzAccessor.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERMETADATA, user)
 	if err != nil {
 		return RegularRole, err
+	} else if hasPriv {
+		return ViewClusterMetadataRole, nil
+	} else {
+		return RegularRole, nil
 	}
-	if row == nil {
-		return RegularRole, errors.AssertionFailedf("hasAdminRole: expected 1 row, got 0")
-	}
-	if len(row) != 1 {
-		return RegularRole, errors.AssertionFailedf("hasAdminRole: expected 1 column, got %d", len(row))
-	}
-	dbDatum, ok := tree.AsDBool(row[0])
-	if !ok {
-		return RegularRole, errors.AssertionFailedf("hasAdminRole: expected bool, got %T", row[0])
-	}
-	if dbDatum {
-		return AdminRole, nil
-	}
-	return RegularRole, nil
 }
 
 func (r *roleAuthorizationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
