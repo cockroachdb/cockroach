@@ -40,6 +40,7 @@ go_test(
     srcs = [
         "activequeryprofiler_test.go",
         "cpuprofile_test.go",
+        "memory_monitoring_profiler_test.go",
         "profiler_common_test.go",
         "profilestore_test.go",
     ],
@@ -48,7 +49,9 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/server/dumpstore",
         "//pkg/settings/cluster",
+        "//pkg/util/mon",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
