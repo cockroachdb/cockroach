@@ -183,6 +183,13 @@ func TestCCLLogic_udf_plpgsql(
 	runCCLLogicTest(t, "udf_plpgsql")
 }
 
+func TestCCLLogic_udf_rewrite(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_rewrite")
+}
+
 func TestCCLLogic_udf_volatility_check(
 	t *testing.T,
 ) {
