@@ -1165,6 +1165,7 @@ child operation: %s, tracer created at:
 	if traceID == 0 {
 		traceID = tracingpb.TraceID(randutil.FastInt63())
 	}
+	ctx = logtags.AddTag(ctx, "trace", fmt.Sprintf("%d", traceID))
 	spanID := tracingpb.SpanID(randutil.FastInt63())
 
 	s := t.newSpan(

@@ -1446,7 +1446,9 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 	// pprof labels in the BatchRequest, then we apply them to the context that is
 	// going to execute the BatchRequest. These labels will help correlate server
 	// side CPU profile samples to the sender.
-	if len(args.ProfileLabels) != 0 && n.execCfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
+	if len(args.ProfileLabels) != 0 &&
+		(n.execCfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels ||
+			n.execCfg.Settings.ExecutionTraceEnabled()) {
 		var undo func()
 		ctx, undo = pprofutil.SetProfilerLabels(ctx, args.ProfileLabels...)
 		defer undo()
