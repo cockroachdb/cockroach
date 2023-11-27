@@ -276,6 +276,10 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 		return s.handleResumeError(ctx, jobExecCtx, err)
 	}
 
+	if err := jobExecCtx.ExecCfg().JobRegistry.CheckPausepoint("stream_ingestion.before_ingestion"); err != nil {
+		return err
+	}
+
 	// Start ingesting KVs from the replication stream.
 	err = ingestWithRetries(ctx, jobExecCtx, s)
 	if err != nil {
