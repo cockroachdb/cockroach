@@ -11,6 +11,8 @@
 package scbuild
 
 import (
+	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1490,7 +1492,7 @@ func (b *builderState) WrapFunctionBody(
 	refProvider scbuildstmt.ReferenceProvider,
 ) *scpb.FunctionBody {
 	if lang != catpb.Function_PLPGSQL {
-		// TODO(drewk): fix this to work with PL/pgSQL.
+		// TODO(#115627): fix this to work with PL/pgSQL.
 		bodyStr = b.replaceSeqNamesWithIDs(bodyStr)
 		bodyStr = b.serializeUserDefinedTypes(bodyStr)
 	}
