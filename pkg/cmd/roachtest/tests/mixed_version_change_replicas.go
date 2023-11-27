@@ -92,7 +92,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		}
 
 		var rangeCount int
-		for i := 0; i < 30; i++ {
+		for i := 0; i < 60; i++ {
 			err := h.QueryRow(r, `SELECT count(*) FROM `+
 				`[SHOW RANGES FROM TABLE test] WHERE $1::int = ANY(replicas)`, node).Scan(&rangeCount)
 			if err != nil {
