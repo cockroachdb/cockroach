@@ -470,7 +470,7 @@ func setFuncOptions(
 		}
 		udfDesc.SetFuncBody(typeReplacedFuncBody)
 	case catpb.Function_PLPGSQL:
-		// TODO(drewk): make replaceSeqNamesWithIDs and serializeUserDefinedTypes
+		// TODO(#115627): make replaceSeqNamesWithIDs and serializeUserDefinedTypes
 		// play nice with PL/pgSQL.
 		udfDesc.SetFuncBody(body)
 	}
