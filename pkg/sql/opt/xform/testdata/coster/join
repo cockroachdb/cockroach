@@ -1081,7 +1081,7 @@ inner-join (lookup big)
  ├── key columns: [1] = [5]
  ├── lookup columns are key
  ├── stats: [rows=60, distinct(1)=60, null(1)=0, distinct(5)=60, null(5)=0]
- ├── cost: 7122.45
+ ├── cost: 5195.45
  ├── key: (5)
  ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
  ├── scan small

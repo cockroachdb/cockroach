@@ -133,7 +133,6 @@ func (c *CustomFuncs) canConsolidateFilter(filter *memo.FiltersItem) (col opt.Co
 	if !filter.ScalarProps().TightConstraints {
 		return 0, false
 	}
-
 	outerCols := c.OuterCols(filter)
 	if outerCols.Len() != 1 {
 		return 0, false

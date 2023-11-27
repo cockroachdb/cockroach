@@ -167,3 +167,33 @@ select
  └── filters
       ├── a:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
       └── b:3 = 7 [outer=(3), constraints=(/3: [/7 - /7]; tight), fd=()-->(3)]
+
+opt
+SELECT * FROM a WHERE s LIKE '%foo%'
+AND s LIKE '%bar%'
+AND s LIKE '%baz%'
+AND s LIKE '%dog%'
+AND s LIKE '%cat%'
+AND s LIKE '%rat%'
+AND s LIKE '%bat%'
+----
+select
+ ├── columns: k:1!null i:2 s:3!null d:4!null
+ ├── stats: [rows=12.22222, distinct(3)=12.2222, null(3)=0]
+ ├── cost: 1118.91
+ ├── key: (1)
+ ├── fd: (1)-->(2-4)
+ ├── scan a
+ │    ├── columns: k:1!null i:2 s:3 d:4!null
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=0]
+ │    ├── cost: 1108.82
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── filters
+      ├── s:3 LIKE '%foo%' [outer=(3), constraints=(/3: (/NULL - ])]
+      ├── s:3 LIKE '%bar%' [outer=(3), constraints=(/3: (/NULL - ])]
+      ├── s:3 LIKE '%baz%' [outer=(3), constraints=(/3: (/NULL - ])]
+      ├── s:3 LIKE '%dog%' [outer=(3), constraints=(/3: (/NULL - ])]
+      ├── s:3 LIKE '%cat%' [outer=(3), constraints=(/3: (/NULL - ])]
+      ├── s:3 LIKE '%rat%' [outer=(3), constraints=(/3: (/NULL - ])]
+      └── s:3 LIKE '%bat%' [outer=(3), constraints=(/3: (/NULL - ])]
