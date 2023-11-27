@@ -54,6 +54,7 @@ func (p *Projection) addColumn(name string, typ *types.T, sqlString string, colI
 
 	p.datums = append(p.datums, rowenc.EncDatum{})
 	p.allCols = append(p.allCols, ord)
+	p.colsByName[name] = ord
 	*colIdxSlice = append(*colIdxSlice, ord)
 	if typ.UserDefined() {
 		p.udtCols = append(p.udtCols, ord)
