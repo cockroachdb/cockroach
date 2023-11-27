@@ -92,24 +92,12 @@ var (
 		Measurement: "Timestamp",
 		Unit:        metric.Unit_TIMESTAMP_NS,
 	}
-	metaDataCheckpointSpanCount = metric.Metadata{
-		Name:        "physical_replication.data_checkpoint_span_count",
-		Help:        "The number of resolved spans in the last checkpoint forwarded by an ingestion data processor",
-		Measurement: "Resolved Spans",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaFrontierCheckpointSpanCount = metric.Metadata{
-		Name:        "physical_replication.frontier_checkpoint_span_count",
-		Help:        "The number of resolved spans last persisted to the ingestion job's checkpoint record",
-		Measurement: "Resolved Spans",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaFrontierLagNanos = metric.Metadata{
-		Name: "physical_replication.frontier_lag_nanos",
-		Help: "Time between the wall clock and replicated time of the replication stream. " +
-			"This metric tracks how far behind the replication stream is relative to now",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_NANOSECONDS,
+
+	metaReplicatedTimeSeconds = metric.Metadata{
+		Name:        "physical_replication.replicated_time_seconds",
+		Help:        "The replicated time of the physical replication stream in seconds since the unix epoch.",
+		Measurement: "Seconds",
+		Unit:        metric.Unit_SECONDS,
 	}
 	metaJobProgressUpdates = metric.Metadata{
 		Name:        "physical_replication.job_progress_updates",
@@ -138,23 +126,21 @@ var (
 
 // Metrics are for production monitoring of stream ingestion jobs.
 type Metrics struct {
-	IngestedEvents              *metric.Counter
-	IngestedLogicalBytes        *metric.Counter
-	IngestedSSTBytes            *metric.Counter
-	Flushes                     *metric.Counter
-	JobProgressUpdates          *metric.Counter
-	ResolvedEvents              *metric.Counter
-	ReplanCount                 *metric.Counter
-	FlushHistNanos              metric.IHistogram
-	CommitLatency               metric.IHistogram
-	AdmitLatency                metric.IHistogram
-	RunningCount                *metric.Gauge
-	EarliestDataCheckpointSpan  *metric.Gauge
-	LatestDataCheckpointSpan    *metric.Gauge
-	DataCheckpointSpanCount     *metric.Gauge
-	FrontierCheckpointSpanCount *metric.Gauge
-	FrontierLagNanos            *metric.Gauge
-	ReplicationCutoverProgress  *metric.Gauge
+	IngestedEvents             *metric.Counter
+	IngestedLogicalBytes       *metric.Counter
+	IngestedSSTBytes           *metric.Counter
+	Flushes                    *metric.Counter
+	JobProgressUpdates         *metric.Counter
+	ResolvedEvents             *metric.Counter
+	ReplanCount                *metric.Counter
+	FlushHistNanos             metric.IHistogram
+	CommitLatency              metric.IHistogram
+	AdmitLatency               metric.IHistogram
+	RunningCount               *metric.Gauge
+	EarliestDataCheckpointSpan *metric.Gauge
+	LatestDataCheckpointSpan   *metric.Gauge
+	ReplicatedTimeSeconds      *metric.Gauge
+	ReplicationCutoverProgress *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -191,13 +177,11 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 			MaxVal:       streamingAdmitLatencyMaxValue.Nanoseconds(),
 			SigFigs:      1,
 		}),
-		RunningCount:                metric.NewGauge(metaStreamsRunning),
-		EarliestDataCheckpointSpan:  metric.NewGauge(metaEarliestDataCheckpointSpan),
-		LatestDataCheckpointSpan:    metric.NewGauge(metaLatestDataCheckpointSpan),
-		DataCheckpointSpanCount:     metric.NewGauge(metaDataCheckpointSpanCount),
-		FrontierCheckpointSpanCount: metric.NewGauge(metaFrontierCheckpointSpanCount),
-		FrontierLagNanos:            metric.NewGauge(metaFrontierLagNanos),
-		ReplicationCutoverProgress:  metric.NewGauge(metaReplicationCutoverProgress),
+		RunningCount:               metric.NewGauge(metaStreamsRunning),
+		EarliestDataCheckpointSpan: metric.NewGauge(metaEarliestDataCheckpointSpan),
+		LatestDataCheckpointSpan:   metric.NewGauge(metaLatestDataCheckpointSpan),
+		ReplicatedTimeSeconds:      metric.NewGauge(metaReplicatedTimeSeconds),
+		ReplicationCutoverProgress: metric.NewGauge(metaReplicationCutoverProgress),
 	}
 	return m
 }
