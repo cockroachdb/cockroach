@@ -61,7 +61,6 @@ curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/baze
 echo '4cb534c52cdd47a6223d4596d530e7c9c785438ab3b0a49ff347e991c210b2cd /tmp/bazelisk' | sha256sum -c -
 chmod +x /tmp/bazelisk
 sudo mv /tmp/bazelisk /usr/bin/bazel
-echo "build --config=dev" > ~/.bazelrc
 
 # Install the Unison file-syncer.
 . bootstrap/bootstrap-unison.sh
