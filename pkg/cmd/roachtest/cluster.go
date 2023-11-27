@@ -2081,6 +2081,18 @@ func (c *clusterImpl) StopE(
 	}
 	c.setStatusForClusterOpt("stopping", stopOpts.RoachtestOpts.Worker, nodes...)
 	defer c.clearStatusForClusterOpt(stopOpts.RoachtestOpts.Worker)
+
+	if c.goCoverDir != "" && stopOpts.RoachprodOpts.Sig == 9 /* SIGKILL */ {
+		// If we are trying to collect coverage, we don't want to kill processes;
+		// use SIGUSR1 which dumps coverage data and exits. Note that Cockroach
+		// v23.1 and earlier ignore SIGUSR1, so we still want to send SIGKILL.
+		l.Printf("coverage mode: first trying to stop using SIGUSR1")
+		opts := stopOpts.RoachprodOpts
+		opts.Sig = 10 // SIGUSR1
+		opts.Wait = true
+		opts.MaxWait = 10
+		_ = roachprod.Stop(ctx, l, c.MakeNodes(nodes...), opts)
+	}
 	return errors.Wrap(roachprod.Stop(ctx, l, c.MakeNodes(nodes...), stopOpts.RoachprodOpts), "cluster.StopE")
 }
 
