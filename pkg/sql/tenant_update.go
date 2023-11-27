@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/serverorchestrator"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -27,8 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -203,6 +206,9 @@ func (p *planner) setTenantService(
 	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("ALTER VIRTUAL CLUSTER SERVICE")
 	}
+	if !p.extendedEvalCtx.TxnIsSingleStmt {
+		return errors.Errorf("ALTER VIRTUAL CLUSTER SERVICE cannot be used inside a multi-statement transaction")
+	}
 
 	if err := CanManageTenant(ctx, p); err != nil {
 		return err
@@ -228,7 +234,73 @@ func (p *planner) setTenantService(
 
 	info.ServiceMode = newMode
 	info.LastRevertTenantTimestamp = hlc.Timestamp{}
-	return UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), info)
+	if err := UpdateTenantRecord(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), info); err != nil {
+		return err
+	}
+
+	// If we are in an InternalExecutor, we don't wait for the
+	// server controller since it may not be started yet.
+	if p.extendedEvalCtx.SessionData().Internal {
+		return nil
+	}
+
+	if err := p.InternalSQLTxn().KV().Commit(ctx); err != nil {
+		return err
+	}
+
+	switch info.ServiceMode {
+	case mtinfopb.ServiceModeNone:
+		return p.waitForNoServiceForTenant(ctx, info.Name)
+	case mtinfopb.ServiceModeShared:
+		return p.waitForServiceForTenant(ctx, info.Name)
+	default:
+		return nil
+	}
+}
+
+func (p *planner) waitForServiceForTenant(ctx context.Context, name roachpb.TenantName) error {
+	srvOrch, err := p.ExecCfg().ServerOrchestrator.Get("alter service")
+	if err != nil {
+		return err
+	}
+
+	r := retry.StartWithCtx(ctx, retry.Options{})
+	for r.Next() {
+		waitCh, err := srvOrch.CheckRunningServer(ctx, name)
+		if err != nil {
+			log.Infof(ctx, "waiting on %v for tenant %s after err: %s", waitCh, name, err)
+			select {
+			case <-waitCh:
+			case <-ctx.Done():
+			}
+			continue
+		}
+		return nil
+	}
+	return ctx.Err()
+}
+
+func (p *planner) waitForNoServiceForTenant(ctx context.Context, name roachpb.TenantName) error {
+	srvOrch, err := p.ExecCfg().ServerOrchestrator.Get("alter service")
+	if err != nil {
+		return err
+	}
+
+	r := retry.StartWithCtx(ctx, retry.Options{})
+	for r.Next() {
+		waitCh, err := srvOrch.CheckRunningServer(ctx, name)
+		if errors.Is(err, serverorchestrator.ErrTenantServerNotReady) {
+			select {
+			case <-waitCh:
+			case <-ctx.Done():
+			}
+		} else if errors.Is(err, serverorchestrator.ErrNoTenantServerRunning) {
+			return nil
+		} else {
+			return err
+		}
+	}
+	return ctx.Err()
 }
 
 func (p *planner) renameTenant(

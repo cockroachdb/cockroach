@@ -15,7 +15,11 @@ SELECT crdb_internal.create_tenant(6);
 
 # Drop one of them.
 exec-sql
-ALTER TENANT [5] STOP SERVICE; DROP TENANT [5]
+ALTER TENANT [5] STOP SERVICE
+----
+
+exec-sql
+DROP TENANT [5]
 ----
 
 exec-sql
@@ -27,11 +31,11 @@ CREATE DATABASE db1;
 ----
 
 query-sql
-SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>'droppedName', crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>'deprecatedDataState' FROM system.tenants;
 ----
-1 system 1 2 true READY 
-5 <nil> 2 0 false DROP cluster-5
-6 cluster-6 1 1 true READY 
+1 system 1 2 true  READY
+5 <nil> 2 0 false cluster-5 DROP
+6 cluster-6 1 1 true  READY
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster_without_tenants'
@@ -79,10 +83,10 @@ job paused at pausepoint
 # Application tenants backed up in an ACTIVE state should be moved to an ADD
 # state during restore.
 query-sql
-SELECT id,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
+SELECT id,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>'deprecatedDataState' FROM system.tenants;
 ----
-1 true READY 
-6 false ADD 
+1 true READY
+6 false ADD
 
 exec-sql
 SET CLUSTER SETTING jobs.debug.pausepoints = ''
@@ -98,13 +102,12 @@ exec-sql
 USE defaultdb;
 ----
 
-# A dropped tenant should be restored as an inactive tenant.
+# Dropped tenants are not backed up and thus not restored.
 query-sql
-SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>'deprecatedDataState' FROM system.tenants;
 ----
-1 system 1 2 true READY 
-6 cluster-6 1 1 true READY 
-
+1 system 1 2 true READY
+6 cluster-6 1 1 true READY
 
 exec-sql expect-error-regex=(tenant 6 not in backup)
 RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/cluster_without_tenants'
@@ -131,15 +134,19 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH virtual_cluster_nam
 ----
 
 query-sql
-SELECT id,name,data_state,service_mode,active,json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'deprecatedDataState'),json_extract_path_text(crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true), 'droppedName') FROM system.tenants;
+SELECT id,name,data_state,service_mode,active,crdb_internal.pb_to_json('cockroach.multitenant.ProtoInfo', info, true)->>'deprecatedDataState' FROM system.tenants;
 ----
-1 system 1 2 true READY 
-2 newname 1 1 true READY 
-6 cluster-6 1 1 true READY 
+1 system 1 2 true READY
+2 newname 1 1 true READY
+6 cluster-6 1 1 true READY
 
 # Check that another service mode is also preserved.
 exec-sql
-ALTER TENANT newname STOP SERVICE; ALTER TENANT newname START SERVICE SHARED
+ALTER TENANT newname STOP SERVICE;
+----
+
+exec-sql
+ALTER TENANT newname START SERVICE SHARED;
 ----
 
 query-sql

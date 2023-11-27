@@ -54,22 +54,13 @@ func TestServerController(t *testing.T) {
 	require.Nil(t, d)
 	require.Error(t, err, `no tenant found with name "somename"`)
 
-	_, err = db.Exec("CREATE TENANT hello; ALTER TENANT hello START SERVICE SHARED")
+	_, err = db.Exec("CREATE TENANT hello")
+	require.NoError(t, err)
+	_, err = db.Exec("ALTER TENANT hello START SERVICE SHARED")
 	require.NoError(t, err)
 
 	_, _, err = sc.getServer(ctx, "hello")
-	// TODO(knz): We're not really expecting an error here.
-	// The actual error seen will exist as long as in-memory
-	// servers use the standard KV connector.
-	//
-	// To make this error go away, we need either to place
-	// this test in a separate CCL package, or to make these servers
-	// use a new non-CCL connector.
-	//
-	// However, none of this is necessary to test the
-	// controller itself: it's sufficient to see that the
-	// tenant constructor was called.
-	require.Error(t, err, "tenant connector requires a CCL binary")
+	require.NoError(t, err)
 	// TODO(knz): test something about d.
 }
 

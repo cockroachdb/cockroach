@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/privchecker"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
+	"github.com/cockroachdb/cockroach/pkg/server/serverorchestrator"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverrules"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -1108,6 +1109,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		node.storeCfg.KVFlowController,
 	)
 
+	// Create a server controller.
+	sc := newServerController(ctx,
+		cfg.BaseConfig.AmbientCtx,
+		node, cfg.BaseConfig.IDContainer,
+		stopper, st,
+		lateBoundServer,
+		&systemServerWrapper{server: lateBoundServer},
+		systemTenantNameContainer,
+		pgPreServer.SendRoutingError,
+		tenantCapabilitiesWatcher,
+	)
+
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
@@ -1160,6 +1173,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		admissionPacerFactory:    gcoords.Elastic,
 		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 		tenantCapabilitiesReader: sql.MakeSystemTenantOnly[tenantcapabilities.Reader](tenantCapabilitiesWatcher),
+		serverOrchestrator:       sql.MakeSystemTenantOnly[serverorchestrator.ServerOrchestrator](sc),
 	})
 	if err != nil {
 		return nil, err
@@ -1186,6 +1200,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	// Create a drain server.
 	drain := newDrainServer(cfg.BaseConfig, stopper, stopTrigger, grpcServer, sqlServer)
+	drain.serverCtl = sc
 	drain.setNode(node, nodeLiveness)
 
 	// Instantiate the admin API server.
@@ -1222,19 +1237,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// Tell the status server how to access SQL structures.
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
-
-	// Create a server controller.
-	sc := newServerController(ctx,
-		cfg.BaseConfig.AmbientCtx,
-		node, cfg.BaseConfig.IDContainer,
-		stopper, st,
-		lateBoundServer,
-		&systemServerWrapper{server: lateBoundServer},
-		systemTenantNameContainer,
-		pgPreServer.SendRoutingError,
-		tenantCapabilitiesWatcher,
-	)
-	drain.serverCtl = sc
 
 	// Create the debug API server.
 	debugServer := debug.NewServer(
