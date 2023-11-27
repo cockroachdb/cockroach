@@ -844,9 +844,6 @@ func registerCDC(r registry.Registry) {
 	// the first account on the assume-role chain:
 	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
 	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
-	//
-	// TODO(rui): Change to a shorter test as it just needs to validate
-	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
 		Name:            "cdc/pubsub-sink/assume-role",
 		Owner:           `cdc`,
@@ -863,6 +860,7 @@ func registerCDC(r registry.Registry) {
 				assumeRole:               "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
 				targetInitialScanLatency: 30 * time.Minute,
 				targetSteadyLatency:      time.Minute,
+				preStartStatements:       []string{"SET CLUSTER SETTING changefeed.memory.per_changefeed_limit = '512MiB'"},
 			})
 		},
 	})
@@ -872,9 +870,6 @@ func registerCDC(r registry.Registry) {
 	// the first account on the assume-role chain:
 	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
 	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
-	//
-	// TODO(rui): Change to a shorter test as it just needs to validate
-	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
 		Name:            "cdc/cloud-sink-gcs/assume-role",
 		Owner:           `cdc`,
@@ -890,6 +885,7 @@ func registerCDC(r registry.Registry) {
 				assumeRole:               "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
 				targetInitialScanLatency: 30 * time.Minute,
 				targetSteadyLatency:      time.Minute,
+				preStartStatements:       []string{"SET CLUSTER SETTING changefeed.memory.per_changefeed_limit = '512MiB'"},
 			})
 		},
 	})
