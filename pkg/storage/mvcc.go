@@ -5650,9 +5650,11 @@ func MVCCResolveWriteIntentRange(
 	defer ltIter.Close()
 	var mvccIter MVCCIterator
 	iterOpts := IterOptions{
-		KeyTypes:   IterKeyTypePointsAndRanges,
-		LowerBound: intent.Key,
-		UpperBound: intent.EndKey,
+		KeyTypes: IterKeyTypePointsAndRanges,
+		// The mvccIter will probe into MVCC keys when matching intents are found by
+		// the lock table scan using engineIter. Each individual probe will only
+		// look at the versions of a single key, so we can use prefix iteration.
+		Prefix: true,
 	}
 	if rw.ConsistentIterators() {
 		// Production code should always have consistent iterators.
