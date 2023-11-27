@@ -2318,6 +2318,13 @@ func TestLogic_udf_regressions(
 	runLogicTest(t, "udf_regressions")
 }
 
+func TestLogic_udf_rewrite(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_rewrite")
+}
+
 func TestLogic_udf_schema_change(
 	t *testing.T,
 ) {
