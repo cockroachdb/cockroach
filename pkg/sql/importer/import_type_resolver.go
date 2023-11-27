@@ -27,7 +27,10 @@ type importTypeResolver struct {
 	typeNameToDesc map[string]*descpb.TypeDescriptor
 }
 
-func newImportTypeResolver(typeDescs []*descpb.TypeDescriptor) importTypeResolver {
+var _ tree.TypeReferenceResolver = importTypeResolver{}
+var _ catalog.TypeDescriptorResolver = importTypeResolver{}
+
+func makeImportTypeResolver(typeDescs []*descpb.TypeDescriptor) importTypeResolver {
 	itr := importTypeResolver{
 		typeIDToDesc:   make(map[descpb.ID]*descpb.TypeDescriptor),
 		typeNameToDesc: make(map[string]*descpb.TypeDescriptor),
@@ -39,21 +42,27 @@ func newImportTypeResolver(typeDescs []*descpb.TypeDescriptor) importTypeResolve
 	return itr
 }
 
-var _ tree.TypeReferenceResolver = &importTypeResolver{}
-
 func (i importTypeResolver) ResolveType(
-	_ context.Context, _ *tree.UnresolvedObjectName,
+	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
-	return nil, errors.New("importTypeResolver does not implement ResolveType")
+	var desc *descpb.TypeDescriptor
+	var ok bool
+	if desc, ok = i.typeNameToDesc[name.Parts[0]]; !ok {
+		return nil, errors.Newf("type descriptor could not be resolved for type name %s", name.Parts[0])
+	}
+	typeDesc := typedesc.NewBuilder(desc).BuildImmutableType()
+	t := typeDesc.AsTypesT()
+	if err := typedesc.EnsureTypeIsHydrated(ctx, t, i); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
 func (i importTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
 	return typedesc.ResolveHydratedTByOID(ctx, oid, i)
 }
 
-var _ catalog.TypeDescriptorResolver = &importTypeResolver{}
-
-// GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
+// GetTypeDescriptor implements the catalog.TypeDescriptorResolver interface.
 func (i importTypeResolver) GetTypeDescriptor(
 	_ context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {

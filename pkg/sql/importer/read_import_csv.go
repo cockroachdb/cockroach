@@ -219,7 +219,7 @@ func (c *csvRowConsumer) FillDatums(
 			conv.Datums[datumIdx] = tree.DNull
 		} else {
 			var err error
-			conv.Datums[datumIdx], err = rowenc.ParseDatumStringAs(ctx, conv.VisibleColTypes[i], field.Val, conv.EvalCtx)
+			conv.Datums[datumIdx], err = rowenc.ParseDatumStringAs(ctx, conv.VisibleColTypes[i], field.Val, conv.EvalCtx, c.importCtx.semaCtx)
 			if err != nil {
 				// Fallback to parsing as a string literal. This allows us to support
 				// both array expressions (like `ARRAY[1, 2, 3]`) and literals (like
