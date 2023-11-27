@@ -333,6 +333,13 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 		`repo:%q user:%q is:issue is:open in:title label:%q sort:created-desc %q`,
 		p.Repo, p.Org, searchLabel(req), title)
 
+	for _, l := range data.AdoptedIssueMustHaveLabels {
+		qBase += fmt.Sprintf(" label:%s", l)
+	}
+	for _, l := range data.AdoptedIssueMustNotHaveLabels {
+		qBase += fmt.Sprintf(" -label:%s", l)
+	}
+
 	releaseLabel := fmt.Sprintf("branch-%s", p.Branch)
 	qExisting := qBase + " label:" + releaseLabel + " -label:X-noreuse"
 	qRelated := qBase + " -label:" + releaseLabel
@@ -494,6 +501,11 @@ type PostRequest struct {
 	// as necessary (as a side effect of creating an issue with them). An
 	// existing issue may be adopted even if it does not have these labels.
 	ExtraLabels []string
+
+	// Labels that an existing issue must have in order to be adopted.
+	AdoptedIssueMustHaveLabels []string
+	// Labels that an existing issue must NOT have in order to be adopted.
+	AdoptedIssueMustNotHaveLabels []string
 
 	// ProjectColumnID is the id of the GitHub project column to add the issue to,
 	// or 0 if none.
