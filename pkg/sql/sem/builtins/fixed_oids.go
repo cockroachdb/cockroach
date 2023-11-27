@@ -1316,7 +1316,6 @@ var builtinOidsArray = []string{
 	1336: `crdb_internal.num_inverted_index_entries(val: jsonb, version: int) -> int`,
 	1337: `crdb_internal.num_inverted_index_entries(val: string, version: int) -> int`,
 	1338: `crdb_internal.num_inverted_index_entries(val: anyelement[], version: int) -> int`,
-	1339: `crdb_internal.is_admin() -> bool`,
 	1341: `crdb_internal.assignment_cast(val: anyelement, type: anyelement) -> anyelement`,
 	1342: `crdb_internal.round_decimal_values(val: decimal, scale: int) -> decimal`,
 	1343: `crdb_internal.round_decimal_values(val: decimal[], scale: int) -> decimal[]`,

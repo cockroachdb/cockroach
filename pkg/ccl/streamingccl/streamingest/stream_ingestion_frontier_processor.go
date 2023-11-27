@@ -78,6 +78,10 @@ type streamIngestionFrontier struct {
 	partitionProgress   map[string]jobspb.StreamIngestionProgress_PartitionProgress
 
 	lastNodeLagCheck time.Time
+
+	// replicatedTimeAtLastPositiveLagNodeCheck records the replicated time the
+	// last time the lagging node checker detected a lagging node.
+	replicatedTimeAtLastPositiveLagNodeCheck hlc.Timestamp
 }
 
 var _ execinfra.Processor = &streamIngestionFrontier{}
@@ -553,9 +557,29 @@ func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
 	}()
 	executionDetails := constructSpanFrontierExecutionDetailsWithFrontier(sf.spec.PartitionSpecs, sf.frontier)
 	log.VEvent(ctx, 2, "checking for lagging nodes")
-	return checkLaggingNodes(
+	err := checkLaggingNodes(
 		ctx,
 		executionDetails,
 		maxLag,
 	)
+	return sf.handleLaggingNodeError(ctx, err)
+}
+
+func (sf *streamIngestionFrontier) handleLaggingNodeError(ctx context.Context, err error) error {
+	switch {
+	case err == nil:
+		sf.replicatedTimeAtLastPositiveLagNodeCheck = hlc.Timestamp{}
+		log.VEvent(ctx, 2, "no lagging nodes after check")
+		return nil
+	case !errors.Is(err, ErrNodeLagging):
+		return err
+	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Less(sf.persistedReplicatedTime):
+		sf.replicatedTimeAtLastPositiveLagNodeCheck = sf.persistedReplicatedTime
+		log.Infof(ctx, "detected a lagging node: %s. Don't forward error because replicated time at last check %s is less than current replicated time %s", err, sf.replicatedTimeAtLastPositiveLagNodeCheck, sf.persistedReplicatedTime)
+		return nil
+	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Equal(sf.persistedReplicatedTime):
+		return errors.Wrapf(err, "hwm has not advanced from %s", sf.persistedReplicatedTime)
+	default:
+		return errors.Wrapf(err, "unable to handle replanning error with replicated time %s and last node lag check replicated time %s", sf.persistedReplicatedTime, sf.replicatedTimeAtLastPositiveLagNodeCheck)
+	}
 }
