@@ -101,16 +101,10 @@ DROP TABLE splitmerge.t;
 
 func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.All())
-	testOptions := []mixedversion.CustomOption{mixedversion.AlwaysUseFixtures}
-	if c.IsLocal() {
-		// Always use latest predecessors when running locally. This is
-		// primarily to avoid disruptive flakes in CI due to known bugs in
-		// older releases (e.g., #110702). We might eventually apply this
-		// option unconditionally if the test also starts flaking too much
-		// on the nightly build.
-		testOptions = append(testOptions, mixedversion.AlwaysUseLatestPredecessors)
-	}
-	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(), testOptions...)
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, c.All(),
+		mixedversion.AlwaysUseFixtures, mixedversion.AlwaysUseLatestPredecessors,
+	)
 	mvt.OnStartup(
 		"setup schema changer workload",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
