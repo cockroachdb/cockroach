@@ -115,6 +115,10 @@ type Metadata struct {
 	// mutation operators, used to determine the logical properties of WithScan.
 	withBindings map[WithID]Expr
 
+	// hoistedUncorrelatedSubqueries is used to track uncorrelated subqueries
+	// that have been hoisted.
+	hoistedUncorrelatedSubqueries map[Expr]struct{}
+
 	// dataSourceDeps stores each data source object that the query depends on.
 	dataSourceDeps map[cat.StableID]cat.DataSource
 
@@ -1060,6 +1064,24 @@ func (md *Metadata) ForEachWithBinding(fn func(WithID, Expr)) {
 	for id, expr := range md.withBindings {
 		fn(id, expr)
 	}
+}
+
+// AddHoistedUncorrelatedSubquery marks the given uncorrelated subquery
+// expression as hoisted. It is used to prevent hoisting the same uncorrelated
+// subquery twice because that may cause two children of an expression to have
+// intersecting columns (see #114703).
+func (md *Metadata) AddHoistedUncorrelatedSubquery(subquery Expr) {
+	if md.hoistedUncorrelatedSubqueries == nil {
+		md.hoistedUncorrelatedSubqueries = make(map[Expr]struct{})
+	}
+	md.hoistedUncorrelatedSubqueries[subquery] = struct{}{}
+}
+
+// IsHoistedUncorrelatedSubquery returns true if the given subquery was
+// previously marked as hoisted with AddHoistedUncorrelatedSubquery.
+func (md *Metadata) IsHoistedUncorrelatedSubquery(subquery Expr) bool {
+	_, ok := md.hoistedUncorrelatedSubqueries[subquery]
+	return ok
 }
 
 // TestingDataSourceDeps exposes the dataSourceDeps for testing.
