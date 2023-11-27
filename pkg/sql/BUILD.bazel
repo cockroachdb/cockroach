@@ -355,6 +355,7 @@ go_library(
         "//pkg/security/username",
         "//pkg/server/autoconfig/acprovider",
         "//pkg/server/pgurl",
+        "//pkg/server/serverorchestrator",
         "//pkg/server/serverpb",
         "//pkg/server/settingswatcher",
         "//pkg/server/status/statuspb",

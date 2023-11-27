@@ -249,7 +249,6 @@ func TestTenantStreamingFailback(t *testing.T) {
 	//   Fingerprint f and g as of ts1
 	//   Fingerprint f and g as of ts2
 	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f STOP SERVICE")
-	waitUntilTenantServerStopped(t, serverA.SystemLayer(), "f")
 	t.Logf("starting replication g->f")
 	sqlA.Exec(t, fmt.Sprintf("SELECT crdb_internal.unsafe_revert_tenant_to_timestamp('f', %s)", ts1))
 	sqlA.Exec(t, fmt.Sprintf("CREATE VIRTUAL CLUSTER f FROM REPLICATION OF g ON $1 WITH RESUME TIMESTAMP = '%s'", ts1), serverBURL.String())
@@ -279,7 +278,6 @@ func TestTenantStreamingFailback(t *testing.T) {
 	sqlA.Exec(t, "ALTER VIRTUAL CLUSTER f START SERVICE SHARED")
 
 	sqlB.Exec(t, "ALTER VIRTUAL CLUSTER g STOP SERVICE")
-	waitUntilTenantServerStopped(t, serverB.SystemLayer(), "g")
 	t.Logf("starting replication f->g")
 	sqlB.Exec(t, fmt.Sprintf("SELECT crdb_internal.unsafe_revert_tenant_to_timestamp('g', %s)", ts3))
 	sqlB.Exec(t, fmt.Sprintf("CREATE VIRTUAL CLUSTER g FROM REPLICATION OF f ON $1 WITH RESUME TIMESTAMP = '%s'", ts3), serverAURL.String())
@@ -616,46 +614,4 @@ func TestCutoverCheckpointing(t *testing.T) {
 	// the empty remainingSpans are encoded as
 	// roachpb.Spans{roachpb.Span{Key:/Min, EndKey:/Min}.
 	require.Equal(t, getCutoverRemainingSpans().String(), roachpb.Spans{}.String())
-}
-
-// ALTER VIRTUAL CLUSTER STOP SERVICE does not block until the service
-// is stopped. But, we need to wait until the SQLServer is stopped to
-// ensure that nothing is writing to the relevant keyspace.
-func waitUntilTenantServerStopped(
-	t *testing.T, srv serverutils.ApplicationLayerInterface, tenantName string,
-) {
-	t.Helper()
-	// TODO(ssd): We may want to do something like this,
-	// but this query is driven first from the
-	// system.tenants table and doesn't strictly represent
-	// the in-memory state of the tenant controller.
-	//
-	// client := srv.GetAdminClient(t)
-	// testutils.SucceedsSoon(t, func() error {
-	// 	resp, err := client.ListTenants(ctx, &serverpb.ListTenantsRequest{})
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	for _, tenant := range resp.Tenants {
-	// 		if tenant.TenantName == tenantName {
-	// 			t.Logf("tenant %q is still running", tenantName)
-	// 			return errors.Newf("tenant %q still running")
-	// 		}
-	// 	}
-	// 	t.Logf("tenant %q is not running", tenantName)
-	// 	return nil
-	// })
-	testutils.SucceedsSoon(t, func() error {
-		db, err := srv.SQLConnE(serverutils.DBName(fmt.Sprintf("cluster:%s", tenantName)))
-		if err != nil {
-			return err
-		}
-		defer func() { _ = db.Close() }()
-		if err := db.Ping(); err == nil {
-			t.Logf("tenant %q is still accepting connections", tenantName)
-			return errors.Newf("tenant %q still accepting connections")
-		}
-		t.Logf("tenant %q is not accepting connections", tenantName)
-		return nil
-	})
 }
