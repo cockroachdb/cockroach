@@ -329,7 +329,7 @@ func (mm *BytesMonitor) traverseTree(level int, monitorStateCb func(MonitorState
 		Name:             string(mm.name),
 		ID:               int64(id),
 		ParentID:         int64(parentID),
-		Used:             mm.mu.curBudget.used,
+		Used:             mm.mu.curAllocated,
 		ReservedUsed:     reservedUsed,
 		ReservedReserved: reservedReserved,
 	}
