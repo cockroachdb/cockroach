@@ -3349,6 +3349,31 @@ func TestChangefeedCustomKey(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+// Reproduce issue for #114196. This test verifies that changefeed with custom
+// key column works with CDC queries correctly.
+func TestChangefeedCustomKeyColumnWithCDCQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'dog', 'cat')`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'dog1', 'cat1')`)
+		foo := feed(t, f,
+			`CREATE CHANGEFEED WITH key_column='b', unordered AS SELECT * FROM foo WHERE b='dog1'`)
+		defer closeFeed(t, foo)
+
+		// We expect that a changefeed record with b="dog1" is emitted rather than
+		// b="dog".
+		assertPayloads(t, foo, []string{
+			`foo: ["dog1"]->{"a": 1, "b": "dog1", "c": "cat1"}`,
+		})
+	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
 func TestChangefeedCustomKeyAvro(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
