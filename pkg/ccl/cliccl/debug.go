@@ -49,6 +49,14 @@ var encryptionStatusOpts struct {
 }
 
 func init() {
+	encryptionCmd := &cobra.Command{
+		Use:   "encryption [sub-commands]",
+		Short: "encrypting commands",
+
+		Long: `Various commands for encryption.`,
+		RunE: cli.UsageAndErr,
+	}
+
 	encryptionStatusCmd := &cobra.Command{
 		Use:   "encryption-status <directory>",
 		Short: "show encryption status of a store",
@@ -102,12 +110,14 @@ with their env type and encryption settings (if applicable).
 		RunE: clierrorplus.MaybeDecorateError(runList),
 	}
 
-	// Add commands to the root debug command.
-	// We can't add them to the lists of commands (eg: DebugCmdsForPebble) as cli init() is called before us.
-	cli.DebugCmd.AddCommand(encryptionStatusCmd)
-	cli.DebugCmd.AddCommand(encryptionActiveKeyCmd)
-	cli.DebugCmd.AddCommand(encryptionDecryptCmd)
-	cli.DebugCmd.AddCommand(encryptionRegistryList)
+	// Add sub-commands to the encryption command.
+	encryptionCmd.AddCommand(encryptionStatusCmd)
+	encryptionCmd.AddCommand(encryptionActiveKeyCmd)
+	encryptionCmd.AddCommand(encryptionDecryptCmd)
+	encryptionCmd.AddCommand(encryptionRegistryList)
+
+	// Add command to the root debug command.
+	cli.DebugCmd.AddCommand(encryptionCmd)
 
 	// Add the encryption flag to commands that need it.
 	// For the encryption-status command.
