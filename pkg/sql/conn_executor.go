@@ -3539,6 +3539,21 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 	return expr
 }
 
+// omitInRangefeeds returns a bool representing whether the KV writes
+// originating from this session should be omitted in rangefeeds.
+// The primary use case for this function is to set the OmitInRangefeeds
+// transaction attribute on roachpb.Transaction.
+//
+// Currently, the only way to exclude writes from rangefeeds is through
+// the CDC session-based filtering feature, which is configured with the
+// disable_changefeed_replication session variable.
+func (ex *connExecutor) omitInRangefeeds() bool {
+	if ex.sessionData() == nil {
+		return false
+	}
+	return ex.sessionData().DisableChangefeedReplication
+}
+
 // initEvalCtx initializes the fields of an extendedEvalContext that stay the
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
