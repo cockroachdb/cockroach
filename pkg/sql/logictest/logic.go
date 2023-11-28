@@ -1473,7 +1473,7 @@ func (t *logicTest) newCluster(
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = clusterversion.ByKey(cfg.BootstrapVersion)
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).BinaryVersionOverride = cfg.BootstrapVersion.Version()
 	}
 	if cfg.DisableUpgrade {
 		if params.ServerArgs.Knobs.Server == nil {

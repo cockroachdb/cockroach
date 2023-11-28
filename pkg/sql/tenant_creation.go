@@ -164,14 +164,14 @@ func (p *planner) createTenantInternal(
 	if p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride != 0 {
 		// An override was passed using testing knobs. Bootstrap the cluster
 		// using this override.
-		tenantVersion.Version = clusterversion.ByKey(p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride)
+		tenantVersion.Version = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride.Version()
 		bootstrapVersionOverride = p.EvalContext().TestingKnobs.TenantLogicalVersionKeyOverride
 	} else if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.Latest) {
 		// The cluster is not running the latest version.
 		// Use the previous major version to create the tenant and bootstrap it
 		// just like the previous major version binary would, using hardcoded
 		// initial values.
-		tenantVersion.Version = clusterversion.ByKey(tenantCreationMinSupportedVersionKey)
+		tenantVersion.Version = tenantCreationMinSupportedVersionKey.Version()
 		bootstrapVersionOverride = tenantCreationMinSupportedVersionKey
 	} else {
 		// The cluster is running the latest version.

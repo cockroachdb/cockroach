@@ -68,11 +68,11 @@ func TestLaggingRangesVersionGate(t *testing.T) {
 	// The version does not matter if the default config is used.
 	t.Run("default config", func(t *testing.T) {
 		opts := MakeDefaultOptions()
-		settings := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.ByKey(clusterversion.V23_2_ChangefeedLaggingRangesOpts), clusterversion.ByKey(clusterversion.V23_1), true)
+		settings := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.V23_2_ChangefeedLaggingRangesOpts.Version(), clusterversion.V23_1.Version(), true)
 		_, _, err := opts.GetLaggingRangesConfig(ctx, settings)
 		require.NoError(t, err)
 
-		settings = cluster.MakeTestingClusterSettingsWithVersions(clusterversion.ByKey(clusterversion.V23_2_ChangefeedLaggingRangesOpts-1), clusterversion.ByKey(clusterversion.V23_1), true)
+		settings = cluster.MakeTestingClusterSettingsWithVersions((clusterversion.V23_2_ChangefeedLaggingRangesOpts - 1).Version(), clusterversion.V23_1.Version(), true)
 		_, _, err = opts.GetLaggingRangesConfig(ctx, settings)
 		require.NoError(t, err)
 	})
@@ -83,11 +83,11 @@ func TestLaggingRangesVersionGate(t *testing.T) {
 		opts.m[OptLaggingRangesThreshold] = "25ms"
 		opts.m[OptLaggingRangesPollingInterval] = "250ms"
 
-		settings := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.ByKey(clusterversion.V23_2_ChangefeedLaggingRangesOpts), clusterversion.ByKey(clusterversion.V23_1), true)
+		settings := cluster.MakeTestingClusterSettingsWithVersions(clusterversion.V23_2_ChangefeedLaggingRangesOpts.Version(), clusterversion.V23_1.Version(), true)
 		_, _, err := opts.GetLaggingRangesConfig(ctx, settings)
 		require.NoError(t, err)
 
-		settings = cluster.MakeTestingClusterSettingsWithVersions(clusterversion.ByKey(clusterversion.V23_2_ChangefeedLaggingRangesOpts-1), clusterversion.ByKey(clusterversion.V23_1), true)
+		settings = cluster.MakeTestingClusterSettingsWithVersions((clusterversion.V23_2_ChangefeedLaggingRangesOpts - 1).Version(), clusterversion.V23_1.Version(), true)
 		_, _, err = opts.GetLaggingRangesConfig(ctx, settings)
 		require.Error(t, err, "cluster version must be 23.2 or greater")
 	})

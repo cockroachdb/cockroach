@@ -1670,7 +1670,7 @@ func TestBackupRestoreResume(t *testing.T) {
 				},
 			},
 			// Required because restore checkpointing is version gated.
-			clusterversion.ByKey(clusterversion.V23_1),
+			clusterversion.V23_1.Version(),
 		)
 		// If the restore properly took the (incorrect) low-water mark into account,
 		// the first half of the table will be missing.

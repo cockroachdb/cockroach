@@ -255,8 +255,7 @@ func (cv ClusterVersion) IsActiveVersion(v roachpb.Version) bool {
 // IsActive returns true if the features of the supplied version are active at
 // the running version.
 func (cv ClusterVersion) IsActive(versionKey Key) bool {
-	v := ByKey(versionKey)
-	return cv.IsActiveVersion(v)
+	return cv.IsActiveVersion(versionKey.Version())
 }
 
 func (cv ClusterVersion) String() string {

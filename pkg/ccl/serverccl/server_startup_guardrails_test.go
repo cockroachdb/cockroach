@@ -33,7 +33,7 @@ func TestServerStartupGuardrails(t *testing.T) {
 	// The tests below will use the minimum supported version as the logical
 	// version.
 	logicalVersionKey := clusterversion.MinSupported
-	logicalVersion := clusterversion.ByKey(logicalVersionKey)
+	logicalVersion := logicalVersionKey.Version()
 
 	prev := func(v roachpb.Version) roachpb.Version {
 		t.Helper()
