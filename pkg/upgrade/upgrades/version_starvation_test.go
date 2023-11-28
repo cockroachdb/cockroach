@@ -52,8 +52,7 @@ func TestLeasingClusterVersionStarvation(t *testing.T) {
 				},
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.V23_2),
+					BinaryVersionOverride:          clusterversion.V23_2.Version(),
 				},
 			},
 		},

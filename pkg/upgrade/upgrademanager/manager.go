@@ -321,7 +321,7 @@ func (m *Manager) runPermanentMigrationsWithoutJobsForTests(
 	ctx context.Context, user username.SQLUsername,
 ) error {
 	log.Infof(ctx, "found test configuration that eliminated all upgrades; running permanent upgrades anyway")
-	vers := clusterversion.ListBetween(roachpb.Version{}, clusterversion.ByKey(clusterversion.VPrimordialMax))
+	vers := clusterversion.ListBetween(roachpb.Version{}, clusterversion.VPrimordialMax.Version())
 	for _, v := range vers {
 		upg, exists := upgrades.GetUpgrade(v)
 		if !exists || !upg.Permanent() {

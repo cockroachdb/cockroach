@@ -168,7 +168,7 @@ func (v NodeVars) TypeFilter(
 	if len(predicatesForTypeOf) == 0 {
 		panic(errors.AssertionFailedf("empty type predicate for %q", v.El))
 	}
-	cv := clusterversion.ClusterVersion{Version: clusterversion.ByKey(version)}
+	cv := clusterversion.ClusterVersion{Version: version.Version()}
 	var valuesForTypeOf []interface{}
 	_ = ForEachElementInActiveVersion(cv, func(e scpb.Element) error {
 		for _, p := range predicatesForTypeOf {
