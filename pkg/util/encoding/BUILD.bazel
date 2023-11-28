@@ -40,6 +40,8 @@ go_test(
         "printer_test.go",
     ],
     embed = [":encoding"],
+    # A test in this package allocates a 2GB array so we need the extra memory.
+    exec_properties = {"Pool": "large"},
     deps = [
         "//pkg/geo",
         "//pkg/geo/geographiclib",

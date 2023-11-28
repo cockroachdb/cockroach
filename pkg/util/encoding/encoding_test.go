@@ -2629,27 +2629,32 @@ func TestUnsafeConvertStringToBytes(t *testing.T) {
 	skip.UnderStress(t)
 
 	testCases := []struct {
-		desc     string
-		input    string
-		expected []byte
+		desc           string
+		input          string
+		expectNil      bool
+		expectedLength int
 	}{
 		{
-			desc:     "empty",
-			input:    "",
-			expected: nil,
+			desc:      "empty",
+			input:     "",
+			expectNil: true,
 		},
 		{
 			// Previous impl could not handle strings longer than math.MaxInt32.
 			// See https://github.com/cockroachdb/cockroach/issues/111626
-			desc:     "large input",
-			input:    string(make([]byte, math.MaxInt32+1)),
-			expected: make([]byte, math.MaxInt32+1),
+			desc:           "large input",
+			input:          string(make([]byte, math.MaxInt32+1)),
+			expectedLength: math.MaxInt32 + 1,
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			actual := UnsafeConvertStringToBytes(tc.input)
-			require.Equal(t, tc.expected, actual)
+			if tc.expectNil {
+				require.Nil(t, actual)
+			} else {
+				require.Equal(t, len(actual), tc.expectedLength)
+			}
 		})
 	}
 }
