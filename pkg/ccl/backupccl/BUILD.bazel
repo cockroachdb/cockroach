@@ -64,7 +64,6 @@ go_library(
         "//pkg/kv/bulk",
         "//pkg/kv/kvclient",
         "//pkg/kv/kvpb",
-        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/protectedts",
