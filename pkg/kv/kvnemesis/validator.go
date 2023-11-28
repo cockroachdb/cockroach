@@ -814,16 +814,14 @@ func (v *validator) processOp(op Operation) {
 			// However, I think the right thing to do is sniff this inside the
 			// AdminMerge code and retry so the client never sees it. In the meantime,
 			// no-op. #44377
-		} else if resultIsErrorStr(t.Result, `merge failed: cannot merge ranges when (rhs)|(lhs) is in a joint state or has learners`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: cannot merge ranges when (lhs|rhs) is in a joint state or has learners`) {
 			// This operation executed concurrently with one that was changing
 			// replicas.
 		} else if resultIsErrorStr(t.Result, `merge failed: ranges not collocated`) {
 			// A merge requires that the two ranges have replicas on the same nodes,
 			// but Generator intentiontally does not try to avoid this so that this
 			// edge case is exercised.
-		} else if resultIsErrorStr(t.Result, `merge failed: waiting for all left-hand replicas to initialize`) {
-			// Probably should be transparently retried.
-		} else if resultIsErrorStr(t.Result, `merge failed: waiting for all right-hand replicas to catch up`) {
+		} else if resultIsErrorStr(t.Result, `merge failed: waiting for all (left|right)-hand replicas to (initialize|catch up)`) {
 			// Probably should be transparently retried.
 		} else if resultIsErrorStr(t.Result, `merge failed: non-deletion intent on local range descriptor`) {
 			// Probably should be transparently retried.
