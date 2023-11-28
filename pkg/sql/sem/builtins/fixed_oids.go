@@ -2509,6 +2509,7 @@ var builtinOidsArray = []string{
 	2540: `information_schema._pg_datetime_precision(typid: oid, typmod: int4) -> int`,
 	2541: `information_schema._pg_interval_type(typid: oid, typmod: int4) -> string`,
 	2542: `crdb_internal.release_series(version: string) -> string`,
+	2543: `crdb_internal.fips_ready() -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

@@ -2997,3 +2997,63 @@ func TestTxnSetIsoLevel(t *testing.T) {
 		require.Equal(t, prev, txn.IsoLevel())
 	}
 }
+
+// TestRefreshWithSavepoint is an integration test that ensures the correct
+// behavior of refreshes under savepoint rollback. The test sets up a write-skew
+// example where txn1 reads keyA and writes to keyB, while concurrently txn2
+// reads keyB and writes to keyA. The two txns can't be serialized so one is
+// expected to get a serialization error upon commit.
+//
+// However, with the old behavior of discarding refresh spans upon savepoint
+// rollback, the read corresponding to the discarded refresh span is not
+// refreshed, so the conflict goes unnoticed and both txns commit successfully.
+// See #111228 for more details.
+func TestRefreshWithSavepoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "keep-refresh-spans", func(t *testing.T, keepRefreshSpans bool) {
+		s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+		ctx := context.Background()
+		defer s.Stopper().Stop(context.Background())
+
+		if keepRefreshSpans {
+			kvcoord.KeepRefreshSpansOnSavepointRollback.Override(ctx, &s.ClusterSettings().SV, true)
+		} else {
+			kvcoord.KeepRefreshSpansOnSavepointRollback.Override(ctx, &s.ClusterSettings().SV, false)
+		}
+
+		keyA := roachpb.Key("a")
+		keyB := roachpb.Key("b")
+		txn1 := kvDB.NewTxn(ctx, "txn1")
+		txn2 := kvDB.NewTxn(ctx, "txn2")
+
+		spt1, err := txn1.CreateSavepoint(ctx)
+		require.NoError(t, err)
+
+		_, err = txn1.Get(ctx, keyA)
+		require.NoError(t, err)
+
+		err = txn1.RollbackToSavepoint(ctx, spt1)
+		require.NoError(t, err)
+
+		_, err = txn2.Get(ctx, keyB)
+		require.NoError(t, err)
+
+		err = txn1.Put(ctx, keyB, "bb")
+		require.NoError(t, err)
+
+		err = txn2.Put(ctx, keyA, "aa")
+		require.NoError(t, err)
+
+		err = txn1.Commit(ctx)
+		if keepRefreshSpans {
+			require.Regexp(t, ".*RETRY_SERIALIZABLE - failed preemptive refresh due to conflicting locks on \"a\"*", err)
+		} else {
+			require.NoError(t, err)
+		}
+
+		err = txn2.Commit(ctx)
+		require.NoError(t, err)
+	})
+}
