@@ -83,7 +83,13 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="goroutines">
-        <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
+        {nodeIDs.map(nid => (
+            <Metric
+                name="cr.node.sys.goroutines"
+                title={nodeDisplayName(nodeDisplayNameByID, nid)}
+                sources={[nid]}
+            />
+        ))}
       </Axis>
     </LineGraph>,
 
@@ -116,25 +122,35 @@ export default function (props: GraphDashboardProps) {
       showMetricsInTooltip={true}
     >
       <Axis label="runs">
-        <Metric name="cr.node.sys.gc.count" title="GC Runs" nonNegativeRate />
+        {nodeIDs.map(nid => (
+            <Metric
+                name="cr.node.sys.gc.count"
+                title={nodeDisplayName(nodeDisplayNameByID, nid)}
+                sources={[nid]}
+                nonNegativeRate
+            />
+        ))}
       </Axis>
     </LineGraph>,
 
     <LineGraph
-      title="GC Pause Time"
+      title="GC Stop-the-World Pause Time"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`The amount of processor time used by Go’s garbage collector per second
-          ${tooltipSelection}. During garbage collection, application code
-          execution is paused.`}
+      tooltip={`The amount of time Go’s garbage collector spent in stop-the-world pauses per second
+          ${tooltipSelection}. During stop-the-world garbage collection phases (sweep termination
+          and mark termination), application code execution is paused.`}
       showMetricsInTooltip={true}
     >
-      <Axis units={AxisUnits.Duration} label="pause time">
-        <Metric
-          name="cr.node.sys.gc.pause.ns"
-          title="GC Pause Time"
-          nonNegativeRate
-        />
+      <Axis units={AxisUnits.Duration} label="STW pause time">
+        {nodeIDs.map(nid => (
+            <Metric
+                name="cr.node.sys.gc.pause.ns"
+                title={nodeDisplayName(nodeDisplayNameByID, nid)}
+                sources={[nid]}
+                nonNegativeRate
+            />
+        ))}
       </Axis>
     </LineGraph>,
 
