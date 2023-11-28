@@ -217,7 +217,9 @@ func startDistIngestion(
 			noopScatter: streamProgress.InitialSplitComplete,
 		}
 		if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.InspectInitialSplitter != nil {
-			knobs.InspectInitialSplitter(splitter.noopScatter)
+			if err := knobs.InspectInitialSplitter(splitter.noopScatter); err != nil {
+				return err
+			}
 		}
 		if err := createInitialSplits(ctx, codec, splitter, planner.initialTopology, details.DestinationTenantID); err != nil {
 			return err

@@ -160,7 +160,7 @@ func TestTenantStreamingPauseResumeIngestion(t *testing.T) {
 	ist := replicationtestutils.InitialSplitTester{}
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 	args.TestingKnobs = &sql.StreamingTestingKnobs{
-		InspectInitialSplitter: ist.GenInitialSplitterInspector(t)}
+		InspectInitialSplitter: ist.GenInitialSplitterInspector()}
 	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 	ist.MaybeSetSplitOnRetry(t, c.Rng, c.DestCluster)
@@ -713,7 +713,7 @@ func TestStreamingAutoReplan(t *testing.T) {
 				alreadyReplanned.Swap(true)
 			}
 		},
-		InspectInitialSplitter: ist.GenInitialSplitterInspector(t),
+		InspectInitialSplitter: ist.GenInitialSplitterInspector(),
 	}
 	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
@@ -809,7 +809,7 @@ func TestStreamingReplanOnLag(t *testing.T) {
 			}
 			return false
 		},
-		InspectInitialSplitter: ist.GenInitialSplitterInspector(t),
+		InspectInitialSplitter: ist.GenInitialSplitterInspector(),
 	}
 	c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
 	defer cleanup()
