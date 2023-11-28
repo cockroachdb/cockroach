@@ -393,6 +393,11 @@ message LocalOnlySessionData {
   // column involved a single column and that column was equated with a single
   // constant value in a WHERE clause filter.
   bool optimizer_use_improved_computed_column_filters_derivation = 104;
+  // OptimizerUseProvidedOrderingFix, when true, causes the optimizer to
+  // reconcile provided orderings with required ordering choices. This prevents
+  // internal errors due to incomplete functional dependencies, and also
+  // fixes a bug that incorrectly truncated the provided ordering (see #113072).
+  bool optimizer_use_provided_ordering_fix = 115;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
