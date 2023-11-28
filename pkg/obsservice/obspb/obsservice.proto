@@ -38,6 +38,14 @@ message Event {
   opentelemetry.proto.logs.v1.LogRecord log_record = 3;
 }
 
+message EventInfo {
+  google.protobuf.Timestamp timestamp = 1 [(gogoproto.stdtime) = true];
+  string event_id = 2 [(gogoproto.customname) = "EventID"];
+  string org_id = 3 [(gogoproto.customname) = "OrgID"];
+  string cluster_id = 4 [(gogoproto.customname) = "ClusterID"];
+  string tenant_id = 5 [(gogoproto.customname) = "TenantID"];
+}
+
 message StatementInsightsStatistics {
   enum Status {
     Completed = 0;
@@ -121,6 +129,8 @@ message StatementInsightsStatistics {
   // ServiceLatSeconds is the time in seconds to service the query, from start of parse to end of execute.
   double service_lat_seconds = 32;
   repeated ContentionEvent contention_events = 33;
+
+  EventInfo event_info = 34;
 }
 
 message ContentionEvent {

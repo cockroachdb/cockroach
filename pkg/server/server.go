@@ -2107,6 +2107,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	s.eventsExporter.SetNodeInfo(obs.NodeInfo{
 		ClusterID:     state.clusterID,
 		NodeID:        int32(state.nodeID),
+		TenantID:      0,
 		BinaryVersion: build.BinaryVersion(),
 	})
 	if s.cfg.ObsServiceAddr != base.ObsServiceEmbedFlagValue {

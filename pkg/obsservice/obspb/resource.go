@@ -15,4 +15,5 @@ const (
 	// base.SQLInstanceID (for SQL tenants).
 	NodeID            string = "NodeID"
 	NodeBinaryVersion string = "NodeBinaryVersion"
+	TenantID          string = "TenantID"
 )

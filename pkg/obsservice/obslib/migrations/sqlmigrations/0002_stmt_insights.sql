@@ -1,14 +1,15 @@
 -- +goose Up
 CREATE TABLE statement_execution_insights (
-   timestamp                  TIMESTAMP NOT NULL,
-   org_id                     BYTES NOT NULL,
-   cluster_id                 BYTES NOT NULL,
-   event_id                   BYTES NOT NULL DEFAULT uuid_v4(),
-   session_id                 STRING NOT NULL,
-   transaction_id             UUID NOT NULL,
-   transaction_fingerprint_id BYTES NOT NULL,
-   statement_id               STRING NOT NULL,
-   statement_fingerprint_id   BYTES NOT NULL,
+   timestamp                  TIMESTAMPTZ,
+   org_id                     STRING,
+   cluster_id                 STRING,
+   tenant_id                  STRING,
+   event_id                   STRING,
+   session_id                 STRING,
+   transaction_id             STRING,
+   transaction_fingerprint_id STRING,
+   statement_id               STRING,
+   statement_fingerprint_id   STRING,
    problem                    INT,
    causes                     INT[],
    query                      STRING,
@@ -29,9 +30,7 @@ CREATE TABLE statement_execution_insights (
    cpu_sql_nanos              INT8,
    error_code                 STRING,
    contention_time            INTERVAL,
-   contention_info            JSONB,
    details                    JSONB,
-   created                    TIMESTAMPTZ NOT NULL DEFAULT now(),
    crdb_internal_end_time_start_time_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(end_time, start_time))), 16:::INT8)) VIRTUAL,
    CONSTRAINT "primary" PRIMARY KEY (statement_id, transaction_id),
    INDEX transaction_id_idx (transaction_id),
@@ -64,10 +63,8 @@ CREATE TABLE statement_execution_insights (
      cpu_sql_nanos,
      error_code,
      contention_time,
-     contention_info,
-     details,
-     created
-   )
+     details
+     )
 );
 
 -- +goose Down
