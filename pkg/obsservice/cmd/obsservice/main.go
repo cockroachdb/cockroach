@@ -263,7 +263,7 @@ func makeStatementInsightsPipeline(
 	}
 
 	processor, err := process.NewMemQueueProcessor[*obspb.StatementInsightsStatistics](
-		memQueue, &process.StmtInsightsProcessor{SinkPGURL: sinkPGURL})
+		memQueue, process.NewStmtInsightsProcessor(sinkPGURL))
 	if err != nil {
 		return nil, nil, err
 	}
