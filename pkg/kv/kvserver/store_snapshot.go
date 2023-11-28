@@ -126,8 +126,9 @@ type kvBatchSnapshotStrategy struct {
 	// before flushing to disk. Only used on the receiver side.
 	sstChunkSize int64
 	// Only used on the receiver side.
-	scratch *SSTSnapshotStorageScratch
-	st      *cluster.Settings
+	scratch   *SSTSnapshotStorageScratch
+	st        *cluster.Settings
+	clusterID uuid.UUID
 }
 
 // multiSSTWriter is a wrapper around an SSTWriter and SSTSnapshotStorageScratch
@@ -769,7 +770,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// If snapshots containing shared files are allowed, and this range is a
 	// non-system range, take advantage of shared storage to minimize the amount
 	// of data we're iterating on and sending over the network.
-	sharedReplicate := header.SharedReplicate
+	sharedReplicate := header.SharedReplicate && rditer.IterateReplicaKeySpansShared != nil
 	replicatedFilter := rditer.ReplicatedSpansAll
 	if sharedReplicate {
 		replicatedFilter = rditer.ReplicatedSpansExcludeUser
@@ -837,7 +838,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 
 	var valBuf []byte
 	if sharedReplicate {
-		err := rditer.IterateReplicaKeySpansShared(ctx, snap.State.Desc, snap.EngineSnap, func(key *pebble.InternalKey, value pebble.LazyValue, _ pebble.IteratorLevel) error {
+		err := rditer.IterateReplicaKeySpansShared(ctx, snap.State.Desc, kvSS.st, kvSS.clusterID, snap.EngineSnap, func(key *pebble.InternalKey, value pebble.LazyValue, _ pebble.IteratorLevel) error {
 			kvs++
 			if b == nil {
 				b = kvSS.newWriteBatch()
@@ -1375,6 +1376,7 @@ func (s *Store) receiveSnapshot(
 		scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID),
 		sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.cfg.Settings.SV),
 		st:           s.ClusterSettings(),
+		clusterID:    s.ClusterID(),
 	}
 	defer ss.Close(ctx)
 
@@ -1629,6 +1631,7 @@ var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
 // snapshot to the replica specified in the input.
 func SendEmptySnapshot(
 	ctx context.Context,
+	clusterID uuid.UUID,
 	st *cluster.Settings,
 	tracer *tracing.Tracer,
 	cc *grpc.ClientConn,
@@ -1751,6 +1754,7 @@ func SendEmptySnapshot(
 
 	if _, err := sendSnapshot(
 		ctx,
+		clusterID,
 		st,
 		tracer,
 		stream,
@@ -1774,6 +1778,7 @@ func (n noopStorePool) Throttle(storepool.ThrottleReason, string, roachpb.StoreI
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
+	clusterID uuid.UUID,
 	st *cluster.Settings,
 	tracer *tracing.Tracer,
 	stream outgoingSnapshotStream,
@@ -1844,6 +1849,7 @@ func sendSnapshot(
 		limiter:       limiter,
 		newWriteBatch: newWriteBatch,
 		st:            st,
+		clusterID:     clusterID,
 	}
 
 	// Record timings for snapshot send if kv.trace.snapshot.enable_threshold is enabled

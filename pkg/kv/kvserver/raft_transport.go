@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/raft/v3/raftpb"
 	"google.golang.org/grpc"
@@ -1117,6 +1118,7 @@ func (t *RaftTransport) dropFlowTokensForDisconnectedNodes() {
 // of the snapshot.
 func (t *RaftTransport) SendSnapshot(
 	ctx context.Context,
+	clusterID uuid.UUID,
 	storePool *storepool.StorePool,
 	header kvserverpb.SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
@@ -1141,7 +1143,7 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %+v", err)
 		}
 	}()
-	return sendSnapshot(ctx, t.st, t.tracer, stream, storePool, header, snap, newWriteBatch, sent, recordBytesSent)
+	return sendSnapshot(ctx, clusterID, t.st, t.tracer, stream, storePool, header, snap, newWriteBatch, sent, recordBytesSent)
 }
 
 // DelegateSnapshot sends a DelegateSnapshotRequest to a remote store
