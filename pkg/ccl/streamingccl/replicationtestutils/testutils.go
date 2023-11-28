@@ -634,12 +634,13 @@ type InitialSplitTester struct {
 	InitialSplitCount int
 }
 
-func (ist *InitialSplitTester) GenInitialSplitterInspector(t *testing.T) func(noopScatter bool) {
-	return func(noopScatter bool) {
+func (ist *InitialSplitTester) GenInitialSplitterInspector() func(noopScatter bool) error {
+	return func(noopScatter bool) error {
 		ist.InitialSplitCount++
-		if noopScatter {
-			require.Greater(t, ist.InitialSplitCount, 1)
+		if noopScatter && ist.InitialSplitCount < 2 {
+			return errors.New("noop scatter even though split count is less than 2")
 		}
+		return nil
 	}
 }
 
