@@ -6,8 +6,12 @@ ARG fips_enabled
 #          files in /usr/share/zoneinfo/
 # hostname - used in cockroach k8s manifests
 # tar - used by kubectl cp
+# TODO(rail): remove the temporary tzdata download hack
 RUN microdnf update -y \
     && rpm --erase --nodeps tzdata \
+    && curl -o /tmp/tzdata-2023c-1.el9.noarch.rpm https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/t/tzdata-2023c-1.el9.noarch.rpm  https://cdn-ubi.redhat.com/content/public/ubi/dist/ubi9/9/x86_64/baseos/os/Packages/t/tzdata-2023c-1.el9.noarch.rpm \
+    && rpm -i /tmp/tzdata-2023c-1.el9.noarch.rpm \
+    && rm -f /tmp/tzdata-2023c-1.el9.noarch.rpm \
     && microdnf install tzdata hostname tar gzip xz -y \
     && rm -rf /var/cache/yum
 # FIPS mode requires the `openssl` package installed. Also we need to temporarily
