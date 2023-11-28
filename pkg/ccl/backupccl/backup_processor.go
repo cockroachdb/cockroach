@@ -722,7 +722,7 @@ func recordExportStats(sp *tracing.Span, resp *kvpb.ExportResponse, requestSentA
 func reserveWorkerMemory(
 	ctx context.Context, settings *cluster.Settings, memAcc *mon.BoundAccount,
 ) (int, func(), error) {
-	maxWorkerCount := workerCount.Get(&settings.SV)
+	maxWorkerCount := int(workerCount.Get(&settings.SV))
 	// We assume that each worker needs at least enough memory to hold onto
 	// 1 buffer used by the external storage.
 	perWorkerMemory := cloud.WriteChunkSize.Get(&settings.SV)
