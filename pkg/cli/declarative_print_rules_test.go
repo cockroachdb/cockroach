@@ -32,23 +32,21 @@ func TestDeclarativeRules(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		version := clusterversion.Latest.Version()
-		versionString := strings.Split(version.String(), "-")[0]
-		depOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s dep", versionString))
-		if err != nil {
-			t.Fatal(err)
-		}
-
 		// Using datadriven allows TESTFLAGS=-rewrite.
 		datadriven.RunTest(t, datapathutils.TestDataPath(t, "declarative-rules", "invalid_version"), func(t *testing.T, td *datadriven.TestData) string {
 			// Do not display the present current version within the output,
 			// for testing purposes. This can change from build to build, and
 			// need changes for every version bump.
 			return strings.Replace(invalidOut,
-				" "+clusterversion.ByKey(clusterversion.V24_1).String()+"\n",
+				" "+clusterversion.Latest.String()+"\n",
 				" latest\n",
 				-1)
 		})
+
+		depOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s dep", clusterversion.PreviousRelease))
+		if err != nil {
+			t.Fatal(err)
+		}
 		datadriven.RunTest(t, datapathutils.TestDataPath(t, "declarative-rules", "deprules"), func(t *testing.T, td *datadriven.TestData) string {
 			return depOut
 		})
