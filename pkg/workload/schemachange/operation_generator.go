@@ -938,7 +938,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	if notvisible := og.randIntn(20) == 0; notvisible {
 		invisibility.Value = 1.0
 		partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
-			ctx, tx, clusterversion.ByKey(clusterversion.V23_2),
+			ctx, tx, clusterversion.V23_2.Version(),
 		)
 		if err != nil {
 			return nil, err
@@ -976,7 +976,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	duplicateRegionColumn := false
 	nonIndexableType := false
 	def.Columns = make(tree.IndexElemList, 1+og.randIntn(len(columnNames)))
-	jsonInvertedIndexesNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.ByKey(clusterversion.V23_2))
+	jsonInvertedIndexesNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V23_2.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -1206,7 +1206,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	}
 
 	partiallyVisibleIndexNotSupported, err := isClusterVersionLessThan(
-		ctx, tx, clusterversion.ByKey(clusterversion.V23_2),
+		ctx, tx, clusterversion.V23_2.Version(),
 	)
 	if err != nil {
 		return nil, err
@@ -1220,7 +1220,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	tsQueryNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V23_1))
+		clusterversion.V23_1.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -1241,7 +1241,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	pgLSNNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V23_2))
+		clusterversion.V23_2.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -1249,7 +1249,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	refCursorNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V23_2))
+		clusterversion.V23_2.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -1258,7 +1258,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	forwardIndexesOnArraysNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V23_1))
+		clusterversion.V23_1.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -1266,7 +1266,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	forwardIndexesOnJSONNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V23_2))
+		clusterversion.V23_2.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -1274,7 +1274,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	indexVisibilityNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V23_2))
+		clusterversion.V23_2.Version())
 	if err != nil {
 		return nil, err
 	}

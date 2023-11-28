@@ -68,7 +68,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	endCV := clusterversion.Latest
-	if clusterversion.ByKey(endCV).Internal == 2 {
+	if endCV.Version().Internal == 2 {
 		skip.IgnoreLint(t, "test cannot run until there is a new version key")
 	}
 	startCV := endCV - 1
@@ -84,7 +84,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          clusterversion.ByKey(startCV),
+					BinaryVersionOverride:          startCV.Version(),
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				DistSQL: &execinfra.TestingKnobs{
@@ -93,7 +93,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
 					RegistryOverride: func(v roachpb.Version) (upgradebase.Upgrade, bool) {
-						if v != clusterversion.ByKey(endCV) {
+						if v != endCV.Version() {
 							return nil, false
 						}
 						return upgrade.NewTenantUpgrade("test", v, upgrade.NoPrecondition, func(
@@ -250,7 +250,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 
 	ctx := context.Background()
 	targetCV := clusterversion.V23_2Start + 1
-	targetCVJSON, err := protoreflect.MessageToJSON(&clusterversion.ClusterVersion{Version: clusterversion.ByKey(targetCV)},
+	targetCVJSON, err := protoreflect.MessageToJSON(&clusterversion.ClusterVersion{Version: targetCV.Version()},
 		protoreflect.FmtFlags{EmitDefaults: false})
 	require.NoError(t, err)
 
@@ -267,7 +267,7 @@ func TestPostJobInfoTableQueryDuplicateJobInfo(t *testing.T) {
 
 	upgradeStarted := make(chan chan struct{})
 	registryOverrideHook := func(v roachpb.Version) (upgradebase.Upgrade, bool) {
-		if v != clusterversion.ByKey(targetCV) {
+		if v != targetCV.Version() {
 			return nil, false
 		}
 		return upgrade.NewTenantUpgrade("test", v, upgrade.NoPrecondition, func(
@@ -371,9 +371,9 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 
 	// We're going to be migrating from startCV to endCV.
 	startCVKey := clusterversion.V23_1
-	startCV := clusterversion.ByKey(startCVKey)
+	startCV := startCVKey.Version()
 	endCVKey := startCVKey + 1
-	endCV := clusterversion.ByKey(endCVKey)
+	endCV := endCVKey.Version()
 
 	var desc roachpb.RangeDescriptor
 	ctx := context.Background()
@@ -577,12 +577,12 @@ func TestPauseMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
-					BinaryVersionOverride:          clusterversion.ByKey(startCV),
+					BinaryVersionOverride:          startCV.Version(),
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				UpgradeManager: &upgradebase.TestingKnobs{
 					RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
-						if cv != clusterversion.ByKey(endCV) {
+						if cv != endCV.Version() {
 							return nil, false
 						}
 						return upgrade.NewTenantUpgrade("test", cv, upgrade.NoPrecondition, func(
@@ -820,9 +820,9 @@ func TestMigrationFailure(t *testing.T) {
 
 	// Configure the range of versions used by the test
 	startVersionKey := clusterversion.MinSupported
-	startVersion := clusterversion.ByKey(startVersionKey)
+	startVersion := startVersionKey.Version()
 	endVersionKey := clusterversion.Latest
-	endVersion := clusterversion.ByKey(endVersionKey)
+	endVersion := endVersionKey.Version()
 
 	// Pick a random version in to fail at
 	versions := clusterversion.ListBetween(startVersion, endVersion)

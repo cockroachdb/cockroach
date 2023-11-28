@@ -459,13 +459,6 @@ func SupportedPreviousReleases() []Key {
 	return res
 }
 
-// ByKey returns the roachpb.Version for a given key.
-// It is a fatal error to use an invalid key.
-// DEPRECATED: use key.Version() instead.
-func ByKey(key Key) roachpb.Version {
-	return key.Version()
-}
-
 // ListBetween returns the list of cluster versions in the range
 // (from, to].
 func ListBetween(from, to roachpb.Version) []roachpb.Version {

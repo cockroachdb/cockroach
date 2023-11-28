@@ -422,7 +422,7 @@ func requireClusterVersion(versionkey clusterversion.Key) CheckHBAEntry {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				`HBA authentication method %q requires all nodes to be upgraded to %s`,
 				e.Method,
-				clusterversion.ByKey(versionkey),
+				versionkey,
 			)
 		}
 		return nil

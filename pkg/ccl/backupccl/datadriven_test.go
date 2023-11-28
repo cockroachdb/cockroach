@@ -177,7 +177,7 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 		}
 		beforeKey--
 		params.ServerArgs.Knobs.Server = &server.TestingKnobs{
-			BinaryVersionOverride:          clusterversion.ByKey(beforeKey),
+			BinaryVersionOverride:          beforeKey.Version(),
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
 		}
 	}
@@ -576,7 +576,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			if !ok {
 				t.Fatalf("clusterVersion %s does not exist in data driven global map", version)
 			}
-			clusterVersion := clusterversion.ByKey(key)
+			clusterVersion := key.Version()
 			_, err := ds.getSQLDB(t, cluster, user).Exec("SET CLUSTER SETTING version = $1", clusterVersion.String())
 			require.NoError(t, err)
 			return ""
