@@ -412,6 +412,10 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		&ex.state,
 	)
 
+	// TODO(yang): This seems wrong actually. Is it safe to just say false?
+	// Seems like it could be wrong, an IE could be spun up to run the
+	// user's delegated writes.
+	omitInRangefeeds := ex.sessionData().DisableChangefeedReplication
 	ex.state.resetForNewSQLTxn(
 		ctx,
 		explicitTxn,
@@ -423,6 +427,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		ex.transitionCtx,
 		ex.QualityOfService(),
 		isolation.Serializable,
+		omitInRangefeeds,
 	)
 
 	// Modify the Collection to match the parent executor's Collection.
