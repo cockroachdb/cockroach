@@ -270,9 +270,9 @@ t  CREATE TABLE public.t (
      CONSTRAINT t_pkey PRIMARY KEY (y ASC),
      INDEX i1 (w ASC),
      INDEX i2 (y ASC),
-     UNIQUE INDEX i3 (z ASC) STORING (y),
+     UNIQUE INDEX i3 (z ASC),
      UNIQUE INDEX i4 (z ASC),
-     UNIQUE INDEX i5 (w ASC) STORING (y),
+     UNIQUE INDEX i5 (w ASC),
      INVERTED INDEX i6 (v),
      INDEX i7 (z ASC) USING HASH WITH (bucket_count=4),
      UNIQUE INDEX t_x_key (x ASC),
@@ -398,6 +398,20 @@ query IIIIT
 SELECT * FROM t@i5
 ----
 1 2 3 4 {}
+
+# Make sure the create_statement from `SHOW CREATE` can indeed recreate the
+# table without error.
+
+let $index_rewrites_t_create_statement
+SELECT create_statement FROM [SHOW CREATE t];
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+$index_rewrites_t_create_statement
+
+subtest end
 
 subtest hash_sharded
 
