@@ -27,10 +27,11 @@ func TestMigrationHaveRequiredColumns(t *testing.T) {
 
 	// Required columns with any amount of space required for alignment (\s+).
 	requiredColumns := []string{
-		`timestamp\s+TIMESTAMP NOT NULL`,
-		`event_id\s+BYTES NOT NULL DEFAULT uuid_v4()`,
-		`org_id\s+BYTES NOT NULL,`,
-		`cluster_id\s+BYTES NOT NULL`,
+		`timestamp\s+TIMESTAMPTZ`,
+		`event_id\s+STRING`,
+		`org_id\s+STRING`,
+		`cluster_id\s+STRING`,
+		`tenant_id\s+STRING`,
 	}
 
 	// Add migrations that don't need to contain the required columns and

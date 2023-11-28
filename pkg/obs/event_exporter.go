@@ -240,6 +240,7 @@ type NodeInfo struct {
 	NodeID int32
 	// BinaryVersion is the executable's version.
 	BinaryVersion string
+	TenantID      int64
 }
 
 // SetDialer configures the dialer to be used when opening network connections.
@@ -265,6 +266,10 @@ func (s *EventsExporter) SetNodeInfo(nodeInfo NodeInfo) {
 			{
 				Key:   obspb.NodeBinaryVersion,
 				Value: &otel_pb.AnyValue{Value: &otel_pb.AnyValue_StringValue{StringValue: nodeInfo.BinaryVersion}},
+			},
+			{
+				Key:   obspb.TenantID,
+				Value: &otel_pb.AnyValue{Value: &otel_pb.AnyValue_IntValue{IntValue: nodeInfo.TenantID}},
 			},
 		},
 	}
