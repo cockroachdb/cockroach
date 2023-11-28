@@ -358,6 +358,11 @@ func restore(
 		return emptyRowCount, errors.Wrapf(err, "counting number of import spans")
 	}
 
+	// requestFinishedCh is pinged every time restore completes the ingestion of a
+	// restoreSpanEntry. Each ping updates the 'fraction completed' job progress.
+	// Note that online restore pings this channel directly, every time a remote
+	// addsstable completes, while conventional restore pings the channel after
+	// updating the progress frontier.
 	requestFinishedCh := make(chan struct{}, numImportSpans) // enough buffer to never block
 
 	// tasks are the concurrent tasks that are run during the restore.
@@ -382,21 +387,26 @@ func restore(
 			return genSpan(ctx, progressTracker.inFlightSpanFeeder)
 		})
 	}
+
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
-	generativeCheckpointLoop := func(ctx context.Context) error {
-		defer close(requestFinishedCh)
-		for progress := range progCh {
-			if spanDone, err := progressTracker.ingestUpdate(ctx, progress); err != nil {
-				return err
-			} else if spanDone {
-				// Signal that the processor has finished importing a span, to update job
-				// progress.
-				requestFinishedCh <- struct{}{}
+	if !details.ExperimentalOnline {
+		// Online restore tracks progress by pinging requestFinishCh instead
+		generativeCheckpointLoop := func(ctx context.Context) error {
+			defer close(requestFinishedCh)
+			for progress := range progCh {
+				if spanDone, err := progressTracker.ingestUpdate(ctx, progress); err != nil {
+					return err
+				} else if spanDone {
+					// Signal that the processor has finished importing a span, to update job
+					// progress.
+					requestFinishedCh <- struct{}{}
+				}
 			}
+			return nil
 		}
-		return nil
+
+		tasks = append(tasks, generativeCheckpointLoop)
 	}
-	tasks = append(tasks, generativeCheckpointLoop)
 
 	// tracingAggLoop is responsible for draining the channel on which processors
 	// in the DistSQL flow will send back their tracing aggregator stats. These
@@ -431,7 +441,7 @@ func restore(
 				encryption,
 				details.URIs,
 				backupLocalityInfo,
-				progCh,
+				requestFinishedCh,
 				tracingAggCh,
 				genSpan,
 			), "sending remote AddSSTable requests")

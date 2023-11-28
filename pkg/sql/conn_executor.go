@@ -1096,7 +1096,7 @@ func (s *Server) newConnExecutor(
 	// The transaction_read_only variable is special; its updates need to be
 	// hooked-up to the executor.
 	ex.dataMutatorIterator.setCurTxnReadOnly = func(val bool) {
-		ex.state.readOnly = val
+		ex.state.readOnly.Swap(val)
 	}
 	ex.dataMutatorIterator.onTempSchemaCreation = func() {
 		ex.hasCreatedTemporarySchema = true
@@ -1431,7 +1431,7 @@ type connExecutor struct {
 		// Note that a single SQL txn can use multiple KV txns under the
 		// hood with multiple KV txn UUIDs, so the KV UUID is not a good
 		// txn identifier for SQL logging.
-		txnCounter int
+		txnCounter atomic.Int32
 
 		// txnRewindPos is the position within stmtBuf to which we'll rewind when
 		// performing automatic retries. This is more or less the position where the
@@ -2793,7 +2793,7 @@ func (ex *connExecutor) execCopyOut(
 			ctx,
 			ex.executorType,
 			int(ex.state.mu.autoRetryCounter),
-			ex.extraTxnState.txnCounter,
+			int(ex.extraTxnState.txnCounter.Load()),
 			numOutputRows,
 			ex.state.mu.stmtCount,
 			0, /* bulkJobId */
@@ -3044,7 +3044,7 @@ func (ex *connExecutor) execCopyIn(
 		)
 		var stats topLevelQueryStats
 		ex.planner.maybeLogStatement(ctx, ex.executorType,
-			int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter,
+			int(ex.state.mu.autoRetryCounter), int(ex.extraTxnState.txnCounter.Load()),
 			numInsertedRows, ex.state.mu.stmtCount,
 			0, /* bulkJobId */
 			copyErr,
@@ -3592,10 +3592,14 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, stmtTS time.Time) {
 	newTxn := txn == nil || evalCtx.Txn != txn
 	evalCtx.TxnState = ex.getTransactionState()
-	evalCtx.TxnReadOnly = ex.state.readOnly
+	evalCtx.TxnReadOnly = ex.state.readOnly.Load()
 	evalCtx.TxnImplicit = ex.implicitTxn()
 	evalCtx.TxnIsSingleStmt = false
-	evalCtx.TxnIsoLevel = ex.state.isolationLevel
+	func() {
+		ex.state.mu.Lock()
+		defer ex.state.mu.Unlock()
+		evalCtx.TxnIsoLevel = ex.state.mu.isolationLevel
+	}()
 	if newTxn || !ex.implicitTxn() {
 		// Only update the stmt timestamp if in a new txn or an explicit txn. This is because this gets
 		// called multiple times during an extended protocol implicit txn, but we
@@ -3769,7 +3773,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		ex.recordTransactionStart(advInfo.txnEvent.txnID)
 		// Start of the transaction, so no statements were executed earlier.
 		// Bump the txn counter for logging.
-		ex.extraTxnState.txnCounter++
+		ex.extraTxnState.txnCounter.Add(1)
 
 		// Session is considered active when executing a transaction.
 		ex.totalActiveTimeStopWatch.Start()
@@ -4006,15 +4010,16 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			NumRetries:            int32(txn.Epoch()),
 			NumAutoRetries:        ex.state.mu.autoRetryCounter,
 			TxnDescription:        txn.String(),
-			Implicit:              ex.implicitTxn(),
-			AllocBytes:            ex.state.mon.AllocBytes(),
-			MaxAllocBytes:         ex.state.mon.MaximumBytes(),
-			IsHistorical:          ex.state.isHistorical,
-			ReadOnly:              ex.state.readOnly,
-			Priority:              ex.state.priority.String(),
-			QualityOfService:      sessiondatapb.ToQoSLevelString(txn.AdmissionHeader().Priority),
-			LastAutoRetryReason:   autoRetryReasonStr,
-			IsolationLevel:        tree.IsolationLevelFromKVTxnIsolationLevel(ex.state.isolationLevel).String(),
+			// TODO(yuzefovich): this seems like not a concurrency safe call.
+			Implicit:            ex.implicitTxn(),
+			AllocBytes:          ex.state.mon.AllocBytes(),
+			MaxAllocBytes:       ex.state.mon.MaximumBytes(),
+			IsHistorical:        ex.state.isHistorical.Load(),
+			ReadOnly:            ex.state.readOnly.Load(),
+			Priority:            ex.state.mu.priority.String(),
+			QualityOfService:    sessiondatapb.ToQoSLevelString(txn.AdmissionHeader().Priority),
+			LastAutoRetryReason: autoRetryReasonStr,
+			IsolationLevel:      tree.IsolationLevelFromKVTxnIsolationLevel(ex.state.mu.isolationLevel).String(),
 		}
 	}
 
@@ -4109,15 +4114,17 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	}
 
 	return serverpb.Session{
-		Username:                   sd.SessionUser().Normalized(),
-		ClientAddress:              remoteStr,
-		ApplicationName:            ex.applicationName.Load().(string),
-		Start:                      ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
-		ActiveQueries:              activeQueries,
-		ActiveTxn:                  activeTxnInfo,
-		NumTxnsExecuted:            int32(ex.extraTxnState.txnCounter),
-		TxnFingerprintIDs:          txnFingerprintIDs,
-		LastActiveQuery:            lastActiveQuery,
+		Username:        sd.SessionUser().Normalized(),
+		ClientAddress:   remoteStr,
+		ApplicationName: ex.applicationName.Load().(string),
+		// TODO(yuzefovich): this seems like not a concurrency safe call.
+		Start:             ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionInit).UTC(),
+		ActiveQueries:     activeQueries,
+		ActiveTxn:         activeTxnInfo,
+		NumTxnsExecuted:   ex.extraTxnState.txnCounter.Load(),
+		TxnFingerprintIDs: txnFingerprintIDs,
+		LastActiveQuery:   lastActiveQuery,
+		// TODO(yuzefovich): this seems like not a concurrency safe call.
 		ID:                         ex.planner.extendedEvalCtx.SessionID.GetBytes(),
 		AllocBytes:                 ex.mon.AllocBytes(),
 		MaxAllocBytes:              ex.mon.MaximumBytes(),

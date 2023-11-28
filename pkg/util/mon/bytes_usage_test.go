@@ -427,14 +427,36 @@ func TestReservedAccountCleared(t *testing.T) {
 func getMonitor(
 	ctx context.Context, st *cluster.Settings, name string, parent *BytesMonitor,
 ) *BytesMonitor {
-	m := NewMonitor(redact.RedactableString(name), MemoryResource, nil, nil, 1, math.MaxInt64, st)
-	var reserved *BoundAccount
+	var reservedBytes int64
 	if parent == nil {
-		reserved = NewStandaloneBudget(math.MaxInt64)
-	} else {
-		reserved = &noReserved
+		reservedBytes = math.MaxInt64
 	}
-	m.Start(ctx, parent, reserved)
+	return getMonitorEx(ctx, st, name, parent, reservedBytes)
+}
+
+func getMonitorEx(
+	ctx context.Context, st *cluster.Settings, name string, parent *BytesMonitor, reservedBytes int64,
+) *BytesMonitor {
+	m := NewMonitor(redact.RedactableString(name), MemoryResource, nil, nil, 1, math.MaxInt64, st)
+	m.Start(ctx, parent, NewStandaloneBudget(reservedBytes))
+	return m
+}
+
+func getMonitorUsed(
+	t *testing.T,
+	ctx context.Context,
+	st *cluster.Settings,
+	name string,
+	parent *BytesMonitor,
+	usedBytes, reservedBytes int64,
+) *BytesMonitor {
+	m := getMonitorEx(ctx, st, name, parent, reservedBytes)
+	if usedBytes != 0 {
+		acc := m.MakeBoundAccount()
+		if err := acc.Grow(ctx, usedBytes); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return m
 }
 
@@ -485,6 +507,25 @@ func TestBytesMonitorTree(t *testing.T) {
 
 	require.Equal(t, "parent\n", export(parent))
 	parent.Stop(ctx)
+}
+
+// TestBytesMonitorUsedFromReserved verifies that the correct memory usage is
+// reported by TraverseTree if that usage counts towards the reserved account.
+func TestBytesMonitorUsedFromReserved(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	root := getMonitor(ctx, st, "root", nil /* parent */)
+	const usedBytes = int64(1 << 10)
+	child := getMonitorUsed(t, ctx, st, "child", root, usedBytes, 2*usedBytes /* reservedBytes */)
+
+	require.NoError(t, root.TraverseTree(func(s MonitorState) error {
+		if s.Name == child.Name() {
+			require.Equal(t, usedBytes, s.Used)
+		}
+		return nil
+	}))
 }
 
 // TestBytesMonitorNoDeadlocks ensures that no deadlocks can occur when monitors
