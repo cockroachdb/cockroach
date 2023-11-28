@@ -78,7 +78,8 @@ func RecoverTxn(
 
 	// Fetch transaction record; if missing, attempt to synthesize one.
 	if ok, err := storage.MVCCGetProto(
-		ctx, readWriter, key, hlc.Timestamp{}, &reply.RecoveredTxn, storage.MVCCGetOptions{},
+		ctx, readWriter, key, hlc.Timestamp{}, &reply.RecoveredTxn,
+		storage.MVCCGetOptions{ReadCategory: storage.BatchEvalReadCategory},
 	); err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -220,7 +221,8 @@ func RecoverTxn(
 		reply.RecoveredTxn.Status = roachpb.ABORTED
 	}
 	txnRecord := reply.RecoveredTxn.AsRecord()
-	if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord, storage.MVCCWriteOptions{Stats: cArgs.Stats}); err != nil {
+	if err := storage.MVCCPutProto(ctx, readWriter, key, hlc.Timestamp{}, &txnRecord,
+		storage.MVCCWriteOptions{Stats: cArgs.Stats, Category: storage.BatchEvalReadCategory}); err != nil {
 		return result.Result{}, err
 	}
 

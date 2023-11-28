@@ -2055,7 +2055,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 
 		// TODO(nvanbenschoten): this should be pushed into MVCCClearTimeRange, which
 		// does not currently handle replicated locks correctly.
-		locks, err := ScanLocks(ctx, s.batch, keySpan.Key, keySpan.EndKey, 1, 0)
+		locks, err := ScanLocks(ctx, s.batch, keySpan.Key, keySpan.EndKey, 1, 0, UnknownReadCategory)
 		if err == nil && len(locks) > 0 {
 			err = &kvpb.LockConflictError{Locks: locks}
 		}

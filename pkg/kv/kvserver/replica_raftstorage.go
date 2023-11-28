@@ -417,7 +417,8 @@ func snapshot(
 	// know they cannot be committed yet; operations that modify range
 	// descriptors resolve their own intents when they commit.
 	ok, err := storage.MVCCGetProto(ctx, snap, keys.RangeDescriptorKey(startKey),
-		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{Inconsistent: true})
+		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{
+			Inconsistent: true, ReadCategory: storage.RangeSnapshotReadCategory})
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Wrap(err, "failed to get desc")
 	}

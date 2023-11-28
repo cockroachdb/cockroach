@@ -92,6 +92,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(
 		ctx, r, todoSpanSet, false, /* requiresClosedTSOlderThanStorageSnap */
+		kvpb.AdmissionHeader{},
 	)
 	defer rec.Release()
 	rw := r.store.TODOEngine().NewReadOnly(storage.StandardDurability)

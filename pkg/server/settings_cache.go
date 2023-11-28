@@ -128,7 +128,8 @@ func loadCachedSettingsKVs(ctx context.Context, eng storage.Engine) ([]roachpb.K
 	var settingsKVs []roachpb.KeyValue
 	if err := eng.MVCCIterate(ctx, keys.LocalStoreCachedSettingsKeyMin,
 		keys.LocalStoreCachedSettingsKeyMax, storage.MVCCKeyAndIntentsIterKind,
-		storage.IterKeyTypePointsOnly, func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+		storage.IterKeyTypePointsOnly, storage.UnknownReadCategory,
+		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
 			settingKey, err := keys.DecodeStoreCachedSettingsKey(kv.Key.Key)
 			if err != nil {
 				return err

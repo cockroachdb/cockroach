@@ -117,7 +117,8 @@ func ClearRange(
 	// consider the txn incomplete, uncommitting it and its writes (even those
 	// outside of the cleared range).
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
-	locks, err := storage.ScanLocks(ctx, readWriter, from, to, maxLockConflicts, 0)
+	locks, err := storage.ScanLocks(ctx, readWriter, from, to, maxLockConflicts, 0,
+		storage.BatchEvalReadCategory)
 	if err != nil {
 		return result.Result{}, err
 	} else if len(locks) > 0 {
@@ -218,9 +219,10 @@ func computeStatsDelta(
 			leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 				from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 			rkIter, err := readWriter.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypeRangesOnly,
-				LowerBound: leftPeekBound,
-				UpperBound: rightPeekBound,
+				KeyTypes:     storage.IterKeyTypeRangesOnly,
+				LowerBound:   leftPeekBound,
+				UpperBound:   rightPeekBound,
+				ReadCategory: storage.BatchEvalReadCategory,
 			})
 			if err != nil {
 				return enginepb.MVCCStats{}, err

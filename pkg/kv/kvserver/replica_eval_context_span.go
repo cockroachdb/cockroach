@@ -277,5 +277,10 @@ func (rec *SpanSetReplicaEvalContext) GetApproximateDiskBytes(
 	return rec.i.GetApproximateDiskBytes(from, to)
 }
 
+// AdmissionHeader implements the batcheval.EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) AdmissionHeader() kvpb.AdmissionHeader {
+	return rec.i.AdmissionHeader()
+}
+
 // Release implements the batcheval.EvalContext interface.
 func (rec *SpanSetReplicaEvalContext) Release() { rec.i.Release() }

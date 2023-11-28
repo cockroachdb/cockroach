@@ -80,6 +80,7 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/limit",

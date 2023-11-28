@@ -964,6 +964,7 @@ func TestReplicaLease(t *testing.T) {
 			batcheval.CommandArgs{
 				EvalCtx: NewReplicaEvalContext(
 					ctx, tc.repl, allSpans(), false, /* requiresClosedTSOlderThanStorageSnap */
+					kvpb.AdmissionHeader{},
 				),
 				Args: &kvpb.RequestLeaseRequest{
 					Lease: lease,
@@ -5165,6 +5166,7 @@ func TestEndTxnDirectGC(t *testing.T) {
 					ctx, tc.engine, batcheval.CommandArgs{
 						EvalCtx: NewReplicaEvalContext(
 							ctx, tc.repl, allSpans(), false, /* requiresClosedTSOlderThanStorageSnap */
+							kvpb.AdmissionHeader{},
 						),
 						Args: &kvpb.GetRequest{RequestHeader: kvpb.RequestHeader{
 							Key: keys.TransactionKey(txn.Key, txn.ID),
@@ -5548,7 +5550,7 @@ func TestAbortSpanError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ec := newEvalContextImpl(ctx, tc.repl, false /* requireClosedTS */)
+	ec := newEvalContextImpl(ctx, tc.repl, false /* requireClosedTS */, kvpb.AdmissionHeader{})
 	rec := &SpanSetReplicaEvalContext{ec, *allSpans()}
 	pErr := checkIfTxnAborted(ctx, rec, tc.engine, txn)
 	if _, ok := pErr.GetDetail().(*kvpb.TransactionAbortedError); ok {
@@ -5963,6 +5965,7 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 		ctx,
 		tc.repl,
 		false, /* requireClosedTS */
+		kvpb.AdmissionHeader{},
 	)
 	if _, err := batcheval.PushTxn(ctx, b, batcheval.CommandArgs{EvalCtx: ec, Stats: &ms, Header: h, Args: &pa}, &reply); err != nil {
 		t.Fatal(err)

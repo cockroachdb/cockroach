@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/rangekey"
+	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -472,7 +473,9 @@ type IterOptions struct {
 	// Range keys themselves are not affected by the masking, and will be
 	// emitted as normal.
 	RangeKeyMaskingBelow hlc.Timestamp
-
+	// ReadCategory is used to map to a user-understandable category string, for
+	// stats aggregation and metrics, and a Pebble-understandable QoS.
+	ReadCategory ReadCategory
 	// useL6Filters allows the caller to opt into reading filter blocks for
 	// L6 sstables. Only for use with Prefix = true. Helpful if a lot of prefix
 	// Seeks are expected in quick succession, that are also likely to not
@@ -570,7 +573,7 @@ type Reader interface {
 	// iteration.
 	MVCCIterate(
 		ctx context.Context, start, end roachpb.Key, iterKind MVCCIterKind, keyTypes IterKeyType,
-		f func(MVCCKeyValue, MVCCRangeKeyStack) error,
+		readCategory ReadCategory, f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 	) error
 	// NewMVCCIterator returns a new instance of an MVCCIterator over this engine.
 	// The caller must invoke Close() on it when done to free resources.
@@ -635,7 +638,7 @@ type Reader interface {
 	// is somewhere in the time interval between the creation of the Reader and
 	// the first call to PinEngineStateForIterators.
 	// REQUIRES: ConsistentIterators returns true.
-	PinEngineStateForIterators() error
+	PinEngineStateForIterators(readCategory ReadCategory) error
 }
 
 // EventuallyFileOnlyReader is a specialized Reader that supports a method to
@@ -1393,7 +1396,9 @@ type EncryptionRegistries struct {
 // key, it will return nil rather than an error. Errors are returned for problem
 // at the storage layer, problem decoding the key, problem unmarshalling the
 // intent, missing transaction on the intent, or multiple intents for this key.
-func GetIntent(ctx context.Context, reader Reader, key roachpb.Key) (*roachpb.Intent, error) {
+func GetIntent(
+	ctx context.Context, reader Reader, key roachpb.Key, category ReadCategory,
+) (*roachpb.Intent, error) {
 	// Probe the lock table at key using a lock-table iterator.
 	opts := LockTableIteratorOptions{
 		Prefix: true,
@@ -1469,6 +1474,7 @@ func Scan(
 ) ([]MVCCKeyValue, error) {
 	var kvs []MVCCKeyValue
 	err := reader.MVCCIterate(ctx, start, end, MVCCKeyAndIntentsIterKind, IterKeyTypePointsOnly,
+		UnknownReadCategory,
 		func(kv MVCCKeyValue, _ MVCCRangeKeyStack) error {
 			if max != 0 && int64(len(kvs)) >= max {
 				return iterutil.StopIteration()
@@ -1482,7 +1488,11 @@ func Scan(
 // ScanLocks scans locks (shared, exclusive, and intent) using only the lock
 // table keyspace. It does not scan over the MVCC keyspace.
 func ScanLocks(
-	ctx context.Context, reader Reader, start, end roachpb.Key, maxLocks int64, targetBytes int64,
+	ctx context.Context,
+	reader Reader,
+	start, end roachpb.Key,
+	maxLocks, targetBytes int64,
+	category ReadCategory,
 ) ([]roachpb.Lock, error) {
 	var locks []roachpb.Lock
 
@@ -1767,6 +1777,7 @@ func iterateOnReader(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
+	readCategory ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if reader.Closed() {
@@ -1777,9 +1788,10 @@ func iterateOnReader(
 	}
 
 	it, err := reader.NewMVCCIterator(ctx, iterKind, IterOptions{
-		KeyTypes:   keyTypes,
-		LowerBound: start,
-		UpperBound: end,
+		KeyTypes:     keyTypes,
+		LowerBound:   start,
+		UpperBound:   end,
+		ReadCategory: readCategory,
 	})
 	if err != nil {
 		return err
@@ -2042,7 +2054,8 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		// [1] Specifically replicated Exclusive locks. Interaction with
 		// unreplicated locks is governed by the ExclusiveLocksBlockNonLockingReads
 		// cluster setting.
-		MatchMinStr: lock.Intent,
+		MatchMinStr:  lock.Intent,
+		ReadCategory: BatchEvalReadCategory,
 	}
 	if upperBoundUnset {
 		opts.Prefix = true
@@ -2128,4 +2141,69 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		return false, err
 	}
 	return needIntentHistory, nil /* err */
+}
+
+// ReadCategory is used to export metrics and maps to a QoS understood by
+// Pebble. Categories are being introduced lazily, since more categories
+// result in more metrics.
+type ReadCategory int8
+
+const (
+	// UnknownReadCategory are requests that are not categorized. If the metric
+	// for this category becomes a high fraction of reads, we will need to
+	// investigate and break out more categories.
+	UnknownReadCategory ReadCategory = iota
+	// BatchEvalReadCategory includes evaluation of most BatchRequests. It
+	// excludes scans and reverse scans. If scans and reverse scans are mixed
+	// with other requests in a batch, we may currently assign the category
+	// based on the first request.
+	BatchEvalReadCategory
+	// ScanRegularBatchEvalReadCategory are BatchRequest (reverse) scans that
+	// have admission priority NormalPri or higher.
+	ScanRegularBatchEvalReadCategory
+	// ScanBackgroundBatchEvalReadCategory are BatchRequest (reverse) scans that
+	// have admission priority lower than NormalPri. This includes backfill
+	// scans for changefeeds (see changefeedccl/kvfeed/scanner.go, which sends
+	// ScanRequests).
+	ScanBackgroundBatchEvalReadCategory
+	// MVCCGCReadCategory are reads for MVCC GC.
+	MVCCGCReadCategory
+	// RangeSnapshotReadCategory are reads for sending range snapshots.
+	RangeSnapshotReadCategory
+	// RangefeedReadCategory are reads for rangefeeds, including catchup scans.
+	RangefeedReadCategory
+	// ReplicationReadCategory are reads related to Raft replication.
+	ReplicationReadCategory
+	// IntentResolutionReadCategory are reads for intent resolution.
+	IntentResolutionReadCategory
+	// BackupReadCategory are reads for backups.
+	BackupReadCategory
+)
+
+var readCategoryMap = map[ReadCategory]sstable.CategoryAndQoS{
+	UnknownReadCategory: {Category: "crdb-unknown", QoSLevel: sstable.LatencySensitiveQoSLevel},
+	// TODO(sumeer): consider splitting batch-eval into two categories, for
+	// latency sensitive and non latency sensitive.
+	BatchEvalReadCategory: {Category: "batch-eval", QoSLevel: sstable.LatencySensitiveQoSLevel},
+	ScanRegularBatchEvalReadCategory: {
+		Category: "scan-regular", QoSLevel: sstable.LatencySensitiveQoSLevel},
+	ScanBackgroundBatchEvalReadCategory: {Category: "scan-background", QoSLevel: sstable.NonLatencySensitiveQoSLevel},
+	MVCCGCReadCategory:                  {Category: "mvcc-gc", QoSLevel: sstable.NonLatencySensitiveQoSLevel},
+	RangeSnapshotReadCategory: {
+		Category: "range-snap", QoSLevel: sstable.NonLatencySensitiveQoSLevel},
+	RangefeedReadCategory: {
+		Category: "rangefeed", QoSLevel: sstable.LatencySensitiveQoSLevel},
+	ReplicationReadCategory: {Category: "replication", QoSLevel: sstable.LatencySensitiveQoSLevel},
+	IntentResolutionReadCategory: {
+		Category: "intent-resolution", QoSLevel: sstable.LatencySensitiveQoSLevel},
+	BackupReadCategory: {
+		Category: "backup", QoSLevel: sstable.NonLatencySensitiveQoSLevel},
+}
+
+func getCategoryAndQoS(c ReadCategory) sstable.CategoryAndQoS {
+	categoryAndQoS, ok := readCategoryMap[c]
+	if !ok {
+		panic(errors.AssertionFailedf("unknown category %d", c))
+	}
+	return categoryAndQoS
 }

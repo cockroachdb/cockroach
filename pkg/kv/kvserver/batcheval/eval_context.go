@@ -146,6 +146,9 @@ type EvalContext interface {
 	// closed timestamp before calling this method.
 	GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp
 
+	// AdmissionHeader returns the AdmissionHeader specified for the batch.
+	AdmissionHeader() kvpb.AdmissionHeader
+
 	// Release returns the memory allocated by the EvalContext implementation to a
 	// sync.Pool.
 	Release()
@@ -317,4 +320,9 @@ func (m *mockEvalCtxImpl) GetEngineCapacity() (roachpb.StoreCapacity, error) {
 func (m *mockEvalCtxImpl) GetApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 	return m.ApproxDiskBytes, nil
 }
+
+func (m *mockEvalCtxImpl) AdmissionHeader() kvpb.AdmissionHeader {
+	return kvpb.AdmissionHeader{}
+}
+
 func (m *mockEvalCtxImpl) Release() {}
