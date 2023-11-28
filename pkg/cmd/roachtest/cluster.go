@@ -2725,6 +2725,10 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 func (c *clusterImpl) GetPreemptedVMs(
 	ctx context.Context, l *logger.Logger,
 ) ([]vm.PreemptedVM, error) {
+	if c.IsLocal() || !c.spec.UseSpotVMs {
+		return nil, nil
+	}
+
 	pattern := "^" + regexp.QuoteMeta(c.name) + "$" // exact match of the cluster name
 	cloudClusters, err := roachprod.List(l, false, pattern, vm.ListOptions{})
 	if err != nil {
