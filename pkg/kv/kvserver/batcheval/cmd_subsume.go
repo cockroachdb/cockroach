@@ -104,7 +104,7 @@ func Subsume(
 	// regardless of what timestamp it is written at.
 	descKey := keys.RangeDescriptorKey(desc.StartKey)
 	intentRes, err := storage.MVCCGet(ctx, readWriter, descKey, hlc.MaxTimestamp,
-		storage.MVCCGetOptions{Inconsistent: true})
+		storage.MVCCGetOptions{Inconsistent: true, ReadCategory: storage.BatchEvalReadCategory})
 	if err != nil {
 		return result.Result{}, errors.Wrap(err, "fetching local range descriptor")
 	} else if intentRes.Intent == nil {

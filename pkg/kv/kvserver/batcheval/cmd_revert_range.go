@@ -91,6 +91,7 @@ func isEmptyKeyTimeRange(
 		UpperBound:   to,
 		MinTimestamp: since.Next(), // make exclusive
 		MaxTimestamp: until,
+		ReadCategory: storage.BatchEvalReadCategory,
 	})
 	if err != nil {
 		return false, err

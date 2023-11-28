@@ -615,7 +615,8 @@ func populatePrevValsInLogicalOpLog(
 		// Read the previous value from the prev Reader. Unlike the new value
 		// (see handleLogicalOpLogRaftMuLocked), this one may be missing.
 		prevValRes, err := storage.MVCCGet(
-			ctx, prevReader, key, ts, storage.MVCCGetOptions{Tombstones: true, Inconsistent: true},
+			ctx, prevReader, key, ts, storage.MVCCGetOptions{
+				Tombstones: true, Inconsistent: true, ReadCategory: storage.RangefeedReadCategory},
 		)
 		if err != nil {
 			return errors.Wrapf(err, "consuming %T for key %v @ ts %v", op, key, ts)
@@ -711,7 +712,8 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		// Read the value directly from the Reader. This is performed in the
 		// same raftMu critical section that the logical op's corresponding
 		// WriteBatch is applied, so the value should exist.
-		valRes, vh, err := storage.MVCCGetWithValueHeader(ctx, reader, key, ts, storage.MVCCGetOptions{Tombstones: true})
+		valRes, vh, err := storage.MVCCGetWithValueHeader(ctx, reader, key, ts,
+			storage.MVCCGetOptions{Tombstones: true, ReadCategory: storage.RangefeedReadCategory})
 		if valRes.Value == nil && err == nil {
 			err = errors.New("value missing in reader")
 		}

@@ -161,16 +161,17 @@ func (p *pebbleBatch) MVCCIterate(
 	start, end roachpb.Key,
 	iterKind MVCCIterKind,
 	keyTypes IterKeyType,
+	readCategory ReadCategory,
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
 		// Doing defer r.Free() does not inline.
-		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, f)
+		err := iterateOnReader(ctx, r, start, end, iterKind, keyTypes, readCategory, f)
 		r.Free()
 		return err
 	}
-	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, f)
+	return iterateOnReader(ctx, p, start, end, iterKind, keyTypes, readCategory, f)
 }
 
 // NewMVCCIterator implements the Batch interface.
@@ -289,14 +290,15 @@ func (p *pebbleBatch) ConsistentIterators() bool {
 }
 
 // PinEngineStateForIterators implements the Batch interface.
-func (p *pebbleBatch) PinEngineStateForIterators() error {
+func (p *pebbleBatch) PinEngineStateForIterators(readCategory ReadCategory) error {
 	var err error
 	if p.iter == nil {
 		var iter *pebble.Iterator
+		o := &pebble.IterOptions{CategoryAndQoS: getCategoryAndQoS(readCategory)}
 		if p.batch.Indexed() {
-			iter, err = p.batch.NewIter(nil)
+			iter, err = p.batch.NewIter(o)
 		} else {
-			iter, err = p.db.NewIter(nil)
+			iter, err = p.db.NewIter(o)
 		}
 		if err != nil {
 			return err

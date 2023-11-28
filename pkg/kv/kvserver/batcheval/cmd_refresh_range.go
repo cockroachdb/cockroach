@@ -88,6 +88,7 @@ func refreshRange(
 		StartTime:    refreshFrom, // exclusive
 		EndTime:      refreshTo,   // inclusive
 		IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
+		ReadCategory: storage.BatchEvalReadCategory,
 	})
 	if err != nil {
 		return err

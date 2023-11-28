@@ -209,44 +209,48 @@ func TestMVCCHistories(t *testing.T) {
 			var hasData bool
 
 			for _, span := range spans {
-				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypeRangesOnly, func(_ storage.MVCCKeyValue, rangeKeys storage.MVCCRangeKeyStack) error {
-					hasData = true
-					buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
-					for i, version := range rangeKeys.Versions {
-						val, err := storage.DecodeMVCCValue(version.Value)
-						require.NoError(t, err)
-						if i > 0 {
-							buf.Printf(" ")
+				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypeRangesOnly,
+					storage.UnknownReadCategory,
+					func(_ storage.MVCCKeyValue, rangeKeys storage.MVCCRangeKeyStack) error {
+						hasData = true
+						buf.Printf("rangekey: %s/[", rangeKeys.Bounds)
+						for i, version := range rangeKeys.Versions {
+							val, err := storage.DecodeMVCCValue(version.Value)
+							require.NoError(t, err)
+							if i > 0 {
+								buf.Printf(" ")
+							}
+							buf.Printf("%s=%s", version.Timestamp, val)
 						}
-						buf.Printf("%s=%s", version.Timestamp, val)
-					}
-					buf.Printf("]\n")
-					return nil
-				})
+						buf.Printf("]\n")
+						return nil
+					})
 				if err != nil {
 					return err
 				}
 
-				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly, func(r storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
-					hasData = true
-					if r.Key.Timestamp.IsEmpty() {
-						// Meta is at timestamp zero.
-						meta := enginepb.MVCCMetadata{}
-						if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
-							buf.Printf("meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
+				err = engine.MVCCIterate(context.Background(), span.Key, span.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsOnly,
+					storage.UnknownReadCategory,
+					func(r storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {
+						hasData = true
+						if r.Key.Timestamp.IsEmpty() {
+							// Meta is at timestamp zero.
+							meta := enginepb.MVCCMetadata{}
+							if err := protoutil.Unmarshal(r.Value, &meta); err != nil {
+								buf.Printf("meta: %v -> error decoding proto from %v: %v\n", r.Key, r.Value, err)
+							} else {
+								buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
+							}
 						} else {
-							buf.Printf("meta: %v -> %+v\n", r.Key, &meta)
+							val, err := storage.DecodeMVCCValue(r.Value)
+							if err != nil {
+								buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
+							} else {
+								buf.Printf("data: %v -> %s\n", r.Key, val)
+							}
 						}
-					} else {
-						val, err := storage.DecodeMVCCValue(r.Value)
-						if err != nil {
-							buf.Printf("data: %v -> error decoding value %v: %v\n", r.Key, r.Value, err)
-						} else {
-							buf.Printf("data: %v -> %s\n", r.Key, val)
-						}
-					}
-					return nil
-				})
+						return nil
+					})
 			}
 
 			if !hasData {
