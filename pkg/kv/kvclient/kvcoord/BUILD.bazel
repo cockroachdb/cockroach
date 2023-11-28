@@ -143,6 +143,7 @@ go_test(
         "txn_correctness_test.go",
         "txn_interceptor_committer_test.go",
         "txn_interceptor_heartbeater_test.go",
+        "txn_interceptor_metric_recorder_test.go",
         "txn_interceptor_pipeliner_client_test.go",
         "txn_interceptor_pipeliner_test.go",
         "txn_interceptor_seq_num_allocator_test.go",

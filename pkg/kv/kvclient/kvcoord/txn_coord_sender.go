@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -258,9 +259,9 @@ func newRootTxnCoordSender(
 		mu:      &tcs.mu.Mutex,
 	}
 	tcs.interceptorAlloc.txnMetricRecorder = txnMetricRecorder{
-		metrics: &tcs.metrics,
-		clock:   tcs.clock,
-		txn:     &tcs.mu.txn,
+		metrics:    &tcs.metrics,
+		timeSource: timeutil.DefaultTimeSource{},
+		txn:        &tcs.mu.txn,
 	}
 	tcs.initCommonInterceptors(tcf, txn, kv.RootTxn)
 

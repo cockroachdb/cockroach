@@ -2606,6 +2606,13 @@ func TestTenantLogicCCL_crdb_internal_tenant(
 	runCCLLogicTest(t, "crdb_internal_tenant")
 }
 
+func TestTenantLogicCCL_fips_ready(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "fips_ready")
+}
+
 func TestTenantLogicCCL_new_schema_changer(
 	t *testing.T,
 ) {

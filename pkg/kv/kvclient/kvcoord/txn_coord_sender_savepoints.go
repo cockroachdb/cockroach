@@ -43,6 +43,9 @@ type savepoint struct {
 	seqNum enginepb.TxnSeq
 
 	// txnSpanRefresher fields.
+	// TODO(mira): after we remove
+	// kv.transaction.keep_refresh_spans_on_savepoint_rollback.enabled, we won't
+	// need these two fields anymore.
 	refreshSpans   []roachpb.Span
 	refreshInvalid bool
 }
