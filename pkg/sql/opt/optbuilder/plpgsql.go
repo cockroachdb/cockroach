@@ -490,6 +490,11 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				stmtScope.makeOrderingChoice(),
 			)
 
+			// Handle a single record-type variable (see maybeWrapInTuple for detail).
+			if b.targetIsRecordVar(t.Target) {
+				stmtScope = b.wrapInTuple(stmtScope, t.Target)
+			}
+
 			// Step 2: build the INTO statement into a continuation routine that calls
 			// the previously built continuation.
 			//
@@ -1110,17 +1115,25 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 	}
 	// For a FETCH statement, we have to pass the expected result types.
 	var typs []*types.T
-	var elems []opt.ScalarExpr
 	if !fetch.IsMove {
-		typs = make([]*types.T, len(fetch.Target))
-		elems = make([]opt.ScalarExpr, len(fetch.Target))
-		for i := range fetch.Target {
-			typ := b.resolveVariableForAssign(fetch.Target[i])
-			typs[i] = typ
-			elems[i] = b.ob.factory.ConstructConstVal(tree.DNull, typ)
+		if b.targetIsRecordVar(fetch.Target) {
+			// If the target is a single record-type variable, the columns of the
+			// FETCH are assigned as its *elements*, rather than directly to the
+			// variable.
+			typs = b.resolveVariableForAssign(fetch.Target[0]).TupleContents()
+		} else {
+			typs = make([]*types.T, len(fetch.Target))
+			for i := range fetch.Target {
+				typ := b.resolveVariableForAssign(fetch.Target[i])
+				typs[i] = typ
+			}
 		}
 	}
 	returnType := types.MakeTuple(typs)
+	elems := make(memo.ScalarListExpr, len(typs))
+	for i := range elems {
+		elems[i] = b.ob.factory.ConstructConstVal(tree.DNull, typs[i])
+	}
 
 	// The arguments are:
 	//   1. The name of the cursor (resolved at runtime).
@@ -1146,7 +1159,34 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 	fetchScope := s.push()
 	b.ob.synthesizeColumn(fetchScope, fetchColName, returnType, nil /* expr */, fetchCall)
 	b.ob.constructProjectForScope(s, fetchScope)
+	if !fetch.IsMove && b.targetIsRecordVar(fetch.Target) {
+		// Handle a single record-type variable (see maybeWrapInTuple for detail).
+		fetchScope = b.wrapInTuple(fetchScope, fetch.Target)
+	}
 	return fetchScope
+}
+
+// targetIsSingleCompositeVar returns true if the given INTO target is a single
+// RECORD-type variable.
+func (b *plpgsqlBuilder) targetIsRecordVar(target []ast.Variable) bool {
+	return len(target) == 1 && b.resolveVariableForAssign(target[0]).Family() == types.TupleFamily
+}
+
+// maybeWrapInTuple handles the special case when a single RECORD-type variable
+// is the target of an INTO clause or FETCH statement. In this case, the columns
+// from the SQL statement (or FETCH) should be wrapped into a tuple, which is
+// assigned to the RECORD-type variable.
+func (b *plpgsqlBuilder) wrapInTuple(s *scope, target []ast.Variable) *scope {
+	typ := b.resolveVariableForAssign(target[0])
+	recordScope := s.push()
+	elems := make(memo.ScalarListExpr, len(s.cols))
+	for j := range elems {
+		elems[j] = b.ob.factory.ConstructVariable(s.cols[j].id)
+	}
+	tuple := b.ob.factory.ConstructTuple(elems, typ)
+	col := b.ob.synthesizeColumn(recordScope, scopeColName(""), typ, nil /* expr */, tuple)
+	recordScope.expr = b.ob.constructProject(s.expr, []scopeColumn{*col})
+	return recordScope
 }
 
 // makeContinuation allocates a new continuation routine with an uninitialized
