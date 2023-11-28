@@ -238,6 +238,8 @@ type DefaultTestTenantOptions struct {
 	// If test tenant is disabled, issue and label to link in log message.
 	issueNum int
 	label    string
+
+	reason string
 }
 
 type testBehavior int16
@@ -291,7 +293,11 @@ var (
 	// TODOTestTenantDisabled should not be used anymore. Use the
 	// other values instead.
 	// TODO(#76378): Review existing tests and use the proper value instead.
-	TODOTestTenantDisabled = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
+	TODOTestTenantDisabled = DefaultTestTenantOptions{
+		testBehavior:           ttDisabled,
+		allowAdditionalTenants: true,
+		reason:                 "TODOTestTenantDisabled",
+	}
 
 	// TestRequiresExplicitSQLConnection is used when the test is unable to pass
 	// the cluster as an option in the connection URL. The test could still
@@ -309,6 +315,7 @@ var (
 		testBehavior:             ttDisabled,
 		allowAdditionalTenants:   true,
 		noWarnImplicitInterfaces: true,
+		reason:                   "TestControlsTenantsExplicitly",
 	}
 
 	// TestIsSpecificToStorageLayerAndNeedsASystemTenant is used when
@@ -319,6 +326,7 @@ var (
 		testBehavior:             ttDisabled,
 		allowAdditionalTenants:   true,
 		noWarnImplicitInterfaces: true,
+		reason:                   "TestIsSpecificToStorageLayerAndNeedsASystemTenant",
 	}
 
 	// TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs is used when
@@ -374,8 +382,8 @@ func (do DefaultTestTenantOptions) WarnImplicitInterfaces() bool {
 	return !do.noWarnImplicitInterfaces
 }
 
-func (do DefaultTestTenantOptions) IssueRef() (int, string) {
-	return do.issueNum, do.label
+func (do DefaultTestTenantOptions) IssueRef() (int, string, string) {
+	return do.issueNum, do.label, do.reason
 }
 
 // TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet can be used
@@ -403,6 +411,9 @@ func TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(
 func TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(
 	issueNumber int,
 ) DefaultTestTenantOptions {
+	if issueNumber == 0 {
+		panic("no issue number in TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet")
+	}
 	return DefaultTestTenantOptions{
 		testBehavior:           ttDisabled,
 		allowAdditionalTenants: true,
