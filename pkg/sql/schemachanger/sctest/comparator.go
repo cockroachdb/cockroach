@@ -45,6 +45,42 @@ type StmtLineReader interface {
 	NextLine() string
 }
 
+type Line struct {
+	// original is the original line to be fed into the testing framework and
+	// cross examined across LSC and DSC clusters.
+	original string
+
+	// legacy is a copy of original, possibly with modification, for execution in
+	// the LSC cluster.
+	legacy string
+
+	// declarative is a copy of original, possibly with modification, for
+	// execution in the DSC cluster.
+	declarative string
+
+	// hasSyntaxError is True if original has syntax error.
+	hasSyntaxError bool
+}
+
+func NewLine(line string) Line {
+	parsedLine, err := parser.Parse(line)
+	syntaxErr := true
+	if err == nil {
+		line = parsedLine.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
+		syntaxErr = false
+	}
+	return Line{
+		original:       line,
+		legacy:         line,
+		declarative:    line,
+		hasSyntaxError: syntaxErr,
+	}
+}
+
+func (l *Line) isModified() bool {
+	return l.original != l.legacy || l.original != l.declarative
+}
+
 // CompareLegacyAndDeclarative is the core logic for performing comparator
 // testing between legacy and declarative schema changer.
 // It reads sql statements (mostly DDLs), one by one, from `ss` and execute them
@@ -69,41 +105,49 @@ func CompareLegacyAndDeclarative(t *testing.T, ss StmtLineReader) {
 	_, err = declarativeConn.ExecContext(ctx, "SET use_declarative_schema_changer = on;")
 	require.NoError(t, err)
 
-	// Track executed statements so far for debugging/repro purposes.
-	var linesExecutedSoFar []string
-
 	for ss.HasNextLine() {
-		line := ss.NextLine()
-		declarativeLine := line
-		syntaxError := hasSyntaxError(line)
+		line := NewLine(ss.NextLine())
 
 		// Pre-execution: modify `line` so that executing it produces the same
 		// descriptor state. This step is primarily for accounting for the known
 		// behavior difference between the two schema changers.
-		line, declarativeLine = preExecutionProcessing(ctx, t, line, legacyConn, declarativeConn)
+		line = preExecutionProcessing(ctx, t, line, legacyConn, declarativeConn)
 
 		// Execution: `line` must be executed in both clusters with the same error
 		// code.
-		_, errLegacy := legacyConn.ExecContext(ctx, line)
-		if pgcode.MakeCode(string(getPQErrCode(errLegacy))) == pgcode.FeatureNotSupported &&
-			(!containsCommit(line) || line != declarativeLine) {
+		// If a line results in feature-not-supported error in LSC, skip it unless
+		// line contains COMMIT, in which case we also need to execute the line in
+		// DSC cluster to properly close the transaction so that their connection
+		// states are in sync.
+		_, errLegacy := legacyConn.ExecContext(ctx, line.legacy)
+		if isFeatureNotSupported(errLegacy) && !containsCommit(line.original) {
 			continue
 		}
-		_, errDeclarative := declarativeConn.ExecContext(ctx, declarativeLine)
+		_, errDeclarative := declarativeConn.ExecContext(ctx, line.declarative)
 		requireNoErrOrSameErrCode(t, line, errLegacy, errDeclarative)
-		linesExecutedSoFar = append(linesExecutedSoFar, line)
-		t.Logf("Executing %q", line)
+
+		// Log executed lines for debugging/repro purposes.
+		if !line.isModified() {
+			t.Logf("Executing %q", line.original)
+		} else {
+			t.Logf("Executing %q with modifications: %q for legacy; %q for declarative",
+				line.original, line.legacy, line.declarative)
+		}
 
 		// Post-execution: Check metadata level identity between two clusters. Only
 		// run when not in a transaction (because legacy schema changer will be used
 		// in both clusters) and current database is not dropped (because the check
 		// fetches descriptor within current database).
-		if !isInATransaction(ctx, t, legacyConn) && !syntaxError && currentDatabaseExist(ctx, legacyConn) {
-			if containsStmtOfType(t, line, tree.TypeDDL) {
-				metaDataIdentityCheck(ctx, t, legacyConn, declarativeConn, linesExecutedSoFar)
+		if !isInATransaction(ctx, t, legacyConn) && !line.hasSyntaxError && currentDatabaseExist(ctx, legacyConn) {
+			if containsStmtOfType(t, line.legacy, tree.TypeDDL) {
+				metaDataIdentityCheck(ctx, t, legacyConn, declarativeConn, line.original)
 			}
 		}
 	}
+}
+
+func isFeatureNotSupported(err error) bool {
+	return pgcode.MakeCode(string(getPQErrCode(err))) == pgcode.FeatureNotSupported
 }
 
 func containsCommit(line string) bool {
@@ -127,11 +171,6 @@ func currentDatabaseExist(ctx context.Context, conn *gosql.Conn) bool {
 	return pgcode.MakeCode(string(getPQErrCode(err))) != pgcode.UndefinedDatabase
 }
 
-func hasSyntaxError(line string) bool {
-	_, err := parser.Parse(line)
-	return err != nil
-}
-
 // isInATransaction returns true if connection `db` is currently in a transaction.
 func isInATransaction(ctx context.Context, t *testing.T, conn *gosql.Conn) bool {
 	rows, err := conn.QueryContext(ctx, "SHOW transaction_status;")
@@ -150,42 +189,34 @@ func isInATransaction(ctx context.Context, t *testing.T, conn *gosql.Conn) bool 
 // and perform some kind of modification to it.
 // The SQLRunner is there in case the modification requires being able to access
 // certain info from the cluster with sql.
-type sqlLineModifier func(context.Context, *testing.T, statements.Statements, *gosql.Conn) (statements.Statements, bool)
+type sqlLineModifier func(context.Context, *testing.T, statements.Statements, *gosql.Conn) statements.Statements
 
 // preExecutionProcessing is where we potentially modify input `line` so that
 // executing the returned line, one for LSC and one for DSC, results in the same
 // descriptor state in both clusters.
 func preExecutionProcessing(
-	ctx context.Context,
-	t *testing.T,
-	line string,
-	legacyConn *gosql.Conn,
-	declarativeConn *gosql.Conn,
-) (legacyLine string, declarativeLine string) {
-	if hasSyntaxError(line) {
-		return line, line
+	ctx context.Context, t *testing.T, line Line, legacyConn *gosql.Conn, declarativeConn *gosql.Conn,
+) (potentiallyModifiedLine Line) {
+	if line.hasSyntaxError {
+		return line
 	}
 
-	parsedLineForLegacy, err := parser.Parse(line)
-	require.NoError(t, err)
-	parsedLineForDeclarative, _ := parser.Parse(line)
+	parsedLineForLegacy, _ := parser.Parse(line.legacy)
+	parsedLineForDeclarative, _ := parser.Parse(line.declarative)
 
-	// General, framework level modifications: They are applied regardless.
-	var modify bool
+	// General, framework level modifications: They are applied to both `line.legacy` and `line.declarative`.
 	for _, lm := range []sqlLineModifier{
 		modifySetDeclarativeSchemaChangerMode,
 		modifyCreateTempTable,
 	} {
-		var m bool
-		parsedLineForLegacy, m = lm(ctx, t, parsedLineForLegacy, legacyConn)
-		parsedLineForDeclarative, _ = lm(ctx, t, parsedLineForDeclarative, legacyConn)
-		modify = modify || m
+		parsedLineForLegacy = lm(ctx, t, parsedLineForLegacy, legacyConn)
+		parsedLineForDeclarative = lm(ctx, t, parsedLineForDeclarative, legacyConn)
 	}
 
-	// If `line` is supported in DSC, apply necessary modifications to ensure LSC
+	// If `line.declarative` is supported in DSC, apply necessary modifications to ensure LSC
 	// and DSC converge after execution to account for known behavioral
 	// differences between the two schema changers.
-	declarativeLine = parsedLineForDeclarative.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
+	declarativeLine := parsedLineForDeclarative.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
 	if willLineBeExecutedInDSC(ctx, t, declarativeLine, declarativeConn) {
 		legacyLineModifiers := []sqlLineModifier{
 			modifyExprsReferencingSequencesWithTrue,
@@ -196,22 +227,23 @@ func preExecutionProcessing(
 			modifyExprsReferencingSequencesWithTrue,
 		}
 		for _, lm := range legacyLineModifiers {
-			var m bool
-			parsedLineForLegacy, m = lm(ctx, t, parsedLineForLegacy, legacyConn)
-			modify = modify || m
+			parsedLineForLegacy = lm(ctx, t, parsedLineForLegacy, legacyConn)
 		}
 		for _, lm := range declarativeLineModifiers {
-			parsedLineForDeclarative, _ = lm(ctx, t, parsedLineForDeclarative, legacyConn)
+			parsedLineForDeclarative = lm(ctx, t, parsedLineForDeclarative, legacyConn)
 		}
 	}
 
-	if modify {
-		t.Logf("Comparator testing framework modifies line %q to %q", line, parsedLineForLegacy.String())
+	res := Line{
+		original:    line.original,
+		legacy:      parsedLineForLegacy.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes),
+		declarative: parsedLineForDeclarative.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes),
 	}
-
-	legacyLine = parsedLineForLegacy.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
-	declarativeLine = parsedLineForDeclarative.StringWithFlags(tree.FmtSimple | tree.FmtTagDollarQuotes)
-	return legacyLine, declarativeLine
+	if res.isModified() {
+		t.Logf("Comparator testing framework modifies line %q to %q (for legacy) and to %q (for declarative)",
+			line.original, res.legacy, res.declarative)
+	}
+	return res
 }
 
 func willLineBeExecutedInDSC(
@@ -221,7 +253,7 @@ func willLineBeExecutedInDSC(
 		return false
 	}
 	// `EXPLAIN(DDL,SHAPE) stmt` returns an error if statement is not supported in the DSC.
-	_, err := conn.ExecContext(ctx, fmt.Sprintf("EXPLAIN(DDL, SHAPE) %v", line))
+	_, err := conn.ExecContext(ctx, fmt.Sprintf("EXPLAIN(DDL, SHAPE) %s", line))
 	return err == nil
 }
 
@@ -233,11 +265,9 @@ func willLineBeExecutedInDSC(
 // would append a `ALTER TABLE .. DROP COLUMN IF EXISTS old-shard-col` to it, so
 // that legacy schema changer will also have that old shard column dropped.
 // See commentary on `needsToDropOldShardColFn` for criteria of such ALTER PK.
-//
-// The returned boolean indicates if such a modification happened.
 func modifyAlterPKWithSamePKColsButDifferentSharding(
 	ctx context.Context, t *testing.T, parsedStmts statements.Statements, conn *gosql.Conn,
-) (statements.Statements, bool) {
+) (newParsedStmts statements.Statements) {
 	// getPKShardingInfo retrieve all sharding related information from table
 	// `name`'s PK.
 	getPKShardingInfo := func(name *tree.UnresolvedObjectName) (isSharded bool, shardColName string, shardBuckets int, columnNames []string) {
@@ -328,8 +358,6 @@ WHERE id = '%v'::REGCLASS;`, name.String()))
 		return true, shardColName
 	}
 
-	var newParsedStmts statements.Statements
-	var modified bool
 	for _, parsedStmt := range parsedStmts {
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 		var tableName *tree.UnresolvedObjectName
@@ -358,19 +386,17 @@ WHERE id = '%v'::REGCLASS;`, name.String()))
 			parsedDropRowID, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %v DROP COLUMN IF EXISTS %v", tableName, shardColName))
 			require.NoError(t, err)
 			newParsedStmts = append(newParsedStmts, parsedCommit, parsedDropRowID)
-			modified = true
 		}
 	}
-	return newParsedStmts, modified
+	return newParsedStmts
 }
 
 // modifySetDeclarativeSchemaChangerMode skips stmts that attempt to alter
 // schema changer mode via session variable "use_declarative_schema_changer" or
 // cluster setting "sql.schema.force_declarative_statements".
 func modifySetDeclarativeSchemaChangerMode(
-	_ context.Context, t *testing.T, parsedStmts statements.Statements, _ *gosql.Conn,
-) (statements.Statements, bool) {
-	var newParsedStmts statements.Statements
+	_ context.Context, _ *testing.T, parsedStmts statements.Statements, _ *gosql.Conn,
+) (newParsedStmts statements.Statements) {
 	for _, parsedStmt := range parsedStmts {
 		switch ast := parsedStmt.AST.(type) {
 		case *tree.SetVar:
@@ -384,7 +410,7 @@ func modifySetDeclarativeSchemaChangerMode(
 		}
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 	}
-	return newParsedStmts, false
+	return newParsedStmts
 }
 
 // modifyAlterPKWithRowIDCol modifies any ALTER PK stmt in `line` if the
@@ -392,10 +418,9 @@ func modifySetDeclarativeSchemaChangerMode(
 // EXISTS rowid` to it, so that legacy schema changer will converge to
 // declarative schema changer (in which ALTER PK will already drop the `rowid`
 // column).
-// The returned boolean indicates if such a modification happened.
 func modifyAlterPKWithRowIDCol(
 	ctx context.Context, t *testing.T, parsedStmts statements.Statements, tdb *gosql.Conn,
-) (statements.Statements, bool) {
+) (newParsedStmts statements.Statements) {
 	// A helper to determine whether table `name`'s current primary key column is
 	// the implicitly created `rowid` column.
 	isCurrentPrimaryKeyColumnRowID := func(name *tree.UnresolvedObjectName) (bool, string) {
@@ -426,8 +451,6 @@ WHERE col -> 'id' = pkcolid;`, name.String(), name.String()))
 			colIsHidden == "true" && colType == "IntFamily", colName
 	}
 
-	var newParsedStmts statements.Statements
-	var modified bool
 	for _, parsedStmt := range parsedStmts {
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 		var isAlterPKWithRowID bool
@@ -454,19 +477,17 @@ WHERE col -> 'id' = pkcolid;`, name.String(), name.String()))
 			parsedDropRowID, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %v DROP COLUMN IF EXISTS %v", tableName, implicitRowidColname))
 			require.NoError(t, err)
 			newParsedStmts = append(newParsedStmts, parsedCommit, parsedDropRowID)
-			modified = true
 		}
 	}
 
-	return newParsedStmts, modified
+	return newParsedStmts
 }
 
 // modifyExprsReferencingSequencesWithTrue modifies any expressions in `line`
-// that references sequences to "True". The returned boolean indicates whether
-// such a modification happened.
+// that references sequences to "True".
 func modifyExprsReferencingSequencesWithTrue(
 	_ context.Context, t *testing.T, parsedStmts statements.Statements, _ *gosql.Conn,
-) (statements.Statements, bool) {
+) (newParsedStmts statements.Statements) {
 	// replaceSeqReferencesWithTrueInExpr detects if `expr` contains any references to
 	// sequences. If so, return a new expression "True"; otherwise, return `expr` as is.
 	replaceSeqReferencesWithTrueInExpr := func(expr tree.Expr) (newExpr tree.Expr) {
@@ -480,8 +501,6 @@ func modifyExprsReferencingSequencesWithTrue(
 		return newExpr
 	}
 
-	var newParsedStmts statements.Statements
-	var modified bool
 	for _, parsedStmt := range parsedStmts {
 		switch ast := parsedStmt.AST.(type) {
 		case *tree.CreateTable:
@@ -490,11 +509,9 @@ func modifyExprsReferencingSequencesWithTrue(
 				case *tree.ColumnTableDef:
 					for i, colCkExpr := range colDef.CheckExprs {
 						colDef.CheckExprs[i].Expr = replaceSeqReferencesWithTrueInExpr(colCkExpr.Expr)
-						modified = true
 					}
 				case *tree.CheckConstraintTableDef:
 					colDef.Expr = replaceSeqReferencesWithTrueInExpr(colDef.Expr)
-					modified = true
 				}
 			}
 		case *tree.AlterTable:
@@ -503,12 +520,10 @@ func modifyExprsReferencingSequencesWithTrue(
 				case *tree.AlterTableAddColumn:
 					for i, colCkExpr := range cmd.ColumnDef.CheckExprs {
 						cmd.ColumnDef.CheckExprs[i].Expr = replaceSeqReferencesWithTrueInExpr(colCkExpr.Expr)
-						modified = true
 					}
 				case *tree.AlterTableAddConstraint:
 					if ck, ok := cmd.ConstraintDef.(*tree.CheckConstraintTableDef); ok {
 						ck.Expr = replaceSeqReferencesWithTrueInExpr(ck.Expr)
-						modified = true
 					}
 				}
 			}
@@ -516,7 +531,7 @@ func modifyExprsReferencingSequencesWithTrue(
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 	}
 
-	return newParsedStmts, modified
+	return newParsedStmts
 }
 
 // modifyCreateTempTable skips `CREATE TEMP TABLE` statement because its parent schema name,
@@ -525,41 +540,41 @@ func modifyExprsReferencingSequencesWithTrue(
 // we decided to just skip those statements, for now.
 func modifyCreateTempTable(
 	_ context.Context, t *testing.T, parsedStmts statements.Statements, _ *gosql.Conn,
-) (newParsedStmts statements.Statements, modified bool) {
+) (newParsedStmts statements.Statements) {
 	for _, parsedStmt := range parsedStmts {
 		if ast, ok := parsedStmt.AST.(*tree.CreateTable); ok && ast.Persistence.IsTemporary() {
-			modified = true
 			continue
 		}
 		newParsedStmts = append(newParsedStmts, parsedStmt)
 	}
-	return newParsedStmts, modified
+	return newParsedStmts
 }
 
 // requireNoErrOrSameErrCode require errors from executing some statement
 // from legacy and declarative schema changer clusters to be both nil or
 // both PQ error with same code.
-func requireNoErrOrSameErrCode(t *testing.T, line string, errLegacy, errDeclarative error) {
+func requireNoErrOrSameErrCode(t *testing.T, line Line, errLegacy, errDeclarative error) {
 	if errLegacy == nil && errDeclarative == nil {
 		return
 	}
 
 	if errLegacy == nil {
 		t.Fatalf("statement %q failed with declarative schema changer "+
-			"(but succeeded with legacy schema changer): %v", line, errDeclarative)
+			"(but succeeded with legacy schema changer): %v", line.declarative, errDeclarative)
 	}
 	if errDeclarative == nil {
 		t.Fatalf("statement %q failed with legacy schema changer "+
-			"(but succeeded with declarative schema changer): %v", line, errLegacy)
+			"(but succeeded with declarative schema changer): %v", line.legacy, errLegacy)
 	}
 	errLegacyPQCode := getPQErrCode(errLegacy)
 	errDeclarativePQCode := getPQErrCode(errDeclarative)
 	if errLegacyPQCode == "" || errDeclarativePQCode == "" {
-		t.Fatalf("executing statement %q results in non-PQ error:  legacy=%v, declarative=%v ", line, errLegacy, errDeclarative)
+		t.Fatalf("executing statement %q results in non-PQ error:  legacy=%v, declarative=%v ",
+			line.original, errLegacy, errDeclarative)
 	}
 	if errLegacyPQCode != errDeclarativePQCode {
-		t.Fatalf("executing statement %q results in different error code: legacy=%v (%v), declarative=%v (%v)", line,
-			errLegacyPQCode.Name(), errLegacyPQCode, errDeclarativePQCode.Name(), errDeclarativePQCode)
+		t.Fatalf("executing statement %q results in different error code: legacy=%v (%v), declarative=%v (%v)",
+			line.original, errLegacyPQCode.Name(), errLegacyPQCode, errDeclarativePQCode.Name(), errDeclarativePQCode)
 	}
 }
 
@@ -585,7 +600,7 @@ func containsStmtOfType(t *testing.T, line string, typ tree.StatementType) bool 
 // metaDataIdentityCheck looks up all descriptors' create_statements in
 // `legacy` and `declarative` clusters and assert that they are identical.
 func metaDataIdentityCheck(
-	ctx context.Context, t *testing.T, legacy, declarative *gosql.Conn, linesExecutedSoFar []string,
+	ctx context.Context, t *testing.T, legacy, declarative *gosql.Conn, lastExecutedLine string,
 ) {
 	// A function to fetch all descriptors create statements, collectively known
 	// as the "descriptor state".
@@ -614,10 +629,8 @@ func metaDataIdentityCheck(
 	}
 	diff := cmp.Diff(createsInLegacy, createsInDeclarative)
 	if len(diff) > 0 {
-		t.Logf("Meta-data mismatch!\nHistory of executed statements:\n%v", strings.Join(linesExecutedSoFar, "\n"))
 		err := errors.Newf("descriptors mismatch with diff (- is legacy, + is declarative):\n%v", diff)
-		err = errors.Wrapf(err, "\ndescriptors diverge after executing %q; "+
-			"see logs for the history of executed statements", linesExecutedSoFar[len(linesExecutedSoFar)-1])
+		err = errors.Wrapf(err, "\ndescriptors diverge after executing %q", lastExecutedLine)
 		t.Fatalf(err.Error())
 	}
 }
