@@ -132,26 +132,20 @@ func createIntroducedSpanFrontier(
 // spanCoveringFilter holds metadata that filters which backups and required spans are used to
 // populate a restoreSpanEntry
 type spanCoveringFilter struct {
-	checkpointFrontier       *spanUtils.Frontier
-	highWaterMark            roachpb.Key
-	introducedSpanFrontier   *spanUtils.Frontier
-	useFrontierCheckpointing bool
-	targetSize               int64
+	checkpointFrontier     *spanUtils.Frontier
+	introducedSpanFrontier *spanUtils.Frontier
+	targetSize             int64
 }
 
 func makeSpanCoveringFilter(
 	checkpointFrontier *spanUtils.Frontier,
-	highWater roachpb.Key,
 	introducedSpanFrontier *spanUtils.Frontier,
 	targetSize int64,
-	useFrontierCheckpointing bool,
 ) (spanCoveringFilter, error) {
 	sh := spanCoveringFilter{
-		introducedSpanFrontier:   introducedSpanFrontier,
-		targetSize:               targetSize,
-		highWaterMark:            highWater,
-		useFrontierCheckpointing: useFrontierCheckpointing,
-		checkpointFrontier:       checkpointFrontier,
+		checkpointFrontier:     checkpointFrontier,
+		introducedSpanFrontier: introducedSpanFrontier,
+		targetSize:             targetSize,
 	}
 	return sh, nil
 }
@@ -159,16 +153,7 @@ func makeSpanCoveringFilter(
 // filterCompleted returns the subspans of the requiredSpan that still need to be
 // restored.
 func (f spanCoveringFilter) filterCompleted(requiredSpan roachpb.Span) roachpb.Spans {
-	if f.useFrontierCheckpointing {
-		return f.findToDoSpans(requiredSpan)
-	}
-	if requiredSpan.EndKey.Compare(f.highWaterMark) <= 0 {
-		return roachpb.Spans{}
-	}
-	if requiredSpan.Key.Compare(f.highWaterMark) < 0 {
-		requiredSpan.Key = f.highWaterMark
-	}
-	return []roachpb.Span{requiredSpan}
+	return f.findToDoSpans(requiredSpan)
 }
 
 // findToDoSpans returns the sub spans within the required span that have not completed.

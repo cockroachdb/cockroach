@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -290,11 +289,9 @@ func restore(
 		return emptyRowCount, err
 	}
 
-	on231 := clusterversion.V23_1.Version().LessEq(job.Payload().CreationClusterVersion)
 	progressTracker, err := makeProgressTracker(
 		dataToRestore.getSpans(),
 		job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint,
-		on231,
 		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV),
 		endTime)
 	if err != nil {
@@ -312,10 +309,8 @@ func restore(
 		defer progressTracker.mu.Unlock()
 		return makeSpanCoveringFilter(
 			progressTracker.mu.checkpointFrontier,
-			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
 			introducedSpanFrontier,
-			targetSize,
-			progressTracker.useFrontier)
+			targetSize)
 	}(); err != nil {
 		return roachpb.RowCount{}, err
 	}
@@ -380,14 +375,6 @@ func restore(
 		}
 		tasks = append(tasks, jobProgressLoop)
 	}
-	if !progressTracker.useFrontier {
-		// This goroutine feeds the deprecated high water mark variant of the
-		// generativeCheckpointLoop.
-		tasks = append(tasks, func(ctx context.Context) error {
-			return genSpan(ctx, progressTracker.inFlightSpanFeeder)
-		})
-	}
-
 	progCh := make(chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	if !details.ExperimentalOnline {
 		// Online restore tracks progress by pinging requestFinishCh instead
