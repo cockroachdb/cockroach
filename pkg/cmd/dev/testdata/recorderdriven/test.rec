@@ -79,7 +79,7 @@ bazel query 'kind(.*_test, pkg/spanconfig:all)'
 ----
 //pkg/spanconfig:spanconfig_test
 
-bazel test --config=race //pkg/spanconfig:spanconfig_test --test_env=GOTRACEBACK=all --runs_per_test=5 '--runs_per_test=.*disallowed_imports_test@1' --test_output errors --build_event_binary_file=/tmp/path
+bazel test --config=race --test_sharding_strategy=disabled //pkg/spanconfig:spanconfig_test --test_env=GOTRACEBACK=all --runs_per_test=5 '--runs_per_test=.*disallowed_imports_test@1' --test_output errors --build_event_binary_file=/tmp/path
 ----
 
 bazel query 'kind(.*_test, pkg/cmd/dev:all)'

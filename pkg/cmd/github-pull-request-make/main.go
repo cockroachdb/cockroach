@@ -345,9 +345,8 @@ func main() {
 				args = append(args, "--")
 				if target == "stressrace" {
 					args = append(args, "--config=race")
-				} else {
-					args = append(args, "--test_sharding_strategy=disabled")
 				}
+				args = append(args, "--test_sharding_strategy=disabled")
 				var filters []string
 				for test := range pkg.tests {
 					filters = append(filters, "^"+test+"$")
