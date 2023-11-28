@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -100,6 +99,14 @@ var (
 		"send each export request with a verbose tracing span",
 		util.ConstantWithMetamorphicTestBool("export_request_verbose_tracing", false),
 		settings.WithName("bulkio.backup.verbose_tracing.enabled"),
+	)
+
+	workerCount = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"bulkio.backup.max_workers",
+		"maximum number of workers to use for reading and uploading data in a backup",
+		5,
+		settings.PositiveInt,
 	)
 
 	testingDiscardBackupData = envutil.EnvOrDefaultBool("COCKROACH_BACKUP_TESTING_DISCARD_DATA", false)
@@ -715,9 +722,7 @@ func recordExportStats(sp *tracing.Span, resp *kvpb.ExportResponse, requestSentA
 func reserveWorkerMemory(
 	ctx context.Context, settings *cluster.Settings, memAcc *mon.BoundAccount,
 ) (int, func(), error) {
-	// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
-	//  *2). See #49798.
-	maxWorkerCount := int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 2
+	maxWorkerCount := workerCount.Get(&settings.SV)
 	// We assume that each worker needs at least enough memory to hold onto
 	// 1 buffer used by the external storage.
 	perWorkerMemory := cloud.WriteChunkSize.Get(&settings.SV)
