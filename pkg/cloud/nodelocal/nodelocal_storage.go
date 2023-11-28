@@ -226,5 +226,10 @@ func (*localFileStorage) Close() error {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_nodelocal,
-		parseLocalFileURI, makeLocalFileStorage, cloud.RedactedParams(), scheme)
+		cloud.RegisteredProvider{
+			ConstructFn:    makeLocalFileStorage,
+			ParseFn:        parseLocalFileURI,
+			RedactedParams: cloud.RedactedParams(),
+			Schemes:        []string{scheme},
+		})
 }

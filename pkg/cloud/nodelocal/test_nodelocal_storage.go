@@ -27,7 +27,7 @@ import (
 //
 // The returned func restores the prooduction implemenation.
 func ReplaceNodeLocalForTesting(root string) func() {
-	makeFn := func(ctx context.Context, conf cloud.ExternalStorageContext, es cloudpb.ExternalStorage) (cloud.ExternalStorage, error) {
+	makeFn := func(ctx context.Context, conf cloud.EarlyBootExternalStorageContext, es cloudpb.ExternalStorage) (cloud.ExternalStorage, error) {
 		if !buildutil.CrdbTestBuild {
 			panic("nodelocal test implementation in non-test build")
 		}
@@ -45,7 +45,7 @@ func ReplaceNodeLocalForTesting(root string) func() {
 		return lfs, nil
 	}
 
-	parserFn := func(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
+	parserFn := func(uri *url.URL) (cloudpb.ExternalStorage, error) {
 		if !buildutil.CrdbTestBuild {
 			panic("nodelocal test implementation in non-test build")
 		}
@@ -57,5 +57,9 @@ func ReplaceNodeLocalForTesting(root string) func() {
 			},
 		}, nil
 	}
-	return cloud.ReplaceProviderForTesting(cloudpb.ExternalStorageProvider_nodelocal, parserFn, makeFn, cloud.RedactedParams(), scheme)
+	return cloud.ReplaceProviderForTesting(cloudpb.ExternalStorageProvider_nodelocal, cloud.RegisteredProvider{
+		EarlyBootConstructFn: makeFn,
+		EarlyBootParseFn:     parserFn,
+		Schemes:              []string{scheme},
+	})
 }

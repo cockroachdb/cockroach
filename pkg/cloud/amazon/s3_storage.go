@@ -291,7 +291,7 @@ func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 	return s3URL.String()
 }
 
-func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.ExternalStorage, error) {
+func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	s3URL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	if s3URL.Host == "" {
@@ -388,7 +388,7 @@ func parseS3URL(_ cloud.ExternalStorageURIContext, uri *url.URL) (cloudpb.Extern
 
 // MakeS3Storage returns an instance of S3 ExternalStorage.
 func MakeS3Storage(
-	ctx context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
+	ctx context.Context, args cloud.EarlyBootExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.s3")
 	conf := dest.S3Config
@@ -957,5 +957,11 @@ func withExternalID(externalID string) func(*stscreds.AssumeRoleProvider) {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_s3,
-		parseS3URL, MakeS3Storage, cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam), scheme)
+		cloud.RegisteredProvider{
+			EarlyBootConstructFn: MakeS3Storage,
+			EarlyBootParseFn:     parseS3URL,
+
+			RedactedParams: cloud.RedactedParams(AWSSecretParam, AWSTempTokenParam),
+			Schemes:        []string{scheme},
+		})
 }

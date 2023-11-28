@@ -395,7 +395,7 @@ func TestS3DisallowCustomEndpoints(t *testing.T) {
 
 	dest := cloudpb.ExternalStorage{S3Config: &cloudpb.ExternalStorage_S3{Endpoint: "http://do.not.go.there/"}}
 	s3, err := MakeS3Storage(context.Background(),
-		cloud.ExternalStorageContext{
+		cloud.EarlyBootExternalStorageContext{
 			IOConf: base.ExternalIODirConfig{DisableHTTP: true},
 		},
 		dest,
@@ -421,7 +421,7 @@ func TestS3DisallowImplicitCredentials(t *testing.T) {
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	s3, err := MakeS3Storage(context.Background(),
-		cloud.ExternalStorageContext{
+		cloud.EarlyBootExternalStorageContext{
 			IOConf:   base.ExternalIODirConfig{DisableImplicitCredentials: true},
 			Settings: testSettings,
 		},
@@ -657,13 +657,11 @@ func TestReadFileAtReturnsSize(t *testing.T) {
 	gsURI := fmt.Sprintf("s3://%s/%s?AUTH=implicit", bucket, "read-file-at-returns-size")
 	conf, err := cloud.ExternalStorageConfFromURI(gsURI, user)
 	require.NoError(t, err)
-	args := cloud.ExternalStorageContext{
-		IOConf:          base.ExternalIODirConfig{},
-		Settings:        testSettings,
-		DB:              nil,
-		Options:         nil,
-		Limiters:        nil,
-		MetricsRecorder: cloud.NilMetrics,
+	args := cloud.EarlyBootExternalStorageContext{
+		IOConf:   base.ExternalIODirConfig{},
+		Settings: testSettings,
+		Options:  nil,
+		Limiters: nil,
 	}
 	s, err := MakeS3Storage(ctx, args, conf)
 	require.NoError(t, err)

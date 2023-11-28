@@ -122,9 +122,7 @@ func azureAuthMethod(uri *url.URL, consumeURI *cloud.ConsumeURL) (cloudpb.AzureA
 
 }
 
-func parseAzureURL(
-	_ cloud.ExternalStorageURIContext, uri *url.URL,
-) (cloudpb.ExternalStorage, error) {
+func parseAzureURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	azureURL := cloud.ConsumeURL{URL: uri}
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_azure
@@ -211,7 +209,7 @@ type azureStorage struct {
 var _ cloud.ExternalStorage = &azureStorage{}
 
 func makeAzureStorage(
-	_ context.Context, args cloud.ExternalStorageContext, dest cloudpb.ExternalStorage,
+	_ context.Context, args cloud.EarlyBootExternalStorageContext, dest cloudpb.ExternalStorage,
 ) (cloud.ExternalStorage, error) {
 	telemetry.Count("external-io.azure")
 	conf := dest.AzureConfig
@@ -423,5 +421,10 @@ var _ base.ModuleTestingKnobs = &TestingKnobs{}
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_azure,
-		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), scheme, deprecatedScheme, deprecatedExternalConnectionScheme)
+		cloud.RegisteredProvider{
+			EarlyBootConstructFn: makeAzureStorage,
+			EarlyBootParseFn:     parseAzureURL,
+			RedactedParams:       cloud.RedactedParams(AzureAccountKeyParam),
+			Schemes:              []string{scheme, deprecatedScheme, deprecatedExternalConnectionScheme},
+		})
 }
