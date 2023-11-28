@@ -33,12 +33,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
@@ -127,9 +125,7 @@ func ShouldStartDefaultTestTenant(
 	case baseArg.ExternalProcessMode():
 		shared = false
 	default:
-		// If no explicit process mode was selected, then randomly select one.
-		rng, _ := randutil.NewTestRand()
-		shared = rng.Intn(2) == 0
+		shared = false
 	}
 
 	// Explicit case for enabling the default test tenant, but with a
@@ -170,14 +166,9 @@ func ShouldStartDefaultTestTenant(
 	// Note: we ask the metamorphic framework for a "disable" value, instead
 	// of an "enable" value, because it probabilistically returns its default value
 	// more often than not and that is what we want.
-	enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
-	if enabled && t != nil {
-		t.Log(defaultTestTenantMessage(shared))
-	}
-	if enabled {
-		return base.InternalNonDefaultDecision(baseArg, true /* enable */, shared /* shared */)
-	}
-	return base.InternalNonDefaultDecision(baseArg, false /* enable */, false /* shared */)
+	//enabled := !util.ConstantWithMetamorphicTestBoolWithoutLogging("disable-test-tenant", false)
+	t.Log(defaultTestTenantMessage(shared))
+	return base.InternalNonDefaultDecision(baseArg, true /* enable */, shared /* shared */)
 }
 
 const (
