@@ -94,6 +94,8 @@ func ShouldStartDefaultTestTenant(
 	if baseArg.TestTenantAlwaysDisabled() {
 		if issueNum, label := baseArg.IssueRef(); issueNum != 0 {
 			t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
+		} else if t != nil {
+			t.Log("cluster virtualization disabled with no issue number")
 		}
 		return baseArg
 	}
@@ -102,12 +104,18 @@ func ShouldStartDefaultTestTenant(
 		// Until #83461 is resolved, we want to make sure that we don't use the
 		// multi-tenant setup so that the comparison against old single-tenant
 		// SHAs in the benchmarks is fair.
+		if t != nil {
+			t.Log("cluster virtualization disabled for benchmarks")
+		}
 		return base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461)
 	}
 
 	// If the test tenant is explicitly enabled and a process mode selected, then
 	// we are done.
 	if !baseArg.TestTenantNoDecisionMade() {
+		if t != nil {
+			t.Log("didn't start default test tenant due to test specifying explicit decision")
+		}
 		return baseArg
 	}
 
@@ -129,12 +137,17 @@ func ShouldStartDefaultTestTenant(
 	// Explicit case for enabling the default test tenant, but with a
 	// probabilistic selection made for running as a shared or external process.
 	if baseArg.TestTenantAlwaysEnabled() {
+		if t != nil {
+			t.Log("default test tenant is always enabled")
+		}
 		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
 	}
 
 	if decision, override := testTenantDecisionFromEnvironment(baseArg, shared); override {
 		if decision.TestTenantAlwaysEnabled() {
 			t.Log(defaultTestTenantMessage(decision.SharedProcessMode()) + "\n(override via COCKROACH_TEST_TENANT)")
+		} else if t != nil {
+			t.Log("default test tenant is disabled by environment")
 		}
 		return decision
 	}
@@ -147,6 +160,8 @@ func ShouldStartDefaultTestTenant(
 		if override.TestTenantAlwaysDisabled() {
 			if issueNum, label := override.IssueRef(); issueNum != 0 {
 				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
+			} else if t != nil {
+				t.Log("cluster virtualization disabled in global scope with no issue")
 			}
 		} else {
 			t.Log(defaultTestTenantMessage(shared) + "\n(override via TestingSetDefaultTenantSelectionOverride)")
