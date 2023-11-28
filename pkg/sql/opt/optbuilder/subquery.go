@@ -249,8 +249,9 @@ func (s *subquery) buildSubquery(desiredTypes []*types.T) {
 		numSubqueryCols := len(outScope.cols)
 		if !desireAnyType && len(desiredTypes) != numSubqueryCols {
 			if s.wrapInTuple && numSubqueryCols == 1 {
-				if tupleExpr, ok := outScope.cols[0].scalar.(*memo.TupleExpr); ok {
-					numSubqueryCols = len(tupleExpr.Elems)
+				colTyp := outScope.cols[0].typ
+				if colTyp.Family() == types.TupleFamily {
+					numSubqueryCols = len(colTyp.TupleContents())
 				}
 			}
 			if len(desiredTypes) != numSubqueryCols {
