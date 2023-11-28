@@ -98,11 +98,11 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 		Ctx:           ctx,
 		connCtx:       tc.ctx,
 		sqlTimestamp:  timeutil.Now(),
-		priority:      roachpb.NormalUserPriority,
 		mon:           txnStateMon,
 		txnAbortCount: metric.NewCounter(MetaTxnAbort),
 	}
 	ts.mu.txn = kv.NewTxn(ctx, tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */)
+	ts.mu.priority = roachpb.NormalUserPriority
 
 	state := stateOpen{
 		ImplicitTxn: fsm.FromBool(typ == implicitTxn),
