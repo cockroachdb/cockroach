@@ -517,6 +517,7 @@ func newClient(
 	if conf.endpoint != "" {
 		opts.Config.Endpoint = aws.String(conf.endpoint)
 		opts.Config.S3ForcePathStyle = aws.Bool(true)
+		opts.Config.S3DisableContentMD5Validation = aws.Bool(true)
 
 		if conf.region == "" {
 			conf.region = "default-region"
