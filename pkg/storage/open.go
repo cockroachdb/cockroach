@@ -184,7 +184,7 @@ func SecondaryCache(size int64) ConfigOption {
 }
 
 // RemoteStorageFactory enables use of remote storage (experimental).
-func RemoteStorageFactory(accessor *cloud.ExternalStorageAccessor) ConfigOption {
+func RemoteStorageFactory(accessor *cloud.EarlyBootExternalStorageAccessor) ConfigOption {
 	return func(cfg *engineConfig) error {
 		cfg.RemoteStorageFactory = accessor
 		return nil
