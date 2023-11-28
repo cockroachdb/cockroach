@@ -776,29 +776,33 @@ func addIndexMutationWithSpecificPrimaryKey(
 		return err
 	}
 
-	if err := setKeySuffixColumnIDsFromPrimary(table, toAdd, primary); err != nil {
+	if err := setKeySuffixAndStoredColumnIDsFromPrimary(table, toAdd, primary); err != nil {
 		return err
 	}
 	if tempIdx := catalog.FindCorrespondingTemporaryIndexByID(table, toAdd.ID); tempIdx != nil {
-		if err := setKeySuffixColumnIDsFromPrimary(table, tempIdx.IndexDesc(), primary); err != nil {
+		if err := setKeySuffixAndStoredColumnIDsFromPrimary(table, tempIdx.IndexDesc(), primary); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// setKeySuffixColumnIDsFromPrimary uses the columns in the given
-// primary index to construct this toAdd's KeySuffixColumnIDs list.
-func setKeySuffixColumnIDsFromPrimary(
+// setKeySuffixAndStoredColumnIDsFromPrimary uses the columns in the given
+// primary index to construct this toAdd's KeySuffixColumnIDs and
+// StoredColumnIDs list.
+func setKeySuffixAndStoredColumnIDsFromPrimary(
 	table *tabledesc.Mutable, toAdd *descpb.IndexDescriptor, primary *descpb.IndexDescriptor,
 ) error {
-	presentColIDs := catalog.MakeTableColSet(toAdd.KeyColumnIDs...)
-	presentColIDs.UnionWith(catalog.MakeTableColSet(toAdd.StoreColumnIDs...))
+	// First, find all key columns in the secondary index.
+	idxColIDs := catalog.MakeTableColSet(toAdd.KeyColumnIDs...)
+	// Second, determine the key suffix columns: add all primary key columns
+	// which have not already been in the key columns in the secondary index.
 	toAdd.KeySuffixColumnIDs = nil
 	invIdx := toAdd.Type == descpb.IndexDescriptor_INVERTED
 	for _, colID := range primary.KeyColumnIDs {
-		if !presentColIDs.Contains(colID) {
+		if !idxColIDs.Contains(colID) {
 			toAdd.KeySuffixColumnIDs = append(toAdd.KeySuffixColumnIDs, colID)
+			idxColIDs.Add(colID)
 		} else if invIdx && colID == toAdd.InvertedColumnID() {
 			// In an inverted index, the inverted column's value is not equal to the
 			// actual data in the row for that column. As a result, if the inverted
@@ -816,6 +820,18 @@ func setKeySuffixColumnIDsFromPrimary(
 				"primary key column %s cannot be present in an inverted index",
 				col.GetName(),
 			)
+		}
+	}
+	// Finally, add all the stored columns if it is not already a key or key suffix column.
+	toAddOldStoredColumnIDs := toAdd.StoreColumnIDs
+	toAddOldStoredColumnNames := toAdd.StoreColumnNames
+	toAdd.StoreColumnIDs = nil
+	toAdd.StoreColumnNames = nil
+	for i, colID := range toAddOldStoredColumnIDs {
+		if !idxColIDs.Contains(colID) {
+			toAdd.StoreColumnIDs = append(toAdd.StoreColumnIDs, colID)
+			toAdd.StoreColumnNames = append(toAdd.StoreColumnNames, toAddOldStoredColumnNames[i])
+			idxColIDs.Add(colID)
 		}
 	}
 	return nil
