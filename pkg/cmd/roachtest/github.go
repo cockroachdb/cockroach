@@ -102,10 +102,10 @@ var skipConditions = []postIssueCondition{
 		cond:   func(g *githubIssues, _ test.Test) bool { return !defaultOpts.CanPost() },
 		reason: "GitHub API token not set",
 	},
-	{
-		cond:   func(g *githubIssues, _ test.Test) bool { return !defaultOpts.IsReleaseBranch() },
-		reason: fmt.Sprintf("not a release branch: %q", defaultOpts.Branch),
-	},
+	//{
+	//	cond:   func(g *githubIssues, _ test.Test) bool { return !defaultOpts.IsReleaseBranch() },
+	//	reason: fmt.Sprintf("not a release branch: %q", defaultOpts.Branch),
+	//},
 	{
 		cond:   func(_ *githubIssues, t test.Test) bool { return t.Spec().(*registry.TestSpec).Run == nil },
 		reason: "TestSpec.Run is nil",
@@ -255,6 +255,7 @@ func (g *githubIssues) createPostRequest(
 			"consult the logs for details. WARNING: DO NOT COPY UNREDACTED ARTIFACTS TO THIS ISSUE."
 	}
 	var topLevelNotes []string
+	topLevelNotes = []string{"This issue is filed as a test, please ignore"}
 	if coverageBuild {
 		topLevelNotes = append(topLevelNotes,
 			"This is a special code-coverage build. If the same failure was hit in a non-coverage run, "+
