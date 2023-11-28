@@ -365,6 +365,8 @@ func (tc *TestCluster) Start(t testing.TB) {
 		errCh = make(chan error, nodes)
 	}
 
+	t.Log("considering starting a default test tenant in a cluster")
+
 	// Determine if we should probabilistically start a test tenant for the
 	// cluster. We key off of the DisableDefaultTestTenant flag of the first
 	// server in the cluster since they should all be set to the same value

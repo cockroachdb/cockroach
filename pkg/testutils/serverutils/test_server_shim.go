@@ -309,6 +309,8 @@ func InitTestServerFactory(impl TestServerFactory) {
 func StartServer(
 	t testing.TB, params base.TestServerArgs,
 ) (TestServerInterface, *gosql.DB, *kv.DB) {
+	t.Log("considering starting a default test tenant in a server")
+
 	if !params.DisableDefaultTestTenant {
 		// Determine if we should probabilistically start a test tenant
 		// for this server.
