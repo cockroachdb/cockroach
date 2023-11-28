@@ -1,4 +1,4 @@
-FROM ubuntu:focal
+FROM ubuntu:jammy
 ARG TARGETPLATFORM
 
 RUN apt-get update \
@@ -7,9 +7,10 @@ RUN apt-get update \
     autoconf \
     bison \
     ca-certificates \
-    clang-10 \
+    clang-15 \
     cmake \
     curl \
+    dh-autoreconf \
     flex \
     g++ \
     git \
@@ -22,67 +23,27 @@ RUN apt-get update \
     netbase \
     openjdk-8-jre \
     openssh-client \
+    patch \
     patchelf \
     python-is-python3 \
-    python3 \
-    python3.8-venv \
+    python3.11 \
+    python3.11-venv \
     unzip \
     zip \
- && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10 \
+ && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-15 100 \
+    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-15 \
  && apt-get clean
-
-# We need a newer version of cmake.
-#
-# NOTE: When upgrading cmake, bump the rebuild counters in
-# c-deps/*-rebuild to force recreating the makefiles. This prevents
-# strange build errors caused by those makefiles depending on the
-# installed version of cmake.
-RUN case ${TARGETPLATFORM} in \
-    "linux/amd64") ARCH=x86_64; SHASUM=97bf730372f9900b2dfb9206fccbcf92f5c7f3b502148b832e77451aa0f9e0e6 ;; \
-    "linux/arm64") ARCH=aarch64; SHASUM=77620f99e9d5f39cf4a49294c6a68c89a978ecef144894618974b9958efe3c2a ;; \
-  esac \
- && curl -fsSL "https://github.com/Kitware/CMake/releases/download/v3.20.3/cmake-3.20.3-linux-$ARCH.tar.gz" -o cmake.tar.gz \
- && echo "$SHASUM cmake.tar.gz" | sha256sum -c - \
- && tar --strip-components=1 -C /usr -xzf cmake.tar.gz \
- && rm cmake.tar.gz
-
-# git - Upgrade to a more modern version
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install dh-autoreconf libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev -y && \
-    apt-get clean && \
-    curl -fsSL https://github.com/git/git/archive/v2.29.2.zip -o "git-2.29.2.zip" && \
-    unzip "git-2.29.2.zip" && \
-    cd git-2.29.2 && \
-    make configure && \
-    ./configure && \
-    make && \
-    make install && \
-    cd .. && \
-    rm -rf git-2.29.2.zip git-2.29.2
 
 RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - \
  && echo 'deb https://packages.cloud.google.com/apt cloud-sdk main' | tee /etc/apt/sources.list.d/gcloud.list \
  && curl -fsLS https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor | apt-key add - \
- && echo "deb https://packages.microsoft.com/repos/azure-cli/ focal main" > /etc/apt/sources.list.d/azure-cli.list \
+ && echo "deb https://packages.microsoft.com/repos/azure-cli/ jammy main" > /etc/apt/sources.list.d/azure-cli.list \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     azure-cli \
     google-cloud-sdk \
     google-cloud-cli-gke-gcloud-auth-plugin \
     && apt-get clean
-
-# chrome is needed for UI tests. Unfortunately it is only distributed for x86_64
-# and not for ARM. Chrome shouldn't need to be installed when we migrate away
-# from Karma for UI testing.
-RUN case ${TARGETPLATFORM} in \
-    "linux/amd64") \
-      curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-      && echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google.list \
-      && apt-get update \
-      && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      google-chrome-stable ;; \
-    esac
 
 RUN apt-get purge -y \
     apt-transport-https \

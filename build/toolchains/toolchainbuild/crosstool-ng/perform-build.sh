@@ -26,7 +26,8 @@ apt-get update \
     make \
     patch \
     patchelf \
-    python \
+    python-is-python3 \
+    python3 \
     texinfo \
     xz-utils \
     unzip \
@@ -100,14 +101,6 @@ mkdir openssl \
  && tar --strip-components=1 -C openssl -xzf openssl.tar.gz \
  && cd openssl && ./Configure && make && patch -p0 <../bootstrap/crypto.h.patch \
  && cp -r include/openssl /x-tools/x86_64-unknown-linux-gnu/x86_64-unknown-linux-gnu/sysroot/usr/include && cd ..
-
-apt-get purge -y gcc g++ && apt-get autoremove -y
-
-apt-get update \
-  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    clang-10 \
-  && update-alternatives --install /usr/bin/clang clang /usr/bin/clang-10 100 \
-    --slave /usr/bin/clang++ clang++ /usr/bin/clang++-10
 
 # Bundle artifacts
 bundle() {

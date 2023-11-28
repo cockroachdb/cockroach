@@ -35,7 +35,7 @@ func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 		Args:    cobra.MinimumNArgs(0),
 		RunE:    runE,
 	}
-	builderCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory")
+	builderCmd.Flags().String(volumeFlag, "bzlhome2", "the Docker volume to use as the container home directory")
 	return builderCmd
 }
 

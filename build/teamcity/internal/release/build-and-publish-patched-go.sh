@@ -16,7 +16,7 @@ toplevel="$(dirname $(dirname $(dirname $(dirname $this_dir))))"
 mkdir -p "${toplevel}"/artifacts
 docker run --rm -i ${tty-} -v $this_dir/build-and-publish-patched-go:/bootstrap \
        -v "${toplevel}"/artifacts:/artifacts \
-       ubuntu:focal /bootstrap/impl.sh
+       ubuntu:jammy /bootstrap/impl.sh
 tc_end_block "Build Go toolchains"
 
 tc_start_block "Build FIPS Go toolchains (linux/amd64)"

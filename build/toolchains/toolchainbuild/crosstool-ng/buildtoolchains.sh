@@ -7,8 +7,7 @@ toplevel="$(dirname $(dirname $(dirname $(dirname $this_dir))))"
 
 mkdir -p "${toplevel}"/artifacts
 
-# note: the Docker image should match the base image of
-# `cockroachdb/builder` and `cockroachdb/bazel`.
+# note: the Docker image should match the base image of `cockroachdb/bazel`.
 docker run --rm -i ${tty-} -v $this_dir:/bootstrap \
        -v "${toplevel}"/artifacts:/artifacts \
-       ubuntu:focal-20210119 /bootstrap/perform-build.sh
+       ubuntu:jammy /bootstrap/perform-build.sh

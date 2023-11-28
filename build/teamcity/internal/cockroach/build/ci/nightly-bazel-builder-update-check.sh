@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -xeuo pipefail
 
-BASE_IMAGE="ubuntu:focal"
+BASE_IMAGE="ubuntu:jammy"
 BAZEL_IMAGE="cockroachdb/bazel:latest-do-not-use"
 
 docker pull $BASE_IMAGE && docker pull $BAZEL_IMAGE

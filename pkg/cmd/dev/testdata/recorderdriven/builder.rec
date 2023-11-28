@@ -13,15 +13,15 @@ cockroachdb/bazel:20220328-163955
 ----
 ----
 
-docker volume inspect bzlhome
+docker volume inspect bzlhome2
 ----
 [
     {
         "CreatedAt": "2022-01-21T18:57:42Z",
         "Driver": "local",
         "Labels": {},
-        "Mountpoint": "/var/lib/docker/volumes/bzlhome/_data",
-        "Name": "bzlhome",
+        "Mountpoint": "/var/lib/docker/volumes/bzlhome2/_data",
+        "Name": "bzlhome2",
         "Options": {},
         "Scope": "local"
     }
@@ -42,7 +42,7 @@ mkdir crdb-checkout/artifacts
 chmod crdb-checkout/artifacts 0777
 ----
 
-docker run --rm -it -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220328-163955
+docker run --rm -it -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome2:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220328-163955
 ----
 
 which docker
@@ -60,15 +60,15 @@ cockroachdb/bazel:20220328-163955
 ----
 ----
 
-docker volume inspect bzlhome
+docker volume inspect bzlhome2
 ----
 [
     {
         "CreatedAt": "2022-01-21T18:57:42Z",
         "Driver": "local",
         "Labels": {},
-        "Mountpoint": "/var/lib/docker/volumes/bzlhome/_data",
-        "Name": "bzlhome",
+        "Mountpoint": "/var/lib/docker/volumes/bzlhome2/_data",
+        "Name": "bzlhome2",
         "Options": {},
         "Scope": "local"
     }
@@ -89,6 +89,6 @@ mkdir crdb-checkout/artifacts
 chmod crdb-checkout/artifacts 0777
 ----
 
-docker run --rm -i -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220328-163955 echo hi
+docker run --rm -i -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome2:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220328-163955 echo hi
 ----
 
