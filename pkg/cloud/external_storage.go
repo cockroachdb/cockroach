@@ -118,6 +118,9 @@ type ExternalStorageFactory func(ctx context.Context, dest cloudpb.ExternalStora
 type ExternalStorageFromURIFactory func(ctx context.Context, uri string,
 	user username.SQLUsername, opts ...ExternalStorageOption) (ExternalStorage, error)
 
+// ExternalStorageFromURIFactory describes a factory function for ExternalStorage given a URI.
+type EarlyBootExternalStorageFromURIFactory func(ctx context.Context, uri string, opts ...ExternalStorageOption) (ExternalStorage, error)
+
 // SQLConnI encapsulates the interfaces which will be implemented by the network
 // backed SQLConn which is used to interact with the userfile tables.
 type SQLConnI interface {
@@ -157,17 +160,29 @@ type ExternalStorageURIContext struct {
 // ExternalStorageURIParser functions parses a URL into a structured
 // ExternalStorage configuration.
 type ExternalStorageURIParser func(ExternalStorageURIContext, *url.URL) (cloudpb.ExternalStorage, error)
+type EarlyBootExternalStorageURIParser func(*url.URL) (cloudpb.ExternalStorage, error)
 
 // ExternalStorageContext contains the dependencies passed to external storage
 // implementations during creation.
 type ExternalStorageContext struct {
-	IOConf            base.ExternalIODirConfig
-	Settings          *cluster.Settings
+	EarlyBootExternalStorageContext
+
 	BlobClientFactory blobs.BlobClientFactory
 	DB                isql.DB
-	Options           []ExternalStorageOption
-	Limiters          Limiters
 	MetricsRecorder   *Metrics
+}
+
+// ExternalStorageContext contains the dependencies passed to external storage
+// implementations during creation.
+type EarlyBootExternalStorageContext struct {
+	IOConf base.ExternalIODirConfig
+	// TODO(ssd): We provide settings to early-boot external
+	// storage, but I am rather uncertain it is a good idea. We
+	// may be using this provider before we've even read our
+	// cached settings.
+	Settings *cluster.Settings
+	Options  []ExternalStorageOption
+	Limiters Limiters
 }
 
 // ExternalStorageOptions holds dependencies and values that can be
@@ -182,6 +197,10 @@ type ExternalStorageOptions struct {
 // of a given external storage implementation.
 type ExternalStorageConstructor func(
 	context.Context, ExternalStorageContext, cloudpb.ExternalStorage,
+) (ExternalStorage, error)
+
+type EarlyBootExternalStorageConstructor func(
+	context.Context, EarlyBootExternalStorageContext, cloudpb.ExternalStorage,
 ) (ExternalStorage, error)
 
 // NewExternalStorageAccessor creates an uninitialized ExternalStorageAccessor.

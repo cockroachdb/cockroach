@@ -11,18 +11,28 @@
 package cloud_test
 
 import (
+	"context"
+	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSanitizeExternalStorageURI(t *testing.T) {
 	// Register a scheme to test scheme-specific redaction.
-	cloud.RegisterExternalStorageProvider(0, nil, nil,
-		cloud.RedactedParams("TEST_PARAM"),
-		"test-scheme",
-	)
+	cloud.RegisterExternalStorageProvider(0, cloud.RegisteredProvider{
+		ParseFn: func(cloud.ExternalStorageURIContext, *url.URL) (cloudpb.ExternalStorage, error) {
+			return cloudpb.ExternalStorage{}, errors.Newf("unimplemented")
+		},
+		ConstructFn: func(context.Context, cloud.ExternalStorageContext, cloudpb.ExternalStorage) (cloud.ExternalStorage, error) {
+			return nil, errors.Newf("unimplemented")
+		},
+		RedactedParams: cloud.RedactedParams("TEST_PARAM"),
+		Schemes:        []string{"test-scheme"},
+	})
 	testCases := []struct {
 		name             string
 		inputURI         string

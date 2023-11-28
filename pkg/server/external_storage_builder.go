@@ -67,7 +67,7 @@ func (e *externalStorageBuilder) init(
 	e.blobClientFactory = blobClientFactory
 	e.initCalled = true
 	e.db = db
-	e.limiters = cloud.MakeLimiters(ctx, &settings.SV)
+	e.limiters = cloud.MakeLimiters(&settings.SV)
 	e.recorder = recorder
 
 	// Register the metrics that track interactions with external storage
