@@ -56,6 +56,7 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
       alignedData[0][0], // startMillis
       alignedData[0][alignedData[0].length - 1], // endMillis
       samplingIntervalMillis,
+      timezone,
     );
 
     const stackedData = stack(alignedData, () => false);

@@ -333,7 +333,7 @@ export function calculateYAxisDomain(
 export function calculateXAxisDomain(
   startMillis: number,
   endMillis: number,
-  timezone = "UTC",
+  timezone = "Etc/UTC",
 ): AxisDomain {
   return ComputeTimeAxisDomain([startMillis, endMillis] as Extent, timezone);
 }
@@ -342,7 +342,7 @@ export function calculateXAxisDomainBarChart(
   startMillis: number,
   endMillis: number,
   samplingIntervalMillis: number,
-  timezone = "UTC",
+  timezone = "Etc/UTC",
 ): AxisDomain {
   // For bar charts, we want to render past endMillis to fully render the
   // last bar. We should extend the x axis to the next sampling interval.
