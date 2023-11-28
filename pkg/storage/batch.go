@@ -225,10 +225,10 @@ func (r *BatchReader) rangeKeys() (rangekey.Span, error) {
 }
 
 // Next advances to the next entry in the batch, returning false when the batch
-// is empty.
+// is empty or the next entry fails to decode.
 func (r *BatchReader) Next() bool {
 	var ok bool
-	r.kind, r.key, r.value, ok = r.batchReader.Next()
+	r.kind, r.key, r.value, ok, r.err = r.batchReader.Next()
 	return ok
 }
 

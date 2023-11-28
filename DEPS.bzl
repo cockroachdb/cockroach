@@ -1593,6 +1593,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_cockroachdb_metamorphic",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/cockroachdb/metamorphic",
+        sha256 = "28c8cf42192951b69378cf537be5a9a43f2aeb35542908cc4fe5f689505853ea",
+        strip_prefix = "github.com/cockroachdb/metamorphic@v0.0.0-20231108215700-4ba948b56895",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/metamorphic/com_github_cockroachdb_metamorphic-v0.0.0-20231108215700-4ba948b56895.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_cockroachdb_pebble",
         build_directives = [
             "gazelle:build_tags invariants",
@@ -1603,10 +1613,10 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "4c0d074253471edcde0fc9f8ddaaf59246d0b28d12625e8adc3b6dff372059f8",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20231122205016-4cbc644681f2",
+        sha256 = "00bdea366a0bef8b023b74a5c59a9d3b813deda8d5f59fbd05c61e330c28b424",
+        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20231128113043-47104ed2d5b1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20231122205016-4cbc644681f2.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20231128113043-47104ed2d5b1.zip",
         ],
     )
     go_repository(
