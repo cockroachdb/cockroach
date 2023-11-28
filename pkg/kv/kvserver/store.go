@@ -275,14 +275,14 @@ var LeaseTransferPerIterationTimeout = settings.RegisterDurationSetting(
 	settings.WithPublic,
 )
 
-// ExportRequestsLimit is the number of Export requests that can run at once.
+// exportRequestsLimit is the number of Export requests that can run at once.
 // Each extracts data from Pebble to an in-memory SST and returns it to the
 // caller. In order to not exhaust the disk or memory, or saturate the network,
 // limit the number of these that can be run in parallel. This number was chosen
 // by a guessing - it could be improved by more measured heuristics. Exported
 // here since we check it in the caller to limit generated requests as well
 // to prevent excessive queuing.
-var ExportRequestsLimit = settings.RegisterIntSetting(
+var exportRequestsLimit = settings.RegisterIntSetting(
 	settings.SystemVisible, // used in backup processor
 	"kv.bulk_io_write.concurrent_export_requests",
 	"number of export requests a store will handle concurrently before queuing",
@@ -1532,7 +1532,7 @@ func NewStore(
 		s.limiters.BulkIOWriteRate.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
 	})
 	s.limiters.ConcurrentExportRequests = limit.MakeConcurrentRequestLimiter(
-		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
+		"exportRequestLimiter", int(exportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
 	s.eagerLeaseAcquisitionLimiter = cfg.EagerLeaseAcquisitionLimiter
 
@@ -1559,8 +1559,8 @@ func NewStore(
 	if exportCores < 1 {
 		exportCores = 1
 	}
-	ExportRequestsLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		limit := int(ExportRequestsLimit.Get(&cfg.Settings.SV))
+	exportRequestsLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
+		limit := int(exportRequestsLimit.Get(&cfg.Settings.SV))
 		if limit > exportCores {
 			limit = exportCores
 		}
