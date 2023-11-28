@@ -473,3 +473,15 @@ query B
 SELECT NULL = ALL(NULL::INTEGER[]);
 ----
 NULL
+
+# Regression test for #102017 - don't throw a "too few columns" error.
+query II
+SELECT * FROM (VALUES (1, 2)) foo(a, b)
+WHERE (a, b) = ANY(ARRAY(SELECT ROW(x, y) FROM (VALUES (1, 2)) bar(x, y)));
+----
+1  2
+
+query II
+SELECT a, b FROM abc WHERE (a, b) = ANY(ARRAY(SELECT ROW(a, b) FROM abc LIMIT 1));
+----
+1  10
