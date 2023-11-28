@@ -996,6 +996,10 @@ func ResolveEncryptedEnvOptions(
 	return fileRegistry, env, nil
 }
 
+// ConfigureForSharedStorage is used to configure a pebble Options for shared
+// storage.
+var ConfigureForSharedStorage func(opts *pebble.Options, storage remote.Storage) error
+
 // NewPebble creates a new Pebble instance, at the specified path.
 // Do not use directly (except in test); use Open instead.
 //
@@ -1225,11 +1229,12 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// in it is needed for CRDB to function properly.
 	if cfg.SharedStorage != nil {
 		esWrapper := &externalStorageWrapper{p: p, es: cfg.SharedStorage, ctx: ctx}
-		opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
-			"": esWrapper,
-		})
-		opts.Experimental.CreateOnShared = remote.CreateOnSharedLower
-		opts.Experimental.CreateOnSharedLocator = ""
+		if ConfigureForSharedStorage == nil {
+			return nil, errors.New("shared storage requires CCL features")
+		}
+		if err := ConfigureForSharedStorage(opts, esWrapper); err != nil {
+			return nil, errors.Wrap(err, "error when configuring shared storage")
+		}
 	} else {
 		if cfg.RemoteStorageFactory != nil {
 			opts.Experimental.RemoteStorage = remoteStorageAdaptor{p: p, ctx: ctx, factory: cfg.RemoteStorageFactory}
