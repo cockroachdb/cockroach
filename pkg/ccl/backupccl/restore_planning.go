@@ -1856,6 +1856,14 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+	if restoreStmt.Options.ExperimentalOnline {
+		for _, uri := range defaultURIs {
+			if err := cloud.SchemeSupportsEarlyBoot(uri); err != nil {
+				return errors.Wrap(err, "backup URI not supported for online restore")
+			}
+		}
+	}
+
 	defer func() {
 		mem.Shrink(ctx, memReserved)
 	}()

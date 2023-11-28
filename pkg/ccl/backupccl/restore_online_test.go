@@ -82,23 +82,33 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	t.Run("incremental backups are unsupported", func(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", incrementalBackup))
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN '%s'", incrementalBackup))
-		rSQLDB.ExpectErr(t, "incremental backup not supported", fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackup))
+		rSQLDB.ExpectErr(t, "incremental backup not supported",
+			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackup))
 	})
 	t.Run("full backups with revision history are unsupported", func(t *testing.T) {
 		var systemTime string
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&systemTime)
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s' AS OF SYSTEM TIME '%s' WITH revision_history", fullBackupWithRevs, systemTime))
-		rSQLDB.ExpectErr(t, "revision history backup not supported", fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", fullBackupWithRevs))
+		rSQLDB.ExpectErr(t, "revision history backup not supported",
+			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", fullBackupWithRevs))
 	})
-	t.Run("icremental backups with revision history are unsupported", func(t *testing.T) {
+	t.Run("incremental backups with revision history are unsupported", func(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s' WITH revision_history", incrementalBackupWithRevs))
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN '%s' WITH revision_history", incrementalBackupWithRevs))
-		rSQLDB.ExpectErr(t, "incremental backup not supported", fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackupWithRevs))
+		rSQLDB.ExpectErr(t, "incremental backup not supported",
+			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackupWithRevs))
 	})
 	t.Run("descriptor rewrites are unsupported", func(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", fullBackup))
 		rSQLDB.Exec(t, "CREATE DATABASE new_data")
-		rSQLDB.ExpectErr(t, "descriptor rewrites not supported", fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH into_db=new_data,EXPERIMENTAL DEFERRED COPY", fullBackup))
+		rSQLDB.ExpectErr(t, "descriptor rewrites not supported",
+			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH into_db=new_data,EXPERIMENTAL DEFERRED COPY", fullBackup))
+	})
+	t.Run("external storage locations that don't support early boot are unsupported", func(t *testing.T) {
+		rSQLDB.Exec(t, "CREATE DATABASE bank")
+		rSQLDB.Exec(t, "BACKUP INTO 'userfile:///my_backups'")
+		rSQLDB.ExpectErr(t, "scheme userfile is not accessible during node startup",
+			"RESTORE DATABASE bank FROM LATEST IN 'userfile:///my_backups' WITH EXPERIMENTAL DEFERRED COPY")
 	})
 
 }

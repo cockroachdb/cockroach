@@ -1092,10 +1092,6 @@ func (t *testTenant) DistSQLPlanningNodeID() roachpb.NodeID {
 	return 0
 }
 
-func (ts *testTenant) ExternalStorageAccessor() interface{} {
-	return ts.sql.cfg.ExternalStorageAccessor
-}
-
 // LeaseManager is part of the serverutils.ApplicationLayerInterface.
 func (t *testTenant) LeaseManager() interface{} {
 	return t.sql.leaseMgr
@@ -1657,7 +1653,6 @@ func (ts *testServer) StartTenant(
 	st.ExternalIODir = params.ExternalIODir
 	sqlCfg := makeTestSQLConfig(st, params.TenantID)
 	sqlCfg.TenantLoopbackAddr = ts.AdvRPCAddr()
-	sqlCfg.ExternalIODirConfig = params.ExternalIODirConfig
 	if params.MemoryPoolSize != 0 {
 		sqlCfg.MemoryPoolSize = params.MemoryPoolSize
 	}
@@ -1706,6 +1701,7 @@ func (ts *testServer) StartTenant(
 	baseCfg.DefaultZoneConfig = ts.Cfg.DefaultZoneConfig
 	baseCfg.HeapProfileDirName = ts.Cfg.BaseConfig.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
+	baseCfg.ExternalIODirConfig = params.ExternalIODirConfig
 
 	// Grant the tenant the default capabilities.
 	if err := ts.grantDefaultTenantCapabilities(ctx, params.TenantID, params.SkipTenantCheck); err != nil {
@@ -1891,10 +1887,6 @@ func (ts *testServer) UpdateChecker() interface{} {
 // DiagnosticsReporter implements the serverutils.ApplicationLayerInterface.
 func (ts *testServer) DiagnosticsReporter() interface{} {
 	return ts.topLevelServer.sqlServer.diagnosticsReporter
-}
-
-func (ts *testServer) ExternalStorageAccessor() interface{} {
-	return ts.Cfg.ExternalStorageAccessor
 }
 
 type v2AuthDecorator struct {
