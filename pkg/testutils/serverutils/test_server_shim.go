@@ -87,6 +87,9 @@ var PreventStartTenantError = errors.New("attempting to manually start a virtual
 func ShouldStartDefaultTestTenant(
 	t TestLogger, baseArg base.DefaultTestTenantOptions,
 ) (retval base.DefaultTestTenantOptions) {
+	if t != nil {
+		t.Log("considering starting a default test tenant")
+	}
 	// Explicit case for disabling the default test tenant.
 	if baseArg.TestTenantAlwaysDisabled() {
 		if issueNum, label := baseArg.IssueRef(); issueNum != 0 {
