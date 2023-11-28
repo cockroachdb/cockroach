@@ -35,6 +35,7 @@ export type StmtInsightsReq = {
   end?: moment.Moment;
   stmtExecutionID?: string;
   stmtFingerprintId?: string;
+  csExportInsights?: boolean;
 };
 
 export type StmtInsightsResponseRow = {
