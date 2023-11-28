@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -24,6 +25,8 @@ import (
 func TestOnlineRestoreBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
 	const numAccounts = 1000
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
@@ -56,12 +59,9 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	_, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1, InitManualReplication, base.TestClusterArgs{
-		// Online restore is not supported in a secondary tenant yet.
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
-	})
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
 	defer cleanupFn()
 	params := base.TestClusterArgs{
 		// Online restore is not supported in a secondary tenant yet.
