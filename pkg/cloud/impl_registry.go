@@ -106,6 +106,22 @@ func RegisterExternalStorageProvider(
 	redactedParams map[string]struct{},
 	schemes ...string,
 ) {
+	registerExternalStorageProviderImpl(providerType, parseFn, constructFn, redactedParams, schemes...)
+	// We do not register limiter settings for the `external` provider. An
+	// external connection object represents an underlying external resource that
+	// will have its own registered limiters.
+	if providerType != cloudpb.ExternalStorageProvider_external {
+		registerLimiterSettings(providerType)
+	}
+}
+
+func registerExternalStorageProviderImpl(
+	providerType cloudpb.ExternalStorageProvider,
+	parseFn ExternalStorageURIParser,
+	constructFn ExternalStorageConstructor,
+	redactedParams map[string]struct{},
+	schemes ...string,
+) {
 	for _, scheme := range schemes {
 		if _, ok := confParsers[scheme]; ok {
 			panic(fmt.Sprintf("external storage provider already registered for %s", scheme))
@@ -119,13 +135,6 @@ func RegisterExternalStorageProvider(
 		panic(fmt.Sprintf("external storage provider already registered for %s", providerType.String()))
 	}
 	implementations[providerType] = constructFn
-
-	// We do not register limiter settings for the `external` provider. An
-	// external connection object represents an underlying external resource that
-	// will have its own registered limiters.
-	if providerType != cloudpb.ExternalStorageProvider_external {
-		registerLimiterSettings(providerType)
-	}
 }
 
 // ExternalStorageConfFromURI generates an ExternalStorage config from a URI string.
@@ -422,4 +431,42 @@ func (l *limitedWriter) Close() error {
 type ReadWriterInterceptor interface {
 	Reader(context.Context, ExternalStorage, ioctx.ReadCloserCtx) ioctx.ReadCloserCtx
 	Writer(context.Context, ExternalStorage, io.WriteCloser) io.WriteCloser
+}
+
+// ReplaceProviderForTesting replaces an existing registered provider
+// with the given alternate implementation.
+//
+// The returned func restores the prooduction implemenation.
+func ReplaceProviderForTesting(
+	providerType cloudpb.ExternalStorageProvider,
+	parseFn ExternalStorageURIParser,
+	constructFn ExternalStorageConstructor,
+	redactedParams map[string]struct{},
+	schemes ...string,
+) func() {
+	if len(schemes) != 1 {
+		panic("expected 1 scheme")
+	}
+	scheme := schemes[0]
+
+	remove := func() {
+		delete(implementations, providerType)
+		delete(confParsers, scheme)
+	}
+
+	oldImpl := implementations[providerType]
+	oldParser := confParsers[scheme]
+
+	remove()
+	registerExternalStorageProviderImpl(providerType, parseFn, constructFn, redactedParams, schemes...)
+
+	return func() {
+		remove()
+		if oldImpl != nil {
+			implementations[providerType] = oldImpl
+		}
+		if oldParser != nil {
+			confParsers[scheme] = oldParser
+		}
+	}
 }
