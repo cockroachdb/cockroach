@@ -233,7 +233,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
 	if race {
-		args = append(args, "--config=race")
+		args = append(args, "--config=race", "--test_sharding_strategy=disabled")
 	}
 	if deadlock {
 		goTags = append(goTags, "deadlock")
