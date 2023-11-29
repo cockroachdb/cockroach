@@ -370,8 +370,25 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		"resolved": fmt.Sprintf("'%s'", resolvedInterval),
 	}
 
-	jobID, err := newChangefeedCreator(db, l, fmt.Sprintf("%s.%s", targetDB, targetTable),
-		cmvt.kafka.manager.sinkURL(ctx), makeDefaultFeatureFlags()).
+	var ff cdcFeatureFlags
+	muxSupported, err := cmvt.muxRangeFeedSupported(r, h)
+	if err != nil {
+		return err
+	}
+	if !muxSupported {
+		ff.MuxRangefeed.v = &featureUnset
+	}
+
+	schedulerSupported, err := cmvt.rangefeedSchedulerSupported(r, h)
+	if err != nil {
+		return err
+	}
+	if !schedulerSupported {
+		ff.RangeFeedScheduler.v = &featureUnset
+	}
+
+	jobID, err := newChangefeedCreator(db, l, r, fmt.Sprintf("%s.%s", targetDB, targetTable),
+		cmvt.kafka.manager.sinkURL(ctx), ff).
 		With(options).
 		Create()
 	if err != nil {
@@ -407,6 +424,20 @@ func (cmvt *cdcMixedVersionTester) initWorkload(
 	return nil
 }
 
+func (cmvt *cdcMixedVersionTester) muxRangeFeedSupported(
+	r *rand.Rand, h *mixedversion.Helper,
+) (bool, error) {
+	return h.ClusterVersionAtLeast(r, v222CV)
+}
+
+const v232CV = "23.2"
+
+func (cmvt *cdcMixedVersionTester) rangefeedSchedulerSupported(
+	r *rand.Rand, h *mixedversion.Helper,
+) (bool, error) {
+	return h.ClusterVersionAtLeast(r, v232CV)
+}
+
 func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	tester := newCDCMixedVersionTester(ctx, t, c)
 
@@ -428,6 +459,34 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	cleanupKafka := tester.StartKafka(t, c)
 	defer cleanupKafka()
 
+	// MuxRangefeed in various forms is available starting from v22.2.
+	setMuxRangeFeedEnabled := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+		supported, err := tester.muxRangeFeedSupported(r, h)
+		if err != nil {
+			return err
+		}
+		if supported {
+			coin := r.Int()%2 == 0
+			l.PrintfCtx(ctx, "Setting changefeed.mux_rangefeed.enabled=%t ", coin)
+			return h.Exec(r, "SET CLUSTER SETTING changefeed.mux_rangefeed.enabled=$1", coin)
+		}
+		return nil
+	}
+
+	// Rangefeed scheduler available in 23.2
+	setRangeFeedSchedulerEnabled := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
+		supported, err := tester.rangefeedSchedulerSupported(r, h)
+		if err != nil {
+			return err
+		}
+		if supported {
+			coin := r.Int()%2 == 0
+			l.PrintfCtx(ctx, "Setting kv.rangefeed.scheduler.enabled=%t", coin)
+			return h.Exec(r, "SET CLUSTER SETTING kv.rangefeed.scheduler.enabled=$1", coin)
+		}
+		return nil
+	}
+
 	// Register hooks.
 	mvt.OnStartup("start changefeed", tester.createChangeFeed)
 	mvt.OnStartup("create validator", tester.setupValidator)
@@ -441,7 +500,12 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// not when any nodes are offline. This is important because the validator relies on a db connection.
 	mvt.InMixedVersion("wait and validate", tester.waitAndValidate)
 
-	mvt.AfterUpgradeFinalized("wait and validate", tester.waitAndValidate)
+	// Enable/disable mux rangefeed related settings in mixed version.
+	mvt.InMixedVersion("use mux", setMuxRangeFeedEnabled)
+	mvt.InMixedVersion("use scheduler", setRangeFeedSchedulerEnabled)
 
+	mvt.AfterUpgradeFinalized("use mux", setMuxRangeFeedEnabled)
+	mvt.AfterUpgradeFinalized("use scheduler", setRangeFeedSchedulerEnabled)
+	mvt.AfterUpgradeFinalized("wait and validate", tester.waitAndValidate)
 	mvt.Run()
 }
