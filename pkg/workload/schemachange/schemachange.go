@@ -182,6 +182,7 @@ func (s *schemaChange) Ops(
 	// checks for progress.
 	cfg.MaxConnLifetime = time.Hour
 	cfg.MaxConnIdleTime = time.Hour
+	cfg.QueryTracer = &PGXTracer{tracer: tracer}
 	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
