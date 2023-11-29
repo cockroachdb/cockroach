@@ -84,46 +84,43 @@ func TestHealthCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+
 	cfg := zonepb.DefaultZoneConfig()
 	cfg.NumReplicas = proto.Int32(1)
+	sCfg := zonepb.DefaultSystemZoneConfig()
+	sCfg.NumReplicas = proto.Int32(1)
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &TestingKnobs{
-				DefaultZoneConfigOverride: &cfg,
+				DefaultZoneConfigOverride:       &cfg,
+				DefaultSystemZoneConfigOverride: &sCfg,
 			},
 		},
 	})
-	defer s.Stopper().Stop(context.Background())
-
-	ctx := context.Background()
-
-	recorder := s.MetricsRecorder()
+	defer s.Stopper().Stop(ctx)
+	recorder := s.StorageLayer().MetricsRecorder()
 
 	{
 		summary := *recorder.GenerateNodeStatus(ctx)
 		result := recorder.CheckHealth(ctx, summary)
-		if len(result.Alerts) != 0 {
-			t.Fatal(result)
-		}
+		require.Equal(t, 0, len(result.Alerts), "unexpected health alerts: %v", result)
 	}
 
-	store, err := s.GetStores().(*kvserver.Stores).GetStore(1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	store, err := s.StorageLayer().GetStores().(*kvserver.Stores).GetStore(1)
+	require.NoError(t, err)
 
-	store.Metrics().UnavailableRangeCount.Inc(100)
-
-	{
-		summary := *recorder.GenerateNodeStatus(ctx)
-		result := recorder.CheckHealth(ctx, summary)
+	testutils.SucceedsSoon(t, func() error {
+		store.Metrics().UnavailableRangeCount.Update(100)
+		result := recorder.CheckHealth(ctx, *recorder.GenerateNodeStatus(ctx))
 		expAlerts := []statuspb.HealthAlert{
 			{StoreID: 1, Category: statuspb.HealthAlert_METRICS, Description: "ranges.unavailable", Value: 100.0},
 		}
 		if !reflect.DeepEqual(expAlerts, result.Alerts) {
-			t.Fatalf("expected %+v, got %+v", expAlerts, result.Alerts)
+			return errors.Newf("expected %+v, got %+v", expAlerts, result.Alerts)
 		}
-	}
+		return nil
+	})
 }
 
 // TestEngineTelemetry tests that the server increments a telemetry counter on
