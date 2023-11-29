@@ -1553,17 +1553,8 @@ func NewStore(
 	s.protectedtsReader = cfg.ProtectedTimestampReader
 	s.raftTransportForFlowControl = cfg.Transport
 
-	// On low-CPU instances, a default limit value may still allow ExportRequests
-	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
-	exportCores := runtime.GOMAXPROCS(0) - 1
-	if exportCores < 1 {
-		exportCores = 1
-	}
 	ExportRequestsLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
-		limit := int(ExportRequestsLimit.Get(&cfg.Settings.SV))
-		if limit > exportCores {
-			limit = exportCores
-		}
+		limit := BackupRequestLimit(&cfg.Settings.SV)
 		s.limiters.ConcurrentExportRequests.SetLimit(limit)
 	})
 	s.limiters.ConcurrentAddSSTableRequests = limit.MakeConcurrentRequestLimiter(
@@ -3833,4 +3824,20 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// BackupRequestLimit returns max number of concurrent export requests that
+// store can handle.
+func BackupRequestLimit(sv *settings.Values) int {
+	// On low-CPU instances, a default limit value may still allow ExportRequests
+	// to tie up all cores so cap limiter at cores-1 when setting value is higher.
+	exportCores := runtime.GOMAXPROCS(0) - 1
+	if exportCores < 1 {
+		exportCores = 1
+	}
+	maxExportRequests := int(ExportRequestsLimit.Get(sv))
+	if maxExportRequests > exportCores {
+		maxExportRequests = exportCores
+	}
+	return maxExportRequests
 }

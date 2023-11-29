@@ -717,7 +717,7 @@ func reserveWorkerMemory(
 ) (int, func(), error) {
 	// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
 	//  *2). See #49798.
-	maxWorkerCount := int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 2
+	maxWorkerCount := kvserver.BackupRequestLimit(&settings.SV) * 2
 	// We assume that each worker needs at least enough memory to hold onto
 	// 1 buffer used by the external storage.
 	perWorkerMemory := cloud.WriteChunkSize.Get(&settings.SV)
