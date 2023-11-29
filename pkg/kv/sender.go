@@ -124,6 +124,14 @@ type TxnSender interface {
 	// SetDebugName sets the txn's debug name.
 	SetDebugName(name string)
 
+	// GetOmitInRangefeeds returns the value of the OmitInRangefeeds attribute of
+	// the Transaction proto.
+	GetOmitInRangefeeds() bool
+
+	// SetOmitInRangefeeds sets the OmitInRangefeeds attribute to true in the
+	// Transaction proto.
+	SetOmitInRangefeeds()
+
 	// String returns a string representation of the txn.
 	String() string
 
