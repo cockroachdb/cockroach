@@ -93,7 +93,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		panic(unimplemented.New("CREATE FUNCTION sql_body", "CREATE FUNCTION...sql_body unimplemented"))
 	}
 
-	if err := tree.ValidateRoutineOptions(cf.Options); err != nil {
+	if err := tree.ValidateRoutineOptions(cf.Options, cf.IsProcedure); err != nil {
 		panic(err)
 	}
 
