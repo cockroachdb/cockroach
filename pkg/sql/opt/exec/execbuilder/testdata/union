@@ -68,7 +68,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a)
-│ ordering: +a
 │ estimated row count: 100 (missing stats)
 │ order: +a
 │
@@ -450,7 +449,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (a, c, b, d, e)
-    │ ordering: +a
     │ estimated row count: 1 (missing stats)
     │ order: +a
     │
@@ -771,7 +769,6 @@ vectorized: true
         │
         ├── • sort
         │   │ columns: (column1, column2)
-        │   │ ordering: +column1
         │   │ estimated row count: 3
         │   │ order: +column1
         │   │
@@ -1015,7 +1012,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (a, b, c, d)
-    │ ordering: +a,+b,-c,+d
     │ estimated row count: 1,000 (missing stats)
     │ order: +a,+b,-c,+d
     │ already ordered: +a,+b,-c
