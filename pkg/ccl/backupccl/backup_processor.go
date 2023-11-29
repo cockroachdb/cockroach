@@ -89,7 +89,7 @@ var (
 		settings.TenantWritable,
 		"bulkio.backup.presplit_request_spans.enabled",
 		"split the spans that will be requests before requesting them",
-		util.ConstantWithMetamorphicTestBool("backup-presplit-spans", true),
+		util.ConstantWithMetamorphicTestBool("backup-presplit-spans", false),
 	)
 
 	sendExportRequestWithVerboseTracing = settings.RegisterBoolSetting(
