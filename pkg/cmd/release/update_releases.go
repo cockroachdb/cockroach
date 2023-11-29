@@ -121,7 +121,7 @@ func processReleaseData(data []Release) map[string]release.Series {
 		// For the purposes of the cockroach_releases file, we are only
 		// interested in beta and rc pre-releases, as we do not support
 		// upgrades from alpha releases.
-		if pre := v.PreRelease(); pre != "" && pre != "rc" && pre != "beta" {
+		if pre := v.PreRelease(); pre != "" && !strings.HasPrefix(pre, "rc") && !strings.HasPrefix(pre, "beta") {
 			continue
 		}
 
