@@ -35,6 +35,7 @@ func registerDisaggRebalance(r registry.Registry) {
 		Tags:              registry.Tags("aws"),
 		Owner:             registry.OwnerStorage,
 		Cluster:           disaggRebalanceSpec,
+		RequiresLicense:   true,
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Timeout:           1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
