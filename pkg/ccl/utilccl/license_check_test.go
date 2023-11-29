@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,7 +54,7 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 		if err := setLicense(ctx, updater, tc.lic); err != nil {
 			t.Fatal(err)
 		}
-		err := checkEnterpriseEnabledAt(st, tc.checkTime, uuid.UUID{}, "", true)
+		err := checkEnterpriseEnabledAt(st, tc.checkTime, "", true)
 		if !testutils.IsError(err, tc.err) {
 			l, _ := decode(tc.lic)
 			t.Fatalf("%d: lic %v, update by %T, checked at %s, got %q", i, l, updater, tc.checkTime, err)
@@ -212,11 +211,11 @@ func TestApplyTenantLicenseWithLicense(t *testing.T) {
 
 	settings := cluster.MakeClusterSettings()
 
-	require.Error(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), ""))
-	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), ""))
+	require.Error(t, CheckEnterpriseEnabled(settings, ""))
+	require.False(t, IsEnterpriseEnabled(settings, ""))
 	require.NoError(t, ApplyTenantLicense())
-	require.NoError(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), ""))
-	require.True(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), ""))
+	require.NoError(t, CheckEnterpriseEnabled(settings, ""))
+	require.True(t, IsEnterpriseEnabled(settings, ""))
 }
 
 func TestApplyTenantLicenseWithoutLicense(t *testing.T) {
@@ -227,11 +226,11 @@ func TestApplyTenantLicenseWithoutLicense(t *testing.T) {
 	envutil.ClearEnvCache()
 	require.False(t, ok)
 
-	require.Error(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), ""))
-	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), ""))
+	require.Error(t, CheckEnterpriseEnabled(settings, ""))
+	require.False(t, IsEnterpriseEnabled(settings, ""))
 	require.NoError(t, ApplyTenantLicense())
-	require.Error(t, CheckEnterpriseEnabled(settings, uuid.MakeV4(), ""))
-	require.False(t, IsEnterpriseEnabled(settings, uuid.MakeV4(), ""))
+	require.Error(t, CheckEnterpriseEnabled(settings, ""))
+	require.False(t, IsEnterpriseEnabled(settings, ""))
 }
 
 func TestApplyTenantLicenseWithInvalidLicense(t *testing.T) {

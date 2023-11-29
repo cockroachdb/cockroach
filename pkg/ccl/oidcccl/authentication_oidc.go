@@ -474,7 +474,7 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		if err := utilccl.CheckEnterpriseEnabled(st, cluster, "OIDC"); err != nil {
+		if err := utilccl.CheckEnterpriseEnabled(st, "OIDC"); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

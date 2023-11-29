@@ -66,7 +66,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	db := execCtx.ExecCfg().InternalDB
 	ex := db.Executor()
 	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(
-		execCtx.ExecCfg().Settings, execCtx.ExecCfg().NodeInfo.LogicalClusterID())
+		execCtx.ExecCfg().Settings)
 	alreadyCompleted, err := migrationstable.CheckIfMigrationCompleted(
 		ctx, v, nil /* txn */, ex,
 		enterpriseEnabled, migrationstable.ConsistentRead,
