@@ -64,31 +64,29 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 	}
 
 	for name, recordGroup := range recordsByName {
-		// No need to break the name down into components as the lookup command
-		// accepts a fully qualified name as the last parameter if the service and
-		// proto parameters are empty strings.
 		existingRecords, err := n.lookupSRVRecords(ctx, name)
 		if err != nil {
 			return err
 		}
-		dataSet := make(map[string]struct{})
-		for _, record := range existingRecords {
-			dataSet[record.Data] = struct{}{}
-		}
-
 		command := "create"
 		if len(existingRecords) > 0 {
 			command = "update"
 		}
 
-		// Add the new record data.
-		for _, record := range recordGroup {
-			dataSet[record.Data] = struct{}{}
+		// Combine old and new records using a map to deduplicate with the record
+		// data as the key.
+		combinedRecords := make(map[string]vm.DNSRecord)
+		for _, record := range existingRecords {
+			combinedRecords[record.Data] = record
 		}
+		for _, record := range recordGroup {
+			combinedRecords[record.Data] = record
+		}
+
 		// We assume that all records in a group have the same name, type, and ttl.
 		// TODO(herko): Add error checking to ensure that the above is the case.
 		firstRecord := recordGroup[0]
-		data := maps.Keys(dataSet)
+		data := maps.Keys(combinedRecords)
 		sort.Strings(data)
 		args := []string{"--project", dnsProject, "dns", "record-sets", command, name,
 			"--type", string(firstRecord.Type),
@@ -101,7 +99,7 @@ func (n *dnsProvider) CreateRecords(ctx context.Context, records ...vm.DNSRecord
 		if err != nil {
 			return markDNSOperationError(errors.Wrapf(err, "output: %s", out))
 		}
-		n.updateCache(name, recordGroup)
+		n.updateCache(name, maps.Values(combinedRecords))
 	}
 	return nil
 }
