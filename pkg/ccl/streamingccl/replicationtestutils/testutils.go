@@ -523,7 +523,7 @@ func CreateScatteredTable(t *testing.T, c *TenantStreamingClusters, numNodes int
 			`SELECT count(DISTINCT lease_holder) FROM [SHOW RANGES FROM DATABASE d WITH DETAILS]`).
 			Scan(&leaseHolderCount)
 		require.Greater(t, leaseHolderCount, 0)
-		if leaseHolderCount == 1 {
+		if leaseHolderCount < numNodes {
 			return errors.New("leaseholders not scattered yet")
 		}
 		return nil
