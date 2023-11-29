@@ -727,7 +727,8 @@ func TestStreamingAutoReplan(t *testing.T) {
 	c.SrcCluster.AddAndStartServer(c.T, replicationtestutils.CreateServerArgs(c.Args))
 	require.NoError(t, c.SrcCluster.WaitForFullReplication())
 
-	replicationtestutils.CreateScatteredTable(t, c, 3)
+	// Only need at least two nodes as leaseholders for test.
+	replicationtestutils.CreateScatteredTable(t, c, 2)
 
 	// Configure the ingestion job to replan eagerly.
 	serverutils.SetClusterSetting(t, c.DestCluster, "stream_replication.replan_flow_threshold", 0.1)
