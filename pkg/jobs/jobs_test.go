@@ -3066,31 +3066,29 @@ func TestPauseReason(t *testing.T) {
 	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */)
 	require.NoError(t, err)
 
-	countRowsWithClaimInfo := func() int {
+	countRowsWithClaimInfo := func() (session, instance gosql.NullString) {
 		t.Helper()
-		n := 0
 		tdb.QueryRow(t,
-			"SELECT count(*) FROM system.jobs "+
-				"WHERE id = $1 AND (claim_session_id IS NOT NULL OR claim_instance_id IS NOT NULL)",
-			jobID).Scan(&n)
-		return n
+			"SELECT claim_session_id::string, claim_instance_id::string FROM system.jobs WHERE id = $1",
+			jobID).Scan(&session, &instance)
+		return
 	}
 	mustNotHaveClaim := func() {
 		t.Helper()
 		testutils.SucceedsSoon(t, func() error {
-			if countRowsWithClaimInfo() == 0 {
-				return nil
+			if s, i := countRowsWithClaimInfo(); s.Valid || i.Valid {
+				return errors.Newf("still waiting for claim to clear: %q %q", s.String, i.String)
 			}
-			return errors.New("still waiting for claim to clear")
+			return nil
 		})
 	}
 	mustHaveClaim := func() {
 		t.Helper()
 		testutils.SucceedsSoon(t, func() error {
-			if countRowsWithClaimInfo() == 1 {
-				return nil
+			if s, i := countRowsWithClaimInfo(); !s.Valid || !i.Valid {
+				return errors.Newf("still waiting for claim: %q %q", s, i)
 			}
-			return errors.New("still waiting for claim info")
+			return nil
 		})
 	}
 
