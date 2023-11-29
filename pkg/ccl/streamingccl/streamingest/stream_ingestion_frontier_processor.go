@@ -564,8 +564,8 @@ func (sf *streamIngestionFrontier) handleLaggingNodeError(ctx context.Context, e
 	case !errors.Is(err, ErrNodeLagging):
 		return err
 	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Less(sf.persistedReplicatedTime):
-		sf.replicatedTimeAtLastPositiveLagNodeCheck = sf.persistedReplicatedTime
 		log.Infof(ctx, "detected a lagging node: %s. Don't forward error because replicated time at last check %s is less than current replicated time %s", err, sf.replicatedTimeAtLastPositiveLagNodeCheck, sf.persistedReplicatedTime)
+		sf.replicatedTimeAtLastPositiveLagNodeCheck = sf.persistedReplicatedTime
 		return nil
 	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Equal(sf.persistedReplicatedTime):
 		return errors.Wrapf(err, "hwm has not advanced from %s", sf.persistedReplicatedTime)
