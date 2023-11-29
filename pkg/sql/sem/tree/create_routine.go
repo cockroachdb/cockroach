@@ -615,7 +615,7 @@ func ComputedColumnExprContext(isVirtual bool) SchemaExprContext {
 
 // ValidateRoutineOptions checks whether there are conflicting or redundant
 // routine options in the given slice.
-func ValidateRoutineOptions(options RoutineOptions) error {
+func ValidateRoutineOptions(options RoutineOptions, isProc bool) error {
 	var hasLang, hasBody, hasLeakProof, hasVolatility, hasNullInputBehavior bool
 	conflictingErr := func(opt RoutineOption) error {
 		return errors.Wrapf(ErrConflictingRoutineOption, "%s", AsString(opt))
@@ -633,16 +633,25 @@ func ValidateRoutineOptions(options RoutineOptions) error {
 			}
 			hasBody = true
 		case RoutineLeakproof:
+			if isProc {
+				return pgerror.Newf(pgcode.InvalidFunctionDefinition, "leakproof attribute not allowed in procedure definition")
+			}
 			if hasLeakProof {
 				return conflictingErr(option)
 			}
 			hasLeakProof = true
 		case RoutineVolatility:
+			if isProc {
+				return pgerror.Newf(pgcode.InvalidFunctionDefinition, "volatility attribute not allowed in procedure definition")
+			}
 			if hasVolatility {
 				return conflictingErr(option)
 			}
 			hasVolatility = true
 		case RoutineNullInputBehavior:
+			if isProc {
+				return pgerror.Newf(pgcode.InvalidFunctionDefinition, "null input attribute not allowed in procedure definition")
+			}
 			if hasNullInputBehavior {
 				return conflictingErr(option)
 			}

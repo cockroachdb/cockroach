@@ -387,3 +387,28 @@ statement error pgcode 42809 family\(val: inet\) is not a procedure
 CALL family(ALL NULL);
 
 subtest end
+
+subtest attributes
+
+statement error pgcode 42P13 volatility attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' VOLATILE LANGUAGE SQL;
+
+statement error pgcode 42P13 volatility attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' IMMUTABLE LANGUAGE SQL;
+
+statement error pgcode 42P13 volatility attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' STABLE LANGUAGE SQL;
+
+statement error pgcode 42P13 leakproof attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' LEAKPROOF LANGUAGE SQL;
+
+statement error pgcode 42P13 leakproof attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' NOT LEAKPROOF LANGUAGE SQL;
+
+statement error pgcode 42P13 null input attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' CALLED ON NULL INPUT LANGUAGE SQL;
+
+statement error pgcode 42P13 null input attribute not allowed in procedure definition
+CREATE PROCEDURE pv() AS 'SELECT 1' STRICT LANGUAGE SQL;
+
+subtest end
