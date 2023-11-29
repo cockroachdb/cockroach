@@ -190,11 +190,11 @@ func (c *Controller) Admit(
 			return true, nil
 		}
 	} else if waitEndState == contextCanceled {
-		log.VEventf(ctx, 2,
-			"canceled after waiting (pri=%s stream=%s wait-duration=%s mode=%s)",
-			pri, connection.Stream(), waitDuration, c.mode())
+		const formatStr = "canceled after waiting (pri=%s stream=%s wait-duration=%s mode=%s)"
+		log.VEventf(ctx, 2, formatStr, pri, connection.Stream(), waitDuration, c.mode())
 		c.metrics.onErrored(class, waitDuration)
-		return false, ctx.Err()
+		err := errors.Newf(formatStr, pri, connection.Stream(), waitDuration, c.mode())
+		return false, errors.CombineErrors(err, ctx.Err())
 	} else {
 		log.VEventf(ctx, 2,
 			"bypassed as stream disconnected (pri=%s stream=%s wait-duration=%s mode=%s)",
