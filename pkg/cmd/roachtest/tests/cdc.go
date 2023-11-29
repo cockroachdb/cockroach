@@ -1328,23 +1328,25 @@ func registerCDC(r registry.Registry) {
 	// the first account on the assume-role chain:
 	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
 	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
-	//
-	// TODO(rui): Change to a shorter test as it just needs to validate
-	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
 		Name:             "cdc/pubsub-sink/assume-role",
 		Owner:            `cdc`,
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
+			// Bump memory limit (too low in 22.2)
+			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.memory.per_changefeed_limit = '512MiB';"); err != nil {
+				ct.t.Fatal(err)
+			}
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "5m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType:   pubsubSink,
@@ -1364,23 +1366,25 @@ func registerCDC(r registry.Registry) {
 	// the first account on the assume-role chain:
 	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
 	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
-	//
-	// TODO(rui): Change to a shorter test as it just needs to validate
-	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
 		Name:             "cdc/cloud-sink-gcs/assume-role",
 		Owner:            `cdc`,
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.runTPCCWorkload(tpccArgs{warehouses: 50, duration: "30m"})
+			// Bump memory limit (too low in 22.2)
+			if _, err := ct.DB().Exec("SET CLUSTER SETTING changefeed.memory.per_changefeed_limit = '512MiB';"); err != nil {
+				ct.t.Fatal(err)
+			}
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 50, duration: "5m"})
 
 			feed := ct.newChangefeed(feedArgs{
 				sinkType:   cloudStorageSink,

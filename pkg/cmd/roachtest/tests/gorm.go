@@ -78,6 +78,11 @@ func registerGORM(r registry.Registry) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		// It's safer to clean up dependencies this way than it is to give the cluster
+		// wipe root access.
+		defer func() {
+			c.Run(ctx, c.All(), "go clean -modcache")
+		}()
 
 		if err := repeatGitCloneE(
 			ctx,

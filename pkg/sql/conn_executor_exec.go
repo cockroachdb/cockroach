@@ -2462,7 +2462,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			0, /* stmtCount */
 			0, /* bulkJobId */
 			execErr,
-			ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived),
+			ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
 			&ex.extraTxnState.hasAdminRoleCache,
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
