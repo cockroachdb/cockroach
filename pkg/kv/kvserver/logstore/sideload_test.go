@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/raft/v3/raftpb"
 	"golang.org/x/time/rate"
@@ -570,4 +571,51 @@ func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine)
 		t.Fatal(err)
 	}
 	return cleanup, eng
+}
+
+// TestSideloadStorageSync tests that the sideloaded storage syncs files and
+// directories properly, to survive crashes.
+func TestSideloadStorageSync(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create a sideloaded storage with an in-memory FS. Use strict MemFS to be
+	// able to emulate crash restart by rolling it back to last synced state.
+	ctx := context.Background()
+	fs := vfs.NewStrictMem()
+	eng := storage.InMemFromFS(ctx, fs, "",
+		cluster.MakeTestingClusterSettings(), storage.ForTesting)
+	ss := newTestingSideloadStorage(eng)
+
+	// Put an entry which should trigger the lazy creation of the sideloaded
+	// directories structure, and create a file for this entry.
+	const testEntry = "test-entry"
+	require.NoError(t, ss.Put(ctx, 100 /* index */, 6 /* term */, []byte(testEntry)))
+	// Cut off all syncs from this point, to emulate a crash.
+	fs.SetIgnoreSyncs(true)
+	ss = nil
+	eng.Close()
+	// Reset filesystem to the last synced state.
+	fs.ResetToSyncedState()
+	fs.SetIgnoreSyncs(false)
+
+	// Emulate process restart. Load from the last synced state.
+	eng = storage.InMemFromFS(ctx, fs, "",
+		cluster.MakeTestingClusterSettings(), storage.ForTesting)
+	defer eng.Close()
+	ss = newTestingSideloadStorage(eng)
+
+	// The sideloaded got lost because all its parents were not synced.
+	// TODO(pavelkalinnikov): make sure the directory structure is persisted.
+	_, err := eng.Stat(ss.Dir())
+	require.True(t, oserror.IsNotExist(err), err)
+
+	// The stored entry is lost too because the sideloaded storage did not sync
+	// the directory structure.
+	// TODO(pavelkalinnikov): make the entries durable.
+	_, err = ss.Get(ctx, 100 /* index */, 6 /* term */)
+	require.ErrorIs(t, err, errSideloadedFileNotFound)
+	// A "control" check that missing entries are unconditionally missing.
+	_, err = ss.Get(ctx, 200 /* index */, 7 /* term */)
+	require.ErrorIs(t, err, errSideloadedFileNotFound)
 }
