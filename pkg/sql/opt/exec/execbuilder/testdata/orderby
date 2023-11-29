@@ -60,7 +60,6 @@ vectorized: true
 ·
 • top-k
 │ columns: (c, b)
-│ ordering: +b
 │ estimated row count: 2 (missing stats)
 │ order: +b
 │ k: 2
@@ -130,7 +129,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b, c)
-│ ordering: +b,+a
 │ estimated row count: 1,000 (missing stats)
 │ order: +b,+a
 │
@@ -148,7 +146,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b, c)
-│ ordering: +b,+a
 │ estimated row count: 1,000 (missing stats)
 │ order: +b,+a
 │
@@ -166,7 +163,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b, c)
-│ ordering: +b,+a
 │ estimated row count: 1,000 (missing stats)
 │ order: +b,+a
 │
@@ -184,7 +180,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b, c)
-│ ordering: +b,+a
 │ estimated row count: 1,000 (missing stats)
 │ order: +b,+a
 │
@@ -239,7 +234,6 @@ vectorized: true
 ·
 • sort
 │ columns: (r)
-│ ordering: +r
 │ estimated row count: 1,000 (missing stats)
 │ order: +r
 │
@@ -262,7 +256,6 @@ vectorized: true
 ·
 • sort
 │ columns: (y)
-│ ordering: +y
 │ estimated row count: 1,000 (missing stats)
 │ order: +y
 │
@@ -390,7 +383,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b, c, d)
-│ ordering: +b,+a,+c
 │ estimated row count: 333 (missing stats)
 │ order: +b,+a,+c
 │
@@ -694,7 +686,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (column1)
-    │ ordering: +column1
     │ estimated row count: 3
     │ order: +column1
     │
@@ -860,7 +851,6 @@ vectorized: true
     │
     └── • sort
         │ columns: (a, b)
-        │ ordering: +a
         │ estimated row count: 1,000 (missing stats)
         │ order: +a
         │
@@ -888,7 +878,6 @@ vectorized: true
     │
     └── • sort
         │ columns: (a, b)
-        │ ordering: +b
         │ estimated row count: 1,000 (missing stats)
         │ order: +b
         │
@@ -915,7 +904,6 @@ vectorized: true
 ·
 • sort
 │ columns: (x, y)
-│ ordering: +x,+y
 │ estimated row count: 1,000 (missing stats)
 │ order: +x,+y
 │
@@ -933,7 +921,6 @@ vectorized: true
 ·
 • sort
 │ columns: (x, y)
-│ ordering: +x,+y
 │ estimated row count: 1,000 (missing stats)
 │ order: +x,+y
 │
@@ -1010,7 +997,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (k, v)
-    │ ordering: +v,+k
     │ estimated row count: 1,000 (missing stats)
     │ order: +v,+k
     │
@@ -1102,7 +1088,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (k, v)
-    │ ordering: -v,+k
     │ estimated row count: 2 (missing stats)
     │ order: -v,+k
     │
@@ -1201,7 +1186,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b)
-│ ordering: +b
 │ estimated row count: 1,000 (missing stats)
 │ order: +b
 │
@@ -1222,7 +1206,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (nulls_ordering_b, a, b)
-    │ ordering: +nulls_ordering_b,+b
     │ estimated row count: 1,000 (missing stats)
     │ order: +nulls_ordering_b,+b
     │
@@ -1249,7 +1232,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (nulls_ordering_b, a, b)
-    │ ordering: -nulls_ordering_b,-b
     │ estimated row count: 1,000 (missing stats)
     │ order: -nulls_ordering_b,-b
     │
@@ -1273,7 +1255,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b)
-│ ordering: -b
 │ estimated row count: 1,000 (missing stats)
 │ order: -b
 │
@@ -1294,7 +1275,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (nulls_ordering_b, nulls_ordering_c, a, b, c)
-    │ ordering: -nulls_ordering_b,-b,+nulls_ordering_c,+c
     │ estimated row count: 1,000 (missing stats)
     │ order: -nulls_ordering_b,-b,+nulls_ordering_c,+c
     │
@@ -1329,7 +1309,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (nulls_ordering_b, a, b)
-    │ ordering: +nulls_ordering_b,+b
     │ estimated row count: 1,000 (missing stats)
     │ order: +nulls_ordering_b,+b
     │

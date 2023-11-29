@@ -54,7 +54,6 @@ vectorized: true
 ·
 • sort
 │ columns: (x, "ordinality")
-│ ordering: -"ordinality"
 │ estimated row count: 333 (missing stats)
 │ order: -"ordinality"
 │

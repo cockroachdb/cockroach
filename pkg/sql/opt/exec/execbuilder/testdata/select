@@ -1371,7 +1371,6 @@ vectorized: true
 │
 └── • sort
     │ columns: ("?column?", b)
-    │ ordering: +b
     │ estimated row count: 1,000 (missing stats)
     │ order: +b
     │

@@ -128,7 +128,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b, c, d)
-│ ordering: +b,+a
 │ estimated row count: 100 (missing stats)
 │ order: +b,+a
 │

@@ -68,7 +68,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a)
-│ ordering: +a
 │ estimated row count: 100 (missing stats)
 │ order: +a
 │

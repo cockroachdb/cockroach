@@ -664,7 +664,6 @@ vectorized: true
     │
     └── • sort
         │ columns: (name, book)
-        │ ordering: +name
         │ estimated row count: 100
         │ order: +name
         │
@@ -1283,7 +1282,6 @@ vectorized: true
 ·
 • sort
 │ columns: (d, e, f, a, b, c)
-│ ordering: +f
 │ estimated row count: 100
 │ order: +f
 │

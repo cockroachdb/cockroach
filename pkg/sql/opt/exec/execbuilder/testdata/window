@@ -134,7 +134,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (k int, stddev decimal, variance decimal)
-    │ ordering: +variance,+k
     │ estimated row count: 1,000 (missing stats)
     │ order: +variance,+k
     │
@@ -164,7 +163,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (k int, stddev decimal, variance decimal)
-    │ ordering: +variance,+k
     │ estimated row count: 1,000 (missing stats)
     │ order: +variance,+k
     │
@@ -195,7 +193,6 @@ vectorized: true
 ·
 • sort
 │ columns: (k int, stddev decimal)
-│ ordering: +k
 │ estimated row count: 1,000 (missing stats)
 │ order: +k
 │
@@ -224,7 +221,6 @@ vectorized: true
 │
 └── • sort
     │ columns: ("?column?" decimal, k int, variance decimal)
-    │ ordering: +variance,+k
     │ estimated row count: 1,000 (missing stats)
     │ order: +variance,+k
     │
@@ -261,7 +257,6 @@ vectorized: true
 │
 └── • sort
     │ columns: ("?column?" decimal, max int, variance decimal)
-    │ ordering: +variance
     │ estimated row count: 1,000 (missing stats)
     │ order: +variance
     │
@@ -301,7 +296,6 @@ vectorized: true
 ·
 • sort
 │ columns: (max int, stddev decimal)
-│ ordering: +max
 │ estimated row count: 1,000 (missing stats)
 │ order: +max
 │
@@ -368,7 +362,6 @@ vectorized: true
 ·
 • sort
 │ columns: (k, v, rank)
-│ ordering: +k
 │ estimated row count: 1,000 (missing stats)
 │ order: +k
 │
