@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/future"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -65,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -651,16 +653,51 @@ func (n *Node) start(
 		return errors.Wrapf(err, "couldn't gossip descriptor for node %d", n.Descriptor.NodeID)
 	}
 
-	// Create stores from the engines that were already initialized.
-	for _, e := range state.initializedEngines {
-		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
-		if err := s.Start(workersCtx, n.stopper); err != nil {
-			return errors.Wrap(err, "failed to start store")
-		}
-
-		n.addStore(ctx, s)
-		log.Infof(ctx, "initialized store s%s", s.StoreID())
+	// Create stores from engines that are already initialized. This uses a channel to collect errors
+	// when starting stores in separate goroutines. The channel is a buffered channel with the same size as the number of
+	// stores so worker go routines will never wait. By default, stores will be started concurrently. To start stores
+	// sequentially set the environment variable COCKROACH_CONCURRENT_STORE_START=false
+	var sem *quotapool.IntPool
+	var startStoresAsync = envutil.EnvOrDefaultBool("COCKROACH_CONCURRENT_STORE_START", true)
+	if !startStoresAsync {
+		sem = quotapool.NewIntPool("store start concurrency", 1)
 	}
+	engineErrC := make(chan error, len(state.initializedEngines))
+	for i := range state.initializedEngines {
+		engine := state.initializedEngines[i]
+		err := n.stopper.RunAsyncTaskEx(ctx,
+			stop.TaskOpts{TaskName: "initialize-stores", SpanOpt: stop.FollowsFromSpan, Sem: sem, WaitForSem: true},
+			func(ctx context.Context) {
+				s := kvserver.NewStore(ctx, n.storeCfg, engine, &n.Descriptor)
+				if err := s.Start(workersCtx, n.stopper); err != nil {
+					engineErrC <- errors.Wrap(err, "failed to start store")
+					return
+				}
+				n.addStore(ctx, s)
+				log.Infof(ctx, "initialized store s%s", s.StoreID())
+				engineErrC <- nil
+			})
+		if err != nil {
+			return err
+		}
+	}
+
+	// Collect errors from the go routines and return the first error received.
+	// This also waits for all stores to finish starting.
+	for range state.initializedEngines {
+		select {
+		case <-n.stopper.ShouldQuiesce():
+			return nil
+		case <-ctx.Done():
+			return nil
+		case err := <-engineErrC:
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	close(engineErrC)
 
 	// Verify all initialized stores agree on cluster and node IDs.
 	if err := n.validateStores(ctx); err != nil {
