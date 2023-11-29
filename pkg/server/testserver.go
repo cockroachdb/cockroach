@@ -538,17 +538,20 @@ func (ts *TestServer) TestTenants() []serverutils.TestTenantInterface {
 // enterprise enabled build. This is due to licensing restrictions on the MT
 // capabilities.
 func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
+	log.Shout(context.Background(), severity.INFO, "maybeStartDefaultTestTenant is called")
 	clusterID := ts.sqlServer.execCfg.NodeInfo.LogicalClusterID
 	if err := base.CheckEnterpriseEnabled(ts.st, clusterID(), "SQL servers"); err != nil {
 		// If not enterprise enabled, we won't be able to use SQL Servers so eat
 		// the error and return without creating/starting a SQL server.
 		ts.cfg.DisableDefaultTestTenant = true
+		log.Shout(context.Background(), severity.INFO, "default test tenant disabled due to license check")
 		return nil // nolint:returnerrcheck
 	}
 
 	// If the flag has been set to disable the default test tenant, don't start
 	// it here.
 	if ts.params.DisableDefaultTestTenant || ts.cfg.DisableDefaultTestTenant {
+		log.Shout(context.Background(), severity.INFO, "default test tenant disabled due to boolean flag")
 		return nil
 	}
 
