@@ -291,6 +291,7 @@ go_test(
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
+        "//pkg/util/intsets",
         "//pkg/util/json",
         "//pkg/util/leaktest",
         "//pkg/util/log",

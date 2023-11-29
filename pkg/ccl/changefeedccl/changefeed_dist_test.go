@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"strconv"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -28,23 +28,57 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-type echoResolver struct {
-	result []roachpb.Spans
-	pos    int
+// mockRangeIterator iterates over ranges in a span.
+type mockRangeIterator struct {
+	rangeDesc *roachpb.RangeDescriptor
 }
 
-func (r *echoResolver) getRangesForSpans(
-	_ context.Context, _ []roachpb.Span,
-) (spans []roachpb.Span, _ error) {
-	spans = r.result[r.pos]
-	r.pos++
-	return spans, nil
+var _ rangeIterator = (*mockRangeIterator)(nil)
+
+func nextKey(startKey []byte) []byte {
+	return []byte{startKey[0] + 1}
+}
+
+// Desc implements the rangeIterator interface.
+func (ri *mockRangeIterator) Desc() *roachpb.RangeDescriptor {
+	return ri.rangeDesc
+}
+
+// NeedAnother implements the rangeIterator interface.
+func (ri *mockRangeIterator) NeedAnother(rs roachpb.RSpan) bool {
+	return ri.rangeDesc.EndKey.Less(rs.EndKey)
+}
+
+// Valid implements the rangeIterator interface.
+func (ri *mockRangeIterator) Valid() bool {
+	return true
+}
+
+// Error implements the rangeIterator interface.
+func (ri *mockRangeIterator) Error() error {
+	panic("unexpected call to Error()")
+}
+
+// Next implements the rangeIterator interface.
+func (ri *mockRangeIterator) Next(ctx context.Context) {
+	ri.rangeDesc.StartKey = nextKey(ri.rangeDesc.StartKey)
+	ri.rangeDesc.EndKey = nextKey(ri.rangeDesc.EndKey)
+}
+
+// Seek implements the rangeIterator interface.
+func (ri *mockRangeIterator) Seek(_ context.Context, key roachpb.RKey, _ kvcoord.ScanDirection) {
+	ri.rangeDesc = &roachpb.RangeDescriptor{
+		StartKey: key,
+		EndKey:   nextKey(key),
+	}
 }
 
 // TestPartitionSpans unit tests the rebalanceSpanPartitions function.
@@ -60,60 +94,128 @@ func TestPartitionSpans(t *testing.T) {
 	mkSpan := func(start, end string) roachpb.Span {
 		return roachpb.Span{Key: []byte(start), EndKey: []byte(end)}
 	}
-	spans := func(s ...roachpb.Span) roachpb.Spans {
-		return s
+	dedupe := func(in []int) []int {
+		ret := intsets.Fast{}
+		for _, id := range in {
+			ret.Add(id)
+		}
+		return ret.Ordered()
 	}
-	const sensitivity = 0.01
+	copySpans := func(partitions []sql.SpanPartition) (g roachpb.SpanGroup) {
+		for _, p := range partitions {
+			for _, sp := range p.Spans {
+				g.Add(sp)
+			}
+		}
+		return
+	}
 
+	const sensitivity = 0.00
 	for i, tc := range []struct {
-		input   []sql.SpanPartition
-		resolve []roachpb.Spans
-		expect  []sql.SpanPartition
+		input  []sql.SpanPartition
+		expect []sql.SpanPartition
 	}{
 		{
 			input: partitions(
-				mkPart(1, mkSpan("a", "j")),
-				mkPart(2, mkSpan("j", "q")),
-				mkPart(3, mkSpan("q", "z")),
+				mkPart(1, mkSpan("a", "g")), // 6 ranges
+				mkPart(2, mkSpan("h", "s")), // 11
+				mkPart(3, mkSpan("s", "z")), // 7
 			),
-			// 6 total ranges, 2 per node.
-			resolve: []roachpb.Spans{
-				spans(mkSpan("a", "c"), mkSpan("c", "e"), mkSpan("e", "j")),
-				spans(mkSpan("j", "q")),
-				spans(mkSpan("q", "y"), mkSpan("y", "z")),
-			},
 			expect: partitions(
-				mkPart(1, mkSpan("a", "e")),
-				mkPart(2, mkSpan("e", "q")),
-				mkPart(3, mkSpan("q", "z")),
+				mkPart(1, mkSpan("a", "g"), mkSpan("h", "j")), // 8
+				mkPart(2, mkSpan("k", "s")),                   // 8
+				mkPart(3, mkSpan("j", "k"), mkSpan("s", "z")), // 8
 			),
 		},
 		{
 			input: partitions(
-				mkPart(1, mkSpan("a", "c"), mkSpan("e", "p"), mkSpan("r", "z")),
-				mkPart(2),
-				mkPart(3, mkSpan("c", "e"), mkSpan("p", "r")),
+				mkPart(1, mkSpan("a", "c"), mkSpan("e", "p"), mkSpan("r", "z")), // 21
+				mkPart(2), // 0
+				mkPart(3, mkSpan("c", "e"), mkSpan("p", "r")), // 4
 			),
-			// 5 total ranges -- on 2 nodes; target should be 1 per node.
-			resolve: []roachpb.Spans{
-				spans(mkSpan("a", "c"), mkSpan("e", "p"), mkSpan("r", "z")),
-				spans(),
-				spans(mkSpan("c", "e"), mkSpan("p", "r")),
-			},
 			expect: partitions(
-				mkPart(1, mkSpan("a", "c"), mkSpan("e", "p")),
-				mkPart(2, mkSpan("r", "z")),
-				mkPart(3, mkSpan("c", "e"), mkSpan("p", "r")),
+				mkPart(1, mkSpan("o", "p"), mkSpan("r", "z")),                   // 9
+				mkPart(2, mkSpan("a", "c"), mkSpan("e", "l")),                   // 9
+				mkPart(3, mkSpan("c", "e"), mkSpan("l", "o"), mkSpan("p", "r")), // 7
+			),
+		},
+		{
+			input: partitions(
+				mkPart(5, mkSpan("c", "f"), mkSpan("a", "c"), mkSpan("f", "j")), // 9
+				mkPart(4, mkSpan("k", "t"), mkSpan("j", "k")),                   // 10
+				mkPart(3, mkSpan("t", "v")),                                     // 2
+				mkPart(2, mkSpan("v", "x")),                                     // 2
+				mkPart(1, mkSpan("x", "z")),                                     // 2
+			),
+			expect: partitions(
+				mkPart(5, mkSpan("b", "c"), mkSpan("f", "j")),                   // 5
+				mkPart(4, mkSpan("j", "k"), mkSpan("p", "t")),                   // 5
+				mkPart(3, mkSpan("a", "b"), mkSpan("d", "f"), mkSpan("t", "v")), // 5                   // 6
+				mkPart(2, mkSpan("c", "d"), mkSpan("n", "p"), mkSpan("v", "x")), // 5
+				mkPart(1, mkSpan("k", "n"), mkSpan("x", "z")),                   // 5
 			),
 		},
 	} {
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("simple-%d", i), func(t *testing.T) {
 			sp, err := rebalanceSpanPartitions(context.Background(),
-				&echoResolver{result: tc.resolve}, sensitivity, tc.input)
+				&mockRangeIterator{}, sensitivity, tc.input)
+
 			require.NoError(t, err)
 			require.Equal(t, tc.expect, sp)
 		})
 	}
+
+	// Create a random input and assert that the output has the same
+	// spans as the input.
+	t.Run("random", func(t *testing.T) {
+		rng, _ := randutil.NewTestRand()
+		numPartitions := rng.Intn(8) + 1
+		numSpans := rng.Intn(25) + 1
+
+		// Randomly create spans and assign them to nodes. For example,
+		// {1 {h-i}, {m-n}, {t-u}}
+		// {2 {a-c}, {d-f}, {l-m}, {s-t}, {x-z}}
+		// {3 {c-d}, {i-j}, {u-w}}
+		// {4 {w-x}}
+		// {5 {f-h}, {p-s}}
+		// {6 {j-k}, {k-l}, {n-o}, {o-p}}
+		input := make([]sql.SpanPartition, numPartitions)
+		for i := range input {
+			input[i] = mkPart(base.SQLInstanceID(i + 1))
+		}
+		spanIdxs := make([]int, numSpans)
+		for i := range spanIdxs {
+			spanIdxs[i] = rng.Intn((int('z')-int('a'))-1) + int('a') + 1
+		}
+		sort.Slice(spanIdxs, func(i int, j int) bool {
+			return spanIdxs[i] < spanIdxs[j]
+		})
+		spanIdxs = dedupe(spanIdxs)
+		for i, key := range spanIdxs {
+			assignTo := rng.Intn(numPartitions)
+			if i == 0 {
+				input[assignTo].Spans = append(input[assignTo].Spans, mkSpan("a", string(rune(key))))
+			} else {
+				input[assignTo].Spans = append(input[assignTo].Spans, mkSpan(string(rune(spanIdxs[i-1])), string(rune(key))))
+			}
+		}
+		last := rng.Intn(numPartitions)
+		input[last].Spans = append(input[last].Spans, mkSpan(string(rune(spanIdxs[len(spanIdxs)-1])), "z"))
+
+		t.Log(input)
+
+		// Ensure the set of input spans matches the set of output spans.
+		g1 := copySpans(input)
+		output, err := rebalanceSpanPartitions(context.Background(),
+			&mockRangeIterator{}, sensitivity, input)
+		require.NoError(t, err)
+
+		t.Log(output)
+
+		g2 := copySpans(output)
+		require.True(t, g1.Encloses(g2.Slice()...))
+		require.True(t, g2.Encloses(g1.Slice()...))
+	})
 }
 
 type rangeDistributionTester struct {
