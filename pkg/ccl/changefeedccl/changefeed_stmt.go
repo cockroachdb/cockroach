@@ -700,6 +700,12 @@ func createChangefeedJobRecord(
 				changefeedbase.OptExecutionLocality, clusterversion.V23_1.String(),
 			)
 		}
+		if err := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), changefeedbase.OptExecutionLocality,
+		); err != nil {
+			return nil, err
+		}
+
 		var executionLocality roachpb.Locality
 		if err := executionLocality.Set(locFilter); err != nil {
 			return nil, err
