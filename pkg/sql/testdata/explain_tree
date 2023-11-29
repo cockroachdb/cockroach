@@ -92,7 +92,6 @@ quality of service: regular
 │
 └── • sort
     │ columns: (column8 decimal, cid int, sum decimal)
-    │ ordering: +column8
     │ estimated row count: 98 (missing stats)
     │ order: +column8
     │
