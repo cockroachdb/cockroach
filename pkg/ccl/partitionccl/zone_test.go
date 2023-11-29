@@ -43,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
@@ -1068,10 +1067,9 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%+v", err)
 			}
-			clusterID := uuid.MakeV4()
 			hasNewSubzones := false
 			spans, err := sql.GenerateSubzoneSpans(
-				cluster.NoSettings, clusterID, keys.SystemSQLCodec, parse.tableDesc, parse.subzones, hasNewSubzones)
+				cluster.NoSettings, keys.SystemSQLCodec, parse.tableDesc, parse.subzones, hasNewSubzones)
 			if err != nil {
 				t.Fatalf("generating subzone spans: %+v", err)
 			}

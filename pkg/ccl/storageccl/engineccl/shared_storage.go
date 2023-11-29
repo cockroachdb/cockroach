@@ -44,7 +44,7 @@ func iterateReplicaKeySpansShared(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	st *cluster.Settings,
-	clusterID uuid.UUID,
+	_ uuid.UUID,
 	reader storage.Reader,
 	visitPoint func(key *pebble.InternalKey, val pebble.LazyValue, info pebble.IteratorLevel) error,
 	visitRangeDel func(start, end []byte, seqNum uint64) error,
@@ -54,7 +54,7 @@ func iterateReplicaKeySpansShared(
 	if !reader.ConsistentIterators() {
 		panic("reader must provide consistent iterators")
 	}
-	if err := utilccl.CheckEnterpriseEnabled(st, clusterID, "disaggregated shared storage"); err != nil {
+	if err := utilccl.CheckEnterpriseEnabled(st, "disaggregated shared storage"); err != nil {
 		// NB: ScanInternal returns ErrInvalidSkipSharedIteration if we can't do
 		// a skip-shared iteration. Return the same error here so the caller can
 		// fall back to regular, non-shared snapshots.

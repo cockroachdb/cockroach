@@ -2395,7 +2395,7 @@ func planDatabaseModifiersForRestore(
 		return nil, nil, nil
 	}
 	if err := multiregionccl.CheckClusterSupportsMultiRegion(
-		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
+		p.ExecCfg().Settings,
 	); err != nil {
 		return nil, nil, errors.WithHintf(
 			err,

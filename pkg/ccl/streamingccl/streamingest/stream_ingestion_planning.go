@@ -153,7 +153,7 @@ func ingestionPlanHook(
 		defer span.Finish()
 
 		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
+			p.ExecCfg().Settings,
 			"CREATE VIRTUAL CLUSTER FROM REPLICATION",
 		); err != nil {
 			return err

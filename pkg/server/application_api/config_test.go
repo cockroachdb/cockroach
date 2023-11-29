@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/safesql"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
@@ -272,7 +271,7 @@ func TestClusterAPI(t *testing.T) {
 			// Override server license check.
 			if enterpriseOn {
 				old := base.CheckEnterpriseEnabled
-				base.CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, _ string) error {
+				base.CheckEnterpriseEnabled = func(_ *cluster.Settings, _ string) error {
 					return nil
 				}
 				defer func() { base.CheckEnterpriseEnabled = old }()

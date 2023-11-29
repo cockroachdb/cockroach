@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -96,8 +95,8 @@ var ConfigureRoleBasedAuditClusterSettings = func(ctx context.Context, acl *audi
 	UpdateAuditConfigOnChange(ctx, acl, st)
 }
 
-var UserAuditEnabled = func(st *cluster.Settings, clusterID uuid.UUID) bool {
-	return UserAuditLogConfig.Get(&st.SV) != "" && utilccl.IsEnterpriseEnabled(st, clusterID, "role-based audit logging")
+var UserAuditEnabled = func(st *cluster.Settings) bool {
+	return UserAuditLogConfig.Get(&st.SV) != "" && utilccl.IsEnterpriseEnabled(st, "role-based audit logging")
 }
 
 var UserAuditReducedConfigEnabled = func(sv *settings.Values) bool {
