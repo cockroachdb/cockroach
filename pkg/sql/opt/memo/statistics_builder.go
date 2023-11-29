@@ -3008,6 +3008,15 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 	}
 }
 
+// TODO(#115278): We should be able to replace this with Go's built-in max
+// function, but doing breaks some optimizer tests on ARM64.
+func max(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 //////////////////////////////////////////////////
 // Helper functions for selectivity calculation //
 //////////////////////////////////////////////////
