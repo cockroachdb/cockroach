@@ -27,7 +27,7 @@ func TestAdmissionHeader(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	txn := roachpb.MakeTransaction("test", []byte("key"), 0, 0, hlc.Timestamp{WallTime: 10},
-		0, 0, admissionpb.UserHighPri)
+		0, 0, admissionpb.UserHighPri, false /* omitInRangefeeds */)
 	ahHighPri := AdmissionHeaderForLockUpdateForTxn(&txn)
 	require.Equal(t, kvpb.AdmissionHeader{
 		// Priority bumped from UserHighPri to LockingUserHighPri to give priority to

@@ -1626,7 +1626,7 @@ func runMVCCAcquireLockCommon(
 		return encoding.EncodeUvarintAscending(keyBuf[:4], uint64(i))
 	}
 	makeTxn := func(name string) roachpb.Transaction {
-		return roachpb.MakeTransaction(name, keyBuf, 0, 0, hlc.Timestamp{WallTime: 1}, 0, 0, 0)
+		return roachpb.MakeTransaction(name, keyBuf, 0, 0, hlc.Timestamp{WallTime: 1}, 0, 0, 0, false /* omitInRangefeeds */)
 	}
 	txn1 := makeTxn("txn1")
 	txn2 := makeTxn("txn2")

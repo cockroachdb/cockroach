@@ -6965,7 +6965,7 @@ func TestInvalidConfChangeRejection(t *testing.T) {
 	// See: https://github.com/cockroachdb/cockroach/issues/105797
 	var ba kvpb.BatchRequest
 	now := tc.Server(0).Clock().Now()
-	txn := roachpb.MakeTransaction("fake", k, isolation.Serializable, roachpb.NormalUserPriority, now, 500*time.Millisecond.Nanoseconds(), 1, 0)
+	txn := roachpb.MakeTransaction("fake", k, isolation.Serializable, roachpb.NormalUserPriority, now, 500*time.Millisecond.Nanoseconds(), 1, 0, false /* omitInRangefeeds */)
 	ba.Txn = &txn
 	ba.Timestamp = now
 	ba.Add(&kvpb.EndTxnRequest{

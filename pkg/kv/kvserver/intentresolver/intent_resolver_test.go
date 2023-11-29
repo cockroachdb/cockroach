@@ -866,7 +866,7 @@ func newTransaction(
 	}
 	txn := roachpb.MakeTransaction(
 		name, baseKey, isolation.Serializable, userPriority, now, offset,
-		1 /* coordinatorNodeID */, 0)
+		1 /* coordinatorNodeID */, 0, false /* omitInRangefeeds */)
 	return &txn
 }
 
