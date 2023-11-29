@@ -651,16 +651,38 @@ func (n *Node) start(
 		return errors.Wrapf(err, "couldn't gossip descriptor for node %d", n.Descriptor.NodeID)
 	}
 
-	// Create stores from the engines that were already initialized.
-	for _, e := range state.initializedEngines {
-		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
-		if err := s.Start(workersCtx, n.stopper); err != nil {
-			return errors.Wrap(err, "failed to start store")
+	// Create stores in parallel from the engines that were already initialized. This uses a channel  to collect errors
+	// when starting stores. The channel is a buffered channel with the same size as the number of stores so worker
+	// go routines will never wait.
+	c := make(chan error, len(state.initializedEngines))
+	for i := range state.initializedEngines {
+		engine := i
+		err := n.stopper.RunAsyncTask(ctx, "initialize-stores", func(ctx context.Context) {
+			s := kvserver.NewStore(ctx, n.storeCfg, state.initializedEngines[engine], &n.Descriptor)
+			if err := s.Start(workersCtx, n.stopper); err != nil {
+				c <- errors.Wrap(err, "failed to start store")
+				return
+			}
+			fmt.Println("starting store with id ", s.StoreID())
+			n.addStore(ctx, s)
+			log.Infof(ctx, "initialized store s%s", s.StoreID())
+			c <- nil
+		})
+		if err != nil {
+			return err
 		}
-
-		n.addStore(ctx, s)
-		log.Infof(ctx, "initialized store s%s", s.StoreID())
 	}
+
+	// Collect errors from the go routines and return the first error received.
+	// This also waits for all stores to finish starting.
+	for range state.initializedEngines {
+		if err := <-c; err != nil {
+			close(c)
+			return err
+		}
+	}
+
+	close(c)
 
 	// Verify all initialized stores agree on cluster and node IDs.
 	if err := n.validateStores(ctx); err != nil {
