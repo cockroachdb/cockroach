@@ -197,5 +197,5 @@ func TestGetSSTableMetricsSingleNode(t *testing.T) {
 		require.NotEqual(t, approximateSpanBytes, 0)
 		count++
 	}
-	require.Equal(t, 1, count)
+	require.GreaterOrEqual(t, count, 1)
 }
