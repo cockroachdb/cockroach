@@ -237,6 +237,7 @@ func TestClusterInflightTraces(t *testing.T) {
 			}
 
 			type testCase struct {
+				name    string
 				servers []serverutils.ApplicationLayerInterface
 				dbs     []*gosql.DB
 				// otherServers, if set, represents the servers corresponding to
@@ -248,6 +249,7 @@ func TestClusterInflightTraces(t *testing.T) {
 			switch config {
 			case "single-tenant":
 				testCases = []testCase{{
+					name:    "system-tenant",
 					servers: []serverutils.ApplicationLayerInterface{tc.Servers[0], tc.Servers[1]},
 					dbs:     systemDBs,
 				}}
@@ -263,11 +265,13 @@ func TestClusterInflightTraces(t *testing.T) {
 				}
 				testCases = []testCase{
 					{
+						name:         "application-tenant",
 						servers:      tenants,
 						dbs:          dbs,
 						otherServers: systemServers,
 					},
 					{
+						name:         "system-tenant",
 						servers:      systemServers,
 						dbs:          systemDBs,
 						otherServers: tenants,
@@ -286,11 +290,13 @@ func TestClusterInflightTraces(t *testing.T) {
 				}
 				testCases = []testCase{
 					{
+						name:         "application-tenant",
 						servers:      tenants,
 						dbs:          dbs,
 						otherServers: systemServers,
 					},
 					{
+						name:         "system-tenant",
 						servers:      systemServers,
 						dbs:          systemDBs,
 						otherServers: tenants,
@@ -299,45 +305,47 @@ func TestClusterInflightTraces(t *testing.T) {
 			}
 
 			for _, tc := range testCases {
-				// Set up the traces we're going to look for.
-				localTraceID, _, cleanup := setupTraces(tc.servers[0].Tracer(), tc.servers[1].Tracer())
-				defer cleanup()
+				t.Run(tc.name, func(t *testing.T) {
+					// Set up the traces we're going to look for.
+					localTraceID, _, cleanup := setupTraces(tc.servers[0].Tracer(), tc.servers[1].Tracer())
+					defer cleanup()
 
-				// Create some other spans on tc.otherServers, that we don't
-				// expect to find.
-				const otherServerSpanName = "other-server-span"
-				for _, s := range tc.otherServers {
-					sp := s.Tracer().StartSpan(otherServerSpanName)
-					defer sp.Finish()
-				}
-
-				// We're going to query the cluster_inflight_traces through
-				// every SQL instance.
-				for _, db := range tc.dbs {
-					rows, err := db.Query(
-						"SELECT node_id, trace_str FROM crdb_internal.cluster_inflight_traces "+
-							"WHERE trace_id=$1 ORDER BY node_id",
-						localTraceID)
-					require.NoError(t, err)
-
-					expSpans := map[int][]string{
-						1: {"root", "root.child", "root.child.remotechilddone"},
-						2: {"root.child.remotechild"},
+					// Create some other spans on tc.otherServers, that we don't
+					// expect to find.
+					const otherServerSpanName = "other-server-span"
+					for _, s := range tc.otherServers {
+						sp := s.Tracer().StartSpan(otherServerSpanName)
+						defer sp.Finish()
 					}
-					for rows.Next() {
-						var nodeID int
-						var trace string
-						require.NoError(t, rows.Scan(&nodeID, &trace))
-						exp, ok := expSpans[nodeID]
-						require.True(t, ok)
-						delete(expSpans, nodeID) // Consume this entry; we'll check that they were all consumed.
-						for _, span := range exp {
-							require.Contains(t, trace, "=== operation:"+span)
+
+					// We're going to query the cluster_inflight_traces through
+					// every SQL instance.
+					for _, db := range tc.dbs {
+						rows, err := db.Query(
+							"SELECT node_id, trace_str FROM crdb_internal.cluster_inflight_traces "+
+								"WHERE trace_id=$1 ORDER BY node_id",
+							localTraceID)
+						require.NoError(t, err)
+
+						expSpans := map[int][]string{
+							1: {"root", "root.child", "root.child.remotechilddone"},
+							2: {"root.child.remotechild"},
 						}
-						require.NotContains(t, trace, "=== operation:"+otherServerSpanName)
+						for rows.Next() {
+							var nodeID int
+							var trace string
+							require.NoError(t, rows.Scan(&nodeID, &trace))
+							exp, ok := expSpans[nodeID]
+							require.True(t, ok)
+							delete(expSpans, nodeID) // Consume this entry; we'll check that they were all consumed.
+							for _, span := range exp {
+								require.Contains(t, trace, "=== operation:"+span)
+							}
+							require.NotContains(t, trace, "=== operation:"+otherServerSpanName)
+						}
+						require.Len(t, expSpans, 0)
 					}
-					require.Len(t, expSpans, 0)
-				}
+				})
 			}
 		})
 	}
