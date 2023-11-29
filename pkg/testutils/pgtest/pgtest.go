@@ -243,6 +243,13 @@ func (p *PGTest) Until(
 			return nil, err
 		}
 		msg := x.Interface().(pgproto3.BackendMessage)
+		if notice, ok := msg.(*pgproto3.NoticeResponse); ok {
+			// The line number can change frequently, so to reduce churn, we always
+			// ignore it.
+			notice.Line = 0
+			msgs = append(msgs, notice)
+			continue
+		}
 		msgs = append(msgs, msg)
 	}
 	return msgs, nil

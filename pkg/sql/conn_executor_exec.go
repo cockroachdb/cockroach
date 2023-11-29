@@ -1043,7 +1043,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.autoCommit = canAutoCommit &&
 		!ex.server.cfg.TestingKnobs.DisableAutoCommitDuringExec && ex.extraTxnState.numDDL == 0
 	p.extendedEvalCtx.TxnIsSingleStmt = canAutoCommit && !ex.extraTxnState.firstStmtExecuted
-	ex.extraTxnState.firstStmtExecuted = true
+	defer func() { ex.extraTxnState.firstStmtExecuted = true }()
 
 	var stmtThresholdSpan *tracing.Span
 	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()
@@ -2195,22 +2195,41 @@ func (ex *connExecutor) handleTxnRowsWrittenReadLimits(ctx context.Context) erro
 	return errors.CombineErrors(writtenErr, readErr)
 }
 
-// makeExecPlan creates an execution plan and populates planner.curPlan using
-// the cost-based optimizer.
-func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
-	if tree.CanModifySchema(planner.stmt.AST) {
-		if planner.Txn().IsoLevel().ToleratesWriteSkew() {
-			if planner.extendedEvalCtx.TxnIsSingleStmt && planner.extendedEvalCtx.TxnImplicit {
+// maybeUpgradeToSerializable checks if the statement is a schema change, and
+// upgrades the transaction to serializable isolation if it is. If the
+// transaction contains multiple statements, and an upgrade was attempted, an
+// error is returned.
+func (ex *connExecutor) maybeUpgradeToSerializable(ctx context.Context, stmt Statement) error {
+	p := &ex.planner
+	if ex.extraTxnState.upgradedToSerializable && ex.extraTxnState.firstStmtExecuted {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported, "multi-statement transaction involving a schema change needs to be SERIALIZABLE",
+		)
+	}
+	if tree.CanModifySchema(stmt.AST) {
+		if ex.state.mu.txn.IsoLevel().ToleratesWriteSkew() {
+			if !ex.extraTxnState.firstStmtExecuted {
 				if err := ex.state.setIsolationLevel(isolation.Serializable); err != nil {
 					return err
 				}
-				planner.BufferClientNotice(ctx, pgnotice.Newf("setting implicit transaction isolation level to SERIALIZABLE due to schema change"))
+				ex.extraTxnState.upgradedToSerializable = true
+				p.BufferClientNotice(ctx, pgnotice.Newf("setting transaction isolation level to SERIALIZABLE due to schema change"))
 			} else {
 				return pgerror.Newf(
-					pgcode.FeatureNotSupported, "explicit transaction involving a schema change needs to be SERIALIZABLE",
+					pgcode.FeatureNotSupported, "multi-statement transaction involving a schema change needs to be SERIALIZABLE",
 				)
 			}
 		}
+	}
+	return nil
+}
+
+// makeExecPlan creates an execution plan and populates planner.curPlan using
+// the cost-based optimizer. This is used to create the plan when executing a
+// query in the "simple" pgwire protocol.
+func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
+	if err := ex.maybeUpgradeToSerializable(ctx, planner.stmt); err != nil {
+		return err
 	}
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {

@@ -54,8 +54,9 @@ type CatalogReader interface {
 	// ScanAll scans the entirety of the descriptor and namespace tables.
 	ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error)
 
-	// ScanAllComments scans only the entirety of the comments table.
-	ScanAllComments(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error)
+	// ScanAllComments scans the entirety of the comments table as well as the namespace entries for the given database.
+	// If the dbContext is nil, we scan the database-level namespace entries.
+	ScanAllComments(ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor) (nstree.Catalog, error)
 
 	// ScanNamespaceForDatabases scans the portion of the namespace table which
 	// contains all database name entries.
@@ -163,11 +164,18 @@ func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalo
 }
 
 // ScanAllComments is part of the CatalogReader interface.
-func (cr catalogReader) ScanAllComments(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
+func (cr catalogReader) ScanAllComments(
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+) (nstree.Catalog, error) {
 	var mc nstree.MutableCatalog
 	cq := catalogQuery{codec: cr.codec}
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-		scan(ctx, b, codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID))
+		// N.B. the primary key of system.namespace is ("parentID" ASC, "parentSchemaID" ASC, name ASC).
+		parentID := descpb.ID(0)
+		if db != nil {
+			parentID = db.GetID()
+		}
+		scan(ctx, b, catalogkeys.MakeDatabaseChildrenNameKeyPrefix(codec, parentID))
 		scan(ctx, b, catalogkeys.CommentsMetadataPrefix(codec))
 	})
 	if err != nil {
