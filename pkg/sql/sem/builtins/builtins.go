@@ -239,6 +239,46 @@ var regularBuiltins = map[string]builtinDefinition{
 		),
 	),
 
+	"bit_count": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},
+		stringOverload1(
+			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
+				total := 0
+				for _, b := range s {
+					total += bits.OnesCount(uint(b))
+				}
+				return tree.NewDInt(tree.DInt(total)), nil
+			},
+			types.Int,
+			"Calculates the number of bits set used to represent `val`.",
+			volatility.Immutable,
+		),
+		bytesOverload1(
+			func(_ context.Context, _ *eval.Context, s string) (tree.Datum, error) {
+				total := 0
+				for _, b := range s {
+					total += bits.OnesCount(uint(b))
+				}
+				return tree.NewDInt(tree.DInt(total)), nil
+			},
+			types.Int,
+			"Calculates the number of bits set used to represent `val`.",
+			volatility.Immutable,
+		),
+		bitsOverload1(
+			func(_ context.Context, _ *eval.Context, s *tree.DBitArray) (tree.Datum, error) {
+				total := 0
+				parts, _ := s.BitArray.EncodingParts()
+				for _, b := range parts {
+					total += bits.OnesCount64(b)
+				}
+				return tree.NewDInt(tree.DInt(total)), nil
+			},
+			types.Int,
+			"Calculates the number of bits set used to represent `val`.",
+			volatility.Immutable,
+		),
+	),
+
 	"format": formatImpls,
 
 	"octet_length": makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategoryString},

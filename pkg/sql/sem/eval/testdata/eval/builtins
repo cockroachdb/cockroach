@@ -94,6 +94,16 @@ bit_length('1011'::bit(4))
 4
 
 eval
+bit_count('0101011100'::bit(10))
+----
+5
+
+eval
+bit_count('1111111111'::bit(10))
+----
+10
+
+eval
 octet_length('1011'::bit(4))
 ----
 1

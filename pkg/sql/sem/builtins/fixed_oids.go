@@ -2510,6 +2510,9 @@ var builtinOidsArray = []string{
 	2541: `information_schema._pg_interval_type(typid: oid, typmod: int4) -> string`,
 	2542: `crdb_internal.release_series(version: string) -> string`,
 	2543: `crdb_internal.fips_ready() -> bool`,
+	2544: `bit_count(val: string) -> int`,
+	2545: `bit_count(val: bytes) -> int`,
+	2546: `bit_count(val: varbit) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
