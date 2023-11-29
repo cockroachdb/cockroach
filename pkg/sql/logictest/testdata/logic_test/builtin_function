@@ -41,6 +41,18 @@ SELECT bit_length('Hello'), bit_length('世界'), bit_length(b'世界')
 ----
 40 48 48
 
+statement ok
+CREATE TABLE bit_count_test (a BIT(3), b varbit, c bytea)
+
+statement ok
+INSERT INTO bit_count_test VALUES (B'101', B'00', '\x10'), (B'100', B'101', '\x10A2')
+
+query TTTIII rowsort
+SELECT a, b, encode(c, 'hex'), bit_count(a), bit_count(b), bit_count(c) FROM bit_count_test
+----
+101  00   10    2  0  1
+100  101  10a2  1  2  4
+
 query TTTTTTTT
 SELECT quote_ident('abc'), quote_ident('ab.c'), quote_ident('ab"c'), quote_ident('世界'),
        quote_ident('array'), -- reserved keyword
