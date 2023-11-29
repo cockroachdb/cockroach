@@ -3349,29 +3349,134 @@ func TestChangefeedCustomKey(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+func TestChangefeedCustomKeyColumnWithCDCQuery2(t *testing.T) {
+	//`old`: {
+	//createTableStmt:      ,
+	//	createChangeFeedStmt: ,
+	//		stmts:                []string{, },
+	//		payloadsAfterStmts:   ,
+	//},
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH key_column='b', unordered AS SELECT * FROM foo`)
+		defer closeFeed(t, foo)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'dog', 'cat')`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'dog1', 'cat1')`)
+		assertPayloads(t, foo, []string{`foo: ["dog"]->{"a": 0, "b": "dog", "c": "cat"}`, `foo: ["dog1"]->{"a": 1, "b": "dog1", "c": "cat1"}`})
+	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
 // Reproduce issue for #114196. This test verifies that changefeed with custom
 // key column works with CDC queries correctly.
 func TestChangefeedCustomKeyColumnWithCDCQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	tests := map[string]struct {
+		createTableStmt      string
+		createChangeFeedStmt string
+		stmts                []string
+		payloadsAfterStmts   []string
+	}{
+		`old`: {
+			createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`,
+			createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='b', unordered AS SELECT * FROM foo`,
+			stmts:                []string{`INSERT INTO foo VALUES (0, 'dog', 'cat')`, `INSERT INTO foo VALUES (1, 'dog1', 'cat1')`},
+			payloadsAfterStmts:   []string{`foo: ["dog"]->{"a": 0, "b": "dog", "c": "cat"}`, `foo: ["dog1"]->{"a": 1, "b": "dog1", "c": "cat1"}`},
+		},
+		`star`: {
+			createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`,
+			createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='b', unordered AS SELECT * FROM foo WHERE b='dog'`,
+			stmts:                []string{`INSERT INTO foo VALUES (0, 'dog', 'cat')`, `INSERT INTO foo VALUES (1, 'dog1', 'cat1')`},
+			payloadsAfterStmts:   []string{`foo: ["dog"]->{"a": 0, "b": "dog", "c": "cat"}`},
+		},
+		`star1`: {
+			createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`,
+			createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='c', unordered AS SELECT b, c FROM foo WHERE b='dog'`,
+			stmts:                []string{`INSERT INTO foo VALUES (0, 'dog', 'cat')`, `INSERT INTO foo VALUES (1, 'dog1', 'cat1')`},
+			payloadsAfterStmts:   []string{`foo: ["cat"]->{"b": "dog", "c": "cat"}`},
+		},
+		//`star2`: {
+		//	createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`,
+		//	createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='double_b', unordered AS SELECT concat(b, c) AS double_b FROM foo`,
+		//	stmts:                []string{`INSERT INTO foo VALUES (0, 'dog', 'cat')`, `INSERT INTO foo VALUES (1, 'dog1', 'cat1')`},
+		//	payloadsAfterStmts:   []string{`foo: ["cat"]->{"c": "cat"}`},
+		//},
+		`star3`: {
+			createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, d STRING AS (concat(b, c)) STORED)`,
+			createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='d', unordered AS SELECT * FROM foo WHERE d='dog1cat1'`,
+			stmts:                []string{`INSERT INTO foo VALUES (0, 'dog', 'cat')`, `INSERT INTO foo VALUES (1, 'dog1', 'cat1')`},
+			payloadsAfterStmts:   []string{`foo: ["dog1cat1"]->{"a": 1, "b": "dog1", "c": "cat1", "d": "dog1cat1"}`},
+		},
+		// Does not exist
+		//`star10`: {
+		//	createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, d STRING AS (concat(b, c)) VIRTUAL)`,
+		//	createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='d', unordered AS SELECT d FROM foo WHERE d='dog1cat1'`,
+		//	stmts:                []string{`INSERT INTO foo VALUES (0, 'dog', 'cat')`, `INSERT INTO foo VALUES (1, 'dog1', 'cat1')`},
+		//	payloadsAfterStmts:   []string{`foo: ["dog1cat1"]->{"a": 1, "b": "dog1", "c": "cat1", "d": "dog1cat1"}`},
+		//},
+		`star6`: {
+			createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`,
+			createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='b', unordered AS SELECT * FROM foo WHERE b IN ('dog', 'dog1')`,
+			stmts:                []string{`INSERT INTO foo VALUES (0, 'dog')`, `INSERT INTO foo VALUES (1, 'dog1')`},
+			payloadsAfterStmts:   []string{`foo: ["dog"]->{"a": 0, "b": "dog"}`, `foo: ["dog1"]->{"a": 1, "b": "dog1"}`},
+		},
+		`star7`: {
+			createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`,
+			createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='b', unordered AS SELECT *, event_op() = 'delete' AS deleted FROM foo WHERE 'hello' != 'world'`,
+			stmts:                []string{`INSERT INTO foo VALUES (0, 'dog')`, `INSERT INTO foo VALUES (1, 'dog1')`, `DELETE FROM foo WHERE a=1`},
+			payloadsAfterStmts:   []string{`foo: ["dog"]->{"a": 0, "b": "dog", "deleted": false}`, `foo: ["dog1"]->{"a": 1, "b": "dog1", "deleted": false}`},
+		},
+		//`star5`: {
+		//	createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`,
+		//	stmtBeforeCreate:     []string{`INSERT INTO foo VALUES (0, 'dog')`, `INSERT INTO foo VALUES (1, 'dog1')`, `DELETE FROM foo WHERE a=1`},
+		//	createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='b', unordered AS SELECT * FROM foo WHERE event_op() = 'delete'`,
+		//	stmts:                []string{},
+		//	payloadsAfterStmts:   []string{`foo: ["dog"]->{"a": 0, "b": "dog", "deleted": false}`},
+		//},
 
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'dog', 'cat')`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'dog1', 'cat1')`)
-		foo := feed(t, f,
-			`CREATE CHANGEFEED WITH key_column='b', unordered AS SELECT * FROM foo WHERE b='dog1'`)
-		defer closeFeed(t, foo)
+		// Different mvcc time
+		//`star8`: {
+		//	createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`,
+		//	createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='crdb_internal_mvcc_timestamp', unordered AS SELECT crdb_internal_mvcc_timestamp FROM foo WHERE crdb_internal_mvcc_timestamp > 0`,
+		//	stmts:                []string{`INSERT INTO foo VALUES (0, 'dog')`, `INSERT INTO foo VALUES (1, 'dog1')`},
+		//	payloadsAfterStmts:   []string{`foo: [1701232020914949000.0000000000]->{"crdb_internal_mvcc_timestamp": 1701232020914949000.0000000000}`},
+		//},
+		`star9`: {
+			createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING NOT VISIBLE)`,
+			createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='b', unordered AS SELECT b FROM foo`,
+			stmts:                []string{`INSERT INTO foo(a,b) VALUES (0, 'dog')`, `INSERT INTO foo(a,b) VALUES (1, 'dog1')`},
+			payloadsAfterStmts:   []string{`foo: ["dog"]->{"b": "dog"}`, `foo: ["dog1"]->{"b": "dog1"}`},
+		},
+		// timed out
+		//`star10`: {
+		//	createTableStmt:      `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`,
+		//	createChangeFeedStmt: `CREATE CHANGEFEED WITH key_column='b', unordered AS SELECT * FROM foo WHERE (cdc_prev).a = 0`,
+		//	stmts:                []string{`INSERT INTO foo(a,b) VALUES (0, 'dog')`, `INSERT INTO foo(a,b) VALUES (1, 'dog1')`},
+		//	payloadsAfterStmts:   []string{`foo: ["dog"]->{"b": "dog"}`, `foo: ["dog1"]->{"b": "dog1"}`},
+		//},
+	}
 
-		// We expect that a changefeed record with b="dog1" is emitted rather than
-		// b="dog".
-		assertPayloads(t, foo, []string{
-			`foo: ["dog1"]->{"a": 1, "b": "dog1", "c": "cat1"}`,
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				sqlDB.Exec(t, test.createTableStmt)
+				foo := feed(t, f, test.createChangeFeedStmt)
+				defer closeFeed(t, foo)
+				for _, stmt := range test.stmts {
+					sqlDB.Exec(t, stmt)
+				}
+				assertPayloads(t, foo, test.payloadsAfterStmts)
+			}
+			cdcTest(t, testFn, feedTestForceSink("kafka"))
 		})
 	}
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestChangefeedCustomKeyAvro(t *testing.T) {
