@@ -107,6 +107,9 @@ build:devdarwinx86_64 --config=dev
 build:macos --action_env=PATH=/opt/homebrew/bin:/opt/local/bin:/usr/local/bin:/usr/bin:/bin
 build:macos --host_action_env=PATH=/opt/homebrew/bin:/opt/local/bin:/usr/local/bin:/usr/bin:/bin
 
+build:macos --linkopt="-Xlinker"
+build:macos --linkopt="-no_warn_duplicate_libraries"
+
 # --config=simplestamp configures the build to stamp the build with inferred
 # information about the configuration.
 # All `dev` builds will use this configuration; all `cross` builds will use a
