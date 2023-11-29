@@ -302,10 +302,3 @@ type quantile struct {
 	suffix   string
 	quantile float64
 }
-
-func min(i, j int64) int64 {
-	if i < j {
-		return i
-	}
-	return j
-}

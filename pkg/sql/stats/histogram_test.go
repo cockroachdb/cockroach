@@ -988,13 +988,6 @@ func roundHistogram(h *histogram) {
 	}
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 func validateHistogramBuckets(t *testing.T, expected []expBucket, h HistogramData) {
 	if h.Version != histVersion {
 		t.Errorf("Invalid histogram version %d expected %d", h.Version, histVersion)

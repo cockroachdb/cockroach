@@ -319,13 +319,6 @@ func compressFile(filePath string) (err error) {
 	return
 }
 
-func min(a, b int) int {
-	if a <= b {
-		return a
-	}
-	return b
-}
-
 func combineErrors(err error, otherErr error) error {
 	if err == nil {
 		return otherErr

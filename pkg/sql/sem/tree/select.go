@@ -1278,10 +1278,3 @@ func (d LockingDurability) String() string {
 func (d LockingDurability) Max(d2 LockingDurability) LockingDurability {
 	return LockingDurability(max(byte(d), byte(d2)))
 }
-
-func max(a, b byte) byte {
-	if a > b {
-		return a
-	}
-	return b
-}

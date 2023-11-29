@@ -289,13 +289,6 @@ var sortByLocalityFirst = settings.RegisterBoolSetting(
 	true,
 )
 
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
 	BatchCount                         *metric.Counter

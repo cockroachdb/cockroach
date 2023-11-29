@@ -1297,7 +1297,7 @@ func (rp *replicaProposer) locker() sync.Locker {
 }
 
 func (rp *replicaProposer) rlocker() sync.Locker {
-	return &rp.mu.ReplicaMutex
+	return rp.mu.ReplicaMutex.RLocker()
 }
 
 func (rp *replicaProposer) getReplicaID() roachpb.ReplicaID {

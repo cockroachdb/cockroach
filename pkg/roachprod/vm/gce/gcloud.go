@@ -1357,13 +1357,6 @@ func propagateDiskLabels(
 	return g.Wait()
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Delete TODO(peter): document
 func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 	// Map from project to map of zone to list of machines in that project/zone.

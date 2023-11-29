@@ -294,10 +294,3 @@ func (e *storePerWorkTokenEstimator) getModelsAtDone() (
 		e.atDoneL0IngestTokensLinearModel.smoothedLinearModel,
 		e.atDoneIngestTokensLinearModel.smoothedLinearModel
 }
-
-func max(i, j int64) int64 {
-	if i < j {
-		return j
-	}
-	return i
-}

@@ -513,20 +513,6 @@ func (r *intFuncRequest) Acquire(
 	return true, 0
 }
 
-func min(a, b int64) (v int64) {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int64) (v int64) {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 func (r *intFuncRequest) ShouldWait() bool { return true }
 
 type intFuncRequestNoWait intFuncRequest

@@ -178,13 +178,6 @@ func (w *slidingWindowFunc) Compute(
 	return w.sw.values.GetFirst().value, nil
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // Reset implements tree.WindowFunc interface.
 func (w *slidingWindowFunc) Reset(context.Context) {
 	w.prevEnd = 0
