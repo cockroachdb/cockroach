@@ -455,6 +455,17 @@ func (txn *Txn) DisablePipelining() error {
 	return txn.mu.sender.DisablePipelining()
 }
 
+// SetOmitInRangefeeds sets the value of the OmitInRangefeeds attribute in the
+// Transaction proto of the sender.
+//
+// SetOmitInRangefeeds must be called before any operations are performed on the
+// transaction.
+func (txn *Txn) SetOmitInRangefeeds(omitInRangefeeds bool) {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	txn.mu.sender.SetOmitInRangefeeds(omitInRangefeeds)
+}
+
 // NewBatch creates and returns a new empty batch object for use with the Txn.
 func (txn *Txn) NewBatch() *Batch {
 	return &Batch{txn: txn, AdmissionHeader: txn.AdmissionHeader()}
