@@ -649,8 +649,8 @@ func newInitServerConfig(
 			// separately when we Activate the server).
 			var bootstrapVersion roachpb.Version
 			for _, v := range bootstrap.VersionsWithInitialValues() {
-				if !overrideVersion.Less(clusterversion.ByKey(v)) {
-					bootstrapVersion = clusterversion.ByKey(v)
+				if !overrideVersion.Less(v.Version()) {
+					bootstrapVersion = v.Version()
 					break
 				}
 			}

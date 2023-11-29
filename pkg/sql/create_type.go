@@ -318,7 +318,7 @@ func (p *planner) createUserDefinedType(params runParams, n *createTypeNode) err
 		if !p.execCfg.Settings.Version.IsActive(params.ctx, clusterversion.V23_1) {
 			return pgerror.Newf(pgcode.FeatureNotSupported,
 				"version %v must be finalized to create composite types",
-				clusterversion.ByKey(clusterversion.V23_1))
+				clusterversion.V23_1)
 		}
 		return params.p.createCompositeWithID(
 			params, id, n.n.CompositeTypeList, n.dbDesc, n.typeName,

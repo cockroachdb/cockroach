@@ -101,7 +101,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
 		c := newCluster()
 		if strings.HasSuffix(path, "_v23_1") {
-			v := clusterversion.ByKey(clusterversion.V23_1)
+			v := clusterversion.V23_1.Version()
 			st := clustersettings.MakeTestingClusterSettingsWithVersions(v, v, true)
 			c = newClusterWithSettings(st)
 		}

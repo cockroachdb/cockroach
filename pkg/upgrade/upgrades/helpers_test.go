@@ -52,7 +52,7 @@ type Schema struct {
 func Upgrade(
 	t *testing.T, sqlDB *gosql.DB, key clusterversion.Key, done chan struct{}, expectError bool,
 ) {
-	UpgradeToVersion(t, sqlDB, clusterversion.ByKey(key), done, expectError)
+	UpgradeToVersion(t, sqlDB, key.Version(), done, expectError)
 }
 
 func UpgradeToVersion(
@@ -206,7 +206,7 @@ func ExecForCountInTxns(
 func ValidateSystemDatabaseSchemaVersionBumped(
 	t *testing.T, sqlDB *gosql.DB, expectedVersion clusterversion.Key,
 ) {
-	expectedSchemaVersion := clusterversion.ByKey(expectedVersion)
+	expectedSchemaVersion := expectedVersion.Version()
 
 	var actualSchemaVersionBytes []byte
 	require.NoError(t, sqlDB.QueryRow(

@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -47,7 +46,7 @@ func (f MultiRegionTestClusterFactory) WithSchemaChangerKnobs(
 // WithMixedVersion implements the sctest.TestServerFactory interface.
 func (f MultiRegionTestClusterFactory) WithMixedVersion() sctest.TestServerFactory {
 	f.server = &server.TestingKnobs{
-		BinaryVersionOverride:          clusterversion.ByKey(sctest.OldVersionKey),
+		BinaryVersionOverride:          sctest.OldVersionKey.Version(),
 		DisableAutomaticVersionUpgrade: make(chan struct{}),
 	}
 	return f

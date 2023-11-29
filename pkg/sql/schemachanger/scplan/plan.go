@@ -196,7 +196,7 @@ func GetReleasesForRulesRegistries() []clusterversion.ClusterVersion {
 	for _, r := range rulesForReleases {
 		supportedVersions = append(supportedVersions,
 			clusterversion.ClusterVersion{
-				Version: clusterversion.ByKey(r.activeVersion),
+				Version: r.activeVersion.Version(),
 			})
 	}
 	return supportedVersions
@@ -213,7 +213,7 @@ func getMinValidVersionForRules(
 			minVersionForRules,
 			activeVersion)
 		return clusterversion.ClusterVersion{
-			Version: clusterversion.ByKey(minVersionForRules),
+			Version: minVersionForRules.Version(),
 		}
 	}
 	return activeVersion
