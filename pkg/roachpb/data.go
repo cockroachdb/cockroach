@@ -943,6 +943,10 @@ func (TransactionStatus) SafeValue() {}
 //
 // baseKey can be nil, in which case it will be set when sending the first
 // write.
+//
+// omitInRangefeeds controls whether the transaction's writes are exposed via
+// rangefeeds. When set to true, all the transaction's writes will be
+// filtered out by rangefeeds, and will not be available in changefeeds.
 func MakeTransaction(
 	name string,
 	baseKey Key,
@@ -952,6 +956,7 @@ func MakeTransaction(
 	maxOffsetNs int64,
 	coordinatorNodeID int32,
 	admissionPriority admissionpb.WorkPriority,
+	omitInRangefeeds bool,
 ) Transaction {
 	u := uuid.FastMakeV4()
 	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
@@ -980,7 +985,7 @@ func MakeTransaction(
 		// for all transactions that write to internal system tables and most other
 		// transactions unless specifically stated otherwise (e.g. by the
 		// disable_changefeed_replication session variable).
-		OmitInRangefeeds: false,
+		OmitInRangefeeds: omitInRangefeeds,
 	}
 }
 
