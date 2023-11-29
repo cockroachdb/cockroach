@@ -683,9 +683,9 @@ func recreateAllSecondaryIndexes(
 		{
 			var largestKeyOrdinal uint32
 			var invertedColumnID catid.ColumnID
+			// First, add all key columns.
+			// Also determine the ID of the inverted column, if applicable.
 			for _, ic := range out.columns {
-				// First, add all key columns.
-				// Also determine the ID of the inverted column, if applicable.
 				if ic.Kind == scpb.IndexColumn_KEY {
 					idxColIDs.Add(ic.ColumnID)
 					inColumns = append(inColumns, indexColumnSpec{
@@ -699,17 +699,7 @@ func recreateAllSecondaryIndexes(
 					}
 				}
 			}
-			// Next, add all the stored columns.
-			for _, ic := range out.columns {
-				if ic.Kind == scpb.IndexColumn_STORED && !idxColIDs.Contains(ic.ColumnID) {
-					idxColIDs.Add(ic.ColumnID)
-					inColumns = append(inColumns, indexColumnSpec{
-						columnID: ic.ColumnID,
-						kind:     scpb.IndexColumn_STORED,
-					})
-				}
-			}
-			// Finally, determine the key suffix columns: add all primary key columns
+			// Second, determine the key suffix columns: add all primary key columns
 			// which have not already been added to the secondary index.
 			for _, ics := range newKeySuffix {
 				if !idxColIDs.Contains(ics.columnID) {
@@ -734,6 +724,16 @@ func recreateAllSecondaryIndexes(
 						"primary key column %s cannot be present in an inverted index",
 						colName,
 					))
+				}
+			}
+			// Finally, add all the stored columns if it is not already a key or key suffix column.
+			for _, ic := range out.columns {
+				if ic.Kind == scpb.IndexColumn_STORED && !idxColIDs.Contains(ic.ColumnID) {
+					idxColIDs.Add(ic.ColumnID)
+					inColumns = append(inColumns, indexColumnSpec{
+						columnID: ic.ColumnID,
+						kind:     scpb.IndexColumn_STORED,
+					})
 				}
 			}
 		}

@@ -1,0 +1,10 @@
+name: EXPERIMENTAL GitHub actions testing
+on:
+  pull_request:
+    types: [ opened, reopened, synchronize, edited ]
+    branches: [ master ]
+jobs:
+  test_job:
+    runs-on: [self-hosted, basic_runner_group]
+    steps:
+      - run: echo hi
