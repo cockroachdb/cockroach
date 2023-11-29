@@ -106,6 +106,13 @@ type testImpl struct {
 		// referencing 0+ errors. failure captures all the errors
 		failures []failure
 
+		// failuresSuppressed indicates if further failures should be added to mu.failures.
+		failuresSuppressed bool
+
+		// numFailures is the number of failures that have been added via addFailures.
+		// This can deviate from len(failures) if failures have been suppressed.
+		numFailures int
+
 		// status is a map from goroutine id to status set by that goroutine. A
 		// special goroutine is indicated by runnerID; that one provides the test's
 		// "main status".
@@ -389,13 +396,16 @@ func (t *testImpl) addFailure(depth int, format string, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.mu.failures = append(t.mu.failures, reportFailure)
+	if !t.mu.failuresSuppressed {
+		t.mu.failures = append(t.mu.failures, reportFailure)
+	}
 
 	var b strings.Builder
 	formatFailure(&b, reportFailure)
 	msg := b.String()
 
-	failureNum := len(t.mu.failures)
+	t.mu.numFailures++
+	failureNum := t.mu.numFailures
 	failureLog := fmt.Sprintf("failure_%d", failureNum)
 	t.L().Printf("test failure #%d: full stack retained in %s.log: %s", failureNum, failureLog, msg)
 	// Also dump the verbose error (incl. all stack traces) to a log file, in case
@@ -419,6 +429,16 @@ func (t *testImpl) addFailure(depth int, format string, args ...interface{}) {
 
 	t.mu.output = append(t.mu.output, msg...)
 	t.mu.output = append(t.mu.output, '\n')
+}
+
+// suppressFailures will stop future failures from being surfaced to github posting
+// or the test logger. It will not stop those failures from being logged in their
+// own failure.log files. Used if we are confident on the root cause of a failure and
+// want to reduce noise of other failures, i.e. timeouts.
+func (t *testImpl) suppressFailures() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.failuresSuppressed = true
 }
 
 // We take the "squashed" error that contains information of all the errors for each failure.
@@ -446,7 +466,7 @@ func (t *testImpl) Failed() bool {
 }
 
 func (t *testImpl) failedRLocked() bool {
-	return len(t.mu.failures) > 0
+	return t.mu.numFailures > 0
 }
 
 func (t *testImpl) firstFailure() failure {

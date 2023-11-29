@@ -1118,6 +1118,9 @@ func (r *testRunner) runTest(
 		// NB: We're adding the timeout failure intentionally without cancelling the context
 		// to capture as much state as possible during artifact collection.
 		t.addFailure(0, "test timed out (%s)", timeout)
+		// We suppress other failures from being surfaced to the top as the timeout is always going
+		// to be the main error and subsequent errors (i.e. context cancelled) add noise.
+		t.suppressFailures()
 		timedOut = true
 	}
 
