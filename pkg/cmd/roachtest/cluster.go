@@ -2666,12 +2666,19 @@ func (c *clusterImpl) StopGrafana(ctx context.Context, l *logger.Logger, dumpDir
 func (c *clusterImpl) WipeForReuse(
 	ctx context.Context, l *logger.Logger, newClusterSpec spec.ClusterSpec,
 ) error {
+	if c.IsLocal() {
+		return errors.New("cluster reuse is disabled for local clusters to guarantee a clean slate for each test")
+	}
 	l.PrintfCtx(ctx, "Using existing cluster: %s (arch=%q). Wiping", c.name, c.arch)
 	if err := c.WipeE(ctx, l, false /* preserveCerts */); err != nil {
 		return err
 	}
-	if err := c.RunE(ctx, c.All(), fmt.Sprintf("rm -rf %s %s", perfArtifactsDir, goCoverArtifactsDir)); err != nil {
-		return errors.Wrapf(err, "failed to remove perf/gocover artifacts dirs")
+	// We remove the entire shared user directory between tests to ensure we aren't
+	// reusing files from previous tests, i.e. cockroach binaries, perf artifacts.
+	// N.B. we don't remove the entire home directory to safeguard against this ever
+	// running locally and deleting someone's local directory.
+	if err := c.RunE(ctx, c.All(), fmt.Sprintf("rm -rf /home/%s/*", config.SharedUser)); err != nil {
+		return errors.Wrapf(err, "failed to remove home directory")
 	}
 	if c.localCertsDir != "" {
 		if err := os.RemoveAll(c.localCertsDir); err != nil {
@@ -2725,6 +2732,10 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 func (c *clusterImpl) GetPreemptedVMs(
 	ctx context.Context, l *logger.Logger,
 ) ([]vm.PreemptedVM, error) {
+	if c.IsLocal() || !c.spec.UseSpotVMs {
+		return nil, nil
+	}
+
 	pattern := "^" + regexp.QuoteMeta(c.name) + "$" // exact match of the cluster name
 	cloudClusters, err := roachprod.List(l, false, pattern, vm.ListOptions{})
 	if err != nil {

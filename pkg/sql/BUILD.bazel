@@ -708,6 +708,7 @@ go_test(
         "split_test.go",
         "sql_activity_update_job_test.go",
         "sql_cursor_test.go",
+        "sql_exec_log_test.go",
         "sql_prepare_test.go",
         "statement_mark_redaction_test.go",
         "table_ref_test.go",

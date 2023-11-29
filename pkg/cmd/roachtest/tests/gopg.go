@@ -140,6 +140,11 @@ func registerGopg(r registry.Registry) {
 							cat %s | %s/bin/go-junit-report`,
 				destPath, goPath, resultsFilePath, goPath),
 		)
+		// It's safer to clean up dependencies this way than it is to give the cluster
+		// wipe root access.
+		defer func() {
+			c.Run(ctx, c.All(), "go clean -modcache")
+		}()
 
 		// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
 		// Proceed for any other (command) errors
