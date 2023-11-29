@@ -8,6 +8,7 @@ go_library(
         "cluster_settings.go",
         "cpuprofiler.go",
         "heapprofiler.go",
+        "memory_monitoring_profiler.go",
         "profiler_common.go",
         "profilestore.go",
         "statsprofiler.go",
@@ -25,9 +26,11 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
+        "//pkg/util/mon",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_dustin_go_humanize//:go-humanize",
     ],
 )
 
@@ -37,6 +40,7 @@ go_test(
     srcs = [
         "activequeryprofiler_test.go",
         "cpuprofile_test.go",
+        "memory_monitoring_profiler_test.go",
         "profiler_common_test.go",
         "profilestore_test.go",
     ],
@@ -46,7 +50,9 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/server/dumpstore",
         "//pkg/settings/cluster",
+        "//pkg/util/mon",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

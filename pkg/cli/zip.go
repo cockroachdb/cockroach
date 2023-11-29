@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -370,23 +369,6 @@ done
 	}
 
 	return nil
-}
-
-// maybeAddProfileSuffix adds a file extension if this was not done
-// already on the server. This is necessary as pre-20.2 servers did
-// not use any extension for memory profiles.
-//
-// TODO(knz): Remove this in v21.1.
-func maybeAddProfileSuffix(name string) string {
-	switch {
-	case strings.HasPrefix(name, profiler.HeapFileNamePrefix+".") && !strings.HasSuffix(name, profiler.HeapFileNameSuffix):
-		name += profiler.HeapFileNameSuffix
-	case strings.HasPrefix(name, profiler.StatsFileNamePrefix+".") && !strings.HasSuffix(name, profiler.StatsFileNameSuffix):
-		name += profiler.StatsFileNameSuffix
-	case strings.HasPrefix(name, profiler.JemallocFileNamePrefix+".") && !strings.HasSuffix(name, profiler.JemallocFileNameSuffix):
-		name += profiler.JemallocFileNameSuffix
-	}
-	return name
 }
 
 type jobTrace struct {

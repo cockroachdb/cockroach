@@ -1902,6 +1902,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.cfg.CPUProfileDirName,
 		s.runtime,
 		s.status.sessionRegistry,
+		s.sqlServer.execCfg.RootMemoryMonitor,
 	); err != nil {
 		return err
 	}
