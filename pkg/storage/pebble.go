@@ -2379,7 +2379,7 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 	// pebbleFormatVersionKeys are sorted in descending order; find the first one
 	// that is not newer than clusterVersion.
 	for _, k := range pebbleFormatVersionKeys {
-		if clusterVersion.AtLeast(clusterversion.ByKey(k)) {
+		if clusterVersion.AtLeast(k.Version()) {
 			return pebbleFormatVersionMap[k]
 		}
 	}

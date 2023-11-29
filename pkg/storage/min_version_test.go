@@ -105,7 +105,7 @@ func TestSetMinVersion(t *testing.T) {
 	ValueBlocksEnabled.Override(context.Background(), &st.SV, true)
 	// Advancing the store cluster version to one that supports a new feature
 	// should also advance the store's format major version.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete))
+	err = p.SetMinVersion(clusterversion.V23_2_PebbleFormatDeleteSizedAndObsolete.Version())
 	require.NoError(t, err)
 	require.Equal(t, pebble.FormatDeleteSizedAndObsolete, p.db.FormatMajorVersion())
 }

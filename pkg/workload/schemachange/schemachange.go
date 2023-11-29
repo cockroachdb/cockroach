@@ -477,7 +477,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 
 	// Enable extra schema changes, if they are available this moment.
 	if !w.workload.declarativeStatementsEnabled.Load() {
-		cannotEnableSchemaChanges, err := isClusterVersionLessThan(ctx, tx, clusterversion.ByKey(clusterversion.V23_2))
+		cannotEnableSchemaChanges, err := isClusterVersionLessThan(ctx, tx, clusterversion.V23_2.Version())
 		if err != nil {
 			return errors.Wrap(err, "cannot to get active")
 		}

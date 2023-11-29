@@ -595,7 +595,7 @@ func performCastWithoutPrecisionTruncation(
 		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
 			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 				"version %v must be finalized to use pg_lsn",
-				clusterversion.ByKey(clusterversion.V23_2))
+				clusterversion.V23_2.Version())
 		}
 		switch d := d.(type) {
 		case *tree.DString:
@@ -610,7 +610,7 @@ func performCastWithoutPrecisionTruncation(
 		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_2) {
 			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 				"version %v must be finalized to use refcursor",
-				clusterversion.ByKey(clusterversion.V23_2))
+				clusterversion.V23_2.Version())
 		}
 		switch d := d.(type) {
 		case *tree.DString:
@@ -896,7 +896,7 @@ func performCastWithoutPrecisionTruncation(
 		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
 			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 				"version %v must be finalized to use TSVector",
-				clusterversion.ByKey(clusterversion.V23_1))
+				clusterversion.V23_1.Version())
 		}
 		switch v := d.(type) {
 		case *tree.DString:
@@ -910,7 +910,7 @@ func performCastWithoutPrecisionTruncation(
 		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V23_1) {
 			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
 				"version %v must be finalized to use TSVector",
-				clusterversion.ByKey(clusterversion.V23_1))
+				clusterversion.V23_1.Version())
 		}
 		switch v := d.(type) {
 		case *tree.DString:

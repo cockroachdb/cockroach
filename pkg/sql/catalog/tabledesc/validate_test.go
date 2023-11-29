@@ -2891,7 +2891,7 @@ func TestValidateTableDesc(t *testing.T) {
 			version := d.version
 			if version != 0 {
 				clusterVersion = clusterversion.ClusterVersion{
-					Version: clusterversion.ByKey(version),
+					Version: version.Version(),
 				}
 			}
 			err := validate.Self(clusterVersion, desc)

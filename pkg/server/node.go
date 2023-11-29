@@ -493,7 +493,7 @@ func bootstrapCluster(
 				Codec:                   keys.SystemSQLCodec,
 			}
 			for _, v := range bootstrap.VersionsWithInitialValues() {
-				if initCfg.latestVersion == clusterversion.ByKey(v) {
+				if initCfg.latestVersion == v.Version() {
 					initialValuesOpts.OverrideKey = v
 					break
 				}

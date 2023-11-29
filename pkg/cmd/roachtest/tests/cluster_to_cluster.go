@@ -1153,7 +1153,8 @@ func registerClusterToCluster(r registry.Registry) {
 				maxBlockBytes: 4096,
 				maxQPS:        2000,
 			},
-			timeout: 12 * time.Hour,
+			maxAcceptedLatency: time.Minute * 5,
+			timeout:            12 * time.Hour,
 			// We bump the TTL on the source and destination tenants to 12h to give
 			// the fingerprinting post cutover adequate time to complete before GC
 			// kicks in.

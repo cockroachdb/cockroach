@@ -119,18 +119,18 @@ func TestVersionGuard(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			settings := cluster.MakeTestingClusterSettingsWithVersions(
-				clusterversion.ByKey(maxVersion),
-				clusterversion.ByKey(initialVersion),
+				maxVersion.Version(),
+				initialVersion.Version(),
 				false,
 			)
-			require.NoError(t, clusterversion.Initialize(ctx, clusterversion.ByKey(test.settingsVersion), &settings.SV))
-			settingVersion := clusterversion.ClusterVersion{Version: clusterversion.ByKey(test.settingsVersion)}
+			require.NoError(t, clusterversion.Initialize(ctx, test.settingsVersion.Version(), &settings.SV))
+			settingVersion := clusterversion.ClusterVersion{Version: test.settingsVersion.Version()}
 			require.NoError(t, settings.Version.SetActiveVersion(ctx, settingVersion))
 
 			if test.storageVersion == nil {
 				tDB.Exec(t, `DELETE FROM system.settings WHERE name = 'version'`)
 			} else {
-				storageVersion := clusterversion.ClusterVersion{Version: clusterversion.ByKey(*test.storageVersion)}
+				storageVersion := clusterversion.ClusterVersion{Version: test.storageVersion.Version()}
 				marshaledVersion, err := protoutil.Marshal(&storageVersion)
 				require.NoError(t, err)
 				tDB.Exec(t, `

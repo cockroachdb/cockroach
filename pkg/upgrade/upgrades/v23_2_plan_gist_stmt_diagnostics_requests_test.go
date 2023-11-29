@@ -43,7 +43,7 @@ func TestStmtDiagForPlanGistMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V23_2_StmtDiagForPlanGist - 1),
+					BinaryVersionOverride:          (clusterversion.V23_2_StmtDiagForPlanGist - 1).Version(),
 				},
 			},
 		},
