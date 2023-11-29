@@ -908,3 +908,16 @@ func TempStorageConfigFromEnv(
 		Settings: st,
 	}
 }
+
+// TempStorageConfigFromKVConfig creates a TempStorageConfig from a
+// TempStorageConfig.
+func TempStorageConfigFromKVConfig(
+	ctx context.Context, st *cluster.Settings, kvStorageCfg TempStorageConfig,
+) TempStorageConfig {
+	cfg := TempStorageConfigFromEnv(ctx, st, kvStorageCfg.Spec, "", kvStorageCfg.Mon.Limit())
+	// We explicitly copy the InMemory configuration from the
+	// kvStorageCfg to account for the fact that this may be
+	// overridden in test scenarios.
+	cfg.InMemory = kvStorageCfg.InMemory
+	return cfg
+}
