@@ -152,13 +152,13 @@ func (c *cachedCatalogReader) Reset(ctx context.Context) {
 
 // ScanAllComments is part of the CatalogReader interface.
 func (c *cachedCatalogReader) ScanAllComments(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
 	if c.hasScanAllComments {
 		return c.cache.Catalog, nil
 	}
 	// Scan all catalog comments.
-	read, err := c.cr.ScanAllComments(ctx, txn)
+	read, err := c.cr.ScanAllComments(ctx, txn, db)
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
