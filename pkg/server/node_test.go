@@ -175,6 +175,65 @@ func TestBootstrapNewStore(t *testing.T) {
 	})
 }
 
+// TestStartManyStores starts a cluster with 20 stores and verifies all stores
+// are started correctly.
+func TestStartManyStores(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	path, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	specs := []base.StoreSpec{
+		{Path: path},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+		{InMemory: true},
+	}
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		StoreSpecs: specs,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Check whether all stores are started properly.
+	testutils.SucceedsSoon(t, func() error {
+		var n int
+		err := s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+			if !s.IsStarted() {
+				return fmt.Errorf("not started: %s", s)
+			}
+			n++
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if exp := len(specs); exp != n {
+			return fmt.Errorf("found only %d of %d stores", n, exp)
+		}
+		return nil
+	})
+}
+
 // TestNodeJoin verifies a new node is able to join a bootstrapped
 // cluster consisting of one node.
 func TestNodeJoin(t *testing.T) {
