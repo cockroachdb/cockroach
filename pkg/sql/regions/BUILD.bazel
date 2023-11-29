@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "regions",
     srcs = [
+        "cached_db_regions.go",
         "db_regions.go",
         "region_provider.go",
     ],
@@ -14,6 +15,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/lease",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
