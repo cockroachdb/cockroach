@@ -29,7 +29,8 @@ func TestTxnMetaSizeOf(t *testing.T) {
 
 func populatedMVCCValueHeader() MVCCValueHeader {
 	allFieldsSet := MVCCValueHeader{
-		LocalTimestamp: hlc.ClockTimestamp{WallTime: 1, Logical: 1, Synthetic: true},
+		LocalTimestamp:   hlc.ClockTimestamp{WallTime: 1, Logical: 1, Synthetic: true},
+		OmitInRangefeeds: true,
 	}
 	allFieldsSet.KVNemesisSeq.Set(123)
 	return allFieldsSet
@@ -37,9 +38,13 @@ func populatedMVCCValueHeader() MVCCValueHeader {
 
 func TestMVCCValueHeader_IsEmpty(t *testing.T) {
 	allFieldsSet := populatedMVCCValueHeader()
-	require.NoError(t, zerofields.NoZeroField(allFieldsSet), "make sure you update the IsEmpty method")
+	require.NoError(t, zerofields.NoZeroField(allFieldsSet), "make sure you update TestMVCCValueHeader_IsEmpty for the new field")
+
 	require.True(t, MVCCValueHeader{}.IsEmpty())
+
 	require.False(t, allFieldsSet.IsEmpty())
+	require.False(t, MVCCValueHeader{LocalTimestamp: allFieldsSet.LocalTimestamp}.IsEmpty())
+	require.False(t, MVCCValueHeader{OmitInRangefeeds: allFieldsSet.OmitInRangefeeds}.IsEmpty())
 }
 
 func TestMVCCValueHeader_MarshalUnmarshal(t *testing.T) {

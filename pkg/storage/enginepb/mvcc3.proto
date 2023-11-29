@@ -143,8 +143,6 @@ message IgnoredSeqNumRange {
 // MVCCValueHeader holds MVCC-level metadata for a versioned value.
 // Used by storage.MVCCValue.
 //
-// NB: Make sure to update MVCCValueHeader.IsEmpty() when adding fields.
-//
 // NB: a shallow copy of this value has to equal a deep copy, i.e. there
 // must be (recursively) no pointers in this type. Should this need to
 // change, need to update mvccGetWithValueHeader.
@@ -195,6 +193,11 @@ message MVCCValueHeader {
   // to stale reads.
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  // When set to true, this value will be filtered out by rangefeeds and will
+  // not be available in changefeeds. This allows higher levels of the system to
+  // control which writes are exported.
+  bool omit_in_rangefeeds = 3;
 }
 
 // MVCCValueHeaderPure is not to be used directly. It's generated only for use of
@@ -202,6 +205,8 @@ message MVCCValueHeader {
 message MVCCValueHeaderPure {
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+
+  bool omit_in_rangefeeds = 3;
 }
 // MVCCValueHeaderCrdbTest is not to be used directly. It's generated only for use of
 // its marshaling methods by MVCCValueHeader. See the comment there.
@@ -213,6 +218,7 @@ message MVCCValueHeaderCrdbTest {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Container"];
   util.hlc.Timestamp local_timestamp = 1 [(gogoproto.nullable) = false,
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/util/hlc.ClockTimestamp"];
+  bool omit_in_rangefeeds = 3;
 }
 
 // MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
