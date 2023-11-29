@@ -20,7 +20,6 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/syncutil",
-        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_olekukonko_tablewriter//:tablewriter",
     ],

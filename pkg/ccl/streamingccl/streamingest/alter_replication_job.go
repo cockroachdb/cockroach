@@ -184,7 +184,7 @@ func alterReplicationJobHook(
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
+			p.ExecCfg().Settings,
 			alterReplicationJobOp,
 		); err != nil {
 			return err

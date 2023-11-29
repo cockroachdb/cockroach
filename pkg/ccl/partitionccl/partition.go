@@ -351,7 +351,7 @@ func createPartitioning(
 	allowedNewColumnNames []tree.Name,
 	allowImplicitPartitioning bool,
 ) (newImplicitCols []catalog.Column, newPartitioning catpb.PartitioningDescriptor, err error) {
-	if err := utilccl.CheckEnterpriseEnabled(st, evalCtx.ClusterID, "partitions"); err != nil {
+	if err := utilccl.CheckEnterpriseEnabled(st, "partitions"); err != nil {
 		return nil, newPartitioning, err
 	}
 

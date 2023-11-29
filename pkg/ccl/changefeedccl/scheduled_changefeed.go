@@ -322,7 +322,7 @@ func makeScheduledChangefeedSpec(
 	}
 
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
+		p.ExecCfg().Settings,
 		opName)
 
 	if !(enterpriseCheckErr == nil) {
