@@ -489,7 +489,6 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 	}
 	sf.metrics.JobProgressUpdates.Inc(1)
 	sf.persistedReplicatedTime = f.Frontier()
-	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
 	sf.metrics.ReplicatedTimeSeconds.Update(sf.persistedReplicatedTime.GoTime().Unix())
 	return nil
 }
