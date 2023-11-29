@@ -68,6 +68,7 @@ go_test(
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@com_github_cockroachdb_pebble//vfs",
         "@com_github_stretchr_testify//require",
         "@io_etcd_go_raft_v3//raftpb",
         "@org_golang_x_time//rate",
