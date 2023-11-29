@@ -588,6 +588,7 @@ func runRequest[T interface{}](
 		result <- f(ctx, p)
 		// Assert that we never process requests after stoppedC is closed. This is
 		// necessary to coordinate catchup iter ownership and avoid double-closing.
+		// Note that request/stop processing is always sequential, see process().
 		if buildutil.CrdbTestBuild {
 			select {
 			case <-p.stoppedC:
@@ -600,8 +601,9 @@ func runRequest[T interface{}](
 	case r = <-result:
 		return r
 	case <-p.stoppedC:
-		// If the request was processed concurrently with a stop, there's a 50%
-		// chance we didn't take the result branch. Check again.
+		// If a request and stop were processed in rapid succession, and the node is
+		// overloaded, this select may observe them happening at the same time and
+		// take this branch instead of the result with 50% probability. Check again.
 		select {
 		case r = <-result:
 		default:
