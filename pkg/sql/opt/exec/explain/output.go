@@ -213,7 +213,13 @@ func (ob *OutputBuilder) BuildStringRows() []string {
 			child.AddLine(fmt.Sprintf("columns: %s", entry.columns))
 		}
 		if entry.ordering != "" {
-			child.AddLine(fmt.Sprintf("ordering: %s", entry.ordering))
+			// Do not print "ordering" redundantly  with "order" attribute of
+			// sort operators. Note that we choose to keep the latter so that
+			// "already ordered" and "K" attributes are printed right after the
+			// order.
+			if entry.node != nodeNames[sortOp] && entry.node != nodeNames[topKOp] {
+				child.AddLine(fmt.Sprintf("ordering: %s", entry.ordering))
+			}
 		}
 		// Add any fields for the node.
 		for entry = popField(); entry != nil; entry = popField() {
