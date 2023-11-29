@@ -346,13 +346,6 @@ var streamerConcurrencyLimit = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // NewStreamer creates a new Streamer.
 //
 // txn must be a LeafTxn that is not used by anything other than this Streamer.

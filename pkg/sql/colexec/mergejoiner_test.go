@@ -1932,13 +1932,6 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 	}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 type expectedGroup struct {
 	val         int64
 	cardinality int

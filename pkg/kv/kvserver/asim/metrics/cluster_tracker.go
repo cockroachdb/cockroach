@@ -58,13 +58,6 @@ func (m *ClusterMetricsTracker) write(record []string) error {
 	return nil
 }
 
-func max(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 // Listen implements the StoreMetricsListener interface.
 func (m *ClusterMetricsTracker) Listen(ctx context.Context, sms []StoreMetrics) {
 	var (

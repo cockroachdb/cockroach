@@ -3827,10 +3827,3 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
