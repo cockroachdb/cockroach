@@ -32,6 +32,7 @@ type txnMetricRecorder struct {
 	txnStart       time.Time
 	onePCCommit    bool
 	parallelCommit bool
+	readOnlyCommit bool
 }
 
 // SendLocked is part of the txnInterceptor interface.
@@ -82,6 +83,11 @@ func (*txnMetricRecorder) createSavepointLocked(context.Context, *savepoint) {}
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) rollbackToSavepointLocked(context.Context, savepoint) {}
 
+// setReadOnlyCommit records the transaction commit as a read-only commit. Such
+// commits do not send EndTxn requests because they have no writes to commit or
+// locks to release.
+func (m *txnMetricRecorder) setReadOnlyCommit() { m.readOnlyCommit = true }
+
 // closeLocked is part of the txnInterceptor interface.
 func (m *txnMetricRecorder) closeLocked() {
 	if m.onePCCommit {
@@ -89,6 +95,9 @@ func (m *txnMetricRecorder) closeLocked() {
 	}
 	if m.parallelCommit {
 		m.metrics.ParallelCommits.Inc(1)
+	}
+	if m.readOnlyCommit {
+		m.metrics.CommitsReadOnly.Inc(1)
 	}
 
 	if !m.txnStart.IsZero() {
