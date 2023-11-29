@@ -41,6 +41,7 @@ func TestBatchRequestString(t *testing.T) {
 		0,               // maxOffsetNs
 		99,              // coordinatorNodeID
 		0,
+		false, // omitInRangefeeds
 	)
 	txn.ID = uuid.NamespaceDNS
 	ba.Txn = &txn
