@@ -67,26 +67,28 @@ func DefaultFormatter(ctx context.Context, f Failure) (issues.IssueFormatter, is
 
 	var projColID int
 	var mentions []string
-	var extraLabels []string
+	var labels []string
+	if os.Getenv("SKIP_LABEL_TEST_FAILURE") == "" {
+		labels = append(labels, issues.DefaultLabels...)
+	}
 	if len(teams) > 0 {
 		projColID = teams[0].TriageColumnID
 		for _, team := range teams {
 			mentions = append(mentions, "@"+string(team.Name()))
 			if team.Label != "" {
-				extraLabels = append(extraLabels, team.Label)
+				labels = append(labels, team.Label)
 			}
 		}
 	}
 	return issues.UnitTestFormatter, issues.PostRequest{
-		TestName:             f.testName,
-		PackageName:          f.packageName,
-		Message:              f.testMessage,
-		Artifacts:            "/", // best we can do for unit tests
-		HelpCommand:          issues.UnitTestHelpCommand(repro),
-		MentionOnCreate:      mentions,
-		ProjectColumnID:      projColID,
-		ExtraLabels:          extraLabels,
-		SkipLabelTestFailure: os.Getenv("SKIP_LABEL_TEST_FAILURE") != "",
+		TestName:        f.testName,
+		PackageName:     f.packageName,
+		Message:         f.testMessage,
+		Artifacts:       "/", // best we can do for unit tests
+		HelpCommand:     issues.UnitTestHelpCommand(repro),
+		MentionOnCreate: mentions,
+		ProjectColumnID: projColID,
+		Labels:          labels,
 	}
 }
 
@@ -712,7 +714,7 @@ func formatPebbleMetamorphicIssue(
 		Message:     f.testMessage,
 		Artifacts:   "meta",
 		HelpCommand: issues.ReproductionCommandFromString(repro),
-		ExtraLabels: []string{"metamorphic-failure"},
+		Labels:      append([]string{"metamorphic-failure"}, issues.DefaultLabels...),
 	}
 }
 
