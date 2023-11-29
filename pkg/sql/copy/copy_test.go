@@ -790,13 +790,6 @@ func (c *copyReader) generateRows() {
 	c.generatedRows = strings.NewReader(sb.String())
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func BenchmarkCopyCSVEndToEnd(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)

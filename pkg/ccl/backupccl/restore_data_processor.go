@@ -110,13 +110,6 @@ const sstReaderEncryptedOverheadBytesPerFile = 8 << 20
 // file.
 const minWorkerMemReservation = 15 << 20
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
 	"restore-worker-concurrency",
 	func() int {

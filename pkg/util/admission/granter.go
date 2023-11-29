@@ -527,13 +527,6 @@ func (sg *kvStoreTokenGranter) tryGrantLocked(grantChainID grantChainID) grantRe
 	return grantFailLocal
 }
 
-func min(i, j int64) int64 {
-	if i < j {
-		return i
-	}
-	return j
-}
-
 // setAvailableTokens implements granterWithIOTokens.
 func (sg *kvStoreTokenGranter) setAvailableTokens(
 	ioTokens int64,
