@@ -145,6 +145,24 @@ func makeSplitStatsHelper(input splitStatsHelperInput) (splitStatsHelper, error)
 		in: input,
 	}
 
+	if h.in.AbsPreSplitBothStored.ContainsEstimates > 0 || h.in.DeltaBatchEstimated.ContainsEstimates > 0 {
+		fastComputeEstimatedStats := func() *enginepb.MVCCStats {
+			// TODO(msbutler): I could try to divide the estimated stats on each side.
+			newStats := enginepb.MVCCStats{}
+			newStats.Add(h.in.AbsPreSplitBothStored)
+			newStats.LiveBytes = newStats.LiveBytes / 2
+			newStats.KeyBytes = newStats.KeyBytes / 2
+			newStats.ValBytes = newStats.ValBytes / 2
+			newStats.KeyCount = newStats.KeyCount / 2
+			newStats.ValCount = newStats.ValCount / 2
+			return &newStats
+		}
+
+		h.absPostSplitLeft = fastComputeEstimatedStats()
+		h.absPostSplitRight = fastComputeEstimatedStats()
+		return h, nil
+	}
+
 	// Scan to compute the stats for the first side.
 	var absPostSplitFirst enginepb.MVCCStats
 	var err error
