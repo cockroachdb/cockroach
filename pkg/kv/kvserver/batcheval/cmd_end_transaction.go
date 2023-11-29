@@ -1034,12 +1034,6 @@ func splitTrigger(
 			"unable to determine whether right hand side of split is empty")
 	}
 
-	rangeKeyDeltaMS, err := computeSplitRangeKeyStatsDelta(ctx, batch, split.LeftDesc, split.RightDesc)
-	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
-			"unable to compute range key stats delta for RHS")
-	}
-
 	// Retrieve MVCC Stats from the current batch instead of using stats from
 	// execution context. Stats in the context could diverge from storage snapshot
 	// of current request when lease extensions are applied. Lease expiration is
@@ -1054,6 +1048,14 @@ func splitTrigger(
 	if err != nil {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
 			"unable to fetch original range mvcc stats for split")
+	}
+	var rangeKeyDeltaMS enginepb.MVCCStats
+	if currentStats.ContainsEstimates > 0 {
+		rangeKeyDeltaMS, err = computeSplitRangeKeyStatsDelta(ctx, batch, split.LeftDesc, split.RightDesc)
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
+				"unable to compute range key stats delta for RHS")
+		}
 	}
 
 	h := splitStatsHelperInput{
