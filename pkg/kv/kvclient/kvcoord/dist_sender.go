@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -229,7 +228,6 @@ This counts the number of ranges with an active rangefeed that are performing ca
 // followerreadsccl code to inject logic to check if follower reads are enabled.
 // By default, without CCL code, this function returns false.
 var CanSendToFollower = func(
-	_ uuid.UUID,
 	_ *cluster.Settings,
 	_ *hlc.Clock,
 	_ roachpb.RangeClosedTimestampPolicy,
@@ -2252,7 +2250,7 @@ func (ds *DistSender) sendToReplicas(
 	// otherwise, we may send a request to a remote region unnecessarily.
 	if ba.RoutingPolicy == kvpb.RoutingPolicy_LEASEHOLDER &&
 		CanSendToFollower(
-			ds.logicalClusterID.Get(), ds.st, ds.clock,
+			ds.st, ds.clock,
 			routing.ClosedTimestampPolicy(defaultSendClosedTimestampPolicy), ba,
 		) {
 		ba = ba.ShallowCopy()

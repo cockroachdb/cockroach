@@ -605,7 +605,7 @@ func createChangefeedJobRecord(
 
 	if scope, ok := opts.GetMetricScope(); ok {
 		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), "CHANGEFEED",
+			p.ExecCfg().Settings, "CHANGEFEED",
 		); err != nil {
 			return nil, errors.Wrapf(err,
 				"use of %q option requires an enterprise license.", changefeedbase.OptMetricsScope)
@@ -634,7 +634,7 @@ func createChangefeedJobRecord(
 
 		if details.Select != `` {
 			if err := utilccl.CheckEnterpriseEnabled(
-				p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), "CHANGEFEED",
+				p.ExecCfg().Settings, "CHANGEFEED",
 			); err != nil {
 				return nil, errors.Wrap(err, "use of AS SELECT requires an enterprise license.")
 			}
@@ -654,7 +654,7 @@ func createChangefeedJobRecord(
 	}
 
 	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), "CHANGEFEED",
+		p.ExecCfg().Settings, "CHANGEFEED",
 	); err != nil {
 		return nil, err
 	}
@@ -691,7 +691,7 @@ func createChangefeedJobRecord(
 			)
 		}
 		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), changefeedbase.OptExecutionLocality,
+			p.ExecCfg().Settings, changefeedbase.OptExecutionLocality,
 		); err != nil {
 			return nil, err
 		}

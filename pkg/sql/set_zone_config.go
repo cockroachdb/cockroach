@@ -101,7 +101,6 @@ func init() {
 				}
 				return base.CheckEnterpriseEnabled(
 					execCfg.Settings,
-					execCfg.NodeInfo.LogicalClusterID(),
 					"global_reads",
 				)
 			},
@@ -1211,7 +1210,7 @@ func prepareZoneConfigWrites(
 	if len(z.Subzones) > 0 {
 		st := execCfg.Settings
 		z.SubzoneSpans, err = GenerateSubzoneSpans(
-			st, execCfg.NodeInfo.LogicalClusterID(), execCfg.Codec, table, z.Subzones, hasNewSubzones)
+			st, execCfg.Codec, table, z.Subzones, hasNewSubzones)
 		if err != nil {
 			return nil, err
 		}

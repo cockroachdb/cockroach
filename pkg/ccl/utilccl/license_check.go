@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -128,8 +127,8 @@ func ApplyTenantLicense() error {
 // cluster ID.
 // `feature` is not used for the check itself; it is merely embedded
 // in the URL displayed in the error message.
-func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, feature string) error {
-	return checkEnterpriseEnabledAt(st, timeutil.Now(), cluster, feature, true /* withDetails */)
+func CheckEnterpriseEnabled(st *cluster.Settings, feature string) error {
+	return checkEnterpriseEnabledAt(st, timeutil.Now(), feature, true /* withDetails */)
 }
 
 // IsEnterpriseEnabled returns whether the requested enterprise feature is
@@ -141,9 +140,9 @@ func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, feature str
 // cluster ID.
 // `feature` is not used for the check itself; it is merely embedded
 // in the URL displayed in the error message.
-func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, feature string) bool {
+func IsEnterpriseEnabled(st *cluster.Settings, feature string) bool {
 	return checkEnterpriseEnabledAt(
-		st, timeutil.Now(), cluster, feature, false /* withDetails */) == nil
+		st, timeutil.Now(), feature, false /* withDetails */) == nil
 }
 
 var licenseMetricUpdateFrequency = 1 * time.Minute
@@ -196,7 +195,7 @@ func updateMetricWithLicenseTTL(
 var AllCCLCodeImported = false
 
 func checkEnterpriseEnabledAt(
-	st *cluster.Settings, at time.Time, cluster uuid.UUID, feature string, withDetails bool,
+	st *cluster.Settings, at time.Time, feature string, withDetails bool,
 ) error {
 	if atomic.LoadInt32(&enterpriseStatus) == enterpriseEnabled {
 		return nil
@@ -206,7 +205,7 @@ func checkEnterpriseEnabledAt(
 		return err
 	}
 	org := sql.ClusterOrganization.Get(&st.SV)
-	if err := check(license, at, cluster, org, feature, withDetails); err != nil {
+	if err := check(license, at, org, feature, withDetails); err != nil {
 		return err
 	}
 
@@ -285,22 +284,19 @@ func decode(s string) (*licenseccl.License, error) {
 
 // check returns an error if the license is empty or not currently valid. If
 // withDetails is false, a generic error message is returned for performance.
-func check(
-	l *licenseccl.License, at time.Time, cluster uuid.UUID, org, feature string, withDetails bool,
-) error {
+func check(l *licenseccl.License, at time.Time, org, feature string, withDetails bool) error {
 	if l == nil {
 		if !withDetails {
 			return errEnterpriseRequired
 		}
 		// TODO(dt): link to some stable URL that then redirects to a helpful page
 		// that explains what to do here.
-		link := "https://cockroachlabs.com/pricing?cluster="
+		link := "https://cockroachlabs.com/pricing"
 		return pgerror.Newf(pgcode.CCLValidLicenseRequired,
 			"use of %s requires an enterprise license. "+
-				"see %s%s for details on how to enable enterprise features",
+				"see %s for details on how to enable enterprise features",
 			errors.Safe(feature),
 			link,
-			cluster.String(),
 		)
 	}
 
