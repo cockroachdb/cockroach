@@ -874,7 +874,6 @@ func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) erro
 
 	sip.metrics.EarliestDataCheckpointSpan.Update(lowestTimestamp.GoTime().UnixNano())
 	sip.metrics.LatestDataCheckpointSpan.Update(highestTimestamp.GoTime().UnixNano())
-	sip.metrics.DataCheckpointSpanCount.Update(int64(len(resolvedSpans)))
 	sip.metrics.ResolvedEvents.Inc(1)
 	return nil
 }
