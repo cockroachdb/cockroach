@@ -465,7 +465,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, privilegeObject privile
 // Requires a valid transaction to be open.
 func (p *planner) UserHasAdminRole(ctx context.Context, user username.SQLUsername) (bool, error) {
 	if user.Undefined() {
-		return false, errors.AssertionFailedf("empty user")
+		return false, sqlerrors.NewUndefinedUserError(user)
 	}
 	// Verify that the txn is valid in any case, so that
 	// we don't get the risk to say "OK" to root requests
