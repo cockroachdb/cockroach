@@ -47,6 +47,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -750,7 +752,11 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		latestDesc, err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
+		cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, sc.db.KV(), sc.leaseMgr)
+		if err != nil {
+			return err
+		}
+		latestDesc, err := WaitToUpdateLeases(ctx, sc.leaseMgr, cachedRegions, sc.descID)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return err
@@ -943,7 +949,11 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
 	waitToUpdateLeases := func(refreshStats bool) error {
-		desc, err := WaitToUpdateLeases(ctx, sc.leaseMgr, sc.descID)
+		cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, sc.db.KV(), sc.leaseMgr)
+		if err != nil {
+			return err
+		}
+		desc, err := WaitToUpdateLeases(ctx, sc.leaseMgr, cachedRegions, sc.descID)
 		if err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return err
@@ -1366,7 +1376,10 @@ func (sc *SchemaChanger) createIndexGCJobWithDropTime(
 // WaitToUpdateLeases until the entire cluster has been updated to the latest
 // version of the descriptor.
 func WaitToUpdateLeases(
-	ctx context.Context, leaseMgr *lease.Manager, descID descpb.ID,
+	ctx context.Context,
+	leaseMgr *lease.Manager,
+	regions regionliveness.CachedDatabaseRegions,
+	descID descpb.ID,
 ) (catalog.Descriptor, error) {
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
@@ -1377,7 +1390,7 @@ func WaitToUpdateLeases(
 	}
 	start := timeutil.Now()
 	log.Infof(ctx, "waiting for a single version...")
-	desc, err := leaseMgr.WaitForOneVersion(ctx, descID, retryOpts)
+	desc, err := leaseMgr.WaitForOneVersion(ctx, descID, regions, retryOpts)
 	if err != nil {
 		return nil, err
 	}
