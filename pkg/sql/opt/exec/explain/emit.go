@@ -147,7 +147,7 @@ func omitTrivialProjections(n *Node) (*Node, colinfo.ResultColumns, colinfo.Colu
 	input, inputColumns, inputOrdering := omitTrivialProjections(n.children[0])
 
 	// Check if the projection is a bijection (i.e. permutation of all input
-	// columnns), and construct the inverse projection.
+	// columns), and construct the inverse projection.
 	if len(projection) != len(inputColumns) {
 		return n, n.Columns(), n.Ordering()
 	}

@@ -1353,7 +1353,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b, c, d)
-│ ordering: -c
 │ estimated row count: 330 (missing stats)
 │ order: -c
 │
@@ -1376,7 +1375,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b, c, d)
-│ ordering: +c
 │ estimated row count: 330 (missing stats)
 │ order: +c
 │
@@ -1452,7 +1450,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (a, b, c, d)
-    │ ordering: +c
     │ estimated row count: 1,000 (missing stats)
     │ order: +c
     │
@@ -1496,7 +1493,6 @@ vectorized: true
 ·
 • top-k
 │ columns: (a, b, c, d)
-│ ordering: +c
 │ estimated row count: 1,000 (missing stats)
 │ order: +c
 │ k: 1000000

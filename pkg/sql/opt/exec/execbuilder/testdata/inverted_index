@@ -1174,7 +1174,6 @@ vectorized: true
     │
     └── • sort
         │ columns: (a)
-        │ ordering: +a
         │ estimated row count: 111 (missing stats)
         │ order: +a
         │
@@ -1339,7 +1338,6 @@ vectorized: true
         │
         └── • sort
             │ columns: (a)
-            │ ordering: +a
             │ estimated row count: 111 (missing stats)
             │ order: +a
             │
@@ -1373,7 +1371,6 @@ vectorized: true
         │
         └── • sort
             │ columns: (a)
-            │ ordering: +a
             │ estimated row count: 111 (missing stats)
             │ order: +a
             │
@@ -1407,7 +1404,6 @@ vectorized: true
         │
         └── • sort
             │ columns: (a)
-            │ ordering: +a
             │ estimated row count: 111 (missing stats)
             │ order: +a
             │
@@ -1437,7 +1433,6 @@ vectorized: true
     │
     └── • sort
         │ columns: (a)
-        │ ordering: +a
         │ estimated row count: 12 (missing stats)
         │ order: +a
         │

@@ -93,7 +93,6 @@ vectorized: true
 ·
 • sort
 │ columns: (lk, rk1)
-│ ordering: +lk,+rk1
 │ estimated row count: 326,700 (missing stats)
 │ order: +lk,+rk1
 │ already ordered: +lk
@@ -143,7 +142,6 @@ vectorized: true
 ·
 • sort
 │ columns: (lk, rk1)
-│ ordering: +lk,+rk1
 │ estimated row count: 9,801 (missing stats)
 │ order: +lk,+rk1
 │ already ordered: +lk

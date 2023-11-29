@@ -356,7 +356,6 @@ vectorized: true
 ·
 • sort
 │ columns: (y, str, res)
-│ ordering: +res
 │ estimated row count: 1,000 (missing stats)
 │ order: +res
 │
@@ -380,7 +379,6 @@ vectorized: true
 ·
 • top-k
 │ columns: (y, str, res)
-│ ordering: +res
 │ estimated row count: 10 (missing stats)
 │ order: +res
 │ k: 10

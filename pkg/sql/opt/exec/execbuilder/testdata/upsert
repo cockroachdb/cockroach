@@ -24,7 +24,6 @@ vectorized: true
     │
     └── • top-k
         │ columns: (k, v)
-        │ ordering: -v
         │ estimated row count: 2 (missing stats)
         │ order: -v
         │ k: 2
@@ -53,7 +52,6 @@ vectorized: true
     │
     └── • top-k
         │ columns: (k, v)
-        │ ordering: -v
         │ estimated row count: 2 (missing stats)
         │ order: -v
         │ k: 2
@@ -82,7 +80,6 @@ vectorized: true
     │
     └── • top-k
         │ columns: (k, v)
-        │ ordering: -v
         │ estimated row count: 2 (missing stats)
         │ order: -v
         │ k: 2
@@ -128,7 +125,6 @@ vectorized: true
             │
             └── • top-k
                 │ columns: (k, v)
-                │ ordering: -v
                 │ estimated row count: 2 (missing stats)
                 │ order: -v
                 │ k: 2
@@ -414,7 +410,6 @@ vectorized: true
 │
 ├── • sort
 │   │ columns: (z)
-│   │ ordering: +z
 │   │ estimated row count: 1,000 (missing stats)
 │   │ order: +z
 │   │

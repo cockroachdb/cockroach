@@ -83,7 +83,6 @@ network usage: 0 B (0 messages)
 │
 └── • sort
     │ columns: (column8 decimal, cid int, sum decimal)
-    │ ordering: +column8
     │ estimated row count: 98 (missing stats)
     │ order: +column8
     │

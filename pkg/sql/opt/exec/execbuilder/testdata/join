@@ -298,7 +298,6 @@ vectorized: true
 ·
 • sort
 │ columns: (k, u, w)
-│ ordering: +u
 │ estimated row count: 2
 │ order: +column1
 │
@@ -402,7 +401,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (pktable_cat, update_rule, delete_rule, deferrability, nspname, relname, attname, nspname, relname, attname, conname, generate_series, relname)
-    │ ordering: +nspname,+relname,+conname,+generate_series
     │ estimated row count: 110,908 (missing stats)
     │ order: +nspname,+relname,+conname,+generate_series
     │
