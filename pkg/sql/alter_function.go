@@ -75,7 +75,7 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 	// referenced by other objects. This is needed when want to allow function
 	// references. Need to think about in what condition a function can be altered
 	// or not.
-	if err := tree.ValidateRoutineOptions(n.n.Options); err != nil {
+	if err := tree.ValidateRoutineOptions(n.n.Options, fnDesc.IsProcedure()); err != nil {
 		return err
 	}
 
