@@ -20,7 +20,8 @@ func (h MVCCValueHeader) IsEmpty() bool {
 
 func (h *MVCCValueHeader) pure() MVCCValueHeaderPure {
 	return MVCCValueHeaderPure{
-		LocalTimestamp: h.LocalTimestamp,
+		LocalTimestamp:   h.LocalTimestamp,
+		OmitInRangefeeds: h.OmitInRangefeeds,
 	}
 }
 
