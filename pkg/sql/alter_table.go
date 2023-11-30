@@ -472,6 +472,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableAlterPrimaryKey:
+			// For `ALTER PRIMARY KEY`, carry over the primary index name, like how we
+			// carried over comments associated with the old primary index.
+			t.Name = tree.Name(n.tableDesc.PrimaryIndex.Name)
 			if err := params.p.AlterPrimaryKey(
 				params.ctx,
 				n.tableDesc,
