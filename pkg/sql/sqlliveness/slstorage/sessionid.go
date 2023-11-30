@@ -90,3 +90,29 @@ func UnsafeDecodeSessionID(session sqlliveness.SessionID) (region, id []byte, er
 
 	return rest[:regionLen], rest[regionLen:], nil
 }
+
+// SafeDecodeSessionID decodes the region and id from the SessionID.
+func SafeDecodeSessionID(session sqlliveness.SessionID) (region, id string, err error) {
+	if len(session) == legacyLen {
+		return "", "", errors.Newf("unexpected legacy SessionID format")
+	}
+	if len(session) < minimumNonLegacyLen {
+		// The smallest valid v1 session id is a [version, 1, single_byte_region, uuid...],
+		// which is three bytes larger than a uuid.
+		return "", "", errors.New("session id is too short")
+	}
+
+	// Decode the version.
+	if session[0] != sessionIDVersion {
+		return "", "", errors.Newf("invalid session id version: %d", session[0])
+	}
+	regionLen := int(session[1])
+	rest := session[2:]
+
+	// Decode and validate the length of the region.
+	if len(rest) != regionLen+uuid.Size {
+		return "", "", errors.Newf("session id with length %d is the wrong size to include a region with length %d", len(session), regionLen)
+	}
+
+	return string(rest[:regionLen]), string(rest[regionLen:]), nil
+}
