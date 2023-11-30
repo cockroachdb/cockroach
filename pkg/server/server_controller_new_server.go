@@ -318,11 +318,9 @@ func makeSharedProcessTenantServerConfig(
 		baseCfg.InflightTraceDirName = traceDir
 	}
 
-	useStore := kvServerCfg.SQLConfig.TempStorageConfig.Spec
-	tempStorageCfg := base.TempStorageConfigFromEnv(
-		ctx, st, useStore, "" /* parentDir */, kvServerCfg.SQLConfig.TempStorageConfig.Mon.Limit())
-
+	tempStorageCfg := base.InheritTempStorageConfig(ctx, st, kvServerCfg.SQLConfig.TempStorageConfig)
 	if !tempStorageCfg.InMemory {
+		useStore := tempStorageCfg.Spec
 		// TODO(knz): Make tempDir configurable.
 		tempDir := useStore.Path
 		if tempStorageCfg.Path, err = fs.CreateTempDir(tempDir, TempDirPrefix, stopper); err != nil {
