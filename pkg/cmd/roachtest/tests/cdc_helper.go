@@ -312,5 +312,8 @@ func checkTwoChangeFeedExportContent(
 		ctx, t, sqlRunner, firstSinkURI, selectedTargetTableName, fmt.Sprintf("%s_1", selectedTargetTableName))
 	secChangefeedFingerprint := m.loadOpsToTableAndShowFingerprint(
 		ctx, t, sqlRunner, secSinkURI, selectedTargetTableName, fmt.Sprintf("%s_1", selectedTargetTableName))
+	t.L().Printf("First fingerprint: %s for %s\nSecond fingerprint: %s for %s\n",
+		firstChangefeedFingerprint, firstSinkURI,
+		secChangefeedFingerprint, secSinkURI)
 	require.Equal(t, firstChangefeedFingerprint, secChangefeedFingerprint)
 }
