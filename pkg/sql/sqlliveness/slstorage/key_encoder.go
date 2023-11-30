@@ -22,7 +22,7 @@ import (
 
 // keyCodec manages the SessionID <-> roachpb.Key mapping.
 type keyCodec interface {
-	encode(sid sqlliveness.SessionID) (roachpb.Key, error)
+	encode(sid sqlliveness.SessionID) (roachpb.Key, string, error)
 	decode(key roachpb.Key) (sqlliveness.SessionID, error)
 
 	// indexPrefix returns the prefix for an encoded key. encode() will return
@@ -37,21 +37,21 @@ type rbrEncoder struct {
 	rbrIndex roachpb.Key
 }
 
-func (e *rbrEncoder) encode(session sqlliveness.SessionID) (roachpb.Key, error) {
-	region, _, err := UnsafeDecodeSessionID(session)
+func (e *rbrEncoder) encode(session sqlliveness.SessionID) (roachpb.Key, string, error) {
+	region, _, err := SafeDecodeSessionID(session)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if len(region) == 0 {
-		return nil, errors.Newf("legacy session passed to rbr table: '%s'", session.String())
+		return nil, "", errors.Newf("legacy session passed to rbr table: '%s'", session.String())
 	}
 
 	const columnFamilyID = 0
 
 	key := e.indexPrefix()
-	key = encoding.EncodeBytesAscending(key, region)
+	key = encoding.EncodeBytesAscending(key, encoding.UnsafeConvertStringToBytes(region))
 	key = encoding.EncodeBytesAscending(key, session.UnsafeBytes())
-	return keys.MakeFamilyKey(key, columnFamilyID), nil
+	return keys.MakeFamilyKey(key, columnFamilyID), region, nil
 }
 
 func (e *rbrEncoder) decode(key roachpb.Key) (sqlliveness.SessionID, error) {
