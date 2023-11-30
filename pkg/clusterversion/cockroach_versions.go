@@ -10,10 +10,7 @@
 
 package clusterversion
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 // Key is a unique identifier for a version of CockroachDB.
 type Key int
@@ -419,27 +416,18 @@ func (k Key) IsFinal() bool {
 	return k.Version().IsFinal()
 }
 
-// ReleaseSeries returns the final version for the release series the Key
-// belongs to. Specifically:
-//   - if the key corresponds to a final version (e.g. 23.2), the result is the
-//     same version; e.g. V23_2.ReleaseSeries() is v23.2.
-//   - if the key corresponds to a transitional upgrade version (e.g. v23.2-8),
-//     the result is the next final version (e.g. v24.1).
+// ReleaseSeries returns the release series the Key. Specifically:
+//   - if the key corresponds to a final version (e.g. V23_2), the result has the
+//     same major/minor;
+//   - if the key corresponds to a transitional upgrade version (e.g.
+//     V23_2SomeFeature with version 23.2-x), the result is the next series
+//     (e.g. 24.1).
 //
-// Note that the result does not have any DevOffset applied.
-func (k Key) ReleaseSeries() roachpb.Version {
-	// Find the first key >= k that is a final version.
-	for k := k; k < numKeys; k++ {
-		if k.IsFinal() {
-			return removeDevOffset(k.Version())
-		}
-	}
-	// k is a dev version in the latest release series.
-	major, minor := build.BranchReleaseSeries()
-	return roachpb.Version{
-		Major: int32(major),
-		Minor: int32(minor),
-	}
+// The key must be in the range [MinSupported, Latest].
+func (k Key) ReleaseSeries() roachpb.ReleaseSeries {
+	// Note: TestReleaseSeries ensures that this works for all valid Keys.
+	s, _ := removeDevOffset(k.Version()).ReleaseSeries()
+	return s
 }
 
 func (k Key) String() string {
