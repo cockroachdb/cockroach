@@ -228,7 +228,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 			"token issued with an audience of %s", parsedToken.Audience())
 	}
 
-	if err = utilccl.CheckEnterpriseEnabled(st, authenticator.clusterUUID, "JWT authentication"); err != nil {
+	if err = utilccl.CheckEnterpriseEnabled(st, "JWT authentication"); err != nil {
 		return err
 	}
 

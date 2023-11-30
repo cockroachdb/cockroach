@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func TestLicense(t *testing.T) {
@@ -74,7 +73,7 @@ func TestLicense(t *testing.T) {
 				}
 			}
 			if err := check(
-				lic, tc.checkTime, uuid.UUID{}, tc.checkOrg, "", true,
+				lic, tc.checkTime, tc.checkOrg, "", true,
 			); !testutils.IsError(err, tc.err) {
 				t.Fatalf("%d: lic to %s, checked at %s.\n got %q", i,
 					tc.expiration, tc.checkTime, err)
@@ -100,7 +99,7 @@ func TestExpiredLicenseLanguage(t *testing.T) {
 		Type:              licenseccl.License_Evaluation,
 		ValidUntilUnixSec: 1,
 	}
-	err := check(lic, timeutil.Now(), uuid.MakeV4(), "", "RESTORE", true)
+	err := check(lic, timeutil.Now(), "", "RESTORE", true)
 	expected := "Use of RESTORE requires an enterprise license. Your evaluation license expired on " +
 		"January 1, 1970. If you're interested in getting a new license, please contact " +
 		"subscriptions@cockroachlabs.com and we can help you out."

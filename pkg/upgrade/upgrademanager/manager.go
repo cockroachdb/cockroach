@@ -212,7 +212,7 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	// because upgrades run in order.
 	latest := permanentUpgrades[len(permanentUpgrades)-1]
 	lastVer := latest.Version()
-	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID.Get())
+	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 	lastUpgradeCompleted, err := startup.RunIdempotentWithRetryEx(ctx,
 		m.deps.Stopper.ShouldQuiesce(),
 		"check if migration completed",
@@ -760,7 +760,7 @@ func (m *Manager) getOrCreateMigrationJob(
 ) (alreadyCompleted, alreadyExisting bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
 	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID.Get())
+		enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 		alreadyCompleted, err = migrationstable.CheckIfMigrationCompleted(
 			ctx, version, txn.KV(), txn, enterpriseEnabled, migrationstable.ConsistentRead,
 		)

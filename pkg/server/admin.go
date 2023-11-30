@@ -2125,7 +2125,6 @@ func (s *adminServer) Cluster(
 	// between different features.
 	enterpriseEnabled := base.CheckEnterpriseEnabled(
 		s.st,
-		s.rpcContext.LogicalClusterID.Get(),
 		"BACKUP") == nil
 
 	return &serverpb.ClusterResponse{
