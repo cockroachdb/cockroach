@@ -243,24 +243,6 @@ func uploadCockroach(
 	return path
 }
 
-// upgradeNodes is a thin wrapper around
-// `clusterupgrade.RestartNodesWithNewBinary` that calls t.Fatal if
-// that call returns an errror.
-func upgradeNodes(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	nodes option.NodeListOption,
-	startOpts option.StartOpts,
-	newVersion *clusterupgrade.Version,
-) {
-	if err := clusterupgrade.RestartNodesWithNewBinary(
-		ctx, t, t.L(), c, nodes, startOpts, newVersion,
-	); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func (u *versionUpgradeTest) binaryVersion(
 	ctx context.Context, t test.Test, i int,
 ) roachpb.Version {
