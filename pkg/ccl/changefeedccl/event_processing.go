@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -84,7 +83,7 @@ func newEventConsumer(
 	cfg *execinfra.ServerConfig,
 	spec execinfrapb.ChangeAggregatorSpec,
 	feed ChangefeedConfig,
-	spanFrontier *span.Frontier,
+	spanFrontier frontier,
 	cursor hlc.Timestamp,
 	sink EventSink,
 	metrics *Metrics,
@@ -516,7 +515,7 @@ type parallelEventConsumer struct {
 
 	// spanFrontier stores the frontier for the aggregator
 	// that spawned this event consumer.
-	spanFrontier *span.Frontier
+	spanFrontier frontier
 
 	// termErr and termCh are used to save the first error that occurs
 	// in any worker and signal all workers to stop.

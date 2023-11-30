@@ -631,12 +631,14 @@ func populatePrevValsInLogicalOpLog(
 }
 
 // handleLogicalOpLogRaftMuLocked passes the logical op log to the active
-// rangefeed, if one is running. The method accepts a reader, which is used to
+// rangefeed, if one is running. The method accepts a batch, which is used to
 // look up the values associated with key-value writes in the log before handing
 // them to the rangefeed processor. No-op if a rangefeed is not active. Requires
 // raftMu to be locked.
+//
+// REQUIRES: batch is an indexed batch.
 func (r *Replica) handleLogicalOpLogRaftMuLocked(
-	ctx context.Context, ops *kvserverpb.LogicalOpLog, reader storage.Reader,
+	ctx context.Context, ops *kvserverpb.LogicalOpLog, batch storage.Batch,
 ) {
 	p, filter := r.getRangefeedProcessorAndFilter()
 	if p == nil {
@@ -661,16 +663,29 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	vhf := r.store.TestingKnobs().RangefeedValueHeaderFilter
 
 	// When reading straight from the Raft log, some logical ops will not be
-	// fully populated. Read from the Reader to populate all fields.
+	// fully populated. Read from the batch to populate all fields.
 	for _, op := range ops.Ops {
 		var key []byte
 		var ts hlc.Timestamp
 		var valPtr *[]byte
+		valueInBatch := false
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:
 			key, ts, valPtr = t.Key, t.Timestamp, &t.Value
+			if !ts.IsEmpty() {
+				// 1PC transaction commit, and no intent was written, so the value
+				// must be in the batch.
+				valueInBatch = true
+			}
+			// Else, inline value. In case inline values are supported for
+			// rangefeeds, we don't assume that the value is in the batch, since
+			// inline values can use Pebble MERGE and the resulting value may
+			// involve merging with state in the engine. So, valueInBatch remains
+			// false.
 		case *enginepb.MVCCCommitIntentOp:
 			key, ts, valPtr = t.Key, t.Timestamp, &t.Value
+			// Intent was committed. The now committed provisional value may be in
+			// the engine, so valueInBatch remains false.
 		case *enginepb.MVCCWriteIntentOp,
 			*enginepb.MVCCUpdateIntentOp,
 			*enginepb.MVCCAbortIntentOp,
@@ -682,7 +697,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 				continue
 			}
 			valBytes, err := storage.MVCCLookupRangeKeyValue(
-				ctx, reader, t.StartKey, t.EndKey, t.Timestamp)
+				ctx, batch, t.StartKey, t.EndKey, t.Timestamp)
 			if err != nil {
 				panic(err)
 			}
@@ -697,7 +712,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			panic(errors.AssertionFailedf("unknown logical op %T", t))
 		}
 
-		// Don't read values from the reader for operations that are not needed
+		// Don't read values from the batch for operations that are not needed
 		// by any rangefeed registration. We still need to inform the rangefeed
 		// processor of the changes to intents so that it can track unresolved
 		// intents, but we don't need to provide values.
@@ -709,14 +724,10 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			continue
 		}
 
-		// Read the value directly from the Reader. This is performed in the
+		// Read the value directly from the batch. This is performed in the
 		// same raftMu critical section that the logical op's corresponding
 		// WriteBatch is applied, so the value should exist.
-		valRes, vh, err := storage.MVCCGetWithValueHeader(ctx, reader, key, ts,
-			storage.MVCCGetOptions{Tombstones: true, ReadCategory: storage.RangefeedReadCategory})
-		if valRes.Value == nil && err == nil {
-			err = errors.New("value missing in reader")
-		}
+		val, vh, err := storage.MVCCGetForKnownTimestampWithNoIntent(ctx, batch, key, ts, valueInBatch)
 		if err != nil {
 			r.disconnectRangefeedWithErr(p, kvpb.NewErrorf(
 				"error consuming %T for key %s @ ts %v: %v", op.GetValue(), roachpb.Key(key), ts, err,
@@ -727,7 +738,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		if vhf != nil {
 			vhf(key, nil, ts, vh)
 		}
-		*valPtr = valRes.Value.RawBytes
+		*valPtr = val.RawBytes
 	}
 
 	// Pass the ops to the rangefeed processor.

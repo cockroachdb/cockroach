@@ -7319,3 +7319,134 @@ func TestMVCCLookupRangeKeyValue(t *testing.T) {
 	path := datapathutils.TestDataPath(t, t.Name())
 	echotest.Require(t, buf.String(), path)
 }
+
+func TestMVCCGetForKnownTimestampWithNoIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	engine := NewDefaultInMemForTesting()
+	defer engine.Close()
+
+	for _, tc := range []struct {
+		name         string
+		key          roachpb.Key
+		writeTs      hlc.Timestamp
+		writeToBatch bool
+		writeWithTxn bool
+		val          string
+		readTs       hlc.Timestamp
+		errStr       string
+	}{
+		{
+			name:         "found-in-batch",
+			key:          roachpb.Key("a"),
+			writeTs:      hlc.Timestamp{WallTime: 5},
+			writeToBatch: true,
+			val:          "a-val",
+			readTs:       hlc.Timestamp{WallTime: 5},
+		},
+		{
+			name:         "found-in-engine",
+			key:          roachpb.Key("b"),
+			writeTs:      hlc.Timestamp{WallTime: 5},
+			writeToBatch: false,
+			val:          "b-val",
+			readTs:       hlc.Timestamp{WallTime: 5},
+		},
+		{
+			name:         "higher-timestamp-in-batch",
+			key:          roachpb.Key("c"),
+			writeTs:      hlc.Timestamp{WallTime: 5},
+			writeToBatch: true,
+			val:          "c-val",
+			readTs:       hlc.Timestamp{WallTime: 4},
+			errStr:       "value missing for key",
+		},
+		{
+			name:         "higher-timestamp-in-engine",
+			key:          roachpb.Key("d"),
+			writeTs:      hlc.Timestamp{WallTime: 5},
+			writeToBatch: false,
+			val:          "d-val",
+			readTs:       hlc.Timestamp{WallTime: 4},
+			errStr:       "value missing for key",
+		},
+		{
+			name:         "intent-in-batch-not-seen",
+			key:          roachpb.Key("e"),
+			writeTs:      hlc.Timestamp{WallTime: 5},
+			writeToBatch: true,
+			writeWithTxn: true,
+			val:          "e-val",
+			readTs:       hlc.Timestamp{WallTime: 5},
+		},
+		{
+			name:         "intent-in-engine-not-seen",
+			key:          roachpb.Key("f"),
+			writeTs:      hlc.Timestamp{WallTime: 5},
+			writeToBatch: false,
+			writeWithTxn: true,
+			val:          "f-val",
+			readTs:       hlc.Timestamp{WallTime: 5},
+		},
+		{
+			name:         "lower-timestamp-in-batch",
+			key:          roachpb.Key("g"),
+			writeTs:      hlc.Timestamp{WallTime: 5},
+			writeToBatch: true,
+			val:          "g-val",
+			readTs:       hlc.Timestamp{WallTime: 6},
+			errStr:       "expected timestamp 0.000000006,0 and found 0.000000005,0",
+		},
+		{
+			name:         "lower-timestamp-in-engine",
+			key:          roachpb.Key("h"),
+			writeTs:      hlc.Timestamp{WallTime: 5},
+			writeToBatch: false,
+			val:          "h-val",
+			readTs:       hlc.Timestamp{WallTime: 6},
+			errStr:       "expected timestamp 0.000000006,0 and found 0.000000005,0",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var rw ReadWriter
+			rw = engine
+			var batch Batch
+			if tc.writeToBatch {
+				batch = engine.NewBatch()
+				defer batch.Close()
+				rw = batch
+			}
+			val := roachpb.MakeValueFromString(tc.val)
+			var txn *roachpb.Transaction
+			if tc.writeWithTxn {
+				txn = makeTxn(*txn1, tc.writeTs)
+			}
+			_, err := MVCCPut(ctx, rw, tc.key, tc.writeTs, val, MVCCWriteOptions{Txn: txn})
+			require.NoError(t, err)
+			if batch == nil {
+				batch = engine.NewBatch()
+				defer batch.Close()
+			}
+			v, _, err := MVCCGetForKnownTimestampWithNoIntent(
+				ctx, batch, tc.key, tc.readTs, tc.writeToBatch)
+			if len(tc.errStr) == 0 {
+				b, err := v.GetBytes()
+				require.NoError(t, err)
+				require.Equal(t, tc.val, string(b))
+				if tc.writeToBatch {
+					// Also read without the batch-only optimization.
+					v, _, err = MVCCGetForKnownTimestampWithNoIntent(
+						ctx, batch, tc.key, tc.readTs, false)
+					require.NoError(t, err)
+					b, err = v.GetBytes()
+					require.NoError(t, err)
+					require.Equal(t, tc.val, string(b))
+				}
+			} else {
+				require.ErrorContains(t, err, tc.errStr)
+			}
+		})
+	}
+}

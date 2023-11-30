@@ -49,7 +49,7 @@ type progressTracker struct {
 		// fields that may get updated while read are put in the lock.
 		syncutil.Mutex
 
-		checkpointFrontier *spanUtils.Frontier
+		checkpointFrontier spanUtils.Frontier
 
 		// res tracks the amount of data that has been ingested.
 		res roachpb.RowCount
@@ -87,7 +87,7 @@ func makeProgressTracker(
 ) (*progressTracker, error) {
 
 	var (
-		checkpointFrontier  *spanUtils.Frontier
+		checkpointFrontier  spanUtils.Frontier
 		err                 error
 		nextRequiredSpanKey map[string]roachpb.Key
 		inFlightSpanFeeder  chan execinfrapb.RestoreSpanEntry
@@ -119,10 +119,16 @@ func makeProgressTracker(
 	pt.endTime = endTime
 	return pt, nil
 }
-
+func (pt *progressTracker) close() {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	if pt.mu.checkpointFrontier != nil {
+		pt.mu.checkpointFrontier.Release()
+	}
+}
 func loadCheckpointFrontier(
 	requiredSpans roachpb.Spans, persistedSpans []jobspb.RestoreProgress_FrontierEntry,
-) (*spanUtils.Frontier, error) {
+) (spanUtils.Frontier, error) {
 	numRequiredSpans := len(requiredSpans) - 1
 	contiguousSpan := roachpb.Span{
 		Key:    requiredSpans[0].Key,
@@ -146,7 +152,7 @@ func loadCheckpointFrontier(
 // first N spans in the frontier that remain below the maxBytes memory limit
 // will return.
 func persistFrontier(
-	frontier *spanUtils.Frontier, maxBytes int64,
+	frontier spanUtils.Frontier, maxBytes int64,
 ) []jobspb.RestoreProgress_FrontierEntry {
 	var used int64
 	completedSpansSlice := make([]jobspb.RestoreProgress_FrontierEntry, 0)

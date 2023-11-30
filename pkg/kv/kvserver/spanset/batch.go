@@ -772,6 +772,12 @@ type spanSetBatch struct {
 
 var _ storage.Batch = spanSetBatch{}
 
+func (s spanSetBatch) NewBatchOnlyMVCCIterator(
+	ctx context.Context, opts storage.IterOptions,
+) (storage.MVCCIterator, error) {
+	panic("unimplemented")
+}
+
 func (s spanSetBatch) ScanInternal(
 	ctx context.Context,
 	lower, upper roachpb.Key,
