@@ -975,6 +975,12 @@ func MakeTransaction(
 		ReadTimestamp:          now,
 		GlobalUncertaintyLimit: gul,
 		AdmissionPriority:      int32(admissionPriority),
+		// When set to true OmitInRangefeeds indicates that none of the
+		// transaction's writes will appear in rangefeeds. Should be set to false
+		// for all transactions that write to internal system tables and most other
+		// transactions unless specifically stated otherwise (e.g. by the
+		// disable_changefeed_replication session variable).
+		OmitInRangefeeds: false,
 	}
 }
 
@@ -1340,6 +1346,8 @@ func (t *Transaction) Update(o *Transaction) {
 	// handled the case of t being uninitialized at the beginning of this
 	// function.
 	t.AdmissionPriority = o.AdmissionPriority
+	// OmitInRangefeeds doesn't change.
+	t.OmitInRangefeeds = o.OmitInRangefeeds
 }
 
 // UpgradePriority sets transaction priority to the maximum of current
