@@ -31,7 +31,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 	// This test requires us to come back and change the stmts in executeSupportedDDLs to be those
 	// supported in the "previous" major release.
 	r.Add(registry.TestSpec{
-		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V222-V231",
+		Name:             "declarative_schema_changer/job-compatibility-mixed-version-V231-V232",
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.AllExceptAWS,
@@ -62,7 +62,7 @@ func setShortGCTTLInSystemZoneConfig(
 	return h.Exec(r, "ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 1;")
 }
 
-// executeSupportedDDLs tests all stmts supported in V22_2.
+// executeSupportedDDLs tests all stmts supported in V23_1.
 // Stmts here is based on set up in testSetupResetStep.
 func executeSupportedDDLs(
 	ctx context.Context,
@@ -111,19 +111,40 @@ func executeSupportedDDLs(
 		`ALTER TABLE testdb.testsc.t2 ALTER PRIMARY KEY USING COLUMNS (j)`,
 	}
 
+	// DDLs supported since V23_1.
+	v231DDls := []string{
+		`CREATE FUNCTION fn(a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL`,
+		`CREATE INDEX ON testdb.testsc.t3 (i)`,
+		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN k SET NOT NULL`,
+		`ALTER TABLE testdb.testsc.t2 ALTER PRIMARY KEY USING COLUMNS (k) USING HASH`,
+		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT j_unique UNIQUE WITHOUT INDEX (k)`,
+		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT j_unique_not_valid UNIQUE WITHOUT INDEX (k) NOT VALID`,
+		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT fk FOREIGN KEY (j) REFERENCES testdb.testsc.t2 (j)`,
+		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT fk_not_valid FOREIGN KEY (j) REFERENCES testdb.testsc.t2 (j) NOT VALID`,
+		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT check_positive CHECK (j > 0)`,
+		`ALTER TABLE testdb.testsc.t3 ADD CONSTRAINT check_positive_not_valid CHECK (j > 0) NOT VALID`,
+		`ALTER TABLE testdb.testsc.t3 DROP CONSTRAINT check_positive`,
+		`ALTER TABLE testdb.testsc.t3 VALIDATE CONSTRAINT check_positive_not_valid`,
+	}
+
 	// Used to clean up our CREATE-d elements after we are done with them.
 	cleanup := []string{
 		// Supported since V22_2.
+		`DROP INDEX testdb.testsc.t@idx`,
 		`DROP SEQUENCE testdb.testsc.s`,
 		`DROP TYPE testdb.testsc.typ`,
 		`DROP VIEW testdb.testsc.v`,
-		`DROP TABLE testdb.testsc.t`,
+		`DROP TABLE testdb.testsc.t3`,
 		`DROP TABLE testdb.testsc.t2`,
+		`DROP TABLE testdb.testsc.t`,
 		`DROP SCHEMA testdb.testsc`,
 		`DROP DATABASE testdb CASCADE`,
+		`DROP OWNED BY foo`,
+		// Supported since V23_1.
+		`DROP FUNCTION fn`,
 	}
 
-	ddls := append(v222DDLs, cleanup...)
+	ddls := append(append(v222DDLs, v231DDls...), cleanup...)
 
 	for _, ddl := range ddls {
 		if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
@@ -153,17 +174,18 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 		}
 
 		setUpQuery := `
-		CREATE DATABASE IF NOT EXISTS testdb;
-		CREATE SCHEMA IF NOT EXISTS testdb.testsc;
-		CREATE TABLE IF NOT EXISTS testdb.testsc.t (i INT PRIMARY KEY, j INT NOT NULL, INDEX idx (j), CONSTRAINT check_j CHECK (j > 0));
-		INSERT INTO testdb.testsc.t VALUES (1, 1);
-		CREATE TABLE IF NOT EXISTS testdb.testsc.t2 (i INT NOT NULL, j INT NOT NULL, k STRING NOT NULL);
-		INSERT INTO testdb.testsc.t2 VALUES (1, 1, 'foo');
-		CREATE TYPE IF NOT EXISTS testdb.testsc.typ AS ENUM ('a', 'b');
-		CREATE SEQUENCE IF NOT EXISTS testdb.testsc.s;
-		CREATE VIEW IF NOT EXISTS testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);
+CREATE DATABASE IF NOT EXISTS testdb;
+CREATE SCHEMA IF NOT EXISTS testdb.testsc;
+CREATE TABLE IF NOT EXISTS testdb.testsc.t (i INT PRIMARY KEY, j INT NOT NULL, INDEX idx (j), CONSTRAINT check_j CHECK (j > 0));
+INSERT INTO testdb.testsc.t VALUES (1, 1);
+CREATE TABLE IF NOT EXISTS testdb.testsc.t2 (i INT NOT NULL, j INT NOT NULL, k STRING NOT NULL);
+INSERT INTO testdb.testsc.t2 VALUES (2, 3, 'foo');
+CREATE TABLE IF NOT EXISTS testdb.testsc.t3 (i INT NOT NULL, j INT NOT NULL, k STRING NOT NULL);
+INSERT INTO testdb.testsc.t3 VALUES (3, 3, 'bar');
+CREATE TYPE IF NOT EXISTS testdb.testsc.typ AS ENUM ('a', 'b');
+CREATE SEQUENCE IF NOT EXISTS testdb.testsc.s;
+CREATE VIEW IF NOT EXISTS testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);
 `
-
 		if err := helper.Exec(r, setUpQuery); err != nil {
 			return err
 		}
@@ -174,6 +196,10 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 		// buried by the fallback.
 		for _, node := range c.All() {
 			if err := helper.ExecWithGateway(r, option.NodeListOption{node}, "SET use_declarative_schema_changer = unsafe_always"); err != nil {
+				return err
+			}
+			// We also need to set experimental_enable_unique_without_index_constraints - since we will be testing this syntax.
+			if err := helper.ExecWithGateway(r, option.NodeListOption{node}, "SET experimental_enable_unique_without_index_constraints = true"); err != nil {
 				return err
 			}
 		}
