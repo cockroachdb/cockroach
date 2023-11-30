@@ -506,7 +506,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 	doExcise := header.SharedReplicate || (storage.UseExciseForSnapshots.Get(&s.ClusterSettings().SV) &&
 		s.cfg.Settings.Version.IsActive(ctx, clusterversion.V23_2_EnablePebbleFormatVirtualSSTables))
-	if header.SharedReplicate && !s.cfg.SharedStorageEnabled {
+	if header.SharedReplicate {
 		return noSnap, sendSnapshotError(ctx, s, stream, errors.New("cannot accept shared sstables"))
 	}
 

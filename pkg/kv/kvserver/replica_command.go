@@ -3140,7 +3140,7 @@ func (r *Replica) followerSendSnapshot(
 	// a snapshot for a non-system range. This allows us to send metadata of
 	// sstables in shared storage as opposed to streaming their contents. Keys
 	// in higher levels of the LSM are still streamed in the snapshot.
-	sharedReplicate := r.store.cfg.SharedStorageEnabled && snap.State.Desc.StartKey.AsRawKey().Compare(keys.TableDataMin) >= 0
+	sharedReplicate := snap.State.Desc.StartKey.AsRawKey().Compare(keys.TableDataMin) >= 0
 
 	// Create new snapshot request header using the delegate snapshot request.
 	header := kvserverpb.SnapshotRequest_Header{
