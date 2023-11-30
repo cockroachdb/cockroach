@@ -86,6 +86,10 @@ func EqualApprox(expected interface{}, actual interface{}, fraction float64, mar
 // FloatsMatchApprox returns whether two floating point represented as
 // strings are equal within a tolerance.
 func FloatsMatchApprox(expectedString, actualString string) (bool, error) {
+	if expectedString == "NULL" || actualString == "NULL" {
+		// Default to string matching for NULL, since it can't be parsed as a float.
+		return expectedString == actualString, nil
+	}
 	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
 	if err != nil {
 		return false, err
@@ -97,6 +101,10 @@ func FloatsMatchApprox(expectedString, actualString string) (bool, error) {
 // strings have matching 15 significant decimal digits (this is the precision
 // that Postgres supports for 'double precision' type).
 func FloatsMatch(expectedString, actualString string) (bool, error) {
+	if expectedString == "NULL" || actualString == "NULL" {
+		// Default to string matching for NULL, since it can't be parsed as a float.
+		return expectedString == actualString, nil
+	}
 	expected, actual, err := parseExpectedAndActualFloats(expectedString, actualString)
 	if err != nil {
 		return false, err
