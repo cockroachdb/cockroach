@@ -1652,24 +1652,25 @@ func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
 	// extension - such as right columns for non-matching rows in left joins.
 	switch joinType {
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		if !rightColsAreEmpty {
-			colStat.NullCount += (rowCount - innerJoinRowCount) * leftNullCount / leftRowCount
+		if !rightColsAreEmpty && leftNullCount > 0 && rowCount > innerJoinRowCount {
+			addedRows := max(rowCount-innerJoinRowCount, epsilon)
+			colStat.NullCount += addedRows * leftNullCount / leftRowCount
 		}
 
 	case opt.RightJoinOp:
-		if !leftColsAreEmpty {
-			colStat.NullCount += (rowCount - innerJoinRowCount) * rightNullCount / rightRowCount
+		if !leftColsAreEmpty && rightNullCount > 0 && rowCount > innerJoinRowCount {
+			addedRows := max(rowCount-innerJoinRowCount, epsilon)
+			colStat.NullCount += addedRows * rightNullCount / rightRowCount
 		}
 
 	case opt.FullJoinOp:
-		leftJoinRowCount := max(innerJoinRowCount, leftRowCount)
-		rightJoinRowCount := max(innerJoinRowCount, rightRowCount)
-
-		if !leftColsAreEmpty {
-			colStat.NullCount += (rightJoinRowCount - innerJoinRowCount) * rightNullCount / rightRowCount
+		if !leftColsAreEmpty && rightNullCount > 0 && rightRowCount > innerJoinRowCount {
+			addedRows := max(rightRowCount-innerJoinRowCount, epsilon)
+			colStat.NullCount += addedRows * rightNullCount / rightRowCount
 		}
-		if !rightColsAreEmpty {
-			colStat.NullCount += (leftJoinRowCount - innerJoinRowCount) * leftNullCount / leftRowCount
+		if !rightColsAreEmpty && leftNullCount > 0 && leftRowCount > innerJoinRowCount {
+			addedRows := max(leftRowCount-innerJoinRowCount, epsilon)
+			colStat.NullCount += addedRows * leftNullCount / leftRowCount
 		}
 	}
 }
@@ -3006,15 +3007,6 @@ func (sb *statisticsBuilder) rowsProcessed(e RelExpr) float64 {
 		}
 		return e.Relational().Statistics().RowCount
 	}
-}
-
-// TODO(#115278): We should be able to replace this with Go's built-in max
-// function, but doing breaks some optimizer tests on ARM64.
-func max(a, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 //////////////////////////////////////////////////
