@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
@@ -74,6 +75,12 @@ var BackupCheckpointInterval = settings.RegisterDurationSetting(
 	time.Minute)
 
 var forceReadBackupManifest = util.ConstantWithMetamorphicTestBool("backup-read-manifest", false)
+
+var useBulkOracle = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"bulkio.backup.balanced_distribution.enabled",
+	"randomize the selection of which replica backs up each range",
+	false)
 
 func countRows(raw kvpb.BulkOpSummary, pkIDs map[uint64]bool) roachpb.RowCount {
 	res := roachpb.RowCount{DataSize: raw.DataSize}
@@ -207,10 +214,15 @@ func backup(
 	evalCtx := execCtx.ExtendedEvalContext()
 	dsp := execCtx.DistSQLPlanner()
 
+	oracle := physicalplan.DefaultReplicaChooser
+	if useBulkOracle.Get(&evalCtx.Settings.SV) {
+		oracle = kvfollowerreadsccl.NewBulkOracle(dsp.ReplicaOracleConfig(evalCtx.Locality), execLocality)
+	}
+
 	// We don't return the compatible nodes here since PartitionSpans will
 	// filter out incompatible nodes.
 	planCtx, _, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, evalCtx, execCtx.ExecCfg(), physicalplan.DefaultReplicaChooser, execLocality,
+		ctx, evalCtx, execCtx.ExecCfg(), oracle, execLocality,
 	)
 	if err != nil {
 		return roachpb.RowCount{}, errors.Wrap(err, "failed to determine nodes on which to run")
