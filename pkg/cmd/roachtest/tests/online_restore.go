@@ -108,6 +108,9 @@ func registerOnlineRestore(r registry.Registry) {
 							if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
 								return err
 							}
+							if _, err := db.Exec("SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled=true"); err != nil {
+								return err
+							}
 							opts := ""
 							if runOnline {
 								opts = "WITH EXPERIMENTAL DEFERRED COPY"
