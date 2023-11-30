@@ -79,7 +79,7 @@ func TestWorkload(t *testing.T) {
 		printRows(tdb.Query(t, "SELECT id, encode(descriptor, 'hex') FROM system.descriptor"))
 		printRows(tdb.Query(t, "SELECT * FROM system.namespace"))
 		tdb.Exec(t, "BACKUP DATABASE schemachange TO 'nodelocal://1/backup'")
-		t.Logf("backup in %s", dir)
+		t.Logf("backup and tracing data in %s", dir)
 	}()
 
 	pgURL, cleanup := sqlutils.PGUrl(t, tc.Server(0).AdvSQLAddr(), t.Name(), url.User("testuser"))
@@ -89,10 +89,14 @@ func TestWorkload(t *testing.T) {
 	require.NoError(t, wl.Flags().Parse([]string{
 		"--concurrency", strconv.Itoa(concurrency),
 		"--verbose", "2",
+		"--trace-file", dir + "/schemachange.otlp.ndjson.gz",
 	}))
 
 	ql, err := wl.Ops(ctx, []string{pgURL.String()}, reg)
 	require.NoError(t, err)
+
+	// Defer ql.Close to ensure it gets called even in the case of panics.
+	defer func() { require.NoError(t, ql.Close(ctx)) }()
 
 	const N = 100
 	workerFn := func(ctx context.Context, fn func(ctx context.Context) error) func() error {
@@ -110,5 +114,4 @@ func TestWorkload(t *testing.T) {
 		g.Go(workerFn(gCtx, ql.WorkerFns[i]))
 	}
 	require.NoError(t, g.Wait())
-	require.NoError(t, ql.Close(ctx))
 }
