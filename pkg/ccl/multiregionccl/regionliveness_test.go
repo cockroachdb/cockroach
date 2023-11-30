@@ -284,9 +284,13 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	// Second attempt should skip the dead region for both
 	// CountLeases and WaitForNoVersion.
 	testutils.SucceedsSoon(t, func() error {
-		_, err = tenantSQL[1].Exec("ALTER TABLE t1 ADD COLUMN i INT")
-		_, err = tenantSQL[1].Exec("DROP TABLE t1")
-		return err
+		if _, err := tenantSQL[1].Exec("ALTER TABLE t1 ADD COLUMN IF NOT EXISTS i INT"); err != nil {
+			return err
+		}
+		if _, err := tenantSQL[1].Exec("DROP TABLE t1"); err != nil {
+			return err
+		}
+		return nil
 	})
 
 	require.NoError(t, tx.Rollback())
