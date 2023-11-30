@@ -663,7 +663,6 @@ func (n *Node) start(
 				c <- errors.Wrap(err, "failed to start store")
 				return
 			}
-			fmt.Println("starting store with id ", s.StoreID())
 			n.addStore(ctx, s)
 			log.Infof(ctx, "initialized store s%s", s.StoreID())
 			c <- nil
