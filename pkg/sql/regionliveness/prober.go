@@ -66,7 +66,7 @@ type Prober interface {
 	// accessible.
 	QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRegions, error)
 	// GetTableTimeout gets maximum timeout waiting on a table before issuing
-	//// liveness queries.
+	// liveness queries.
 	GetTableTimeout() (bool, time.Duration)
 }
 
@@ -144,18 +144,10 @@ SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.crdb_in
 		// Get the read timestamp and pick a commit deadline.
 		readTS := txn.KV().ReadTimestamp().AddDuration(defaultHeartbeat)
 		txnTS := readTS.AddDuration(defaultTTL)
-		// Confirm that unavailable_at is not already set.
-		rows, err := txn.QueryRow(ctx, "check-region-unavailable-exists", txn.KV(),
-			"SELECT unavailable_at FROM system.region_liveness WHERE unavailable_at IS NOT NULL AND crdb_region=$1",
-			region)
-		// If there is any row from this query then unavailable_at is already set,
-		// so don't push it further.
-		if err != nil || len(rows) == 1 {
-			return err
-		}
-		// Upset a new unavailable_at time.
+		// Insert a new unavailable_at time if one doesn't exist already.
 		_, err = txn.Exec(ctx, "mark-region-unavailable", txn.KV(),
-			"UPSERT into system.region_liveness(crdb_region, unavailable_at) VALUES ($1, $2)",
+			"INSERT INTO system.region_liveness(crdb_region, unavailable_at) VALUES ($1, $2) "+
+				"ON CONFLICT (crdb_region) DO NOTHING",
 			region,
 			txnTS.GoTime())
 		if err != nil {
