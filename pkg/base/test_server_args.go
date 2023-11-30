@@ -520,6 +520,7 @@ func DefaultTestTempStorageConfigWithSize(
 	return TempStorageConfig{
 		InMemory: true,
 		Mon:      monitor,
+		Spec:     DefaultTestStoreSpec,
 		Settings: st,
 	}
 }
@@ -542,6 +543,7 @@ func InheritTestTempStorageConfig(
 	return TempStorageConfig{
 		InMemory: parentConfig.InMemory,
 		Path:     parentConfig.Path,
+		Spec:     parentConfig.Spec,
 		Mon:      monitor,
 		Settings: st,
 	}
