@@ -2347,6 +2347,7 @@ func TestRangefeedUpdatesHandledProperlyInTheFaceOfRaces(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	defer ensureTestTakesLessThan(t, 30*time.Second)()
+	skip.UnderRace(t, "test must take less than 30 seconds, and race builds are slow")
 
 	ctx := context.Background()
 	var interestingTable atomic.Value
