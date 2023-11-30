@@ -7523,7 +7523,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://1/timeout'")
 	require.Regexp(t,
-		`exporting .*/Table/\d+/.*\: context deadline exceeded`,
+		`running distributed backup to export.*/Table/\d+/.*\: context deadline exceeded`,
 		err.Error())
 }
 

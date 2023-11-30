@@ -263,12 +263,12 @@ func (rd *restoreDataProcessor) Start(ctx context.Context) {
 	entries := make(chan execinfrapb.RestoreSpanEntry, rd.numWorkers)
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(entries)
-		return inputReader(ctx, rd.input, entries, rd.metaCh)
+		return errors.Wrap(inputReader(ctx, rd.input, entries, rd.metaCh), "reading restore span entries")
 	})
 
 	rd.phaseGroup.GoCtx(func(ctx context.Context) error {
 		defer close(rd.progCh)
-		return rd.runRestoreWorkers(ctx, entries)
+		return errors.Wrap(rd.runRestoreWorkers(ctx, entries), "running restore workers")
 	})
 }
 
@@ -491,7 +491,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 		kr, err := MakeKeyRewriterFromRekeys(rd.FlowCtx.Codec(), rd.spec.TableRekeys, rd.spec.TenantRekeys,
 			false /* restoreTenantFromStream */)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating key rewriter from rekeys")
 		}
 
 		var sstIter mergedSST
@@ -507,18 +507,18 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 				for {
 					sstIter, res, err = rd.openSSTs(ctx, entry, res)
 					if err != nil {
-						return done, err
+						return done, errors.Wrap(err, "opening SSTs")
 					}
 
 					summary, err := rd.processRestoreSpanEntry(ctx, kr, sstIter)
 					if err != nil {
-						return done, err
+						return done, errors.Wrap(err, "processing restore span entry")
 					}
 
 					select {
 					case rd.progCh <- makeProgressUpdate(summary, sstIter.entry, rd.spec.PKIDs, sstIter.completeUpTo):
 					case <-ctx.Done():
-						return done, ctx.Err()
+						return done, errors.Wrap(ctx.Err(), "sending progress update")
 					}
 					if res.done {
 						break
