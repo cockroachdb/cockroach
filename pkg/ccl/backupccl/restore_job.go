@@ -281,11 +281,6 @@ func restore(
 		return emptyRowCount, errors.Wrap(err, "resolving locality locations")
 	}
 
-	introducedSpanFrontier, err := createIntroducedSpanFrontier(backupManifests, endTime)
-	if err != nil {
-		return emptyRowCount, err
-	}
-
 	if err := checkCoverage(restoreCtx, dataToRestore.getSpans(), backupManifests); err != nil {
 		return emptyRowCount, err
 	}
@@ -300,6 +295,13 @@ func restore(
 	if err != nil {
 		return emptyRowCount, err
 	}
+	defer progressTracker.close()
+
+	introducedSpanFrontier, err := createIntroducedSpanFrontier(backupManifests, endTime)
+	if err != nil {
+		return emptyRowCount, err
+	}
+	defer introducedSpanFrontier.Release()
 
 	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
 	if details.ExperimentalOnline {

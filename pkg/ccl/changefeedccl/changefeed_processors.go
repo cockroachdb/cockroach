@@ -112,7 +112,7 @@ type timestampLowerBoundOracle interface {
 }
 
 type changeAggregatorLowerBoundOracle struct {
-	sf                         *span.Frontier
+	sf                         frontier
 	initialInclusiveLowerBound hlc.Timestamp
 }
 
@@ -246,7 +246,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 	timestampOracle := &changeAggregatorLowerBoundOracle{
-		sf:                         ca.frontier.SpanFrontier(),
+		sf:                         ca.frontier,
 		initialInclusiveLowerBound: feed.ScanTime,
 	}
 
@@ -319,7 +319,7 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 	ca.eventConsumer, ca.sink, err = newEventConsumer(
-		ctx, ca.flowCtx.Cfg, ca.spec, feed, ca.frontier.SpanFrontier(), kvFeedHighWater,
+		ctx, ca.flowCtx.Cfg, ca.spec, feed, ca.frontier, kvFeedHighWater,
 		ca.sink, ca.metrics, ca.sliMetrics, ca.knobs)
 	if err != nil {
 		ca.MoveToDraining(err)
@@ -1705,20 +1705,15 @@ func (cf *changeFrontier) isSinkless() bool {
 	return cf.spec.JobID == 0
 }
 
-// type to make embedding span.Frontier in schemaChangeFrontier convenient.
-type spanFrontier struct {
-	*span.Frontier
-}
-
-func (s *spanFrontier) frontierTimestamp() hlc.Timestamp {
-	return s.Frontier.Frontier()
-}
+// type alias to make it possible to embed and forward calls (e.g. Frontier())
+// to the underlying span.Frontier.
+type spanFrontier = span.Frontier
 
 // schemaChangeFrontier encapsulates the span frontier, which keeps track of the
 // per-span timestamps we no longer need to emit, along with information about
 // the most recently observed schema change boundary.
 type schemaChangeFrontier struct {
-	*spanFrontier
+	spanFrontier
 
 	// schemaChangeBoundary values are communicated to the changeFrontier via
 	// Resolved messages send from the changeAggregators. The policy regarding
@@ -1762,8 +1757,7 @@ func makeSchemaChangeFrontier(
 	if err != nil {
 		return nil, err
 	}
-	return &schemaChangeFrontier{
-		spanFrontier:     &spanFrontier{Frontier: sf},
+	scf := &schemaChangeFrontier{
 		initialHighWater: initialHighWater,
 		latestTs:         initialHighWater,
 
@@ -1774,7 +1768,9 @@ func makeSchemaChangeFrontier(
 		// to ensure that sql pod in serverless deployment does
 		// not get shutdown immediately after changefeed starts.
 		latestKV: timeutil.Now(),
-	}, nil
+	}
+	scf.spanFrontier = span.MakeConcurrentFrontier(sf)
+	return scf, nil
 }
 
 // ForwardResolvedSpan advances the timestamp for a resolved span, taking care
@@ -1803,16 +1799,6 @@ func (f *schemaChangeFrontier) ForwardLatestKV(ts time.Time) {
 	if f.latestKV.Before(ts) {
 		f.latestKV = ts
 	}
-}
-
-// Frontier returns the minimum timestamp being tracked.
-func (f *schemaChangeFrontier) Frontier() hlc.Timestamp {
-	return f.frontierTimestamp()
-}
-
-// SpanFrontier returns underlying span.Frontier.
-func (f *schemaChangeFrontier) SpanFrontier() *span.Frontier {
-	return f.spanFrontier.Frontier
 }
 
 type spanIter func(forEachSpan span.Operation)
@@ -1855,7 +1841,7 @@ func getCheckpointSpans(
 func (f *schemaChangeFrontier) getCheckpointSpans(
 	maxBytes int64,
 ) (spans []roachpb.Span, timestamp hlc.Timestamp) {
-	return getCheckpointSpans(f.frontierTimestamp(), f.Entries, maxBytes)
+	return getCheckpointSpans(f.Frontier(), f.Entries, maxBytes)
 }
 
 // BackfillTS returns the timestamp of the incoming spans for an ongoing
