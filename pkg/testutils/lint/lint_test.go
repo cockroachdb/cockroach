@@ -1235,6 +1235,7 @@ func TestLint(t *testing.T) {
 			":!storage/enginepb/mvcc3_valueheader.go",
 			":!sql/types/types_jsonpb.go",
 			":!sql/schemachanger/scplan/scviz/maps.go",
+			":!workload/schemachange/tracing.go",
 		)
 		if err != nil {
 			t.Fatal(err)
