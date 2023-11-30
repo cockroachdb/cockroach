@@ -9,15 +9,20 @@
 package engineccl
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/datadriven"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -42,6 +47,143 @@ func generateKey(encType enginepbccl.EncryptionType) (*enginepbccl.SecretKey, er
 	key.Key = make([]byte, keyLength)
 	_, err := rand.Read(key.Key)
 	return key, err
+}
+
+func readHex(s string) ([]byte, error) {
+	s = strings.ReplaceAll(s, " ", "")
+	s = strings.ReplaceAll(s, "\n", "")
+	return hex.DecodeString(s)
+}
+
+func writeHex(b []byte) string {
+	var buf strings.Builder
+	for i, c := range b {
+		fmt.Fprintf(&buf, "%02x", c)
+		if i%16 == 15 {
+			buf.WriteString("\n")
+		} else {
+			buf.WriteString(" ")
+		}
+	}
+	return buf.String()
+}
+
+func encryptManySubBlocks(
+	t *testing.T, fcs *fileCipherStream, baseOffset int64, plaintext, ciphertext []byte,
+) {
+	// Split the text into many different left/right pairs, encrypt each one
+	// separately, and make sure it matches the corresponding ciphertext.
+	// This covers various cases such as full and partial blocks, aligned and
+	// unaligned, etc.
+	// Since we're only dealing with fairly small data sizes, we can iterate
+	// through every possible split point and just try them all.
+	for i := range plaintext {
+		leftData := append([]byte{}, plaintext[0:i]...)
+		fcs.Encrypt(baseOffset, leftData)
+		if !bytes.Equal(leftData, ciphertext[0:i]) {
+			t.Errorf("encrypting bytes 0:%d did not match full ciphertext", i)
+		}
+		rightData := append([]byte{}, plaintext[i:]...)
+		fcs.Encrypt(baseOffset+int64(i), rightData)
+		if !bytes.Equal(rightData, ciphertext[i:]) {
+			t.Errorf("encrypting bytes %d:end did not match full ciphertext", i)
+		}
+	}
+}
+
+// Running non-fips mode:
+// ./dev test pkg/ccl/storageccl/engineccl -f CTRStreamDataDriven  --rewrite --stream-output
+// Running fips mode:
+// ./dev test-binaries --cross=crosslinuxfips pkg/ccl/storageccl/engineccl && mkdir -p fipsbin && tar xf bin/test_binaries.tar.gz -C fipsbin && docker run -v $PWD/fipsbin:/fipsbin -it redhat/ubi9 bash -c 'cd /fipsbin/pkg/ccl/storageccl/engineccl/bin && ./run.sh -test.run CTRStreamDataDriven'
+func TestCTRStreamDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var data []byte
+	keys := map[string]*enginepbccl.SecretKey{}
+	ivs := map[string][]byte{}
+	seenCiphertexts := map[string]struct{}{}
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "ctr_stream"),
+		func(t *testing.T, d *datadriven.TestData) string {
+			fmt.Println(d.Pos)
+
+			switch d.Cmd {
+			case "set-data":
+				var err error
+				data, err = readHex(d.Input)
+				require.NoError(t, err)
+				return "ok"
+
+			case "create-key":
+				var name string
+				d.ScanArgs(t, "name", &name)
+				decoded, err := readHex(d.Input)
+				require.NoError(t, err)
+				key := &enginepbccl.SecretKey{
+					Info: &enginepbccl.KeyInfo{},
+					Key:  decoded,
+				}
+				switch len(decoded) {
+				case 16:
+					key.Info.EncryptionType = enginepbccl.EncryptionType_AES128_CTR
+				case 24:
+					key.Info.EncryptionType = enginepbccl.EncryptionType_AES192_CTR
+				case 32:
+					key.Info.EncryptionType = enginepbccl.EncryptionType_AES256_CTR
+				default:
+					return fmt.Sprintf("invalid key size %d", len(decoded))
+				}
+				keys[name] = key
+				return "ok"
+
+			case "create-iv":
+				var name string
+				d.ScanArgs(t, "name", &name)
+				decoded, err := readHex(d.Input)
+				require.NoError(t, err)
+				if len(decoded) != 16 {
+					return "iv must be 16 bytes"
+				}
+				ivs[name] = decoded
+				return "ok"
+
+			case "encrypt":
+				var offset int64
+				d.ScanArgs(t, "offset", &offset)
+				keyName := "default"
+				d.MaybeScanArgs(t, "key", &keyName)
+				ivName := "default"
+				d.MaybeScanArgs(t, "iv", &ivName)
+				expectDuplicate := false
+				d.MaybeScanArgs(t, "expect_duplicate", &expectDuplicate)
+				iv := ivs[ivName]
+				bcs, err := newCTRBlockCipherStream(keys[keyName], iv[:12], binary.BigEndian.Uint32(iv[12:16]))
+				require.NoError(t, err)
+				fcs := &fileCipherStream{bcs: bcs}
+				// Encrypt() mutates its argument so make a copy of data.
+				output := append([]byte{}, data...)
+				fcs.Encrypt(offset, output)
+				reencrypted := append([]byte{}, output...)
+				fcs.Decrypt(offset, reencrypted)
+				if !bytes.Equal(data, reencrypted) {
+					t.Fatalf("decrypted data didn't match input")
+				}
+
+				outputString := string(output)
+				_, isDuplicate := seenCiphertexts[outputString]
+				if isDuplicate && !expectDuplicate {
+					// Assume that each test is using different parameters; if we see the same
+					// ciphertext twice something's gone wrong.
+					t.Fatalf("same ciphertext produced more than once")
+				} else if expectDuplicate && !isDuplicate {
+					t.Fatalf("expected duplicate of prior ciphertext")
+				}
+				seenCiphertexts[outputString] = struct{}{}
+				encryptManySubBlocks(t, fcs, offset, data, output)
+				return writeHex(output)
+
+			default:
+				return fmt.Sprintf("unknown command: %s\n", d.Cmd)
+			}
+		})
 }
 
 func TestFileCipherStream(t *testing.T) {
