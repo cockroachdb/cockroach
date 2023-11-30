@@ -1023,16 +1023,6 @@ func TestSchemaChangeComparator_mixed_version_can_login(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_can_login"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_mixed_version_database_role_settings_role_id(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_database_role_settings_role_id"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_mixed_version_external_connections_owner_id(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_external_connections_owner_id"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_mixed_version_insights_queries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_insights_queries"
@@ -1056,11 +1046,6 @@ func TestSchemaChangeComparator_mixed_version_procedure(t *testing.T) {
 func TestSchemaChangeComparator_mixed_version_refcursor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_refcursor"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_mixed_version_role_members_user_ids(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_role_members_user_ids"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_mixed_version_schedule_details(t *testing.T) {
