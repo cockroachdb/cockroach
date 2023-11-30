@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -312,12 +313,36 @@ func (s *Storage) deleteOrFetchSession(
 	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Reset captured variable in case of retry.
 		deleted, expiration, prevExpiration = false, hlc.Timestamp{}, hlc.Timestamp{}
-
-		k, err := s.keyCodec.encode(sid)
+		k, regionPhysicalRep, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
 		}
-		kv, err := txn.Get(ctx, k)
+		livenessProber := regionliveness.NewLivenessProber(s.db, s.codec, nil, s.settings)
+		if unavailableAtRegions, err := livenessProber.QueryUnavailablePhysicalRegions(ctx, txn); err != nil ||
+			unavailableAtRegions.ContainsPhysicalRepresentation(string(regionPhysicalRep)) {
+			return err
+		}
+		execWithTimeout, timeout := livenessProber.GetProbeTimeout()
+		var kv kv.KeyValue
+		if execWithTimeout {
+			// Detect if we fail to a region and force a probe in that
+			// case.
+			err = timeutil.RunWithTimeout(ctx, "fetch-session", timeout, func(ctx context.Context) error {
+				kvInner, err := txn.Get(ctx, k)
+				kv = kvInner
+				return err
+			})
+
+			if err != nil &&
+				regionliveness.IsQueryTimeoutErr(err) {
+				probeErr := livenessProber.ProbeLivenessWithPhysicalRegion(ctx, regionPhysicalRep)
+				if probeErr != nil {
+					return errors.WithSecondaryError(err, probeErr)
+				}
+			}
+		} else {
+			kv, err = txn.Get(ctx, k)
+		}
 		if err != nil {
 			return err
 		}
@@ -468,7 +493,7 @@ func (s *Storage) Insert(
 	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
 
-		k, err := s.keyCodec.encode(sid)
+		k, _, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
 		}
@@ -492,7 +517,7 @@ func (s *Storage) Update(
 ) (sessionExists bool, err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err = s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		k, err := s.keyCodec.encode(sid)
+		k, _, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
 		}
@@ -525,7 +550,7 @@ func (s *Storage) Delete(ctx context.Context, session sqlliveness.SessionID) err
 	return s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
 
-		key, err := s.keyCodec.encode(session)
+		key, _, err := s.keyCodec.encode(session)
 		if err != nil {
 			return err
 		}
