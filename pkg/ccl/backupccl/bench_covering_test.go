@@ -96,10 +96,8 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 
 											filter, err := makeSpanCoveringFilter(
 												checkpointFrontier,
-												nil,
 												introducedSpanFrontier,
-												0,
-												false)
+												0)
 											require.NoError(b, err)
 
 											g := ctxgroup.WithContext(ctx)

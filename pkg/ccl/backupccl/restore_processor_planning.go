@@ -189,26 +189,22 @@ func distRestore(
 		id := execCtx.ExecCfg().NodeInfo.NodeID.SQLInstanceID()
 
 		spec := &execinfrapb.GenerativeSplitAndScatterSpec{
-			TableRekeys:              md.dataToRestore.getRekeys(),
-			TenantRekeys:             md.dataToRestore.getTenantRekeys(),
-			ValidateOnly:             md.dataToRestore.isValidateOnly(),
-			URIs:                     md.uris,
-			Encryption:               md.encryption,
-			EndTime:                  md.restoreTime,
-			Spans:                    md.dataToRestore.getSpans(),
-			BackupLocalityInfo:       md.backupLocalityInfo,
-			HighWater:                md.spanFilter.highWaterMark,
-			UserProto:                execCtx.User().EncodeProto(),
-			TargetSize:               md.spanFilter.targetSize,
-			ChunkSize:                int64(chunkSize),
-			NumEntries:               int64(md.numImportSpans),
-			NumNodes:                 int64(numNodes),
-			UseFrontierCheckpointing: md.spanFilter.useFrontierCheckpointing,
-			JobID:                    int64(md.jobID),
+			TableRekeys:        md.dataToRestore.getRekeys(),
+			TenantRekeys:       md.dataToRestore.getTenantRekeys(),
+			ValidateOnly:       md.dataToRestore.isValidateOnly(),
+			URIs:               md.uris,
+			Encryption:         md.encryption,
+			EndTime:            md.restoreTime,
+			Spans:              md.dataToRestore.getSpans(),
+			BackupLocalityInfo: md.backupLocalityInfo,
+			UserProto:          execCtx.User().EncodeProto(),
+			TargetSize:         md.spanFilter.targetSize,
+			ChunkSize:          int64(chunkSize),
+			NumEntries:         int64(md.numImportSpans),
+			NumNodes:           int64(numNodes),
+			JobID:              int64(md.jobID),
 		}
-		if md.spanFilter.useFrontierCheckpointing {
-			spec.CheckpointedSpans = persistFrontier(md.spanFilter.checkpointFrontier, 0)
-		}
+		spec.CheckpointedSpans = persistFrontier(md.spanFilter.checkpointFrontier, 0)
 
 		proc := physicalplan.Processor{
 			SQLInstanceID: id,

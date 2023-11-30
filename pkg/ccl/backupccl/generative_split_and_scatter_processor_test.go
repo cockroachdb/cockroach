@@ -258,7 +258,6 @@ func makeTestingGenerativeSplitAndScatterSpec(
 		EndTime:            hlc.Timestamp{},
 		Spans:              requiredSpans,
 		BackupLocalityInfo: nil,
-		HighWater:          nil,
 		UserProto:          "",
 		ChunkSize:          1,
 		TargetSize:         1,

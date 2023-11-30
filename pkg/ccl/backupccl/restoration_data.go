@@ -51,7 +51,7 @@ type restorationData interface {
 	isMainBundle() bool
 }
 
-// mainRestorationData is a data bundle that actually affects the highwater mark in
+// mainRestorationData is a data bundle that actually affects the checkpoint frontier in
 // the job's progress. We should only restore 1 of these.
 type mainRestorationData struct {
 	restorationDataBase
