@@ -404,17 +404,24 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}
 
 	if !startOpts.SkipInit {
-		if err := c.waitForDefaultTargetCluster(ctx, l, startOpts); err != nil {
-			return errors.Wrap(err, "failed to wait for default target cluster")
+		storageCluster := c
+		if startOpts.KVCluster != nil {
+			storageCluster = startOpts.KVCluster
+		}
+		if startOpts.Target == StartDefault {
+			if err := storageCluster.waitForDefaultTargetCluster(ctx, l, startOpts); err != nil {
+				return errors.Wrap(err, "failed to wait for default target cluster")
+			}
+			// Only after a successful cluster initialization should we attempt to schedule backups.
+			if startOpts.ScheduleBackups && shouldInit && config.CockroachDevLicense != "" {
+				if err := c.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs); err != nil {
+					return err
+				}
+			}
 		}
 		c.createAdminUserForSecureCluster(ctx, l, startOpts)
-		if err = c.setClusterSettings(ctx, l, startOpts.GetInitTarget(), startOpts.VirtualClusterName); err != nil {
+		if err = storageCluster.setClusterSettings(ctx, l, startOpts.GetInitTarget(), startOpts.VirtualClusterName); err != nil {
 			return err
-		}
-
-		// Only after a successful cluster initialization should we attempt to schedule backups.
-		if startOpts.ScheduleBackups && shouldInit && config.CockroachDevLicense != "" {
-			return c.createFixedBackupSchedule(ctx, l, startOpts.ScheduleBackupArgs)
 		}
 	}
 
@@ -1059,8 +1066,10 @@ func (c *SyncedCluster) createAdminUserForSecureCluster(
 	// work for shared-process virtual clusters.
 	retryOpts := retry.Options{MaxRetries: 20}
 	if err := retryOpts.Do(ctx, func(ctx context.Context) error {
+		// We use the first node in the virtual cluster to create the user.
+		firstNode := c.TargetNodes()[0]
 		results, err := c.ExecSQL(
-			ctx, l, Nodes{startOpts.GetInitTarget()}, startOpts.VirtualClusterName, startOpts.SQLInstance, []string{
+			ctx, l, Nodes{firstNode}, startOpts.VirtualClusterName, startOpts.SQLInstance, []string{
 				"-e", stmts,
 			})
 
