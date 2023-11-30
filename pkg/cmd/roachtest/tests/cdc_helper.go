@@ -237,6 +237,7 @@ func (m *metamorphicTestHelper) loadOpsToTableAndShowFingerprint(
 	sqlRunner *sqlutils.SQLRunner,
 	sinkURI string,
 	selectedTargetTableName string,
+	newTableName string,
 ) string {
 	// Grab a handler to the cloud storage for the given sinks.
 	cs, err := cloud.ExternalStorageFromURI(ctx, strings.TrimPrefix(sinkURI, `experimental-`),
@@ -250,7 +251,6 @@ func (m *metamorphicTestHelper) loadOpsToTableAndShowFingerprint(
 	)
 	require.NoError(t, err)
 
-	newTableName := fmt.Sprintf("%s_for_%s", selectedTargetTableName, sinkURI)
 	// Create two empty tables with same schema as the selectedTargetTable. For
 	// example, create two tables stock_sinkurl1, stock_sinkurl2 for tpcc.stock.
 	createStmt, dropStmt := createTargetTableStmt(selectedTargetTableName, newTableName)
@@ -309,8 +309,8 @@ func checkTwoChangeFeedExportContent(
 		cachedTableToEventTypeColIdx: make(map[string]int),
 	}
 	firstChangefeedFingerprint := m.loadOpsToTableAndShowFingerprint(
-		ctx, t, sqlRunner, firstSinkURI, selectedTargetTableName)
+		ctx, t, sqlRunner, firstSinkURI, selectedTargetTableName, fmt.Sprintf("%s_1", selectedTargetTableName))
 	secChangefeedFingerprint := m.loadOpsToTableAndShowFingerprint(
-		ctx, t, sqlRunner, secSinkURI, selectedTargetTableName)
+		ctx, t, sqlRunner, secSinkURI, selectedTargetTableName, fmt.Sprintf("%s_1", selectedTargetTableName))
 	require.Equal(t, firstChangefeedFingerprint, secChangefeedFingerprint)
 }
