@@ -48,6 +48,7 @@ jobs:
           base: "${{ matrix.branch }}"
           branch: 'crdb-releases-yaml-update-${{ matrix.branch }}'
           title: "${{ matrix.branch }}: Update pkg/testutils/release/cockroach_releases.yaml"
+          team-reviewers: release-eng
           body: |
             Update pkg/testutils/release/cockroach_releases.yaml with recent values.
 
