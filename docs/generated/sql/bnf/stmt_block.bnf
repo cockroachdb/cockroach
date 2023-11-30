@@ -4241,8 +4241,8 @@ opt_interval_qualifier ::=
 
 func_application ::=
 	func_application_name '(' ')'
-	| func_application_name '(' expr_list opt_sort_clause ')'
-	| func_application_name '(' 'ALL' expr_list opt_sort_clause ')'
+	| func_application_name '(' expr_list opt_sort_clause_no_index ')'
+	| func_application_name '(' 'ALL' expr_list opt_sort_clause_no_index ')'
 	| func_application_name '(' 'DISTINCT' expr_list ')'
 	| func_application_name '(' '*' ')'
 
@@ -4437,13 +4437,17 @@ func_application_name ::=
 	func_name
 	| '[' 'FUNCTION' iconst32 ']'
 
+opt_sort_clause_no_index ::=
+	sort_clause_no_index
+	| 
+
 single_sort_clause ::=
 	'ORDER' 'BY' sortby
 	| 'ORDER' 'BY' sortby ',' sortby_list
 	| 'ORDER' 'BY' sortby_index ',' sortby_list
 
 window_specification ::=
-	'(' opt_existing_window_name opt_partition_clause opt_sort_clause opt_frame_clause ')'
+	'(' opt_existing_window_name opt_partition_clause opt_sort_clause_no_index opt_frame_clause ')'
 
 window_name ::=
 	name
@@ -4524,6 +4528,9 @@ func_name ::=
 	| prefixed_column_path
 	| 'INDEX'
 
+sort_clause_no_index ::=
+	'ORDER' 'BY' sortby_no_index_list
+
 opt_existing_window_name ::=
 	name
 	| 
@@ -4598,6 +4605,9 @@ reference_action ::=
 	| 'CASCADE'
 	| 'SET' 'NULL'
 	| 'SET' 'DEFAULT'
+
+sortby_no_index_list ::=
+	( sortby ) ( ( ',' sortby | ',' sortby_index ) )*
 
 frame_extent ::=
 	frame_bound
