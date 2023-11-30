@@ -1859,12 +1859,6 @@ func doRestorePlan(
 		mem.Shrink(ctx, memReserved)
 	}()
 
-	err = checkBackupManifestVersionCompatability(ctx, p.ExecCfg().Settings.Version,
-		mainBackupManifests, restoreStmt.Options.UnsafeRestoreIncompatibleVersion)
-	if err != nil {
-		return err
-	}
-
 	if restoreStmt.Options.ExperimentalOnline {
 		if err := checkManifestsForOnlineCompat(ctx, mainBackupManifests); err != nil {
 			return err
@@ -2156,14 +2150,15 @@ func doRestorePlan(
 		// compatability.
 		//
 		// TODO(msbutler): Delete in 23.1
-		RestoreSystemUsers:  restoreStmt.DescriptorCoverage == tree.SystemUsers,
-		PreRewriteTenantId:  oldTenantID,
-		SchemaOnly:          restoreStmt.Options.SchemaOnly,
-		VerifyData:          restoreStmt.Options.VerifyData,
-		SkipLocalitiesCheck: restoreStmt.Options.SkipLocalitiesCheck,
-		ExecutionLocality:   execLocality,
-		ExperimentalOnline:  restoreStmt.Options.ExperimentalOnline,
-		RemoveRegions:       restoreStmt.Options.RemoveRegions,
+		RestoreSystemUsers:               restoreStmt.DescriptorCoverage == tree.SystemUsers,
+		PreRewriteTenantId:               oldTenantID,
+		SchemaOnly:                       restoreStmt.Options.SchemaOnly,
+		VerifyData:                       restoreStmt.Options.VerifyData,
+		SkipLocalitiesCheck:              restoreStmt.Options.SkipLocalitiesCheck,
+		ExecutionLocality:                execLocality,
+		ExperimentalOnline:               restoreStmt.Options.ExperimentalOnline,
+		RemoveRegions:                    restoreStmt.Options.RemoveRegions,
+		UnsafeRestoreIncompatibleVersion: restoreStmt.Options.UnsafeRestoreIncompatibleVersion,
 	}
 
 	jr := jobs.Record{

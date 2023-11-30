@@ -1622,10 +1622,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
-	if err := r.validateJobIsResumable(p.ExecCfg()); err != nil {
-		return err
-	}
-
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		p.ExecCfg().Settings,
 		&p.ExecCfg().ExternalIODirConfig,
@@ -1636,6 +1632,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		ctx, &mem, p, details, details.Encryption, &kmsEnv,
 	)
 	if err != nil {
+		return err
+	}
+	if err := r.validateJobIsResumable(ctx, p.ExecCfg(), backupManifests); err != nil {
 		return err
 	}
 	defer func() {
@@ -1926,8 +1925,17 @@ func clusterRestoreDuringUpgradeErr(
 }
 
 // validateJobDetails returns an error if this job cannot be resumed.
-func (r *restoreResumer) validateJobIsResumable(execConfig *sql.ExecutorConfig) error {
+func (r *restoreResumer) validateJobIsResumable(
+	ctx context.Context,
+	execConfig *sql.ExecutorConfig,
+	mainBackupManifests []backuppb.BackupManifest,
+) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
+
+	if err := checkBackupManifestVersionCompatability(ctx, execConfig.Settings.Version,
+		mainBackupManifests, details.UnsafeRestoreIncompatibleVersion); err != nil {
+		return err
+	}
 
 	// Validate that we aren't in the middle of an upgrade. To avoid unforseen
 	// issues, we want to avoid full cluster restores if it is possible that an
