@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // GenerateSubzoneSpans constructs from a TableDescriptor the entries mapping
@@ -71,7 +70,6 @@ import (
 // all subzones at once is introduced.
 func GenerateSubzoneSpans(
 	st *cluster.Settings,
-	logicalClusterID uuid.UUID,
 	codec keys.SQLCodec,
 	tableDesc catalog.TableDescriptor,
 	subzones []zonepb.Subzone,
@@ -79,7 +77,7 @@ func GenerateSubzoneSpans(
 ) ([]zonepb.SubzoneSpan, error) {
 	// Removing zone configs does not require a valid license.
 	if hasNewSubzones {
-		if err := base.CheckEnterpriseEnabled(st, logicalClusterID,
+		if err := base.CheckEnterpriseEnabled(st,
 			"replication zones on indexes or partitions"); err != nil {
 			return nil, err
 		}

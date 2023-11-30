@@ -27,7 +27,7 @@ func init() {
 		ReturnType: tree.FixedReturnType(types.Bool),
 		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 			if err := utilccl.CheckEnterpriseEnabled(
-				evalCtx.Settings, evalCtx.ClusterID, "fips_ready",
+				evalCtx.Settings, "fips_ready",
 			); err != nil {
 				return nil, err
 			}

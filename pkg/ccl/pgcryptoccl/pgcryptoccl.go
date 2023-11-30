@@ -36,7 +36,6 @@ var EnterpriseLicenseCheckFeatureName = fmt.Sprintf(
 func checkEnterpriseEnabledForCryptoFunction(evalCtx *eval.Context) error {
 	return utilccl.CheckEnterpriseEnabled(
 		evalCtx.Settings,
-		evalCtx.ClusterID,
 		EnterpriseLicenseCheckFeatureName,
 	)
 }

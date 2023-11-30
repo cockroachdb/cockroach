@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -62,13 +61,13 @@ func TestEvalFollowerReadOffset(t *testing.T) {
 	disableEnterprise := utilccl.TestingEnableEnterprise()
 	defer disableEnterprise()
 	st := cluster.MakeTestingClusterSettings()
-	if offset, err := evalFollowerReadOffset(uuid.MakeV4(), st); err != nil {
+	if offset, err := evalFollowerReadOffset(st); err != nil {
 		t.Fatal(err)
 	} else if offset != expectedFollowerReadOffset {
 		t.Fatalf("expected %v, got %v", expectedFollowerReadOffset, offset)
 	}
 	disableEnterprise()
-	_, err := evalFollowerReadOffset(uuid.MakeV4(), st)
+	_, err := evalFollowerReadOffset(st)
 	if !testutils.IsError(err, "requires an enterprise license") {
 		t.Fatalf("failed to get error when evaluating follower read offset without " +
 			"an enterprise license")
@@ -82,7 +81,7 @@ func TestZeroDurationDisablesFollowerReadOffset(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	closedts.TargetDuration.Override(ctx, &st.SV, 0)
-	if offset, err := evalFollowerReadOffset(uuid.MakeV4(), st); err != nil {
+	if offset, err := evalFollowerReadOffset(st); err != nil {
 		t.Fatal(err)
 	} else if offset != math.MinInt64 {
 		t.Fatalf("expected %v, got %v", math.MinInt64, offset)
@@ -483,7 +482,7 @@ func TestCanSendToFollower(t *testing.T) {
 				closedts.TargetDuration.Override(ctx, &st.SV, 0)
 			}
 
-			can := canSendToFollower(uuid.MakeV4(), st, clock, c.ctPolicy, c.ba)
+			can := canSendToFollower(st, clock, c.ctPolicy, c.ba)
 			require.Equal(t, c.exp, can)
 		})
 	}

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -33,7 +32,7 @@ var ConfigureRoleBasedAuditClusterSettings = func(ctx context.Context, acl *Audi
 }
 
 // UserAuditEnabled is a noop global var injected by CCL hook.
-var UserAuditEnabled = func(st *cluster.Settings, clusterID uuid.UUID) bool {
+var UserAuditEnabled = func(st *cluster.Settings) bool {
 	return false
 }
 

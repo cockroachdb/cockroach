@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -336,7 +335,6 @@ var InitializeMultiRegionMetadataCCL = func(
 	ctx context.Context,
 	descIDGenerator eval.DescIDGenerator,
 	settings *cluster.Settings,
-	clusterID uuid.UUID,
 	liveClusterRegions LiveClusterRegions,
 	survivalGoal tree.SurvivalGoal,
 	primaryRegion catpb.RegionName,
@@ -429,7 +427,6 @@ func (p *planner) maybeInitializeMultiRegionMetadata(
 		ctx,
 		p.EvalContext().DescIDGenerator,
 		p.EvalContext().Settings,
-		p.ExecCfg().NodeInfo.LogicalClusterID(),
 		liveRegions,
 		survivalGoal,
 		catpb.RegionName(primaryRegion),

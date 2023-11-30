@@ -91,7 +91,7 @@ func newReplicationStreamManagerWithPrivilegesCheck(
 
 	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), "REPLICATION")
+		execCfg.Settings, "REPLICATION")
 	if enterpriseCheckErr != nil {
 		return nil, pgerror.Wrap(enterpriseCheckErr,
 			pgcode.CCLValidLicenseRequired, "physical replication requires an enterprise license on the primary (and secondary) cluster")

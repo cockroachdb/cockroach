@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errutil"
 	"github.com/cockroachdb/redact"
@@ -385,7 +384,6 @@ func TestSendRPCOrder(t *testing.T) {
 	old := CanSendToFollower
 	defer func() { CanSendToFollower = old }()
 	CanSendToFollower = func(
-		_ uuid.UUID,
 		_ *cluster.Settings,
 		_ *hlc.Clock,
 		p roachpb.RangeClosedTimestampPolicy,
@@ -893,7 +891,6 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 	old := CanSendToFollower
 	defer func() { CanSendToFollower = old }()
 	CanSendToFollower = func(
-		_ uuid.UUID,
 		_ *cluster.Settings,
 		_ *hlc.Clock,
 		_ roachpb.RangeClosedTimestampPolicy,
@@ -3975,7 +3972,6 @@ func TestCanSendToFollower(t *testing.T) {
 	defer func() { CanSendToFollower = old }()
 	canSend := true
 	CanSendToFollower = func(
-		_ uuid.UUID,
 		_ *cluster.Settings,
 		_ *hlc.Clock,
 		_ roachpb.RangeClosedTimestampPolicy,
