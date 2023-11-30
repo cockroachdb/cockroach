@@ -96,7 +96,7 @@ func getRandomIndex(sizeOfSlice int) int {
 // see a file for a table other than selectedTargetTable. It is just passed in
 // for a validation check.
 func listFilesOfTargetTable(
-	selectedTargetTable string, cs cloud.ExternalStorage,
+	cs cloud.ExternalStorage, selectedTargetTable string,
 ) (csFileNames []string, _ error) {
 	err := cs.List(context.Background(), "", "", func(str string) error {
 		targetTableName, err := extractTableNameFromFileName(str)
@@ -157,16 +157,25 @@ func cleanUpDownloadedFiles(fileNames []string) error {
 // processTable reads the local file specified by fileName, parse the data
 // content, execute upsert statement for the file content into the provided
 // targetTable. If any steps fail, an error is returned.
-func processTable(
+func (m *metamorphicTestHelper) processTable(
 	t test.Test, sqlRunner *sqlutils.SQLRunner, targetTable string, fileName string,
 ) error {
 	meta, filesInDatums, err := parquet.ReadFile(fileName)
 	if err != nil {
 		return err
 	}
-	eventTypeColIdx, err := changefeedccl.GetEventTypeColIdx(meta)
-	if err != nil {
-		return err
+
+	// Check cachedTableToEventTypeColIdx before processing metadata since the
+	// event column index in different files should stay the same for the same
+	// table.
+	eventTypeColIdx, ok := m.cachedTableToEventTypeColIdx[targetTable]
+	if !ok {
+		eventTypeColIdx, err = changefeedccl.TestingGetEventTypeColIdx(meta)
+		if err != nil {
+			return err
+		}
+		// Save the event column index to avoid processing again.
+		m.cachedTableToEventTypeColIdx[targetTable] = eventTypeColIdx
 	}
 
 	for _, rowInDatums := range filesInDatums {
@@ -193,11 +202,11 @@ func processTable(
 
 // processTables read in fileNames and execute UPSERT stmts for the file content
 // into the given targetTable to eliminate duplicates.
-func processTables(
+func (m *metamorphicTestHelper) processTables(
 	t test.Test, sqlRunner *sqlutils.SQLRunner, targetTable string, fileNames []string,
 ) error {
 	for _, fn := range fileNames {
-		if err := processTable(t, sqlRunner, targetTable, fn); err != nil {
+		if err := m.processTable(t, sqlRunner, targetTable, fn); err != nil {
 			return err
 		}
 	}
@@ -219,6 +228,70 @@ func downloadFiles(
 	return
 }
 
+// processEventsAndReturnFingerprint parses the changefeed sink output, loads
+// the events into a table by UPSERT, and returns the fingerprint of the table
+// in string format.
+func (m *metamorphicTestHelper) loadOpsToTableAndShowFingerprint(
+	ctx context.Context,
+	t test.Test,
+	sqlRunner *sqlutils.SQLRunner,
+	sinkURI string,
+	selectedTargetTableName string,
+) string {
+	// Grab a handler to the cloud storage for the given sinks.
+	cs, err := cloud.ExternalStorageFromURI(ctx, strings.TrimPrefix(sinkURI, `experimental-`),
+		base.ExternalIODirConfig{},
+		cluster.MakeTestingClusterSettings(),
+		blobs.TestEmptyBlobClientFactory,
+		username.RootUserName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+
+	newTableName := fmt.Sprintf("%s_for_%s", selectedTargetTableName, sinkURI)
+
+	// Create two empty tables with same schema as the selectedTargetTable. For
+	// example, create two tables stock_sinkurl1, stock_sinkurl2 for tpcc.stock.
+	createStmt, dropStmt := createTargetTableStmt(selectedTargetTableName, newTableName)
+	sqlRunner.Exec(t, createStmt)
+	defer func() {
+		sqlRunner.Exec(t, dropStmt)
+	}()
+
+	// List names of the changefeed output files in cloud storage.
+	csFileNames, err := listFilesOfTargetTable(cs, selectedTargetTableName)
+	require.NoError(t, err)
+	require.NotEmpty(t, csFileNames)
+
+	// Download files from cloud storage and return the local files names.
+	downloadedFileNames, err := downloadFiles(ctx, cs, csFileNames)
+	require.NoError(t, err)
+	require.NotEmpty(t, downloadedFileNames)
+
+	// Parse the downloaded files given the local file names and execute UPSERT
+	// stmts for the file content into the two tables.
+	err = m.processTables(t, sqlRunner, newTableName, downloadedFileNames)
+	require.NoError(t, err)
+
+	// Assert that two tables have the same content by checking their
+	// fingerprints.
+	fingerPrint := sqlRunner.QueryStr(t,
+		fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s", newTableName))
+	require.NotEmpty(t, fingerPrint)
+	require.GreaterOrEqual(t, len(fingerPrint[0]), 2)
+	require.NotEqual(t, "NULL", fingerPrint[0][1])
+
+	// Clean up downloaded local files.
+	err = cleanUpDownloadedFiles(downloadedFileNames)
+	require.NoError(t, err)
+	return sqlutils.MatrixToStr(fingerPrint)
+}
+
+type metamorphicTestHelper struct {
+	cachedTableToEventTypeColIdx map[string]int
+}
+
 // checkTwoChangeFeedExportContent checks if the given two sinks have the same
 // changefeed export output on the cloud storage. Theoretically, we should never
 // expect to see an output file for a table other than selectedTargetTable. It
@@ -229,87 +302,15 @@ func checkTwoChangeFeedExportContent(
 	sqlRunner *sqlutils.SQLRunner,
 	firstSinkURI string,
 	secSinkURI string,
-	selectedTargetTable string,
+	selectedTargetTableName string,
 ) {
 	require.NotEqual(t, firstSinkURI, secSinkURI)
-	// TODO(wenyihu6): Is it faster if I create one table and do all ops in the
-	// table at once?
-	// Grab a handler to the cloud storage for the given sinks.
-	firstCloudStorage, err := cloud.ExternalStorageFromURI(ctx, strings.TrimPrefix(firstSinkURI, `experimental-`),
-		base.ExternalIODirConfig{},
-		cluster.MakeTestingClusterSettings(),
-		blobs.TestEmptyBlobClientFactory,
-		username.RootUserName(),
-		nil, /* db */
-		nil, /* limiters */
-		cloud.NilMetrics,
-	)
-	require.NoError(t, err)
-	secCloudStorage, err := cloud.ExternalStorageFromURI(ctx, strings.TrimPrefix(secSinkURI, `experimental-`),
-		base.ExternalIODirConfig{},
-		cluster.MakeTestingClusterSettings(),
-		blobs.TestEmptyBlobClientFactory,
-		username.RootUserName(),
-		nil, /* db */
-		nil, /* limiters */
-		cloud.NilMetrics,
-	)
-	require.NoError(t, err)
-
-	firstTableName := selectedTargetTable + "_1"
-	secTableName := selectedTargetTable + "_2"
-
-	// Create two empty tables with same schema as the selectedTargetTable. For
-	// example, create two tables stock_1, stock_2 for tpcc.stock.
-	firstCreateStmt, firstDropStmt := createTargetTableStmt(selectedTargetTable, firstTableName)
-	secCreateStmt, secDropStmt := createTargetTableStmt(selectedTargetTable, secTableName)
-	sqlRunner.Exec(t, firstCreateStmt)
-	sqlRunner.Exec(t, secCreateStmt)
-	defer func() {
-		sqlRunner.Exec(t, firstDropStmt)
-		sqlRunner.Exec(t, secDropStmt)
-	}()
-
-	// List names of the changefeed output files in cloud storage.
-	firstCloudStorageFileNames, err := listFilesOfTargetTable(selectedTargetTable, firstCloudStorage)
-	require.NoError(t, err)
-	secCloudStorageFileNames, err := listFilesOfTargetTable(selectedTargetTable, secCloudStorage)
-	require.NoError(t, err)
-	require.NotEmpty(t, firstCloudStorageFileNames)
-	require.NotEmpty(t, secCloudStorageFileNames)
-
-	// Download files from cloud storage and return the local files names.
-	firstDownloadedFileNames, err := downloadFiles(ctx, firstCloudStorage, firstCloudStorageFileNames)
-	require.NoError(t, err)
-	secDownloadedFileNames, err := downloadFiles(ctx, secCloudStorage, secCloudStorageFileNames)
-	require.NoError(t, err)
-	require.NotEmpty(t, firstDownloadedFileNames)
-	require.NotEmpty(t, secDownloadedFileNames)
-
-	// Parse the downloaded files given the local file names and execute UPSERT
-	// stmts for the file content into the two tables.
-	err = processTables(t, sqlRunner, firstTableName, firstDownloadedFileNames)
-	require.NoError(t, err)
-	err = processTables(t, sqlRunner, secTableName, secDownloadedFileNames)
-	require.NoError(t, err)
-
-	// Assert that two tables have the same content by checking their
-	// fingerprints.
-	firstFingerPrint := sqlRunner.QueryStr(t,
-		fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s", firstTableName))
-	secFingerPrint := sqlRunner.QueryStr(t,
-		fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s", secTableName))
-	require.Equal(t, firstFingerPrint, secFingerPrint)
-	require.GreaterOrEqual(t, len(firstFingerPrint[0]), 2)
-	require.GreaterOrEqual(t, len(secFingerPrint[0]), 2)
-	require.NotEqual(t, "NULL", firstFingerPrint[0][1])
-	require.NotEqual(t, "NULL", secFingerPrint[0][1])
-	require.NotEmpty(t, firstFingerPrint)
-	require.NotEmpty(t, secFingerPrint)
-
-	// Clean up downloaded local files.
-	err = cleanUpDownloadedFiles(firstDownloadedFileNames)
-	require.NoError(t, err)
-	err = cleanUpDownloadedFiles(secDownloadedFileNames)
-	require.NoError(t, err)
+	m := &metamorphicTestHelper{
+		cachedTableToEventTypeColIdx: make(map[string]int),
+	}
+	firstChangefeedFingerprint := m.loadOpsToTableAndShowFingerprint(
+		ctx, t, sqlRunner, firstSinkURI, selectedTargetTableName)
+	secChangefeedFingerprint := m.loadOpsToTableAndShowFingerprint(
+		ctx, t, sqlRunner, secSinkURI, selectedTargetTableName)
+	require.Equal(t, firstChangefeedFingerprint, secChangefeedFingerprint)
 }
