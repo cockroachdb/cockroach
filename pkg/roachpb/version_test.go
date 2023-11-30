@@ -18,6 +18,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestParseVersion(t *testing.T) {
+	testData := []struct {
+		s         string
+		v         Version
+		roundtrip bool
+	}{
+		{s: "23.1", v: Version{Major: 23, Minor: 1}, roundtrip: true},
+		{s: "23.1-upgrading-to-23.2-step-004", v: Version{Major: 23, Minor: 1, Internal: 4}, roundtrip: true},
+		{s: "1000023.1-upgrading-to-1000023.2-step-004", v: Version{Major: 1000023, Minor: 1, Internal: 4}, roundtrip: true},
+		{s: "23.1-4", v: Version{Major: 23, Minor: 1, Internal: 4}},
+		{s: "23.1-upgrading-step-004", v: Version{Major: 23, Minor: 1, Internal: 4}},
+	}
+	for _, tc := range testData {
+		t.Run("", func(t *testing.T) {
+			v, err := ParseVersion(tc.s)
+			require.NoError(t, err)
+			require.Equal(t, tc.v, v)
+			if tc.roundtrip {
+				require.Equal(t, tc.s, v.String())
+			}
+		})
+	}
+}
+
 func TestVersionCmp(t *testing.T) {
 	v := func(major, minor, patch, internal int32) Version {
 		return Version{
