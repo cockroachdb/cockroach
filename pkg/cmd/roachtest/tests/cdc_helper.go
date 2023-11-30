@@ -248,9 +248,9 @@ func (m *metamorphicTestHelper) loadOpsToTableAndShowFingerprint(
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
+	require.NoError(t, err)
 
 	newTableName := fmt.Sprintf("%s_for_%s", selectedTargetTableName, sinkURI)
-
 	// Create two empty tables with same schema as the selectedTargetTable. For
 	// example, create two tables stock_sinkurl1, stock_sinkurl2 for tpcc.stock.
 	createStmt, dropStmt := createTargetTableStmt(selectedTargetTableName, newTableName)
