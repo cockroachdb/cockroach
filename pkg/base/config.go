@@ -885,8 +885,23 @@ func TempStorageConfigFromEnv(
 	maxSizeBytes int64,
 ) TempStorageConfig {
 	inMem := parentDir == "" && useStore.InMemory
+	return newTempStorageConfig(ctx, st, inMem, useStore, maxSizeBytes)
+}
+
+// InheritTempStorageConfig creates a new TempStorageConfig using the
+// configuration of the given TempStorageConfig. It assumes the given
+// TempStorageConfig has been fully initialized.
+func InheritTempStorageConfig(
+	ctx context.Context, st *cluster.Settings, parentConfig TempStorageConfig,
+) TempStorageConfig {
+	return newTempStorageConfig(ctx, st, parentConfig.InMemory, parentConfig.Spec, parentConfig.Mon.Limit())
+}
+
+func newTempStorageConfig(
+	ctx context.Context, st *cluster.Settings, inMemory bool, useStore StoreSpec, maxSizeBytes int64,
+) TempStorageConfig {
 	var monitorName redact.RedactableString
-	if inMem {
+	if inMemory {
 		monitorName = "in-mem temp storage"
 	} else {
 		monitorName = "temp disk storage"
@@ -902,7 +917,7 @@ func TempStorageConfigFromEnv(
 	)
 	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
-		InMemory: inMem,
+		InMemory: inMemory,
 		Mon:      monitor,
 		Spec:     useStore,
 		Settings: st,
