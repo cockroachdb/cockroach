@@ -1254,6 +1254,9 @@ func (bq *baseQueue) processReplicasInPurgatory(
 		for _, item := range ranges {
 			repl, err := bq.getReplica(item.rangeID)
 			if err != nil || item.replicaID != repl.ReplicaID() {
+				bq.mu.Lock()
+				bq.removeFromReplicaSetLocked(item.rangeID)
+				bq.mu.Unlock()
 				continue
 			}
 			annotatedCtx := repl.AnnotateCtx(ctx)
@@ -1263,6 +1266,10 @@ func (bq *baseQueue) processReplicasInPurgatory(
 					bq.finishProcessingReplica(ctx, stopper, repl, err)
 				},
 			) != nil {
+				// NB: We do not need to worry about removing any unprocessed replicas
+				// from the replica set here, as RunTask will only return an error when
+				// the stopper is quiescing or stopping -- meaning the process is
+				// shutting down.
 				return
 			}
 		}
