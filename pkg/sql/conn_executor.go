@@ -3534,6 +3534,13 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 	return expr
 }
 
+func (ex *connExecutor) omitFromRangefeeds() bool {
+	if ex.sessionData() == nil {
+		return false
+	}
+	return ex.sessionData().DisableChangefeedReplication
+}
+
 // initEvalCtx initializes the fields of an extendedEvalContext that stay the
 // same across multiple statements. resetEvalCtx must also be called before each
 // statement, to reinitialize other fields.
