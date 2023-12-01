@@ -1428,9 +1428,14 @@ func (ex *connExecutor) reportSessionDataChanges(fn func() error) error {
 	return nil
 }
 
-func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error {
+func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) (retErr error) {
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "commit sql txn")
 	defer sp.Finish()
+
+	defer func() {
+		failed := retErr != nil
+		ex.recordDDLTxnTelemetry(failed)
+	}()
 
 	if err := ex.extraTxnState.sqlCursors.closeAll(true /* errorOnWithHold */); err != nil {
 		return err
@@ -1508,6 +1513,29 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 	return nil
 }
 
+// recordDDLTxnTelemetry records telemetry for explicit transactions that
+// contain DDL.
+func (ex *connExecutor) recordDDLTxnTelemetry(failed bool) {
+	numDDL, numStmts := ex.extraTxnState.numDDL, ex.state.mu.stmtCount
+	if numDDL == 0 || ex.implicitTxn() {
+		return
+	}
+	// Subtract 1 statement so the COMMIT/ROLLBACK is not counted.
+	if numDDL == numStmts-1 {
+		if failed {
+			telemetry.Inc(sqltelemetry.DDLOnlyTransactionFailureCounter)
+		} else {
+			telemetry.Inc(sqltelemetry.DDLOnlyTransactionSuccessCounter)
+		}
+	} else /* numDDL != numStmts-1 */ {
+		if failed {
+			telemetry.Inc(sqltelemetry.MixedDDLDMLTransactionFailureCounter)
+		} else {
+			telemetry.Inc(sqltelemetry.MixedDDLDMLTransactionSuccessCounter)
+		}
+	}
+}
+
 // createJobs creates jobs for the records cached in schemaChangeJobRecords
 // during this transaction.
 func (ex *connExecutor) createJobs(ctx context.Context) error {
@@ -1541,6 +1569,7 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	}
 
 	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+	ex.recordDDLTxnTelemetry(true /* failed */)
 
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
