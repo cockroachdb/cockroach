@@ -2694,6 +2694,25 @@ func (c *clusterImpl) WipeForReuse(
 	return nil
 }
 
+// MaybeExtendCluster checks if the cluster has enough life left for the
+// test plus enough headroom after the test finishes so that the next test
+// can be selected. If it doesn't, extend it.
+func (c *clusterImpl) MaybeExtendCluster(
+	ctx context.Context, l *logger.Logger, testSpec registry.TestSpec,
+) error {
+	timeout := testTimeout(&testSpec)
+	minExp := timeutil.Now().Add(timeout + time.Hour)
+	if c.expiration.Before(minExp) {
+		extend := minExp.Sub(c.expiration)
+		l.PrintfCtx(ctx, "cluster needs to survive until %s, but has expiration: %s. Extending.",
+			minExp, c.expiration)
+		if err := c.Extend(ctx, extend, l); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // archForTest determines the CPU architecture to use for a test. If the test
 // doesn't specify it, one is chosen randomly depending on flags.
 func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSpec) vm.CPUArch {
