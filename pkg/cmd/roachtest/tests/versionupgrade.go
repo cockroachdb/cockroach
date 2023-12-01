@@ -108,7 +108,7 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"setup schema changer workload",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
 			node := h.RandomNode(rng, c.All())
-			workloadPath, err := clusterupgrade.UploadWorkload(
+			workloadPath, _, err := clusterupgrade.UploadWorkload(
 				ctx, t, l, c, c.Node(node), h.Context.ToVersion,
 			)
 			if err != nil {
@@ -149,11 +149,16 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// The schemachange workload is designed to work up to one
 			// version back. Therefore, we upload a compatible `workload`
 			// binary to `randomNode`, where the workload will run.
-			workloadPath, err := clusterupgrade.UploadWorkload(
+			workloadPath, uploaded, err := clusterupgrade.UploadWorkload(
 				ctx, t, l, c, c.Node(randomNode), h.Context.ToVersion,
 			)
 			if err != nil {
 				return errors.Wrap(err, "uploading workload binary")
+			}
+
+			if !uploaded {
+				l.Printf("Version being upgraded is too old, no workload binary available. Skipping")
+				return nil
 			}
 
 			l.Printf("running schemachange workload")

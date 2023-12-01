@@ -89,7 +89,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/pkg/errors"
 )
 
@@ -144,7 +143,7 @@ var (
 	// is a published ARM64 build. If we are running a mixedversion test
 	// on ARM64, older versions will be skipped even if the test
 	// requested a certain number of upgrades.
-	minSupportedARM64Version = version.MustParse("v22.2.0")
+	minSupportedARM64Version = clusterupgrade.MustParseVersion("v22.2.0")
 
 	defaultTestOptions = testOptions{
 		// We use fixtures more often than not as they are more likely to
