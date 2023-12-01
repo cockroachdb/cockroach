@@ -432,62 +432,68 @@ func TestUnavailableZip(t *testing.T) {
 		"debug zip --concurrency=1 --cpu-profile-duration=0 " + os.
 			DevNull + " --timeout=.5s"
 
-	c := TestCLI{
-		t:        t,
-		Server:   tc.Server(0),
-		Insecure: true,
-	}
-	defer func(prevStderr *os.File) { stderr = prevStderr }(stderr)
-	stderr = os.Stdout
-
-	out, err := c.RunWithCapture(debugZipCommand)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Assert debug zip output for cluster, node 1, node 2, node 3.
-	assert.NotEmpty(t, out)
-	clusterOut := []string{
-		"[cluster] requesting nodes... received response...",
-		"[cluster] requesting liveness... received response...",
-	}
-	expectedOut := clusterOut
-	for i := 1; i < tc.NumServers()+1; i++ {
-		nodeOut := baseZipOutput(i)
-
-		expectedOut = append(expectedOut, nodeOut...)
-
-		// If the request to nodes failed, we can't expect the remaining
-		// nodes to be present in the debug zip output.
-		if i == 1 && strings.Contains(out,
-			"[cluster] requesting nodes: last request failed") {
-			break
+	t.Run("server 1", func(t *testing.T) {
+		c := TestCLI{
+			t:        t,
+			Server:   tc.Server(0),
+			Insecure: true,
 		}
-	}
 
-	containsAssert(t, out, expectedOut)
+		out, err := c.RunWithCapture(debugZipCommand)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	// Run debug zip against node 2.
-	c = TestCLI{
-		t:        t,
-		Server:   tc.Server(1),
-		Insecure: true,
-	}
+		// Assert debug zip output for cluster, node 1, node 2, node 3.
+		assert.NotEmpty(t, out)
+		clusterOut := []string{
+			"[cluster] requesting nodes... received response...",
+			"[cluster] requesting liveness... received response...",
+		}
+		expectedOut := clusterOut
+		for i := 1; i < tc.NumServers()+1; i++ {
+			nodeOut := baseZipOutput(i)
 
-	out, err = c.RunWithCapture(debugZipCommand)
-	if err != nil {
-		t.Fatal(err)
-	}
+			expectedOut = append(expectedOut, nodeOut...)
 
-	// Assert debug zip output for cluster, node 2.
-	assert.NotEmpty(t, out)
-	assert.NotContains(t, out, "[node 1]")
-	assert.NotContains(t, out, "[node 3]")
+			// If the request to nodes failed, we can't expect the remaining
+			// nodes to be present in the debug zip output.
+			if i == 1 && strings.Contains(out,
+				"[cluster] requesting nodes: last request failed") {
+				break
+			}
+		}
 
-	nodeOut := baseZipOutput(2)
-	expectedOut = append(clusterOut, nodeOut...)
+		containsAssert(t, out, expectedOut)
+	})
 
-	containsAssert(t, out, expectedOut)
+	t.Run("server 2", func(t *testing.T) {
+		// Run debug zip against node 2.
+		c := TestCLI{
+			t:        t,
+			Server:   tc.Server(1),
+			Insecure: true,
+		}
+
+		out, err := c.RunWithCapture(debugZipCommand)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Assert debug zip output for cluster, node 2.
+		assert.NotEmpty(t, out)
+		assert.NotContains(t, out, "[node 1]")
+		assert.NotContains(t, out, "[node 3]")
+
+		clusterOut := []string{
+			"[cluster] requesting nodes... received response...",
+			"[cluster] requesting liveness... received response...",
+		}
+		nodeOut := baseZipOutput(2)
+		expectedOut := append(clusterOut, nodeOut...)
+
+		containsAssert(t, out, expectedOut)
+	})
 }
 
 func containsAssert(t *testing.T, actual string, expected []string) {
