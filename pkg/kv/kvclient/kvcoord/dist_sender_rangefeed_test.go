@@ -642,6 +642,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 
 		frontier, err := span.MakeFrontier(fooSpan)
 		require.NoError(t, err)
+		frontier = span.MakeConcurrentFrontier(frontier)
 
 		// This error causes rangefeed to restart.
 		transientErrEvent := kvpb.RangeFeedEvent{
@@ -887,6 +888,7 @@ func TestMuxRangeFeedCanCloseStream(t *testing.T) {
 
 	frontier, err := span.MakeFrontier(fooSpan)
 	require.NoError(t, err)
+	frontier = span.MakeConcurrentFrontier(frontier)
 
 	expectFrontierAdvance := func() {
 		t.Helper()
