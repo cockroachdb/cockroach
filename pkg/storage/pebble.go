@@ -126,6 +126,20 @@ var UseExciseForSnapshots = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+// IngestSplitEnabled controls whether ingest-time splitting is enabled in
+// Pebble. This feature allows for existing sstables to be split into multiple
+// virtual sstables at ingest time if that allows for an ingestion sstable to go
+// into a lower level than it would otherwise be in. No keys are masked with
+// this split; it only happens if there are no keys in that existing sstable
+// in the span of the incoming sstable.
+var IngestSplitEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"storage.ingest_split.enabled",
+	"set to true to use ingest-time splitting to lower write-amplification (experimental)",
+	false, /* defaultValue */
+	settings.WithPublic,
+)
+
 // IngestAsFlushable controls whether ingested sstables that overlap the
 // memtable may be lazily ingested: written to the WAL and enqueued in the list
 // of flushables (eg, memtables, large batches and now lazily-ingested
@@ -1075,6 +1089,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// See https://github.com/cockroachdb/pebble/issues/3120
 	// TODO(travers): Re-enable, once the issues are resolved.
 	opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
+	opts.Experimental.IngestSplit = func() bool {
+		return IngestSplitEnabled.Get(&cfg.Settings.SV)
+	}
 
 	auxDir := opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
 	if err := opts.FS.MkdirAll(auxDir, 0755); err != nil {
