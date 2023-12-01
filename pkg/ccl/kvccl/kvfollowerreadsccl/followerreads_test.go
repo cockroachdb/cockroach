@@ -800,12 +800,11 @@ func TestFollowerReadsWithStaleDescriptor(t *testing.T) {
 	// the following settings.
 	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
 	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
-	n1.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.1s'`)
 
 	// Sleep so that we can perform follower reads. The read timestamp needs to be
 	// above the timestamp when the table was created.
 	log.Infof(ctx, "test sleeping for the follower read timestamps to pass the table creation timestamp...")
-	time.Sleep(300 * time.Millisecond)
+	n1.Exec(t, `SELECT pg_sleep((now() - follower_read_timestamp())::FLOAT)`)
 	log.Infof(ctx, "test sleeping... done")
 
 	// Run a query on n4 to populate its cache.
@@ -1007,7 +1006,6 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			systemSQL := sqlutils.MakeSQLRunner(tc.Conns[0])
 			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '0.1s'`)
 			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s'`)
-			systemSQL.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.1s'`)
 			// We're making assertions on traces collected by the tenant using
 			// log lines in KV so we must ensure they're not redacted.
 			systemSQL.Exec(t, `SET CLUSTER SETTING trace.redact_at_virtual_cluster_boundary.enabled = 'false'`)
@@ -1086,7 +1084,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			// Wait until all tenant servers are aware of the setting override.
 			testutils.SucceedsSoon(t, func() error {
 				settingNames := []string{
-					"kv.closed_timestamp.target_duration", "kv.closed_timestamp.side_transport_interval", "kv.closed_timestamp.propagation_slack",
+					"kv.closed_timestamp.target_duration", "kv.closed_timestamp.side_transport_interval",
 				}
 				for _, settingName := range settingNames {
 					for i := 0; i < numNodes; i++ {
@@ -1129,7 +1127,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 			// Sleep so that we can perform follower reads. The read timestamp
 			// needs to be above the timestamp when the table was created.
 			log.Infof(ctx, "test sleeping for the follower read timestamps to pass the table creation timestamp...")
-			time.Sleep(500 * time.Millisecond)
+			tenantSQL.Exec(t, `SELECT pg_sleep((now() - follower_read_timestamp())::FLOAT)`)
 			log.Infof(ctx, "test sleeping... done")
 
 			// Check that the cache was indeed populated.
