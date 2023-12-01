@@ -124,6 +124,10 @@ type Cluster interface {
 	WipeE(ctx context.Context, l *logger.Logger, preserveCerts bool, opts ...option.Option) error
 	Wipe(ctx context.Context, preserveCerts bool, opts ...option.Option)
 
+	// DNS
+
+	DestroyDNS(ctx context.Context, l *logger.Logger) error
+
 	// Internal niche tools.
 
 	Reformat(ctx context.Context, l *logger.Logger, node option.NodeListOption, filesystem string) error
