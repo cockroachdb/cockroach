@@ -1011,7 +1011,7 @@ CREATE TABLE enum_data_type (x STRING);
 INSERT INTO enum_data_type VALUES ('hello'), ('howdy');
 
 statement ok
-ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting;
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting USING x::greeting;
 
 statement ok
 INSERT INTO enum_data_type VALUES ('hi')
@@ -1089,7 +1089,7 @@ CREATE TABLE enum_data_type (x STRING);
 INSERT INTO enum_data_type VALUES ('notagreeting')
 
 statement error pq: invalid input value for enum greeting: "notagreeting"
-ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting
+ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting USING x::greeting
 
 statement ok
 ALTER TABLE enum_data_type
