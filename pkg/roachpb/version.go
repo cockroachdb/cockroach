@@ -130,3 +130,56 @@ func MustParseVersion(s string) Version {
 	}
 	return v
 }
+
+// ReleaseSeries is just the major.minor part of a Version.
+type ReleaseSeries struct {
+	Major int32
+	Minor int32
+}
+
+func (s ReleaseSeries) String() string {
+	return fmt.Sprintf("%d.%d", s.Major, s.Minor)
+}
+
+// Successor returns the next release series, if known. This is only guaranteed
+// to work for versions from the minimum supported series up to the previous
+// series.
+func (s ReleaseSeries) Successor() (_ ReleaseSeries, ok bool) {
+	res, ok := successorSeries[s]
+	return res, ok
+}
+
+// successorSeries stores the successor for each series. We are only concerned
+// with versions within our compatibility window, but there is no harm in
+// populating more if they are known.
+//
+// When this map is updated, the expected result in TestReleaseSeriesSuccessor
+// needs to be updated. Also note that clusterversion tests ensure that this map
+// contains all necessary versions.
+var successorSeries = map[ReleaseSeries]ReleaseSeries{
+	{20, 1}: {20, 2},
+	{20, 2}: {21, 1},
+	{21, 1}: {21, 2},
+	{21, 2}: {22, 1},
+	{22, 1}: {22, 2},
+	{22, 2}: {23, 1},
+	{23, 1}: {23, 2},
+	{23, 2}: {24, 1},
+}
+
+// ReleaseSeries obtains the release series for the given version. Specifically:
+//   - if the version is final (Internal=0), the ReleaseSeries has the same major/minor.
+//   - if the version is a transitional version during upgrade (e.g. v23.1-8),
+//     the result is the next final version (e.g. v23.1).
+//
+// For non-final versions (which indicate an update to the next series), this
+// requires knowledge of the next series; unknown non-final versions will return
+// ok=false.
+func (v Version) ReleaseSeries() (_ ReleaseSeries, ok bool) {
+	base := ReleaseSeries{v.Major, v.Minor}
+	if v.IsFinal() {
+		return base, true
+	}
+	res, ok := base.Successor()
+	return res, ok
+}

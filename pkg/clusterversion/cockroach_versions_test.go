@@ -160,13 +160,23 @@ func TestClusterVersionPrettyPrint(t *testing.T) {
 }
 
 func TestReleaseSeries(t *testing.T) {
-	require.Equal(t, fmt.Sprintf("v%s", Latest.ReleaseSeries()), build.BinaryVersionPrefix())
-	if Latest.IsFinal() {
-		require.True(t, Latest.Version() == Latest.ReleaseSeries())
-	} else {
-		require.True(t, removeDevOffset(Latest.Version()).Less(Latest.ReleaseSeries()))
+	// Verify that the ReleaseSeries call works on all keys.
+	for k := Latest; k > 0; k-- {
+		if k.Version().Major > 0 {
+			require.NotEqual(t, roachpb.ReleaseSeries{}, k.ReleaseSeries())
+		} else {
+			require.Equal(t, roachpb.ReleaseSeries{}, k.ReleaseSeries())
+		}
 	}
-	require.Equal(t, PreviousRelease.ReleaseSeries(), removeDevOffset(PreviousRelease.Version()))
-	require.Equal(t, (PreviousRelease - 1).ReleaseSeries(), removeDevOffset(PreviousRelease.Version()))
-	require.Equal(t, MinSupported.ReleaseSeries(), removeDevOffset(MinSupported.Version()))
+
+	// Verify the ReleaseSeries results down to MinSupported.
+	expected := Latest.ReleaseSeries()
+	require.Equal(t, fmt.Sprintf("v%s", expected), build.BinaryVersionPrefix())
+	for k := Latest; k >= MinSupported; k-- {
+		if k.IsFinal() {
+			v := removeDevOffset(k.Version())
+			expected = roachpb.ReleaseSeries{Major: v.Major, Minor: v.Minor}
+		}
+		require.Equalf(t, expected, k.ReleaseSeries(), "version: %s", k)
+	}
 }
