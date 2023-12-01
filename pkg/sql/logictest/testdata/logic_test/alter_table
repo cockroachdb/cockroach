@@ -1784,9 +1784,9 @@ query I
 SELECT count(descriptor_id)
   FROM (
         SELECT json_array_elements_text(
-                crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->'descriptorIds'
+                crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', value)->'descriptorIds'
                )::INT8 AS descriptor_id
-          FROM system.jobs
+          FROM system.job_info WHERE info_key = 'legacy_payload'
        )
  WHERE descriptor_id = ('test.public.t45985'::REGCLASS)::INT8;
 ----
