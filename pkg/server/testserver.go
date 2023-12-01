@@ -611,7 +611,7 @@ func (ts *testServer) startDefaultTestTenant(
 
 	var tempStorageConfig base.TempStorageConfig
 	if tsc := ts.params.TempStorageConfig; tsc.Settings != nil {
-		tempStorageConfig = base.InheritTestTempStorageConfig(tenantSettings, tsc)
+		tempStorageConfig = base.InheritTempStorageConfig(ctx, tenantSettings, tsc)
 	} else {
 		tempStorageConfig = base.DefaultTestTempStorageConfig(tenantSettings)
 	}
