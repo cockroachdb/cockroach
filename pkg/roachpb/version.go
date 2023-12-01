@@ -12,8 +12,8 @@ package roachpb
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -54,8 +54,14 @@ func (v Version) AtLeast(otherV Version) bool {
 	return !v.Less(otherV)
 }
 
-// String implements the fmt.Stringer interface.
+// String implements the fmt.Stringer interface. The result is of the form
+// "23.2" for final versions and "23.2-upgrading-to-24.1-step-004" for
+// transitional internal versions during upgrade.
 func (v Version) String() string { return redact.StringWithoutMarkers(v) }
+
+// VersionMajorDevOffset is an offset we apply to major version numbers during
+// development; see clusterversion.DevOffset for more information.
+const VersionMajorDevOffset = 1_000_000
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
@@ -63,7 +69,21 @@ func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 		p.Printf("%d.%d", v.Major, v.Minor)
 		return
 	}
-	p.Printf("%d.%d-%d", v.Major, v.Minor, v.Internal)
+	// If the version is offset, remove the offset and add it back to the result. We want
+	// 1000023.1-upgrading-to-1000023.2-step-002, not 1000023.1-upgrading-to-23.2-step-002.
+	noOffsetVersion := v
+	if v.Major > VersionMajorDevOffset {
+		noOffsetVersion.Major -= VersionMajorDevOffset
+	}
+	if s, ok := noOffsetVersion.ReleaseSeries(); ok {
+		if v.Major > VersionMajorDevOffset {
+			s.Major += VersionMajorDevOffset
+		}
+		p.Printf("%d.%d-upgrading-to-%d.%d-step-%03d", v.Major, v.Minor, s.Major, s.Minor, v.Internal)
+	} else {
+		// This shouldn't happen in practice.
+		p.Printf("%d.%d-upgrading-step-%03d", v.Major, v.Minor, v.Internal)
+	}
 }
 
 // IsFinal returns true if this is a final version (as opposed to a transitional
@@ -87,39 +107,45 @@ func (v Version) PrettyPrint() string {
 	return fmt.Sprintf("%v(fence)", v)
 }
 
-// ParseVersion parses a Version from a string of the form
-// "<major>.<minor>-<internal>" where the "-<internal>" is optional. We don't
-// use the Patch component, so it is always zero.
-func ParseVersion(s string) (Version, error) {
-	var c Version
-	dotParts := strings.Split(s, ".")
+var (
+	verPattern = regexp.MustCompile(
+		`^(?P<major>[0-9]+)\.(?P<minor>[0-9]+)(|(-|-upgrading(|-to-[0-9]+.[0-9]+)-step-)(?P<internal>[0-9]+))$`,
+	)
+	verPatternMajorIdx    = verPattern.SubexpIndex("major")
+	verPatternMinorIdx    = verPattern.SubexpIndex("minor")
+	verPatternInternalIdx = verPattern.SubexpIndex("internal")
+)
 
-	if len(dotParts) != 2 {
+// ParseVersion parses a Version from a string of one of the forms:
+//   - "<major>.<minor>"
+//   - "<major>.<minor>-upgrading-to-<nextmajor>.<nextminor>-step-<internal>"
+//   - "<major>.<minor>-<internal>" (older version of the above)
+//
+// We don't use the Patch component, so it is always zero.
+func ParseVersion(s string) (Version, error) {
+	matches := verPattern.FindStringSubmatch(s)
+	if matches == nil {
 		return Version{}, errors.Errorf("invalid version %s", s)
 	}
 
-	parts := append(dotParts[:1], strings.Split(dotParts[1], "-")...)
-	if len(parts) == 2 {
-		parts = append(parts, "0")
-	}
-
-	if len(parts) != 3 {
-		return c, errors.Errorf("invalid version %s", s)
-	}
-
-	ints := make([]int64, len(parts))
-	for i := range parts {
-		var err error
-		if ints[i], err = strconv.ParseInt(parts[i], 10, 32); err != nil {
-			return c, errors.Wrapf(err, "invalid version %s", s)
+	var err error
+	toInt := func(s string) int32 {
+		if err != nil || s == "" {
+			return 0
 		}
+		var n int64
+		n, err = strconv.ParseInt(s, 10, 32)
+		return int32(n)
 	}
-
-	c.Major = int32(ints[0])
-	c.Minor = int32(ints[1])
-	c.Internal = int32(ints[2])
-
-	return c, nil
+	v := Version{
+		Major:    toInt(matches[verPatternMajorIdx]),
+		Minor:    toInt(matches[verPatternMinorIdx]),
+		Internal: toInt(matches[verPatternInternalIdx]),
+	}
+	if err != nil {
+		return Version{}, errors.Wrapf(err, "invalid version %s", s)
+	}
+	return v, nil
 }
 
 // MustParseVersion calls ParseVersion and panics on error.
@@ -129,4 +155,60 @@ func MustParseVersion(s string) Version {
 		panic(err)
 	}
 	return v
+}
+
+// ReleaseSeries is just the major.minor part of a Version.
+type ReleaseSeries struct {
+	Major int32
+	Minor int32
+}
+
+func (s ReleaseSeries) String() string {
+	return fmt.Sprintf("%d.%d", s.Major, s.Minor)
+}
+
+// Successor returns the next release series, if known. This is only guaranteed
+// to work for versions from the minimum supported series up to the previous
+// series.
+func (s ReleaseSeries) Successor() (_ ReleaseSeries, ok bool) {
+	res, ok := successorSeries[s]
+	return res, ok
+}
+
+// successorSeries stores the successor for each series. We are only concerned
+// with versions within our compatibility window, but there is no harm in
+// populating more if they are known.
+//
+// When this map is updated, the expected result in TestReleaseSeriesSuccessor
+// needs to be updated. Also note that clusterversion tests ensure that this map
+// contains all necessary versions.
+var successorSeries = map[ReleaseSeries]ReleaseSeries{
+	{20, 1}: {20, 2},
+	{20, 2}: {21, 1},
+	{21, 1}: {21, 2},
+	{21, 2}: {22, 1},
+	{22, 1}: {22, 2},
+	{22, 2}: {23, 1},
+	{23, 1}: {23, 2},
+	{23, 2}: {24, 1},
+}
+
+// ReleaseSeries obtains the release series for the given version. Specifically:
+//   - if the version is final (Internal=0), the ReleaseSeries has the same major/minor.
+//   - if the version is a transitional version during upgrade (e.g. v23.1-8),
+//     the result is the next final version (e.g. v23.1).
+//
+// For non-final versions (which indicate an update to the next series), this
+// requires knowledge of the next series; unknown non-final versions will return
+// ok=false.
+//
+// Note that if the version has the clusterversion.DevOffset applied, the
+// resulting release series will have it too.
+func (v Version) ReleaseSeries() (s ReleaseSeries, ok bool) {
+	base := ReleaseSeries{v.Major, v.Minor}
+	if v.IsFinal() {
+		return base, true
+	}
+	s, ok = base.Successor()
+	return s, ok
 }
