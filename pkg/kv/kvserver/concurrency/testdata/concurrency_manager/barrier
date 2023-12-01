@@ -53,7 +53,7 @@ sequence req=barrier2
 ----
 [2] sequence barrier2: sequencing request
 [2] sequence barrier2: waiting on latches without acquiring
-[2] sequence barrier2: waiting to acquire write latch ‹{a-f}›@0,0, held by read latch ‹c›@15.000000000,1
+[2] sequence barrier2: waiting to acquire write latch ‹{a-f}›@0,0 for request Barrier [‹"a"›,‹"f"›), held by read latch ‹c›@15.000000000,1 for request Get [‹"c"›]
 [2] sequence barrier2: blocked on select in spanlatch.(*Manager).waitForSignal
 
 finish req=read1
@@ -96,7 +96,7 @@ sequence req=barrier1
 ----
 [2] sequence barrier1: sequencing request
 [2] sequence barrier1: waiting on latches without acquiring
-[2] sequence barrier1: waiting to acquire write latch ‹{a-f}›@0,0, held by read latch ‹c›@10.000000000,1
+[2] sequence barrier1: waiting to acquire write latch ‹{a-f}›@0,0 for request Barrier [‹"a"›,‹"f"›), held by read latch ‹c›@10.000000000,1 for request Get [‹"c"›]
 [2] sequence barrier1: blocked on select in spanlatch.(*Manager).waitForSignal
 
 finish req=read1
@@ -143,7 +143,7 @@ sequence req=barrier1
 ----
 [2] sequence barrier1: sequencing request
 [2] sequence barrier1: waiting on latches without acquiring
-[2] sequence barrier1: waiting to acquire write latch ‹{a-f}›@0,0, held by write latch ‹c›@10.000000000,1
+[2] sequence barrier1: waiting to acquire write latch ‹{a-f}›@0,0 for request Barrier [‹"a"›,‹"f"›), held by write latch ‹c›@10.000000000,1 for request Put [‹"c"›], [txn: 00000001]
 [2] sequence barrier1: blocked on select in spanlatch.(*Manager).waitForSignal
 
 debug-latch-manager
