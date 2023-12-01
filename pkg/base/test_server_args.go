@@ -526,29 +526,7 @@ func DefaultTestTempStorageConfigWithSize(
 	return TempStorageConfig{
 		InMemory: true,
 		Mon:      monitor,
-		Settings: st,
-	}
-}
-
-// InheritTestTempStorageConfig is the associated temp storage for
-// a secondary tenant.
-func InheritTestTempStorageConfig(
-	st *cluster.Settings, parentConfig TempStorageConfig,
-) TempStorageConfig {
-	monitor := mon.NewMonitor(
-		"in-mem temp storage",
-		mon.DiskResource,
-		nil,                                    /* curCount */
-		nil,                                    /* maxHist */
-		1024*1024,                              /* increment */
-		DefaultInMemTempStorageMaxSizeBytes/10, /* noteworthy */
-		st,
-	)
-	monitor.Start(context.Background(), parentConfig.Mon, nil /* reserved */)
-	return TempStorageConfig{
-		InMemory: parentConfig.InMemory,
-		Path:     parentConfig.Path,
-		Mon:      monitor,
+		Spec:     DefaultTestStoreSpec,
 		Settings: st,
 	}
 }
