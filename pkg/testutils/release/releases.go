@@ -14,6 +14,7 @@ import (
 	_ "embed"
 	"fmt"
 	"math/rand"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"gopkg.in/yaml.v2"
@@ -135,10 +136,17 @@ func activePatchReleases(releaseSeries Series) []string {
 
 	latestVersion := mustParseVersion(releaseSeries.Latest)
 	var releases []string
-	for patch := 0; patch <= latestVersion.Patch(); patch++ {
-		patchVersion := fmt.Sprintf("%d.%d.%d", latestVersion.Major(), latestVersion.Minor(), patch)
-		if !isWithdrawn(patchVersion) {
-			releases = append(releases, patchVersion)
+	if latestVersion.PreRelease() != "" {
+		// If the latest version for this series is a pre-release, don't
+		// try to enumerate all releases in this series. Instead, just
+		// return the latest pre-release defined.
+		releases = append(releases, strings.TrimPrefix(latestVersion.String(), "v"))
+	} else {
+		for patch := 0; patch <= latestVersion.Patch(); patch++ {
+			patchVersion := fmt.Sprintf("%d.%d.%d", latestVersion.Major(), latestVersion.Minor(), patch)
+			if !isWithdrawn(patchVersion) {
+				releases = append(releases, patchVersion)
+			}
 		}
 	}
 
