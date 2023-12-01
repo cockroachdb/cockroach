@@ -235,6 +235,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"kv.rangefeed.catchup_scan_concurrency":                {},
 	"kv.rangefeed.scheduler.enabled":                       {},
 	"physical_replication.producer.mux_rangefeeds.enabled": {},
+	"changefeed.balance_range_distribution.sensitivity":    {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults

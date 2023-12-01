@@ -123,8 +123,6 @@ var mkSingleLetterRanges = func(start, end rune) (result []roachpb.Span) {
 // TestPartitionSpans unit tests the rebalanceSpanPartitions function.
 func TestPartitionSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	// TODO: remove sensitivity.
-	const sensitivity = 0.00
 
 	// 26 nodes, 1 range per node.
 	make26NodesBalanced := func() (p []sql.SpanPartition) {
@@ -234,7 +232,7 @@ func TestPartitionSpans(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sp, err := rebalanceSpanPartitions(context.Background(),
-				&mockRangeIterator{}, sensitivity, tc.input)
+				&mockRangeIterator{}, tc.input, 0)
 			t.Log("expected partitions")
 			for _, p := range tc.expect {
 				t.Log(p)
@@ -312,7 +310,7 @@ func TestPartitionSpans(t *testing.T) {
 		// Ensure the set of input spans matches the set of output spans.
 		g1 := copySpans(input)
 		output, err := rebalanceSpanPartitions(context.Background(),
-			&mockRangeIterator{}, sensitivity, input)
+			&mockRangeIterator{}, input, 0)
 		require.NoError(t, err)
 
 		t.Log(output)
@@ -422,6 +420,9 @@ func newRangeDistributionTester(
 		sqlDB.ExecSucceedsSoon(t, cmd)
 	}
 
+	// Enure rebalancing always kicks in.
+	sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.range_distribution_threshold = 0")
+
 	return &rangeDistributionTester{
 		ctx:          ctx,
 		t:            t,
@@ -460,7 +461,41 @@ func (rdt *rangeDistributionTester) countRangesPerNode(partitions []sql.SpanPart
 // When balancing 64 ranges across numNodes, we aim for at most (1 + rebalanceThreshold) * (64 / numNodes)
 // ranges per node. We add an extra 10% to the threshold for extra tolerance during testing.
 func (rdt *rangeDistributionTester) balancedDistributionUpperBound(numNodes int) int {
-	return int(math.Ceil((1 + rebalanceThreshold.Get(&rdt.lastNode.ClusterSettings().SV) + 0.1) * 64 / float64(numNodes)))
+	return int(math.Ceil(64 / float64(numNodes)))
+}
+
+// countRanges returns an array where each index i stores the ranges assigned to node i.
+func (rdt *rangeDistributionTester) countRanges(partitions []sql.SpanPartition) []int {
+	ri := kvcoord.MakeRangeIterator(rdt.distSender)
+	var counts = make([]int, 8)
+	for _, p := range partitions {
+		for _, sp := range p.Spans {
+			rSpan, err := keys.SpanAddr(sp)
+			require.NoError(rdt.t, err)
+			for ri.Seek(rdt.ctx, rSpan.Key, kvcoord.Ascending); ; ri.Next(rdt.ctx) {
+				if !ri.Valid() {
+					rdt.t.Fatal(ri.Error())
+				}
+				counts[p.SQLInstanceID-1] += 1
+				if !ri.NeedAnother(rSpan) {
+					break
+				}
+			}
+		}
+
+	}
+	return counts
+}
+
+func noLocality(i int) []roachpb.Tier {
+	return make([]roachpb.Tier, 0)
+}
+
+func localityConstraintForOddNodes(i int) []roachpb.Tier {
+	if i%2 == 1 {
+		return []roachpb.Tier{{Key: "y", Value: "1"}}
+	}
+	return []roachpb.Tier{}
 }
 
 func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
@@ -470,10 +505,6 @@ func TestChangefeedWithNoDistributionStrategy(t *testing.T) {
 	// The test is slow and will time out under deadlock/race/stress.
 	skip.UnderShort(t)
 	skip.UnderDuress(t)
-
-	noLocality := func(i int) []roachpb.Tier {
-		return make([]roachpb.Tier, 0)
-	}
 
 	// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
 	// to the same node which stores it. No load balancing is performed afterwards. Thus, the distribution of
@@ -497,10 +528,6 @@ func TestChangefeedWithSimpleDistributionStrategy(t *testing.T) {
 	skip.UnderShort(t)
 	skip.UnderDuress(t)
 
-	noLocality := func(i int) []roachpb.Tier {
-		return make([]roachpb.Tier, 0)
-	}
-
 	// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
 	// to the same node which stores it. Afterwards, load balancing is performed to attempt an even distribution.
 	// Check that we roughly assign (64 ranges / 6 nodes) ranges to each node.
@@ -510,7 +537,7 @@ func TestChangefeedWithSimpleDistributionStrategy(t *testing.T) {
 	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
 	partitions := tester.getPartitions()
 	counts := tester.countRangesPerNode(partitions)
-	upper := int(math.Ceil((1 + rebalanceThreshold.Get(&tester.lastNode.ClusterSettings().SV)) * 64 / 6))
+	upper := tester.balancedDistributionUpperBound(len(partitions))
 	for _, count := range counts {
 		require.LessOrEqual(t, count, upper, "counts %v contains value greater than upper bound %d",
 			counts, upper)
@@ -528,12 +555,7 @@ func TestChangefeedWithNoDistributionStrategyAndConstrainedLocality(t *testing.T
 	// The replica oracle selects the leaseholder replica for each range. Then, distsql assigns the replica
 	// to the same node which stores it. However, node of these nodes don't pass the filter. The replicas assigned
 	// to these nodes are distributed arbitrarily to any nodes which pass the filter.
-	tester := newRangeDistributionTester(t, func(i int) []roachpb.Tier {
-		if i%2 == 1 {
-			return []roachpb.Tier{{Key: "y", Value: "1"}}
-		}
-		return []roachpb.Tier{}
-	})
+	tester := newRangeDistributionTester(t, localityConstraintForOddNodes)
 	defer tester.cleanup()
 	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'default'")
 	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1'")
@@ -563,12 +585,7 @@ func TestChangefeedWithSimpleDistributionStrategyAndConstrainedLocality(t *testi
 	// to the same node which stores it. However, node of these nodes don't pass the filter. The replicas assigned
 	// to these nodes are distributed arbitrarily to any nodes which pass the filter.
 	// Afterwards, we perform load balancing on this set of nodes.
-	tester := newRangeDistributionTester(t, func(i int) []roachpb.Tier {
-		if i%2 == 1 {
-			return []roachpb.Tier{{Key: "y", Value: "1"}}
-		}
-		return []roachpb.Tier{}
-	})
+	tester := newRangeDistributionTester(t, localityConstraintForOddNodes)
 	defer tester.cleanup()
 	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_simple'")
 	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1'")
@@ -586,6 +603,77 @@ func TestChangefeedWithSimpleDistributionStrategyAndConstrainedLocality(t *testi
 		}
 	}
 	require.Equal(t, totalRanges, 64)
+}
+
+func TestChangefeedWithFullDistributionStrategy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The test is slow and will time out under deadlock/race/stress.
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
+
+	// We perform load balancing on the full set of nodes which results in a uniform
+	// distribution of 8 ranges per node.
+	tester := newRangeDistributionTester(t, noLocality)
+	defer tester.cleanup()
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_full'")
+	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
+	partitions := tester.getPartitions()
+	require.Equal(t, len(partitions), 8)
+	counts := tester.countRanges(partitions)
+	for _, count := range counts {
+		require.Equal(t, count, 8)
+	}
+}
+
+func TestChangefeedWithFullDistributionStrategyAndConstrainedLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The test is slow and will time out under deadlock/race/stress.
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
+
+	// We perform load balancing on the full set of nodes which results in a uniform
+	// distribution of 16 ranges per node.
+	tester := newRangeDistributionTester(t, localityConstraintForOddNodes)
+	defer tester.cleanup()
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_full'")
+	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no', execution_locality='y=1'")
+	partitions := tester.getPartitions()
+	require.Equal(t, len(partitions), 4)
+	counts := tester.countRanges(partitions)
+	for i, count := range counts {
+		if i%2 == 1 {
+			require.Equal(t, count, 16)
+		} else {
+			require.Equal(t, count, 0)
+		}
+	}
+}
+
+// TestChangefeedRangeDistributionThreshold tests that we do not rebalance if
+// the number of ranges is under the set threshold.
+func TestChangefeedRangeDistributionThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// The test is slow and will time out under deadlock/race/stress.
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
+
+	// Do not rebalance due to the threshold being too high.
+	tester := newRangeDistributionTester(t, noLocality)
+	defer tester.cleanup()
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.default_range_distribution_strategy = 'balanced_full'")
+	tester.sqlDB.Exec(t, "SET CLUSTER SETTING changefeed.range_distribution_threshold = 1000")
+	tester.sqlDB.Exec(t, "CREATE CHANGEFEED FOR x INTO 'null://' WITH initial_scan='no'")
+	partitions := tester.getPartitions()
+	require.Equal(t, len(partitions), 8)
+	counts := tester.countRanges(partitions)
+	require.True(t, reflect.DeepEqual(counts, []int{2, 2, 4, 8, 16, 32, 0, 0}),
+		"unexpected counts %v, partitions: %v", counts, partitions)
 }
 
 // TestDistSenderAllRangeSpans tests (*distserver).AllRangeSpans.
