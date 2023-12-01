@@ -151,9 +151,13 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 			if synthetic {
 				txn.ReadTimestamp = txn.ReadTimestamp.WithSynthetic(true)
 			}
+			ba := kvpb.BatchRequest{}
+			ba.Txn = &txn
+			ba.Timestamp = txn.ReadTimestamp
 			return Request{
-				Txn:       &txn,
-				Timestamp: txn.ReadTimestamp,
+				Txn:          &txn,
+				Timestamp:    ba.Timestamp,
+				BatchRequest: &ba,
 			}
 		}
 
@@ -241,9 +245,13 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 
 	reqHeaderTS := hlc.Timestamp{WallTime: 10}
 	makeReq := func() Request {
+		ba := kvpb.BatchRequest{}
+		ba.Timestamp = reqHeaderTS
+		ba.UserPriority = roachpb.NormalUserPriority
 		return Request{
-			Timestamp:      reqHeaderTS,
-			NonTxnPriority: roachpb.NormalUserPriority,
+			Timestamp:      ba.Timestamp,
+			NonTxnPriority: ba.UserPriority,
+			BatchRequest:   &ba,
 		}
 	}
 
@@ -441,10 +449,15 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 	makeReq := func() Request {
 		txn := makeTxnProto("request")
 		txn.GlobalUncertaintyLimit = uncertaintyLimit
+		ba := kvpb.BatchRequest{}
+		ba.Txn = &txn
+		ba.Timestamp = txn.ReadTimestamp
+		ba.WaitPolicy = lock.WaitPolicy_Error
 		return Request{
-			Txn:        &txn,
-			Timestamp:  txn.ReadTimestamp,
-			WaitPolicy: lock.WaitPolicy_Error,
+			Txn:          &txn,
+			Timestamp:    ba.Timestamp,
+			WaitPolicy:   ba.WaitPolicy,
+			BatchRequest: &ba,
 		}
 	}
 	makeHighPriReq := func() Request {
@@ -608,17 +621,26 @@ func TestLockTableWaiterWithLockTimeout(t *testing.T) {
 		const lockTimeout = 1 * time.Millisecond
 		makeReq := func() Request {
 			txn := makeTxnProto("request")
+			ba := kvpb.BatchRequest{}
+			ba.Txn = &txn
+			ba.Timestamp = txn.ReadTimestamp
+			ba.LockTimeout = lockTimeout
 			return Request{
-				Txn:         &txn,
-				Timestamp:   txn.ReadTimestamp,
-				LockTimeout: lockTimeout,
+				Txn:          ba.Txn,
+				Timestamp:    ba.Timestamp,
+				LockTimeout:  ba.LockTimeout,
+				BatchRequest: &ba,
 			}
 		}
 		if !txn {
 			makeReq = func() Request {
+				ba := kvpb.BatchRequest{}
+				ba.Timestamp = hlc.Timestamp{WallTime: 10}
+				ba.LockTimeout = lockTimeout
 				return Request{
-					Timestamp:   hlc.Timestamp{WallTime: 10},
-					LockTimeout: lockTimeout,
+					Timestamp:    ba.Timestamp,
+					LockTimeout:  ba.LockTimeout,
+					BatchRequest: &ba,
 				}
 			}
 		}
@@ -793,9 +815,13 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	err2 := kvpb.NewErrorf("error2")
 
 	txn := makeTxnProto("request")
+	ba := kvpb.BatchRequest{}
+	ba.Txn = &txn
+	ba.Timestamp = txn.ReadTimestamp
 	req := Request{
-		Txn:       &txn,
-		Timestamp: txn.ReadTimestamp,
+		Txn:          ba.Txn,
+		Timestamp:    ba.Timestamp,
+		BatchRequest: &ba,
 	}
 
 	// Test with both synchronous and asynchronous pushes.
@@ -849,9 +875,13 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	defer w.stopper.Stop(ctx)
 
 	txn := makeTxnProto("request")
+	ba := kvpb.BatchRequest{}
+	ba.Txn = &txn
+	ba.Timestamp = txn.ReadTimestamp
 	req := Request{
-		Txn:       &txn,
-		Timestamp: txn.ReadTimestamp,
+		Txn:          ba.Txn,
+		Timestamp:    ba.Timestamp,
+		BatchRequest: &ba,
 	}
 	keyA := roachpb.Key("keyA")
 	pusheeTxn := makeTxnProto("pushee")
