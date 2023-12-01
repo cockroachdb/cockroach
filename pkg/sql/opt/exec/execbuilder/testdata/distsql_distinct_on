@@ -107,7 +107,6 @@ vectorized: true
 ·
 • sort
 │ columns: (x, y, z)
-│ ordering: +x
 │ estimated row count: 1,000 (missing stats)
 │ order: +x
 │
@@ -158,7 +157,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (x, y)
-    │ ordering: +y,+x
     │ estimated row count: 1,000 (missing stats)
     │ order: +y,+x
     │

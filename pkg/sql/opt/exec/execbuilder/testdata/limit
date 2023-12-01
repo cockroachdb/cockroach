@@ -56,7 +56,6 @@ vectorized: true
     │
     └── • top-k
         │ columns: (w)
-        │ ordering: +w
         │ estimated row count: 100 (missing stats)
         │ order: +w
         │ k: 100
@@ -149,7 +148,6 @@ vectorized: true
     │
     └── • top-k
         │ columns: (k, sum, any_not_null)
-        │ ordering: -any_not_null
         │ estimated row count: 10 (missing stats)
         │ order: -any_not_null
         │ k: 10
@@ -278,7 +276,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (k, v, w)
-    │ ordering: +v
     │ estimated row count: 10 (missing stats)
     │ order: +v
     │
@@ -464,7 +461,6 @@ vectorized: true
 ·
 • top-k
 │ columns: (k, v, w)
-│ ordering: +v,+w
 │ estimated row count: 5 (missing stats)
 │ order: +v,+w
 │ k: 5

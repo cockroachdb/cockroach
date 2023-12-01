@@ -966,7 +966,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b)
-│ ordering: +b
 │ estimated row count: 10 (missing stats)
 │ order: +b
 │
@@ -995,7 +994,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, b)
-│ ordering: +b
 │ estimated row count: 10 (missing stats)
 │ order: +b
 │
@@ -1236,7 +1234,6 @@ vectorized: true
 ·
 • sort
 │ columns: (v int)
-│ ordering: +v
 │ estimated row count: 1,000 (missing stats)
 │ order: +v
 │

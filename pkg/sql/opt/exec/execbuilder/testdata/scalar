@@ -1221,7 +1221,6 @@ vectorized: true
     │
     └── • sort
         │ columns: (generate_series)
-        │ ordering: -generate_series
         │ estimated row count: 10
         │ order: -generate_series
         │
@@ -1257,7 +1256,6 @@ vectorized: true
         │
         └── • sort
             │ columns: (a, b)
-            │ ordering: +b
             │ estimated row count: 1,000 (missing stats)
             │ order: +b
             │
