@@ -92,20 +92,6 @@ func TestLogic_mixed_version_can_login(
 	runLogicTest(t, "mixed_version_can_login")
 }
 
-func TestLogic_mixed_version_database_role_settings_role_id(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_database_role_settings_role_id")
-}
-
-func TestLogic_mixed_version_external_connections_owner_id(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_external_connections_owner_id")
-}
-
 func TestLogic_mixed_version_insights_queries(
 	t *testing.T,
 ) {
@@ -139,13 +125,6 @@ func TestLogic_mixed_version_refcursor(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "mixed_version_refcursor")
-}
-
-func TestLogic_mixed_version_role_members_user_ids(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "mixed_version_role_members_user_ids")
 }
 
 func TestLogic_mixed_version_schedule_details(
