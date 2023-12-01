@@ -236,6 +236,8 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	}
 	detectLeaseWait := atomic.Bool{}
 	targetCount := atomic.Int64{}
+	var tenants []serverutils.ApplicationLayerInterface
+	var tenantSQL []*gosql.DB
 	defer regionliveness.TestingSetProbeLivenessTimeout(func() {
 		if !detectLeaseWait.Load() {
 			return
@@ -253,12 +255,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	defer cleanup()
 
 	id, err := roachpb.MakeTenantID(11)
-	require.NoError(t, err)
-
-	var tenants []serverutils.ApplicationLayerInterface
-	var tenantSQL []*gosql.DB
-
-	for _, s := range testCluster.Servers {
+	for i, s := range testCluster.Servers {
 		tenantArgs := base.TestTenantArgs{
 			Settings: makeSettings(),
 			TenantID: id,
@@ -284,19 +281,25 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 		tenant, tenantDB := serverutils.StartTenant(t, s, tenantArgs)
 		tenantSQL = append(tenantSQL, tenantDB)
 		tenants = append(tenants, tenant)
-	}
-	// Convert into a multi-region DB.
-	_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system SET PRIMARY REGION '%s'", testCluster.Servers[0].Locality().Tiers[0].Value))
-	require.NoError(t, err)
-	for i := 1; i < len(expectedRegions); i++ {
-		_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system ADD REGION '%s'", expectedRegions[i]))
-		require.NoError(t, err)
-	}
-	_, err = tenantSQL[0].Exec("ALTER DATABASE system SURVIVE ZONE FAILURE")
-	require.NoError(t, err)
-	// Override the table timeout probe for testing.
-	for _, ts := range tenants {
-		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeout)
+		// Before the other tenants are added we need to configure the system database,
+		// otherwise they will come up in a non multi-region mode and not all subsystems
+		// will be aware (i.e. session ID and SQL instance will not be MR aware).
+		if i == 0 {
+			require.NoError(t, err)
+			// Convert into a multi-region DB.
+			_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system SET PRIMARY REGION '%s'", testCluster.Servers[0].Locality().Tiers[0].Value))
+			require.NoError(t, err)
+			for i := 1; i < len(expectedRegions); i++ {
+				_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system ADD REGION '%s'", expectedRegions[i]))
+				require.NoError(t, err)
+			}
+			_, err = tenantSQL[0].Exec("ALTER DATABASE system SURVIVE ZONE FAILURE")
+			require.NoError(t, err)
+		}
+		// Override the table timeout probe for testing.
+		for _, ts := range tenants {
+			regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeout)
+		}
 	}
 	// Create a new table and have it used on all nodes.
 	_, err = tenantSQL[0].Exec("CREATE TABLE t1(j int)")
@@ -313,7 +316,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	detectLeaseWait.Swap(true)
 	_, err = tenantSQL[1].Exec("ALTER TABLE t1 ADD COLUMN i INT")
 	require.ErrorContainsf(t, err, "count-lease timed out reading from a region", "failed to timeout")
-	// Keep an active lease on node 1, but it will be seen as ignored eventually
+	// Keep an active lease on node 0, but it will be seen as ignored eventually
 	// because the region will start to get quarantined.
 	tx, err := tenantSQL[0].Begin()
 	require.NoError(t, err)
