@@ -55,7 +55,7 @@ func main() {
 }
 
 // writeDataFile creates a file in pkg/sql/catalog/bootstrap/data.
-func writeDataFile(version roachpb.Version, filenameSuffix, data string) {
+func writeDataFile(version roachpb.ReleaseSeries, filenameSuffix, data string) {
 	filename := filepath.Join(
 		"pkg", "sql", "catalog", "bootstrap", "data",
 		fmt.Sprintf("%d_%d_%s", version.Major, version.Minor, filenameSuffix),

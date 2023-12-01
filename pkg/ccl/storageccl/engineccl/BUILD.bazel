@@ -50,6 +50,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/baseccl",
+        "//pkg/ccl/securityccl/fipsccl",
         "//pkg/ccl/storageccl/engineccl/enginepbccl",
         "//pkg/clusterversion",
         "//pkg/keys",
