@@ -25,7 +25,7 @@ build format=show-scalars
 CALL my_upsert(1, 10, 'foo')
 ----
 call
- └── udf: my_upsert
+ └── procedure: my_upsert
       ├── args
       │    ├── const: 1
       │    ├── const: 10

@@ -24,7 +24,7 @@ build format=show-scalars
 CALL p()
 ----
 call
- └── udf: p
+ └── procedure: p
       └── body
            ├── insert abc
            │    ├── columns: <none>
@@ -62,7 +62,7 @@ build format=show-scalars
 CALL p()
 ----
 call
- └── udf: p
+ └── procedure: p
       └── body
            ├── insert abc
            │    ├── columns: <none>
@@ -116,7 +116,7 @@ build format=show-scalars
 CALL p(10, 20, 30.3)
 ----
 call
- └── udf: p
+ └── procedure: p
       ├── args
       │    ├── const: 10
       │    ├── const: 20
