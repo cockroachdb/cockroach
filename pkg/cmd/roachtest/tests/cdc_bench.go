@@ -112,49 +112,55 @@ func registerCDCBench(r registry.Registry) {
 	// Workload impact benchmarks.
 	for _, readPercent := range []int{0, 100} {
 		for _, ranges := range []int64{100, 100000} {
-			readPercent, ranges := readPercent, ranges // pin loop variables
-			const (
-				nodes  = 5 // excluding coordinator and workload nodes
-				cpus   = 16
-				format = "json"
-			)
+			for _, withExecutionLocality := range []bool{false, true} {
+				readPercent, ranges := readPercent, ranges // pin loop variables
+				const (
+					cpus   = 16
+					format = "json"
+				)
 
-			// Control run that only runs the workload, with no changefeed.
-			r.Add(registry.TestSpec{
-				Name: fmt.Sprintf(
-					"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/control",
-					readPercent, nodes, cpus, formatSI(ranges)),
-				Owner:            registry.OwnerCDC,
-				Benchmark:        true,
-				Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
-				CompatibleClouds: registry.AllExceptAWS,
-				Suites:           registry.Suites(registry.Nightly),
-				RequiresLicense:  true,
-				Timeout:          time.Hour,
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "", "")
-				},
-			})
+				var nodes = 5 // excluding coordinator and workload nodes
+				if withExecutionLocality {
+					nodes *= 3
+				}
 
-			// Workloads with a concurrent changefeed running.
-			for _, server := range cdcBenchServers {
-				for _, protocol := range cdcBenchProtocols {
-					server, protocol := server, protocol // pin loop variables
-					r.Add(registry.TestSpec{
-						Name: fmt.Sprintf(
-							"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=%s/format=%s/sink=null",
-							readPercent, nodes, cpus, formatSI(ranges), server, protocol, format),
-						Owner:            registry.OwnerCDC,
-						Benchmark:        true,
-						Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
-						CompatibleClouds: registry.AllExceptAWS,
-						Suites:           registry.Suites(registry.Nightly),
-						RequiresLicense:  true,
-						Timeout:          time.Hour,
-						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-							runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, protocol, format)
-						},
-					})
+				// Control run that only runs the workload, with no changefeed.
+				r.Add(registry.TestSpec{
+					Name: fmt.Sprintf(
+						"cdc/workload/kv%d/nodes=%d/locality=%t/cpu=%d/ranges=%s/control",
+						readPercent, nodes, withExecutionLocality, cpus, formatSI(ranges)),
+					Owner:            registry.OwnerCDC,
+					Benchmark:        true,
+					Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
+					CompatibleClouds: registry.AllExceptAWS,
+					Suites:           registry.Suites(registry.Nightly),
+					RequiresLicense:  true,
+					Timeout:          time.Hour,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runCDCBenchWorkload(ctx, t, c, ranges, withExecutionLocality, readPercent, "", "", "")
+					},
+				})
+
+				// Workloads with a concurrent changefeed running.
+				for _, server := range cdcBenchServers {
+					for _, protocol := range cdcBenchProtocols {
+						server, protocol := server, protocol // pin loop variables
+						r.Add(registry.TestSpec{
+							Name: fmt.Sprintf(
+								"cdc/workload/kv%d/nodes=%d/locality=%t/cpu=%d/ranges=%s/server=%s/protocol=%s/format=%s/sink=null",
+								readPercent, nodes, withExecutionLocality, cpus, formatSI(ranges), server, protocol, format),
+							Owner:            registry.OwnerCDC,
+							Benchmark:        true,
+							Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
+							CompatibleClouds: registry.AllExceptAWS,
+							Suites:           registry.Suites(registry.Nightly),
+							RequiresLicense:  true,
+							Timeout:          time.Hour,
+							Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+								runCDCBenchWorkload(ctx, t, c, ranges, withExecutionLocality, readPercent, server, protocol, format)
+							},
+						})
+					}
 				}
 			}
 		}
@@ -377,6 +383,7 @@ func runCDCBenchWorkload(
 	t test.Test,
 	c cluster.Cluster,
 	numRanges int64,
+	withExecutionLocality bool,
 	readPercent int,
 	server cdcBenchServer,
 	protocol cdcBenchProtocol,
@@ -431,18 +438,40 @@ func runCDCBenchWorkload(
 		t.Fatalf("unknown server type %q", server)
 	}
 
-	c.Start(ctx, t.L(), opts, settings, nData)
+	const numAZs = 3
+	nodesPerAZ := len(nData) / numAZs
+
+	if withExecutionLocality {
+		if nodesPerAZ*numAZs != len(nData) {
+			t.Fatalf("expected number of nodes to be a multiple of %d, but %d isn't", numAZs, len(nData))
+		}
+
+		concurrency /= numAZs
+
+		for az := 1; az <= numAZs; az++ {
+			opts.RoachprodOpts.ExtraArgs = []string{fmt.Sprintf("--locality=az=%d", az)}
+			c.Start(ctx, t.L(), opts, settings, nData[(az-1)*nodesPerAZ:az*nodesPerAZ])
+		}
+	} else {
+		c.Start(ctx, t.L(), opts, settings, nData)
+	}
+
 	m := c.NewMonitor(ctx, nData.Merge(nCoord))
 
 	conn := c.Conn(ctx, t.L(), nData[0])
 	defer conn.Close()
 
-	// Prohibit ranges on the changefeed coordinator.
+	// Prohibit ranges on the changefeed coordinator, and set lease preferences
+	// to avoid the last AZ when running withExecutionLocality
 	t.L().Printf("configuring zones")
 	for _, target := range getAllZoneTargets(ctx, t, conn) {
-		_, err := conn.ExecContext(ctx, fmt.Sprintf(
-			`ALTER %s CONFIGURE ZONE USING num_replicas=3, constraints='[-node%d]'`, target, nCoord[0]))
-		require.NoError(t, err)
+		alterCmd := fmt.Sprintf(
+			`ALTER %s CONFIGURE ZONE USING num_replicas=3, constraints='[-node%d]'`, target, nCoord[0])
+		if withExecutionLocality {
+			alterCmd += fmt.Sprintf(", lease_preferences='[[-az=%d]]'", numAZs)
+		}
+		_, err := conn.ExecContext(ctx, alterCmd)
+		require.NoError(t, err, alterCmd)
 	}
 
 	// Wait for system ranges to upreplicate.
@@ -488,9 +517,13 @@ func runCDCBenchWorkload(
 		_, err := conn.ExecContext(ctx, "ALTER TABLE kv.kv  SET (schema_locked = true);")
 		require.NoError(t, err)
 
+		executionLocality := ""
+		if withExecutionLocality {
+			executionLocality = fmt.Sprintf(", execution_locality='az=%d'", numAZs)
+		}
 		require.NoError(t, conn.QueryRowContext(ctx, fmt.Sprintf(
-			`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH format = '%s', initial_scan = 'no'`,
-			sink, format)).
+			`CREATE CHANGEFEED FOR kv.kv INTO '%s' WITH format = '%s', initial_scan = 'no' %s`,
+			sink, format, executionLocality)).
 			Scan(&jobID))
 
 		// Monitor the changefeed for failures. When the workload finishes, it will
