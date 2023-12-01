@@ -532,7 +532,11 @@ func (sf *streamIngestionFrontier) maybePersistFrontierEntries() error {
 
 func (sf *streamIngestionFrontier) maybeCheckForLaggingNodes() error {
 	ctx := sf.Ctx()
-	checkFreq := streamingccl.ReplanFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV)
+
+	// We halve the frequency relative to the ReplanFrequency setting (i.e.
+	// check twice as often), because the node lag checker will only restart the
+	// distSQL plan if a node is lagging for 2 checks in a row.
+	checkFreq := streamingccl.ReplanFrequency.Get(&sf.FlowCtx.Cfg.Settings.SV) / 2
 	maxLag := streamingccl.InterNodeLag.Get(&sf.FlowCtx.Cfg.Settings.SV)
 	if checkFreq == 0 || maxLag == 0 || timeutil.Since(sf.lastNodeLagCheck) < checkFreq {
 		log.VEventf(ctx, 2, "skipping lag replanning check: maxLag %d; checkFreq %.2f; last node check %s; time since last check %.2f",
@@ -566,8 +570,8 @@ func (sf *streamIngestionFrontier) handleLaggingNodeError(ctx context.Context, e
 	case !errors.Is(err, ErrNodeLagging):
 		return err
 	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Less(sf.persistedReplicatedTime):
-		sf.replicatedTimeAtLastPositiveLagNodeCheck = sf.persistedReplicatedTime
 		log.Infof(ctx, "detected a lagging node: %s. Don't forward error because replicated time at last check %s is less than current replicated time %s", err, sf.replicatedTimeAtLastPositiveLagNodeCheck, sf.persistedReplicatedTime)
+		sf.replicatedTimeAtLastPositiveLagNodeCheck = sf.persistedReplicatedTime
 		return nil
 	case sf.replicatedTimeAtLastPositiveLagNodeCheck.Equal(sf.persistedReplicatedTime):
 		return errors.Wrapf(err, "hwm has not advanced from %s", sf.persistedReplicatedTime)
