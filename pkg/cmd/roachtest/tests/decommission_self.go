@@ -24,7 +24,7 @@ import (
 func runDecommissionSelf(ctx context.Context, t test.Test, c cluster.Cluster) {
 	allNodes := c.All()
 	u := newVersionUpgradeTest(c,
-		uploadVersionStep(allNodes, clusterupgrade.CurrentVersion()),
+		uploadCockroachStep(allNodes, clusterupgrade.CurrentVersion()),
 		startVersion(allNodes, clusterupgrade.CurrentVersion()),
 		fullyDecommissionStep(2, 2, clusterupgrade.CurrentVersion()),
 		func(ctx context.Context, t test.Test, u *versionUpgradeTest) {

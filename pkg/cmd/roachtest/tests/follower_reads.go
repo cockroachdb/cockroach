@@ -896,7 +896,7 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 
 	// Start the cluster at the old version.
 	settings := install.MakeClusterSettings()
-	settings.Binary = uploadVersion(
+	settings.Binary = uploadCockroach(
 		ctx, t, c, c.All(), clusterupgrade.MustParseVersion(predecessorVersion),
 	)
 	startOpts := option.DefaultStartOpts()
