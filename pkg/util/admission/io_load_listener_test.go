@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
@@ -46,11 +48,11 @@ func TestIOLoadListener(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	L0MinimumSizePerSubLevel.Override(ctx, &st.SV, 0)
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "io_load_listener"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "init":
+				L0MinimumSizePerSubLevel.Override(ctx, &st.SV, 0)
 				ioll = &ioLoadListener{
 					settings:              st,
 					kvRequester:           req,
@@ -139,6 +141,14 @@ func TestIOLoadListener(t *testing.T) {
 					d.ScanArgs(t, "flush-bytes", &flushBytes)
 					d.ScanArgs(t, "flush-work-sec", &flushWorkSec)
 					d.ScanArgs(t, "flush-idle-sec", &flushIdleSec)
+				}
+				if d.HasArg("base-level") {
+					var baseLevel int
+					d.ScanArgs(t, "base-level", &baseLevel)
+					metrics.Levels[baseLevel].Size = 1000
+					var compactedBytes int
+					d.ScanArgs(t, "compacted-bytes", &compactedBytes)
+					metrics.Levels[baseLevel].BytesCompacted = uint64(compactedBytes)
 				}
 
 				cumFlushIdle += time.Duration(flushIdleSec) * time.Second
@@ -295,8 +305,8 @@ func TestAdjustTokensInnerAndLogging(t *testing.T) {
 			l0TokensProduced: metric.NewCounter(l0TokensProduced),
 		}
 		res := ioll.adjustTokensInner(
-			ctx, tt.prev, tt.l0Metrics, 12, pebble.ThroughputMetric{},
-			100, 10, 0, 0.50)
+			ctx, tt.prev, tt.l0Metrics, 12, cumStoreCompactionStats{numOutLevelsGauge: 1},
+			pebble.ThroughputMetric{}, 100, 10, 0, 0.50)
 		buf.Printf("%s\n", res)
 	}
 	echotest.Require(t, string(redact.Sprint(buf)), filepath.Join(datapathutils.TestDataPath(t, "format_adjust_tokens_stats.txt")))
@@ -545,4 +555,85 @@ func TestTokenAllocationTicker(t *testing.T) {
 	// Skip to the future in which case remainingTicks must be exhausted.
 	ticker.adjustmentIntervalStartTime = timeutil.Now().Add(-17 * time.Second)
 	require.Equal(t, 0, int(ticker.remainingTicks()))
+}
+
+func TestComputeCumStoreCompactionStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name       string
+		baseLevel  int
+		writeBytes int64
+		sizeBytes  int64
+		expected   cumStoreCompactionStats
+	}{
+		{
+			name: "base-l6-zero",
+			expected: cumStoreCompactionStats{
+				numOutLevelsGauge: 1,
+			},
+		},
+		{
+			name:       "base-l6",
+			baseLevel:  6,
+			writeBytes: 50,
+			sizeBytes:  500,
+			expected: cumStoreCompactionStats{
+				writeBytes:        50,
+				numOutLevelsGauge: 1,
+			},
+		},
+		{
+			name:       "base-l2",
+			baseLevel:  2,
+			writeBytes: 97,
+			sizeBytes:  397,
+			expected: cumStoreCompactionStats{
+				writeBytes:        97,
+				numOutLevelsGauge: 5,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := pebble.Metrics{}
+			var cumSizeBytes int64
+			var cumWriteBytes uint64
+			divisor := int64(len(m.Levels) - tc.baseLevel)
+			for i := tc.baseLevel; i < len(m.Levels); i++ {
+				m.Levels[i].Size = tc.sizeBytes / divisor
+				cumSizeBytes += m.Levels[i].Size
+				m.Levels[i].BytesCompacted = uint64(tc.writeBytes / divisor)
+				cumWriteBytes += m.Levels[i].BytesCompacted
+			}
+			if cumSizeBytes < tc.sizeBytes {
+				m.Levels[tc.baseLevel].Size += tc.sizeBytes - cumSizeBytes
+			}
+			if cumWriteBytes < uint64(tc.writeBytes) {
+				m.Levels[tc.baseLevel].BytesCompacted += uint64(tc.writeBytes) - cumWriteBytes
+			}
+			require.Equal(t, tc.expected, computeCumStoreCompactionStats(&m))
+		})
+	}
+}
+
+func TestComputeL0CompactionTokensLowerBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.Equal(t, int64(1000), computeL0CompactionTokensLowerBound(cumStoreCompactionStats{
+		writeBytes:        3000,
+		numOutLevelsGauge: 1,
+	}, cumStoreCompactionStats{
+		writeBytes:        8000,
+		numOutLevelsGauge: 5,
+	}))
+
+	require.Equal(t, int64(0), computeL0CompactionTokensLowerBound(cumStoreCompactionStats{
+		writeBytes:        1000,
+		numOutLevelsGauge: 1,
+	}, cumStoreCompactionStats{
+		writeBytes:        500,
+		numOutLevelsGauge: 2,
+	}))
 }
