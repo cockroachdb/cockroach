@@ -432,6 +432,10 @@ type Request struct {
 	// passed to SequenceReq. Only supplied to SequenceReq if the method is
 	// not also passed an exiting Guard.
 	LockSpans *lockspanset.LockSpanSet
+
+	// We store a reference to kvpb.BatchRequest. This is used to enrich logging
+	// when latches conflict.
+	BatchRequest *kvpb.BatchRequest
 }
 
 // Guard is returned from Manager.SequenceReq. The guard is passed back in to
@@ -510,7 +514,7 @@ type latchManager interface {
 	// WaitFor waits for conflicting latches on the specified spans without adding
 	// any latches itself. Fast path for operations that only require flushing out
 	// old operations without blocking any new ones.
-	WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison.Policy) *Error
+	WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, br *kvpb.BatchRequest) *Error
 
 	// Poison a guard's latches, allowing waiters to fail fast.
 	Poison(latchGuard)
