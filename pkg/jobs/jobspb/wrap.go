@@ -98,6 +98,7 @@ type ReplicationStatus uint8
 
 const (
 	InitializingReplication   ReplicationStatus = 0
+	CreatingInitialSplits     ReplicationStatus = 6
 	Replicating               ReplicationStatus = 1
 	ReplicationPaused         ReplicationStatus = 2
 	ReplicationPendingCutover ReplicationStatus = 3
@@ -120,6 +121,8 @@ func (rs ReplicationStatus) String() string {
 		return "replication cutting over"
 	case ReplicationError:
 		return "replication error"
+	case CreatingInitialSplits:
+		return "creating initial splits"
 	default:
 		return fmt.Sprintf("unimplemented-%d", int(rs))
 	}
