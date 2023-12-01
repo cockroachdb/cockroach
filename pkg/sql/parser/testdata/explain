@@ -94,6 +94,14 @@ EXPLAIN (OPT, VERBOSE) SELECT (1) -- fully parenthesized
 EXPLAIN (OPT, VERBOSE) SELECT _ -- literals removed
 EXPLAIN (OPT, VERBOSE) SELECT 1 -- identifiers removed
 
+parse
+EXPLAIN (OPT) CALL foo(1, 'bar')
+----
+EXPLAIN (OPT) CALL foo(1, 'bar')
+EXPLAIN (OPT) CALL foo((1), ('bar')) -- fully parenthesized
+EXPLAIN (OPT) CALL foo(_, '_') -- literals removed
+EXPLAIN (OPT) CALL _(1, 'bar') -- identifiers removed
+
 error
 EXPLAIN (ANALYZE, PLAN) SELECT 1
 ----

@@ -294,6 +294,7 @@ var nodeNames = [...]string{
 	alterTableUnsplitOp:    "unsplit",
 	applyJoinOp:            "", // This node does not have a fixed name.
 	bufferOp:               "buffer",
+	callOp:                 "call",
 	cancelQueriesOp:        "cancel queries",
 	cancelSessionsOp:       "cancel sessions",
 	controlJobsOp:          "control jobs",
@@ -979,6 +980,10 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 		if a.subjectReplicas != tree.RelocateLease {
 			ob.Expr("from", a.fromStoreID, nil /* columns */)
 		}
+
+	case callOp:
+		a := n.args.(*callArgs)
+		ob.Expr("procedure", a.Proc, nil /* columns */)
 
 	case simpleProjectOp,
 		serializingProjectOp,
