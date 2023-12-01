@@ -25,7 +25,7 @@ jobs:
     if: github.repository == 'cockroachdb/cockroach'
     strategy:
       matrix:
-        branch: ["master", "release-23.1"]
+        branch: ["master", "release-23.1", "release-23.2"]
     name: Update pkg/testutils/release/cockroach_releases.yaml on ${{ matrix.branch }}
     runs-on: ubuntu-latest
     steps:
