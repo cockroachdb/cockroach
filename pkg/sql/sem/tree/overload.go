@@ -142,6 +142,20 @@ const (
 	ProcedureRoutine
 )
 
+// String returns the string representation of the routine type.
+func (t RoutineType) String() string {
+	switch t {
+	case BuiltinRoutine:
+		return "builtin"
+	case UDFRoutine:
+		return "udf"
+	case ProcedureRoutine:
+		return "procedure"
+	default:
+		panic(errors.AssertionFailedf("unexpected routine type %d", t))
+	}
+}
+
 // Overload is one of the overloads of a built-in function.
 // Each FunctionDefinition may contain one or more overloads.
 type Overload struct {

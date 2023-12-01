@@ -1694,4 +1694,20 @@ SELECT colors FROM test_114867
 ----
 {red}
 
+subtest prepare_call
+
+# CALL statements cannot be prepared.
+statement ok
+CREATE PROCEDURE foo(x INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'foo %', x;
+  END
+$$;
+
+statement error pgcode 42601 syntax error
+PREPARE bar AS CALL foo(0);
+
+statement error pgcode 42601 syntax error
+PREPARE bar AS CALL foo($1);
+
 subtest end
