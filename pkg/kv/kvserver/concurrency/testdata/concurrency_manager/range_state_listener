@@ -195,7 +195,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 [7] sequence req2: lock wait-queue event: done waiting
 [7] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [7] sequence req2: acquiring latches
-[7] sequence req2: waiting to acquire read latch ‹k2›@10.000000000,1, held by write latch ‹k2›@10.000000000,1
+[7] sequence req2: waiting to acquire read latch ‹k2›@10.000000000,1[Put [‹"k"›,/Min), Get [‹"k2"›,/Min), [txn: 00000002]], held by write latch ‹k2›@10.000000000,1[ResolveIntent [‹"k"›,/Min), ResolveIntent [‹"k2"›,/Min)]
 [7] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
 
 on-lock-updated req=reqRes1 txn=txn1 key=k2 status=committed
@@ -309,7 +309,7 @@ on-lock-updated req=reqRes2 txn=txn2 key=k status=committed
 [13] sequence req3: lock wait-queue event: done waiting
 [13] sequence req3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [13] sequence req3: acquiring latches
-[13] sequence req3: waiting to acquire write latch ‹k›@10.000000000,1, held by write latch ‹k›@10.000000000,1
+[13] sequence req3: waiting to acquire write latch ‹k›@10.000000000,1[Put [‹"k"›,/Min), [txn: 00000003]], held by write latch ‹k›@10.000000000,1[ResolveIntent [‹"k"›,/Min)]
 [13] sequence req3: blocked on select in spanlatch.(*Manager).waitForSignal
 
 finish req=reqRes2
@@ -467,7 +467,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 [4] sequence req2: lock wait-queue event: done waiting
 [4] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence req2: acquiring latches
-[4] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1, held by write latch ‹k›@10.000000000,1
+[4] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1[Put [‹"k"›,/Min), [txn: 00000002]], held by write latch ‹k›@10.000000000,1[ResolveIntent [‹"k"›,/Min)]
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
 
 finish req=reqRes1
@@ -687,7 +687,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 [8] sequence req2: lock wait-queue event: done waiting
 [8] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [8] sequence req2: acquiring latches
-[8] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1, held by write latch ‹k›@10.000000000,1
+[8] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1[Put [‹"k"›,/Min), [txn: 00000002]], held by write latch ‹k›@10.000000000,1[ResolveIntent [‹"k"›,/Min)]
 [8] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
 
 finish req=reqRes1
@@ -845,7 +845,7 @@ on-lock-updated req=reqRes1 txn=txn1 key=k status=committed
 [4] sequence req2: lock wait-queue event: done waiting
 [4] sequence req2: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
 [4] sequence req2: acquiring latches
-[4] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1, held by write latch ‹k›@10.000000000,1
+[4] sequence req2: waiting to acquire write latch ‹k›@10.000000000,1[Put [‹"k"›,/Min), [txn: 00000002]], held by write latch ‹k›@10.000000000,1[ResolveIntent [‹"k"›,/Min)]
 [4] sequence req2: blocked on select in spanlatch.(*Manager).waitForSignal
 
 finish req=reqRes1

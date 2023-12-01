@@ -258,7 +258,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 	// them.
 	if shouldWaitOnLatchesWithoutAcquiring(g.Req) {
 		log.Event(ctx, "waiting on latches without acquiring")
-		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans, g.Req.PoisonPolicy)
+		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans, g.Req.PoisonPolicy, g.Req.BatchRequests)
 	}
 
 	// Provide the manager with an opportunity to intercept the request. It
@@ -363,8 +363,8 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 	case req.isSingle(kvpb.PushTxn):
 		// If necessary, wait in the txnWaitQueue for the pushee transaction to
 		// expire or to move to a finalized state.
-		t := req.Requests[0].GetPushTxn()
-		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.WaitPolicy)
+		t := req.BatchRequests.Requests[0].GetPushTxn()
+		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.BatchRequests.WaitPolicy)
 		if err != nil {
 			return nil, err
 		} else if resp != nil {
@@ -373,7 +373,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 	case req.isSingle(kvpb.QueryTxn):
 		// If necessary, wait in the txnWaitQueue for a transaction state update
 		// or for a dependent transaction to change.
-		t := req.Requests[0].GetQueryTxn()
+		t := req.BatchRequests.Requests[0].GetQueryTxn()
 		return nil, m.twq.MaybeWaitForQuery(ctx, t)
 	default:
 		// TODO(nvanbenschoten): in the future, use this hook to update the lock
@@ -398,7 +398,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 // they could wait on them, even if they don't acquire latches.
 func shouldIgnoreLatches(req Request) bool {
 	switch {
-	case req.ReadConsistency != kvpb.CONSISTENT:
+	case req.BatchRequests.ReadConsistency != kvpb.CONSISTENT:
 		// Only acquire latches for consistent operations.
 		return true
 	case req.isSingle(kvpb.RequestLease):
@@ -506,7 +506,7 @@ func (m *managerImpl) HandleLockConflictError(
 	// If the discovery process collected a set of intents to resolve before the
 	// next evaluation attempt, do so.
 	if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
-		if err := m.ltw.ResolveDeferredIntents(ctx, g.Req.AdmissionHeader, toResolve); err != nil {
+		if err := m.ltw.ResolveDeferredIntents(ctx, g.Req.BatchRequests.AdmissionHeader, toResolve); err != nil {
 			m.FinishReq(g)
 			return nil, err
 		}
@@ -652,10 +652,10 @@ func (m *managerImpl) TestingSetMaxLocks(maxLocks int64) {
 }
 
 func (r *Request) isSingle(m kvpb.Method) bool {
-	if len(r.Requests) != 1 {
+	if len(r.BatchRequests.Requests) != 1 {
 		return false
 	}
-	return r.Requests[0].GetInner().Method() == m
+	return r.BatchRequests.Requests[0].GetInner().Method() == m
 }
 
 // Used to avoid allocations.

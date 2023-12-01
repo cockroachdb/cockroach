@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
@@ -321,9 +322,11 @@ func TestLockTableBasic(t *testing.T) {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
 				}
 				latchSpans, lockSpans := scanSpans(t, d, ts)
+				br := kvpb.BatchRequest{}
+				br.Timestamp = ts
+				br.WaitPolicy = waitPolicy
 				req := Request{
-					Timestamp:              ts,
-					WaitPolicy:             waitPolicy,
+					BatchRequests:          &br,
 					MaxLockWaitQueueLength: maxLockWaitQueueLength,
 					LatchSpans:             latchSpans,
 					LockSpans:              lockSpans,
@@ -332,7 +335,7 @@ func TestLockTableBasic(t *testing.T) {
 					// Update the transaction's timestamp, if necessary. The transaction
 					// may have needed to move its timestamp for any number of reasons.
 					txnMeta.WriteTimestamp = ts
-					req.Txn = &roachpb.Transaction{
+					req.BatchRequests.Txn = &roachpb.Transaction{
 						TxnMeta:       *txnMeta,
 						ReadTimestamp: ts,
 					}
@@ -391,7 +394,7 @@ func TestLockTableBasic(t *testing.T) {
 				}
 				strength := ScanLockStrength(t, d)
 				acq := roachpb.MakeLockAcquisition(
-					req.Txn.TxnMeta, roachpb.Key(key), durability, strength, req.Txn.IgnoredSeqNums,
+					req.BatchRequests.Txn.TxnMeta, roachpb.Key(key), durability, strength, req.BatchRequests.Txn.IgnoredSeqNums,
 				)
 				var ignored []enginepb.IgnoredSeqNumRange
 				if d.HasArg("ignored-seqs") {
@@ -497,7 +500,7 @@ func TestLockTableBasic(t *testing.T) {
 				if g == nil {
 					d.Fatalf(t, "unknown guard: %s", reqName)
 				}
-				_, lockSpans := scanSpans(t, d, req.Timestamp)
+				_, lockSpans := scanSpans(t, d, req.BatchRequests.Timestamp)
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
@@ -874,10 +877,12 @@ func TestLockTableMaxLocks(t *testing.T) {
 			latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: k}, hlc.Timestamp{WallTime: 1})
 			lockSpans.Add(lock.Intent, roachpb.Span{Key: k})
 		}
+		br := kvpb.BatchRequest{}
+		br.Timestamp = hlc.Timestamp{WallTime: 1}
 		req := Request{
-			Timestamp:  hlc.Timestamp{WallTime: 1},
-			LatchSpans: latchSpans,
-			LockSpans:  lockSpans,
+			BatchRequests: &br,
+			LatchSpans:    latchSpans,
+			LockSpans:     lockSpans,
 		}
 		reqs = append(reqs, req)
 		ltg, err := lt.ScanAndEnqueue(req, nil)
@@ -1011,10 +1016,12 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 		}
 		latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key}, hlc.Timestamp{WallTime: 1})
 		lockSpans.Add(lock.Intent, roachpb.Span{Key: key})
+		br := kvpb.BatchRequest{}
+		br.Timestamp = hlc.Timestamp{WallTime: 1}
 		req := Request{
-			Timestamp:  hlc.Timestamp{WallTime: 1},
-			LatchSpans: latchSpans,
-			LockSpans:  lockSpans,
+			BatchRequests: &br,
+			LatchSpans:    latchSpans,
+			LockSpans:     lockSpans,
 		}
 		ltg, err := lt.ScanAndEnqueue(req, nil)
 		require.Nil(t, err)
@@ -1082,8 +1089,8 @@ type workItem struct {
 }
 
 func (w *workItem) getRequestTxnID() uuid.UUID {
-	if w.request != nil && w.request.Txn != nil {
-		return w.request.Txn.ID
+	if w.request != nil && w.request.BatchRequests.Txn != nil {
+		return w.request.BatchRequests.Txn.ID
 	}
 	return uuid.UUID{}
 }
@@ -1111,7 +1118,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, poison.Policy_Error)
+			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, poison.Policy_Error, item.request.BatchRequests)
 			if err != nil {
 				return err
 			}
@@ -1139,21 +1146,21 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 				}
 				switch state.kind {
 				case doneWaiting:
-					if !lastID.Equal(uuid.UUID{}) && item.request.Txn != nil {
-						_, err = e.waitingFor(item.request.Txn.ID, lastID, uuid.UUID{})
+					if !lastID.Equal(uuid.UUID{}) && item.request.BatchRequests.Txn != nil {
+						_, err = e.waitingFor(item.request.BatchRequests.Txn.ID, lastID, uuid.UUID{})
 						if err != nil {
 							return err
 						}
 					}
 					break L
 				case waitSelf:
-					if item.request.Txn == nil {
+					if item.request.BatchRequests.Txn == nil {
 						return errors.Errorf("non-transactional request cannot waitSelf")
 					}
 				case waitForDistinguished, waitFor, waitElsewhere:
-					if item.request.Txn != nil {
+					if item.request.BatchRequests.Txn != nil {
 						var aborted bool
-						aborted, err = e.waitingFor(item.request.Txn.ID, lastID, state.txn.ID)
+						aborted, err = e.waitingFor(item.request.BatchRequests.Txn.ID, lastID, state.txn.ID)
 						if !aborted {
 							lastID = state.txn.ID
 						}
@@ -1169,7 +1176,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 
 		// Acquire locks.
 		for _, toAcq := range item.locksToAcquire {
-			err = e.acquireLock(item.request.Txn, toAcq)
+			err = e.acquireLock(item.request.BatchRequests.Txn, toAcq)
 			if err != nil {
 				break
 			}
@@ -1433,13 +1440,13 @@ L:
 		i++
 		if wi.request != nil {
 			work := makeWorkItemForRequest(wi)
-			if wi.request.Txn != nil {
-				txnID := wi.request.Txn.ID
+			if wi.request.BatchRequests.Txn != nil {
+				txnID := wi.request.BatchRequests.Txn.ID
 				_, ok := e.transactions[txnID]
 				if !ok {
 					// New transaction
 					tstate := &transactionState{
-						txn:             &wi.request.Txn.TxnMeta,
+						txn:             &wi.request.BatchRequests.Txn.TxnMeta,
 						dependsOn:       make(map[uuid.UUID]int),
 						ongoingRequests: make(map[*workItem]struct{}),
 					}
@@ -1518,11 +1525,13 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 				ReadTimestamp: ts,
 			}
 		}
+		br := kvpb.BatchRequest{}
+		br.Txn = txn
+		br.Timestamp = ts
 		request := &Request{
-			Txn:        txn,
-			Timestamp:  ts,
-			LatchSpans: latchSpans,
-			LockSpans:  lockSpans,
+			BatchRequests: &br,
+			LatchSpans:    latchSpans,
+			LockSpans:     lockSpans,
 		}
 		items = append(items, workloadItem{request: request})
 		if txn != nil {
@@ -1600,13 +1609,15 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 		lockSpans := &lockspanset.LockSpanSet{}
 		onlyReads := txnMeta == nil && rng.Intn(2) != 0
 		numKeys := rng.Intn(len(keys)-1) + 1
+		br := kvpb.BatchRequest{}
+		br.Timestamp = ts
 		request := &Request{
-			Timestamp:  ts,
-			LatchSpans: latchSpans,
-			LockSpans:  lockSpans,
+			BatchRequests: &br,
+			LatchSpans:    latchSpans,
+			LockSpans:     lockSpans,
 		}
 		if txnMeta != nil {
-			request.Txn = &roachpb.Transaction{
+			request.BatchRequests.Txn = &roachpb.Transaction{
 				TxnMeta:       *txnMeta,
 				ReadTimestamp: ts,
 			}
@@ -1690,7 +1701,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	var err error
 	firstIter := true
 	for {
-		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error); err != nil {
+		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.BatchRequests); err != nil {
 			doneCh <- err
 			return
 		}
@@ -1723,7 +1734,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	}
 	for _, k := range item.locksToAcquire {
 		acq := roachpb.MakeLockAcquisition(
-			item.Txn.TxnMeta, k, lock.Unreplicated, lock.Exclusive, item.Txn.IgnoredSeqNums,
+			item.BatchRequests.Txn.TxnMeta, k, lock.Unreplicated, lock.Exclusive, item.BatchRequests.Txn.IgnoredSeqNums,
 		)
 		if err = env.lt.AcquireLock(&acq); err != nil {
 			doneCh <- err
@@ -1737,14 +1748,14 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		return
 	}
 	// Release locks.
-	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error); err != nil {
+	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.BatchRequests); err != nil {
 		doneCh <- err
 		return
 	}
 	for _, k := range item.locksToAcquire {
 		intent := roachpb.LockUpdate{
 			Span:   roachpb.Span{Key: k},
-			Txn:    item.Request.Txn.TxnMeta,
+			Txn:    item.Request.BatchRequests.Txn.TxnMeta,
 			Status: roachpb.COMMITTED,
 		}
 		if err = env.lt.UpdateLocks(&intent); err != nil {
@@ -1765,11 +1776,13 @@ func createRequests(index int, numOutstanding int, numKeys int, numReadKeys int)
 	ts := hlc.Timestamp{WallTime: 10}
 	latchSpans := &spanset.SpanSet{}
 	lockSpans := &lockspanset.LockSpanSet{}
+	ba := kvpb.BatchRequest{}
+	ba.Timestamp = ts
 	wi := benchWorkItem{
 		Request: Request{
-			Timestamp:  ts,
-			LatchSpans: latchSpans,
-			LockSpans:  lockSpans,
+			BatchRequests: &ba,
+			LatchSpans:    latchSpans,
+			LockSpans:     lockSpans,
 		},
 	}
 	for i := 0; i < numKeys; i++ {
@@ -1788,7 +1801,7 @@ func createRequests(index int, numOutstanding int, numKeys int, numReadKeys int)
 	txnCounter := uint128.FromInts(0, 0)
 	for i := 0; i < numOutstanding; i++ {
 		wiCopy := wi
-		wiCopy.Request.Txn = &roachpb.Transaction{
+		wiCopy.Request.BatchRequests.Txn = &roachpb.Transaction{
 			TxnMeta: enginepb.TxnMeta{
 				ID:             nextUUID(&txnCounter),
 				WriteTimestamp: ts,

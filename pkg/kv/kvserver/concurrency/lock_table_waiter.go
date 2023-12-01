@@ -187,7 +187,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// *each* of that transaction's previously written intents.
 				livenessPush := state.kind == waitForDistinguished
 				deadlockPush := true
-				waitPolicyPush := req.WaitPolicy == lock.WaitPolicy_Error
+				waitPolicyPush := req.BatchRequests.WaitPolicy == lock.WaitPolicy_Error
 
 				// If the conflict is a claimant transaction that hasn't acquired the
 				// lock yet there's no need to perform a liveness push - the request
@@ -201,14 +201,14 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// deadlock detection because a non-transactional request can
 				// not be part of a dependency cycle. Non-transactional requests
 				// cannot hold locks (and by extension, claim them).
-				if req.Txn == nil {
+				if req.BatchRequests.Txn == nil {
 					deadlockPush = false
 				}
 
 				// For requests that have a lock timeout, push after the timeout to
 				// determine whether the lock is abandoned or whether its holder is
 				// still active.
-				timeoutPush := req.LockTimeout != 0
+				timeoutPush := req.BatchRequests.LockTimeout != 0
 
 				// If the pushee has the minimum priority or if the pusher has the
 				// maximum priority, push immediately to proceed without queueing.
@@ -241,7 +241,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 					oldState := timerWaitingState // empty on first pass
 					newLock := !oldState.key.Equal(state.key) || oldState.txn.ID != state.txn.ID
 					if newLock {
-						lockDeadline = w.clock.PhysicalTime().Add(req.LockTimeout)
+						lockDeadline = w.clock.PhysicalTime().Add(req.BatchRequests.LockTimeout)
 					}
 					delay = minDuration(delay, w.timeUntilDeadline(lockDeadline))
 				}
@@ -290,9 +290,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// this completes, the request should stop waiting on this
 				// lockTableGuard, as it will no longer observe lock-table state
 				// transitions.
-				if req.LockTimeout != 0 {
+				if req.BatchRequests.LockTimeout != 0 {
 					return doWithTimeoutAndFallback(
-						ctx, req.LockTimeout,
+						ctx, req.BatchRequests.LockTimeout,
 						func(ctx context.Context) *Error { return w.pushLockTxn(ctx, req, state) },
 						func(ctx context.Context) *Error { return w.pushLockTxnAfterTimeout(ctx, req, state) },
 					)
@@ -329,7 +329,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// the comment in lockTableImpl.tryActiveWait for the proper way to
 				// remove this and other evaluation races.
 				toResolve := guard.ResolveBeforeScanning()
-				return w.ResolveDeferredIntents(ctx, req.AdmissionHeader, toResolve)
+				return w.ResolveDeferredIntents(ctx, req.BatchRequests.AdmissionHeader, toResolve)
 
 			default:
 				panic("unexpected waiting state")
@@ -431,7 +431,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// depending on the state of the lock timeout, if one exists,
 			// and depending on the wait policy.
 			var err *Error
-			if req.WaitPolicy == lock.WaitPolicy_Error {
+			if req.BatchRequests.WaitPolicy == lock.WaitPolicy_Error {
 				err = w.pushLockTxn(ctx, req, timerWaitingState)
 			} else if !lockDeadline.IsZero() {
 				untilDeadline := w.timeUntilDeadline(lockDeadline)
@@ -489,7 +489,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// so the read request can read under the lock. For write-write conflicts, try
 	// to abort the lock holder entirely so the write request can revoke and
 	// replace the lock with its own lock.
-	if req.WaitPolicy == lock.WaitPolicy_Error &&
+	if req.BatchRequests.WaitPolicy == lock.WaitPolicy_Error &&
 		!w.st.Version.IsActive(ctx, clusterversion.V23_2_RemoveLockTableWaiterTouchPush) {
 		// This wait policy signifies that the request wants to raise an error
 		// upon encountering a conflicting lock. We still need to push the lock
@@ -528,7 +528,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	if err != nil {
 		// If pushing with an Error WaitPolicy and the push fails, then the lock
 		// holder is still active. Transform the error into a WriteIntentError.
-		if _, ok := err.GetDetail().(*kvpb.TransactionPushError); ok && req.WaitPolicy == lock.WaitPolicy_Error {
+		if _, ok := err.GetDetail().(*kvpb.TransactionPushError); ok && req.BatchRequests.WaitPolicy == lock.WaitPolicy_Error {
 			err = newWriteIntentErr(req, ws, reasonWaitPolicy)
 		}
 		return err
@@ -658,7 +658,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		resolve.ClockWhilePending = beforePushObs
 	}
 	logResolveIntent(ctx, resolve)
-	opts := intentresolver.ResolveOptions{Poison: true, AdmissionHeader: req.AdmissionHeader}
+	opts := intentresolver.ResolveOptions{Poison: true, AdmissionHeader: req.BatchRequests.AdmissionHeader}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
 
@@ -670,7 +670,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 func (w *lockTableWaiterImpl) pushLockTxnAfterTimeout(
 	ctx context.Context, req Request, ws waitingState,
 ) *Error {
-	req.WaitPolicy = lock.WaitPolicy_Error
+	req.BatchRequests.WaitPolicy = lock.WaitPolicy_Error
 	err := w.pushLockTxn(ctx, req, ws)
 	if _, ok := err.GetDetail().(*kvpb.WriteIntentError); ok {
 		err = newWriteIntentErr(req, ws, reasonLockTimeout)
@@ -766,16 +766,16 @@ func (w *lockTableWaiterImpl) pushRequestTxn(
 // transactions on behalf of the provided request.
 func (w *lockTableWaiterImpl) pushHeader(req Request) kvpb.Header {
 	h := kvpb.Header{
-		Timestamp:    req.Timestamp,
-		UserPriority: req.NonTxnPriority,
-		WaitPolicy:   req.WaitPolicy,
+		Timestamp:    req.BatchRequests.Timestamp,
+		UserPriority: req.BatchRequests.UserPriority,
+		WaitPolicy:   req.BatchRequests.WaitPolicy,
 	}
-	if req.Txn != nil {
+	if req.BatchRequests.Txn != nil {
 		// We are going to hand the header (and thus the transaction proto) to
 		// the RPC framework, after which it must not be changed (since that
 		// could race). Since the subsequent execution of the original request
 		// might mutate the transaction, make a copy here. See #9130.
-		h.Txn = req.Txn.Clone()
+		h.Txn = req.BatchRequests.Txn.Clone()
 
 		// We must push at least to req.Timestamp, but for transactional
 		// requests we actually want to go all the way up to the top of the
@@ -787,7 +787,7 @@ func (w *lockTableWaiterImpl) pushHeader(req Request) kvpb.Header {
 		// not come from an HLC clock, but it does not currently get marked as
 		// so. See the comment in roachpb.MakeTransaction. This synthetic flag
 		// is then removed if we call Backward(clock.Now()) below.
-		uncertaintyLimit := req.Txn.GlobalUncertaintyLimit.WithSynthetic(true)
+		uncertaintyLimit := req.BatchRequests.Txn.GlobalUncertaintyLimit.WithSynthetic(true)
 		if !h.Timestamp.Synthetic {
 			// Because we intend to read on the same node, we can limit this to a
 			// clock reading from the local clock, relying on the fact that an
@@ -1282,7 +1282,7 @@ func newWriteIntentErr(req Request, ws waitingState, reason kvpb.WriteIntentErro
 	// mapping from lock span to request. However, as a best-effort optimization,
 	// we set the error index to 0 if this is the only request in the batch (that
 	// landed on this range, from the client's perspective).
-	if len(req.Requests) == 1 {
+	if len(req.BatchRequests.Requests) == 1 {
 		err.SetErrorIndex(0)
 	}
 	return err
@@ -1301,12 +1301,12 @@ func canPushWithPriority(req Request, s waitingState) bool {
 	}
 	var pusherIso, pusheeIso isolation.Level
 	var pusherPri, pusheePri enginepb.TxnPriority
-	if req.Txn != nil {
-		pusherIso = req.Txn.IsoLevel
-		pusherPri = req.Txn.Priority
+	if req.BatchRequests.Txn != nil {
+		pusherIso = req.BatchRequests.Txn.IsoLevel
+		pusherPri = req.BatchRequests.Txn.Priority
 	} else {
 		pusherIso = isolation.Serializable
-		pusherPri = roachpb.MakePriority(req.NonTxnPriority)
+		pusherPri = roachpb.MakePriority(req.BatchRequests.UserPriority)
 	}
 	pusheeIso = s.txn.IsoLevel
 	pusheePri = s.txn.Priority

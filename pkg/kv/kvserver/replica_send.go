@@ -466,17 +466,10 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		// returns a request guard that must be eventually released.
 		var resp []kvpb.ResponseUnion
 		g, resp, pErr = r.concMgr.SequenceReq(ctx, g, concurrency.Request{
-			Txn:             ba.Txn,
-			Timestamp:       ba.Timestamp,
-			NonTxnPriority:  ba.UserPriority,
-			ReadConsistency: ba.ReadConsistency,
-			WaitPolicy:      ba.WaitPolicy,
-			LockTimeout:     ba.LockTimeout,
-			AdmissionHeader: ba.AdmissionHeader,
-			PoisonPolicy:    pp,
-			Requests:        ba.Requests,
-			LatchSpans:      latchSpans, // nil if g != nil
-			LockSpans:       lockSpans,  // nil if g != nil
+			BatchRequests: ba,
+			PoisonPolicy:  pp,
+			LatchSpans:    latchSpans, // nil if g != nil
+			LockSpans:     lockSpans,  // nil if g != nil
 		}, requestEvalKind)
 		if pErr != nil {
 			if poisonErr := (*poison.PoisonedError)(nil); errors.As(pErr.GoError(), &poisonErr) {

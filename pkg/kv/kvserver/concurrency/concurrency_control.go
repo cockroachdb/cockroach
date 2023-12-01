@@ -15,8 +15,6 @@ package concurrency
 
 import (
 	"context"
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
@@ -25,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -373,29 +370,9 @@ const (
 // information necessary to sequence a KV request and determine which locks and
 // other in-flight requests it conflicts with.
 type Request struct {
-	// The (optional) transaction that sent the request.
-	// Non-transactional requests do not acquire locks.
-	Txn *roachpb.Transaction
-
-	// The timestamp that the request should evaluate at.
-	// Should be set to Txn.ReadTimestamp if Txn is non-nil.
-	Timestamp hlc.Timestamp
-
-	// The priority of the request. Only set if Txn is nil.
-	NonTxnPriority roachpb.UserPriority
-
-	// The consistency level of the request. Only set if Txn is nil.
-	ReadConsistency kvpb.ReadConsistencyType
-
-	// The wait policy of the request. Signifies how the request should
-	// behave if it encounters conflicting locks held by other active
-	// transactions.
-	WaitPolicy lock.WaitPolicy
-
-	// The maximum amount of time that the batch request will wait while
-	// attempting to acquire a lock on a key or while blocking on an
-	// existing lock in order to perform a non-locking read on a key.
-	LockTimeout time.Duration
+	// The reference to BatchRequest that contains information on
+	// transactions, requests, and lock metadata.
+	BatchRequests *kvpb.BatchRequest
 
 	// The maximum length of a lock wait-queue that the request is willing
 	// to enter and wait in. Used to provide a release valve and ensure some
@@ -405,15 +382,8 @@ type Request struct {
 	// with a WriteIntentError instead of entering the queue and waiting.
 	MaxLockWaitQueueLength int
 
-	// AdmissionHeader is the header in the request's BatchRequest. It is plumbed
-	// through for intent resolution admission control.
-	AdmissionHeader kvpb.AdmissionHeader
-
 	// The poison.Policy to use for this Request.
 	PoisonPolicy poison.Policy
-
-	// The individual requests in the batch.
-	Requests []kvpb.RequestUnion
 
 	// The maximal set of spans that the request will access. Latches
 	// will be acquired for these spans.
@@ -510,7 +480,7 @@ type latchManager interface {
 	// WaitFor waits for conflicting latches on the specified spans without adding
 	// any latches itself. Fast path for operations that only require flushing out
 	// old operations without blocking any new ones.
-	WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison.Policy) *Error
+	WaitFor(ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, br *kvpb.BatchRequest) *Error
 
 	// Poison a guard's latches, allowing waiters to fail fast.
 	Poison(latchGuard)

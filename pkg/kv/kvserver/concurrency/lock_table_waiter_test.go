@@ -151,9 +151,11 @@ func TestLockTableWaiterWithTxn(t *testing.T) {
 			if synthetic {
 				txn.ReadTimestamp = txn.ReadTimestamp.WithSynthetic(true)
 			}
+			br := kvpb.BatchRequest{}
+			br.Txn = &txn
+			br.Timestamp = txn.ReadTimestamp
 			return Request{
-				Txn:       &txn,
-				Timestamp: txn.ReadTimestamp,
+				BatchRequests: &br,
 			}
 		}
 
@@ -241,9 +243,11 @@ func TestLockTableWaiterWithNonTxn(t *testing.T) {
 
 	reqHeaderTS := hlc.Timestamp{WallTime: 10}
 	makeReq := func() Request {
+		br := kvpb.BatchRequest{}
+		br.Timestamp = reqHeaderTS
+		br.UserPriority = roachpb.NormalUserPriority
 		return Request{
-			Timestamp:      reqHeaderTS,
-			NonTxnPriority: roachpb.NormalUserPriority,
+			BatchRequests: &br,
 		}
 	}
 
@@ -340,7 +344,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 			// Non-transactional requests without a timeout do not push transactions
 			// that have claimed a lock; they only push lock holders. Instead, they
 			// wait for doneWaiting.
-			if req.Txn == nil && !lockHeld {
+			if req.BatchRequests.Txn == nil && !lockHeld {
 				defer notifyUntilDone(t, g)()
 				err := w.WaitOn(ctx, req, g)
 				require.Nil(t, err)
@@ -354,7 +358,7 @@ func testWaitPush(t *testing.T, k waitKind, makeReq func() Request, expPushTS hl
 				pushType kvpb.PushTxnType,
 			) (*roachpb.Transaction, *Error) {
 				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
-				require.Equal(t, req.Txn, h.Txn)
+				require.Equal(t, req.BatchRequests.Txn, h.Txn)
 				require.Equal(t, expPushTS, h.Timestamp)
 				if waitAsWrite || !lockHeld {
 					require.Equal(t, kvpb.PUSH_ABORT, pushType)
@@ -441,15 +445,17 @@ func TestLockTableWaiterWithErrorWaitPolicy(t *testing.T) {
 	makeReq := func() Request {
 		txn := makeTxnProto("request")
 		txn.GlobalUncertaintyLimit = uncertaintyLimit
+		br := kvpb.BatchRequest{}
+		br.Txn = &txn
+		br.Timestamp = txn.ReadTimestamp
+		br.WaitPolicy = lock.WaitPolicy_Error
 		return Request{
-			Txn:        &txn,
-			Timestamp:  txn.ReadTimestamp,
-			WaitPolicy: lock.WaitPolicy_Error,
+			BatchRequests: &br,
 		}
 	}
 	makeHighPriReq := func() Request {
 		req := makeReq()
-		req.Txn.Priority = enginepb.MaxTxnPriority
+		req.BatchRequests.Txn.Priority = enginepb.MaxTxnPriority
 		return req
 	}
 
@@ -552,7 +558,7 @@ func testErrorWaitPush(
 				pushType kvpb.PushTxnType,
 			) (*roachpb.Transaction, *Error) {
 				require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
-				require.Equal(t, req.Txn, h.Txn)
+				require.Equal(t, req.BatchRequests.Txn, h.Txn)
 				require.Equal(t, expPushTS, h.Timestamp)
 				require.Equal(t, kvpb.PUSH_TIMESTAMP, pushType)
 
@@ -608,17 +614,21 @@ func TestLockTableWaiterWithLockTimeout(t *testing.T) {
 		const lockTimeout = 1 * time.Millisecond
 		makeReq := func() Request {
 			txn := makeTxnProto("request")
+			br := kvpb.BatchRequest{}
+			br.Txn = &txn
+			br.Timestamp = txn.ReadTimestamp
+			br.LockTimeout = lockTimeout
 			return Request{
-				Txn:         &txn,
-				Timestamp:   txn.ReadTimestamp,
-				LockTimeout: lockTimeout,
+				BatchRequests: &br,
 			}
 		}
 		if !txn {
 			makeReq = func() Request {
+				br := kvpb.BatchRequest{}
+				br.Timestamp = hlc.Timestamp{WallTime: 10}
+				br.LockTimeout = lockTimeout
 				return Request{
-					Timestamp:   hlc.Timestamp{WallTime: 10},
-					LockTimeout: lockTimeout,
+					BatchRequests: &br,
 				}
 			}
 		}
@@ -693,7 +703,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 				// push is initiated, install a hook to manipulate the clock.
 				if timeoutBeforePush {
 					w.onPushTimer = func() {
-						manual.Advance(req.LockTimeout)
+						manual.Advance(req.BatchRequests.LockTimeout)
 					}
 				}
 
@@ -715,7 +725,7 @@ func testWaitPushWithTimeout(t *testing.T, k waitKind, makeReq func() Request) {
 					pushType kvpb.PushTxnType,
 				) (*roachpb.Transaction, *Error) {
 					require.Equal(t, &pusheeTxn.TxnMeta, pusheeArg)
-					require.Equal(t, req.Txn, h.Txn)
+					require.Equal(t, req.BatchRequests.Txn, h.Txn)
 
 					if expBlockingPush {
 						require.Equal(t, kvpb.PUSH_ABORT, pushType)
@@ -793,9 +803,11 @@ func TestLockTableWaiterIntentResolverError(t *testing.T) {
 	err2 := kvpb.NewErrorf("error2")
 
 	txn := makeTxnProto("request")
+	br := kvpb.BatchRequest{}
+	br.Txn = &txn
+	br.Timestamp = txn.ReadTimestamp
 	req := Request{
-		Txn:       &txn,
-		Timestamp: txn.ReadTimestamp,
+		BatchRequests: &br,
 	}
 
 	// Test with both synchronous and asynchronous pushes.
@@ -849,9 +861,11 @@ func TestLockTableWaiterDeferredIntentResolverError(t *testing.T) {
 	defer w.stopper.Stop(ctx)
 
 	txn := makeTxnProto("request")
+	br := kvpb.BatchRequest{}
+	br.Txn = &txn
+	br.Timestamp = txn.ReadTimestamp
 	req := Request{
-		Txn:       &txn,
-		Timestamp: txn.ReadTimestamp,
+		BatchRequests: &br,
 	}
 	keyA := roachpb.Key("keyA")
 	pusheeTxn := makeTxnProto("pushee")

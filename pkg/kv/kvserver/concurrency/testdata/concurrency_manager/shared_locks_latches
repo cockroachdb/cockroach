@@ -176,7 +176,7 @@ sequence req=req10
 ----
 [10] sequence req10: sequencing request
 [10] sequence req10: acquiring latches
-[10] sequence req10: waiting to acquire write latch ‹a›@9.000000000,1, held by read latch ‹a›@9223372036.854775807,2147483647
+[10] sequence req10: waiting to acquire write latch ‹a›@9.000000000,1[Get [‹"a"›,/Min), [txn: 00000003]], held by read latch ‹a›@9223372036.854775807,2147483647[Get [‹"a"›,/Min), [txn: 00000001]]
 [10] sequence req10: blocked on select in spanlatch.(*Manager).waitForSignal
 
 # exclusive_lock(ts) == shared_lock(ts)
@@ -188,7 +188,7 @@ sequence req=req11
 ----
 [11] sequence req11: sequencing request
 [11] sequence req11: acquiring latches
-[11] sequence req11: waiting to acquire write latch ‹b›@10.000000000,1, held by read latch ‹b›@9223372036.854775807,2147483647
+[11] sequence req11: waiting to acquire write latch ‹b›@10.000000000,1[Get [‹"b"›,/Min), [txn: 00000001]], held by read latch ‹b›@9223372036.854775807,2147483647[Get [‹"b"›,/Min), [txn: 00000001]]
 [11] sequence req11: blocked on select in spanlatch.(*Manager).waitForSignal
 
 # exclusive_lock(ts) > shared_lock(ts)
@@ -200,7 +200,7 @@ sequence req=req12
 ----
 [12] sequence req12: sequencing request
 [12] sequence req12: acquiring latches
-[12] sequence req12: waiting to acquire write latch ‹c›@11.000000000,1, held by read latch ‹c›@9223372036.854775807,2147483647
+[12] sequence req12: waiting to acquire write latch ‹c›@11.000000000,1[Get [‹"c"›,/Min), [txn: 00000002]], held by read latch ‹c›@9223372036.854775807,2147483647[Get [‹"c"›,/Min), [txn: 00000001]]
 [12] sequence req12: blocked on select in spanlatch.(*Manager).waitForSignal
 
 debug-latch-manager
@@ -286,7 +286,7 @@ sequence req=req16
 ----
 [16] sequence req16: sequencing request
 [16] sequence req16: acquiring latches
-[16] sequence req16: waiting to acquire write latch ‹a›@9.000000000,1, held by read latch ‹a›@9223372036.854775807,2147483647
+[16] sequence req16: waiting to acquire write latch ‹a›@9.000000000,1[Put [‹"a"›,/Min), [txn: 00000003]], held by read latch ‹a›@9223372036.854775807,2147483647[Get [‹"a"›,/Min), [txn: 00000001]]
 [16] sequence req16: blocked on select in spanlatch.(*Manager).waitForSignal
 
 # write(ts) == shared_lock(ts)
@@ -298,7 +298,7 @@ sequence req=req17
 ----
 [17] sequence req17: sequencing request
 [17] sequence req17: acquiring latches
-[17] sequence req17: waiting to acquire write latch ‹b›@10.000000000,1, held by read latch ‹b›@9223372036.854775807,2147483647
+[17] sequence req17: waiting to acquire write latch ‹b›@10.000000000,1[Put [‹"b"›,/Min), [txn: 00000001]], held by read latch ‹b›@9223372036.854775807,2147483647[Get [‹"b"›,/Min), [txn: 00000001]]
 [17] sequence req17: blocked on select in spanlatch.(*Manager).waitForSignal
 
 # write(ts) > shared_lock(ts)
@@ -310,7 +310,7 @@ sequence req=req18
 ----
 [18] sequence req18: sequencing request
 [18] sequence req18: acquiring latches
-[18] sequence req18: waiting to acquire write latch ‹c›@11.000000000,1, held by read latch ‹c›@9223372036.854775807,2147483647
+[18] sequence req18: waiting to acquire write latch ‹c›@11.000000000,1[Put [‹"c"›,/Min), [txn: 00000002]], held by read latch ‹c›@9223372036.854775807,2147483647[Get [‹"c"›,/Min), [txn: 00000001]]
 [18] sequence req18: blocked on select in spanlatch.(*Manager).waitForSignal
 
 debug-latch-manager
@@ -470,7 +470,7 @@ sequence req=req26
 ----
 [26] sequence req26: sequencing request
 [26] sequence req26: acquiring latches
-[26] sequence req26: waiting to acquire read latch ‹a›@9223372036.854775807,2147483647, held by write latch ‹a›@10.000000000,1
+[26] sequence req26: waiting to acquire read latch ‹a›@9223372036.854775807,2147483647[Get [‹"a"›,/Min), [txn: 00000003]], held by write latch ‹a›@10.000000000,1[Get [‹"a"›,/Min), [txn: 00000001]]
 [26] sequence req26: blocked on select in spanlatch.(*Manager).waitForSignal
 
 # shared_lock(ts) == exclusive_lock(ts)
@@ -482,7 +482,7 @@ sequence req=req27
 ----
 [27] sequence req27: sequencing request
 [27] sequence req27: acquiring latches
-[27] sequence req27: waiting to acquire read latch ‹b›@9223372036.854775807,2147483647, held by write latch ‹b›@10.000000000,1
+[27] sequence req27: waiting to acquire read latch ‹b›@9223372036.854775807,2147483647[Get [‹"b"›,/Min), [txn: 00000001]], held by write latch ‹b›@10.000000000,1[Get [‹"b"›,/Min), [txn: 00000001]]
 [27] sequence req27: blocked on select in spanlatch.(*Manager).waitForSignal
 
 # shared_lock(ts) > exclusive_lock(ts)
@@ -494,7 +494,7 @@ sequence req=req28
 ----
 [28] sequence req28: sequencing request
 [28] sequence req28: acquiring latches
-[28] sequence req28: waiting to acquire read latch ‹c›@9223372036.854775807,2147483647, held by write latch ‹c›@10.000000000,1
+[28] sequence req28: waiting to acquire read latch ‹c›@9223372036.854775807,2147483647[Get [‹"c"›,/Min), [txn: 00000002]], held by write latch ‹c›@10.000000000,1[Get [‹"c"›,/Min), [txn: 00000001]]
 [28] sequence req28: blocked on select in spanlatch.(*Manager).waitForSignal
 
 debug-latch-manager
@@ -580,7 +580,7 @@ sequence req=req32
 ----
 [32] sequence req32: sequencing request
 [32] sequence req32: acquiring latches
-[32] sequence req32: waiting to acquire read latch ‹a›@9223372036.854775807,2147483647, held by write latch ‹a›@10.000000000,1
+[32] sequence req32: waiting to acquire read latch ‹a›@9223372036.854775807,2147483647[Get [‹"a"›,/Min), [txn: 00000003]], held by write latch ‹a›@10.000000000,1[Put [‹"a"›,/Min), [txn: 00000001]]
 [32] sequence req32: blocked on select in spanlatch.(*Manager).waitForSignal
 
 # shared_lock(ts) == write(ts)
@@ -592,7 +592,7 @@ sequence req=req33
 ----
 [33] sequence req33: sequencing request
 [33] sequence req33: acquiring latches
-[33] sequence req33: waiting to acquire read latch ‹b›@9223372036.854775807,2147483647, held by write latch ‹b›@10.000000000,1
+[33] sequence req33: waiting to acquire read latch ‹b›@9223372036.854775807,2147483647[Get [‹"b"›,/Min), [txn: 00000001]], held by write latch ‹b›@10.000000000,1[Put [‹"b"›,/Min), [txn: 00000001]]
 [33] sequence req33: blocked on select in spanlatch.(*Manager).waitForSignal
 
 # shared_lock(ts) > write(ts)
@@ -604,7 +604,7 @@ sequence req=req34
 ----
 [34] sequence req34: sequencing request
 [34] sequence req34: acquiring latches
-[34] sequence req34: waiting to acquire read latch ‹c›@9223372036.854775807,2147483647, held by write latch ‹c›@10.000000000,1
+[34] sequence req34: waiting to acquire read latch ‹c›@9223372036.854775807,2147483647[Get [‹"c"›,/Min), [txn: 00000002]], held by write latch ‹c›@10.000000000,1[Put [‹"c"›,/Min), [txn: 00000001]]
 [34] sequence req34: blocked on select in spanlatch.(*Manager).waitForSignal
 
 debug-latch-manager
@@ -667,7 +667,7 @@ sequence req=req36
 ----
 [36] sequence req36: sequencing request
 [36] sequence req36: acquiring latches
-[36] sequence req36: waiting to acquire write latch ‹/Local/RangeID/1/r/ReplicatedSharedLocksTransactionLatch/"00000002-0000-0000-0000-000000000000"›@0,0, held by write latch ‹/Local/RangeID/1/r/ReplicatedSharedLocksTransactionLatch/"00000002-0000-0000-0000-000000000000"›@0,0
+[36] sequence req36: waiting to acquire write latch ‹/Local/RangeID/1/r/ReplicatedSharedLocksTransactionLatch/"00000002-0000-0000-0000-000000000000"›@0,0[Scan [‹"a"›,‹"f"›), [txn: 00000002]], held by write latch ‹/Local/RangeID/1/r/ReplicatedSharedLocksTransactionLatch/"00000002-0000-0000-0000-000000000000"›@0,0[Get [‹"c"›,/Min), [txn: 00000002]]
 [36] sequence req36: blocked on select in spanlatch.(*Manager).waitForSignal
 
 new-request name=req37 txn=txn1 ts=11,1

@@ -3893,10 +3893,10 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g := newLockTableGuardImpl()
 	g.seqNum = t.seqNum.Add(1)
 	g.lt = t
-	g.txn = req.Txn
-	g.ts = req.Timestamp
+	g.txn = req.BatchRequests.Txn
+	g.ts = req.BatchRequests.Timestamp
 	g.spans = req.LockSpans
-	g.waitPolicy = req.WaitPolicy
+	g.waitPolicy = req.BatchRequests.WaitPolicy
 	g.maxWaitQueueLength = req.MaxLockWaitQueueLength
 	g.str = lock.MaxStrength
 	g.index = -1

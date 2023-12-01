@@ -194,22 +194,23 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				if d.HasArg("max-lock-wait-queue-length") {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
 				}
-
+				ba := kvpb.BatchRequest{}
 				pp := scanPoisonPolicy(t, d)
 
 				// Each kvpb.Request is provided on an indented line.
 				reqs, reqUnions := scanRequests(t, d, c)
+				ba.Txn = txn
+				ba.Timestamp = ts
+				ba.UserPriority = priority
+				ba.ReadConsistency = readConsistency
+				ba.WaitPolicy = waitPolicy
+				ba.LockTimeout = lockTimeout
+				ba.Requests = reqUnions
 				latchSpans, lockSpans := c.collectSpans(t, txn, ts, waitPolicy, reqs)
 
 				c.requestsByName[reqName] = concurrency.Request{
-					Txn:                    txn,
-					Timestamp:              ts,
-					NonTxnPriority:         priority,
-					ReadConsistency:        readConsistency,
-					WaitPolicy:             waitPolicy,
-					LockTimeout:            lockTimeout,
+					BatchRequests:          &ba,
 					MaxLockWaitQueueLength: maxLockWaitQueueLength,
-					Requests:               reqUnions,
 					LatchSpans:             latchSpans,
 					LockSpans:              lockSpans,
 					PoisonPolicy:           pp,
@@ -365,7 +366,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				reqs, _ := scanRequests(t, d, c)
-				latchSpans, lockSpans := c.collectSpans(t, g.Req.Txn, g.Req.Timestamp, g.Req.WaitPolicy, reqs)
+				latchSpans, lockSpans := c.collectSpans(t, g.Req.BatchRequests.Txn, g.Req.BatchRequests.Timestamp, g.Req.BatchRequests.WaitPolicy, reqs)
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(latchSpans, lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
@@ -399,7 +400,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
-				txn := guard.Req.Txn
+				txn := guard.Req.BatchRequests.Txn
 
 				var key string
 				d.ScanArgs(t, "key", &key)
@@ -432,7 +433,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				// Confirm that the request has a corresponding write request.
 				found := false
-				for _, ru := range guard.Req.Requests {
+				for _, ru := range guard.Req.BatchRequests.Requests {
 					req := ru.GetInner()
 					keySpan := roachpb.Span{Key: roachpb.Key(key)}
 					if kvpb.IsLocking(req) &&
@@ -483,7 +484,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				// Confirm that the request has a corresponding ResolveIntent.
 				found := false
-				for _, ru := range guard.Req.Requests {
+				for _, ru := range guard.Req.BatchRequests.Requests {
 					if riReq := ru.GetResolveIntent(); riReq != nil &&
 						riReq.IntentTxn.ID == txn.ID &&
 						riReq.Key.Equal(roachpb.Key(key)) &&
