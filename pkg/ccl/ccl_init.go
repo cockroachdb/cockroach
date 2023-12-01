@@ -12,6 +12,8 @@ package ccl
 // import of this package enables building a binary with CCL features.
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/auditloggingccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
@@ -47,6 +49,7 @@ func init() {
 	base.LicenseType = utilccl.GetLicenseType
 	base.UpdateMetricOnLicenseChange = utilccl.UpdateMetricOnLicenseChange
 	server.ApplyTenantLicense = utilccl.ApplyTenantLicense
+	fmt.Print("")
 }
 
 // TestingEnableEnterprise allows overriding the license check in tests.
