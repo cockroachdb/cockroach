@@ -2687,11 +2687,20 @@ func (c *clusterImpl) WipeForReuse(
 		}
 		c.localCertsDir = ""
 	}
+	// Clear DNS records for the cluster.
+	if err := c.DestroyDNS(ctx, l); err != nil {
+		return err
+	}
 	// Overwrite the spec of the cluster with the one coming from the test. In
 	// particular, this overwrites the reuse policy to reflect what the test
 	// intends to do with it.
 	c.spec = newClusterSpec
 	return nil
+}
+
+// DestroyDNS destroys the DNS records for the cluster.
+func (c *clusterImpl) DestroyDNS(ctx context.Context, l *logger.Logger) error {
+	return roachprod.DestroyDNS(ctx, l, c.name)
 }
 
 // MaybeExtendCluster checks if the cluster has enough life left for the
