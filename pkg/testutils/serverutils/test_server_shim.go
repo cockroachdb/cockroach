@@ -109,8 +109,6 @@ func ShouldStartDefaultTestTenant(
 	}
 
 	// Determine if the default test tenant should be run as a shared process.
-	// TODO(herko): We should add an environment variable override for this.
-	// See also: https://github.com/cockroachdb/cockroach/issues/113294
 	var shared bool
 	switch {
 	case baseArg.SharedProcessMode():
