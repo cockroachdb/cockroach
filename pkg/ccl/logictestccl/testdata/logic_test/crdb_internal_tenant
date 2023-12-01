@@ -421,18 +421,16 @@ node_id  component  field   value
 0        UI         URI     /
 
 statement error unsupported within a virtual cluster
-SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version FROM crdb_internal.gossip_nodes WHERE node_id = 1
+SELECT node_id FROM crdb_internal.gossip_nodes WHERE node_id = 1
 
 statement error unsupported within a virtual cluster
-SELECT node_id, epoch, regexp_replace(expiration, '^\d+\.\d+,\d+$', '<timestamp>') as expiration, draining, decommissioning, membership FROM crdb_internal.gossip_liveness WHERE node_id = 1
+SELECT node_id FROM crdb_internal.gossip_liveness WHERE node_id = 1
 
 statement error unsupported within a virtual cluster
-SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version, regexp_replace(go_version, '^go.+$', '<go_version>') as go_version
-FROM crdb_internal.kv_node_status WHERE node_id = 1
+SELECT node_id FROM crdb_internal.kv_node_status WHERE node_id = 1
 
 statement error unsupported within a virtual cluster
-SELECT node_id, store_id, attrs, used
-FROM crdb_internal.kv_store_status WHERE node_id = 1
+SELECT node_id FROM crdb_internal.kv_store_status WHERE node_id = 1
 
 query TT
 SELECT * FROM crdb_internal.regions ORDER BY 1

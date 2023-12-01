@@ -132,10 +132,10 @@ func TestBackupManifestVersionCompatibility(t *testing.T) {
 		},
 		{
 			name:                    "alpha-restore",
-			backupVersion:           roachpb.Version{Major: 100022, Minor: 2, Internal: 14},
+			backupVersion:           roachpb.Version{Major: 1000022, Minor: 2, Internal: 14},
 			clusterVersion:          roachpb.Version{Major: 23, Minor: 1},
 			minimumSupportedVersion: roachpb.Version{Major: 22, Minor: 2},
-			expectedError:           "backup from version 100022.2-14 is newer than current version 23.1",
+			expectedError:           "backup from version 1000022.2-upgrading-to-1000023.1-step-014 is newer than current version 23.1",
 		},
 		{
 			name:                    "old-backup",

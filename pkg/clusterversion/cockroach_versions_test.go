@@ -145,12 +145,11 @@ func TestClusterVersionPrettyPrint(t *testing.T) {
 		cv  ClusterVersion
 		exp string
 	}{
-		{cv(19, 2, 1, 5), "19.2-5"},
-		{cv(20, 1, 0, 4), "20.1-4"},
-		{cv(20, 2, 0, 7), "20.2-7(fence)"},
-		{cv(20, 2, 0, 4), "20.2-4"},
-		{cv(20, 2, 1, 5), "20.2-5(fence)"},
-		{cv(20, 2, 1, 4), "20.2-4"},
+		{cv(20, 1, 0, 4), "20.1-upgrading-to-20.2-step-004"},
+		{cv(20, 2, 0, 7), "20.2-upgrading-to-21.1-step-007(fence)"},
+		{cv(20, 2, 0, 4), "20.2-upgrading-to-21.1-step-004"},
+		{cv(22, 2, 1, 5), "22.2-upgrading-to-23.1-step-005(fence)"},
+		{cv(22, 2, 1, 4), "22.2-upgrading-to-23.1-step-004"},
 	}
 	for _, test := range tests {
 		if actual := test.cv.PrettyPrint(); actual != test.exp {
@@ -169,9 +168,11 @@ func TestReleaseSeries(t *testing.T) {
 		}
 	}
 
+	// Verify the latest version.
+	require.Equal(t, fmt.Sprintf("v%s", Latest.ReleaseSeries()), build.BinaryVersionPrefix())
+
 	// Verify the ReleaseSeries results down to MinSupported.
 	expected := Latest.ReleaseSeries()
-	require.Equal(t, fmt.Sprintf("v%s", expected), build.BinaryVersionPrefix())
 	for k := Latest; k >= MinSupported; k-- {
 		if k.IsFinal() {
 			v := removeDevOffset(k.Version())

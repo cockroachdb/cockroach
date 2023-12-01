@@ -76,7 +76,7 @@ var devOffsetKeyStart = func() Key {
 
 // DevOffset is the offset applied to major versions into the future if this is
 // a dev branch.
-const DevOffset = 1_000_000
+const DevOffset = roachpb.VersionMajorDevOffset
 
 // maybeApplyDevOffset applies DevOffset to the major version, if appropriate.
 func maybeApplyDevOffset(key Key, v roachpb.Version) roachpb.Version {
