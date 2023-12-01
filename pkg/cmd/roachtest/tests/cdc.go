@@ -2762,6 +2762,9 @@ func (cfc *changefeedCreator) applySettings() error {
 	rangeDistribution, rangeDistributionEnabled := cfc.flags.DistributionStrategy.enabled(cfc.rng,
 		chooseDistributionStrategy)
 	if rangeDistributionEnabled == featureEnabled {
+		if _, err := cfc.db.Exec("SET CLUSTER SETTING changefeed.range_distribution_threshold = 10"); err != nil {
+			return err
+		}
 		cfc.logger.Printf("Setting changefeed.default_range_distribution_strategy to %s", rangeDistribution)
 		if _, err := cfc.db.Exec(fmt.Sprintf(
 			"SET CLUSTER SETTING changefeed.default_range_distribution_strategy = '%s'", rangeDistribution)); err != nil {

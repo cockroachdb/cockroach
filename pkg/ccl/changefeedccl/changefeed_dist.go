@@ -13,6 +13,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -334,9 +335,21 @@ const (
 	// set of nodes to distribute work to. However, changefeeds will try to
 	// distribute work evenly across this set of nodes.
 	balancedSimpleDistribution rangeDistributionType = 1
-	// TODO(jayant): add balancedFullDistribution which takes
-	// full control of node selection and distribution.
+	// balancedFullDistribution distributes work uniformly across a list of
+	// all healthy nodes provided by distsql.
+	balancedFullDistribution rangeDistributionType = 2
 )
+
+// RangeDisitributionThreshold is the number of ranges targeted by a changefeed
+// above which changefeed.default_range_distribution_strategy will take effect.
+var RangeDisitributionThreshold = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"changefeed.range_distribution_threshold",
+	"the number of ranges targeted by a changefeed above which"+
+		" configured range distribution strategies will take effect",
+	1024,
+	settings.NonNegativeInt,
+	settings.WithPublic)
 
 // RangeDistributionStrategy is used to determine how the changefeed balances
 // ranges between nodes.
@@ -345,15 +358,43 @@ var RangeDistributionStrategy = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"changefeed.default_range_distribution_strategy",
 	"configures how work is distributed among nodes for a given changefeed. "+
-		"for the most balanced distribution, use `balanced_simple`. changing this setting "+
-		"will not override locality restrictions",
+		"for the most balanced distribution across as many nodes as possible use "+
+		"'balanced_full'. for a smaller selection of nodes, use 'balanced_simple'. "+
+		"changing this setting will not override locality restrictions. non-default "+
+		"values for this setting will only take effect if the number of ranges targeted by "+
+		"the changefeed is greater than the configured range distribution threshold. see"+
+		" https://www.cockroachlabs.com/docs/stable/show-ranges for more information about ranges",
 	util.ConstantWithMetamorphicTestChoice("default_range_distribution_strategy",
 		"default", "balanced_simple").(string),
 	map[int64]string{
 		int64(defaultDistribution):        "default",
 		int64(balancedSimpleDistribution): "balanced_simple",
+		int64(balancedFullDistribution):   "balanced_full",
 	},
 	settings.WithPublic)
+
+// getEmptyPartitions makes an empty partition for each node in `allNodes` which
+// does not have a partition in `partitions`.
+func getEmptyPartitions(
+	allNodes []base.SQLInstanceID, partitions []sql.SpanPartition,
+) (result []sql.SpanPartition) {
+	// len(partitions) > len(allNodes) is unexpected and handled silently here.
+	// len(partitions) == len(allNodes) where node X is in `allNodes` but not in
+	//`partitions` is also unexpected and silently handled by this case.
+	if len(partitions) >= len(allNodes) {
+		return result
+	}
+	s := make(map[base.SQLInstanceID]struct{})
+	for _, p := range partitions {
+		s[p.SQLInstanceID] = struct{}{}
+	}
+	for _, instanceID := range allNodes {
+		if _, contains := s[instanceID]; !contains {
+			result = append(result, sql.MakeSpanPartition(instanceID, nil, true, 0))
+		}
+	}
+	return result
+}
 
 func makePlan(
 	execCtx sql.JobExecContext,
@@ -397,7 +438,31 @@ func makePlan(
 			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 			ri := kvcoord.MakeRangeIterator(distSender)
 			spanPartitions, err = rebalanceSpanPartitions(
-				ctx, &ri, rebalanceThreshold.Get(sv), spanPartitions)
+				ctx, &ri, spanPartitions, []base.SQLInstanceID{}, RangeDisitributionThreshold.Get(&execCtx.ExecCfg().Settings.SV))
+			if err != nil {
+				return nil, nil, err
+			}
+		case rangeDistribution == int64(balancedFullDistribution):
+			var allNodes []base.SQLInstanceID
+			planCtx, allNodes, err = dsp.SetupAllNodesPlanningWithOracle(ctx, execCtx.ExtendedEvalContext(),
+				planCtx.ExtendedEvalCtx.ExecCfg, oracle, locFilter)
+			if err != nil {
+				return nil, nil, err
+			}
+			// We still use dsp.PartitionSpans() followed by a minimal rebalance to leverage distsql heuristics
+			// without being unbalanced. For example, distsql tends to assign local ranges to nodes.
+			// If a node has many local ranges and is assigned more ranges compared to other nodes,
+			// then we reassign some of those ranges during rebalancing. The node still gets to keep as many local
+			// ranges as possible.
+			spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
+			if err != nil {
+				return nil, nil, err
+			}
+			sender := execCtx.ExecCfg().DB.NonTransactionalSender()
+			distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
+			ri := kvcoord.MakeRangeIterator(distSender)
+			spanPartitions, err = rebalanceSpanPartitions(
+				ctx, &ri, spanPartitions, allNodes, RangeDisitributionThreshold.Get(&execCtx.ExecCfg().Settings.SV))
 			if err != nil {
 				return nil, nil, err
 			}
@@ -538,14 +603,6 @@ func (w *changefeedResultWriter) Err() error {
 	return w.err
 }
 
-var rebalanceThreshold = settings.RegisterFloatSetting(
-	settings.ApplicationLevel,
-	"changefeed.balance_range_distribution.sensitivity",
-	"rebalance if the number of ranges on a node exceeds the average by this fraction",
-	0.05,
-	settings.PositiveFloat,
-)
-
 type rangeIterator interface {
 	Desc() *roachpb.RangeDescriptor
 	NeedAnother(rs roachpb.RSpan) bool
@@ -576,14 +633,26 @@ type rebalancingPartition struct {
 var expensiveReblanceChecksEnabled = buildutil.CrdbTestBuild || envutil.EnvOrDefaultBool(
 	"COCKROACH_CHANGEFEED_TESTING_REBALANCING_CHECKS", false)
 
+// rebalanceSpanPartitions rebalances the input list of spans and returns true
+// if the list of spans was modified.
 func rebalanceSpanPartitions(
-	ctx context.Context, ri rangeIterator, sensitivity float64, partitions []sql.SpanPartition,
+	ctx context.Context,
+	ri rangeIterator,
+	originalPartitions []sql.SpanPartition,
+	allNodes []base.SQLInstanceID,
+	threshold int64,
 ) ([]sql.SpanPartition, error) {
-	if len(partitions) <= 1 {
-		return partitions, nil
+	if len(originalPartitions) <= 1 {
+		log.Infof(ctx, "skipping rebalance due to single partition")
+		return originalPartitions, nil
 	}
 
-	//Create partition builder structs for the partitions array above.
+	// Create a new partitions array for re-balancing.
+	var partitions []sql.SpanPartition
+	partitions = append(partitions, originalPartitions...)
+	partitions = append(partitions, getEmptyPartitions(allNodes, originalPartitions)...)
+
+	// Create partition builder structs for the partitions array above.
 	var builders = make([]rebalancingPartition, len(partitions))
 	var totalRanges int
 	for i, p := range partitions {
@@ -600,12 +669,21 @@ func rebalanceSpanPartitions(
 		builders[i].g.Add(p.Spans...)
 	}
 
+	// If the number of ranges is small, there's no need to rebalance.
+	// As an extra backstop, don't rebalance if the total ranges is smaller
+	// than the number of partitions (ie. nodes).
+	if int64(totalRanges) <= threshold || totalRanges < len(partitions) {
+		log.Infof(ctx, "skipping rebalance due to a small number of ranges: %d, threshold: %d, partitions: %d",
+			totalRanges, threshold, len(partitions))
+		return originalPartitions, nil
+	}
+
 	// Sort descending based on the number of ranges.
 	sort.Slice(builders, func(i, j int) bool {
 		return builders[i].numRanges > builders[j].numRanges
 	})
 
-	targetRanges := int(math.Ceil((1 + sensitivity) * float64(totalRanges) / float64(len(partitions))))
+	targetRanges := int(math.Ceil(float64(totalRanges) / float64(len(partitions))))
 	to := len(builders) - 1
 	from := 0
 
@@ -674,6 +752,19 @@ func rebalanceSpanPartitions(
 		partitions[b.pIdx] = sql.MakeSpanPartition(
 			b.p.SQLInstanceID, b.g.Slice(), true, b.numRanges)
 	}
+
+	// Since targetRanges may be greater than totalRanges/partitions, if some
+	// partitions have `targetRanges` ranges, some other partitions may be empty.
+	// Remove the empty ones here. Move zeros to the end, then truncate.
+	j := 0
+	for i := range partitions {
+		count, _ := partitions[i].NumRanges()
+		if count != 0 {
+			partitions[i], partitions[j] = partitions[j], partitions[i]
+			j += 1
+		}
+	}
+	partitions = partitions[:j]
 
 	if err := verifyPartitionsIfExpensiveChecksEnabled(builders, partitions); err != nil {
 		return nil, err
