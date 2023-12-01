@@ -480,7 +480,6 @@ func newTenantServer(
 		args.Settings,
 		sqlServer.pgServer.HBADebugFn(),
 		sqlServer.execCfg.SQLStatusServer,
-		nil, /* serverTickleFn */
 		sqlCfg.TenantID,
 		processCapAuthz,
 	)

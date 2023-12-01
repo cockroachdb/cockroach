@@ -1235,16 +1235,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		st,
 		sqlServer.pgServer.HBADebugFn(),
 		sqlServer.execCfg.SQLStatusServer,
-		// TODO(knz): Remove this once
-		// https://github.com/cockroachdb/cockroach/issues/84585 is
-		// implemented.
-		func(ctx context.Context, name roachpb.TenantName) error {
-			d, _, err := sc.getServer(ctx, name)
-			if err != nil {
-				return err
-			}
-			return errors.Newf("server found with type %T", d)
-		},
 		roachpb.SystemTenantID,
 		authorizer,
 	)
