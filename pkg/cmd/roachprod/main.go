@@ -1174,6 +1174,15 @@ var jaegerURLCmd = &cobra.Command{
 	}),
 }
 
+var destroyDNSCmd = &cobra.Command{
+	Use:   `destroy-dns <cluster>`,
+	Short: `cleans up DNS entries for the cluster`,
+	Args:  cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		return roachprod.DestroyDNS(context.Background(), config.Logger, args[0])
+	}),
+}
+
 var snapshotCmd = &cobra.Command{
 	Use:   `snapshot`,
 	Short: "snapshot enables creating/listing/deleting/applying cluster snapshots",
@@ -1453,6 +1462,7 @@ func main() {
 		runCmd,
 		signalCmd,
 		wipeCmd,
+		destroyDNSCmd,
 		reformatCmd,
 		installCmd,
 		distributeCertsCmd,
