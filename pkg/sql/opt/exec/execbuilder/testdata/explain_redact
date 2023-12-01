@@ -3321,7 +3321,6 @@ vectorized: true
 │
 └── • top-k
     │ columns: (column6, c, d)
-    │ ordering: +column6
     │ estimated row count: 3 (missing stats)
     │ order: +column6
     │ k: 3

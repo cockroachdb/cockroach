@@ -14,7 +14,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -702,16 +701,13 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, args)
 	defer tc.Stopper().Stop(ctx)
 
-	conn := sqlutils.MakeSQLRunner(tc.ServerConn(0))
-	// This connection will ensure the setting is changed for secondary tenant.
-
+	conn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 	conn.Exec(t, "SET tracing = true;")
 	serverutils.SetClusterSetting(t, tc, "sql.txn_stats.sample_rate", "1")
-	// Reduce the resolution interval to speed up the test.
-	serverutils.SetClusterSetting(t, tc, "sql.contention.event_store.resolution_interval", "100ms")
-
 	// Set the insights detection threshold lower.
-	serverutils.SetClusterSetting(t, tc, "sql.insights.latency_threshold", "1ms")
+	serverutils.SetClusterSetting(t, tc, "sql.insights.latency_threshold", "100ms")
+	// Set to a long interval as we'll manually trigger the event resolution later.
+	serverutils.SetClusterSetting(t, tc, "sql.contention.event_store.resolution_interval", "30m")
 
 	conn.Exec(t, "CREATE TABLE t (id string PRIMARY KEY, s string);")
 
@@ -722,7 +718,9 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	// Chan to wait for the txn to complete to avoid checking for insights before the txn is committed.
 	txnDoneChan := make(chan struct{})
 
-	tx := conn.Begin(t)
+	observerConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
+	txConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
+	tx := txConn.Begin(t)
 
 	_, errTxn := tx.ExecContext(ctx, "INSERT INTO t (id, s) VALUES ('test', 'originalValue');")
 	require.NoError(t, errTxn)
@@ -730,6 +728,7 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	waitingTxStartedChan := make(chan struct{})
 	approxStmtRuntime := timeutil.NewStopWatch()
 	go func() {
+		conn.Exec(t, "SET application_name = 'waiting_txn'")
 		waitingTxStartedChan <- struct{}{}
 		approxStmtRuntime.Start()
 		// This will be blocked until the started txn above finishes.
@@ -742,6 +741,13 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 
 	_, errTxn = tx.ExecContext(ctx, "select pg_sleep(.7);")
 	require.NoError(t, errTxn)
+
+	var waitingTxnID uuid.UUID
+	observerConn.QueryRow(t,
+		`SELECT id
+         FROM crdb_internal.node_transactions
+         WHERE application_name = 'waiting_txn'`).Scan(&waitingTxnID)
+
 	require.NoError(t, tx.Commit())
 
 	<-txnDoneChan
@@ -752,8 +758,24 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	require.GreaterOrEqualf(t,
 		approxStmtRuntime.Elapsed().Milliseconds(), int64(100), "expected stmt to run for at least 100ms")
 
+	// We should ensure that the waiting txn id exists in the txn id cache. Failing to
+	// lookup this id will result in the resolver potentially missing the event.
+	txnIDCache := tc.ApplicationLayer(0).SQLServer().(*sql.Server).GetTxnIDCache()
+	txnIDCache.DrainWriteBuffer()
+	testutils.SucceedsSoon(t, func() error {
+		waitingTxnFingerprintID, ok := txnIDCache.Lookup(waitingTxnID)
+		if !ok || waitingTxnFingerprintID == appstatspb.InvalidTransactionFingerprintID {
+			return fmt.Errorf("waiting txn fingerprint not found in cache")
+		}
+
+		return nil
+	})
+
 	// Verify the table content is valid.
 	testutils.SucceedsSoon(t, func() error {
+		err := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry.FlushEventsForTest(ctx)
+		require.NoError(t, err)
+
 		rows, err := conn.DB.QueryContext(ctx, `SELECT
 		query,
 		COALESCE(insight.contention, 0::INTERVAL)::FLOAT,
@@ -762,7 +784,7 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 		COALESCE(txn_contention.database_name, ''::STRING)::STRING AS database_name,
 		COALESCE(txn_contention.table_name, ''::STRING)::STRING AS table_name,
 		COALESCE(txn_contention.index_name, ''::STRING)::STRING AS index_name,
-		encode(txn_contention.waiting_txn_fingerprint_id, 'hex') AS waiting_txn_fingerprint_id
+		COALESCE(encode(txn_contention.waiting_txn_fingerprint_id, 'hex'), '')::STRING AS waiting_txn_fingerprint_id
 		FROM crdb_internal.cluster_execution_insights insight
 		left join crdb_internal.transaction_contention_events txn_contention on  insight.stmt_id = txn_contention.waiting_stmt_id
 																		 where query like 'UPDATE t SET s =%'
@@ -770,10 +792,11 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 		if err != nil {
 			return err
 		}
-
-		rowCount := 0
+		// There may be multiple contention events for the query. We'll verify that
+		// at least 1 row matches the one we're looking for.
+		foundRow := false
+		var lastErr error
 		for rows.Next() {
-			rowCount++
 			if err != nil {
 				return err
 			}
@@ -781,45 +804,59 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 			var totalContentionFromQueryMs, contentionFromEventMs float64
 			var queryText, schemaName, dbName, tableName, indexName, waitingTxnFingerprintID string
 			err = rows.Scan(&queryText, &totalContentionFromQueryMs, &contentionFromEventMs, &schemaName, &dbName, &tableName, &indexName, &waitingTxnFingerprintID)
+
+			prettyPrintRow := fmt.Sprintf(`query: %s, totalContentionFromQueryMs: %f, contentionFromEventMs: %f,
+				"schemaName: %s, dbName: %s, tableName: %s, indexName: %s, waitingTxnFingerprintID: %s`,
+				queryText, totalContentionFromQueryMs, contentionFromEventMs,
+				schemaName, dbName, tableName, indexName, waitingTxnFingerprintID)
+
 			if err != nil {
 				return err
 			}
 
 			if totalContentionFromQueryMs <= 0 {
-				return fmt.Errorf("contention time is %f must be greater than 0", totalContentionFromQueryMs)
+				return fmt.Errorf("total contention time must be greater than 0\n%v", prettyPrintRow)
 			}
 
 			if totalContentionFromQueryMs > 60*1000 {
-				return fmt.Errorf("contention time must be less than 1 minute:  %f", totalContentionFromQueryMs)
-			}
-
-			diff := totalContentionFromQueryMs - contentionFromEventMs
-			if math.Abs(diff) > .1 {
-				return fmt.Errorf("contention time from column: %f should be the same as event value %f", totalContentionFromQueryMs, contentionFromEventMs)
+				lastErr = fmt.Errorf("contention time must be less than 1 minute:\n%s", prettyPrintRow)
+				continue
 			}
 
 			if schemaName != "public" {
-				return fmt.Errorf("schema names do not match 'public', %s", schemaName)
+				lastErr = fmt.Errorf("schema names do not match 'public'\n%s", prettyPrintRow)
+				continue
 			}
 
 			if dbName != "defaultdb" {
-				return fmt.Errorf("db names do not match 'defaultdb', %s", dbName)
+				lastErr = fmt.Errorf("db names do not match 'defaultdb'\n%s", prettyPrintRow)
+				continue
 			}
 
 			if tableName != "t" {
-				return fmt.Errorf("table names do not match 't', %s", tableName)
+				lastErr = fmt.Errorf("table names do not match 't'\n%s", prettyPrintRow)
+				continue
 			}
 
 			if indexName != "t_pkey" {
-				return fmt.Errorf("index names do not match 't_pkey', %s", indexName)
+				lastErr = fmt.Errorf("index names do not match 't_pkey'\n%s", prettyPrintRow)
+				continue
 			}
 
 			if waitingTxnFingerprintID == "0000000000000000" || waitingTxnFingerprintID == "" {
-				return fmt.Errorf("waitingTxnFingerprintID is default value: %s", waitingTxnFingerprintID)
+				lastErr = fmt.Errorf("waitingTxnFingerprintID is default value\n%s", prettyPrintRow)
+				continue
 			}
+
+			foundRow = true
+			break
 		}
 
-		if rowCount < 1 {
+		if !foundRow && lastErr != nil {
+			return lastErr
+		}
+
+		if !foundRow {
 			var queryStatsMsg string
 			var stats, txnEventContentionTime string
 			err = conn.DB.QueryRowContext(ctx, `

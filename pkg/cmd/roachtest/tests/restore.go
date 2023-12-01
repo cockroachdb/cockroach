@@ -925,8 +925,10 @@ func (rd *restoreDriver) getAOST(ctx context.Context) {
 }
 
 func (rd *restoreDriver) restoreCmd(target, opts string) string {
-	return fmt.Sprintf(`RESTORE %s FROM %s IN %s AS OF SYSTEM TIME '%s' %s`,
+	query := fmt.Sprintf(`RESTORE %s FROM %s IN %s AS OF SYSTEM TIME '%s' %s`,
 		target, rd.sp.backup.fullBackupDir, rd.sp.backup.backupCollection(), rd.aost, opts)
+	rd.t.L().Printf("Running restore cmd: %s", query)
+	return query
 }
 
 // run executes the restore, where target injects a restore target into the restore command.
