@@ -2510,6 +2510,9 @@ var builtinOidsArray = []string{
 	2541: `information_schema._pg_interval_type(typid: oid, typmod: int4) -> string`,
 	2542: `crdb_internal.release_series(version: string) -> string`,
 	2543: `crdb_internal.fips_ready() -> bool`,
+	2544: `st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4) -> geometry`,
+	2545: `st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4, bounds: geometry) -> geometry`,
+	2546: `st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4, bounds: geometry, margin: float) -> geometry`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

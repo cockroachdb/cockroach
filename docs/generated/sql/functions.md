@@ -2669,6 +2669,18 @@ The swap_ordinate_string parameter is a 2-character string naming the ordinates 
 <tr><td><a name="st_symmetricdifference"></a><code>st_symmetricdifference(geometry_a: geometry, geometry_b: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Returns the symmetric difference of both geometries.</p>
 <p>This function utilizes the GEOS module.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="st_tileenvelope"></a><code>st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a rectangular Polygon giving the extent of a tile in the XYZ tile system.
+The tile is specifed by the zoom level Z and the XY index of the tile in the grid at that level.
+Can be used to define the tile bounds required by ST_AsMVTGeom to convert geometry into the MVT tile coordinate space.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_tileenvelope"></a><code>st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4, bounds: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a rectangular Polygon giving the extent of a tile in the XYZ tile system.
+The tile is specifed by the zoom level Z and the XY index of the tile in the grid at that level.
+Can be used to define the tile bounds required by ST_AsMVTGeom to convert geometry into the MVT tile coordinate space.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_tileenvelope"></a><code>st_tileenvelope(tileZoom: int4, tileX: int4, tileY: int4, bounds: geometry, margin: <a href="float.html">float</a>) &rarr; geometry</code></td><td><span class="funcdesc"><p>Creates a rectangular Polygon giving the extent of a tile in the XYZ tile system.
+The tile is specifed by the zoom level Z and the XY index of the tile in the grid at that level.
+Can be used to define the tile bounds required by ST_AsMVTGeom to convert geometry into the MVT tile coordinate space.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="st_touches"></a><code>st_touches(geometry_a: geometry, geometry_b: geometry) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns true if the only points in common between geometry_a and geometry_b are on the boundary. Note points do not touch other points.</p>
 <p>This function utilizes the GEOS module.</p>
 <p>This function variant will attempt to utilize any available spatial index.</p>

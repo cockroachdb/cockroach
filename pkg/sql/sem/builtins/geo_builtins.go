@@ -7144,6 +7144,127 @@ Note that the top vertex of the segment touching another line does not count as 
 		},
 	),
 
+	"st_tileenvelope": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "tileZoom", Typ: types.Int4},
+				{Name: "tileX", Typ: types.Int4},
+				{Name: "tileY", Typ: types.Int4},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull || args[2] == tree.DNull {
+					return tree.DNull, nil
+				}
+
+				tileZoom := int(tree.MustBeDInt(args[0]))
+				tileX := int(tree.MustBeDInt(args[1]))
+				tileY := int(tree.MustBeDInt(args[2]))
+
+				defBounds := "SRID=3857;LINESTRING(-20037508.342789244 -20037508.342789244, 20037508.342789244 20037508.342789244)"
+				bounds, err := geo.ParseGeometryFromEWKT(geopb.EWKT(defBounds), geopb.DefaultGeometrySRID, geo.DefaultSRIDIsHint)
+				if err != nil {
+					return nil, err
+				}
+
+				envelope, err := geomfn.TileEnvelope(tileZoom, tileX, tileY, bounds, 0.0)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: envelope}, nil
+			},
+			Info: infoBuilder{
+				info: `Creates a rectangular Polygon giving the extent of a tile in the XYZ tile system. 
+The tile is specifed by the zoom level Z and the XY index of the tile in the grid at that level. 
+Can be used to define the tile bounds required by ST_AsMVTGeom to convert geometry into the MVT tile coordinate space.`,
+			}.String(),
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "tileZoom", Typ: types.Int4},
+				{Name: "tileX", Typ: types.Int4},
+				{Name: "tileY", Typ: types.Int4},
+				{Name: "bounds", Typ: types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull || args[2] == tree.DNull {
+					return tree.DNull, nil
+				}
+
+				tileZoom := int(tree.MustBeDInt(args[0]))
+				tileX := int(tree.MustBeDInt(args[1]))
+				tileY := int(tree.MustBeDInt(args[2]))
+
+				if args[3] == tree.DNull {
+					return tree.DNull, nil
+				}
+
+				bounds := tree.MustBeDGeometry(args[3])
+
+				envelope, err := geomfn.TileEnvelope(tileZoom, tileX, tileY, bounds.Geometry, 0.0)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: envelope}, nil
+			},
+			Info: infoBuilder{
+				info: `Creates a rectangular Polygon giving the extent of a tile in the XYZ tile system. 
+The tile is specifed by the zoom level Z and the XY index of the tile in the grid at that level. 
+Can be used to define the tile bounds required by ST_AsMVTGeom to convert geometry into the MVT tile coordinate space.`,
+			}.String(),
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "tileZoom", Typ: types.Int4},
+				{Name: "tileX", Typ: types.Int4},
+				{Name: "tileY", Typ: types.Int4},
+				{Name: "bounds", Typ: types.Geometry},
+				{Name: "margin", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull || args[1] == tree.DNull || args[2] == tree.DNull {
+					return tree.DNull, nil
+				}
+
+				tileZoom := int(tree.MustBeDInt(args[0]))
+				tileX := int(tree.MustBeDInt(args[1]))
+				tileY := int(tree.MustBeDInt(args[2]))
+
+				if args[3] == tree.DNull {
+					return tree.DNull, nil
+				}
+
+				bounds := tree.MustBeDGeometry(args[3])
+
+				if args[4] == tree.DNull {
+					return tree.DNull, nil
+				}
+
+				margin := float64(tree.MustBeDFloat(args[4]))
+
+				envelope, err := geomfn.TileEnvelope(tileZoom, tileX, tileY, bounds.Geometry, margin)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DGeometry{Geometry: envelope}, nil
+			},
+			Info: infoBuilder{
+				info: `Creates a rectangular Polygon giving the extent of a tile in the XYZ tile system. 
+The tile is specifed by the zoom level Z and the XY index of the tile in the grid at that level. 
+Can be used to define the tile bounds required by ST_AsMVTGeom to convert geometry into the MVT tile coordinate space.`,
+			}.String(),
+			Volatility:        volatility.Immutable,
+			CalledOnNullInput: true,
+		},
+	),
+
 	//
 	// Unimplemented.
 	//
@@ -7174,7 +7295,6 @@ Note that the top vertex of the segment touching another line does not count as 
 	"st_seteffectivearea":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49030}),
 	"st_simplifyvw":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49039}),
 	"st_split":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49045}),
-	"st_tileenvelope":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49053}),
 	"st_wrapx":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49068}),
 	"st_geomfromgml":         makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48807}),
 	"st_geomfromtwkb":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48809}),
