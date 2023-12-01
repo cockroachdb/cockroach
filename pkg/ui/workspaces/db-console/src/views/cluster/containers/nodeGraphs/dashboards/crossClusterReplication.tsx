@@ -20,6 +20,23 @@ export default function (props: GraphDashboardProps) {
   const { storeSources, tenantSource } = props;
 
   return [
+      <LineGraph
+          title="Replicated Time"
+          sources={storeSources}
+          tenantSource={tenantSource}
+          tooltip={`The replicated time of the replication stream, in seconds since the Unix Epoch.`}
+      >
+          <Axis units={AxisUnits.Count} label="time">
+              <Metric
+                  name="physical_replication.replicated_time_seconds"
+                  title="Replicated Time"
+              />
+              <Metric
+                  name="physical_replication.current_time_seconds"
+                  title="Current Time"
+              />
+          </Axis>
+      </LineGraph>,
     <LineGraph
       title="Logical Bytes"
       sources={storeSources}

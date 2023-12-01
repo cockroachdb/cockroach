@@ -99,6 +99,14 @@ var (
 		Measurement: "Seconds",
 		Unit:        metric.Unit_SECONDS,
 	}
+
+	// This metric only exists to help display the replicated time on the DBConsole.
+	metaCurrentTimeSeconds = metric.Metadata{
+		Name:        "physical_replication.current_time_seconds",
+		Help:        "The wall clock time on physical replication stream coordinator in seconds since the unix epoch.",
+		Measurement: "Seconds",
+		Unit:        metric.Unit_SECONDS,
+	}
 	metaJobProgressUpdates = metric.Metadata{
 		Name:        "physical_replication.job_progress_updates",
 		Help:        "Total number of updates to the ingestion job progress",
@@ -140,6 +148,7 @@ type Metrics struct {
 	EarliestDataCheckpointSpan *metric.Gauge
 	LatestDataCheckpointSpan   *metric.Gauge
 	ReplicatedTimeSeconds      *metric.Gauge
+	CurrentTimeSeconds         *metric.Gauge
 	ReplicationCutoverProgress *metric.Gauge
 }
 
@@ -181,6 +190,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		EarliestDataCheckpointSpan: metric.NewGauge(metaEarliestDataCheckpointSpan),
 		LatestDataCheckpointSpan:   metric.NewGauge(metaLatestDataCheckpointSpan),
 		ReplicatedTimeSeconds:      metric.NewGauge(metaReplicatedTimeSeconds),
+		CurrentTimeSeconds:         metric.NewGauge(metaCurrentTimeSeconds),
 		ReplicationCutoverProgress: metric.NewGauge(metaReplicationCutoverProgress),
 	}
 	return m
