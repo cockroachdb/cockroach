@@ -107,7 +107,13 @@ func init() {
 	jobspb.ChangefeedDetailsMarshaler = func(m *jobspb.ChangefeedDetails, marshaller *jsonpb.Marshaler) ([]byte, error) {
 		if protoreflect.ShouldRedact(marshaller) {
 			var err error
-			m.SinkURI, err = cloud.SanitizeExternalStorageURI(m.SinkURI, nil)
+			// Redacts user sensitive information from sinkURI.
+			m.SinkURI, err = cloud.SanitizeExternalStorageURI(m.SinkURI, []string{
+				changefeedbase.SinkParamSASLPassword,
+				changefeedbase.SinkParamCACert,
+				changefeedbase.SinkParamClientCert,
+				changefeedbase.SinkParamConfluentAPISecret,
+			})
 			if err != nil {
 				return nil, err
 			}
