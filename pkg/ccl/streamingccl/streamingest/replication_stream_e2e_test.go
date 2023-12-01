@@ -1349,3 +1349,61 @@ WHERE
 	sysSQL.QueryRow(t, distinctQuery).Scan(&locality)
 	require.Contains(t, locality, region)
 }
+
+// TestStreamingZoneConfigsMismatchedRegions tests that c2c cutover proceeds
+// smoothly even if the user replicated an unsatisfiable zone config.
+func TestStreamingZoneConfigsMismatchedRegions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStressRace(t, "takes too long under stress race")
+
+	ctx := context.Background()
+	regions := []string{"mars", "venus", "mercury"}
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	args.SrcClusterTestRegions = regions
+	args.SrcNumNodes = 3
+
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.SrcTenantSQL.Exec(t, "CREATE DATABASE test")
+	c.SrcTenantSQL.Exec(t, `ALTER DATABASE test CONFIGURE ZONE USING constraints = '[+region=mars]', num_replicas = 1;`)
+	c.SrcTenantSQL.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
+	c.SrcTenantSQL.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
+
+	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.Cutover(producerJobID, ingestionJobID, srcTime.GoTime(), false)
+
+	cleanupTenant := c.StartDestTenant(ctx, nil)
+	defer func() {
+		require.NoError(t, cleanupTenant())
+	}()
+
+	// Note that the unsatisfiable zone config does not appear in the create statement.
+	var res string
+	c.DestTenantSQL.QueryRow(c.T, `SELECT create_statement FROM [SHOW CREATE DATABASE test]`).Scan(&res)
+	require.Equal(t, "CREATE DATABASE test", res)
+
+	var zcfg string
+	c.DestTenantSQL.QueryRow(c.T, `SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATION FROM DATABASE test]`).Scan(&zcfg)
+	// Note that the Zone configuration contains an unsatisfiable region constraint.
+	require.Contains(t, zcfg, `region=mars`)
+
+	// Ensure the db's table is available
+	c.DestTenantSQL.Exec(t, "INSERT INTO test.x VALUES (2, 2)")
+	var rowCount int
+	c.DestTenantSQL.QueryRow(t, "SELECT count(*) FROM test.x").Scan(&rowCount)
+	require.Equal(t, 2, rowCount)
+
+	// Ensure we can remove the unsatsfiable region constraint
+	c.DestTenantSQL.Exec(t, `ALTER DATABASE test CONFIGURE ZONE DISCARD`)
+
+	var newZcfg string
+	c.DestTenantSQL.QueryRow(c.T, `SELECT raw_config_sql FROM [SHOW ZONE CONFIGURATION FROM DATABASE test]`).Scan(&zcfg)
+	require.NotContains(t, newZcfg, `region=mars`)
+}
