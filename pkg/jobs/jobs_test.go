@@ -144,21 +144,6 @@ func (expected *expectation) verify(id jobspb.JobID, expectedStatus jobs.Status)
 	return nil
 }
 
-func TestJobsTableProgressFamily(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	var table, schema string
-	sqlutils.MakeSQLRunner(db).QueryRow(t, `SHOW CREATE system.jobs`).Scan(&table, &schema)
-	if !strings.Contains(schema, `FAMILY progress (progress)`) {
-		t.Fatalf("expected progress family, got %q", schema)
-	}
-}
-
 type counters struct {
 	ResumeExit int
 	// These sometimes retry so just use bool.
@@ -1428,28 +1413,6 @@ func TestJobLifecycle(t *testing.T) {
 			if err := exp.verify(job.ID(), jobs.StatusFailed); err != nil {
 				t.Fatal(err)
 			}
-		})
-
-		// TODO(adityamaru): Delete these tests once we drop the payload and
-		// progress columns from system.jobs.
-		t.Run("payload in system.jobs is irrelevant when marking job as successful", func(t *testing.T) {
-			job, _ := createDefaultJob()
-			if _, err := sqlDB.Exec(
-				`UPDATE system.jobs SET payload = 'garbage' WHERE id = $1`, job.ID(),
-			); err != nil {
-				t.Fatal(err)
-			}
-			require.NoError(t, job.Succeeded(ctx))
-		})
-
-		t.Run("payload in system.jobs is irrelevant when marking job as failed", func(t *testing.T) {
-			job, _ := createDefaultJob()
-			if _, err := sqlDB.Exec(
-				`UPDATE system.jobs SET payload = 'garbage' WHERE id = $1`, job.ID(),
-			); err != nil {
-				t.Fatal(err)
-			}
-			require.NoError(t, job.Failed(ctx, errors.New("boom")))
 		})
 
 		t.Run("internal errors are not swallowed if marking job as successful", func(t *testing.T) {

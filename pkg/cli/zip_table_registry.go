@@ -1055,8 +1055,6 @@ var zipSystemTables = DebugZipTableRegistry{
 		customQueryRedacted: `SELECT id,
 			status,
 			created,
-			'<redacted>' as payload,
-			progress,
 			created_by_type,
 			created_by_id,
 			claim_session_id,
