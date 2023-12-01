@@ -113,6 +113,13 @@ func TestCCLLogic_crdb_internal(
 	runCCLLogicTest(t, "crdb_internal")
 }
 
+func TestCCLLogic_explain_call_plpgsql(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "explain_call_plpgsql")
+}
+
 func TestCCLLogic_explain_redact(
 	t *testing.T,
 ) {
