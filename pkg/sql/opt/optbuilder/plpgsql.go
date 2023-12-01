@@ -460,6 +460,19 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					"INTO STRICT statements are not yet implemented",
 				))
 			}
+			if len(t.Target) > 1 {
+				seenTargets := make(map[ast.Variable]struct{})
+				for _, name := range t.Target {
+					if _, ok := seenTargets[name]; ok {
+						panic(unimplemented.New(
+							"duplicate INTO target",
+							"assigning to a variable more than once in the same INTO statement is not supported",
+						))
+					}
+					seenTargets[name] = struct{}{}
+				}
+			}
+
 			// Create a new continuation routine to handle executing a SQL statement.
 			execCon := b.makeContinuation("_stmt_exec")
 			stmtScope := b.ob.buildStmtAtRootWithScope(t.SqlStmt, nil /* desiredTypes */, execCon.s)
@@ -492,35 +505,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 
 			// Step 2: build the INTO statement into a continuation routine that calls
 			// the previously built continuation.
-			//
-			// For each target variable, project an output column that aliases the
-			// corresponding column from the SQL statement. Previous values for the
-			// variables will naturally be "overwritten" by the projection, since
-			// input columns are always considered before outer columns when resolving
-			// a column reference.
-			intoScope := stmtScope.push()
-			for j := range t.Target {
-				typ := b.resolveVariableForAssign(t.Target[j])
-				colName := scopeColName(t.Target[j])
-				var scalar opt.ScalarExpr
-				if j < len(stmtScope.cols) {
-					scalar = b.ob.factory.ConstructVariable(stmtScope.cols[j].id)
-				} else {
-					// If there are less output columns than target variables, NULL is
-					// assigned to any remaining targets.
-					scalar = b.ob.factory.ConstructConstVal(tree.DNull, typ)
-				}
-				for i := range intoScope.cols {
-					if intoScope.cols[i].name.MatchesReferenceName(t.Target[j]) {
-						panic(unimplemented.New(
-							"duplicate INTO target",
-							"assigning to a variable more than once in the same INTO statement is not supported",
-						))
-					}
-				}
-				b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
-			}
-			b.ob.constructProjectForScope(stmtScope, intoScope)
+			intoScope := b.buildInto(stmtScope, t.Target)
 			intoScope = b.callContinuation(&retCon, intoScope)
 
 			// Step 3: call the INTO continuation from the parent scope.
@@ -772,6 +757,52 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(inScope *scope, ident ast.Variable, va
 	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	return assignScope
+}
+
+// buildInto handles the mapping from the columns of a SQL statement to the
+// variables in an INTO target.
+func (b *plpgsqlBuilder) buildInto(stmtScope *scope, target []ast.Variable) *scope {
+	var targetTypes []*types.T
+	var targetNames []ast.Variable
+	if b.targetIsRecordVar(target) {
+		// For a single record-type variable, the SQL statement columns are assigned
+		// as elements of the variable, rather than the variable itself.
+		targetTypes = b.resolveVariableForAssign(target[0]).TupleContents()
+	} else {
+		targetNames = target
+		targetTypes = make([]*types.T, len(target))
+		for j := range target {
+			targetTypes[j] = b.resolveVariableForAssign(target[j])
+		}
+	}
+
+	// For each target, project an output column that aliases the
+	// corresponding column from the SQL statement. Previous values for the
+	// variables will naturally be "overwritten" by the projection, since
+	// input columns are always considered before outer columns when resolving
+	// a column reference.
+	intoScope := stmtScope.push()
+	for j, typ := range targetTypes {
+		var colName scopeColumnName
+		if targetNames != nil {
+			colName = scopeColName(targetNames[j])
+		}
+		var scalar opt.ScalarExpr
+		if j < len(stmtScope.cols) {
+			scalar = b.ob.factory.ConstructVariable(stmtScope.cols[j].id)
+		} else {
+			// If there are less output columns than target variables, NULL is
+			// assigned to any remaining targets.
+			scalar = b.ob.factory.ConstructConstVal(tree.DNull, typ)
+		}
+		b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+	}
+	b.ob.constructProjectForScope(stmtScope, intoScope)
+	if b.targetIsRecordVar(target) {
+		// Handle a single record-type variable (see projectRecordVar for details).
+		intoScope = b.projectRecordVar(intoScope, target[0])
+	}
+	return intoScope
 }
 
 // buildPLpgSQLRaise builds a call to the crdb_internal.plpgsql_raise builtin
@@ -1110,17 +1141,25 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 	}
 	// For a FETCH statement, we have to pass the expected result types.
 	var typs []*types.T
-	var elems []opt.ScalarExpr
 	if !fetch.IsMove {
-		typs = make([]*types.T, len(fetch.Target))
-		elems = make([]opt.ScalarExpr, len(fetch.Target))
-		for i := range fetch.Target {
-			typ := b.resolveVariableForAssign(fetch.Target[i])
-			typs[i] = typ
-			elems[i] = b.ob.factory.ConstructConstVal(tree.DNull, typ)
+		if b.targetIsRecordVar(fetch.Target) {
+			// If the target is a single record-type variable, the columns of the
+			// FETCH are assigned as its *elements*, rather than directly to the
+			// variable.
+			typs = b.resolveVariableForAssign(fetch.Target[0]).TupleContents()
+		} else {
+			typs = make([]*types.T, len(fetch.Target))
+			for i := range fetch.Target {
+				typ := b.resolveVariableForAssign(fetch.Target[i])
+				typs[i] = typ
+			}
 		}
 	}
 	returnType := types.MakeTuple(typs)
+	elems := make(memo.ScalarListExpr, len(typs))
+	for i := range elems {
+		elems[i] = b.ob.factory.ConstructConstVal(tree.DNull, typs[i])
+	}
 
 	// The arguments are:
 	//   1. The name of the cursor (resolved at runtime).
@@ -1146,7 +1185,34 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 	fetchScope := s.push()
 	b.ob.synthesizeColumn(fetchScope, fetchColName, returnType, nil /* expr */, fetchCall)
 	b.ob.constructProjectForScope(s, fetchScope)
+	if !fetch.IsMove && b.targetIsRecordVar(fetch.Target) {
+		// Handle a single record-type variable (see projectRecordVar for details).
+		fetchScope = b.projectRecordVar(fetchScope, fetch.Target[0])
+	}
 	return fetchScope
+}
+
+// targetIsSingleCompositeVar returns true if the given INTO target is a single
+// RECORD-type variable.
+func (b *plpgsqlBuilder) targetIsRecordVar(target []ast.Variable) bool {
+	return len(target) == 1 && b.resolveVariableForAssign(target[0]).Family() == types.TupleFamily
+}
+
+// projectRecordVar handles the special case when a single RECORD-type variable
+// is the target of an INTO clause or FETCH statement. In this case, the columns
+// from the SQL statement (or FETCH) should be wrapped into a tuple, which is
+// assigned to the RECORD-type variable.
+func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
+	typ := b.resolveVariableForAssign(name)
+	recordScope := s.push()
+	elems := make(memo.ScalarListExpr, len(s.cols))
+	for j := range elems {
+		elems[j] = b.ob.factory.ConstructVariable(s.cols[j].id)
+	}
+	tuple := b.ob.factory.ConstructTuple(elems, typ)
+	col := b.ob.synthesizeColumn(recordScope, scopeColName(name), typ, nil /* expr */, tuple)
+	recordScope.expr = b.ob.constructProject(s.expr, []scopeColumn{*col})
+	return recordScope
 }
 
 // makeContinuation allocates a new continuation routine with an uninitialized
