@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
@@ -321,21 +322,26 @@ func TestLockTableBasic(t *testing.T) {
 					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
 				}
 				latchSpans, lockSpans := scanSpans(t, d, ts)
+				ba := kvpb.BatchRequest{}
+				ba.Timestamp = ts
+				ba.WaitPolicy = waitPolicy
 				req := Request{
-					Timestamp:              ts,
-					WaitPolicy:             waitPolicy,
+					Timestamp:              ba.Timestamp,
+					WaitPolicy:             ba.WaitPolicy,
 					MaxLockWaitQueueLength: maxLockWaitQueueLength,
 					LatchSpans:             latchSpans,
 					LockSpans:              lockSpans,
+					BatchRequest:           &ba,
 				}
 				if txnMeta != nil {
 					// Update the transaction's timestamp, if necessary. The transaction
 					// may have needed to move its timestamp for any number of reasons.
 					txnMeta.WriteTimestamp = ts
-					req.Txn = &roachpb.Transaction{
+					ba.Txn = &roachpb.Transaction{
 						TxnMeta:       *txnMeta,
 						ReadTimestamp: ts,
 					}
+					req.Txn = ba.Txn
 				}
 				requestsByName[reqName] = req
 				return ""
@@ -874,10 +880,13 @@ func TestLockTableMaxLocks(t *testing.T) {
 			latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: k}, hlc.Timestamp{WallTime: 1})
 			lockSpans.Add(lock.Intent, roachpb.Span{Key: k})
 		}
+		ba := kvpb.BatchRequest{}
+		ba.Timestamp = hlc.Timestamp{WallTime: 1}
 		req := Request{
-			Timestamp:  hlc.Timestamp{WallTime: 1},
-			LatchSpans: latchSpans,
-			LockSpans:  lockSpans,
+			Timestamp:    ba.Timestamp,
+			LatchSpans:   latchSpans,
+			LockSpans:    lockSpans,
+			BatchRequest: &ba,
 		}
 		reqs = append(reqs, req)
 		ltg, err := lt.ScanAndEnqueue(req, nil)
@@ -1011,10 +1020,13 @@ func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
 		}
 		latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key}, hlc.Timestamp{WallTime: 1})
 		lockSpans.Add(lock.Intent, roachpb.Span{Key: key})
+		ba := kvpb.BatchRequest{}
+		ba.Timestamp = hlc.Timestamp{WallTime: 1}
 		req := Request{
-			Timestamp:  hlc.Timestamp{WallTime: 1},
-			LatchSpans: latchSpans,
-			LockSpans:  lockSpans,
+			Timestamp:    ba.Timestamp,
+			LatchSpans:   latchSpans,
+			LockSpans:    lockSpans,
+			BatchRequest: &ba,
 		}
 		ltg, err := lt.ScanAndEnqueue(req, nil)
 		require.Nil(t, err)
@@ -1111,7 +1123,7 @@ func doWork(ctx context.Context, item *workItem, e *workloadExecutor) error {
 			// cancellation, the code makes sure to release latches when returning
 			// early due to error. Otherwise other requests will get stuck and
 			// group.Wait() will not return until the test times out.
-			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, poison.Policy_Error)
+			lg, err = e.lm.Acquire(context.Background(), item.request.LatchSpans, poison.Policy_Error, item.request.BatchRequest)
 			if err != nil {
 				return err
 			}
@@ -1519,11 +1531,15 @@ func TestLockTableConcurrentSingleRequests(t *testing.T) {
 				ReadTimestamp: ts,
 			}
 		}
+		ba := kvpb.BatchRequest{}
+		ba.Txn = txn
+		ba.Timestamp = ts
 		request := &Request{
-			Txn:        txn,
-			Timestamp:  ts,
-			LatchSpans: latchSpans,
-			LockSpans:  lockSpans,
+			Txn:          ba.Txn,
+			Timestamp:    ba.Timestamp,
+			LatchSpans:   latchSpans,
+			LockSpans:    lockSpans,
+			BatchRequest: &ba,
 		}
 		items = append(items, workloadItem{request: request})
 		if txn != nil {
@@ -1601,10 +1617,13 @@ func TestLockTableConcurrentRequests(t *testing.T) {
 		lockSpans := &lockspanset.LockSpanSet{}
 		onlyReads := txnMeta == nil && rng.Intn(2) != 0
 		numKeys := rng.Intn(len(keys)-1) + 1
+		ba := kvpb.BatchRequest{}
+		ba.Timestamp = ts
 		request := &Request{
-			Timestamp:  ts,
-			LatchSpans: latchSpans,
-			LockSpans:  lockSpans,
+			Timestamp:    ba.Timestamp,
+			LatchSpans:   latchSpans,
+			LockSpans:    lockSpans,
+			BatchRequest: &ba,
 		}
 		if txnMeta != nil {
 			request.Txn = &roachpb.Transaction{
@@ -1691,7 +1710,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 	var err error
 	firstIter := true
 	for {
-		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error); err != nil {
+		if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.BatchRequest); err != nil {
 			doneCh <- err
 			return
 		}
@@ -1738,7 +1757,7 @@ func doBenchWork(item *benchWorkItem, env benchEnv, doneCh chan<- error) {
 		return
 	}
 	// Release locks.
-	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error); err != nil {
+	if lg, err = env.lm.Acquire(context.Background(), item.LatchSpans, poison.Policy_Error, item.BatchRequest); err != nil {
 		doneCh <- err
 		return
 	}
@@ -1766,11 +1785,14 @@ func createRequests(index int, numOutstanding int, numKeys int, numReadKeys int)
 	ts := hlc.Timestamp{WallTime: 10}
 	latchSpans := &spanset.SpanSet{}
 	lockSpans := &lockspanset.LockSpanSet{}
+	ba := kvpb.BatchRequest{}
+	ba.Timestamp = ts
 	wi := benchWorkItem{
 		Request: Request{
-			Timestamp:  ts,
-			LatchSpans: latchSpans,
-			LockSpans:  lockSpans,
+			Timestamp:    ts,
+			LatchSpans:   latchSpans,
+			LockSpans:    lockSpans,
+			BatchRequest: &ba,
 		},
 	}
 	for i := 0; i < numKeys; i++ {

@@ -477,6 +477,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			Requests:        ba.Requests,
 			LatchSpans:      latchSpans, // nil if g != nil
 			LockSpans:       lockSpans,  // nil if g != nil
+			BatchRequest:    ba,
 		}, requestEvalKind)
 		if pErr != nil {
 			if poisonErr := (*poison.PoisonedError)(nil); errors.As(pErr.GoError(), &poisonErr) {
