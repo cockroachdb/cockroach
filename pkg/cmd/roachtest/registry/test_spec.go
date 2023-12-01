@@ -63,10 +63,6 @@ type TestSpec struct {
 	// etc). Must be set, even if empty (see ManualOnly).
 	Suites SuiteSet
 
-	// Tags is a set of tags associated with the test that allow grouping
-	// tests. If no tags are specified, the set ["default"] is automatically
-	// given.
-	Tags map[string]struct{}
 	// Cluster provides the specification for the cluster to use for the test.
 	Cluster spec.ClusterSpec
 	// NativeLibs specifies the native libraries required to be present on
@@ -162,31 +158,6 @@ const (
 func PromSub(raw string) string {
 	invalidPromRE := regexp.MustCompile("[^a-zA-Z0-9_]")
 	return invalidPromRE.ReplaceAllLiteralString(raw, "_")
-}
-
-func matchesAll(testTags map[string]struct{}, filterTags []string) bool {
-	for _, tag := range filterTags {
-		negate := false
-		if tag[0] == '!' {
-			negate = true
-			tag = tag[1:]
-		}
-		_, tagExists := testTags[tag]
-
-		if negate == tagExists {
-			return false
-		}
-	}
-	return true
-}
-
-// Tags returns a set of strings.
-func Tags(values ...string) map[string]struct{} {
-	set := make(map[string]struct{})
-	for _, s := range values {
-		set[s] = struct{}{}
-	}
-	return set
 }
 
 // LeaseType specifies the type of leases to use for the cluster.
@@ -329,6 +300,9 @@ func Suites(suites ...string) SuiteSet {
 	return SuiteSet{m: addToSet(nil, suites...)}
 }
 
+// AllSuites contains all suites.
+var AllSuites = Suites(allSuites...)
+
 // Contains returns true if the set contains the given suite.
 func (ss SuiteSet) Contains(suite string) bool {
 	ss.AssertInitialized()
@@ -344,38 +318,6 @@ func (ss SuiteSet) String() string {
 func (ss SuiteSet) AssertInitialized() {
 	if ss.m == nil {
 		panic("SuiteSet not initialized")
-	}
-}
-
-// CrossCheckTags verifies that the CompatibleClouds and Suites values match those of the tags.
-func (t *TestSpec) CrossCheckTags() {
-	// Check that CompatibleClouds + Suites would make the same determination as
-	// tags for what test to run for Nightly/Weekly and GCE/AWS.
-	var expected, actual struct {
-		nightlyGCE bool
-		weeklyGCE  bool
-		nightlyAWS bool
-		weeklyAWS  bool
-	}
-
-	expected.nightlyGCE = matchesAll(t.Tags, []string{"default"}) || matchesAll(t.Tags, []string{"aws"})
-	expected.weeklyGCE = matchesAll(t.Tags, []string{"weekly"})
-	expected.nightlyAWS = matchesAll(t.Tags, []string{"aws"})
-	expected.weeklyAWS = matchesAll(t.Tags, []string{"aws-weekly"})
-
-	actual.nightlyGCE = t.Suites.Contains(Nightly) && t.CompatibleClouds.Contains(spec.GCE)
-	actual.weeklyGCE = t.Suites.Contains(Weekly) && t.CompatibleClouds.Contains(spec.GCE)
-	actual.nightlyAWS = t.Suites.Contains(Nightly) && t.CompatibleClouds.Contains(spec.AWS)
-	actual.weeklyAWS = t.Suites.Contains(Weekly) && t.CompatibleClouds.Contains(spec.AWS)
-
-	if actual != expected {
-		panic(fmt.Sprintf("CompatibleClouds/Suites inconsistent with Tags\nexpected: %#v\nactual:   %#v\nclouds: %s  suites:%s  tags:%v\n", expected, actual, t.CompatibleClouds, t.Suites, t.Tags))
-	}
-
-	otherSuiteTags := fmt.Sprintf("%v", removeFromSet(t.Tags, "default", "weekly", "aws-weekly", "aws", "owner-"+string(t.Owner)))
-	otherSuites := fmt.Sprintf("%v", removeFromSet(t.Suites.m, Weekly, Nightly))
-	if otherSuiteTags != otherSuites && !(otherSuiteTags == "map[manual:{}]" && otherSuites == "map[]") {
-		panic(fmt.Sprintf("Suites inconsistent with Tags\nexpected: %v\nactual:   %v\nsuites:%s  tags:%v\n", otherSuiteTags, otherSuites, t.Suites, t.Tags))
 	}
 }
 

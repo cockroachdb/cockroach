@@ -37,8 +37,3 @@ describe cloud=gce suite=nightly benchmarks
 foo
 ----
 benchmarks which match regex "foo" and are compatible with cloud "gce" and are part of the "nightly" suite
-
-describe
-tag:aws tag:default
-----
-tests which match tag(s) aws OR default

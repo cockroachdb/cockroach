@@ -100,7 +100,6 @@ type backupFixtureSpecs struct {
 	timeout  time.Duration
 	clouds   registry.CloudSet
 	suites   registry.SuiteSet
-	tags     map[string]struct{}
 	testName string
 
 	// If non-empty, the test will be skipped with the supplied reason.
@@ -246,7 +245,6 @@ func registerBackupFixtures(r registry.Registry) {
 			// TODO(radu): this should be only AWS.
 			clouds: registry.AllClouds,
 			suites: registry.Suites(registry.Nightly),
-			tags:   registry.Tags("aws"),
 		},
 		{
 			// 15 GB backup fixture with 48 incremental layers. This is used by
@@ -265,7 +263,6 @@ func registerBackupFixtures(r registry.Registry) {
 			timeout: 2 * time.Hour,
 			clouds:  registry.AllClouds,
 			suites:  registry.Suites(registry.Weekly),
-			tags:    registry.Tags("weekly", "aws-weekly"),
 		},
 		{
 			// 8TB Backup Fixture.
@@ -280,9 +277,7 @@ func registerBackupFixtures(r registry.Registry) {
 			},
 			clouds: registry.AllClouds,
 			suites: registry.Suites(registry.Weekly),
-			// add the weekly tags to allow an over 24 hour timeout.
-			tags: registry.Tags("weekly", "aws-weekly"),
-			skip: "only for fixture generation",
+			skip:   "only for fixture generation",
 		},
 		{
 			// Default Fixture, Run on GCE. Initiated by the tpce --init.
@@ -306,10 +301,9 @@ func registerBackupFixtures(r registry.Registry) {
 			},
 			timeout: 48 * time.Hour,
 			clouds:  registry.AllClouds,
-			suites:  registry.Suites(registry.Weekly),
-			// add the weekly tags to allow an over 24 hour timeout.
-			tags: registry.Tags("weekly", "aws-weekly"),
-			skip: "only for fixture generation",
+			// Use the nightly suite to allow an over 24 hour timeout.
+			suites: registry.Suites(registry.Weekly),
+			skip:   "only for fixture generation",
 		},
 	} {
 		bf := bf
@@ -322,7 +316,6 @@ func registerBackupFixtures(r registry.Registry) {
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			CompatibleClouds:  bf.clouds,
 			Suites:            bf.suites,
-			Tags:              bf.tags,
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 

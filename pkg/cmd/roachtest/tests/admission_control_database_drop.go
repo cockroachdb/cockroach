@@ -45,7 +45,6 @@ func registerDatabaseDrop(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
-		Tags:             registry.Tags(`weekly`),
 		Cluster:          clusterSpec,
 		RequiresLicense:  true,
 		SnapshotPrefix:   "droppable-database-tpce-100k",

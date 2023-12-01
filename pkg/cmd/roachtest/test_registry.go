@@ -62,7 +62,6 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
-	spec.CrossCheckTags()
 	r.m[spec.Name] = &spec
 }
 
@@ -99,23 +98,15 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	if !spec.Owner.IsValid() {
 		return fmt.Errorf(`%s: unknown owner %q`, spec.Name, spec.Owner)
 	}
-	if len(spec.Tags) == 0 {
-		spec.Tags = registry.Tags(registry.DefaultTag)
-	}
-	spec.Tags["owner-"+string(spec.Owner)] = struct{}{}
 
 	// At the time of writing, we expect the roachtest job to finish within 24h
 	// and have corresponding timeouts set up in CI. Since each individual test
 	// may not be scheduled until a few hours in due to the CPU quota, individual
-	// tests should expect to take "less time". Longer-running tests require the
-	// weekly tag.
+	// tests should expect to take "less time". Longer-running tests have to be in
+	// the weekly suite.
 	const maxTimeout = 18 * time.Hour
 	if spec.Timeout > maxTimeout {
-		var weekly bool
-		if _, ok := spec.Tags["weekly"]; ok {
-			weekly = true
-		}
-		if !weekly {
+		if !spec.Suites.Contains(registry.Weekly) {
 			return fmt.Errorf(
 				"%s: timeout %s exceeds the maximum allowed of %s", spec.Name, spec.Timeout, maxTimeout,
 			)

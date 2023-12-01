@@ -135,7 +135,6 @@ func registerRestore(r registry.Registry) {
 		Timeout:          withPauseSpecs.timeout,
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
-		Tags:             registry.Tags("aws"),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			rd := makeRestoreDriver(t, c, withPauseSpecs)
@@ -281,7 +280,6 @@ func registerRestore(r registry.Registry) {
 			timeout:                1 * time.Hour,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
 		{
@@ -312,7 +310,6 @@ func registerRestore(r registry.Registry) {
 			timeout:                1 * time.Hour,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
 		{
@@ -325,7 +322,6 @@ func registerRestore(r registry.Registry) {
 			timeout:                90 * time.Minute,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
 		{
@@ -336,7 +332,6 @@ func registerRestore(r registry.Registry) {
 			timeout:                1 * time.Hour,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
 		{
@@ -347,7 +342,6 @@ func registerRestore(r registry.Registry) {
 			timeout:                1 * time.Hour,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: 48,
 		},
 		{
@@ -362,7 +356,6 @@ func registerRestore(r registry.Registry) {
 			timeout:                5 * time.Hour,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
 		{
@@ -375,7 +368,6 @@ func registerRestore(r registry.Registry) {
 			timeout:                24 * time.Hour,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Weekly),
-			tags:                   registry.Tags("weekly", "aws-weekly"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
 		{
@@ -397,7 +389,6 @@ func registerRestore(r registry.Registry) {
 			timeout: 30 * time.Hour,
 			clouds:  registry.AllClouds,
 			suites:  registry.Suites(registry.Weekly),
-			tags:    registry.Tags("weekly", "aws-weekly"),
 			setUpStmts: []string{
 				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
 			},
@@ -415,7 +406,6 @@ func registerRestore(r registry.Registry) {
 			timeout: 30 * time.Hour,
 			clouds:  registry.AllExceptAWS,
 			suites:  registry.Suites(registry.Weekly),
-			tags:    registry.Tags("weekly"),
 			setUpStmts: []string{
 				`SET CLUSTER SETTING backup.restore_span.target_size = '0'`,
 			},
@@ -431,7 +421,6 @@ func registerRestore(r registry.Registry) {
 			timeout:                3 * time.Hour,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			fingerprint:            8445446819555404274,
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
@@ -453,7 +442,6 @@ func registerRestore(r registry.Registry) {
 			EncryptionSupport: registry.EncryptionAlwaysDisabled,
 			CompatibleClouds:  sp.clouds,
 			Suites:            sp.suites,
-			Tags:              sp.tags,
 			Skip:              sp.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
@@ -828,7 +816,6 @@ type restoreSpecs struct {
 	timeout time.Duration
 	clouds  registry.CloudSet
 	suites  registry.SuiteSet
-	tags    map[string]struct{}
 
 	// restoreUptoIncremental specifies the number of incremental backups in the
 	// chain to restore up to.

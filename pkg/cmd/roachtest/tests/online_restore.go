@@ -43,7 +43,6 @@ func registerOnlineRestore(r registry.Registry) {
 			timeout:                5 * time.Hour,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: 1,
 			skip:                   "used for ad hoc experiments",
 		},
@@ -58,7 +57,6 @@ func registerOnlineRestore(r registry.Registry) {
 			timeout:                5 * time.Hour,
 			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: 1,
 			skip:                   "used for ad hoc experiments",
 		},
@@ -89,7 +87,6 @@ func registerOnlineRestore(r registry.Registry) {
 					EncryptionSupport: registry.EncryptionAlwaysDisabled,
 					CompatibleClouds:  sp.clouds,
 					Suites:            sp.suites,
-					Tags:              sp.tags,
 					Skip:              sp.skip,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
