@@ -430,6 +430,9 @@ func (k Key) IsFinal() bool {
 //     (e.g. 24.1).
 //
 // The key must be in the range [MinSupported, Latest].
+//
+// Note that the release series won't have the DevOffset applied, even if the
+// version has it.
 func (k Key) ReleaseSeries() roachpb.ReleaseSeries {
 	// Note: TestReleaseSeries ensures that this works for all valid Keys.
 	s, _ := removeDevOffset(k.Version()).ReleaseSeries()

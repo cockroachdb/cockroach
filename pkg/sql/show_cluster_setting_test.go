@@ -38,26 +38,26 @@ func TestCheckClusterSettingValuesAreEquivalent(t *testing.T) {
 		exp   string
 	}{
 		{ // 0
-			local: encode(t, "22.2-10"),
-			kv:    encode(t, "22.2-10"),
+			local: encode(t, "22.2-upgrading-to-23.1-step-010"),
+			kv:    encode(t, "22.2-upgrading-to-23.1-step-010"),
 		},
 		{ // 1
-			local: encode(t, "22.2-12"),
-			kv:    encode(t, "22.2-11"),
-			exp:   "value differs between local setting (22.2-12) and KV (22.2-11)",
+			local: encode(t, "22.2-upgrading-to-23.1-step-012"),
+			kv:    encode(t, "22.2-upgrading-to-23.1-step-011"),
+			exp:   "value differs between local setting (22.2-upgrading-to-23.1-step-012) and KV (22.2-upgrading-to-23.1-step-011)",
 		},
 		{ // 2
-			local: encode(t, "22.2-11"),
-			kv:    encode(t, "22.2-10"),
+			local: encode(t, "22.2-upgrading-to-23.1-step-011"),
+			kv:    encode(t, "22.2-upgrading-to-23.1-step-010"),
 		},
 		{ // 3
-			local: encode(t, "22.2-11"),
+			local: encode(t, "22.2-upgrading-to-23.1-step-011"),
 			kv:    []byte("abc"),
-			exp:   "value differs between local setting (22.2-11) and KV ([97 98 99])",
+			exp:   "value differs between local setting (22.2-upgrading-to-23.1-step-011) and KV ([97 98 99])",
 		},
 		{ // 4
-			kv:  encode(t, "22.2-11"),
-			exp: "value differs between local setting ([]) and KV (22.2-11)",
+			kv:  encode(t, "22.2-upgrading-to-23.1-step-011"),
+			exp: "value differs between local setting ([]) and KV (22.2-upgrading-to-23.1-step-011)",
 		},
 	} {
 		t.Run("", func(t *testing.T) {
