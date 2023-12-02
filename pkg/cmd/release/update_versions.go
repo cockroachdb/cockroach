@@ -377,6 +377,11 @@ func generateRepoList(
 	if err != nil {
 		return []prRepo{}, fmt.Errorf("listing staging branches: %w", err)
 	}
+	if maybeRCBranches, err := listRemoteBranches(fmt.Sprintf("rc-%d.%d.*", releasedVersion.Major(), releasedVersion.Minor())); err != nil {
+		return []prRepo{}, fmt.Errorf("listing staging branches: %w", err)
+	} else {
+		maybeVersionBumpBranches = append(maybeVersionBumpBranches, maybeRCBranches...)
+	}
 	if releasedVersion.Prerelease() == "" {
 		maybeVersionBumpBranches = append(maybeVersionBumpBranches, fmt.Sprintf("release-%d.%d", releasedVersion.Major(), releasedVersion.Minor()))
 	} else {

@@ -257,7 +257,7 @@ tc_build_branch() {
 # function.
 tc_release_branch() {
   branch=$(tc_build_branch)
-  [[ "$branch" == master || "$branch" == release-* || "$branch" == provisional_* ]]
+  [[ "$branch" == master || "$branch" == release-* || "$branch" == "rc-"* || "$branch" == provisional_* ]]
 }
 
 tc_bors_branch() {
