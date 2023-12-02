@@ -1247,7 +1247,9 @@ func (c *conn) Flush(pos sql.CmdPos) error {
 
 	c.writerState.fi.lastFlushed = pos
 	// Make sure that the entire cmdStarts buffer is drained.
-	c.writerState.fi.cmdStarts.Discard()
+	// Use (*ring.Buffer).Reset instead of (*ring.Buffer).Discard to preserve
+	// the underlying ring buffer memory for reuse.
+	c.writerState.fi.cmdStarts.Reset()
 
 	_ /* n */, err := c.writerState.buf.WriteTo(c.conn)
 	if err != nil {
