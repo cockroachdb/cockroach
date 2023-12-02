@@ -177,79 +177,79 @@ var (
 		Name:        "sys.host.disk.read.count",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
-		Help:        "Disk read operations across all disks since this process started",
+		Help:        "Disk read operations across all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskReadBytes = metric.Metadata{
 		Name:        "sys.host.disk.read.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
-		Help:        "Bytes read from all disks since this process started",
+		Help:        "Bytes read from all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskReadTime = metric.Metadata{
 		Name:        "sys.host.disk.read.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
-		Help:        "Time spent reading from all disks since this process started",
+		Help:        "Time spent reading from all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskWriteCount = metric.Metadata{
 		Name:        "sys.host.disk.write.count",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
-		Help:        "Disk write operations across all disks since this process started",
+		Help:        "Disk write operations across all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskWriteBytes = metric.Metadata{
 		Name:        "sys.host.disk.write.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
-		Help:        "Bytes written to all disks since this process started",
+		Help:        "Bytes written to all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskWriteTime = metric.Metadata{
 		Name:        "sys.host.disk.write.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
-		Help:        "Time spent writing to all disks since this process started",
+		Help:        "Time spent writing to all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskIOTime = metric.Metadata{
 		Name:        "sys.host.disk.io.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
-		Help:        "Time spent reading from or writing to all disks since this process started",
+		Help:        "Time spent reading from or writing to all disks since this process started (as reported by the OS)",
 	}
 	metaHostDiskWeightedIOTime = metric.Metadata{
 		Name:        "sys.host.disk.weightedio.time",
 		Unit:        metric.Unit_NANOSECONDS,
 		Measurement: "Time",
-		Help:        "Weighted time spent reading from or writing to to all disks since this process started",
+		Help:        "Weighted time spent reading from or writing to to all disks since this process started (as reported by the OS)",
 	}
 	metaHostIopsInProgress = metric.Metadata{
 		Name:        "sys.host.disk.iopsinprogress",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
-		Help:        "IO operations currently in progress on this host",
+		Help:        "IO operations currently in progress on this host (as reported by the OS)",
 	}
 	metaHostNetRecvBytes = metric.Metadata{
 		Name:        "sys.host.net.recv.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
-		Help:        "Bytes received on all network interfaces since this process started",
+		Help:        "Bytes received on all network interfaces since this process started (as reported by the OS)",
 	}
 	metaHostNetRecvPackets = metric.Metadata{
 		Name:        "sys.host.net.recv.packets",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
-		Help:        "Packets received on all network interfaces since this process started",
+		Help:        "Packets received on all network interfaces since this process started (as reported by the OS)",
 	}
 	metaHostNetSendBytes = metric.Metadata{
 		Name:        "sys.host.net.send.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
-		Help:        "Bytes sent on all network interfaces since this process started",
+		Help:        "Bytes sent on all network interfaces since this process started (as reported by the OS)",
 	}
 	metaHostNetSendPackets = metric.Metadata{
 		Name:        "sys.host.net.send.packets",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
-		Help:        "Packets sent on all network interfaces since this process started",
+		Help:        "Packets sent on all network interfaces since this process started (as reported by the OS)",
 	}
 )
 
