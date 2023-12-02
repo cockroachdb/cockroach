@@ -456,6 +456,7 @@ func registerTPCC(r registry.Registry) {
 		// running with the max supported warehouses.
 		Name:              "tpcc/headroom/" + headroomSpec.String(),
 		Owner:             registry.OwnerTestEng,
+		Benchmark:         true,
 		CompatibleClouds:  registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly, registry.ReleaseQualification),
 		Tags:              registry.Tags(`default`, `release_qualification`, `aws`),
@@ -477,6 +478,7 @@ func registerTPCC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:              "tpcc/headroom/isolation-level=read-committed/" + headroomSpec.String(),
 		Owner:             registry.OwnerTestEng,
+		Benchmark:         true,
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
 		Tags:              registry.Tags(`default`),
@@ -521,6 +523,7 @@ func registerTPCC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:              "tpcc-nowait/nodes=3/w=1",
 		Owner:             registry.OwnerTestEng,
+		Benchmark:         true,
 		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
@@ -539,6 +542,7 @@ func registerTPCC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:              "tpcc-nowait/isolation-level=read-committed/nodes=3/w=1",
 		Owner:             registry.OwnerTestEng,
+		Benchmark:         true,
 		Cluster:           r.MakeClusterSpec(4, spec.CPU(16)),
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
@@ -558,6 +562,7 @@ func registerTPCC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "weekly/tpcc/headroom",
 		Owner:            registry.OwnerTestEng,
+		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
 		Tags:             registry.Tags(`weekly`),
