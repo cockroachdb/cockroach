@@ -110,6 +110,14 @@ func TestTileEnvelope(t *testing.T) {
 			bounds:   "SRID=4326;POLYGON((-180 -90,-180 90,180 90,180 -90,-180 -90))",
 			margin:   0.0,
 		},
+		{
+			desc:     "Invalid geometric bounds",
+			tileZoom: 1,
+			tileX:    1,
+			tileY:    1,
+			bounds:   "SRID=4326;LINESTRING EMPTY",
+			margin:   0.0,
+		},
 	}
 
 	t.Run("Errors on invalid input", func(t *testing.T) {

@@ -33,6 +33,13 @@ func TileEnvelope(
 		)
 	}
 
+	if bbox == nil {
+		return geo.Geometry{}, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"Geometrics bounds are nil",
+		)
+	}
+
 	if bbox.HiX-bbox.LoX <= 0 || bbox.HiY-bbox.LoY <= 0 {
 		return geo.Geometry{}, pgerror.New(
 			pgcode.InvalidParameterValue,
