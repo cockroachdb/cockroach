@@ -426,3 +426,10 @@ CREATE MATERIALIZED VIEW v (b) AS SELECT a * 2 FROM t WITH DATA;
 
 statement ok
 CREATE INDEX ON v (b);
+
+# Issue #114843 happened because we are unable to create
+# virtual columnsq on materialized views in the declarative
+# schema changer.
+statement ok
+CREATE INDEX ON v ((b>0));
+

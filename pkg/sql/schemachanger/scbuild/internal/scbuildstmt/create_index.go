@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -568,6 +569,9 @@ func addColumnsForSecondaryIndex(
 	for i, columnNode := range n.Columns {
 		colName := columnNode.Column
 		if columnNode.Expr != nil {
+			// Add column needs to support materialized views for the
+			// declarative schema changer to work.
+			fallbackIfRelationIsNotTable(n, relation)
 			colNameStr := maybeCreateVirtualColumnForIndex(b, &n.Table, relation.(*scpb.Table), columnNode.Expr, n.Inverted, i == len(n.Columns)-1)
 			colName = tree.Name(colNameStr)
 			if !expressionTelemtryCounted {
@@ -653,6 +657,9 @@ func addColumnsForSecondaryIndex(
 	// Set up sharding.
 	if n.Sharded != nil {
 		b.IncrementSchemaChangeIndexCounter("hash_sharded")
+		// Add column needs to support materialized views for the
+		// declarative schema changer to work.
+		fallbackIfRelationIsNotTable(n, relation)
 		sharding, shardColID := ensureShardColAndMakeShardDesc(b, relation.(*scpb.Table), keyColNames,
 			n.Sharded.ShardBuckets, n.StorageParams, n)
 		idxSpec.secondary.Sharding = sharding
@@ -945,4 +952,17 @@ func maybeApplyStorageParameters(b BuildCtx, n *tree.CreateIndex, idxSpec *index
 	} else {
 		idxSpec.secondary.GeoConfig = nil
 	}
+}
+
+// fallbackIfRelationIsNotTable falls back if a relation element is
+// not a table. This is temporally used in cases involving materialized
+// views, where a column needs to be added.
+func fallbackIfRelationIsNotTable(node tree.NodeFormatter, element scpb.Element) {
+	switch element.(type) {
+	case *scpb.Table:
+		return
+	case *scpb.View, *scpb.Sequence:
+		panic(scerrors.NotImplementedErrorf(node, "relation is not a view"))
+	}
+	panic(errors.AssertionFailedf("element is not a relation type"))
 }
