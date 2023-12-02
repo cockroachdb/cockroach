@@ -496,6 +496,10 @@ message RestoreDetails {
   // Removes regions.
   bool RemoveRegions = 33;
 
+  // UnsafeRestoreIncompatibleVersion allows restoring a backup older than the min compatible
+  // version.
+  bool unsafe_restore_incompatible_version = 34;
+
   // NEXT ID: 34.
 }
 
