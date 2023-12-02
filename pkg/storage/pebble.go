@@ -1088,6 +1088,12 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		// Pebble has better guards against this.
 		return cfg.SharedStorage != nil || !IngestAsFlushable.Get(&cfg.Settings.SV)
 	}
+	// Multi-level compactions were discovered to cause excessively large
+	// compactions that can have adverse affects. We disable these types of
+	// compactions for now.
+	// See https://github.com/cockroachdb/pebble/issues/3120
+	// TODO(travers): Re-enable, once the issues are resolved.
+	opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
 
 	auxDir := opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
 	if err := opts.FS.MkdirAll(auxDir, 0755); err != nil {
