@@ -37,6 +37,9 @@ type Metrics struct {
 	Listings *metric.Counter
 	// ListingResults counts the listing results from cloud storage.
 	ListingResults *metric.Counter
+	// ConnsOpened, ConnsReused and TLSHandhakes track connection http info for cloud
+	// storage when collecting this info is enabled.
+	ConnsOpened, ConnsReused, TLSHandhakes *metric.Counter
 }
 
 // MakeMetrics returns a new instance of Metrics.
@@ -83,6 +86,27 @@ func MakeMetrics() metric.Struct {
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
+	connsOpened := metric.Metadata{
+		Name:        "cloud.conns_opened",
+		Help:        "HTTP connections opened by cloud operations",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	connsReused := metric.Metadata{
+		Name:        "cloud.conns_reused",
+		Help:        "HTTP connections reused by cloud operations",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	tlsHandhakes := metric.Metadata{
+		Name:        "cloud.tls_handshakes",
+		Help:        "TLS handshakes done by cloud operations",
+		Measurement: "Handshakes",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
 	return &Metrics{
 		Readers:        metric.NewCounter(cloudReaders),
 		ReadBytes:      metric.NewCounter(cloudReadBytes),
@@ -90,6 +114,9 @@ func MakeMetrics() metric.Struct {
 		WriteBytes:     metric.NewCounter(cloudWriteBytes),
 		Listings:       metric.NewCounter(listings),
 		ListingResults: metric.NewCounter(listingResults),
+		ConnsOpened:    metric.NewCounter(connsOpened),
+		ConnsReused:    metric.NewCounter(connsReused),
+		TLSHandhakes:   metric.NewCounter(tlsHandhakes),
 	}
 }
 
