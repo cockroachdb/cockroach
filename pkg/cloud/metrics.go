@@ -25,6 +25,8 @@ var NilMetrics = (*Metrics)(nil)
 // Metrics encapsulates the metrics tracking interactions with cloud storage
 // providers.
 type Metrics struct {
+	// Readers counts the cloud storage readers opened.
+	Readers *metric.Counter
 	// ReadBytes counts the bytes read from cloud storage.
 	ReadBytes *metric.Counter
 	// WriteBytes counts the bytes written to cloud storage.
@@ -33,6 +35,13 @@ type Metrics struct {
 
 // MakeMetrics returns a new instance of Metrics.
 func MakeMetrics() metric.Struct {
+	cloudReaders := metric.Metadata{
+		Name:        "cloud.readers_opened",
+		Help:        "Readers opened by all cloud operations",
+		Measurement: "Files",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
 	cloudReadBytes := metric.Metadata{
 		Name:        "cloud.read_bytes",
 		Help:        "Bytes read from all cloud operations",
@@ -48,6 +57,7 @@ func MakeMetrics() metric.Struct {
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
 	return &Metrics{
+		Readers:    metric.NewCounter(cloudReaders),
 		ReadBytes:  metric.NewCounter(cloudReadBytes),
 		WriteBytes: metric.NewCounter(cloudWriteBytes),
 	}
@@ -65,6 +75,7 @@ func (m *Metrics) Reader(
 	if m == nil {
 		return r
 	}
+	m.Readers.Inc(1)
 	return &metricsReader{
 		inner: r,
 		m:     m,
