@@ -29,6 +29,8 @@ type Metrics struct {
 	Readers *metric.Counter
 	// ReadBytes counts the bytes read from cloud storage.
 	ReadBytes *metric.Counter
+	// Writers counts the cloud storage writers opened.
+	Writers *metric.Counter
 	// WriteBytes counts the bytes written to cloud storage.
 	WriteBytes *metric.Counter
 }
@@ -49,6 +51,13 @@ func MakeMetrics() metric.Struct {
 		Unit:        metric.Unit_BYTES,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
+	cloudWriters := metric.Metadata{
+		Name:        "cloud.writers_opened",
+		Help:        "Writers opened by all cloud operations",
+		Measurement: "files",
+		Unit:        metric.Unit_BYTES,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
 	cloudWriteBytes := metric.Metadata{
 		Name:        "cloud.write_bytes",
 		Help:        "Bytes written by all cloud operations",
@@ -59,6 +68,7 @@ func MakeMetrics() metric.Struct {
 	return &Metrics{
 		Readers:    metric.NewCounter(cloudReaders),
 		ReadBytes:  metric.NewCounter(cloudReadBytes),
+		Writers:    metric.NewCounter(cloudWriters),
 		WriteBytes: metric.NewCounter(cloudWriteBytes),
 	}
 }
@@ -87,6 +97,7 @@ func (m *Metrics) Writer(_ context.Context, _ ExternalStorage, w io.WriteCloser)
 	if m == nil {
 		return w
 	}
+	m.Writers.Inc(1)
 	return &metricsWriter{
 		w: w,
 		m: m,
