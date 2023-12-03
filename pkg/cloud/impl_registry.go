@@ -305,10 +305,15 @@ func (e *esWrapper) ReadFile(
 }
 
 func (e *esWrapper) List(ctx context.Context, prefix, delimiter string, fn ListingFn) error {
+	countingFn := fn
 	if e.metrics != nil {
 		e.metrics.Listings.Inc(1)
+		countingFn = func(s string) error {
+			e.metrics.ListingResults.Inc(1)
+			return fn(s)
+		}
 	}
-	return e.ExternalStorage.List(ctx, prefix, delimiter, fn)
+	return e.ExternalStorage.List(ctx, prefix, delimiter, countingFn)
 }
 
 func (e *esWrapper) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
