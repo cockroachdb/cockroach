@@ -154,7 +154,7 @@ type ExternalStorageContext struct {
 	DB                isql.DB
 	Options           []ExternalStorageOption
 	Limiters          Limiters
-	MetricsRecorder   MetricsRecorder
+	MetricsRecorder   *Metrics
 }
 
 // ExternalStorageOptions holds dependencies and values that can be

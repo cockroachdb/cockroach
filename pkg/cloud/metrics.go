@@ -58,79 +58,39 @@ var _ metric.Struct = (*Metrics)(nil)
 // MetricStruct implements the metric.Struct interface.
 func (m *Metrics) MetricStruct() {}
 
-// MetricsRecorder is the interface that describes the methods that can be used
-// to mutate the metrics corresponding to cloud operations.
-type MetricsRecorder interface {
-	// RecordReadBytes records the bytes read.
-	RecordReadBytes(int64)
-	// RecordWriteBytes records the bytes written.
-	RecordWriteBytes(int64)
-	// Metrics returns the underlying Metrics struct.
-	Metrics() *Metrics
-}
-
-var _ MetricsRecorder = &Metrics{}
-
-// RecordReadBytes implements the MetricsRecorder interface.
-func (m *Metrics) RecordReadBytes(bytes int64) {
-	if m == nil {
-		return
-	}
-	m.ReadBytes.Inc(bytes)
-}
-
-// RecordWriteBytes implements the MetricsRecorder interface.
-func (m *Metrics) RecordWriteBytes(bytes int64) {
-	if m == nil {
-		return
-	}
-	m.WriteBytes.Inc(bytes)
-}
-
-// Metrics implements the MetricsRecorder interface.
-func (m *Metrics) Metrics() *Metrics {
-	return m
-}
-
-type metricsReadWriter struct {
-	metricsRecorder MetricsRecorder
-}
-
-func newMetricsReadWriter(m MetricsRecorder) ReadWriterInterceptor {
-	return &metricsReadWriter{metricsRecorder: m}
-}
-
 // Reader implements the ReadWriterInterceptor interface.
-func (m *metricsReadWriter) Reader(
+func (m *Metrics) Reader(
 	_ context.Context, _ ExternalStorage, r ioctx.ReadCloserCtx,
 ) ioctx.ReadCloserCtx {
+	if m == nil {
+		return r
+	}
 	return &metricsReader{
-		inner:           r,
-		metricsRecorder: m.metricsRecorder,
+		inner: r,
+		m:     m,
 	}
 }
 
 // Writer implements the ReadWriterInterceptor interface.
-func (m *metricsReadWriter) Writer(
-	_ context.Context, _ ExternalStorage, w io.WriteCloser,
-) io.WriteCloser {
+func (m *Metrics) Writer(_ context.Context, _ ExternalStorage, w io.WriteCloser) io.WriteCloser {
+	if m == nil {
+		return w
+	}
 	return &metricsWriter{
-		w:               w,
-		metricsRecorder: m.metricsRecorder,
+		w: w,
+		m: m,
 	}
 }
 
-var _ ReadWriterInterceptor = &metricsReadWriter{}
-
 type metricsReader struct {
-	inner           ioctx.ReadCloserCtx
-	metricsRecorder MetricsRecorder
+	inner ioctx.ReadCloserCtx
+	m     *Metrics
 }
 
 // Read implements the ioctx.ReadCloserCtx interface.
 func (mr *metricsReader) Read(ctx context.Context, p []byte) (int, error) {
 	n, err := mr.inner.Read(ctx, p)
-	mr.metricsRecorder.RecordReadBytes(int64(n))
+	mr.m.ReadBytes.Inc(int64(n))
 	return n, err
 }
 
@@ -140,14 +100,14 @@ func (mr *metricsReader) Close(ctx context.Context) error {
 }
 
 type metricsWriter struct {
-	w               io.WriteCloser
-	metricsRecorder MetricsRecorder
+	w io.WriteCloser
+	m *Metrics
 }
 
 // Write implements the WriteCloser interface.
 func (mw *metricsWriter) Write(p []byte) (int, error) {
 	n, err := mw.w.Write(p)
-	mw.metricsRecorder.RecordWriteBytes(int64(n))
+	mw.m.WriteBytes.Inc(int64(n))
 	return n, err
 }
 
