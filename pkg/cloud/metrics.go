@@ -35,6 +35,8 @@ type Metrics struct {
 	WriteBytes *metric.Counter
 	// Listings counts the listing calls made to cloud storage.
 	Listings *metric.Counter
+	// ListingResults counts the listing results from cloud storage.
+	ListingResults *metric.Counter
 }
 
 // MakeMetrics returns a new instance of Metrics.
@@ -74,12 +76,20 @@ func MakeMetrics() metric.Struct {
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
+	listingResults := metric.Metadata{
+		Name:        "cloud.listing_results",
+		Help:        "Listing results by all cloud operations",
+		Measurement: "Results",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
 	return &Metrics{
-		Readers:    metric.NewCounter(cloudReaders),
-		ReadBytes:  metric.NewCounter(cloudReadBytes),
-		Writers:    metric.NewCounter(cloudWriters),
-		WriteBytes: metric.NewCounter(cloudWriteBytes),
-		Listings:   metric.NewCounter(listings),
+		Readers:        metric.NewCounter(cloudReaders),
+		ReadBytes:      metric.NewCounter(cloudReadBytes),
+		Writers:        metric.NewCounter(cloudWriters),
+		WriteBytes:     metric.NewCounter(cloudWriteBytes),
+		Listings:       metric.NewCounter(listings),
+		ListingResults: metric.NewCounter(listingResults),
 	}
 }
 
