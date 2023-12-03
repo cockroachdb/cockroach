@@ -3902,7 +3902,8 @@ var charts = []sectionDescription{
 			{
 				Title: "Activity",
 				Metrics: []string{
-					"cloud.cloud.readers_opened",
+					"cloud.readers_opened",
+					"cloud.writers_opened",
 				},
 			},
 		},
