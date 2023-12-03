@@ -213,7 +213,7 @@ func MakeExternalStorage(
 			ExternalStorage: e,
 			lim:             limiters[dest.Provider],
 			ioRecorder:      options.ioAccountingInterceptor,
-			metricsRecorder: newMetricsReadWriter(cloudMetrics),
+			metrics:         cloudMetrics,
 		}, nil
 	}
 
@@ -264,9 +264,9 @@ func MakeLimiters(ctx context.Context, sv *settings.Values) Limiters {
 type esWrapper struct {
 	ExternalStorage
 
-	lim             rwLimiter
-	ioRecorder      ReadWriterInterceptor
-	metricsRecorder ReadWriterInterceptor
+	lim        rwLimiter
+	ioRecorder ReadWriterInterceptor
+	metrics    *Metrics
 }
 
 func (e *esWrapper) wrapReader(ctx context.Context, r ioctx.ReadCloserCtx) ioctx.ReadCloserCtx {
@@ -277,7 +277,7 @@ func (e *esWrapper) wrapReader(ctx context.Context, r ioctx.ReadCloserCtx) ioctx
 		r = e.ioRecorder.Reader(ctx, e.ExternalStorage, r)
 	}
 
-	r = e.metricsRecorder.Reader(ctx, e.ExternalStorage, r)
+	r = e.metrics.Reader(ctx, e.ExternalStorage, r)
 	return r
 }
 
@@ -289,7 +289,7 @@ func (e *esWrapper) wrapWriter(ctx context.Context, w io.WriteCloser) io.WriteCl
 		w = e.ioRecorder.Writer(ctx, e.ExternalStorage, w)
 	}
 
-	w = e.metricsRecorder.Writer(ctx, e.ExternalStorage, w)
+	w = e.metrics.Writer(ctx, e.ExternalStorage, w)
 	return w
 }
 
@@ -302,6 +302,10 @@ func (e *esWrapper) ReadFile(
 	}
 
 	return e.wrapReader(ctx, r), s, nil
+}
+
+func (e *esWrapper) List(ctx context.Context, prefix, delimiter string, fn ListingFn) error {
+	return e.ExternalStorage.List(ctx, prefix, delimiter, fn)
 }
 
 func (e *esWrapper) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
