@@ -3893,10 +3893,16 @@ var charts = []sectionDescription{
 		Organization: [][]string{{Jobs, "External Storage"}},
 		Charts: []chartDescription{
 			{
-				Title: "External Storage",
+				Title: "Transfer",
 				Metrics: []string{
 					"cloud.read_bytes",
 					"cloud.write_bytes",
+				},
+			},
+			{
+				Title: "Activity",
+				Metrics: []string{
+					"cloud.cloud.readers_opened",
 				},
 			},
 		},
