@@ -3906,6 +3906,12 @@ var charts = []sectionDescription{
 					"cloud.writers_opened",
 				},
 			},
+			{
+				Title: "Listing",
+				Metrics: []string{
+					"cloud.listings",
+				},
+			},
 		},
 	},
 	{

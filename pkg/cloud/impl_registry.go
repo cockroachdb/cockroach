@@ -348,6 +348,9 @@ func (e *esWrapper) ReadFileAt(
 }
 
 func (e *esWrapper) List(ctx context.Context, prefix, delimiter string, fn ListingFn) error {
+	if e.metrics != nil {
+		e.metrics.Listings.Inc(1)
+	}
 	return e.ExternalStorage.List(ctx, prefix, delimiter, fn)
 }
 
