@@ -3907,6 +3907,14 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Connections",
+				Metrics: []string{
+					"cloud.conns_opened",
+					"cloud.conns_reused",
+					"cloud.tls_handshakes",
+				},
+			},
+			{
 				Title: "Listing",
 				Metrics: []string{
 					"cloud.listings",
