@@ -25,7 +25,7 @@ import (
 var ErrStepLocalMsg = errors.New("raft: cannot step raft local message")
 
 // ErrStepPeerNotFound is returned when try to step a response message
-// but there is no peer found in raft.prs for that node.
+// but there is no peer found in raft.trk for that node.
 var ErrStepPeerNotFound = errors.New("raft: cannot step as peer not found")
 
 // RawNode is a thread-unsafe Node.
@@ -120,7 +120,7 @@ func (rn *RawNode) Step(m pb.Message) error {
 	if IsLocalMsg(m.Type) && !IsLocalMsgTarget(m.From) {
 		return ErrStepLocalMsg
 	}
-	if IsResponseMsg(m.Type) && !IsLocalMsgTarget(m.From) && rn.raft.prs.Progress[m.From] == nil {
+	if IsResponseMsg(m.Type) && !IsLocalMsgTarget(m.From) && rn.raft.trk.Progress[m.From] == nil {
 		return ErrStepPeerNotFound
 	}
 	return rn.raft.Step(m)
@@ -516,7 +516,7 @@ const (
 // WithProgress is a helper to introspect the Progress for this node and its
 // peers.
 func (rn *RawNode) WithProgress(visitor func(id uint64, typ ProgressType, pr tracker.Progress)) {
-	rn.raft.prs.Visit(func(id uint64, pr *tracker.Progress) {
+	rn.raft.trk.Visit(func(id uint64, pr *tracker.Progress) {
 		typ := ProgressTypePeer
 		if pr.IsLearner {
 			typ = ProgressTypeLearner

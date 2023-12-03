@@ -170,7 +170,7 @@ func testNonleaderStartElection(t *testing.T, state StateType) {
 	if r.state != StateCandidate {
 		t.Errorf("state = %s, want %s", r.state, StateCandidate)
 	}
-	if !r.prs.Votes[r.id] {
+	if !r.trk.Votes[r.id] {
 		t.Errorf("vote for self = false, want true")
 	}
 	msgs := r.readMessages()

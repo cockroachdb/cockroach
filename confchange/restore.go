@@ -98,12 +98,12 @@ func toConfChangeSingle(cs pb.ConfState) (out []pb.ConfChangeSingle, in []pb.Con
 
 func chain(chg Changer, ops ...func(Changer) (tracker.Config, tracker.ProgressMap, error)) (tracker.Config, tracker.ProgressMap, error) {
 	for _, op := range ops {
-		cfg, prs, err := op(chg)
+		cfg, trk, err := op(chg)
 		if err != nil {
 			return tracker.Config{}, nil, err
 		}
 		chg.Tracker.Config = cfg
-		chg.Tracker.Progress = prs
+		chg.Tracker.Progress = trk
 	}
 	return chg.Tracker.Config, chg.Tracker.Progress, nil
 }
