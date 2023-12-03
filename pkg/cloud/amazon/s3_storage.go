@@ -514,6 +514,12 @@ func newClient(
 
 	opts := session.Options{}
 
+	httpClient, err := cloud.MakeHTTPClient(settings)
+	if err != nil {
+		return s3Client{}, "", err
+	}
+	opts.Config.HTTPClient = httpClient
+
 	if conf.endpoint != "" {
 		opts.Config.Endpoint = aws.String(conf.endpoint)
 		opts.Config.S3ForcePathStyle = aws.Bool(true)
@@ -521,12 +527,6 @@ func newClient(
 		if conf.region == "" {
 			conf.region = "default-region"
 		}
-
-		client, err := cloud.MakeHTTPClient(settings)
-		if err != nil {
-			return s3Client{}, "", err
-		}
-		opts.Config.HTTPClient = client
 	}
 
 	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
@@ -547,7 +547,6 @@ func newClient(
 	opts.Config.Retryer = retryer
 
 	var sess *session.Session
-	var err error
 
 	switch conf.auth {
 	case "", cloud.AuthParamSpecified:
