@@ -15,9 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -129,7 +131,7 @@ var _ Subscription = (*spanConfigStreamSubscription)(nil)
 
 // Subscribe implements the Subscription interface.
 func (p *spanConfigStreamSubscription) Subscribe(ctx context.Context) error {
-	ctx, sp := tracing.ChildSpan(ctx, "Subscription.Subscribe")
+	ctx, sp := tracing.ChildSpan(ctx, "spanConfigStreamSubscription.Subscribe")
 	defer sp.Finish()
 
 	defer close(p.eventsChan)
@@ -152,6 +154,16 @@ func (p *spanConfigStreamSubscription) Subscribe(ctx context.Context) error {
 	defer cancelFunc()
 	rows, err := srcConn.Query(cancelCtx, `SELECT crdb_internal.setup_span_configs_stream($1)`, p.tenantName)
 	if err != nil {
+		// TODO(adityamaru): This is a short term fix for https://github.com/cockroachdb/cockroach/issues/113682
+		// to allow for a < 23.2 source cluster to replicate into a 23.2 destination
+		// cluster. In the long term we will want to use the source cluster's
+		// cluster version to gate features on the destination.
+		if pgErr := (*pgconn.PgError)(nil); errors.As(err, &pgErr) {
+			if pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedFunction {
+				log.Warningf(ctx, "source cluster is running a version < 23.2, skipping span config replication: %v", err)
+				return nil
+			}
+		}
 		return err
 	}
 	// For close to return, the ctx passed to the query above must be cancelled.
