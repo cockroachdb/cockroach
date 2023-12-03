@@ -57,6 +57,7 @@ type Frontier interface {
 
 	// Entries invokes the given callback with the current timestamp for each
 	// component span in the tracked span set.
+	// The fn may not mutate this frontier while iterating.
 	Entries(fn Operation)
 
 	// SpanEntries invokes op for each sub-span of the specified span with the
@@ -77,6 +78,7 @@ type Frontier interface {
 	//
 	// Note: neither [a-b) nor [m, q) will be emitted since they do not intersect with the spans
 	// tracked by this frontier.
+	// The fn may not mutate this frontier while iterating.
 	SpanEntries(span roachpb.Span, op Operation)
 
 	// Len returns the number of spans tracked by the frontier.
@@ -161,6 +163,11 @@ type btreeFrontier struct {
 	idAlloc uint64
 
 	mergeAlloc []*btreeFrontierEntry // Amortize allocations.
+
+	// disallowMutationWhileIterating is set when iterating
+	// over frontier entries.  Attempts to mutate this frontier
+	// will panic under the test or return an error.
+	disallowMutationWhileIterating bool
 }
 
 // btreeFrontierEntry represents a timestamped span. It is used as the nodes in both
@@ -199,6 +206,10 @@ type btreeFrontierEntry struct {
 // the underlying keys.  If the caller has to modify underlying key slices, they
 // must pass in the copy.
 func (f *btreeFrontier) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) (retErr error) {
+	if err := f.checkDisallowedMutation(); err != nil {
+		return err
+	}
+
 	if expensiveChecksEnabled() {
 		defer func() {
 			if err := f.checkUnsafeKeyModification(); err != nil {
@@ -207,33 +218,31 @@ func (f *btreeFrontier) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span)
 		}()
 	}
 
-	collectOverlaps := func(s roachpb.Span) (overlaps []*btreeFrontierEntry) {
-		key := newSearchKey(s.Key, s.EndKey)
-		defer putFrontierEntry(key)
-
-		it := f.tree.MakeIter()
-		for it.FirstOverlap(key); it.Valid(); it.NextOverlap(key) {
-			overlaps = append(overlaps, it.Cur())
-		}
-		return overlaps
-	}
-
-	for _, s := range spans {
+	for _, toAdd := range spans {
 		// Validate caller provided span.
-		if err := checkSpan(s); err != nil {
+		if err := checkSpan(toAdd); err != nil {
 			return err
 		}
 
 		var sg roachpb.SpanGroup
-		sg.Add(s)
-		for _, o := range collectOverlaps(s) {
-			if err := f.deleteEntry(o); err != nil {
+		if err := collectOverlaps(toAdd, startAt, f, &sg); err != nil {
+			return err
+		}
+
+		if err := sg.ForEach(func(s roachpb.Span) error {
+			// Add span to this frontier. This is done in 2 steps: first, span
+			// is added with 0 timestamp; then the timestamp is forwarded.
+			// This is done to ensure that adjacent spans are merged.
+			e := newFrontierEntry(&f.idAlloc, s.Key, s.EndKey, hlc.Timestamp{})
+			if err := f.setEntry(e); err != nil {
+				putFrontierEntry(e)
 				return err
 			}
-		}
-		if err := sg.ForEach(func(span roachpb.Span) error {
-			e := newFrontierEntry(&f.idAlloc, span.Key, span.EndKey, startAt)
-			return f.setEntry(e)
+			if err := f.forward(s, startAt); err != nil {
+				putFrontierEntry(e)
+				return err
+			}
+			return nil
 		}); err != nil {
 			return err
 		}
@@ -283,6 +292,10 @@ func (f *btreeFrontier) PeekFrontierSpan() roachpb.Span {
 func (f *btreeFrontier) Forward(
 	span roachpb.Span, ts hlc.Timestamp,
 ) (forwarded bool, retErr error) {
+	if err := f.checkDisallowedMutation(); err != nil {
+		return false, err
+	}
+
 	// Validate caller provided span.
 	if err := checkSpan(span); err != nil {
 		return false, err
@@ -455,7 +468,6 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 		return f.mergeEntries(e)
 	}
 
-	it := f.tree.MakeIter()
 	for !todoEntry.isEmptyRange() { // Keep going as long as there is work to be done.
 		if expensiveChecksEnabled() {
 			if err := checkSpan(todoEntry.span()); err != nil {
@@ -464,6 +476,7 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 		}
 
 		// Seek to the first entry overlapping todoEntry.
+		it := f.tree.MakeIter()
 		it.FirstOverlap(todoEntry)
 		if !it.Valid() {
 			break
@@ -501,9 +514,9 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 		// At this point, we know that overlap timestamp is not ahead of the
 		// insertTS (otherwise we'd hit fast case above).
 		// We need to split overlap range into multiple parts.
-		// 1. Possibly isEmptyRange part before todoEntry.Start
+		// 1. Possibly empty part before todoEntry.Start
 		// 2. Middle part (with updated timestamp),
-		// 3. Possibly isEmptyRange part after todoEntry end.
+		// 3. Possibly empty part after todoEntry end.
 		if overlap.Start.Compare(todoEntry.Start) < 0 {
 			// Split overlap into 2 entries
 			// [overlap.Start, todoEntry.Start) and [todoEntry.Start, overlap.End)
@@ -549,9 +562,18 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 	return nil
 }
 
+func (f *btreeFrontier) disallowMutations() func() {
+	f.disallowMutationWhileIterating = true
+	return func() {
+		f.disallowMutationWhileIterating = false
+	}
+}
+
 // Entries invokes the given callback with the current timestamp for each
 // component span in the tracked span set.
 func (f *btreeFrontier) Entries(fn Operation) {
+	defer f.disallowMutations()()
+
 	it := f.tree.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
 		if fn(it.Cur().span(), it.Cur().ts) == StopMatch {
@@ -579,6 +601,8 @@ func (f *btreeFrontier) Entries(fn Operation) {
 // Note: neither [a-b) nor [m, q) will be emitted since they do not intersect with the spans
 // tracked by this frontier.
 func (f *btreeFrontier) SpanEntries(span roachpb.Span, op Operation) {
+	defer f.disallowMutations()()
+
 	todoRange := newSearchKey(span.Key, span.EndKey)
 	defer putFrontierEntry(todoRange)
 
@@ -776,10 +800,46 @@ func (f *btreeFrontier) checkUnsafeKeyModification() error {
 	return nil
 }
 
+func (f *btreeFrontier) checkDisallowedMutation() error {
+	if f.disallowMutationWhileIterating {
+		err := errors.AssertionFailedWithDepthf(1, "attempt to mutate frontier while iterating")
+		if buildutil.CrdbTestBuild {
+			panic(err)
+		}
+		return err
+	}
+	return nil
+}
+
 var disableSanityChecksForBenchmark bool
 
 func expensiveChecksEnabled() bool {
 	return buildutil.CrdbTestBuild && !disableSanityChecksForBenchmark
+}
+
+// collectOverlaps collects all spans overlapping s, and including s, into span
+// group. Any overlapping spans with timestamp less than startAt are forwarded.
+func collectOverlaps(
+	s roachpb.Span, startAt hlc.Timestamp, f Frontier, sg *roachpb.SpanGroup,
+) error {
+	sg.Add(s)
+
+	var forwardOverlaps []roachpb.Span
+	f.SpanEntries(s, func(overlap roachpb.Span, ts hlc.Timestamp) (done OpResult) {
+		if ts.Less(startAt) {
+			forwardOverlaps = append(forwardOverlaps, overlap)
+		}
+		sg.Sub(overlap)
+		return false
+	})
+
+	// Any overlap with lower timestamp needs to be forwarded to startAt.
+	for _, s := range forwardOverlaps {
+		if _, err := f.Forward(s, startAt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type concurrentFrontier struct {
