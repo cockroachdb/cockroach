@@ -49,7 +49,7 @@ type Changer struct {
 //
 // [1]: https://github.com/ongardie/dissertation/blob/master/online-trim.pdf
 func (c Changer) EnterJoint(autoLeave bool, ccs ...pb.ConfChangeSingle) (tracker.Config, tracker.ProgressMap, error) {
-	cfg, prs, err := c.checkAndCopy()
+	cfg, trk, err := c.checkAndCopy()
 	if err != nil {
 		return c.err(err)
 	}
@@ -70,11 +70,11 @@ func (c Changer) EnterJoint(autoLeave bool, ccs ...pb.ConfChangeSingle) (tracker
 		outgoing(cfg.Voters)[id] = struct{}{}
 	}
 
-	if err := c.apply(&cfg, prs, ccs...); err != nil {
+	if err := c.apply(&cfg, trk, ccs...); err != nil {
 		return c.err(err)
 	}
 	cfg.AutoLeave = autoLeave
-	return checkAndReturn(cfg, prs)
+	return checkAndReturn(cfg, trk)
 }
 
 // LeaveJoint transitions out of a joint configuration. It is an error to call
@@ -92,7 +92,7 @@ func (c Changer) EnterJoint(autoLeave bool, ccs ...pb.ConfChangeSingle) (tracker
 //
 // [1]: https://github.com/ongardie/dissertation/blob/master/online-trim.pdf
 func (c Changer) LeaveJoint() (tracker.Config, tracker.ProgressMap, error) {
-	cfg, prs, err := c.checkAndCopy()
+	cfg, trk, err := c.checkAndCopy()
 	if err != nil {
 		return c.err(err)
 	}
@@ -102,7 +102,7 @@ func (c Changer) LeaveJoint() (tracker.Config, tracker.ProgressMap, error) {
 	}
 	for id := range cfg.LearnersNext {
 		nilAwareAdd(&cfg.Learners, id)
-		prs[id].IsLearner = true
+		trk[id].IsLearner = true
 	}
 	cfg.LearnersNext = nil
 
@@ -111,13 +111,13 @@ func (c Changer) LeaveJoint() (tracker.Config, tracker.ProgressMap, error) {
 		_, isLearner := cfg.Learners[id]
 
 		if !isVoter && !isLearner {
-			delete(prs, id)
+			delete(trk, id)
 		}
 	}
 	*outgoingPtr(&cfg.Voters) = nil
 	cfg.AutoLeave = false
 
-	return checkAndReturn(cfg, prs)
+	return checkAndReturn(cfg, trk)
 }
 
 // Simple carries out a series of configuration changes that (in aggregate)
@@ -126,7 +126,7 @@ func (c Changer) LeaveJoint() (tracker.Config, tracker.ProgressMap, error) {
 // zero, or if the configuration is in a joint state (i.e. if there is an
 // outgoing configuration).
 func (c Changer) Simple(ccs ...pb.ConfChangeSingle) (tracker.Config, tracker.ProgressMap, error) {
-	cfg, prs, err := c.checkAndCopy()
+	cfg, trk, err := c.checkAndCopy()
 	if err != nil {
 		return c.err(err)
 	}
@@ -134,20 +134,20 @@ func (c Changer) Simple(ccs ...pb.ConfChangeSingle) (tracker.Config, tracker.Pro
 		err := errors.New("can't apply simple config change in joint config")
 		return c.err(err)
 	}
-	if err := c.apply(&cfg, prs, ccs...); err != nil {
+	if err := c.apply(&cfg, trk, ccs...); err != nil {
 		return c.err(err)
 	}
 	if n := symdiff(incoming(c.Tracker.Voters), incoming(cfg.Voters)); n > 1 {
 		return tracker.Config{}, nil, errors.New("more than one voter changed without entering joint config")
 	}
 
-	return checkAndReturn(cfg, prs)
+	return checkAndReturn(cfg, trk)
 }
 
 // apply a change to the configuration. By convention, changes to voters are
 // always made to the incoming majority config Voters[0]. Voters[1] is either
 // empty or preserves the outgoing majority configuration while in a joint state.
-func (c Changer) apply(cfg *tracker.Config, prs tracker.ProgressMap, ccs ...pb.ConfChangeSingle) error {
+func (c Changer) apply(cfg *tracker.Config, trk tracker.ProgressMap, ccs ...pb.ConfChangeSingle) error {
 	for _, cc := range ccs {
 		if cc.NodeID == 0 {
 			// etcd replaces the NodeID with zero if it decides (downstream of
@@ -157,11 +157,11 @@ func (c Changer) apply(cfg *tracker.Config, prs tracker.ProgressMap, ccs ...pb.C
 		}
 		switch cc.Type {
 		case pb.ConfChangeAddNode:
-			c.makeVoter(cfg, prs, cc.NodeID)
+			c.makeVoter(cfg, trk, cc.NodeID)
 		case pb.ConfChangeAddLearnerNode:
-			c.makeLearner(cfg, prs, cc.NodeID)
+			c.makeLearner(cfg, trk, cc.NodeID)
 		case pb.ConfChangeRemoveNode:
-			c.remove(cfg, prs, cc.NodeID)
+			c.remove(cfg, trk, cc.NodeID)
 		case pb.ConfChangeUpdateNode:
 		default:
 			return fmt.Errorf("unexpected conf type %d", cc.Type)
@@ -175,10 +175,10 @@ func (c Changer) apply(cfg *tracker.Config, prs tracker.ProgressMap, ccs ...pb.C
 
 // makeVoter adds or promotes the given ID to be a voter in the incoming
 // majority config.
-func (c Changer) makeVoter(cfg *tracker.Config, prs tracker.ProgressMap, id uint64) {
-	pr := prs[id]
+func (c Changer) makeVoter(cfg *tracker.Config, trk tracker.ProgressMap, id uint64) {
+	pr := trk[id]
 	if pr == nil {
-		c.initProgress(cfg, prs, id, false /* isLearner */)
+		c.initProgress(cfg, trk, id, false /* isLearner */)
 		return
 	}
 
@@ -201,19 +201,19 @@ func (c Changer) makeVoter(cfg *tracker.Config, prs tracker.ProgressMap, id uint
 // simultaneously. Instead, we add the learner to LearnersNext, so that it will
 // be added to Learners the moment the outgoing config is removed by
 // LeaveJoint().
-func (c Changer) makeLearner(cfg *tracker.Config, prs tracker.ProgressMap, id uint64) {
-	pr := prs[id]
+func (c Changer) makeLearner(cfg *tracker.Config, trk tracker.ProgressMap, id uint64) {
+	pr := trk[id]
 	if pr == nil {
-		c.initProgress(cfg, prs, id, true /* isLearner */)
+		c.initProgress(cfg, trk, id, true /* isLearner */)
 		return
 	}
 	if pr.IsLearner {
 		return
 	}
 	// Remove any existing voter in the incoming config...
-	c.remove(cfg, prs, id)
+	c.remove(cfg, trk, id)
 	// ... but save the Progress.
-	prs[id] = pr
+	trk[id] = pr
 	// Use LearnersNext if we can't add the learner to Learners directly, i.e.
 	// if the peer is still tracked as a voter in the outgoing config. It will
 	// be turned into a learner in LeaveJoint().
@@ -228,8 +228,8 @@ func (c Changer) makeLearner(cfg *tracker.Config, prs tracker.ProgressMap, id ui
 }
 
 // remove this peer as a voter or learner from the incoming config.
-func (c Changer) remove(cfg *tracker.Config, prs tracker.ProgressMap, id uint64) {
-	if _, ok := prs[id]; !ok {
+func (c Changer) remove(cfg *tracker.Config, trk tracker.ProgressMap, id uint64) {
+	if _, ok := trk[id]; !ok {
 		return
 	}
 
@@ -239,18 +239,18 @@ func (c Changer) remove(cfg *tracker.Config, prs tracker.ProgressMap, id uint64)
 
 	// If the peer is still a voter in the outgoing config, keep the Progress.
 	if _, onRight := outgoing(cfg.Voters)[id]; !onRight {
-		delete(prs, id)
+		delete(trk, id)
 	}
 }
 
 // initProgress initializes a new progress for the given node or learner.
-func (c Changer) initProgress(cfg *tracker.Config, prs tracker.ProgressMap, id uint64, isLearner bool) {
+func (c Changer) initProgress(cfg *tracker.Config, trk tracker.ProgressMap, id uint64, isLearner bool) {
 	if !isLearner {
 		incoming(cfg.Voters)[id] = struct{}{}
 	} else {
 		nilAwareAdd(&cfg.Learners, id)
 	}
-	prs[id] = &tracker.Progress{
+	trk[id] = &tracker.Progress{
 		// Initializing the Progress with the last index means that the follower
 		// can be probed (with the last index).
 		//
@@ -273,7 +273,7 @@ func (c Changer) initProgress(cfg *tracker.Config, prs tracker.ProgressMap, id u
 // checkInvariants makes sure that the config and progress are compatible with
 // each other. This is used to check both what the Changer is initialized with,
 // as well as what it returns.
-func checkInvariants(cfg tracker.Config, prs tracker.ProgressMap) error {
+func checkInvariants(cfg tracker.Config, trk tracker.ProgressMap) error {
 	// NB: intentionally allow the empty config. In production we'll never see a
 	// non-empty config (we prevent it from being created) but we will need to
 	// be able to *create* an initial config, for example during bootstrap (or
@@ -286,7 +286,7 @@ func checkInvariants(cfg tracker.Config, prs tracker.ProgressMap) error {
 		cfg.LearnersNext,
 	} {
 		for id := range ids {
-			if _, ok := prs[id]; !ok {
+			if _, ok := trk[id]; !ok {
 				return fmt.Errorf("no progress for %d", id)
 			}
 		}
@@ -298,7 +298,7 @@ func checkInvariants(cfg tracker.Config, prs tracker.ProgressMap) error {
 		if _, ok := outgoing(cfg.Voters)[id]; !ok {
 			return fmt.Errorf("%d is in LearnersNext, but not Voters[1]", id)
 		}
-		if prs[id].IsLearner {
+		if trk[id].IsLearner {
 			return fmt.Errorf("%d is in LearnersNext, but is already marked as learner", id)
 		}
 	}
@@ -310,7 +310,7 @@ func checkInvariants(cfg tracker.Config, prs tracker.ProgressMap) error {
 		if _, ok := incoming(cfg.Voters)[id]; ok {
 			return fmt.Errorf("%d is in Learners and Voters[0]", id)
 		}
-		if !prs[id].IsLearner {
+		if !trk[id].IsLearner {
 			return fmt.Errorf("%d is in Learners, but is not marked as learner", id)
 		}
 	}
@@ -336,23 +336,23 @@ func checkInvariants(cfg tracker.Config, prs tracker.ProgressMap) error {
 // if checkInvariants does.
 func (c Changer) checkAndCopy() (tracker.Config, tracker.ProgressMap, error) {
 	cfg := c.Tracker.Config.Clone()
-	prs := tracker.ProgressMap{}
+	trk := tracker.ProgressMap{}
 
 	for id, pr := range c.Tracker.Progress {
 		// A shallow copy is enough because we only mutate the Learner field.
 		ppr := *pr
-		prs[id] = &ppr
+		trk[id] = &ppr
 	}
-	return checkAndReturn(cfg, prs)
+	return checkAndReturn(cfg, trk)
 }
 
 // checkAndReturn calls checkInvariants on the input and returns either the
 // resulting error or the input.
-func checkAndReturn(cfg tracker.Config, prs tracker.ProgressMap) (tracker.Config, tracker.ProgressMap, error) {
-	if err := checkInvariants(cfg, prs); err != nil {
+func checkAndReturn(cfg tracker.Config, trk tracker.ProgressMap) (tracker.Config, tracker.ProgressMap, error) {
+	if err := checkInvariants(cfg, trk); err != nil {
 		return tracker.Config{}, tracker.ProgressMap{}, err
 	}
-	return cfg, prs, nil
+	return cfg, trk, nil
 }
 
 // err returns zero values and an error.

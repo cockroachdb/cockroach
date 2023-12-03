@@ -37,50 +37,50 @@ func TestConfChangeQuick(t *testing.T) {
 	const infoCount = 5
 
 	runWithJoint := func(c *Changer, ccs []pb.ConfChangeSingle) error {
-		cfg, prs, err := c.EnterJoint(false /* autoLeave */, ccs...)
+		cfg, trk, err := c.EnterJoint(false /* autoLeave */, ccs...)
 		if err != nil {
 			return err
 		}
 		// Also do this with autoLeave on, just to check that we'd get the same
 		// result.
-		cfg2a, prs2a, err := c.EnterJoint(true /* autoLeave */, ccs...)
+		cfg2a, trk2a, err := c.EnterJoint(true /* autoLeave */, ccs...)
 		if err != nil {
 			return err
 		}
 		cfg2a.AutoLeave = false
-		if !reflect.DeepEqual(cfg, cfg2a) || !reflect.DeepEqual(prs, prs2a) {
-			return fmt.Errorf("cfg: %+v\ncfg2a: %+v\nprs: %+v\nprs2a: %+v",
-				cfg, cfg2a, prs, prs2a)
+		if !reflect.DeepEqual(cfg, cfg2a) || !reflect.DeepEqual(trk, trk2a) {
+			return fmt.Errorf("cfg: %+v\ncfg2a: %+v\ntrk: %+v\ntrk2a: %+v",
+				cfg, cfg2a, trk, trk2a)
 		}
 		c.Tracker.Config = cfg
-		c.Tracker.Progress = prs
-		cfg2b, prs2b, err := c.LeaveJoint()
+		c.Tracker.Progress = trk
+		cfg2b, trk2b, err := c.LeaveJoint()
 		if err != nil {
 			return err
 		}
 		// Reset back to the main branch with autoLeave=false.
 		c.Tracker.Config = cfg
-		c.Tracker.Progress = prs
-		cfg, prs, err = c.LeaveJoint()
+		c.Tracker.Progress = trk
+		cfg, trk, err = c.LeaveJoint()
 		if err != nil {
 			return err
 		}
-		if !reflect.DeepEqual(cfg, cfg2b) || !reflect.DeepEqual(prs, prs2b) {
-			return fmt.Errorf("cfg: %+v\ncfg2b: %+v\nprs: %+v\nprs2b: %+v",
-				cfg, cfg2b, prs, prs2b)
+		if !reflect.DeepEqual(cfg, cfg2b) || !reflect.DeepEqual(trk, trk2b) {
+			return fmt.Errorf("cfg: %+v\ncfg2b: %+v\ntrk: %+v\ntrk2b: %+v",
+				cfg, cfg2b, trk, trk2b)
 		}
 		c.Tracker.Config = cfg
-		c.Tracker.Progress = prs
+		c.Tracker.Progress = trk
 		return nil
 	}
 
 	runWithSimple := func(c *Changer, ccs []pb.ConfChangeSingle) error {
 		for _, cc := range ccs {
-			cfg, prs, err := c.Simple(cc)
+			cfg, trk, err := c.Simple(cc)
 			if err != nil {
 				return err
 			}
-			c.Tracker.Config, c.Tracker.Progress = cfg, prs
+			c.Tracker.Config, c.Tracker.Progress = cfg, trk
 		}
 		return nil
 	}
