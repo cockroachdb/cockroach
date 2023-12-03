@@ -320,10 +320,6 @@ func TestSequentialSpans(t *testing.T) {
 	})
 }
 
-func makeSingleCharSpan(start, end byte) roachpb.Span {
-	return roachpb.Span{Key: roachpb.Key{start}, EndKey: roachpb.Key{end}}
-}
-
 func makeSpan(start, end string) roachpb.Span {
 	return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
 }
@@ -352,13 +348,13 @@ func TestSpanEntries(t *testing.T) {
 		defer enableBtreeFrontier(useBtreeFrontier)()
 
 		t.Run("contiguous frontier", func(t *testing.T) {
-			spAZ := makeSingleCharSpan('A', 'Z')
+			spAZ := makeSpan("A", "Z")
 			f, err := MakeFrontier(spAZ)
 			require.NoError(t, err)
 			// Nothing overlaps span fully to the left of frontier.
-			require.Equal(t, ``, spanEntries(f, makeSingleCharSpan('0', '9')))
+			require.Equal(t, ``, spanEntries(f, makeSpan("0", "9")))
 			// Nothing overlaps span fully to the right of the frontier.
-			require.Equal(t, ``, spanEntries(f, makeSingleCharSpan('a', 'z')))
+			require.Equal(t, ``, spanEntries(f, makeSpan("a", "z")))
 
 			// Span overlaps entire frontier.
 			require.Equal(t, `{A-Z}@0`, spanEntries(f, spAZ))
@@ -366,36 +362,36 @@ func TestSpanEntries(t *testing.T) {
 			require.Equal(t, `{A-Z}@1`, spanEntries(f, spAZ))
 
 			// Span overlaps part of the frontier, with left part outside frontier.
-			require.Equal(t, `{A-C}@1`, spanEntries(f, makeSingleCharSpan('0', 'C')))
+			require.Equal(t, `{A-C}@1`, spanEntries(f, makeSpan("0", "C")))
 
 			// Span overlaps part of the frontier, with right part outside frontier.
-			require.Equal(t, `{Q-Z}@1`, spanEntries(f, makeSingleCharSpan('Q', 'c')))
+			require.Equal(t, `{Q-Z}@1`, spanEntries(f, makeSpan("Q", "c")))
 
 			// Span fully inside frontier.
-			require.Equal(t, `{P-W}@1`, spanEntries(f, makeSingleCharSpan('P', 'W')))
+			require.Equal(t, `{P-W}@1`, spanEntries(f, makeSpan("P", "W")))
 
 			// Advance part of the frontier.
-			advance(f, makeSingleCharSpan('C', 'E'), 2)
-			advance(f, makeSingleCharSpan('H', 'M'), 5)
-			advance(f, makeSingleCharSpan('N', 'Q'), 3)
+			advance(f, makeSpan("C", "E"), 2)
+			advance(f, makeSpan("H", "M"), 5)
+			advance(f, makeSpan("N", "Q"), 3)
 
 			// Span overlaps various parts of the frontier.
 			require.Equal(t,
 				`{A-C}@1 {C-E}@2 {E-H}@1 {H-M}@5 {M-N}@1 {N-P}@3`,
-				spanEntries(f, makeSingleCharSpan('3', 'P')))
+				spanEntries(f, makeSpan("3", "P")))
 		})
 
 		t.Run("disjoint frontier", func(t *testing.T) {
-			spAB := makeSingleCharSpan('A', 'B')
-			spCE := makeSingleCharSpan('C', 'E')
+			spAB := makeSpan("A", "B")
+			spCE := makeSpan("C", "E")
 			f, err := MakeFrontier(spAB, spCE)
 			require.NoError(t, err)
 
 			// Nothing overlaps between the two spans in the frontier.
-			require.Equal(t, ``, spanEntries(f, makeSingleCharSpan('B', 'C')))
+			require.Equal(t, ``, spanEntries(f, makeSpan("B", "C")))
 
 			// Overlap with only one entry in the frontier
-			require.Equal(t, `{C-D}@0`, spanEntries(f, makeSingleCharSpan('B', 'D')))
+			require.Equal(t, `{C-D}@0`, spanEntries(f, makeSpan("B", "D")))
 		})
 	})
 }
@@ -493,7 +489,7 @@ func advanceFrontier(t *testing.T, f Frontier, s roachpb.Span, wall int64) {
 func TestForwardInvertedSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	spAZ := makeSingleCharSpan('A', 'Z')
+	spAZ := makeSpan("A", "Z")
 	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
 		defer enableBtreeFrontier(useBtreeFrontier)()
 
@@ -521,7 +517,7 @@ func TestForwardInvertedSpan(t *testing.T) {
 
 func TestForwardToSameTimestamp(t *testing.T) {
 	defer enableBtreeFrontier(true)() // LLRB frontier fails this test
-	spAZ := makeSingleCharSpan('A', 'Z')
+	spAZ := makeSpan("A", "Z")
 
 	f, err := MakeFrontier(spAZ)
 	require.NoError(t, err)
@@ -547,8 +543,63 @@ func TestAddOverlappingSpans(t *testing.T) {
 		for r := 'A'; r < 'Z'; r++ {
 			require.NoError(t, f.AddSpansAt(ts(int64(r-'A'+1)), makeSpan(string(r), string(r+'a'-'A'))))
 		}
-		require.NoError(t, f.AddSpansAt(ts(42), makeSpan("a", "z")))
+		require.NoError(t, f.AddSpansAt(ts(42), makeSpan("A", "z")))
 		require.Equal(t, hlc.Timestamp{WallTime: 42}, f.Frontier(), "f=%s", f)
+	})
+}
+
+func TestBtreeFrontierMergesSpansDuringInitialization(t *testing.T) {
+	ts := func(wall int64) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: wall}
+	}
+
+	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
+		defer enableBtreeFrontier(useBtreeFrontier)()
+
+		f, err := MakeFrontier()
+		require.NoError(t, err)
+
+		require.NoError(t, f.AddSpansAt(ts(8), makeSpan("A", "C")))
+		require.NoError(t, f.AddSpansAt(ts(10), makeSpan("B", "D")))
+		require.NoError(t, f.AddSpansAt(ts(9), makeSpan("C", "Z")))
+		start, end, err := checkContiguousFrontier(f)
+		require.NoError(t, err)
+		require.Equal(t, []byte{'A'}, start, f)
+		require.Equal(t, []byte{'Z'}, end, f)
+		require.Equal(t, "{A-B}@8 {B-D}@10 {D-Z}@9", entriesStr(f))
+	})
+}
+
+// Regression for #115411
+func TestForwardDeepNestedFrontierEntry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ts := func(wall int) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: int64(wall)}
+	}
+
+	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
+		defer enableBtreeFrontier(useBtreeFrontier)()
+		f, err := MakeFrontier()
+		require.NoError(t, err)
+
+		require.NoError(t, f.AddSpansAt(ts(10), makeSpan("B", "C")))
+
+		// Add a bunch of ranges inside [B-C) range.
+		// We want to add more than 32 of such ranges to make sure that
+		// the underlying b-tree node (if using btree frontier) gets some "children"
+		// nodes created.
+		bStart := "B"
+		for i := 0; i < 64; i++ {
+			bEnd := "B" + strings.Repeat("b", i+1)
+			require.NoError(t, f.AddSpansAt(ts(i+10), makeSpan(bStart, bEnd)))
+			_, _, err := checkContiguousFrontier(f)
+			require.NoError(t, err, f)
+			bStart = bEnd
+		}
+
+		advanceFrontier(t, f, makeSpan("A", "Z"), 100)
+		require.Equal(t, "{B-C}@100", entriesStr(f))
 	})
 }
 
@@ -649,7 +700,7 @@ func fuzzFrontier(f *testing.F) {
 	for i := 0; i < corpusSize; i++ {
 		s := spanMaker.rndSpan()
 		// Add fuzz corpus.  Note: timestamps added could be negative, which
-		// is of course is not a valid timestamp, but makes it so much fun to test.
+		// of course is not a valid timestamp, but makes it so much fun to test.
 		f.Add([]byte(s.Key), []byte(s.EndKey), rnd.Intn(corpusSize)-rnd.Intn(corpusSize))
 	}
 
