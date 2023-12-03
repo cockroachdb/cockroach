@@ -3910,6 +3910,7 @@ var charts = []sectionDescription{
 				Title: "Listing",
 				Metrics: []string{
 					"cloud.listings",
+					"cloud.listing_results",
 				},
 			},
 		},
