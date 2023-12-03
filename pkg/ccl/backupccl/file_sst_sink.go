@@ -175,7 +175,8 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 		}
 		s.out = e
 	}
-	s.sst = storage.MakeBackupSSTWriter(ctx, s.dest.Settings(), s.out)
+	// TODO(dt): make ExternalStorage.Writer return objstorage.Writable.
+	s.sst = storage.MakeIngestionSSTWriter(ctx, s.dest.Settings(), storage.NoopFinishAbortWritable(s.out))
 
 	return nil
 }
