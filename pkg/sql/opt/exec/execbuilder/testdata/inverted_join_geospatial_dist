@@ -470,7 +470,7 @@ vectorized: true
 │
 └── • lookup join
     │ table: rtable2@rtable2_pkey
-    │ equality: (rk1, rk2) = (rk1,rk2)
+    │ equality: (rk1, rk2) = (rk1, rk2)
     │ equality cols are key
     │ pred: st_intersects(geom1, geom)
     │
@@ -498,7 +498,7 @@ vectorized: true
 │
 └── • lookup join (left outer)
     │ table: rtable2@rtable2_pkey
-    │ equality: (rk1, rk2) = (rk1,rk2)
+    │ equality: (rk1, rk2) = (rk1, rk2)
     │ equality cols are key
     │ pred: st_intersects(geom1, geom)
     │
@@ -522,7 +522,7 @@ vectorized: true
 ·
 • lookup join (semi)
 │ table: rtable2@rtable2_pkey
-│ equality: (rk1, rk2) = (rk1,rk2)
+│ equality: (rk1, rk2) = (rk1, rk2)
 │ equality cols are key
 │ pred: st_intersects(geom1, geom)
 │
@@ -546,7 +546,7 @@ vectorized: true
 ·
 • lookup join (anti)
 │ table: rtable2@rtable2_pkey
-│ equality: (rk1, rk2) = (rk1,rk2)
+│ equality: (rk1, rk2) = (rk1, rk2)
 │ equality cols are key
 │ pred: st_intersects(geom1, geom)
 │
