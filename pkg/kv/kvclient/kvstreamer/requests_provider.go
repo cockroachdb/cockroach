@@ -304,7 +304,7 @@ func (p *outOfOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
 	p.Lock()
 	defer p.Unlock()
 	if len(p.requests) > 0 {
-		panic(errors.AssertionFailedf("outOfOrderRequestsProvider has old requests in enqueue"))
+		panic(errors.AssertionFailedf("outOfOrderRequestsProvider has %d old requests in enqueue", len(p.requests)))
 	}
 	if len(requests) == 0 {
 		panic(errors.AssertionFailedf("outOfOrderRequestsProvider enqueuing zero requests"))
@@ -435,7 +435,7 @@ func (p *inOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
 	p.Lock()
 	defer p.Unlock()
 	if len(p.requests) > 0 {
-		panic(errors.AssertionFailedf("inOrderRequestsProvider has old requests in enqueue"))
+		panic(errors.AssertionFailedf("inOrderRequestsProvider has %d old requests in enqueue", len(p.requests)))
 	}
 	if len(requests) == 0 {
 		panic(errors.AssertionFailedf("inOrderRequestsProvider enqueuing zero requests"))
