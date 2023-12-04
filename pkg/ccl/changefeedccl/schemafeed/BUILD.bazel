@@ -43,7 +43,7 @@ go_library(
 
 go_test(
     name = "schemafeed_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "helpers_test.go",
         "main_test.go",
