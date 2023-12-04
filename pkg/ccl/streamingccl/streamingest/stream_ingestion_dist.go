@@ -244,6 +244,39 @@ func startDistIngestion(
 	return err
 }
 
+type partitionedSpans struct {
+	spans []roachpb.Span
+}
+
+var _ sort.Interface = &partitionedSpans{}
+
+func (s partitionedSpans) Len() int {
+	return len(s.spans)
+}
+
+func (s partitionedSpans) Less(i, j int) bool {
+	return s.spans[i].Key.Compare(s.spans[j].Key) < 0
+}
+
+func (s partitionedSpans) Swap(i, j int) {
+	s.spans[i], s.spans[j] = s.spans[j], s.spans[i]
+}
+
+func newPartitionedSpans() partitionedSpans {
+	newPSpan := partitionedSpans{}
+	newPSpan.spans = make([]roachpb.Span, 0)
+	return newPSpan
+}
+
+func sortSpans(partitions []streamclient.PartitionInfo) roachpb.Spans {
+	pSpans := newPartitionedSpans()
+	for i := range partitions {
+		pSpans.spans = append(pSpans.spans, partitions[i].Spans...)
+	}
+	sort.Sort(pSpans)
+	return pSpans.spans
+}
+
 // TODO(ssd): This is a duplicative with the split_and_scatter processor in
 // backupccl.
 type splitAndScatterer interface {
@@ -288,7 +321,8 @@ func (s *dbSplitAndScatter) now() hlc.Timestamp {
 }
 
 // createInitialSplits creates splits based on the given toplogy from the
-// source.
+// source. Parallelize splits by first sorting all the partition spans, and then
+// sending an equal number of contiguous spans to split workers.
 //
 // The idea here is to use the information from the source cluster about
 // the distribution of the data to produce split points to help prevent
@@ -314,8 +348,33 @@ func createInitialSplits(
 	if err != nil {
 		return err
 	}
-	for _, partition := range topology.Partitions {
-		for _, span := range partition.Spans {
+
+	grp := ctxgroup.WithContext(ctx)
+	sortedSpans := sortSpans(topology.Partitions)
+	// Set the number of split workers to the number of partitions (i.e. src node count).
+	splitWorkers := len(topology.Partitions)
+	if splitWorkers > len(sortedSpans) {
+		return errors.AssertionFailedf("There are more partitions than partition spans")
+	}
+	spansPerWorker := len(sortedSpans) / splitWorkers
+	for i := 0; i < splitWorkers; i++ {
+		startIdx := i * spansPerWorker
+		endIdx := (i + 1) * spansPerWorker
+		workerSpans := sortedSpans[startIdx:endIdx]
+		if i == splitWorkers-1 {
+			// The last worker handles the remainder spans
+			workerSpans = sortedSpans[startIdx:]
+		}
+		grp.GoCtx(splitAndScatterWorker(workerSpans, rekeyer, splitter))
+	}
+	return grp.Wait()
+}
+
+func splitAndScatterWorker(
+	spans []roachpb.Span, rekeyer *backupccl.KeyRewriter, splitter splitAndScatterer,
+) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		for _, span := range spans {
 			startKey := span.Key.Clone()
 			splitKey, _, err := rekeyer.RewriteKey(startKey, 0 /* walltimeForImportElision */)
 			if err != nil {
@@ -348,8 +407,8 @@ func createInitialSplits(
 			}
 
 		}
+		return nil
 	}
-	return nil
 }
 
 var splitAndScatterSitckyBitDuration = time.Hour
