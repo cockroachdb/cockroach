@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -207,6 +208,10 @@ func (mu *ReplicaMutex) AssertRHeld() {
 
 func (mu *ReplicaMutex) RUnlock() {
 	(*syncutil.RWMutex)(mu).RUnlock()
+}
+
+func (mu *ReplicaMutex) RLocker() sync.Locker {
+	return (*syncutil.RWMutex)(mu).RLocker()
 }
 
 // A Replica is a contiguous keyspace with writes managed via an
