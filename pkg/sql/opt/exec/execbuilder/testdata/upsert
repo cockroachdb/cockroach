@@ -552,7 +552,7 @@ vectorized: true
             │ columns: (column1, column2, column3, x, y, z)
             │ estimated row count: 2 (missing stats)
             │ table: tdup@tdup_y_z_key
-            │ equality: (column2, column3) = (y,z)
+            │ equality: (column2, column3) = (y, z)
             │ equality cols are key
             │
             └── • distinct

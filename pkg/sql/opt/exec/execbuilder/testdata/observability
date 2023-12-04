@@ -204,7 +204,7 @@ vectorized: true
         │ columns: (query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, service_latency_p99_seconds, fingerprint_id, app_name, max, max, max, merge_transaction_stats, aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics, query, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
         │ estimated row count: 27,778
         │ table: transaction_activity@primary
-        │ equality: (max, fingerprint_id, app_name) = (aggregated_ts,fingerprint_id,app_name)
+        │ equality: (max, fingerprint_id, app_name) = (aggregated_ts, fingerprint_id, app_name)
         │ equality cols are key
         │
         └── • render
@@ -307,7 +307,7 @@ vectorized: true
             │ columns: ("lookup_join_const_col_@58", bytea, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats, max, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
             │ estimated row count: 27,778
             │ table: statement_activity@primary
-            │ equality: (max, fingerprint_id, lookup_join_const_col_@58, plan_hash, app_name) = (aggregated_ts,fingerprint_id,transaction_fingerprint_id,plan_hash,app_name)
+            │ equality: (max, fingerprint_id, lookup_join_const_col_@58, plan_hash, app_name) = (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name)
             │ equality cols are key
             │
             └── • render
@@ -549,7 +549,7 @@ vectorized: true
             │ columns: ("lookup_join_const_col_@99", txn_fingerprint_id, idx_rec, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "coalesce", aggregated_ts, fingerprint_id, plan_hash, app_name, max, max, merge_stats_metadata, merge_statement_stats, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, agg_interval, metadata, statistics, plan, index_recommendations, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
             │ estimated row count: 3
             │ table: statement_activity@primary
-            │ equality: (aggregated_ts, fingerprint_id, lookup_join_const_col_@99, plan_hash, app_name) = (aggregated_ts,fingerprint_id,transaction_fingerprint_id,plan_hash,app_name)
+            │ equality: (aggregated_ts, fingerprint_id, lookup_join_const_col_@99, plan_hash, app_name) = (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name)
             │ equality cols are key
             │
             └── • render
@@ -593,7 +593,7 @@ vectorized: true
                                 │ columns: (aggregated_ts, fingerprint_id, app_name, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id, crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, agg_interval, metadata, statistics, plan)
                                 │ estimated row count: 3
                                 │ table: statement_statistics@primary
-                                │ equality: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) = (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,aggregated_ts,fingerprint_id,transaction_fingerprint_id,plan_hash,app_name,node_id)
+                                │ equality: (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id) = (crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
                                 │ equality cols are key
                                 │
                                 └── • lookup join (inner)
@@ -864,7 +864,7 @@ vectorized: true
         │ columns: (query, int8, "?column?", execution_total_cluster_seconds, "coalesce", "coalesce", float8, "?column?", aggregated_ts, fingerprint_id, app_name, max, max, merge_stats, aggregated_ts, fingerprint_id, app_name, agg_interval, metadata, statistics, query, execution_count, execution_total_seconds, execution_total_cluster_seconds, contention_time_avg_seconds, cpu_sql_avg_nanos, service_latency_avg_seconds, service_latency_p99_seconds)
         │ estimated row count: 1
         │ table: transaction_activity@primary
-        │ equality: (aggregated_ts, fingerprint_id, app_name) = (aggregated_ts,fingerprint_id,app_name)
+        │ equality: (aggregated_ts, fingerprint_id, app_name) = (aggregated_ts, fingerprint_id, app_name)
         │ equality cols are key
         │
         └── • render
