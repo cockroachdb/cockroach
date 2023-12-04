@@ -15,9 +15,11 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"math/bits"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl/enginepbccl"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // FileCipherStreamCreator wraps the KeyManager interface and provides functions to create a
@@ -29,8 +31,10 @@ type FileCipherStreamCreator struct {
 }
 
 const (
-	// The difference is 4 bytes, which are supplied by the counter.
 	ctrBlockSize = 16
+	// DEPRECATED: The V1 implementation had a distinction between a 12-byte
+	// "nonce" and a 4-byte "counter". This was incorrect and we now treat the
+	// IV/nonce as a single 128-bit value.
 	ctrNonceSize = 12
 )
 
@@ -195,4 +199,76 @@ func (s *cTRBlockCipherStream) transform(blockIndex uint64, data []byte, scratch
 	for i := 0; i < ctrBlockSize; i++ {
 		data[i] = data[i] ^ iv[i]
 	}
+}
+
+type fileCipherStreamV2 struct {
+	aesBlock cipher.Block
+	// High and low portions of the 128-bit IV (big-endian).
+	ivHi, ivLo uint64
+	mu         struct {
+		syncutil.Mutex
+		// If ctr is non-nil, it is ready to use at fileOffset. This is
+		// effectively a single-entry cache; it would be reasonable to change it
+		// to a map from fileOffset to CTR objects to track multiple sequential
+		// "cursors".
+		fileOffset int64
+		ctr        cipher.Stream
+	}
+}
+
+func newFileCipherStreamV2(key, iv []byte) (*fileCipherStreamV2, error) {
+	aesBlock, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	return &fileCipherStreamV2{
+		aesBlock: aesBlock,
+		ivHi:     binary.BigEndian.Uint64(iv[:8]),
+		ivLo:     binary.BigEndian.Uint64(iv[8:]),
+	}, nil
+}
+
+func (s *fileCipherStreamV2) Encrypt(fileOffset int64, data []byte) {
+	var ctr cipher.Stream
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.mu.fileOffset == fileOffset {
+			ctr = s.mu.ctr
+			s.mu.ctr = nil
+		}
+	}()
+	if ctr == nil {
+		// We need to create a new CTR object seeked to the correct position.
+		// This means we reimplement some of the IV math that appears inside the
+		// CTR implementation.
+		blockIndex := uint64(fileOffset / int64(ctrBlockSize))
+		blockOffset := int(fileOffset % int64(ctrBlockSize))
+		// Add the block index to the 128-bit IV. Overflow in the "hi" portion
+		// just wraps around so we can use plain uint64 addition instead of
+		// bits.Add64.
+		blockIVLo, carry := bits.Add64(s.ivLo, blockIndex, 0)
+		blockIVHi := s.ivHi + carry
+		var iv [ctrBlockSize]byte
+		binary.BigEndian.PutUint64(iv[0:8], blockIVHi)
+		binary.BigEndian.PutUint64(iv[8:], blockIVLo)
+		ctr = cipher.NewCTR(s.aesBlock, iv[:])
+		if blockOffset != 0 {
+			// If our read was not block-aligned, consume and discard the partial block.
+			var scratch [ctrBlockSize]byte
+			ctr.XORKeyStream(scratch[0:blockOffset], scratch[0:blockOffset])
+		}
+	}
+	ctr.XORKeyStream(data, data)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Save our CTR object for reuse in case the next operation follows directly
+	// after this one.
+	s.mu.ctr = ctr
+	s.mu.fileOffset = fileOffset + int64(len(data))
+}
+
+func (s *fileCipherStreamV2) Decrypt(fileOffset int64, data []byte) {
+	// For CTR mode, encryption and decryption are the same.
+	s.Encrypt(fileOffset, data)
 }
