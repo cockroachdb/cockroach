@@ -12,7 +12,6 @@ package kvstreamer
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"testing"
 
@@ -83,7 +82,7 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 	acc := monitor.MakeBoundAccount()
 	defer acc.Close(ctx)
 
-	getStreamer := func(singleRowLookup bool) *Streamer {
+	getStreamer := func() *Streamer {
 		require.Zero(t, acc.Used())
 		rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
 		leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
@@ -104,15 +103,13 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 			lock.None,
 			lock.Unreplicated,
 		)
-		s.Init(OutOfOrder, Hints{UniqueRequests: true, SingleRowLookup: singleRowLookup}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
+		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
 	}
 
 	t.Run("get", func(t *testing.T) {
 		acc.Clear(ctx)
-		// SingleRowLookup hint only influences the accounting when at least
-		// one Scan request is present.
-		streamer := getStreamer(false /* singleRowLookup */)
+		streamer := getStreamer()
 		defer streamer.Close(ctx)
 
 		// Get the row with pk=0.
@@ -129,40 +126,35 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 		require.Equal(t, expectedUsed, acc.Used())
 	})
 
-	for _, singleRowLookup := range []bool{false, true} {
-		t.Run(fmt.Sprintf("scan/single_row_lookup=%t", singleRowLookup), func(t *testing.T) {
-			acc.Clear(ctx)
-			streamer := getStreamer(singleRowLookup)
-			defer streamer.Close(ctx)
+	t.Run("scan", func(t *testing.T) {
+		acc.Clear(ctx)
+		streamer := getStreamer()
+		defer streamer.Close(ctx)
 
-			// Scan the row with pk=0.
-			reqs := make([]kvpb.RequestUnion, 1)
-			reqs[0] = makeScanRequest(codec, uint32(tableID), 0, 1)
-			require.NoError(t, streamer.Enqueue(ctx, reqs))
-			results, err := streamer.GetResults(ctx)
-			require.NoError(t, err)
-			require.Equal(t, 1, len(results))
-			// 29 is usually the number of bytes in
-			// ScanResponse.BatchResponse[0]. We choose to hard-code this number
-			// rather than consult NumBytes field directly as an additional
-			// sanity-check. We also adjust the estimate to account for possible
-			// tenant prefix.
-			expectedMemToken := scanResponseOverhead + 29 + int64(len(codec.TenantPrefix()))
-			if results[0].ScanResp.NumBytes == 33+int64(len(codec.TenantPrefix())) {
-				// For some reason, sometimes it's not 29, but 33, and we do
-				// allow for this.
-				expectedMemToken += 4
-			}
-			require.Equal(t, expectedMemToken, results[0].memoryTok.toRelease)
-			expectedUsed := expectedMemToken + resultSize
-			if !singleRowLookup {
-				// This is streamer.numRangesPerScanRequestAccountedFor which is
-				// only non-zero when SingleRowLookup hint is false.
-				expectedUsed += 4
-			}
-			require.Equal(t, expectedUsed, acc.Used())
-		})
-	}
+		// Scan the row with pk=0.
+		reqs := make([]kvpb.RequestUnion, 1)
+		reqs[0] = makeScanRequest(codec, uint32(tableID), 0, 1)
+		require.NoError(t, streamer.Enqueue(ctx, reqs))
+		results, err := streamer.GetResults(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(results))
+		// 29 is usually the number of bytes in
+		// ScanResponse.BatchResponse[0]. We choose to hard-code this number
+		// rather than consult NumBytes field directly as an additional
+		// sanity-check. We also adjust the estimate to account for possible
+		// tenant prefix.
+		expectedMemToken := scanResponseOverhead + 29 + int64(len(codec.TenantPrefix()))
+		if results[0].ScanResp.NumBytes == 33+int64(len(codec.TenantPrefix())) {
+			// For some reason, sometimes it's not 29, but 33, and we do
+			// allow for this.
+			expectedMemToken += 4
+		}
+		require.Equal(t, expectedMemToken, results[0].memoryTok.toRelease)
+		expectedUsed := expectedMemToken + resultSize
+		// This is streamer.numRangesPerScanRequestAccountedFor.
+		expectedUsed += 4
+		require.Equal(t, expectedUsed, acc.Used())
+	})
 }
 
 func makeScanRequest(codec keys.SQLCodec, tableID uint32, start, end int) kvpb.RequestUnion {
