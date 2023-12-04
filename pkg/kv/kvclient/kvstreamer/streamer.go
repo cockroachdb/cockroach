@@ -104,8 +104,8 @@ type Result struct {
 	}
 	// subRequestIdx allows us to order two Results that come for the same
 	// original Scan request but from different ranges. It is non-zero only in
-	// InOrder mode when Hints.SingleRowLookup is false, in all other cases it
-	// will remain zero. See singleRangeBatch.subRequestIdx for more details.
+	// InOrder mode, in all other cases it will remain zero. See
+	// singleRangeBatch.subRequestIdx for more details.
 	subRequestIdx int32
 	// subRequestDone is true if the current Result is the last one for the
 	// corresponding sub-request. For all Get requests and for Scan requests
@@ -113,8 +113,7 @@ type Result struct {
 	// have a single sub-request.
 	//
 	// Note that for correctness, it is only necessary that this value is set
-	// properly if this Result is a Scan response and Hints.SingleRowLookup is
-	// false.
+	// properly if this Result is a Scan response.
 	subRequestDone bool
 	// If the Result represents a scan result, scanComplete indicates whether
 	// this is the last response for the respective scan, or if there are more
@@ -135,9 +134,12 @@ type Hints struct {
 	// such, there's no point in de-duping them or caching results.
 	UniqueRequests bool
 	// SingleRowLookup tells the Streamer that each enqueued request will result
-	// in a single row lookup (in other words, the request contains a "key"). If
-	// true, then the Streamer knows that no request will be split across
-	// multiple ranges, so some internal state can be optimized away.
+	// in a single row lookup (in other words, the request contains a "key").
+	// TODO(yuzefovich): investigate using this hint to optimize the performance
+	// and / or allocations. In particular, whenever this hint is set, once one
+	// of the truncated single-range ScanRequests receives non-empty result,
+	// then we know for sure that the original cross-range ScanRequest has been
+	// fully satisfied (since we never split SQL rows across ranges).
 	SingleRowLookup bool
 }
 
@@ -285,8 +287,8 @@ type Streamer struct {
 		// enqueued ScanRequest touches. In other words, it contains how many
 		// "sub-requests" the original Scan request was broken down into.
 		//
-		// It is allocated lazily if Hints.SingleRowLookup is false when the
-		// first ScanRequest is encountered in Enqueue.
+		// It is allocated lazily when the first ScanRequest is encountered in
+		// Enqueue.
 		numRangesPerScanRequest []int32
 
 		// numRequestsInFlight tracks the number of single-range batches that
@@ -614,36 +616,38 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 		for i, pos := range positions {
 			if _, isScan := reqs[pos].GetInner().(*kvpb.ScanRequest); isScan {
 				numScansInReqs++
-				if !s.hints.SingleRowLookup {
-					if firstScanRequest {
-						// We have some ScanRequests, and each might touch
-						// multiple ranges, so we have to set up
-						// numRangesPerScanRequest.
-						streamerLocked = true
-						s.mu.Lock()
-						if cap(s.mu.numRangesPerScanRequest) < len(reqs) {
-							s.mu.numRangesPerScanRequest = make([]int32, len(reqs))
-							newNumRangesPerScanRequestMemoryUsage = int64(cap(s.mu.numRangesPerScanRequest)) * int32Size
-						} else {
-							// We can reuse numRangesPerScanRequest allocated on
-							// the previous call to Enqueue after we zero it
-							// out.
-							s.mu.numRangesPerScanRequest = s.mu.numRangesPerScanRequest[:len(reqs)]
-							for n := 0; n < len(s.mu.numRangesPerScanRequest); {
-								n += copy(s.mu.numRangesPerScanRequest[n:], zeroInt32Slice)
-							}
+				// TODO(yuzefovich): we could avoid using / allocating
+				// numRangesPerScanRequest if allRequestsAreWithinSingleRange is
+				// true. We could also take this further and see whether any of
+				// the original ScanRequests are cross-range, and if not, then
+				// we could avoid using numRangesPerScanRequest even if all
+				// requests touch multiple ranges.
+				if firstScanRequest {
+					// We have some ScanRequests, so we have to set up
+					// numRangesPerScanRequest.
+					streamerLocked = true
+					s.mu.Lock()
+					if cap(s.mu.numRangesPerScanRequest) < len(reqs) {
+						s.mu.numRangesPerScanRequest = make([]int32, len(reqs))
+						newNumRangesPerScanRequestMemoryUsage = int64(cap(s.mu.numRangesPerScanRequest)) * int32Size
+					} else {
+						// We can reuse numRangesPerScanRequest allocated on the
+						// previous call to Enqueue after we zero it out.
+						s.mu.numRangesPerScanRequest = s.mu.numRangesPerScanRequest[:len(reqs)]
+						for n := 0; n < len(s.mu.numRangesPerScanRequest); {
+							n += copy(s.mu.numRangesPerScanRequest[n:], zeroInt32Slice)
 						}
 					}
-					if s.mode == InOrder {
-						if subRequestIdx == nil {
-							subRequestIdx = make([]int32, len(singleRangeReqs))
-							subRequestIdxOverhead = int32SliceOverhead + int32Size*int64(cap(subRequestIdx))
-						}
-						subRequestIdx[i] = s.mu.numRangesPerScanRequest[pos]
-					}
-					s.mu.numRangesPerScanRequest[pos]++
-					firstScanRequest = false
 				}
+				if s.mode == InOrder {
+					if subRequestIdx == nil {
+						subRequestIdx = make([]int32, len(singleRangeReqs))
+						subRequestIdxOverhead = int32SliceOverhead + int32Size*int64(cap(subRequestIdx))
+					}
+					subRequestIdx[i] = s.mu.numRangesPerScanRequest[pos]
+				}
+				s.mu.numRangesPerScanRequest[pos]++
+				firstScanRequest = false
 			}
 		}
 
@@ -1632,12 +1636,11 @@ func processSingleRangeResults(
 	numRequestsStarted := fp.numGetResults + fp.numStartedScans
 	s.mu.avgResponseEstimator.update(fp.memoryFootprintBytes, numRequestsStarted)
 
-	// If we have any Scan results to create and the Scan requests can return
-	// multiple rows, we'll need to consult s.mu.numRangesPerScanRequest, so
-	// we'll defer unlocking the streamer's mutex. However, if only Get results
-	// or Scan results of single rows will be created, we can unlock the
+	// If we have any Scan results to create, we'll need to consult
+	// s.mu.numRangesPerScanRequest, so we'll defer unlocking the streamer's
+	// mutex. However, if only Get results will be created, we can unlock the
 	// streamer's mutex right away.
-	if fp.numScanResults > 0 && !s.hints.SingleRowLookup {
+	if fp.numScanResults > 0 {
 		defer s.mu.Unlock()
 	} else {
 		s.mu.Unlock()
@@ -1712,9 +1715,7 @@ func processSingleRangeResults(
 			result.memoryTok.toRelease = scanResponseSize(scan) + scanResponseOverhead
 			memoryTokensBytes += result.memoryTok.toRelease
 			result.ScanResp = scan
-			if s.hints.SingleRowLookup {
-				result.scanComplete = true
-			} else if scan.ResumeSpan == nil {
+			if scan.ResumeSpan == nil {
 				// The scan within the range is complete.
 				if s.mode == OutOfOrder {
 					s.mu.numRangesPerScanRequest[position]--
