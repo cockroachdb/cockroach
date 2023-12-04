@@ -328,6 +328,9 @@ func (t *ttlProcessor) runTTLOnQueryBounds(
 			var batchRowCount int64
 			do := func(ctx context.Context, txn isql.Txn) error {
 				txn.KV().SetDebugName("ttljob-delete-batch")
+				if ttlSpec.DisableChangefeedReplication {
+					txn.KV().SetOmitInRangefeeds()
+				}
 				// If we detected a schema change here, the DELETE will not succeed
 				// (the SELECT still will because of the AOST). Early exit here.
 				desc, err := flowCtx.Descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)

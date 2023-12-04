@@ -197,22 +197,24 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		deleteBatchSize := ttlbase.GetDeleteBatchSize(settingsValues, rowLevelTTL)
 		selectRateLimit := ttlbase.GetSelectRateLimit(settingsValues, rowLevelTTL)
 		deleteRateLimit := ttlbase.GetDeleteRateLimit(settingsValues, rowLevelTTL)
+		disableChangefeedReplication := ttlbase.GetChangefeedReplicationDisabled(settingsValues)
 		newTTLSpec := func(spans []roachpb.Span) *execinfrapb.TTLSpec {
 			return &execinfrapb.TTLSpec{
 				JobID:              jobID,
 				RowLevelTTLDetails: details,
 				// Set AOST in case of mixed 22.2.0/22.2.1+ cluster where the job started on a 22.2.1+ node.
-				AOST:                        ttlSpecAOST,
-				TTLExpr:                     ttlExpr,
-				Spans:                       spans,
-				SelectBatchSize:             selectBatchSize,
-				DeleteBatchSize:             deleteBatchSize,
-				SelectRateLimit:             selectRateLimit,
-				DeleteRateLimit:             deleteRateLimit,
-				LabelMetrics:                rowLevelTTL.LabelMetrics,
-				PreDeleteChangeTableVersion: knobs.PreDeleteChangeTableVersion,
-				PreSelectStatement:          knobs.PreSelectStatement,
-				AOSTDuration:                aostDuration,
+				AOST:                         ttlSpecAOST,
+				TTLExpr:                      ttlExpr,
+				Spans:                        spans,
+				SelectBatchSize:              selectBatchSize,
+				DeleteBatchSize:              deleteBatchSize,
+				SelectRateLimit:              selectRateLimit,
+				DeleteRateLimit:              deleteRateLimit,
+				LabelMetrics:                 rowLevelTTL.LabelMetrics,
+				PreDeleteChangeTableVersion:  knobs.PreDeleteChangeTableVersion,
+				PreSelectStatement:           knobs.PreSelectStatement,
+				AOSTDuration:                 aostDuration,
+				DisableChangefeedReplication: disableChangefeedReplication,
 			}
 		}
 
