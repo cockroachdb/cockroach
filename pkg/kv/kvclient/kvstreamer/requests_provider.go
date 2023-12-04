@@ -74,8 +74,8 @@ type singleRangeBatch struct {
 	// the responses to these single-range requests (which might come back in
 	// any order) correctly.
 	//
-	// subRequestIdx is only allocated in InOrder mode when
-	// Hints.SingleRowLookup is false and some Scan requests were enqueued.
+	// subRequestIdx is only allocated in InOrder mode when some Scan requests
+	// were enqueued.
 	subRequestIdx []int32
 	// isScanStarted tracks whether we have already received at least one
 	// response for the corresponding ScanRequest (i.e. whether the ScanRequest
