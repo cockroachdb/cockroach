@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -1513,6 +1514,12 @@ func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalo
 			}
 			if col.Dropped() && idx.GetEncodingType() != catenumpb.PrimaryIndexEncoding {
 				return errors.Newf("secondary index %q contains dropped stored column %q", idx.GetName(), col.ColName())
+			}
+			if !idx.IsMutation() {
+				// Ensure any active index does not store a primary key column.
+				if catalog.MakeTableColSet(desc.PrimaryIndex.KeyColumnIDs...).Contains(colID) {
+					return sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName())
+				}
 			}
 		}
 		if idx.IsSharded() {
