@@ -33,6 +33,19 @@ func (m *Mutex) Lock() {
 	atomic.StoreInt32(&m.wLocked, 1)
 }
 
+// TryLock tries to lock m and reports whether it succeeded.
+//
+// Note that while correct uses of TryLock do exist, they are rare,
+// and use of TryLock is often a sign of a deeper problem
+// in a particular use of mutexes.
+func (m *Mutex) TryLock() bool {
+	if m.mu.TryLock() {
+		atomic.StoreInt32(&m.wLocked, 1)
+		return true
+	}
+	return false
+}
+
 // Unlock unlocks m.
 func (m *Mutex) Unlock() {
 	atomic.StoreInt32(&m.wLocked, 0)
@@ -64,6 +77,19 @@ type RWMutex struct {
 func (rw *RWMutex) Lock() {
 	rw.RWMutex.Lock()
 	atomic.StoreInt32(&rw.wLocked, 1)
+}
+
+// TryLock tries to lock m and reports whether it succeeded.
+//
+// Note that while correct uses of TryLock do exist, they are rare,
+// and use of TryLock is often a sign of a deeper problem
+// in a particular use of mutexes.
+func (m *RWMutex) TryLock() bool {
+	if m.RWMutex.TryLock() {
+		atomic.StoreInt32(&m.wLocked, 1)
+		return true
+	}
+	return false
 }
 
 // Unlock unlocks rw for writing.

@@ -31,6 +31,17 @@ type Mutex struct {
 	deadlock.Mutex
 }
 
+// TryLock tries to lock m and reports whether it succeeded.
+//
+// Note that while correct uses of TryLock do exist, they are rare,
+// and use of TryLock is often a sign of a deeper problem
+// in a particular use of mutexes.
+// Note: Deadlock mutex lacks try lock method -- so, revert to regular lock.
+func (m *Mutex) TryLock() bool {
+	m.Lock()
+	return true
+}
+
 // AssertHeld is a no-op for deadlock mutexes.
 func (m *Mutex) AssertHeld() {
 }
@@ -43,6 +54,17 @@ func (rw *Mutex) TryLock() bool {
 // An RWMutex is a reader/writer mutual exclusion lock.
 type RWMutex struct {
 	deadlock.RWMutex
+}
+
+// TryLock tries to lock m and reports whether it succeeded.
+//
+// Note that while correct uses of TryLock do exist, they are rare,
+// and use of TryLock is often a sign of a deeper problem
+// in a particular use of mutexes.
+// Note: Deadlock mutex lacks try lock method -- so, revert to regular lock.
+func (m *RWMutex) TryLock() bool {
+	m.Lock()
+	return true
 }
 
 // AssertHeld is a no-op for deadlock mutexes.
