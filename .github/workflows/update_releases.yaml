@@ -62,4 +62,5 @@ jobs:
 
             Epic: None
             Release note: None
+            Release justification: test-only updates
           delete-branch: true
