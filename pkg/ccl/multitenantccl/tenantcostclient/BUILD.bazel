@@ -82,7 +82,7 @@ go_test(
         "//pkg/sql/execinfra",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sqlliveness",
-        "//pkg/sql/sqlliveness/slinstance",
+        "//pkg/sql/sqlliveness/slbase",
         "//pkg/sql/stats",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",

@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -140,8 +140,8 @@ SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.crdb_in
 
 	// Region has gone down, set the unavailable_at time on it
 	return l.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		defaultTTL := slinstance.DefaultTTL.Get(&l.settings.SV)
-		defaultHeartbeat := slinstance.DefaultHeartBeat.Get(&l.settings.SV)
+		defaultTTL := slbase.DefaultTTL.Get(&l.settings.SV)
+		defaultHeartbeat := slbase.DefaultHeartBeat.Get(&l.settings.SV)
 		// Get the read timestamp and pick a commit deadline.
 		readTS := txn.KV().ReadTimestamp().AddDuration(defaultHeartbeat)
 		txnTS := readTS.AddDuration(defaultTTL)

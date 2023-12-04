@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -44,8 +45,8 @@ func TestSQLInstance(t *testing.T) {
 		clusterversion.Latest.Version(),
 		clusterversion.MinSupported.Version(),
 		true /* initializeVersion */)
-	slinstance.DefaultTTL.Override(ctx, &settings.SV, 20*time.Millisecond)
-	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
+	slbase.DefaultTTL.Override(ctx, &settings.SV, 20*time.Millisecond)
+	slbase.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
 	sqlInstance := slinstance.NewSQLInstance(ambientCtx, stopper, clock, fakeStorage, settings, nil, nil)
@@ -113,8 +114,8 @@ func TestSQLInstanceRelease(t *testing.T) {
 		clusterversion.Latest.Version(),
 		clusterversion.MinSupported.Version(),
 		true /* initializeVersion */)
-	slinstance.DefaultTTL.Override(ctx, &settings.SV, 20*time.Millisecond)
-	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
+	slbase.DefaultTTL.Override(ctx, &settings.SV, 20*time.Millisecond)
+	slbase.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
 	var ambientCtx log.AmbientContext
