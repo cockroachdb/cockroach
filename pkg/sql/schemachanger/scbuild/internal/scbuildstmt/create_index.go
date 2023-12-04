@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -556,8 +557,7 @@ func addColumnsForSecondaryIndex(
 	for _, storingNode := range n.Storing {
 		colName := storingNode.String()
 		if _, found := columnRefs[colName]; found {
-			panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
-				"index %q already contains column %q", n.Name, colName))
+			panic(sqlerrors.NewColumnAlreadyExistsInIndexError(string(n.Name), colName))
 		}
 		columnRefs[colName] = struct{}{}
 	}
@@ -616,8 +616,7 @@ func addColumnsForSecondaryIndex(
 		// earlier so this covers any extra columns.
 		columnName := mustRetrieveColumnNameElem(b, e.TableID, e.ColumnID)
 		if _, found := columnRefs[columnName.Name]; found {
-			panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
-				"index %q already contains column %q", n.Name, columnName.Name))
+			panic(sqlerrors.NewColumnAlreadyExistsInIndexError(string(n.Name), columnName.Name))
 		}
 		columnRefs[columnName.Name] = struct{}{}
 		keySuffixColumns = append(keySuffixColumns, e)
