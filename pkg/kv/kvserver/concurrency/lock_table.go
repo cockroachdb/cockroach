@@ -1864,20 +1864,19 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 	}
 }
 
-// collectLockStateInfo converts receiver into exportable LockStateInfo metadata
-// and returns (true, valid LockStateInfo), or (false, empty LockStateInfo) if
-// it was filtered out due to being an empty lock or an uncontended lock (if
-// includeUncontended is false).
+// collectLockStateInfo exports all locks held on the receiver's key as a list
+// of roachpb.LockStateInfos. If no locks are held, or the lock is uncontended
+// and includeUncontended is false, nothing is returned.
 func (kl *keyLocks) collectLockStateInfo(
-	includeUncontended bool, now time.Time,
-) (bool, []roachpb.LockStateInfo) {
+	includeUncontended bool, now time.Time, rangeID roachpb.RangeID,
+) []roachpb.LockStateInfo {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
 
 	// Don't include locks that have neither lock holders, nor claims, nor
 	// waiting readers/locking requests.
 	if kl.isEmptyLock() {
-		return false, []roachpb.LockStateInfo{}
+		return nil
 	}
 
 	// Filter out locks without waiting readers/locking requests unless explicitly
@@ -1890,15 +1889,15 @@ func (kl *keyLocks) collectLockStateInfo(
 	if !includeUncontended && kl.waitingReaders.Len() == 0 &&
 		(kl.queuedLockingRequests.Len() == 0 ||
 			(kl.queuedLockingRequests.Len() == 1 && !kl.queuedLockingRequests.Front().Value.active)) {
-		return false, []roachpb.LockStateInfo{}
+		return nil
 	}
 
-	return true, kl.lockStateInfo(now)
+	return kl.lockStateInfo(now, rangeID)
 }
 
 // lockStateInfo converts receiver to the roachpb.LockStateInfo structure.
 // REQUIRES: kl.mu is locked.
-func (kl *keyLocks) lockStateInfo(now time.Time) []roachpb.LockStateInfo {
+func (kl *keyLocks) lockStateInfo(now time.Time, rangeID roachpb.RangeID) []roachpb.LockStateInfo {
 	waiterCount := kl.waitingReaders.Len() + kl.queuedLockingRequests.Len()
 	lockWaiters := make([]lock.Waiter, 0, waiterCount)
 
@@ -1932,6 +1931,7 @@ func (kl *keyLocks) lockStateInfo(now time.Time) []roachpb.LockStateInfo {
 	if !kl.isLocked() {
 		return []roachpb.LockStateInfo{
 			{
+				RangeID:      rangeID,
 				Key:          kl.key,
 				LockHolder:   nil,
 				Durability:   lock.Unreplicated,
@@ -1950,6 +1950,7 @@ func (kl *keyLocks) lockStateInfo(now time.Time) []roachpb.LockStateInfo {
 			durability = lock.Replicated
 		}
 		lsi := roachpb.LockStateInfo{
+			RangeID:      rangeID,
 			Key:          kl.key,
 			LockHolder:   tl.txn,
 			Durability:   durability,
@@ -4616,40 +4617,47 @@ func (t *lockTableImpl) QueryLockTableState(
 	var numLocks int64
 	var numBytes int64
 	var nextKey roachpb.Key
-	var nextByteSize int64
+	var nextNumBytes int64
 
 	// Iterate over locks and gather metadata.
 	iter := snap.MakeIter()
 	ltRange := &keyLocks{key: span.Key, endKey: span.EndKey}
 	for iter.FirstOverlap(ltRange); iter.Valid(); iter.NextOverlap(ltRange) {
 		l := iter.Cur()
+		nextKey = l.key
 
-		if ok, lInfos := l.collectLockStateInfo(opts.IncludeUncontended, now); ok {
-			for _, lInfo := range lInfos {
-				nextKey = l.key
-				nextByteSize = int64(lInfo.Size())
-				lInfo.RangeID = t.rID
+		lInfos := l.collectLockStateInfo(opts.IncludeUncontended, now, t.rID)
+		nextNumBytes = 0
+		nextNumLocks := int64(len(lInfos))
+		for _, lInfo := range lInfos {
+			nextNumBytes += int64(lInfo.Size())
+		}
 
-				// Check if adding the lock would exceed our byte or count limits,
-				// though we must ensure we return at least one lock.
-				if len(lockTableState) > 0 && opts.TargetBytes > 0 && (numBytes+nextByteSize) > opts.TargetBytes {
-					resumeState.ResumeReason = kvpb.RESUME_BYTE_LIMIT
-					break
-				} else if len(lockTableState) > 0 && opts.MaxLocks > 0 && numLocks >= opts.MaxLocks {
-					resumeState.ResumeReason = kvpb.RESUME_KEY_LIMIT
-					break
-				}
-
-				lockTableState = append(lockTableState, lInfo)
-				numLocks++
-				numBytes += nextByteSize
+		// We always return locks on at least one key, regardless of the byte or
+		// count limits.
+		if len(lockTableState) > 0 {
+			// Check if accumulating the result will cause byte limits to be exceeded.
+			if opts.TargetBytes > 0 && (numBytes+nextNumBytes) > opts.TargetBytes {
+				resumeState.ResumeReason = kvpb.RESUME_BYTE_LIMIT
+				break
+			}
+			// Check if accumulating the result will cause lock count limits to be
+			// exceeded.
+			if opts.MaxLocks > 0 && (numLocks+nextNumLocks) > opts.MaxLocks {
+				resumeState.ResumeReason = kvpb.RESUME_KEY_LIMIT
+				break
 			}
 		}
+
+		// Adding all locks on this key won't cause us to go over byte/count limits.
+		lockTableState = append(lockTableState, lInfos...)
+		numBytes += nextNumBytes
+		numLocks += nextNumLocks
 	}
 
 	// If we need to paginate results, set the continuation key in the ResumeSpan.
 	if resumeState.ResumeReason != 0 {
-		resumeState.ResumeNextBytes = nextByteSize
+		resumeState.ResumeNextBytes = nextNumBytes
 		resumeState.ResumeSpan = &roachpb.Span{Key: nextKey, EndKey: span.EndKey}
 	}
 	resumeState.TotalBytes = numBytes
