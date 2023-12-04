@@ -1340,6 +1340,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		ctx,
 		ex.server.cfg.Clock,
 		ex.server.cfg.InternalDB,
+		ex.server.cfg.Codec,
 		ex.extraTxnState.descCollection,
 		regionCache,
 		ex.server.cfg.Settings,

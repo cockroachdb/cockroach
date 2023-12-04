@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -61,7 +61,7 @@ func TestRegionLivenessProber(t *testing.T) {
 	makeSettings := func() *cluster.Settings {
 		cs := cluster.MakeTestingClusterSettings()
 		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
-		slinstance.DefaultTTL.Override(ctx, &cs.SV, 10*time.Second)
+		slbase.DefaultTTL.Override(ctx, &cs.SV, 10*time.Second)
 		regionliveness.RegionLivenessEnabled.Override(ctx, &cs.SV, true)
 		return cs
 	}
@@ -84,24 +84,19 @@ func TestRegionLivenessProber(t *testing.T) {
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
 	blockProbeQuery := atomic.Bool{}
-	defer regionliveness.TestingSetProbeLivenessTimeout(500 * time.Millisecond)()
+	defer regionliveness.TestingSetProbeLivenessTimeout(500*time.Millisecond,
+		func() {
+			// Timeout attempts to probe intentionally.
+			if blockProbeQuery.Swap(false) {
+				time.Sleep(1 * time.Second)
+			}
+		})()
 
 	for _, s := range testCluster.Servers {
 		tenantArgs := base.TestTenantArgs{
 			Settings: makeSettings(),
 			TenantID: id,
 			Locality: s.Locality(),
-			TestingKnobs: base.TestingKnobs{
-				SQLExecutor: &sql.ExecutorTestingKnobs{
-					BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
-						const probeQuery = "SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.crdb_internal_region"
-						if strings.Contains(stmt, probeQuery) && blockProbeQuery.Swap(false) {
-							// Timeout this query intentionally.
-							time.Sleep(1 * time.Second)
-						}
-					},
-				},
-			},
 		}
 		ts, tenantDB := serverutils.StartTenant(t, s, tenantArgs)
 		tenants = append(tenants, ts)
@@ -118,7 +113,7 @@ func TestRegionLivenessProber(t *testing.T) {
 	cachedRegionProvider, err = regions.NewCachedDatabaseRegions(ctx, tenants[0].DB(), tenants[0].LeaseManager().(*lease.Manager))
 	require.NoError(t, err)
 	idb := tenants[0].InternalDB().(isql.DB)
-	regionProber := regionliveness.NewLivenessProber(idb, cachedRegionProvider, tenants[0].ClusterSettings())
+	regionProber := regionliveness.NewLivenessProber(idb.KV(), tenants[0].Codec(), cachedRegionProvider, tenants[0].ClusterSettings())
 	// Validates the expected regions versus the region liveness set.
 	checkExpectedRegions := func(expectedRegions []string, regions regionliveness.LiveRegions) {
 		require.Equalf(t, len(regions), len(expectedRegions),
@@ -203,7 +198,7 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	makeSettings := func() *cluster.Settings {
 		cs := cluster.MakeTestingClusterSettings()
 		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
-		slinstance.DefaultTTL.Override(ctx, &cs.SV, 10*time.Second)
+		slbase.DefaultTTL.Override(ctx, &cs.SV, 10*time.Second)
 		regionliveness.RegionLivenessEnabled.Override(ctx, &cs.SV, true)
 		return cs
 	}
@@ -214,7 +209,15 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 		"us-west",
 	}
 	detectLeaseWait := atomic.Bool{}
-	defer regionliveness.TestingSetProbeLivenessTimeout(1 * time.Second)()
+	targetCount := atomic.Int64{}
+	defer regionliveness.TestingSetProbeLivenessTimeout(1*time.Second, func() {
+		if !detectLeaseWait.Load() {
+			return
+		}
+		time.Sleep(time.Second * 2)
+		targetCount.Swap(0)
+		detectLeaseWait.Swap(false)
+	})()
 
 	testCluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(t,
 		expectedRegions,
@@ -228,7 +231,6 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
-	targetCount := atomic.Int64{}
 
 	for _, s := range testCluster.Servers {
 		tenantArgs := base.TestTenantArgs{
@@ -241,7 +243,6 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 						if !detectLeaseWait.Load() {
 							return
 						}
-						const probeQuery = "SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.public.crdb_internal_region"
 						const leaseQuery = "SELECT count(1) FROM system.public.lease AS OF SYSTEM TIME"
 						// Fail intentionally, when we go to probe the first region.
 						if strings.Contains(stmt, leaseQuery) {
@@ -249,10 +250,6 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 								return
 							}
 							time.Sleep(time.Second * 2)
-						} else if strings.Contains(stmt, probeQuery) {
-							time.Sleep(time.Second * 2)
-							targetCount.Swap(0)
-							detectLeaseWait.Swap(false)
 						}
 					},
 				},
