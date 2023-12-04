@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
@@ -1605,10 +1606,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		return err
 	}
 
-	if err := r.validateJobIsResumable(p.ExecCfg()); err != nil {
-		return err
-	}
-
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		p.ExecCfg().Settings,
 		&p.ExecCfg().ExternalIODirConfig,
@@ -1619,6 +1616,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		ctx, &mem, p, details, details.Encryption, &kmsEnv,
 	)
 	if err != nil {
+		return err
+	}
+	if err := r.validateJobIsResumable(ctx, p.ExecCfg(), backupManifests); err != nil {
 		return err
 	}
 	defer func() {
@@ -1923,8 +1923,26 @@ func clusterRestoreDuringUpgradeErr(
 }
 
 // validateJobDetails returns an error if this job cannot be resumed.
-func (r *restoreResumer) validateJobIsResumable(execConfig *sql.ExecutorConfig) error {
+func (r *restoreResumer) validateJobIsResumable(
+	ctx context.Context,
+	execConfig *sql.ExecutorConfig,
+	mainBackupManifests []backuppb.BackupManifest,
+) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
+
+	allowUnsafeRestore := details.UnsafeRestoreIncompatibleVersion
+	if strings.Contains(r.job.Payload().Description, "unsafe_restore_incompatible_version") {
+		// This added check ensures we continue with unsafe restore in the
+		// following mixed version case: user plans a restore on 23.1 which will
+		// not set the unsafe restore field in the job proto, and resumes it on
+		// a 23.2.
+		allowUnsafeRestore = true
+	}
+
+	if err := checkBackupManifestVersionCompatability(ctx, execConfig.Settings.Version,
+		mainBackupManifests, allowUnsafeRestore); err != nil {
+		return err
+	}
 
 	// Validate that we aren't in the middle of an upgrade. To avoid unforseen
 	// issues, we want to avoid full cluster restores if it is possible that an
