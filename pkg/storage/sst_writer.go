@@ -40,6 +40,12 @@ var _ Writer = &SSTWriter{}
 var _ ExportWriter = &SSTWriter{}
 var _ InternalWriter = &SSTWriter{}
 
+// NoopFinishAbortWritable wraps an io.Writer to make a objstorage.Writable that
+// will ignore Finish and Abort calls.
+func NoopFinishAbortWritable(w io.Writer) objstorage.Writable {
+	return &noopFinishAbort{Writer: w}
+}
+
 // noopFinishAbort is used to wrap io.Writers for sstable.Writer.
 type noopFinishAbort struct {
 	io.Writer
