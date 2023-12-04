@@ -2170,7 +2170,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// known lease instead of relying on shouldUseExpirationLeaseRLocked(). We
 		// also check Sequence > 0 to omit ranges that haven't seen a lease yet.
 		if l, _ := rep.GetLease(); l.Type() == roachpb.LeaseExpiration && l.Sequence > 0 {
-			rep.maybeUnquiesce(true /* wakeLeader */, true /* mayCampaign */)
+			rep.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
 		}
 	}
 
