@@ -341,6 +341,12 @@ func (b *outOfOrderResultsBuffer) get(context.Context) ([]Result, bool, error) {
 	// is done as a way of "amortizing" the reservation.
 	b.results = nil
 	allComplete := b.numCompleteResponses == b.numExpectedResponses
+	if b.err == nil && b.numCompleteResponses > b.numExpectedResponses {
+		b.err = errors.AssertionFailedf(
+			"received %d complete responses when only %d were expected",
+			b.numCompleteResponses, b.numExpectedResponses,
+		)
+	}
 	return results, allComplete, b.err
 }
 
@@ -594,6 +600,12 @@ func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) 
 	// All requests are complete IFF we have received the complete responses for
 	// all requests and there no buffered Results.
 	allComplete := b.numCompleteResponses == b.numExpectedResponses && len(b.buffered) == 0
+	if b.err == nil && b.numCompleteResponses > b.numExpectedResponses {
+		b.err = errors.AssertionFailedf(
+			"received %d complete responses when only %d were expected",
+			b.numCompleteResponses, b.numExpectedResponses,
+		)
+	}
 	b.resultScratch = res
 	return res, allComplete, b.err
 }
