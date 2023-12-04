@@ -127,15 +127,14 @@ ba f1 04 5a 3c 96 0e a4 13 aa 61 a2 81 9e aa 0b
 70 0b 5a 9f fe fd 97 da 11 bf ea 5d 53 5e 54 5e
 dd 3b 2d 67 71 8b 10 ac 14 a9 91 29 13 4b 91 1f
 
-# When the 32-bit counter wraps around we see the same data again,
-# but this code is not used for files that can get that large.
-encrypt offset=68719476736 expect_duplicate=true
+# V1 has a bug when the 32-bit counter wraps around.
+encrypt offset=68719476736 skip-v1=true
 ----
-70 54 03 81 d3 f0 e5 f2 ab 28 03 55 f0 53 a3 63
-a8 03 e1 f5 06 48 53 3a 86 81 f8 a6 da 35 80 a3
-4a fb 80 48 39 cf 77 32 17 1e ec 32 cc 22 e9 4a
-3f b7 f9 e4 93 52 89 21 0c bc bc 66 77 3a 23 18
-df 79 ab 4a 7a 29 c7 3d 45 41 dd fc e0 d9 10 e0
-76 22 e8 78 2c 6a cb 3d 62 af 84 3e 3c 9f ee f7
-84 7b 38 01 db fb 98 e5 1d 9b 61 e1 ed ef be 94
-93 3a 79 84 c3 dc 9d 26 be 2f ed 3c 83 68 d4 30
+35 cf c5 43 7e 0b 72 07 d7 c0 c0 fe 97 09 b9 bf
+de 97 8c 3c 9b 9c da f4 bf e8 78 6a 75 cc bd 13
+c2 c8 28 6b 19 ae d5 96 6d aa eb 6f 5c 25 c3 f3
+23 50 60 1f 05 dd 13 d5 3c d4 d0 bc 55 d8 11 6d
+e4 dc aa 44 1f f0 a5 e6 b4 53 a3 5d 72 ca 94 b7
+5e 90 a3 4b 85 5e 77 32 62 0c 63 46 5c 63 23 10
+42 bc 8e 63 df ca b4 d7 b7 05 60 96 3d 08 5e 0d
+0f 0e 97 bf 1f 0c 92 3b 87 62 fc 0b f5 c9 bc e4
