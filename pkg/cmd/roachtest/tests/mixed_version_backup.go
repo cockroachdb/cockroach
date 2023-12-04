@@ -192,7 +192,7 @@ var (
 		5,
 	}
 
-	schemaChangeDB = "schemachange"
+	schemaChangeDB = "schemachangedb"
 )
 
 // sanitizeVersionForBackup takes the string representation of a
@@ -2620,6 +2620,7 @@ func schemaChangeWorkloadCmd(
 		concurrency = 2
 	}
 	initCmd := roachtestutil.NewCommand("./workload init schemachange").
+		Flag("db", schemaChangeDB).
 		Arg("{pgurl%s}", roachNodes)
 	// TODO (msbutler): ideally we'd use the `db` flag to explicitly set the
 	// database, but it is currently broken:
@@ -2628,6 +2629,7 @@ func schemaChangeWorkloadCmd(
 		Flag("verbose", 1).
 		Flag("max-ops", maxOps).
 		Flag("concurrency", concurrency).
+		Flag("db", schemaChangeDB).
 		Arg("{pgurl%s}", roachNodes)
 	l.Printf("sc init: %s", initCmd)
 	l.Printf("sc run: %s", runCmd)
