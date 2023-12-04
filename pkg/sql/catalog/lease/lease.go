@@ -134,7 +134,7 @@ func (m *Manager) WaitForNoVersion(
 	}
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		now := m.storage.clock.Now()
-		count, err := CountLeases(ctx, m.storage.db, cachedDatabaseRegions, m.settings, versions, now, true /*forAnyVersion*/)
+		count, err := CountLeases(ctx, m.storage.db, m.Codec(), cachedDatabaseRegions, m.settings, versions, now, true /*forAnyVersion*/)
 		if err != nil {
 			return err
 		}
@@ -198,7 +198,7 @@ func (m *Manager) WaitForOneVersion(
 		// version of the descriptor.
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
-		count, err := CountLeases(ctx, m.storage.db, regions, m.settings, descs, now, false /*forAnyVersion*/)
+		count, err := CountLeases(ctx, m.storage.db, m.Codec(), regions, m.settings, descs, now, false /*forAnyVersion*/)
 		if err != nil {
 			return nil, err
 		}
