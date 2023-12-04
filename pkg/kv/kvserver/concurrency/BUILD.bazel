@@ -10,6 +10,7 @@ go_library(
         "lock_table.go",
         "lock_table_waiter.go",
         "metrics.go",
+        "verifiable_lock_table.go",
         ":keylocks_interval_btree.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency",
