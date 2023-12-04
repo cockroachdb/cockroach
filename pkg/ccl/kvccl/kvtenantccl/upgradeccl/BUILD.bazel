@@ -21,7 +21,7 @@ go_test(
         "//pkg/spanconfig",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sqlinstance/instancestorage",
-        "//pkg/sql/sqlliveness/slinstance",
+        "//pkg/sql/sqlliveness/slbase",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
