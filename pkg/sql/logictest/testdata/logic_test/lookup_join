@@ -1562,3 +1562,17 @@ SELECT length(c1), length(c3) FROM l_113013 l INNER JOIN r_113013 r ON l.r_id = 
 ----
 2  4000
 2  2
+
+# Regression test for incorrectly treating cross-range ScanRequests by the
+# Streamer when "equality columns are key" in the loopkup join (#101823).
+statement ok
+CREATE TABLE l_101823 (a INT, b INT, PRIMARY KEY (a, b));
+INSERT INTO l_101823 VALUES (1, 1);
+CREATE TABLE r_101823 (k INT PRIMARY KEY, u INT, v INT, w BOOL, UNIQUE INDEX (u), UNIQUE INDEX (u, v, w));
+INSERT INTO r_101823 VALUES (1, 1, 1, false);
+ALTER INDEX r_101823_u_v_w_key SPLIT AT VALUES (1, 1, false), (1, 1, true);
+
+query I
+SELECT count(v) FROM l_101823 LEFT LOOKUP JOIN r_101823 ON a = u AND b = v;
+----
+1
