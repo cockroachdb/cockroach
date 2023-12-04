@@ -70,6 +70,15 @@ var LongRunning60mLatencyBuckets = staticBucketConfig{
 	distribution: Exponential,
 }
 
+var DataCount16MBuckets = staticBucketConfig{
+	category:     "DataSize16MBBuckets",
+	min:          1,
+	max:          16e6,
+	count:        24,
+	units:        COUNT,
+	distribution: Exponential,
+}
+
 var DataSize16MBBuckets = staticBucketConfig{
 	category:     "DataSize16MBBuckets",
 	min:          1e3,     // 1kB
@@ -126,7 +135,8 @@ var Percent100Buckets = staticBucketConfig{
 var StaticBucketConfigs = []staticBucketConfig{IOLatencyBuckets,
 	BatchProcessLatencyBuckets, LongRunning60mLatencyBuckets,
 	DataSize16MBBuckets, MemoryUsage64MBBuckets, ReplicaCPUTimeBuckets,
-	ReplicaBatchRequestCountBuckets, Count1KBuckets, Percent100Buckets}
+	ReplicaBatchRequestCountBuckets, Count1KBuckets, Percent100Buckets,
+	DataCount16MBuckets}
 
 func (config staticBucketConfig) GetBucketsFromBucketConfig() []float64 {
 	var buckets []float64

@@ -8966,3 +8966,37 @@ func TestCloudstorageBufferedBytesMetric(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
+
+// TestBatchSizeMetric the emitted batch size histogram metric.
+func TestBatchSizeMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		batchSizeHist := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics.EmittedBatchSizes
+
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `
+		  CREATE TABLE foo (key INT PRIMARY KEY);
+		  INSERT INTO foo (key) VALUES (1), (2), (3);
+		`)
+
+		numSamples, sum := batchSizeHist.TotalWindowed()
+		require.Equal(t, int64(0), numSamples)
+		require.Equal(t, 0.0, sum)
+
+		foo, err := f.Feed(fmt.Sprintf("CREATE CHANGEFEED FOR TABLE foo"))
+		require.NoError(t, err)
+
+		testutils.SucceedsSoon(t, func() error {
+			numSamples, sum = batchSizeHist.TotalWindowed()
+			if numSamples <= 0 && sum <= 0.0 {
+				return errors.Newf("waiting for metric %d %d", numSamples, sum)
+			}
+			return nil
+		})
+		require.NoError(t, foo.Close())
+	}
+	cdcTest(t, testFn)
+}
