@@ -23,6 +23,11 @@ func TileEnvelope(
 	tileZoom int, tileX int, tileY int, bounds geo.Geometry, margin float64,
 ) (geo.Geometry, error) {
 	bbox := bounds.BoundingBoxRef()
+	if bbox == nil {
+		return geo.Geometry{}, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			"Unable to compute bbox")
+	}
 	srid := bounds.SRID()
 
 	if tileZoom < 0 || tileZoom >= 32 {
