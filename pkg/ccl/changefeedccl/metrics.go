@@ -48,6 +48,7 @@ const defaultSLIScope = "default"
 // indicators, combined with a limited number of per-changefeed indicators.
 type AggMetrics struct {
 	EmittedMessages           *aggmetric.AggCounter
+	EmittedBatchSizes         *aggmetric.AggHistogram
 	FilteredMessages          *aggmetric.AggCounter
 	MessageSize               *aggmetric.AggHistogram
 	EmittedBytes              *aggmetric.AggCounter
@@ -113,6 +114,7 @@ func (a *AggMetrics) MetricStruct() {}
 // sliMetrics holds all SLI related metrics aggregated into AggMetrics.
 type sliMetrics struct {
 	EmittedMessages           *aggmetric.Counter
+	EmittedBatchSizes         *aggmetric.Histogram
 	FilteredMessages          *aggmetric.Counter
 	MessageSize               *aggmetric.Histogram
 	EmittedBytes              *aggmetric.Counter
@@ -239,6 +241,7 @@ func (m *sliMetrics) recordEmittedBatch(
 	emitNanos := timeutil.Since(startTime).Nanoseconds()
 	m.EmittedMessages.Inc(int64(numMessages))
 	m.EmittedBytes.Inc(int64(bytes))
+	m.EmittedBatchSizes.RecordValue(int64(numMessages))
 	if compressedBytes == sinkDoesNotCompress {
 		compressedBytes = bytes
 	}
@@ -259,6 +262,7 @@ func (m *sliMetrics) recordResolvedCallback() func() {
 		emitNanos := timeutil.Since(start).Nanoseconds()
 		m.EmittedMessages.Inc(1)
 		m.BatchHistNanos.RecordValue(emitNanos)
+		m.EmittedBatchSizes.RecordValue(int64(1))
 	}
 }
 
@@ -489,6 +493,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedEmittedBatchSizes := metric.Metadata{
+		Name:        "changefeed.emitted_batch_sizes",
+		Help:        "Size of batches emitted emitted by all feeds",
+		Measurement: "Number of Messages in Batch",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaChangefeedFilteredMessages := metric.Metadata{
 		Name: "changefeed.filtered_messages",
 		Help: "Messages filtered out by all feeds. " +
@@ -651,8 +661,15 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 	// retain significant figures of 2.
 	b := aggmetric.MakeBuilder("scope")
 	a := &AggMetrics{
-		ErrorRetries:     b.Counter(metaChangefeedErrorRetries),
-		EmittedMessages:  b.Counter(metaChangefeedEmittedMessages),
+		ErrorRetries:    b.Counter(metaChangefeedErrorRetries),
+		EmittedMessages: b.Counter(metaChangefeedEmittedMessages),
+		EmittedBatchSizes: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaChangefeedEmittedBatchSizes,
+			Duration:     histogramWindow,
+			MaxVal:       16e6, /* 16M max batch size */
+			SigFigs:      1,
+			BucketConfig: metric.DataCount16MBuckets,
+		}),
 		FilteredMessages: b.Counter(metaChangefeedFilteredMessages),
 		MessageSize: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaMessageSize,
@@ -752,6 +769,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 
 	sm := &sliMetrics{
 		EmittedMessages:           a.EmittedMessages.AddChild(scope),
+		EmittedBatchSizes:         a.EmittedBatchSizes.AddChild(scope),
 		FilteredMessages:          a.FilteredMessages.AddChild(scope),
 		MessageSize:               a.MessageSize.AddChild(scope),
 		EmittedBytes:              a.EmittedBytes.AddChild(scope),
