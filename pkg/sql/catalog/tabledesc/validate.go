@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -868,7 +869,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			desc.validateColumnFamilies(columnsByID),
 			desc.validateCheckConstraints(columnsByID),
 			desc.validateUniqueWithoutIndexConstraints(columnsByID),
-			desc.validateTableIndexes(columnsByID),
+			desc.validateTableIndexes(columnsByID, vea.IsActive),
 			desc.validatePartitioning(),
 		}
 		hasErrs := false
@@ -881,7 +882,6 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		if hasErrs {
 			return
 		}
-
 	}
 
 	// Ensure that mutations cannot be queued if a primary key change, TTL change
@@ -1389,7 +1389,9 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 // IDs are unique, and the family of the primary key is 0. This does not check
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
-func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalog.Column) error {
+func (desc *wrapper) validateTableIndexes(
+	columnsByID map[descpb.ColumnID]catalog.Column, isActive func(version clusterversion.Key) bool,
+) error {
 	if len(desc.PrimaryIndex.KeyColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}
@@ -1513,6 +1515,10 @@ func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalo
 			}
 			if col.Dropped() && idx.GetEncodingType() != catenumpb.PrimaryIndexEncoding {
 				return errors.Newf("secondary index %q contains dropped stored column %q", idx.GetName(), col.ColName())
+			}
+			// Ensure any active index does not store a primary key column (added and gated in V24.1).
+			if !idx.IsMutation() && catalog.MakeTableColSet(desc.PrimaryIndex.KeyColumnIDs...).Contains(colID) && isActive(clusterversion.V24_1) {
+				return sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName())
 			}
 		}
 		if idx.IsSharded() {
