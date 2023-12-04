@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -86,7 +86,7 @@ func TestEndToEndGC(t *testing.T) {
 				settings := cluster.MakeTestingClusterSettings()
 				// Push the TTL up to 60 hours since we emulate a 50 hours
 				// clock jump below.
-				slinstance.DefaultTTL.Override(ctx, &settings.SV, 60*time.Hour)
+				slbase.DefaultTTL.Override(ctx, &settings.SV, 60*time.Hour)
 
 				manualClock := hlc.NewHybridManualClock()
 				s, appSqlDb, appKvDb := serverutils.StartServer(t, base.TestServerArgs{

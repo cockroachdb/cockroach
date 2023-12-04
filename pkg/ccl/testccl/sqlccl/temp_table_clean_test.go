@@ -16,7 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -104,8 +104,8 @@ func TestTenantTempTableCleanup(t *testing.T) {
 		sql.TempObjectWaitInterval.Override(ctx, &st.SV, time.Second*0)
 		// Set up sessions to expire within 5 seconds of a
 		// nodes death.
-		slinstance.DefaultTTL.Override(ctx, &st.SV, 5*time.Second)
-		slinstance.DefaultHeartBeat.Override(ctx, &st.SV, time.Second)
+		slbase.DefaultTTL.Override(ctx, &st.SV, 5*time.Second)
+		slbase.DefaultHeartBeat.Override(ctx, &st.SV, time.Second)
 		return st
 	}
 
