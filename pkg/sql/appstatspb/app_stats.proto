@@ -313,6 +313,9 @@ message TxnStats {
 // ExecStats contains execution statistics that apply to both statements
 // and transactions. These stats are currently collected using a sampling
 // approach.
+// When adding additional fields to this message, please make the corresponding
+// changes to 'SampledExecStats' in telemetry.proto to keep the two messages in sync
+// with respect to the information stored.
 message ExecStats {
   // Count keeps track of how many times execution stats were recorded. This is
   // not necessarily equal to the number of times a statement/transaction was

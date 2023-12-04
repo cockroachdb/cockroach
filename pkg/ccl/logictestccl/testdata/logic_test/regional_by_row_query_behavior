@@ -3650,7 +3650,7 @@ project
       │    ├── key columns: [13 17 12 11] = [6 2 5 1]
       │    ├── lookup columns are key
       │    ├── immutable
-      │    ├── stats: [rows=0.01031997, distinct(1)=0.01032, null(1)=0, distinct(2)=0.01032, null(2)=0, distinct(5)=0.01032, null(5)=0, distinct(6)=0.01032, null(6)=0, distinct(10)=0.0102714, null(10)=0, distinct(11)=0.01032, null(11)=0, distinct(12)=0.01032, null(12)=0, distinct(13)=0.01032, null(13)=0, distinct(16)=0.0102638, null(16)=0, distinct(17)=0.01032, null(17)=0, distinct(18)=0.010244, null(18)=0, distinct(19)=0.010244, null(19)=0, distinct(20)=0.0102638, null(20)=0, distinct(21)=0.0102638, null(21)=0, distinct(2,5,6)=0.01032, null(2,5,6)=0]
+      │    ├── stats: [rows=0.01031997, distinct(1)=0.01032, null(1)=0, distinct(2)=0.01032, null(2)=0, distinct(5)=0.01032, null(5)=0, distinct(6)=0.01032, null(6)=0, distinct(11)=0.01032, null(11)=0, distinct(12)=0.01032, null(12)=0, distinct(13)=0.01032, null(13)=0, distinct(17)=0.01032, null(17)=0, distinct(2,5,6)=0.01032, null(2,5,6)=0]
       │    ├── cost: 112.088874
       │    ├── fd: ()-->(2,5,6,12,13,17,20,21), (16)-->(18,19), (11)==(1,16), (16)==(1,11), (12)==(5,20), (20)==(5,12), (13)==(6,21), (21)==(6,13), (6)==(13,21), (2)==(17), (17)==(2), (5)==(12,20), (1)==(11,16)
       │    ├── distribution: ap-southeast-2
@@ -3660,7 +3660,7 @@ project
       │    │    ├── key columns: [21 16] = [21 16]
       │    │    ├── lookup columns are key
       │    │    ├── immutable
-      │    │    ├── stats: [rows=1.101776, distinct(10)=1.08174, null(10)=0, distinct(11)=0.936667, null(11)=0, distinct(12)=0.936667, null(12)=0, distinct(13)=0.936667, null(13)=0, distinct(16)=0.936667, null(16)=0, distinct(17)=0.709904, null(17)=0, distinct(18)=0.693547, null(18)=0, distinct(19)=0.693547, null(19)=0, distinct(20)=0.936667, null(20)=0, distinct(21)=0.936667, null(21)=0]
+      │    │    ├── stats: [rows=1.101776, distinct(11)=0.936667, null(11)=0, distinct(12)=0.936667, null(12)=0, distinct(13)=0.936667, null(13)=0, distinct(16)=0.936667, null(16)=0, distinct(17)=0.709904, null(17)=0, distinct(20)=0.936667, null(20)=0, distinct(21)=0.936667, null(21)=0]
       │    │    ├── cost: 107.514948
       │    │    ├── fd: ()-->(12,13,17,20,21), (16)-->(18,19), (11)==(16), (16)==(11), (12)==(20), (20)==(12), (13)==(21), (21)==(13)
       │    │    ├── distribution: ap-southeast-2
@@ -3680,7 +3680,7 @@ project
       │    │    │    ├── project
       │    │    │    │    ├── columns: "lookup_join_const_col_@17":28 str:10 abc_id:11 x.id2:12 x.crdb_region:13
       │    │    │    │    ├── immutable
-      │    │    │    │    ├── stats: [rows=3.666667, distinct(10)=3.11719, null(10)=0, distinct(11)=3.11719, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(28)=1, null(28)=0]
+      │    │    │    │    ├── stats: [rows=3.666667, distinct(11)=3.11719, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(28)=1, null(28)=0]
       │    │    │    │    ├── cost: 73.3666668
       │    │    │    │    ├── fd: ()-->(12,13,28)
       │    │    │    │    ├── distribution: ap-southeast-2
@@ -3689,7 +3689,7 @@ project
       │    │    │    │    │    ├── columns: str:10 abc_id:11 x.id2:12 x.crdb_region:13
       │    │    │    │    │    ├── constraint: /13/12/10/11/9: [/'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b' - /'ap-southeast-2'/'68088706-02c6-47d1-b993-a421cd761f2b']
       │    │    │    │    │    ├── immutable
-      │    │    │    │    │    ├── stats: [rows=3.666667, distinct(10)=3.11719, null(10)=0, distinct(11)=3.11719, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(12,13)=1, null(12,13)=0]
+      │    │    │    │    │    ├── stats: [rows=3.666667, distinct(11)=3.11719, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=1, null(13)=0, distinct(12,13)=1, null(12,13)=0]
       │    │    │    │    │    │   histogram(13)=  0       3.6667
       │    │    │    │    │    │                 <--- 'ap-southeast-2'
       │    │    │    │    │    ├── cost: 73.2733335
