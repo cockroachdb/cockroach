@@ -208,6 +208,18 @@ func startDistIngestion(
 	if !streamProgress.InitialSplitComplete {
 		codec := execCtx.ExtendedEvalContext().Codec
 		splitter := &dbSplitAndScatter{db: execCtx.ExecCfg().DB}
+		countNumOfSplitsAndScatters := func() int {
+			numSplitsAndScatters := 0
+			for _, partition := range planner.initialTopology.Partitions {
+				for range partition.Spans {
+					numSplitsAndScatters++
+				}
+			}
+			return numSplitsAndScatters
+		}
+		msg := redact.Sprintf("creating %d initial splits based on the source cluster's topology",
+			countNumOfSplitsAndScatters())
+		updateRunningStatus(ctx, ingestionJob, jobspb.CreatingInitialSplits, msg)
 		if err := createInitialSplits(ctx, codec, splitter, planner.initialTopology, details.DestinationTenantID); err != nil {
 			return err
 		}
@@ -331,7 +343,7 @@ func createInitialSplits(
 			// 	splitKey = newSplitKey
 			// }
 			//
-			if err := splitAndScatter(ctx, roachpb.Key(splitKey), splitter); err != nil {
+			if err := splitAndScatter(ctx, splitKey, splitter); err != nil {
 				return err
 			}
 
@@ -345,7 +357,7 @@ var splitAndScatterSitckyBitDuration = time.Hour
 func splitAndScatter(
 	ctx context.Context, splitAndScatterKey roachpb.Key, s splitAndScatterer,
 ) error {
-	log.Infof(ctx, "splitting and scattering at %s", splitAndScatterKey)
+	log.VInfof(ctx, 1, "splitting and scattering at %s", splitAndScatterKey)
 	expirationTime := s.now().AddDuration(splitAndScatterSitckyBitDuration)
 	if err := s.split(ctx, splitAndScatterKey, expirationTime); err != nil {
 		return err
