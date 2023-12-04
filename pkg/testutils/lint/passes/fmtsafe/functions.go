@@ -70,6 +70,7 @@ var requireConstFmt = map[string]bool{
 	"github.com/cockroachdb/cockroach/pkg/util/log.shoutfDepth":            true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.logfDepthInternal":      true,
 	"github.com/cockroachdb/cockroach/pkg/util/log.makeStartLine":          true,
+	"github.com/cockroachdb/cockroach/pkg/util/log.untypedVEventfDepth":    true,
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash.ReportOrPanic": true,
 
