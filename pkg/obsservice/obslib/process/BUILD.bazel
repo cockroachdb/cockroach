@@ -18,6 +18,8 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/util/log",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx_v5//pgxpool",
         "@com_github_jackc_pgx_v5//stdlib",
