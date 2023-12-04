@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -740,16 +741,13 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 			if primaryColIDs.Contains(col.GetID()) && idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
 				// If the primary index contains a stored column, we don't need to
 				// store it - it's already part of the index.
-				err = pgerror.Newf(pgcode.DuplicateColumn,
-					"index %q already contains column %q", idx.GetName(), col.GetName())
-				err = errors.WithDetailf(err,
+				err = errors.WithDetailf(
+					sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName()),
 					"column %q is part of the primary index and therefore implicit in all indexes", col.GetName())
 				return err
 			}
 			if colIDs.Contains(col.GetID()) {
-				return pgerror.Newf(
-					pgcode.DuplicateColumn,
-					"index %q already contains column %q", idx.GetName(), col.GetName())
+				return sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName())
 			}
 			if indexHasOldStoredColumns {
 				idx.IndexDesc().KeySuffixColumnIDs = append(idx.IndexDesc().KeySuffixColumnIDs, col.GetID())

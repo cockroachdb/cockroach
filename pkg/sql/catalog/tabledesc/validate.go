@@ -1651,7 +1651,9 @@ func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalo
 					idx.GetName(), idx.IndexDesc().EncodingType, catenumpb.SecondaryIndexEncoding)
 			}
 		}
-		// Ensure that index column ID subsets are well formed.
+
+		// Ensure that an index column ID shows up at most once in `keyColumnIDs`,
+		// `keySuffixColumnIDs`, and `storeColumnIDs`.
 		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {
 			continue
 		}
