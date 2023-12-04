@@ -2308,7 +2308,7 @@ project
       ├── project
       │    ├── columns: c:2 b:1
       │    ├── immutable
-      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=1000, null(2)=0]
+      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
       │    ├── cost: 1088.44
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
@@ -2378,7 +2378,7 @@ project
       ├── project
       │    ├── columns: c:2(float!null) b:1(float!null)
       │    ├── immutable
-      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=1000, null(2)=0]
+      │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
       │    ├── cost: 1088.44
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)

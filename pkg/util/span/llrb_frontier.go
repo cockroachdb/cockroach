@@ -122,42 +122,28 @@ func (f *llrbFrontier) Release() {}
 
 // AddSpansAt adds the provided spans to the llrbFrontier at the provided timestamp.
 func (f *llrbFrontier) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) error {
-	collectOverlaps := func(s roachpb.Span, sg *roachpb.SpanGroup) (overlaps []*llrbFrontierEntry) {
-		f.tree.DoMatching(func(i interval.Interface) (done bool) {
-			overlap := i.(*llrbFrontierEntry)
-			overlaps = append(overlaps, overlap)
-			sg.Add(overlap.span)
-			return false
-		}, s.AsRange())
-		return overlaps
-	}
 
-	for _, s := range spans {
-		span := copyRangeToSpan(s.AsRange())
-		var sg roachpb.SpanGroup
-		sg.Add(span)
-		overlaps := collectOverlaps(span, &sg)
-		for _, o := range overlaps {
-			if err := f.tree.Delete(o, true /* fast */); err != nil {
-				return err
-			}
-			heap.Remove(&f.minHeap, o.index)
-		}
+	for _, toAdd := range spans {
+		toAdd = copyRangeToSpan(toAdd.AsRange())
 
-		if err := sg.ForEach(func(span roachpb.Span) error {
+		// Add toAdd sub-spans that do not overlap this frontier. To ensure that
+		// adjacent spans are merged, sub-spans are added in two steps: first,
+		// non-overlapping spans are added with 0 timestamp; then the timestamp for
+		// the entire toAdd span is forwarded.
+		for _, span := range spanDifference(toAdd, f) {
 			e := &llrbFrontierEntry{
 				id:   f.idAlloc,
 				keys: span.AsRange(),
 				span: span,
-				ts:   startAt,
+				ts:   hlc.Timestamp{},
 			}
 			f.idAlloc++
-			if err := f.tree.Insert(e, true /* fast */); err != nil {
+			if err := f.tree.Insert(e, false /* fast */); err != nil {
 				return err
 			}
 			heap.Push(&f.minHeap, e)
-			return nil
-		}); err != nil {
+		}
+		if err := f.insert(toAdd, startAt); err != nil {
 			return err
 		}
 	}
