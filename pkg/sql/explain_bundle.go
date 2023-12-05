@@ -539,8 +539,26 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	if mem.Metadata().HasUserDefinedFunctions() {
 		// Get all relevant user-defined functions.
 		blankLine()
-		if err := c.PrintRelevantCreateUdf(&buf, strings.ToLower(b.stmt), b.flags.RedactValues, &b.errorStrings); err != nil {
+		err = c.PrintRelevantCreateRoutine(
+			&buf, strings.ToLower(b.stmt), b.flags.RedactValues, &b.errorStrings, false, /* procedure */
+		)
+		if err != nil {
 			b.printError(fmt.Sprintf("-- error getting schema for udfs: %v", err), &buf)
+		}
+	}
+	if call, ok := mem.RootExpr().(*memo.CallExpr); ok {
+		// Currently, a stored procedure can only be called from a CALL statement,
+		// which can only be the root expression.
+		if proc, ok := call.Proc.(*memo.UDFCallExpr); ok {
+			blankLine()
+			err = c.PrintRelevantCreateRoutine(
+				&buf, strings.ToLower(proc.Def.Name), b.flags.RedactValues, &b.errorStrings, true, /* procedure */
+			)
+			if err != nil {
+				b.printError(fmt.Sprintf("-- error getting schema for procedure: %v", err), &buf)
+			}
+		} else {
+			b.printError("-- unexpected input expression for CALL statement", &buf)
 		}
 	}
 	for i := range tables {
@@ -899,30 +917,43 @@ func (c *stmtEnvCollector) PrintCreateEnum(w io.Writer, redactValues bool) error
 	return nil
 }
 
-func (c *stmtEnvCollector) PrintRelevantCreateUdf(
-	w io.Writer, stmt string, redactValues bool, errorStrings *[]string,
+func (c *stmtEnvCollector) PrintRelevantCreateRoutine(
+	w io.Writer, stmt string, redactValues bool, errorStrings *[]string, procedure bool,
 ) error {
 	// The select function_name returns a DOidWrapper,
 	// we need to cast it to string for queryRows function to process.
 	// TODO(#104976): consider getting the udf sql body statements from the memo metadata.
-	functionNameQuery := "SELECT function_name::STRING as function_name_str FROM [SHOW FUNCTIONS]"
-	udfNames, err := c.queryRows(functionNameQuery)
+	var routineTypeName, routineNameQuery string
+	if procedure {
+		routineTypeName = "PROCEDURE"
+		routineNameQuery = "SELECT procedure_name::STRING as procedure_name_str FROM [SHOW PROCEDURES]"
+	} else {
+		routineTypeName = "FUNCTION"
+		routineNameQuery = "SELECT function_name::STRING as function_name_str FROM [SHOW FUNCTIONS]"
+	}
+	routineNames, err := c.queryRows(routineNameQuery)
 	if err != nil {
 		return err
 	}
-	for _, name := range udfNames {
+	for _, name := range routineNames {
 		if strings.Contains(stmt, name) {
-			createFunctionQuery := fmt.Sprintf(
-				"SELECT create_statement FROM [ SHOW CREATE FUNCTION \"%s\" ]", name,
+			createRoutineQuery := fmt.Sprintf(
+				"SELECT create_statement FROM [ SHOW CREATE %s \"%s\" ]", routineTypeName, name,
 			)
 			if redactValues {
-				createFunctionQuery = fmt.Sprintf(
-					"SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM [ SHOW CREATE FUNCTION \"%s\" ]", name,
+				createRoutineQuery = fmt.Sprintf(
+					"SELECT crdb_internal.redact(crdb_internal.redactable_sql_constants(create_statement)) FROM [ SHOW CREATE %s \"%s\" ]",
+					routineTypeName, name,
 				)
 			}
-			createStatement, err := c.query(createFunctionQuery)
+			createStatement, err := c.query(createRoutineQuery)
 			if err != nil {
-				errString := fmt.Sprintf("-- error getting user defined function %s: %s", name, err)
+				var errString string
+				if procedure {
+					errString = fmt.Sprintf("-- error getting stored procedure %s: %s", name, err)
+				} else {
+					errString = fmt.Sprintf("-- error getting user defined function %s: %s", name, err)
+				}
 				fmt.Fprint(w, errString+"\n")
 				*errorStrings = append(*errorStrings, errString)
 				continue
