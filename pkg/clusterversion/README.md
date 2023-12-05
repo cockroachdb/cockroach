@@ -21,7 +21,6 @@ graph TD;
   base("Cut release-24.1 branch
         Latest = 23.2-x
         MinSupported = 23.1
-        PreviousRelease = 23.2
         version.txt = v24.1.0-alpha.00000000")
     
   base -- release-24.1 --> rel1
@@ -29,7 +28,6 @@ graph TD;
   rel1("R.1: Prepare for beta
         Latest = 23.2-x
         MinSupported = 23.1
-        PreviousRelease = 23.2
         developmentBranch = false
         version.txt = v24.1.0-beta.1")
   
@@ -38,7 +36,6 @@ graph TD;
   rel2("R.2: Mint release
         Latest = 24.1
         MinSupported = 23.1
-        PreviousRelease = 23.2
         developmentBranch = false
         finalVersion = V24_1
         version.txt = v24.1.0")
@@ -49,7 +46,6 @@ graph TD;
   master1("M.1: Bump min supported
            Latest = 23.2-x
            MinSupported = 23.2
-           PreviousRelease = 23.2
            version.txt = v24.1.0-alpha.00000000")
             
   master1 --> master2
@@ -57,20 +53,11 @@ graph TD;
   master2("M.2: Bump current version
            Latest = 24.1-2
            MinSupported = 23.2
-           PreviousRelease = 23.2
            version.txt = v24.2.0-alpha.00000000")
             
   master2 --> master3
             
-  master3("M.3: Bump previous release
-           Latest = 24.1-x
-           MinSupported = 23.2
-           PreviousRelease = 24.1
-           version.txt = v24.2.0-alpha.00000000")
-            
-  master3 --> master4
-
-  master4(M.4: Finalize gates and bootstrap data for released version)
+  master3(M.3: Finalize gates and bootstrap data for released version)
 ```
 
 ## Release branch changes
@@ -213,31 +200,12 @@ necessary if the current runbooks are followed).
 
 **Example PR:** [#112271](https://github.com/cockroachdb/cockroach/pull/112271)
 
-### M.3: Bump previous release
-
-**What**: `PreviousRelease` is the version from which we the Cockroach binary
-supports upgrades (without enabling experimental version skipping). This value
-can only be updated once a beta version for that release is published (and
-listed as a "predecessor version" in
-`pkg/testutils/release/cockroach_releases.yaml`); this is because upgrade tests
-attempt to download the published version to test against.
-
-**When**: Any time after publishing the first beta from the forked release (and
-after M.2).
-
-**Checklist**:
-- [ ] Advance `PreviousRelease` to match the in-progress release
-- [ ] Regenerate expected test data results as needed; file issues for any
-  skipped tests.
-
-**Example PR:** TODO
-
-### M.4: Finalize gates and bootstrap data for released version
+### M.3: Finalize gates and bootstrap data for released version
 
 **What**: Bring in any last changes to bootstrap data and version gates from the
 release.
 
-**When**: Any time after minting the previous release (R.2), and after M.3.
+**When**: Any time after minting the previous release (R.2), and after M.2.
 
 **Checklist**:
 
