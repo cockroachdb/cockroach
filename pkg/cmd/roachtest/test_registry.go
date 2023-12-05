@@ -19,18 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
-
-var loadTeams = func() (team.Map, error) {
-	return team.DefaultLoadTeams()
-}
-
-func ownerToAlias(o registry.Owner) team.Alias {
-	return team.Alias(fmt.Sprintf("cockroachdb/%s", o))
-}
 
 type testRegistryImpl struct {
 	m            map[string]*registry.TestSpec
@@ -40,13 +31,13 @@ type testRegistryImpl struct {
 	preferSSD    bool
 
 	promRegistry *prometheus.Registry
-	// benchOnly is true iff the registry is being used to run benchmarks only.
-	benchOnly bool
 }
+
+var _ registry.Registry = (*testRegistryImpl)(nil)
 
 // makeTestRegistry constructs a testRegistryImpl and configures it with opts.
 func makeTestRegistry(
-	cloud string, instanceType string, zones string, preferSSD bool, benchOnly bool,
+	cloud string, instanceType string, zones string, preferSSD bool,
 ) testRegistryImpl {
 	return testRegistryImpl{
 		cloud:        cloud,
@@ -55,7 +46,6 @@ func makeTestRegistry(
 		preferSSD:    preferSSD,
 		m:            make(map[string]*registry.TestSpec),
 		promRegistry: prometheus.NewRegistry(),
-		benchOnly:    benchOnly,
 	}
 }
 
@@ -64,11 +54,6 @@ func (r *testRegistryImpl) Add(spec registry.TestSpec) {
 	if _, ok := r.m[spec.Name]; ok {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
-	}
-
-	if r.benchOnly && !spec.Benchmark {
-		// Skip non-benchmarks.
-		return
 	}
 
 	if err := r.prepareSpec(&spec); err != nil {
@@ -119,12 +104,8 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	if spec.Owner == `` {
 		return fmt.Errorf(`%s: unspecified owner`, spec.Name)
 	}
-	teams, err := loadTeams()
-	if err != nil {
-		return err
-	}
-	if _, ok := teams[ownerToAlias(spec.Owner)]; !ok {
-		return fmt.Errorf(`%s: unknown owner [%s]`, spec.Name, spec.Owner)
+	if !spec.Owner.IsValid() {
+		return fmt.Errorf(`%s: unknown owner %q`, spec.Name, spec.Owner)
 	}
 	if len(spec.Tags) == 0 {
 		spec.Tags = registry.Tags(registry.DefaultTag)
@@ -155,37 +136,15 @@ func (r *testRegistryImpl) PromFactory() promauto.Factory {
 	return promauto.With(r.promRegistry)
 }
 
-// GetTests returns all the tests that match the given regexp, sorted by name.
-// Skipped tests are included, and tests that don't match their minVersion spec
-// are also included but marked as skipped.
-func (r testRegistryImpl) GetTests(
-	filter *registry.TestFilter,
-) ([]registry.TestSpec, []registry.TestSpec) {
+// AllTests returns all the tests specs, sorted by name.
+func (r testRegistryImpl) AllTests() []registry.TestSpec {
 	var tests []registry.TestSpec
-	var tagMismatch []registry.TestSpec
 	for _, t := range r.m {
-		switch t.Match(filter) {
-		case registry.Matched:
-			tests = append(tests, *t)
-		case registry.FailedTags:
-			tagMismatch = append(tagMismatch, *t)
-		case registry.FailedFilter:
-		}
+		tests = append(tests, *t)
 	}
 	sort.Slice(tests, func(i, j int) bool {
 		return tests[i].Name < tests[j].Name
 	})
-	sort.Slice(tagMismatch, func(i, j int) bool {
-		return tagMismatch[i].Name < tagMismatch[j].Name
-	})
-	return tests, tagMismatch
-}
-
-// List lists tests that match one of the filters.
-func (r testRegistryImpl) List(filters []string) []registry.TestSpec {
-	filter := registry.NewTestFilter(filters, true)
-	tests, _ := r.GetTests(filter)
-	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
 	return tests
 }
 
