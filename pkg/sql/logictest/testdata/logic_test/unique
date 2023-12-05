@@ -1026,3 +1026,25 @@ ALTER TABLE multiple_uniq ADD CONSTRAINT uniq_fk FOREIGN KEY (d) REFERENCES uniq
 statement error pq: insert on table "multiple_uniq" violates foreign key constraint "uniq_fk"\nDETAIL: Key \(d\)=\(14\) is not present in table "uniq"\.
 INSERT INTO multiple_uniq (a,b,c,d)
 VALUES (11,12,13,14), (15,16,17,18)
+
+# Regression test for #115377.
+statement ok
+CREATE TABLE t115377 (
+  k INT,
+  a INT,
+  b INT,
+  s TEXT NOT NULL,
+  PRIMARY KEY (s, k),
+  UNIQUE WITHOUT INDEX (k),
+  UNIQUE (s, a, b),
+  UNIQUE WITHOUT INDEX (a, b),
+  CHECK (s IN ('east', 'west'))
+)
+
+statement ok
+INSERT INTO t115377 VALUES (2, 0, 0, 'east')
+
+statement error pgcode 23505 duplicate key value violates unique constraint \"unique_k\"
+INSERT INTO t115377 VALUES (2, 1, 1, 'east')
+
+subtest end
