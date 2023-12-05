@@ -515,6 +515,7 @@ func TestLint(t *testing.T) {
 					":!testutils/datapathutils/data_path.go", // For TEST_UNDECLARED_OUTPUT_DIR, REMOTE_EXEC
 					":!testutils/backup.go",                  // For BACKUP_TESTING_BUCKET
 					":!compose/compose_test.go",              // For PATH.
+					":!testutils/skip/skip.go",               // For REMOTE_EXEC.
 				},
 			},
 		} {

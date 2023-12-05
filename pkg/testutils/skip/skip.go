@@ -13,6 +13,7 @@ package skip
 import (
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -196,6 +197,16 @@ func UnderBench() bool {
 	// test executable with `-test.bench 1`.
 	f := flag.Lookup("test.bench")
 	return f != nil && f.Value.String() != ""
+}
+
+// UnderRemoteExecution skips the given test under remote test execution.
+func UnderRemoteExecutionWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
+	t.Helper()
+	isRemote := os.Getenv("REMOTE_EXEC")
+	if len(isRemote) > 0 {
+		maybeSkip(t, withIssue("disabled under race", githubIssueID), args...)
+	}
+
 }
 
 func testConfig() string {
