@@ -3100,7 +3100,9 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 		// If we have a commitTimestamp, we should use it.
 		ex.previousTransactionCommitTimestamp.Forward(ev.commitTimestamp)
 		if telemetryLoggingEnabled.Get(&ex.server.cfg.Settings.SV) {
-			ex.server.TelemetryLoggingMetrics.onTxnFinish(ev.txnID.String())
+			txnCounter := int(ex.extraTxnState.txnCounter.Load())
+			txnKey := createTelemetryTransactionID(ex.planner.extendedEvalCtx.SessionID, txnCounter)
+			ex.server.TelemetryLoggingMetrics.onTxnFinish(txnKey)
 		}
 	}
 }

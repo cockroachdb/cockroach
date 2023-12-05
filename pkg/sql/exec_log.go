@@ -109,6 +109,18 @@ const (
 	executorTypeInternal
 )
 
+// shouldForceLogStatementType returns true if the statement should be force logged to
+// TELEMETRY. Currently the criteria is if the statement is not of type DML and is
+// not BEGIN or COMMIT.
+func shouldForceLogStatementType(stmtType tree.StatementType, stmtTag string) bool {
+	switch stmtTag {
+	case "BEGIN", "COMMIT":
+		return false
+	default:
+		return stmtType != tree.TypeDML
+	}
+}
+
 // vLevel returns the vmodule log level at which logs from the given executor
 // should be written to the logs.
 func (s executorType) vLevel() log.Level { return log.Level(s) + 2 }
@@ -206,6 +218,12 @@ func (p *planner) maybeLogStatementInternal(
 		sqlErrState = pgerror.GetPGCode(err).String()
 	}
 
+	// See #115610. The txn counter for BEGIN is off by 1.
+	// We can increment it manually here until the issue is resolved.
+	if p.stmt.AST.StatementTag() == "BEGIN" {
+		txnCounter++
+	}
+
 	execDetails := eventpb.CommonSQLExecDetails{
 		// Note: the current statement, application name, etc, are
 		// automatically populated by the shared logic in event_log.go.
@@ -282,25 +300,17 @@ func (p *planner) maybeLogStatementInternal(
 		// the last event emission.
 		tracingEnabled := telemetryMetrics.isTracing(p.curPlan.instrumentation.Tracing())
 
-		isStmtMode := telemetrySamplingMode.Get(&p.execCfg.Settings.SV) == telemetryModeStatement
-
 		// Always sample if one of the scenarios is true:
-		// - on 'statement' sampling and the current statement is not of type DML
-		// - on 'transaction' sampling mode and the current statement is not of type DML and is not a COMMIT
+		// - statement is not of type DML and is not BEGIN or COMMIT
 		// - tracing is enabled for this statement
 		// - this is a query emitted by our console (application_name starts with `$ internal-console`) and
 		// the cluster setting to log console queries is enabled
-		forceLog := (p.stmt.AST.StatementType() != tree.TypeDML &&
-			(isStmtMode || p.stmt.AST.StatementTag() != "COMMIT")) ||
+		forceLog := shouldForceLogStatementType(p.stmt.AST.StatementType(), p.stmt.AST.StatementTag()) ||
 			tracingEnabled || logConsoleQuery
 
-		var txnID string
-		// p.txn can be nil for COPY.
-		if p.txn != nil {
-			txnID = p.txn.ID().String()
-		}
-
-		if telemetryMetrics.shouldEmitStatementLog(telemetryMetrics.timeNow(), txnID, forceLog, stmtCount) {
+		txnTrackingID := createTelemetryTransactionID(p.extendedEvalCtx.SessionID, txnCounter)
+		isFirstStmt := stmtCount == 0 || (p.extendedEvalCtx.Context.TxnImplicit && stmtCount == 1)
+		if telemetryMetrics.shouldEmitStatementLog(telemetryMetrics.timeNow(), txnTrackingID, forceLog, isFirstStmt) {
 			var queryLevelStats execstats.QueryLevelStats
 			if stats, ok := p.instrumentation.GetQueryLevelStats(); ok {
 				queryLevelStats = *stats
@@ -310,6 +320,12 @@ func (p *planner) maybeLogStatementInternal(
 			indexRecs := make([]string, 0, len(p.curPlan.instrumentation.indexRecs))
 			for _, rec := range p.curPlan.instrumentation.indexRecs {
 				indexRecs = append(indexRecs, rec.SQL)
+			}
+
+			var txnID string
+			// p.txn can be nil for COPY.
+			if p.txn != nil {
+				txnID = p.txn.ID().String()
 			}
 
 			phaseTimes := statsCollector.PhaseTimes()

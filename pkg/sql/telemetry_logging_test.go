@@ -1711,7 +1711,7 @@ func TestTelemetryLoggingTxnMode(t *testing.T) {
 	queries := []testQuery{
 		{
 			query:   "BEGIN; TRUNCATE t; COMMIT",
-			logTime: 0, // Logged.
+			logTime: 0.1, // Logged.
 		},
 		{
 			query:   "BEGIN; SELECT 1; SELECT 2; SELECT 3; COMMIT",
@@ -1750,16 +1750,24 @@ func TestTelemetryLoggingTxnMode(t *testing.T) {
 
 	expectedLogs := []expectedLog{
 		{
+			logMsg:            `BEGIN TRANSACTION`,
+			skippedQueryCount: 0,
+		},
+		{
 			logMsg:            `TRUNCATE TABLE defaultdb.public.t`,
-			skippedQueryCount: 1, // Skipped BEGIN.
+			skippedQueryCount: 0,
 		},
 		{
 			logMsg:            `COMMIT TRANSACTION`,
 			skippedQueryCount: 0,
 		},
 		{
+			logMsg:            `BEGIN TRANSACTION`,
+			skippedQueryCount: 0,
+		},
+		{
 			logMsg:            `SELECT ‹1›`,
-			skippedQueryCount: 1, // BEGIN skipped.
+			skippedQueryCount: 0,
 		},
 		{
 			logMsg:            `SELECT ‹2›`,
@@ -1782,8 +1790,12 @@ func TestTelemetryLoggingTxnMode(t *testing.T) {
 			skippedQueryCount: 2,
 		},
 		{
+			logMsg:            `BEGIN TRANSACTION`,
+			skippedQueryCount: 3,
+		},
+		{
 			logMsg:            `SELECT * FROM ""."".t LIMIT ‹4›`,
-			skippedQueryCount: 4,
+			skippedQueryCount: 0,
 		},
 		{
 			logMsg:            `SELECT * FROM ""."".t LIMIT ‹5›`,
@@ -2060,8 +2072,12 @@ func TestTelemetryLoggingRespectsTxnLimit(t *testing.T) {
 
 	expectedLogs := []expectedLog{
 		{
+			logMsg:            `BEGIN TRANSACTION`,
+			skippedQueryCount: 0,
+		},
+		{
 			logMsg:            `SELECT ‹1›`,
-			skippedQueryCount: 2, // Skipped both BEGIN queries.
+			skippedQueryCount: 1, // Skipped BEGIN in other transaction.
 		},
 		{
 			logMsg:            `SELECT ‹1›, ‹1›`,

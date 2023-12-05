@@ -12,11 +12,13 @@ package sql
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -86,6 +88,18 @@ var telemetryTrackedTxnsLimit = settings.RegisterIntSetting(
 	settings.WithPublic,
 )
 
+// We need to track the transaction execution for transaction telemetry logging.
+// We can't use the transaction execution id since it is not available for BEGIN
+// statements, so we use the session id and txn counter to track the transaction through
+// its execution.
+type telemetryTransactionID string
+
+func createTelemetryTransactionID(
+	sessionID clusterunique.ID, txnCounter int,
+) telemetryTransactionID {
+	return telemetryTransactionID(sessionID.String() + "/" + strconv.Itoa(txnCounter))
+}
+
 // TelemetryLoggingMetrics keeps track of the last time at which an event
 // was logged to the telemetry channel, and the number of skipped queries
 // since the last logged event.
@@ -101,7 +115,7 @@ type TelemetryLoggingMetrics struct {
 		// being logged. When the sampling mode is set to txns, we must ensure we
 		// log all stmts for a txn. Txns are removed upon completing execution when
 		// all events have been captured.
-		observedTxnExecutions map[string]interface{}
+		observedTxnExecutions map[telemetryTransactionID]interface{}
 	}
 
 	Knobs *TelemetryLoggingTestingKnobs
@@ -114,7 +128,7 @@ func newTelemetryLoggingMetrics(
 	knobs *TelemetryLoggingTestingKnobs, st *cluster.Settings,
 ) *TelemetryLoggingMetrics {
 	t := TelemetryLoggingMetrics{Knobs: knobs, st: st}
-	t.mu.observedTxnExecutions = make(map[string]interface{})
+	t.mu.observedTxnExecutions = make(map[telemetryTransactionID]interface{})
 	return &t
 }
 
@@ -154,12 +168,12 @@ func (t *TelemetryLoggingMetrics) registerOnTelemetrySamplingModeChange(
 		defer t.mu.Unlock()
 		if mode == telemetryModeStatement {
 			// Clear currently observed txns.
-			t.mu.observedTxnExecutions = make(map[string]interface{})
+			t.mu.observedTxnExecutions = make(map[telemetryTransactionID]interface{})
 		}
 	})
 }
 
-func (t *TelemetryLoggingMetrics) onTxnFinish(txnExecutionID string) {
+func (t *TelemetryLoggingMetrics) onTxnFinish(txnID telemetryTransactionID) {
 	if telemetrySamplingMode.Get(&t.st.SV) != telemetryModeTransaction {
 		return
 	}
@@ -169,7 +183,7 @@ func (t *TelemetryLoggingMetrics) onTxnFinish(txnExecutionID string) {
 	func() {
 		t.mu.RLock()
 		defer t.mu.RUnlock()
-		_, exists = t.mu.observedTxnExecutions[txnExecutionID]
+		_, exists = t.mu.observedTxnExecutions[txnID]
 	}()
 
 	if !exists {
@@ -178,7 +192,7 @@ func (t *TelemetryLoggingMetrics) onTxnFinish(txnExecutionID string) {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.mu.observedTxnExecutions, txnExecutionID)
+	delete(t.mu.observedTxnExecutions, txnID)
 }
 
 func (t *TelemetryLoggingMetrics) getTrackedTxnsCount() int {
@@ -206,20 +220,12 @@ func (t *TelemetryLoggingMetrics) timeNow() time.Time {
 //   - The telemetry mode is set to "statement" AND the required amount of time has elapsed
 //   - The txn is not being tracked and the stmt is being forced to log.
 func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
-	newTime time.Time, txnExecutionID string, force bool, stmtPosInTxn int,
+	newTime time.Time, txnID telemetryTransactionID, force bool, isFirstStmt bool,
 ) (shouldEmit bool) {
 	maxEventFrequency := TelemetryMaxStatementEventFrequency.Get(&t.st.SV)
 	requiredTimeElapsed := time.Second / time.Duration(maxEventFrequency)
 	isTxnMode := telemetrySamplingMode.Get(&t.st.SV) == telemetryModeTransaction
 	txnsLimit := int(telemetryTrackedTxnsLimit.Get(&t.st.SV))
-
-	if isTxnMode && txnExecutionID == "" {
-		// If we are in transaction mode, skip logging statements without txn ids
-		// since we won't be able to track the stmt's txn through its execution.
-		// This will skip statements like BEGIN which don't have an associated
-		// transaction id.
-		return false
-	}
 
 	var enoughTimeElapsed, txnIsTracked, startTrackingTxn bool
 	// Avoid taking the full lock if we don't have to.
@@ -228,9 +234,9 @@ func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
 		defer t.mu.RUnlock()
 
 		enoughTimeElapsed = newTime.Sub(t.mu.lastEmittedTime) >= requiredTimeElapsed
-		startTrackingTxn = isTxnMode && txnExecutionID != "" &&
-			stmtPosInTxn == 1 && len(t.mu.observedTxnExecutions) < txnsLimit
-		_, txnIsTracked = t.mu.observedTxnExecutions[txnExecutionID]
+		startTrackingTxn = isTxnMode && txnID != "" &&
+			isFirstStmt && len(t.mu.observedTxnExecutions) < txnsLimit
+		_, txnIsTracked = t.mu.observedTxnExecutions[txnID]
 	}()
 
 	if txnIsTracked || (!force && (!enoughTimeElapsed || (isTxnMode && !startTrackingTxn))) {
@@ -253,7 +259,7 @@ func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
 
 	// We could be forcing the log so we should only track its txn if it meets the criteria.
 	if startTrackingTxn && !txnLimitReached {
-		t.mu.observedTxnExecutions[txnExecutionID] = struct{}{}
+		t.mu.observedTxnExecutions[txnID] = struct{}{}
 	}
 
 	t.mu.lastEmittedTime = newTime
