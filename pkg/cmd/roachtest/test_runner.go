@@ -778,6 +778,7 @@ func (r *testRunner) runWorker(
 
 				// Set initial cluster settings for this test.
 				c.clusterSettings = map[string]string{}
+				c.virtualClusterSettings = map[string]string{}
 
 				switch testSpec.Leases {
 				case registry.DefaultLeases:
