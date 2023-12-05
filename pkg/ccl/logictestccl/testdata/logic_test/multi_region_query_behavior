@@ -62,7 +62,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ table: parent@parent_pkey
-            │ equality: (crdb_region_eq, p_id) = (crdb_region,id)
+            │ equality: (crdb_region_eq, p_id) = (crdb_region, id)
             │ equality cols are key
             │
             └── • render

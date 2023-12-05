@@ -69,7 +69,7 @@ vectorized: true
 │ columns: (a, b, c, d, e, f)
 │ estimated row count: 0
 │ table: def@def_pkey
-│ equality: (b, c) = (f,e)
+│ equality: (b, c) = (f, e)
 │ equality cols are key
 │
 └── • scan
@@ -456,7 +456,7 @@ vectorized: true
     │ columns: (a, b, c, d, a, b, c, d)
     │ estimated row count: 0
     │ table: data@data_pkey
-    │ equality: (a, b, c, d) = (a,b,c,d)
+    │ equality: (a, b, c, d) = (a, b, c, d)
     │ equality cols are key
     │ pred: c > 0
     │
@@ -483,7 +483,7 @@ vectorized: true
 • lookup join
 │ estimated row count: 0
 │ table: data@data_pkey
-│ equality: (a, b, c, d) = (a,b,c,d)
+│ equality: (a, b, c, d) = (a, b, c, d)
 │ equality cols are key
 │ pred: c > 0
 │
@@ -705,7 +705,7 @@ vectorized: true
 • lookup join
 │ estimated row count: 99
 │ table: books2@books2_pkey
-│ equality: (book, lookup_join_const_col_@7) = (title,edition)
+│ equality: (book, lookup_join_const_col_@7) = (title, edition)
 │ equality cols are key
 │
 └── • render
@@ -797,7 +797,7 @@ vectorized: true
         │ columns: (a, a, b, d)
         │ estimated row count: 1,000
         │ table: large@large_pkey
-        │ equality: (a, b) = (a,b)
+        │ equality: (a, b) = (a, b)
         │ equality cols are key
         │
         └── • lookup join (inner)
@@ -919,7 +919,7 @@ vectorized: true
         │ columns: (c, a, b, d)
         │ estimated row count: 1,000
         │ table: large@large_pkey
-        │ equality: (a, b) = (a,b)
+        │ equality: (a, b) = (a, b)
         │ equality cols are key
         │
         └── • lookup join (left outer)
@@ -974,7 +974,7 @@ vectorized: true
         │ columns: (c, a, b, cont, b, d)
         │ estimated row count: 336
         │ table: large@large_pkey
-        │ equality: (a, b) = (a,b)
+        │ equality: (a, b) = (a, b)
         │ equality cols are key
         │ pred: d < 30
         │
@@ -1004,7 +1004,7 @@ vectorized: true
     │ columns: (c, a, b, cont)
     │ estimated row count: 100
     │ table: large@large_pkey
-    │ equality: (a, b) = (a,b)
+    │ equality: (a, b) = (a, b)
     │ equality cols are key
     │ pred: d < 30
     │
@@ -1034,7 +1034,7 @@ vectorized: true
     │ columns: (c, a, b, cont)
     │ estimated row count: 0
     │ table: large@large_pkey
-    │ equality: (a, b) = (a,b)
+    │ equality: (a, b) = (a, b)
     │ equality cols are key
     │ pred: d < 30
     │
@@ -1077,7 +1077,7 @@ vectorized: true
     │ columns: (a, d, e, a, d)
     │ estimated row count: 1 (missing stats)
     │ table: u@idx
-    │ equality: (d, a) = (d,a)
+    │ equality: (d, a) = (d, a)
     │
     └── • filter
         │ columns: (a, d, e)
@@ -1145,7 +1145,7 @@ vectorized: true
     │ columns: (a, b, d, e, a, b, d)
     │ estimated row count: 0 (missing stats)
     │ table: u@idx
-    │ equality: (d, a, b) = (d,a,b)
+    │ equality: (d, a, b) = (d, a, b)
     │
     └── • filter
         │ columns: (a, b, d, e)
@@ -1178,7 +1178,7 @@ vectorized: true
     │ columns: (a, b, d, e, a, b, d)
     │ estimated row count: 0 (missing stats)
     │ table: u@idx
-    │ equality: (d, b, a) = (d,b,a)
+    │ equality: (d, b, a) = (d, b, a)
     │
     └── • filter
         │ columns: (a, b, d, e)
@@ -1349,7 +1349,7 @@ vectorized: true
 │ columns: (a, b, c)
 │ estimated row count: 100
 │ table: def@def_pkey
-│ equality: (a, c) = (f,e)
+│ equality: (a, c) = (f, e)
 │ equality cols are key
 │
 └── • scan
@@ -1368,7 +1368,7 @@ vectorized: true
 │ columns: (a, b, c)
 │ estimated row count: 0
 │ table: def@def_pkey
-│ equality: (a, c) = (f,e)
+│ equality: (a, c) = (f, e)
 │ equality cols are key
 │
 └── • scan
@@ -2043,7 +2043,7 @@ vectorized: true
                 └── • lookup join
                     │ estimated row count: 80,016
                     │ table: lineitem@lineitem_pkey
-                    │ equality: (l_orderkey, l_linenumber) = (l_orderkey,l_linenumber)
+                    │ equality: (l_orderkey, l_linenumber) = (l_orderkey, l_linenumber)
                     │ equality cols are key
                     │ pred: l_receiptdate > l_commitdate
                     │
@@ -2096,7 +2096,7 @@ vectorized: true
         │ columns: ("lookup_join_const_col_@15", pk, col0, col3)
         │ estimated row count: 10 (missing stats)
         │ table: tab4@tab4_col3_col4_key
-        │ equality: (col0, lookup_join_const_col_@15) = (col3,col4)
+        │ equality: (col0, lookup_join_const_col_@15) = (col3, col4)
         │ equality cols are key
         │
         └── • render
