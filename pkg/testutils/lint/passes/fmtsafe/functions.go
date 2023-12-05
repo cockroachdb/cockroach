@@ -161,6 +161,8 @@ var requireConstFmt = map[string]bool{
 
 	"(github.com/cockroachdb/cockroach/pkg/kv/kvpb.TestPrinter).Printf": true,
 
+	"(*github.com/cockroachdb/cockroach/pkg/cloud/amazon.awsLogAdapter).Logf": true,
+
 	// Error things are populated in the init() message.
 }
 
