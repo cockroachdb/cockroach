@@ -472,6 +472,7 @@ func fullClusterRestoreWithTenants(exportDir string) func(t *testing.T) {
 		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
 			InitManualReplication, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
+					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 					Knobs: base.TestingKnobs{
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 					},

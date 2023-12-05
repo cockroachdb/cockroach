@@ -626,6 +626,11 @@ func TestBackupRestoreAppend(t *testing.T) {
 	tc, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
+	if !tc.ApplicationLayer(0).Codec().ForSystemTenant() {
+		systemRunner := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+		systemRunner.Exec(t, `ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+	}
+
 	// Ensure that each node has at least one leaseholder. (These splits were
 	// made in backupRestoreTestSetup.) These are wrapped with SucceedsSoon()
 	// because EXPERIMENTAL_RELOCATE can fail if there are other replication
@@ -2070,7 +2075,7 @@ table_name from [SHOW TABLES FROM restore] ORDER BY schema_name, table_name`, tc
 		}
 
 		// Verify that the schemas are in the database's schema map.
-		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
+		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, tc.ApplicationLayer(0).Codec(), "newdb")
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc1")
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc2")
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc3")
@@ -3365,7 +3370,11 @@ func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 
 	const numAccounts = 1
 	ctx := context.Background()
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
 	defer cleanupFn()
 
 	_, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
@@ -3390,7 +3399,11 @@ func TestBackupJobFailsInRestoredTenant(t *testing.T) {
 
 	const numAccounts = 1
 	ctx := context.Background()
-	tc, systemDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, systemDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	defer cleanupFn()
 
 	t10, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{
@@ -3498,7 +3511,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 	const numAccounts = 10
 	ctx := context.Background()
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	const dir = "nodelocal://1/"
 
@@ -3728,13 +3741,13 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE drop_table_db")
 		sqlDB.Exec(t, "CREATE DATABASE drop_table_db_restore")
 		sqlDB.Exec(t, "CREATE TABLE drop_table_db.a (k int, v string)")
-		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db TO $1 WITH revision_history`, backupPath)
+		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db INTO $1 WITH revision_history`, backupPath)
 		sqlDB.Exec(t, "INSERT INTO drop_table_db.a VALUES (1, 'foo')")
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
 		sqlDB.Exec(t, "DROP TABLE drop_table_db.a")
-		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db TO $1 WITH revision_history`, backupPath)
+		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db INTO LATEST IN $1 WITH revision_history`, backupPath)
 		restoreQuery := fmt.Sprintf(
-			"RESTORE drop_table_db.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='drop_table_db_restore'", tsBefore)
+			"RESTORE drop_table_db.* FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH into_db='drop_table_db_restore'", tsBefore)
 		sqlDB.Exec(t, restoreQuery, backupPath)
 
 		restoredTableQuery := "SELECT * FROM drop_table_db_restore.a"
@@ -3745,17 +3758,20 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	t.Run("backup-create-drop-backup", func(t *testing.T) {
 		var tsBefore string
 		backupPath := "nodelocal://1/create_and_drop"
-
+		if !tc.ApplicationLayer(0).Codec().ForSystemTenant() {
+			// TODO(adityamaru): Unskip once #115640 is resolved.
+			skip.WithIssue(t, 115640)
+		}
 		sqlDB.Exec(t, "CREATE DATABASE create_and_drop")
 		sqlDB.Exec(t, "CREATE DATABASE create_and_drop_restore")
-		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop TO $1 WITH revision_history`, backupPath)
+		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop INTO $1 WITH revision_history`, backupPath)
 		sqlDB.Exec(t, "CREATE TABLE create_and_drop.a (k int, v string)")
 		sqlDB.Exec(t, "INSERT INTO create_and_drop.a VALUES (1, 'foo')")
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
 		sqlDB.Exec(t, "DROP TABLE create_and_drop.a")
-		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop TO $1 WITH revision_history`, backupPath)
+		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop INTO LATEST IN $1 WITH revision_history`, backupPath)
 		restoreQuery := fmt.Sprintf(
-			"RESTORE create_and_drop.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='create_and_drop_restore'", tsBefore)
+			"RESTORE create_and_drop.* FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH into_db='create_and_drop_restore'", tsBefore)
 		sqlDB.Exec(t, restoreQuery, backupPath)
 
 		restoredTableQuery := "SELECT * FROM create_and_drop_restore.a"
@@ -4162,7 +4178,13 @@ func TestEncryptedBackup(t *testing.T) {
 				incorrectEncryptionOption = "encryption_passphrase = 'wrongpassphrase'"
 			}
 			ctx := context.Background()
-			_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, multiNode, 3, InitManualReplication)
+			// Restrict to system tenant as the setup involves running ALTER PARTITION
+			// that is disabled for secondary tenants.
+			_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, 3, InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				},
+			})
 			defer cleanupFn()
 
 			setupBackupEncryptedTest(ctx, t, sqlDB)
@@ -6497,7 +6519,11 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 		cleanup := func() { conn.Close() }
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
-	tc, systemDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, systemDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	_, _ = tc, systemDB
 	defer cleanupFn()
 	srv := tc.Server(0)
@@ -6513,7 +6539,11 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 	defer cleanupT11()
 
 	// Create another server.
-	tc2, systemDB2, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	tc2, systemDB2, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	srv2 := tc2.Server(0)
 	defer cleanupEmptyCluster()
 
@@ -6589,7 +6619,11 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 				defer cleanupEmptyHTTPServer()
 
 				_, emptySystemDB, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
-					dir, InitManualReplication, base.TestClusterArgs{})
+					dir, InitManualReplication, base.TestClusterArgs{
+						ServerArgs: base.TestServerArgs{
+							DefaultTestTenant: base.TestControlsTenantsExplicitly,
+						},
+					})
 				defer cleanupEmptyCluster()
 
 				emptySystemDB.Exec(t, `BACKUP TO $1`, httpAddrEmpty)
@@ -6618,7 +6652,11 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 		cleanup := func() { conn.Close() }
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
-	tc, systemDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, systemDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	_, _ = tc, systemDB
 	defer cleanupFn()
 
@@ -6626,7 +6664,11 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	_ = securitytest.EmbeddedTenantIDs()
 
 	// Create another server.
-	tc2, _, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	tc2, _, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	srv2 := tc2.Server(0)
 	defer cleanupEmptyCluster()
 
@@ -6642,7 +6684,11 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 		tenant2C2.Exec(t, `RESTORE FROM $1 WITH include_all_virtual_clusters`, backup2HttpAddr)
 	})
 
-	_, systemDB2, cleanupDB2 := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	_, systemDB2, cleanupDB2 := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	defer cleanupDB2()
 	t.Run("cluster-restore-into-cluster-with-tenant-settings-succeeds", func(t *testing.T) {
 		systemDB2.Exec(t, `RESTORE FROM $1 WITH include_all_virtual_clusters`, backup2HttpAddr)
@@ -6670,7 +6716,11 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
 
-	tc, systemDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, systemDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	_, _ = tc, systemDB
 	defer cleanupFn()
 	srv := tc.Server(0)
@@ -6679,7 +6729,11 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 	_ = securitytest.EmbeddedTenantIDs()
 
 	// Create another server.
-	tc2, systemDB2, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	tc2, systemDB2, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	srv2 := tc2.Server(0)
 	defer cleanupEmptyCluster()
 
@@ -6768,7 +6822,11 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 				defer cleanupEmptyHTTPServer()
 
 				_, emptySystemDB, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
-					dir, InitManualReplication, base.TestClusterArgs{})
+					dir, InitManualReplication, base.TestClusterArgs{
+						ServerArgs: base.TestServerArgs{
+							DefaultTestTenant: base.TestControlsTenantsExplicitly,
+						},
+					})
 				defer cleanupEmptyCluster()
 
 				emptySystemDB.Exec(t, `BACKUP TO $1`, httpAddrEmpty)
@@ -7646,16 +7704,17 @@ ALTER TYPE sc.typ ADD VALUE 'hi';
 	sqlDB.Exec(t, `DROP DATABASE d`)
 	sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://1/test/'`)
 
-	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
+	codec := tc.ApplicationLayer(0).Codec()
+	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, codec, "d")
 	require.EqualValues(t, 2, dbDesc.GetVersion())
 
-	schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+	schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, codec, dbDesc.GetID(), "sc")
 	require.EqualValues(t, 2, schemaDesc.GetVersion())
 
-	tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
+	tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "d", "sc", "tb")
 	require.EqualValues(t, 2, tableDesc.GetVersion())
 
-	typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "d", "sc", "typ")
+	typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, codec, "d", "sc", "typ")
 	require.EqualValues(t, 2, typeDesc.GetVersion())
 }
 
@@ -7745,27 +7804,28 @@ CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE SQL;
 		// get bumped during the cluster upgrade that rewrites all descriptors
 		// with PostDeserializationChanges.
 
-		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
+		codec := tc.ApplicationLayer(0).Codec()
+		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, codec, "d")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, dbDesc.DatabaseDesc().State)
 		require.Equal(t, descpb.DescriptorVersion(1), dbDesc.DatabaseDesc().Version)
 		require.Empty(t, dbDesc.GetPostDeserializationChanges())
 
-		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, codec, dbDesc.GetID(), "sc")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.SchemaDesc().State)
 		require.Equal(t, descpb.DescriptorVersion(1), schemaDesc.SchemaDesc().Version)
 		require.Empty(t, schemaDesc.GetPostDeserializationChanges())
 
-		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
+		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "d", "sc", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.GetState())
 		require.Equal(t, descpb.DescriptorVersion(1), tableDesc.GetVersion())
 		require.Empty(t, tableDesc.GetPostDeserializationChanges())
 
-		typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "d", "sc", "typ")
+		typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, codec, "d", "sc", "typ")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.TypeDesc().State)
 		require.Equal(t, descpb.DescriptorVersion(1), typeDesc.TypeDesc().Version)
 		require.Empty(t, typeDesc.GetPostDeserializationChanges())
 
-		funcDesc := desctestutils.TestingGetFunctionDescriptor(kvDB, keys.SystemSQLCodec, "d", "public", "f")
+		funcDesc := desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "d", "public", "f")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, funcDesc.FuncDesc().State)
 		require.Equal(t, descpb.DescriptorVersion(1), funcDesc.FuncDesc().Version)
 		require.Empty(t, funcDesc.GetPostDeserializationChanges())
@@ -7858,17 +7918,18 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		// Verify that the descriptors are offline.
 
-		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
-		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+		codec := tc.ApplicationLayer(0).Codec()
+		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, codec, "newdb")
+		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, codec, dbDesc.GetID(), "sc")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.SchemaDesc().State)
 
-		publicTableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "public", "tb")
+		publicTableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "newdb", "public", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, publicTableDesc.GetState())
 
-		scTableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "sc", "tb")
+		scTableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "newdb", "sc", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, scTableDesc.GetState())
 
-		typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "sc", "typ")
+		typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, codec, "newdb", "sc", "typ")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.TypeDesc().State)
 
 		// Verify that the descriptors are not visible.
@@ -7965,18 +8026,19 @@ CREATE TABLE d.sc.tb (x d.sc.typ);
 
 		<-beforePublishingNotif
 
+		codec := tc.ApplicationLayer(0).Codec()
 		// Verify that the database and schema descriptors are public.
-		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
+		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, codec, "newdb")
 		require.Equal(t, descpb.DescriptorState_PUBLIC, dbDesc.DatabaseDesc().State)
 
-		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, codec, dbDesc.GetID(), "sc")
 		require.Equal(t, descpb.DescriptorState_PUBLIC, schemaDesc.SchemaDesc().State)
 
 		// Verify that the table and type descriptors are offline.
-		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "sc", "tb")
+		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "newdb", "sc", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.GetState())
 
-		typDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "sc", "typ")
+		typDesc := desctestutils.TestingGetTypeDescriptor(kvDB, codec, "newdb", "sc", "typ")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, typDesc.TypeDesc().State)
 
 		// Verify that dropping the table or the type is not permitted in any way.
@@ -8971,7 +9033,7 @@ CREATE DATABASE test; USE test;
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, INDEX idx_2 (b), INDEX idx_3 (c), INDEX idx_4 (b, c));
 DROP INDEX idx_3;
 `)
-	codec := keys.SystemSQLCodec
+	codec := tc.ApplicationLayer(0).Codec()
 	clearHistoricalTableVersions := func() {
 		// Save the latest value of the descriptor.
 		table := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
@@ -10638,8 +10700,9 @@ func TestBackupDoNotIncludeViewSpans(t *testing.T) {
 
 	// Verify that the manifest doesn't contain any spans that intersect the span
 	// for the view.
-	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "tview")
-	viewSpan := tbDesc.TableSpan(keys.SystemSQLCodec)
+	codec := tc.ApplicationLayer(0).Codec()
+	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "d", "tview")
+	viewSpan := tbDesc.TableSpan(codec)
 
 	for _, sp := range backupManifest.Spans {
 		if sp.Overlaps(viewSpan) {
@@ -10667,9 +10730,16 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0,
+		InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// ForceTableGC sends a kvpb.GCRequest that is marked as systemOnly in
+				// authorizer.go.
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			},
+		})
 	defer cleanupFn()
-	s0 := tc.Servers[0]
+	s0 := tc.ApplicationLayer(0)
 
 	// Speeds up the test.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
@@ -10846,19 +10916,40 @@ func TestBackupRestoreClusterWithUDFs(t *testing.T) {
 	tempDir, tempDirCleanupFn := testutils.TempDir(t)
 	defer tempDirCleanupFn()
 
-	srcCluster, srcSQLDB, srcClusterCleanupFn := backupRestoreTestSetupEmpty(
-		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{},
-	)
-	srcServer := srcCluster.Server(0)
-	defer srcClusterCleanupFn()
+	// In this test we setup two clusters one to backup in and one to restore
+	// into. We then assert the descriptor IDs post restore are what we expect.
+	// Since we restore different sets of system tables in the case of a system
+	// and secondary tenant, to simplify reasoning about this test we ensure both
+	// clusters are operating in the same mode.
+	testutils.RunTrueAndFalse(t, "systemTenant", func(
+		t *testing.T, useSystemTenant bool,
+	) {
+		testTenantOption := base.TestTenantAlwaysEnabled
+		if useSystemTenant {
+			testTenantOption = base.TestControlsTenantsExplicitly
+		}
 
-	tgtCluster, tgtSQLDB, tgtClusterCleanupFn := backupRestoreTestSetupEmpty(
-		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{},
-	)
-	tgtServer := tgtCluster.Server(0)
-	defer tgtClusterCleanupFn()
+		srcCluster, srcSQLDB, srcClusterCleanupFn := backupRestoreTestSetupEmpty(
+			t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					DefaultTestTenant: testTenantOption,
+				},
+			},
+		)
+		srcServer := srcCluster.ApplicationLayer(0)
+		defer srcClusterCleanupFn()
 
-	srcSQLDB.Exec(t, `
+		tgtCluster, tgtSQLDB, tgtClusterCleanupFn := backupRestoreTestSetupEmpty(
+			t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					DefaultTestTenant: testTenantOption,
+				},
+			},
+		)
+		tgtServer := tgtCluster.ApplicationLayer(0)
+		defer tgtClusterCleanupFn()
+
+		srcSQLDB.Exec(t, `
 CREATE DATABASE db1;
 USE db1;
 CREATE SCHEMA sc1;
@@ -10871,114 +10962,133 @@ CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
 $$;
 `)
 
-	rows := srcSQLDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
-	require.Equal(t, 1, len(rows))
-	require.Equal(t, 1, len(rows[0]))
-	udfID, err := strconv.Atoi(rows[0][0])
-	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
+		rows := srcSQLDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
+		require.Equal(t, 1, len(rows))
+		require.Equal(t, 1, len(rows[0]))
+		udfID, err := strconv.Atoi(rows[0][0])
 		require.NoError(t, err)
-		require.Equal(t, 104, int(dbDesc.GetID()))
+		err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
+			require.NoError(t, err)
+			require.Equal(t, 104, int(dbDesc.GetID()))
 
-		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
+			scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
+			require.NoError(t, err)
+			require.Equal(t, 106, int(scDesc.GetID()))
+
+			tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
+			_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
+			require.NoError(t, err)
+			require.Equal(t, 107, int(tbDesc.GetID()))
+
+			typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
+			_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
+			require.NoError(t, err)
+			require.Equal(t, 108, int(typDesc.GetID()))
+
+			tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
+			_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
+			require.NoError(t, err)
+			require.Equal(t, 110, int(tbDesc.GetID()))
+
+			fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
+			require.NoError(t, err)
+			require.Equal(t, 111, int(fnDesc.GetID()))
+			require.Equal(t, 104, int(fnDesc.GetParentID()))
+			require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
+			require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
+			require.Equal(t, 100108, int(fnDesc.GetParams()[0].Type.Oid()))
+			require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
+			require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
+
+			fnDef, _ := scDesc.GetFunction("f1")
+			require.Equal(t, 111, int(fnDef.Signatures[0].ID))
+			require.Equal(t, 100108, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
+			return nil
+		})
 		require.NoError(t, err)
-		require.Equal(t, 106, int(scDesc.GetID()))
 
-		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
+		// Bakcup the whole src cluster.
+		srcSQLDB.Exec(t, `BACKUP INTO $1`, localFoo)
+
+		// Restore into target cluster.
+		tgtSQLDB.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
+		tgtSQLDB.Exec(t, `USE db1`)
+
+		// Verify that all IDs are correctly rewritten.
+		rows = tgtSQLDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
+		require.Equal(t, 1, len(rows))
+		require.Equal(t, 1, len(rows[0]))
+		udfID, err = strconv.Atoi(rows[0][0])
 		require.NoError(t, err)
-		require.Equal(t, 107, int(tbDesc.GetID()))
 
-		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
+		isSystemTenant := tgtCluster.ApplicationLayer(0).Codec().ForSystemTenant()
+
+		// System tenant restores the system.tenant_settings while the secondary
+		// tenant does not.
+		startingDescID := 122
+		if isSystemTenant {
+			startingDescID = 123
+		}
+		err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
+			require.NoError(t, err)
+			require.Equal(t, startingDescID, int(dbDesc.GetID()))
+
+			scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
+			require.NoError(t, err)
+			require.Equal(t, startingDescID+2, int(scDesc.GetID()))
+
+			tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
+			_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
+			require.NoError(t, err)
+			require.Equal(t, startingDescID+3, int(tbDesc.GetID()))
+
+			typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
+			_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
+			require.NoError(t, err)
+			require.Equal(t, startingDescID+4, int(typDesc.GetID()))
+
+			tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
+			_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
+			require.NoError(t, err)
+			require.Equal(t, startingDescID+6, int(tbDesc.GetID()))
+
+			fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
+			require.NoError(t, err)
+			require.Equal(t, startingDescID+7, int(fnDesc.GetID()))
+			require.Equal(t, startingDescID, int(fnDesc.GetParentID()))
+			require.Equal(t, startingDescID+2, int(fnDesc.GetParentSchemaID()))
+			// Make sure db name and IDs are rewritten in function body.
+			require.Equal(t, fmt.Sprintf("SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(%d:::REGCLASS);",
+				startingDescID+6), fnDesc.GetFunctionBody())
+
+			expectedOID := 100126
+			dependsOn := []descpb.ID{125, 128}
+			dependsOnTypes := []descpb.ID{126, 127}
+			if isSystemTenant {
+				expectedOID = 100127
+				dependsOn = []descpb.ID{126, 129}
+				dependsOnTypes = []descpb.ID{127, 128}
+			}
+			require.Equal(t, expectedOID, int(fnDesc.GetParams()[0].Type.Oid()))
+			require.Equal(t, dependsOn, fnDesc.GetDependsOn())
+			require.Equal(t, dependsOnTypes, fnDesc.GetDependsOnTypes())
+
+			fnDef, _ := scDesc.GetFunction("f1")
+			require.Equal(t, startingDescID+7, int(fnDef.Signatures[0].ID))
+			require.Equal(t, expectedOID, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
+			return nil
+		})
 		require.NoError(t, err)
-		require.Equal(t, 108, int(typDesc.GetID()))
 
-		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
+		// Make sure function actually works on the target cluster.
+		rows = tgtSQLDB.QueryStr(t, `SELECT sc1.f1('Good'::sc1.enum1)`)
+		require.Equal(t, 1, len(rows))
+		require.Equal(t, 1, len(rows[0]))
+		require.Equal(t, "1", rows[0][0])
 		require.NoError(t, err)
-		require.Equal(t, 110, int(tbDesc.GetID()))
-
-		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
-		require.NoError(t, err)
-		require.Equal(t, 111, int(fnDesc.GetID()))
-		require.Equal(t, 104, int(fnDesc.GetParentID()))
-		require.Equal(t, 106, int(fnDesc.GetParentSchemaID()))
-		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(110:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100108, int(fnDesc.GetParams()[0].Type.Oid()))
-		require.Equal(t, []descpb.ID{107, 110}, fnDesc.GetDependsOn())
-		require.Equal(t, []descpb.ID{108, 109}, fnDesc.GetDependsOnTypes())
-
-		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 111, int(fnDef.Signatures[0].ID))
-		require.Equal(t, 100108, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
-		return nil
 	})
-	require.NoError(t, err)
-
-	// Bakcup the whole src cluster.
-	srcSQLDB.Exec(t, `BACKUP INTO $1`, localFoo)
-
-	// Restore into target cluster.
-	tgtSQLDB.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
-	tgtSQLDB.Exec(t, `USE db1`)
-
-	// Verify that all IDs are correctly rewritten.
-	rows = tgtSQLDB.QueryStr(t, `SELECT function_id FROM crdb_internal.create_function_statements WHERE function_name = 'f1'`)
-	require.Equal(t, 1, len(rows))
-	require.Equal(t, 1, len(rows[0]))
-	udfID, err = strconv.Atoi(rows[0][0])
-	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
-		require.NoError(t, err)
-		require.Equal(t, 123, int(dbDesc.GetID()))
-
-		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
-		require.NoError(t, err)
-		require.Equal(t, 125, int(scDesc.GetID()))
-
-		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
-		require.NoError(t, err)
-		require.Equal(t, 126, int(tbDesc.GetID()))
-
-		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
-		require.NoError(t, err)
-		require.Equal(t, 127, int(typDesc.GetID()))
-
-		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
-		require.NoError(t, err)
-		require.Equal(t, 129, int(tbDesc.GetID()))
-
-		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
-		require.NoError(t, err)
-		require.Equal(t, 130, int(fnDesc.GetID()))
-		require.Equal(t, 123, int(fnDesc.GetParentID()))
-		require.Equal(t, 125, int(fnDesc.GetParentSchemaID()))
-		// Make sure db name and IDs are rewritten in function body.
-		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(129:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100127, int(fnDesc.GetParams()[0].Type.Oid()))
-		require.Equal(t, []descpb.ID{126, 129}, fnDesc.GetDependsOn())
-		require.Equal(t, []descpb.ID{127, 128}, fnDesc.GetDependsOnTypes())
-
-		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 130, int(fnDef.Signatures[0].ID))
-		require.Equal(t, 100127, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
-		return nil
-	})
-	require.NoError(t, err)
-
-	// Make sure function actually works on the target cluster.
-	rows = tgtSQLDB.QueryStr(t, `SELECT sc1.f1('Good'::sc1.enum1)`)
-	require.Equal(t, 1, len(rows))
-	require.Equal(t, 1, len(rows[0]))
-	require.Equal(t, "1", rows[0][0])
-	require.NoError(t, err)
-
 }
 
 func localityFromStr(t *testing.T, s string) roachpb.Locality {
