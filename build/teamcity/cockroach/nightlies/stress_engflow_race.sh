@@ -8,6 +8,4 @@ export EXTRA_ISSUE_PARAMS=race=true
 
 THIS_DIR=$(cd "$(dirname "$0")" && pwd)
 
-unset GITHUB_API_TOKEN
-
 $THIS_DIR/stress_engflow_impl.sh
