@@ -12,7 +12,7 @@ build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev
 
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
 release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
-is_release_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^(release-[0-9][0-9]\.[0-9](\.0)?)$" || echo "")"
+is_release_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^((staging|release|rc)-(v)?[0-9][0-9]\.[0-9](\.0)?).*" || echo "")"
 is_customized_build="$(echo "$TC_BUILD_BRANCH" | grep -Eo "^custombuild-" || echo "")"
 github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
 
