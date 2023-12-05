@@ -6,7 +6,7 @@ mkdir -p artifacts
 
 # NB: The certs are set up and cleaned up in unconditional build steps before
 # and after this build step.
-ENGFLOW_FLAGS="--config engflow --config cibase --config crosslinux \
+ENGFLOW_FLAGS="--config engflow --config crosslinux \
 --jobs 400 --tls_client_certificate=/home/agent/engflow/engflow.crt \
 --tls_client_key=/home/agent/engflow/engflow.key"
 INVOCATION_ID=$(uuidgen)
