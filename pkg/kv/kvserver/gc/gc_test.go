@@ -144,7 +144,7 @@ func TestLockAgeThresholdSetting(t *testing.T) {
 		WallTime: lockTs.Nanoseconds(),
 	}
 	makeTxn := func() roachpb.Transaction {
-		return roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0, 0)
+		return roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0, 0, false /* omitInRangefeeds */)
 	}
 	txn1, txn2 := makeTxn(), makeTxn()
 	for _, local := range []bool{false, true} {
@@ -216,7 +216,7 @@ func TestIntentCleanupBatching(t *testing.T) {
 	}
 	for i, prefix := range txnPrefixes {
 		key := []byte{prefix, objectKeys[0]}
-		txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0, 0)
+		txn := roachpb.MakeTransaction("txn", key, isolation.Serializable, roachpb.NormalUserPriority, intentHlc, 1000, 0, 0, false /* omitInRangefeeds */)
 		for j, suffix := range objectKeys {
 			key := []byte{prefix, suffix}
 			idx := i*len(objectKeys) + j

@@ -140,6 +140,7 @@ func NewTxnWithAdmissionControl(
 		db.clock.MaxOffset().Nanoseconds(),
 		int32(db.ctx.NodeID.SQLInstanceID()),
 		priority,
+		false, /* omitInRangefeeds */
 	)
 	txn := NewTxnFromProto(ctx, db, gatewayNodeID, now, RootTxn, &kvTxn)
 	txn.admissionHeader = kvpb.AdmissionHeader{
@@ -452,6 +453,25 @@ func (txn *Txn) DisablePipelining() error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.DisablePipelining()
+}
+
+// GetOmitInRangefeeds returns the value of the OmitInRangefeeds attribute of
+// the Transaction proto of the sender.
+func (txn *Txn) GetOmitInRangefeeds() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.GetOmitInRangefeeds()
+}
+
+// SetOmitInRangefeeds sets the OmitInRangefeeds attribute to true in the
+// Transaction proto of the sender.
+//
+// SetOmitInRangefeeds must be called before any operations are performed on the
+// transaction.
+func (txn *Txn) SetOmitInRangefeeds() {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	txn.mu.sender.SetOmitInRangefeeds()
 }
 
 // NewBatch creates and returns a new empty batch object for use with the Txn.

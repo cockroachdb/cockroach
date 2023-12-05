@@ -195,7 +195,7 @@ func TestCatchupScanSeesOldIntent(t *testing.T) {
 		tsVersionInWindow, roachpb.MakeValueFromString("foo"), storage.MVCCWriteOptions{})
 	require.NoError(t, err)
 
-	txn := roachpb.MakeTransaction("foo", roachpb.Key("d"), isolation.Serializable, roachpb.NormalUserPriority, tsIntent, 100, 0, 0)
+	txn := roachpb.MakeTransaction("foo", roachpb.Key("d"), isolation.Serializable, roachpb.NormalUserPriority, tsIntent, 100, 0, 0, false /* omitInRangefeeds */)
 	_, err = storage.MVCCPut(ctx, eng, roachpb.Key("d"),
 		tsIntent, roachpb.MakeValueFromString("intent"), storage.MVCCWriteOptions{Txn: &txn})
 	require.NoError(t, err)

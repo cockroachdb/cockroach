@@ -473,7 +473,7 @@ type testValue struct {
 func intent(key roachpb.Key, val string, ts hlc.Timestamp) testValue {
 	var value = roachpb.MakeValueFromString(val)
 	value.InitChecksum(key)
-	tx := roachpb.MakeTransaction(fmt.Sprintf("txn-%v", key), key, isolation.Serializable, roachpb.NormalUserPriority, ts, 1000, 99, 0)
+	tx := roachpb.MakeTransaction(fmt.Sprintf("txn-%v", key), key, isolation.Serializable, roachpb.NormalUserPriority, ts, 1000, 99, 0, false /* omitInRangefeeds */)
 	var txn = &tx
 	return testValue{key, value, ts, txn}
 }

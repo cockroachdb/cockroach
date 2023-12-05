@@ -48,7 +48,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 		require.NoError(t, err)
 	}
 	writeIntent := func(k string, ts int64) {
-		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(ts), 0, 1, 0)
+		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(ts), 0, 1, 0, false /* omitInRangefeeds */)
 		_, _, err := storage.MVCCDelete(ctx, db, roachpb.Key(k), makeTS(ts), storage.MVCCWriteOptions{Txn: &txn})
 		require.NoError(t, err)
 	}
@@ -57,7 +57,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 		require.NoError(t, err)
 	}
 	writeLock := func(k string, str lock.Strength) {
-		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(1), 0, 1, 0)
+		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(1), 0, 1, 0, false /* omitInRangefeeds */)
 		err := storage.MVCCAcquireLock(ctx, db, &txn, str, roachpb.Key(k), nil, 0)
 		require.NoError(t, err)
 	}

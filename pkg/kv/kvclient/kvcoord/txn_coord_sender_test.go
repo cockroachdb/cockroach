@@ -937,7 +937,7 @@ func testTxnCoordSenderTxnUpdatedOnError(t *testing.T, isoLevel isolation.Level)
 			db := kv.NewDB(ambient, tsf, clock, stopper)
 			key := roachpb.Key("test-key")
 			now := clock.NowAsClockTimestamp()
-			origTxnProto := roachpb.MakeTransaction("test txn", key, isoLevel, roachpb.UserPriority(0), now.ToTimestamp(), clock.MaxOffset().Nanoseconds(), 0, 0)
+			origTxnProto := roachpb.MakeTransaction("test txn", key, isoLevel, roachpb.UserPriority(0), now.ToTimestamp(), clock.MaxOffset().Nanoseconds(), 0, 0, false /* omitInRangefeeds */)
 			// TODO(andrei): I've monkeyed with the priorities on this initial
 			// Transaction to keep the test happy from a previous version in which the
 			// Transaction was not initialized before use (which became insufficient
