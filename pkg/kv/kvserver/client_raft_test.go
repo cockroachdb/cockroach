@@ -4916,30 +4916,47 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		tc.WaitForValues(t, keyA, []int64{1, 1, 1})
 		disabled.Store(true)
 
-		// Set a relatively short timeout so that this test doesn't take too long.
-		// We should always hit it.
-		withTimeout, cancel := context.WithTimeout(ctx, 1*time.Second)
-		defer cancel()
+		// Create a pair of utilities to perform operations under suitable timeouts.
+		expSucceed := func(msg string, fn func(context.Context) error) {
+			// Set a long timeout so that this test doesn't flake under stress.
+			// We should never hit it.
+			ctxTimeout, cancel := context.WithTimeout(ctx, testutils.DefaultSucceedsSoonDuration)
+			defer cancel()
+			require.NoError(t, fn(ctxTimeout), "Expected success "+msg)
+		}
+		expTimeout := func(msg string, fn func(context.Context) error) {
+			// Set a relatively short timeout so that this test doesn't take too long.
+			// We should always hit it.
+			ctxTimeout, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+			defer cancel()
+			require.ErrorIs(t, fn(ctxTimeout), context.DeadlineExceeded, "Expected timeout "+msg)
+		}
 
 		// Write to the liveness range on the System class.
-		require.NoError(t, db.Put(withTimeout, keyLiveness, 2), "Expected success writing to liveness range")
+		expSucceed("writing to liveness range", func(ctx context.Context) error {
+			return db.Put(ctx, keyLiveness, 2)
+		})
 
 		// Write to the standard range on the default class.
-		require.ErrorIs(t, db.Put(withTimeout, keyA, 2), context.DeadlineExceeded,
-			"Expected timeout writing to key range")
+		expTimeout("writing to key range", func(ctx context.Context) error {
+			return db.Put(ctx, keyA, 2)
+		})
 
 		// Write to the liveness range on the System class with system disabled to
 		// ensure the test is actually working.
 		disabledSystem.Store(true)
-		require.ErrorIs(t, db.Put(withTimeout, keyLiveness, 2),
-			context.DeadlineExceeded, "Expected timeout writing to liveness range")
+		expTimeout("writing to liveness range", func(ctx context.Context) error {
+			return db.Put(ctx, keyLiveness, 2)
+		})
 		disabledSystem.Store(false)
 
-		// Heal the partition, the previous proposal may now succeed but it may have
+		// Heal the partition, the previous proposal may now succeed but it also may
 		// have been canceled.
 		disabled.Store(false)
 		// Overwrite with a new value and ensure that it propagates.
-		require.NoError(t, db.Put(ctx, keyA, 3), "Expected success after healed partition")
+		expSucceed("after healed partition", func(ctx context.Context) error {
+			return db.Put(ctx, keyA, 3)
+		})
 		tc.WaitForValues(t, keyA, []int64{3, 3, 3})
 	}
 	t.Run("initial_run", runTest)
