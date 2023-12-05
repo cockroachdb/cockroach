@@ -3357,14 +3357,17 @@ func TestConcurrentBackupRestores(t *testing.T) {
 	}
 }
 
-// TODO(adityamaru): Restrict to system tenant.
 func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	ctx := context.Background()
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
 	defer cleanupFn()
 
 	_, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
@@ -3383,15 +3386,17 @@ func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 // tenant fails on resume, even if the backup job details are not fully
 // populated. This test specifically addresses the bug described in
 // https://github.com/cockroachdb/cockroach/issues/112114
-//
-// TODO(adityamaru): Explicitly controlling tenants.
 func TestBackupJobFailsInRestoredTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1
 	ctx := context.Background()
-	tc, systemDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, systemDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	defer cleanupFn()
 
 	t10, err := tc.Servers[0].TenantController().StartTenant(ctx, base.TestTenantArgs{
@@ -4132,7 +4137,6 @@ func getAWSKMSURI(t *testing.T, regionEnvVariable, keyIDEnvVariable string) (str
 	return correctURI, incorrectURI
 }
 
-// TODO(adityamaru): Restrict to system tenant involves ALTER PARTITION.
 func TestEncryptedBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4165,7 +4169,13 @@ func TestEncryptedBackup(t *testing.T) {
 				incorrectEncryptionOption = "encryption_passphrase = 'wrongpassphrase'"
 			}
 			ctx := context.Background()
-			_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, multiNode, 3, InitManualReplication)
+			// Restrict to system tenant as the setup involves running ALTER PARTITION
+			// that is disabled for secondary tenants.
+			_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, 3, InitManualReplication, base.TestClusterArgs{
+				ServerArgs: base.TestServerArgs{
+					DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				},
+			})
 			defer cleanupFn()
 
 			setupBackupEncryptedTest(ctx, t, sqlDB)
@@ -6491,7 +6501,6 @@ INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510,
 	// TODO(adityamaru): Add a RESTORE inside tenant once it is supported.
 }
 
-// TODO(adityamaru): Restrict to secondary tenant.
 func TestBackupRestoreInsideTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6502,7 +6511,11 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 		cleanup := func() { conn.Close() }
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
-	tc, systemDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, systemDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	_, _ = tc, systemDB
 	defer cleanupFn()
 	srv := tc.Server(0)
@@ -6518,7 +6531,11 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 	defer cleanupT11()
 
 	// Create another server.
-	tc2, systemDB2, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	tc2, systemDB2, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	srv2 := tc2.Server(0)
 	defer cleanupEmptyCluster()
 
@@ -6613,8 +6630,6 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 
 // TestBackupRestoreTenantSettings tests the behaviour of the custom restore function for
 // the system.tenant_settings table.
-//
-// TODO(adityamaru): Restrict to system tenant.
 func TestBackupRestoreTenantSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6625,7 +6640,11 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 		cleanup := func() { conn.Close() }
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
-	tc, systemDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, systemDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	_, _ = tc, systemDB
 	defer cleanupFn()
 
@@ -6633,7 +6652,11 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	_ = securitytest.EmbeddedTenantIDs()
 
 	// Create another server.
-	tc2, _, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	tc2, _, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	srv2 := tc2.Server(0)
 	defer cleanupEmptyCluster()
 
@@ -6649,7 +6672,11 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 		tenant2C2.Exec(t, `RESTORE FROM $1 WITH include_all_virtual_clusters`, backup2HttpAddr)
 	})
 
-	_, systemDB2, cleanupDB2 := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	_, systemDB2, cleanupDB2 := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	defer cleanupDB2()
 	t.Run("cluster-restore-into-cluster-with-tenant-settings-succeeds", func(t *testing.T) {
 		systemDB2.Exec(t, `RESTORE FROM $1 WITH include_all_virtual_clusters`, backup2HttpAddr)
