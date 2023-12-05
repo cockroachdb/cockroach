@@ -184,7 +184,7 @@ func TestRegionLivenessProber(t *testing.T) {
 				return errors.AssertionFailedf("removed region detected %s", expectedRegions[1])
 			}
 			// Similarly query the unavailable physcial regions
-			unavailablePhysicalRegions, err := regionProber.QueryUnavailablePhysicalRegions(ctx, txn)
+			unavailablePhysicalRegions, err := regionProber.QueryUnavailablePhysicalRegions(ctx, txn, true /*filterAvailable*/)
 			if err != nil {
 				return err
 			}
