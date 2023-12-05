@@ -25,7 +25,7 @@ export function getClusterSettings(
 ): Promise<SettingsResponseMessage> {
   return fetchData(
     cockroach.server.serverpb.SettingsResponse,
-    `/${ADMIN_API_PREFIX}/settings?unredacted_values=true`,
+    `${ADMIN_API_PREFIX}/settings?unredacted_values=true`,
     cockroach.server.serverpb.SettingsRequest,
     req,
     timeout,
