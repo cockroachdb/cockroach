@@ -160,7 +160,9 @@ const (
 	// StartRoutingProxy starts the SQL proxy process to route
 	// connections to multiple virtual clusters.
 	StartRoutingProxy
+)
 
+const (
 	// startSQLTimeout identifies the COCKROACH_CONNECT_TIMEOUT to use (in seconds)
 	// for sql cmds within syncedCluster.Start().
 	startSQLTimeout = 1200
