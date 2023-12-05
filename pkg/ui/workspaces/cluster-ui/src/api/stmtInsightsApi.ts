@@ -156,6 +156,7 @@ export async function getStmtInsightsApi(
     execute: true,
     max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
+    use_obs_service: req.csExportInsights,
   };
 
   const result = await executeInternalSql<StmtInsightsResponseRow>(request);
