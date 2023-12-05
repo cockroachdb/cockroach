@@ -34,3 +34,5 @@ GOVERS=$(go/bin/go env GOVERSION)
 GOOS=$(go/bin/go env GOOS)
 GOARCH=$(go/bin/go env GOARCH)
 tar cf - go | gzip -9 > /artifacts/$GOVERS.$GOOS-$GOARCH.tar.gz
+
+sha256sum /artifacts/$GOVERS.$GOOS-$GOARCH.tar.gz
