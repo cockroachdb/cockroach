@@ -91,7 +91,7 @@ func backupRestoreTestSetup(
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TODOTestTenantDisabled,
+				DefaultTestTenant: base.TestTenantAlwaysEnabled,
 			}})
 }
 
@@ -102,8 +102,7 @@ func backupRestoreTestSetupEmpty(
 	init func(*testcluster.TestCluster),
 	params base.TestClusterArgs,
 ) (*testcluster.TestCluster, *sqlutils.SQLRunner, func()) {
-	// TODO (msbutler): this should be disabled by callers of this function
-	params.ServerArgs.DefaultTestTenant = base.TODOTestTenantDisabled
+	params.ServerArgs.DefaultTestTenant = base.TestTenantAlwaysEnabled
 	tc, sqlDB, _, cleanup := backuptestutils.StartBackupRestoreTestCluster(t, clusterSize,
 		backuptestutils.WithTempDir(tempDir),
 		backuptestutils.WithInitFunc(init),

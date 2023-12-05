@@ -2068,7 +2068,7 @@ table_name from [SHOW TABLES FROM restore] ORDER BY schema_name, table_name`, tc
 		}
 
 		// Verify that the schemas are in the database's schema map.
-		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
+		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, tc.ApplicationLayer(0).Codec(), "newdb")
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc1")
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc2")
 		require.Contains(t, dbDesc.DatabaseDesc().Schemas, "sc3")
@@ -7646,16 +7646,17 @@ ALTER TYPE sc.typ ADD VALUE 'hi';
 	sqlDB.Exec(t, `DROP DATABASE d`)
 	sqlDB.Exec(t, `RESTORE DATABASE d FROM 'nodelocal://1/test/'`)
 
-	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
+	codec := tc.ApplicationLayer(0).Codec()
+	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, codec, "d")
 	require.EqualValues(t, 2, dbDesc.GetVersion())
 
-	schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+	schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, codec, dbDesc.GetID(), "sc")
 	require.EqualValues(t, 2, schemaDesc.GetVersion())
 
-	tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
+	tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "d", "sc", "tb")
 	require.EqualValues(t, 2, tableDesc.GetVersion())
 
-	typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "d", "sc", "typ")
+	typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, codec, "d", "sc", "typ")
 	require.EqualValues(t, 2, typeDesc.GetVersion())
 }
 
@@ -7745,27 +7746,28 @@ CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE SQL;
 		// get bumped during the cluster upgrade that rewrites all descriptors
 		// with PostDeserializationChanges.
 
-		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "d")
+		codec := tc.ApplicationLayer(0).Codec()
+		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, codec, "d")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, dbDesc.DatabaseDesc().State)
 		require.Equal(t, descpb.DescriptorVersion(1), dbDesc.DatabaseDesc().Version)
 		require.Empty(t, dbDesc.GetPostDeserializationChanges())
 
-		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, codec, dbDesc.GetID(), "sc")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.SchemaDesc().State)
 		require.Equal(t, descpb.DescriptorVersion(1), schemaDesc.SchemaDesc().Version)
 		require.Empty(t, schemaDesc.GetPostDeserializationChanges())
 
-		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "sc", "tb")
+		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "d", "sc", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.GetState())
 		require.Equal(t, descpb.DescriptorVersion(1), tableDesc.GetVersion())
 		require.Empty(t, tableDesc.GetPostDeserializationChanges())
 
-		typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "d", "sc", "typ")
+		typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, codec, "d", "sc", "typ")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.TypeDesc().State)
 		require.Equal(t, descpb.DescriptorVersion(1), typeDesc.TypeDesc().Version)
 		require.Empty(t, typeDesc.GetPostDeserializationChanges())
 
-		funcDesc := desctestutils.TestingGetFunctionDescriptor(kvDB, keys.SystemSQLCodec, "d", "public", "f")
+		funcDesc := desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "d", "public", "f")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, funcDesc.FuncDesc().State)
 		require.Equal(t, descpb.DescriptorVersion(1), funcDesc.FuncDesc().Version)
 		require.Empty(t, funcDesc.GetPostDeserializationChanges())
@@ -7858,17 +7860,18 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		// Verify that the descriptors are offline.
 
-		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
-		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+		codec := tc.ApplicationLayer(0).Codec()
+		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, codec, "newdb")
+		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, codec, dbDesc.GetID(), "sc")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, schemaDesc.SchemaDesc().State)
 
-		publicTableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "public", "tb")
+		publicTableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "newdb", "public", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, publicTableDesc.GetState())
 
-		scTableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "sc", "tb")
+		scTableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "newdb", "sc", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, scTableDesc.GetState())
 
-		typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "sc", "typ")
+		typeDesc := desctestutils.TestingGetTypeDescriptor(kvDB, codec, "newdb", "sc", "typ")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, typeDesc.TypeDesc().State)
 
 		// Verify that the descriptors are not visible.
@@ -7965,18 +7968,19 @@ CREATE TABLE d.sc.tb (x d.sc.typ);
 
 		<-beforePublishingNotif
 
+		codec := tc.ApplicationLayer(0).Codec()
 		// Verify that the database and schema descriptors are public.
-		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "newdb")
+		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, codec, "newdb")
 		require.Equal(t, descpb.DescriptorState_PUBLIC, dbDesc.DatabaseDesc().State)
 
-		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, keys.SystemSQLCodec, dbDesc.GetID(), "sc")
+		schemaDesc := desctestutils.TestingGetSchemaDescriptor(kvDB, codec, dbDesc.GetID(), "sc")
 		require.Equal(t, descpb.DescriptorState_PUBLIC, schemaDesc.SchemaDesc().State)
 
 		// Verify that the table and type descriptors are offline.
-		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "sc", "tb")
+		tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "newdb", "sc", "tb")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, tableDesc.GetState())
 
-		typDesc := desctestutils.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "newdb", "sc", "typ")
+		typDesc := desctestutils.TestingGetTypeDescriptor(kvDB, codec, "newdb", "sc", "typ")
 		require.Equal(t, descpb.DescriptorState_OFFLINE, typDesc.TypeDesc().State)
 
 		// Verify that dropping the table or the type is not permitted in any way.
@@ -8943,7 +8947,7 @@ CREATE DATABASE test; USE test;
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, INDEX idx_2 (b), INDEX idx_3 (c), INDEX idx_4 (b, c));
 DROP INDEX idx_3;
 `)
-	codec := keys.SystemSQLCodec
+	codec := tc.ApplicationLayer(0).Codec()
 	clearHistoricalTableVersions := func() {
 		// Save the latest value of the descriptor.
 		table := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
@@ -10610,8 +10614,9 @@ func TestBackupDoNotIncludeViewSpans(t *testing.T) {
 
 	// Verify that the manifest doesn't contain any spans that intersect the span
 	// for the view.
-	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "d", "tview")
-	viewSpan := tbDesc.TableSpan(keys.SystemSQLCodec)
+	codec := tc.ApplicationLayer(0).Codec()
+	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "d", "tview")
+	viewSpan := tbDesc.TableSpan(codec)
 
 	for _, sp := range backupManifest.Spans {
 		if sp.Overlaps(viewSpan) {
