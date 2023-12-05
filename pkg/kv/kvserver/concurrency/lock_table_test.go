@@ -206,7 +206,7 @@ func TestLockTableBasic(t *testing.T) {
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
 				ltImpl.minKeysLocked = 0
-				lt = ltImpl
+				lt = maybeWrapInVerifyingLockTable(ltImpl)
 				txnsByName = make(map[string]*enginepb.TxnMeta)
 				txnCounter = uint128.FromInts(0, 0)
 				requestsByName = make(map[string]Request)
@@ -1259,10 +1259,11 @@ type workloadExecutor struct {
 
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
 	const maxLocks = 100000
-	lt := newLockTable(
+	ltImpl := newLockTable(
 		maxLocks, roachpb.RangeID(3), hlc.NewClockForTesting(nil), cluster.MakeTestingClusterSettings(),
 	)
-	lt.enabled = true
+	ltImpl.enabled = true
+	lt := maybeWrapInVerifyingLockTable(ltImpl)
 	return &workloadExecutor{
 		lm:           spanlatch.Manager{},
 		lt:           lt,
