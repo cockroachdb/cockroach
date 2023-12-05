@@ -10,7 +10,7 @@ import React from "react";
 
 import DebugAnnotation from "src/views/shared/components/debugAnnotation";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
-import OSSLicenseType from "oss/src/views/shared/components/licenseType";
+import OSSLicenseType from "src/views/shared/components/licenseType";
 
 export class CCLLicenseType extends React.Component<{}, {}> {
   render() {
