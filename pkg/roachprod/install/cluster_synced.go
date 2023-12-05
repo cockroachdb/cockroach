@@ -1636,6 +1636,7 @@ fi
 const (
 	certsTarName       = "certs.tar"
 	tenantCertsTarName = "tenant-certs.tar"
+	tenantCertFile     = "client-tenant.%d.crt"
 )
 
 // DistributeCerts will generate and distribute certificates to all the nodes.
@@ -1657,9 +1658,6 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 			if c.IsLocal() {
 				cmd = fmt.Sprintf(`cd %s ; `, c.localVMDir(1))
 			}
-			// TODO(ssd): Pre-populating the certs for tenants 1
-			// through 4 helps facilitate UA testing. But we
-			// should do something better here.
 			cmd += fmt.Sprintf(`
 rm -fr certs
 mkdir -p certs
@@ -1673,10 +1671,6 @@ fi
 %[1]s cert create-client root --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
 %[1]s cert create-client testuser --certs-dir=certs --ca-key=certs/ca.key $TENANT_SCOPE_OPT
 %[1]s cert create-node %[2]s --certs-dir=certs --ca-key=certs/ca.key
-# Pre-create a few tenant-client
-%[1]s cert create-tenant-client 2 %[2]s --certs-dir=certs --ca-key=certs/ca.key
-%[1]s cert create-tenant-client 3 %[2]s --certs-dir=certs --ca-key=certs/ca.key
-%[1]s cert create-tenant-client 4 %[2]s --certs-dir=certs --ca-key=certs/ca.key
 tar cvf %[3]s certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
 
@@ -1703,7 +1697,7 @@ tar cvf %[3]s certs
 func (c *SyncedCluster) DistributeTenantCerts(
 	ctx context.Context, l *logger.Logger, hostCluster *SyncedCluster, virtualClusterID int,
 ) error {
-	if hostCluster.checkForTenantCertificates(ctx, l) {
+	if hostCluster.checkForTenantCertificates(ctx, l, virtualClusterID) {
 		return nil
 	}
 
@@ -1818,14 +1812,20 @@ func (c *SyncedCluster) checkForCertificates(ctx context.Context, l *logger.Logg
 	return c.fileExistsOnFirstNode(ctx, l, filepath.Join(dir, certsTarName))
 }
 
-// checkForTenantCertificates checks if the cluster already has a tenant-certs bundle created
-// on the first node.
-func (c *SyncedCluster) checkForTenantCertificates(ctx context.Context, l *logger.Logger) bool {
+// checkForTenantCertificates checks if the cluster already has a tenant-certs
+// bundle created on the first node and if a tenant certificate exists for the
+// given virtual cluster ID.
+func (c *SyncedCluster) checkForTenantCertificates(
+	ctx context.Context, l *logger.Logger, virtualClusterID int,
+) bool {
 	dir := ""
 	if c.IsLocal() {
 		dir = c.localVMDir(1)
 	}
-	return c.fileExistsOnFirstNode(ctx, l, filepath.Join(dir, tenantCertsTarName))
+	if !c.fileExistsOnFirstNode(ctx, l, filepath.Join(dir, tenantCertsTarName)) {
+		return false
+	}
+	return c.fileExistsOnFirstNode(ctx, l, filepath.Join(c.CertsDir(1), fmt.Sprintf(tenantCertFile, virtualClusterID)))
 }
 
 func (c *SyncedCluster) fileExistsOnFirstNode(
