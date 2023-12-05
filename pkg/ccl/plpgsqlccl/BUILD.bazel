@@ -9,6 +9,5 @@ go_library(
         "//pkg/ccl/utilccl",
         "//pkg/settings/cluster",
         "//pkg/sql/plpgsql",
-        "//pkg/util/uuid",
     ],
 )

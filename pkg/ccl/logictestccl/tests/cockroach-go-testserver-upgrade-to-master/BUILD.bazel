@@ -7,17 +7,19 @@ go_test(
     data = [
         "//c-deps:libgeos",  # keep
         "//pkg/cmd/cockroach-short",  # keep
+        "//pkg/ccl/logictestccl:testdata",  # keep
         "//pkg/sql/logictest:cockroach_predecessor_version",  # keep
-        "//pkg/sql/logictest:testdata",  # keep
     ],
     exec_properties = {"Pool": "large"},
-    shard_count = 12,
+    shard_count = 1,
     tags = [
+        "ccl_test",
         "cpu:2",
     ],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
+        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
