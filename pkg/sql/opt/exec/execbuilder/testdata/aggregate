@@ -1167,7 +1167,6 @@ vectorized: true
 ·
 • sort
 │ columns: (v int, count int)
-│ ordering: +count
 │ estimated row count: 100 (missing stats)
 │ order: +count_rows
 │
@@ -1191,7 +1190,6 @@ vectorized: true
 ·
 • sort
 │ columns: (v int, count int)
-│ ordering: +count
 │ estimated row count: 100 (missing stats)
 │ order: +count_rows
 │
@@ -1218,7 +1216,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (v int, count int, count_rows int)
-    │ ordering: +count_rows
     │ estimated row count: 100 (missing stats)
     │ order: +count_rows
     │
@@ -1455,7 +1452,6 @@ vectorized: true
 │
 └── • top-k
     │ columns: (column5 int)
-    │ ordering: +column5
     │ estimated row count: 1 (missing stats)
     │ order: +column5
     │ k: 1
@@ -1773,7 +1769,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (v)
-    │ ordering: +v
     │ estimated row count: 1,000 (missing stats)
     │ order: +v
     │
@@ -1796,7 +1791,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (v, arr)
-    │ ordering: +v
     │ estimated row count: 1,000 (missing stats)
     │ order: +v
     │
@@ -1817,7 +1811,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (k, s)
-    │ ordering: +s
     │ estimated row count: 1,000 (missing stats)
     │ order: +s
     │
@@ -1858,7 +1851,6 @@ vectorized: true
 │
 └── • sort
     │ columns: (k, s)
-    │ ordering: +s
     │ estimated row count: 1,000 (missing stats)
     │ order: +s
     │
@@ -1996,7 +1988,6 @@ vectorized: true
 ·
 • sort
 │ columns: (company_id, string_agg)
-│ ordering: +company_id
 │ estimated row count: 100 (missing stats)
 │ order: +company_id
 │
@@ -2034,7 +2025,6 @@ vectorized: true
 ·
 • sort
 │ columns: (company_id, string_agg)
-│ ordering: +company_id
 │ estimated row count: 100 (missing stats)
 │ order: +company_id
 │
@@ -2072,7 +2062,6 @@ vectorized: true
 ·
 • sort
 │ columns: (company_id, string_agg)
-│ ordering: +company_id
 │ estimated row count: 100 (missing stats)
 │ order: +company_id
 │
@@ -2110,7 +2099,6 @@ vectorized: true
 ·
 • sort
 │ columns: (company_id, string_agg)
-│ ordering: +company_id
 │ estimated row count: 100 (missing stats)
 │ order: +company_id
 │

@@ -122,7 +122,6 @@ vectorized: true
 ·
 • sort
 │ columns: (a, generate_series)
-│ ordering: +a,+generate_series
 │ estimated row count: 10,000 (missing stats)
 │ order: +a,+generate_series
 │
@@ -152,7 +151,6 @@ vectorized: true
 ·
 • sort
 │ columns: (x, y, z, "information_schema._pg_expandarray")
-│ ordering: +x
 │ estimated row count: 3,267 (missing stats)
 │ order: +x
 │
@@ -418,7 +416,6 @@ vectorized: true
 ·
 • top-k
 │ columns: (id, body, description, title, slug, tag_list, user_id, created_at, updated_at)
-│ ordering: +created_at
 │ estimated row count: 10 (missing stats)
 │ order: +any_not_null
 │ k: 10
