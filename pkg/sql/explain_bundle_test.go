@@ -67,6 +67,7 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
 		base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
 	)
+
 	verifyRetryHit()
 }
 
@@ -344,6 +345,27 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 					reg = regexp.MustCompile("subtract")
 					if reg.FindString(contents) != "" {
 						return errors.Errorf("Found irrelevant user defined function 'substract' in schema.sql")
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql.html vec-v.txt vec.txt")
+	})
+
+	t.Run("procedures", func(t *testing.T) {
+		r.Exec(t, "CREATE PROCEDURE add(a INT, b INT) LANGUAGE SQL AS 'SELECT a + b';")
+		r.Exec(t, "CREATE PROCEDURE subtract(a INT, b INT) LANGUAGE SQL AS 'SELECT a - b';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) CALL add(3, 4);")
+		checkBundle(
+			t, fmt.Sprint(rows), "add", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("add")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'add' procedure in schema.sql")
+					}
+					reg = regexp.MustCompile("subtract")
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("Found irrelevant procedure 'substract' in schema.sql")
 					}
 				}
 				return nil
