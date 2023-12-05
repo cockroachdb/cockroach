@@ -6321,13 +6321,32 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 			// bpchar types truncate trailing whitespace.
 			sv = strings.TrimRight(sv, " ")
 		}
-		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
+
+		var overlength int
+		// Fast path. Check for skip counting the number of runes through iteration.
+		if typ.Width() > 0 && len(sv) > int(typ.Width()) {
+			overlength = utf8.RuneCountInString(sv) - int(typ.Width())
+		} else {
+			overlength = 0
+		}
+		if typ.Oid() == oid.T_varchar {
+			// varchar types truncate extra trailing whitespace when
+			// more characters than the varchar size are provided.
+			for overlength > 0 {
+				if sv[len(sv)-1] != ' ' {
+					break
+				}
+				sv = sv[:len(sv)-1]
+				overlength--
+			}
+		}
+		if overlength > 0 {
 			return nil, pgerror.Newf(pgcode.StringDataRightTruncation,
 				"value too long for type %s",
 				typ.SQLString())
 		}
 
-		if typ.Oid() == oid.T_bpchar || typ.Oid() == oid.T_char {
+		if typ.Oid() == oid.T_bpchar || typ.Oid() == oid.T_char || typ.Oid() == oid.T_varchar {
 			if _, ok := AsDString(inVal); ok {
 				return NewDString(sv), nil
 			} else if _, ok := inVal.(*DCollatedString); ok {

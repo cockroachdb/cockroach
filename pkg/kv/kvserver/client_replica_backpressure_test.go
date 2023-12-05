@@ -42,6 +42,7 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "takes >1m under race")
+	skip.UnderRemoteExecutionWithIssue(t, 113032, "probable OOM")
 
 	rRand, _ := randutil.NewTestRand()
 	ctx := context.Background()
