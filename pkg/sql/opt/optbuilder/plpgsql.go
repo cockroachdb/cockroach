@@ -11,6 +11,7 @@
 package optbuilder
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	ast "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -218,6 +220,14 @@ func (b *plpgsqlBuilder) build(block *ast.Block, s *scope) *scope {
 			b.constants[dec.Var] = struct{}{}
 		}
 	}
+	if types.IsRecordType(b.returnType) {
+		// Infer the concrete type by examining the RETURN statements. This has to
+		// happen after building the declaration block because RETURN statements can
+		// reference declared variables.
+		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s)
+		ast.Walk(recordVisitor, block)
+		b.returnType = recordVisitor.typ
+	}
 	if exceptions := b.buildExceptions(block); exceptions != nil {
 		// There is an implicit block around the body statements, with an optional
 		// exception handler. Note that the variable declarations are not in block
@@ -334,6 +344,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_if"))
 			returnScope := s.push()
 			b.ensureScopeHasExpr(returnScope)
+			scalar = b.coerceType(scalar, b.returnType)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, scalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
@@ -645,6 +656,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					b.ob.factory.ConstructVariable(fetchCol),
 					memo.TupleOrdinal(j),
 				)
+				scalar = b.coerceType(scalar, typ)
 				b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
 			}
 			b.ob.constructProjectForScope(fetchScope, intoScope)
@@ -795,6 +807,7 @@ func (b *plpgsqlBuilder) buildInto(stmtScope *scope, target []ast.Variable) *sco
 			// assigned to any remaining targets.
 			scalar = b.ob.factory.ConstructConstVal(tree.DNull, typ)
 		}
+		scalar = b.coerceType(scalar, typ)
 		b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
 	}
 	b.ob.constructProjectForScope(stmtScope, intoScope)
@@ -1110,9 +1123,11 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(inScope *scope) *scope {
 	// Build a dummy statement that returns NULL. It won't be executed, but
 	// ensures that the continuation routine's return type is correct.
 	eofColName := scopeColName("").WithMetadataName(b.makeIdentifier("end_of_function"))
-	eofScope := inScope.push()
-	b.ob.synthesizeColumn(eofScope, eofColName, b.returnType, nil /* expr */, memo.NullSingleton)
+	eofScope := con.s.push()
+	typedNull := b.ob.factory.ConstructNull(b.returnType)
+	b.ob.synthesizeColumn(eofScope, eofColName, b.returnType, nil /* expr */, typedNull)
 	b.ob.constructProjectForScope(inScope, eofScope)
+	b.appendBodyStmt(&con, eofScope)
 	return b.callContinuation(&con, inScope)
 }
 
@@ -1322,7 +1337,34 @@ func (b *plpgsqlBuilder) buildPLpgSQLExpr(expr ast.Expr, typ *types.T, s *scope)
 	if err != nil {
 		panic(err)
 	}
-	return b.ob.buildScalar(typedExpr, s, nil, nil, b.colRefs)
+	scalar := b.ob.buildScalar(typedExpr, s, nil, nil, b.colRefs)
+	return b.coerceType(scalar, typ)
+}
+
+// coerceType implements PLpgSQL type-coercion behavior.
+func (b *plpgsqlBuilder) coerceType(scalar opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
+	resolved := scalar.DataType()
+	if !resolved.Identical(typ) {
+		// Postgres will attempt to coerce the expression's type with an assignment
+		// cast. If that fails, it will convert to a string and attempt to parse the
+		// string as the desired type.
+		//
+		// Note that we intentionally use an explicit cast instead of an assignment
+		// cast here. This is because postgres does not error for narrowing type
+		// coercion, but instead performs the cast without truncation. Using an
+		// explicit cast, we also allow narrowing type coercion, but with
+		// truncation. This difference is tracked in #115385.
+		if !cast.ValidCast(resolved, typ, cast.ContextAssignment) {
+			if !cast.ValidCast(types.String, typ, cast.ContextExplicit) {
+				panic(pgerror.Newf(pgcode.DatatypeMismatch,
+					"unable to coerce type %s to %s", resolved.Name(), typ.Name(),
+				))
+			}
+			scalar = b.ob.factory.ConstructCast(scalar, types.String)
+		}
+		scalar = b.ob.factory.ConstructCast(scalar, typ)
+	}
+	return scalar
 }
 
 // resolveVariableForAssign attempts to retrieve the type of the variable with
@@ -1407,4 +1449,57 @@ func (b *plpgsqlBuilder) getLoopContinuation() *continuation {
 		}
 	}
 	return nil
+}
+
+// recordTypeVisitor is used to infer the concrete return type for a
+// record-returning PLpgSQL routine. It visits each return statement and checks
+// that the types of all returned expressions are either identical or UNKNOWN.
+type recordTypeVisitor struct {
+	ctx     context.Context
+	semaCtx *tree.SemaContext
+	s       *scope
+	typ     *types.T
+}
+
+func newRecordTypeVisitor(
+	ctx context.Context, semaCtx *tree.SemaContext, s *scope,
+) *recordTypeVisitor {
+	return &recordTypeVisitor{ctx: ctx, semaCtx: semaCtx, s: s, typ: types.Unknown}
+}
+
+var _ ast.StatementVisitor = &recordTypeVisitor{}
+
+func (r *recordTypeVisitor) Visit(stmt ast.Statement) {
+	if retStmt, ok := stmt.(*ast.Return); ok {
+		desired := types.Any
+		if r.typ != types.Unknown {
+			desired = r.typ
+		}
+		expr, _ := tree.WalkExpr(r.s, retStmt.Expr)
+		typedExpr, err := expr.TypeCheck(r.ctx, r.semaCtx, desired)
+		if err != nil {
+			panic(err)
+		}
+		typ := typedExpr.ResolvedType()
+		if typ == types.Unknown {
+			return
+		}
+		if typ.Family() != types.TupleFamily {
+			panic(pgerror.New(pgcode.DatatypeMismatch,
+				"cannot return non-composite value from function returning composite type",
+			))
+		}
+		if r.typ == types.Unknown {
+			r.typ = typ
+			return
+		}
+		if !typ.Identical(r.typ) {
+			panic(errors.WithHint(
+				unimplemented.NewWithIssue(115384,
+					"returning different types from a RECORD-returning function is not yet supported",
+				),
+				"try casting all RETURN statements to the same type",
+			))
+		}
+	}
 }

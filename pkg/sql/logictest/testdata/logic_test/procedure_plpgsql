@@ -95,24 +95,8 @@ NOTICE: v: (10,4)
 NOTICE: v: (5,5)
 NOTICE: v: (11,5)
 
-# TODO(drewk): This should fail because of the doubly-wrapped tuple.
-# This should be fixed when #112816 merges along with #114683.
-query T noticetrace
+statement error pgcode 22P02 could not parse
 CALL get_rows(1);
-----
-NOTICE: v: (6,0)
-NOTICE: v: (12,0)
-NOTICE: v: (1,1)
-NOTICE: v: (7,1)
-NOTICE: v: (13,1)
-NOTICE: v: (2,2)
-NOTICE: v: (8,2)
-NOTICE: v: (3,3)
-NOTICE: v: (9,3)
-NOTICE: v: (4,4)
-NOTICE: v: (10,4)
-NOTICE: v: (5,5)
-NOTICE: v: (11,5)
 
 # Casting to text and then to "t114683" shows the error that should occur in
 # the previous test case.
