@@ -197,6 +197,9 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 				execFastPathCheck.DatumsFromConstraint[j][execFastPathCheck.InsertCols[k]] = constExpr.Value
 			}
 		}
+		// Shadow "i" so that the closure below closes over a local copy of "i",
+		// rather than closing over the incrementing "i".
+		i := i
 		execFastPathCheck.MkErr = func(values tree.Datums) error {
 			return mkFastPathUniqueCheckErr(md, &ins.UniqueChecks[i], values, execFastPathCheck.ReferencedIndex)
 		}
