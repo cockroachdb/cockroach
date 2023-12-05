@@ -342,10 +342,10 @@ export class CustomChartTable extends React.Component<CustomChartTableProps> {
               <td className="metric-table__header">Source</td>
               <td className="metric-table__header">Per Node</td>
               {canViewTenantOptions && (
-                <td className="metric-table__header">Tenant</td>
+                <td className="metric-table__header">Virtual Cluster</td>
               )}
               {canViewTenantOptions && (
-                <td className="metric-table__header">Per Tenant</td>
+                <td className="metric-table__header">Per Virtual Cluster</td>
               )}
               <td className="metric-table__header"></td>
             </tr>

@@ -20,9 +20,14 @@ import (
 type StickyVFSOption func(cfg *stickyConfig)
 
 type stickyConfig struct {
-	// Preserved for anticipated future options, such as the ability to use
-	// Pebble's "strict" MemFS.
+	newFS func() *vfs.MemFS // by default vfs.NewMem
 }
+
+// UseStrictMemFS option instructs StickyVFSRegistry to produce strict in-memory
+// filesystems, i.e. to use vfs.NewStrictMem instead of vfs.NewMem.
+var UseStrictMemFS = StickyVFSOption(func(cfg *stickyConfig) {
+	cfg.newFS = vfs.NewStrictMem
+})
 
 // StickyVFSRegistry manages the lifecycle of sticky in-memory filesystems. It
 // is intended for use in demos and/or tests, where we want in-memory storage
@@ -30,7 +35,7 @@ type stickyConfig struct {
 type StickyVFSRegistry interface {
 	// Get returns the named in-memory FS, constructing a new one if this is the
 	// first time a FS with the provided ID has been requested.
-	Get(stickyVFSID string) vfs.FS
+	Get(stickyVFSID string) *vfs.MemFS
 }
 
 // stickyVFSRegistryImpl is the bookkeeper for all active sticky filesystems,
@@ -49,18 +54,22 @@ func NewStickyVFSRegistry(opts ...StickyVFSOption) StickyVFSRegistry {
 	for _, opt := range opts {
 		opt(&registry.cfg)
 	}
+	// Use the regular in-memory filesystem, unless specified otherwise.
+	if registry.cfg.newFS == nil {
+		registry.cfg.newFS = vfs.NewMem
+	}
 	return registry
 }
 
 // Get implements the StickyVFSRegistry interface.
-func (registry *stickyVFSRegistryImpl) Get(stickyVFSID string) vfs.FS {
+func (registry *stickyVFSRegistryImpl) Get(stickyVFSID string) *vfs.MemFS {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
 	if fs, ok := registry.entries[stickyVFSID]; ok {
 		return fs
 	}
-	fs := vfs.NewMem()
+	fs := registry.cfg.newFS()
 	registry.entries[stickyVFSID] = fs
 	return fs
 }
