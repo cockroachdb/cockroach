@@ -464,7 +464,6 @@ func NewServer(
 	}
 
 	telemetryLoggingMetrics := newTelemetryLoggingMetrics(cfg.TelemetryLoggingTestingKnobs, cfg.Settings)
-	telemetryLoggingMetrics.registerOnTelemetrySamplingModeChange(cfg.Settings)
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
 	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
@@ -1568,6 +1567,13 @@ type connExecutor struct {
 		// createdSequences keeps track of sequences created in the current transaction.
 		// The map key is the sequence descpb.ID.
 		createdSequences map[descpb.ID]struct{}
+
+		// shouldLogToTelemetry indicates if the current transaction should be
+		// logged to telemetry. It is used in telemetry transaction sampling
+		// mode to emit all statement events for a particular transaction.
+		// Note that the number of statement events emitted per transaction is
+		// capped by the cluster setting telemetryStatementsPerTransactionMax.
+		shouldLogToTelemetry bool
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -2011,12 +2017,20 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		)
 		ex.extraTxnState.savepoints.clear()
 		ex.onTxnFinish(ctx, ev, payloadErr)
+		ex.extraTxnState.shouldLogToTelemetry = false
 	case txnRestart:
 		ex.onTxnRestart(ctx)
 		ex.state.mu.Lock()
 		defer ex.state.mu.Unlock()
 		ex.state.mu.stmtCount = 0
+		isTracing := ex.planner.ExtendedEvalContext().Tracing.Enabled()
+		if ex.server.TelemetryLoggingMetrics.shouldTrackTransaction(isTracing, ex.executorType == executorTypeInternal) {
+			ex.extraTxnState.shouldLogToTelemetry = true
+		} else {
+			ex.extraTxnState.shouldLogToTelemetry = false
+		}
 	}
+
 	// NOTE: on txnRestart we don't need to muck with the savepoints stack. It's either a
 	// a ROLLBACK TO SAVEPOINT that generated the event, and that statement deals with the
 	// savepoints, or it's a rewind which also deals with them.
@@ -2811,7 +2825,7 @@ func (ex *connExecutor) execCopyOut(
 			stmtFingerprintID,
 			&stats,
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
@@ -3071,7 +3085,8 @@ func (ex *connExecutor) execCopyIn(
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
 			&stats,
-			ex.statsCollector)
+			ex.statsCollector,
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	var copyErr error
