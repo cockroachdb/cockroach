@@ -237,12 +237,6 @@ func (b *resultsBufferBase) signal() bool {
 }
 
 func (b *resultsBufferBase) wait(ctx context.Context) error {
-	if buildutil.CrdbTestBuild {
-		// Note that here we don't check the context cancellation in hopes of
-		// reproducing #101823.
-		<-b.hasResults
-		return nil
-	}
 	select {
 	case <-b.hasResults:
 		return b.error()

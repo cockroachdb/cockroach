@@ -792,17 +792,6 @@ func (s *Streamer) GetResults(ctx context.Context) (retResults []Result, retErr 
 			s.results.setError(err)
 			return nil, err
 		}
-		if buildutil.CrdbTestBuild {
-			// Check whether the Streamer has been canceled or closed while we
-			// were	waiting for the results.
-			//
-			// Note that this check is done within wait() call above in non-test
-			// builds.
-			if err = ctx.Err(); err != nil {
-				s.results.setError(err)
-				return nil, err
-			}
-		}
 	}
 }
 
