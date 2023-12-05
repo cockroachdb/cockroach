@@ -68,8 +68,8 @@ func TestPutS3(t *testing.T) {
 	if err != nil {
 		skip.IgnoreLint(t, "No AWS credentials")
 	}
-	bucket := os.Getenv("AWS_S3_BUCKET")
-	if bucket == "" {
+	baseBucket := os.Getenv("AWS_S3_BUCKET")
+	if baseBucket == "" {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 
@@ -78,128 +78,138 @@ func TestPutS3(t *testing.T) {
 	ctx := context.Background()
 	user := username.RootUserName()
 	testID := cloudtestutils.NewTestID()
-
-	t.Run("auth-empty-no-cred", func(t *testing.T) {
-		_, err := cloud.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s-%d", bucket,
-			"backup-test-default", testID), base.ExternalIODirConfig{}, testSettings,
-			blobs.TestEmptyBlobClientFactory, user,
-			nil, /* ie */
-			nil, /* ief */
-			nil, /* kvDB */
-			nil, /* limiters */
-			nil, /* metrics */
-		)
-		require.EqualError(t, err, fmt.Sprintf(
-			`%s is set to '%s', but %s is not set`,
-			cloud.AuthParam,
-			cloud.AuthParamSpecified,
-			AWSAccessKeyParam,
-		))
-	})
-	t.Run("auth-implicit", func(t *testing.T) {
-		// You can create an IAM that can access S3
-		// in the AWS console, then set it up locally.
-		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
-		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
-		if err != nil {
-			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+	for _, locked := range []bool{true, false} {
+		bucket := baseBucket
+		testName := "regular-bucket"
+		if locked {
+			testName = "object-locked-bucket"
+			bucket += "-locked"
 		}
+		t.Run(testName, func(t *testing.T) {
+			t.Run("auth-empty-no-cred", func(t *testing.T) {
+				_, err := cloud.ExternalStorageFromURI(ctx, fmt.Sprintf("s3://%s/%s-%d", bucket,
+					"backup-test-default", testID), base.ExternalIODirConfig{}, testSettings,
+					blobs.TestEmptyBlobClientFactory, user,
+					nil, /* ie */
+					nil, /* ief */
+					nil, /* kvDB */
+					nil, /* limiters */
+					nil, /* metrics */
+				)
+				require.EqualError(t, err, fmt.Sprintf(
+					`%s is set to '%s', but %s is not set`,
+					cloud.AuthParam,
+					cloud.AuthParamSpecified,
+					AWSAccessKeyParam,
+				))
+			})
+			t.Run("auth-implicit", func(t *testing.T) {
+				// You can create an IAM that can access S3
+				// in the AWS console, then set it up locally.
+				// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
+				// We only run this test if default role exists.
+				credentialsProvider := credentials.SharedCredentialsProvider{}
+				_, err := credentialsProvider.Retrieve()
+				if err != nil {
+					skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
+						"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+				}
 
-		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
-			"s3://%s/%s-%d?%s=%s",
-			bucket, "backup-test-default", testID,
-			cloud.AuthParam, cloud.AuthParamImplicit,
-		), false, user,
-			nil, /* db */
-			testSettings)
-	})
-	t.Run("auth-specified", func(t *testing.T) {
-		uri := S3URI(bucket, fmt.Sprintf("backup-test-%d", testID),
-			&cloudpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
-		)
-		cloudtestutils.CheckExportStore(
-			t, uri, false, user, nil /* db */, testSettings,
-		)
-		cloudtestutils.CheckListFiles(
-			t, uri, user, nil /* db */, testSettings,
-		)
-	})
+				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
+					"s3://%s/%s-%d?%s=%s",
+					bucket, "backup-test-default", testID,
+					cloud.AuthParam, cloud.AuthParamImplicit,
+				), false, user,
+					nil, /* db */
+					testSettings)
+			})
+			t.Run("auth-specified", func(t *testing.T) {
+				uri := S3URI(bucket, fmt.Sprintf("backup-test-%d", testID),
+					&cloudpb.ExternalStorage_S3{AccessKey: creds.AccessKeyID, Secret: creds.SecretAccessKey, Region: "us-east-1"},
+				)
+				cloudtestutils.CheckExportStore(
+					t, uri, false, user, nil /* db */, testSettings,
+				)
+				cloudtestutils.CheckListFiles(
+					t, uri, user, nil /* db */, testSettings,
+				)
+			})
 
-	// Tests that we can put an object with server side encryption specified.
-	t.Run("server-side-encryption", func(t *testing.T) {
-		// You can create an IAM that can access S3
-		// in the AWS console, then set it up locally.
-		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
-		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
-		if err != nil {
-			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
-		}
+			// Tests that we can put an object with server side encryption specified.
+			t.Run("server-side-encryption", func(t *testing.T) {
+				// You can create an IAM that can access S3
+				// in the AWS console, then set it up locally.
+				// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
+				// We only run this test if default role exists.
+				credentialsProvider := credentials.SharedCredentialsProvider{}
+				_, err := credentialsProvider.Retrieve()
+				if err != nil {
+					skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
+						"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+				}
 
-		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
-			"s3://%s/%s-%d?%s=%s&%s=%s",
-			bucket, "backup-test-sse-256", testID,
-			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
-			"AES256",
-		),
-			false,
-			user,
-			nil, /* db */
-			testSettings,
-		)
+				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
+					"s3://%s/%s-%d?%s=%s&%s=%s",
+					bucket, "backup-test-sse-256", testID,
+					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+					"AES256",
+				),
+					false,
+					user,
+					nil, /* db */
+					testSettings,
+				)
 
-		v := os.Getenv("AWS_KMS_KEY_ARN")
-		if v == "" {
-			skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
-		}
-		cloudtestutils.CheckExportStore(t, fmt.Sprintf(
-			"s3://%s/%s-%d?%s=%s&%s=%s&%s=%s",
-			bucket, "backup-test-sse-kms", testID,
-			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
-			"aws:kms", AWSServerSideEncryptionKMSID, v,
-		),
-			false,
-			user,
-			nil, /* db */
-			testSettings)
-	})
+				v := os.Getenv("AWS_KMS_KEY_ARN")
+				if v == "" {
+					skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
+				}
+				cloudtestutils.CheckExportStore(t, fmt.Sprintf(
+					"s3://%s/%s-%d?%s=%s&%s=%s&%s=%s",
+					bucket, "backup-test-sse-kms", testID,
+					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+					"aws:kms", AWSServerSideEncryptionKMSID, v,
+				),
+					false,
+					user,
+					nil, /* db */
+					testSettings)
+			})
 
-	t.Run("server-side-encryption-invalid-params", func(t *testing.T) {
-		// You can create an IAM that can access S3
-		// in the AWS console, then set it up locally.
-		// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
-		// We only run this test if default role exists.
-		credentialsProvider := credentials.SharedCredentialsProvider{}
-		_, err := credentialsProvider.Retrieve()
-		if err != nil {
-			skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
-				"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
-		}
+			t.Run("server-side-encryption-invalid-params", func(t *testing.T) {
+				// You can create an IAM that can access S3
+				// in the AWS console, then set it up locally.
+				// https://docs.aws.com/cli/latest/userguide/cli-configure-role.html
+				// We only run this test if default role exists.
+				credentialsProvider := credentials.SharedCredentialsProvider{}
+				_, err := credentialsProvider.Retrieve()
+				if err != nil {
+					skip.IgnoreLintf(t, "we only run this test if a default role exists, "+
+						"refer to https://docs.aws.com/cli/latest/userguide/cli-configure-role.html: %s", err)
+				}
 
-		// Unsupported server side encryption option.
-		invalidSSEModeURI := fmt.Sprintf(
-			"s3://%s/%s?%s=%s&%s=%s",
-			bucket, "backup-test-sse-256",
-			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
-			"unsupported-algorithm")
+				// Unsupported server side encryption option.
+				invalidSSEModeURI := fmt.Sprintf(
+					"s3://%s/%s?%s=%s&%s=%s",
+					bucket, "backup-test-sse-256",
+					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+					"unsupported-algorithm")
 
-		_, err = makeS3Storage(ctx, invalidSSEModeURI, user)
-		require.True(t, testutils.IsError(err, "unsupported server encryption mode unsupported-algorithm. Supported values are `aws:kms` and `AES256"))
+				_, err = makeS3Storage(ctx, invalidSSEModeURI, user)
+				require.True(t, testutils.IsError(err, "unsupported server encryption mode unsupported-algorithm. Supported values are `aws:kms` and `AES256"))
 
-		// Specify aws:kms encryption mode but don't specify kms ID.
-		invalidKMSURI := fmt.Sprintf(
-			"s3://%s/%s?%s=%s&%s=%s",
-			bucket, "backup-test-sse-256",
-			cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
-			"aws:kms")
-		_, err = makeS3Storage(ctx, invalidKMSURI, user)
-		require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
-	})
+				// Specify aws:kms encryption mode but don't specify kms ID.
+				invalidKMSURI := fmt.Sprintf(
+					"s3://%s/%s?%s=%s&%s=%s",
+					bucket, "backup-test-sse-256",
+					cloud.AuthParam, cloud.AuthParamImplicit, AWSServerSideEncryptionMode,
+					"aws:kms")
+				_, err = makeS3Storage(ctx, invalidKMSURI, user)
+				require.True(t, testutils.IsError(err, "AWS_SERVER_KMS_ID param must be set when using aws:kms server side encryption mode."))
+			})
+		})
+
+	}
 }
 
 func TestPutS3AssumeRole(t *testing.T) {
