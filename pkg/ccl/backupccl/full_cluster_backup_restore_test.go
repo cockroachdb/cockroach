@@ -78,6 +78,8 @@ func TestFullClusterBackup(t *testing.T) {
 			},
 		}}
 	const numAccounts = 10
+	// TODO(adityamaru): We need to ensure that both these clusters have the same
+	// cluster mode. i.e. either both are system or both are virtual cluster.
 	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
 	tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, params)
 	defer cleanupFn()
@@ -621,7 +623,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	}
 
 	const numAccounts = 1000
-	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	// This test flakes due to
@@ -673,6 +675,7 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP data.bank INTO 'nodelocal://1/throwawayjob'`)
 	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
+	isSystemTenant := tc.ApplicationLayer(0).Codec().ForSystemTenant()
 	t.Run("during restoration of data", func(t *testing.T) {
 		_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
@@ -680,26 +683,49 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
-		sqlDBRestore.CheckQueryResults(t,
-			`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
-			[][]string{
-				{"bank"},
-				{"comments"},
-				{"database_role_settings"},
-				{"external_connections"},
-				{"locations"},
-				{"privileges"},
-				{"role_id_seq"},
-				{"role_members"},
-				{"role_options"},
-				{"scheduled_jobs"},
-				{"settings"},
-				{"tenant_settings"},
-				{"ui"},
-				{"users"},
-				{"zones"},
-			},
-		)
+		if isSystemTenant {
+			sqlDBRestore.CheckQueryResults(t,
+				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+				[][]string{
+					{"bank"},
+					{"comments"},
+					{"database_role_settings"},
+					{"external_connections"},
+					{"locations"},
+					{"privileges"},
+					{"role_id_seq"},
+					{"role_members"},
+					{"role_options"},
+					{"scheduled_jobs"},
+					{"settings"},
+					{"tenant_settings"},
+					{"ui"},
+					{"users"},
+					{"zones"},
+				},
+			)
+		} else {
+			log.Info(context.Background(), "COMING HERE INNIT")
+			sqlDBRestore.CheckQueryResults(t,
+				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
+				[][]string{
+					{"bank"},
+					{"comments"},
+					{"database_role_settings"},
+					{"external_connections"},
+					{"locations"},
+					{"privileges"},
+					{"role_id_seq"},
+					{"role_members"},
+					{"role_options"},
+					{"scheduled_jobs"},
+					{"settings"},
+					{"ui"},
+					{"users"},
+					{"zones"},
+				},
+			)
+		}
 	})
 
 	// This test retries the job (by injected a retry error) after restoring a
@@ -709,6 +735,10 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	t.Run("retry-during-custom-system-table-restore", func(t *testing.T) {
 		customRestoreSystemTables := make([]string, 0)
 		for table, config := range systemTableBackupConfiguration {
+			if (isSystemTenant && config.expectMissingInSystemTenant) ||
+				(!isSystemTenant && config.expectMissingInSecondaryTenant) {
+				continue
+			}
 			if config.customRestoreFunc != nil {
 				customRestoreSystemTables = append(customRestoreSystemTables, table)
 			}

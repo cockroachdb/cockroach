@@ -3357,6 +3357,7 @@ func TestConcurrentBackupRestores(t *testing.T) {
 	}
 }
 
+// TODO(adityamaru): Restrict to system tenant.
 func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3382,6 +3383,8 @@ func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 // tenant fails on resume, even if the backup job details are not fully
 // populated. This test specifically addresses the bug described in
 // https://github.com/cockroachdb/cockroach/issues/112114
+//
+// TODO(adityamaru): Explicitly controlling tenants.
 func TestBackupJobFailsInRestoredTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3726,11 +3729,11 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		sqlDB.Exec(t, "CREATE DATABASE drop_table_db")
 		sqlDB.Exec(t, "CREATE DATABASE drop_table_db_restore")
 		sqlDB.Exec(t, "CREATE TABLE drop_table_db.a (k int, v string)")
-		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db TO $1 WITH revision_history`, backupPath)
+		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db INTO $1 WITH revision_history`, backupPath)
 		sqlDB.Exec(t, "INSERT INTO drop_table_db.a VALUES (1, 'foo')")
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
 		sqlDB.Exec(t, "DROP TABLE drop_table_db.a")
-		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db TO $1 WITH revision_history`, backupPath)
+		sqlDB.Exec(t, `BACKUP DATABASE drop_table_db INTO LATEST IN $1 WITH revision_history`, backupPath)
 		restoreQuery := fmt.Sprintf(
 			"RESTORE drop_table_db.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='drop_table_db_restore'", tsBefore)
 		sqlDB.Exec(t, restoreQuery, backupPath)
@@ -4129,6 +4132,7 @@ func getAWSKMSURI(t *testing.T, regionEnvVariable, keyIDEnvVariable string) (str
 	return correctURI, incorrectURI
 }
 
+// TODO(adityamaru): Restrict to system tenant involves ALTER PARTITION.
 func TestEncryptedBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6487,6 +6491,7 @@ INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510,
 	// TODO(adityamaru): Add a RESTORE inside tenant once it is supported.
 }
 
+// TODO(adityamaru): Restrict to secondary tenant.
 func TestBackupRestoreInsideTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6608,6 +6613,8 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 
 // TestBackupRestoreTenantSettings tests the behaviour of the custom restore function for
 // the system.tenant_settings table.
+//
+// TODO(adityamaru): Restrict to system tenant.
 func TestBackupRestoreTenantSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -10826,13 +10833,13 @@ func TestBackupRestoreClusterWithUDFs(t *testing.T) {
 	srcCluster, srcSQLDB, srcClusterCleanupFn := backupRestoreTestSetupEmpty(
 		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{},
 	)
-	srcServer := srcCluster.Server(0)
+	srcServer := srcCluster.ApplicationLayer(0)
 	defer srcClusterCleanupFn()
 
 	tgtCluster, tgtSQLDB, tgtClusterCleanupFn := backupRestoreTestSetupEmpty(
 		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{},
 	)
-	tgtServer := tgtCluster.Server(0)
+	tgtServer := tgtCluster.ApplicationLayer(0)
 	defer tgtClusterCleanupFn()
 
 	srcSQLDB.Exec(t, `
@@ -10907,44 +10914,63 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err = strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
+
+	isSystemTenant := tgtCluster.ApplicationLayer(0).Codec().ForSystemTenant()
+
+	// System tenant restores the system.tenant_settings while the secondary
+	// tenant does not.
+	startingDescID := 122
+	if isSystemTenant {
+		startingDescID = 123
+	}
 	err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 		require.NoError(t, err)
-		require.Equal(t, 123, int(dbDesc.GetID()))
+		require.Equal(t, startingDescID, int(dbDesc.GetID()))
 
 		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
-		require.Equal(t, 125, int(scDesc.GetID()))
+		require.Equal(t, startingDescID+2, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
 		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
-		require.Equal(t, 126, int(tbDesc.GetID()))
+		require.Equal(t, startingDescID+3, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
 		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
 		require.NoError(t, err)
-		require.Equal(t, 127, int(typDesc.GetID()))
+		require.Equal(t, startingDescID+4, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
 		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
-		require.Equal(t, 129, int(tbDesc.GetID()))
+		require.Equal(t, startingDescID+6, int(tbDesc.GetID()))
 
 		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
-		require.Equal(t, 130, int(fnDesc.GetID()))
-		require.Equal(t, 123, int(fnDesc.GetParentID()))
-		require.Equal(t, 125, int(fnDesc.GetParentSchemaID()))
+		require.Equal(t, startingDescID+7, int(fnDesc.GetID()))
+		require.Equal(t, startingDescID, int(fnDesc.GetParentID()))
+		require.Equal(t, startingDescID+2, int(fnDesc.GetParentSchemaID()))
 		// Make sure db name and IDs are rewritten in function body.
-		require.Equal(t, "SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(129:::REGCLASS);", fnDesc.GetFunctionBody())
-		require.Equal(t, 100127, int(fnDesc.GetParams()[0].Type.Oid()))
-		require.Equal(t, []descpb.ID{126, 129}, fnDesc.GetDependsOn())
-		require.Equal(t, []descpb.ID{127, 128}, fnDesc.GetDependsOnTypes())
+		require.Equal(t, fmt.Sprintf("SELECT a FROM db1.sc1.tbl1;\nSELECT nextval(%d:::REGCLASS);",
+			startingDescID+6), fnDesc.GetFunctionBody())
+
+		expectedOID := 100126
+		dependsOn := []descpb.ID{125, 128}
+		dependsOnTypes := []descpb.ID{126, 127}
+		if isSystemTenant {
+			expectedOID = 100127
+			dependsOn = []descpb.ID{126, 129}
+			dependsOnTypes = []descpb.ID{127, 128}
+		}
+		require.Equal(t, expectedOID, int(fnDesc.GetParams()[0].Type.Oid()))
+		require.Equal(t, dependsOn, fnDesc.GetDependsOn())
+		require.Equal(t, dependsOnTypes, fnDesc.GetDependsOnTypes())
 
 		fnDef, _ := scDesc.GetFunction("f1")
-		require.Equal(t, 130, int(fnDef.Signatures[0].ID))
-		require.Equal(t, 100127, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
+		require.Equal(t, startingDescID+7, int(fnDef.Signatures[0].ID))
+		require.Equal(t, expectedOID, int(fnDef.Signatures[0].ArgTypes[0].Oid()))
 		return nil
 	})
 	require.NoError(t, err)
