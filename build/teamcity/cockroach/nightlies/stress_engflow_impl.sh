@@ -23,6 +23,7 @@ bazel build //pkg/cmd/bazci/process-bep-file $ENGFLOW_FLAGS
 _bazel/bin/pkg/cmd/bazci/process-bep-file/process-bep-file_/process-bep-file \
     -branch $TC_BUILD_BRANCH -eventsfile artifacts/eventstream \
     -invocation $INVOCATION_ID -cert /home/agent/engflow/engflow.crt \
-    -key /home/agent/engflow/engflow.key
+    -key /home/agent/engflow/engflow.key \
+    -extra "${EXTRA_ISSUE_PARAMS:+$EXTRA_ISSUE_PARAMS}"
 
 exit $status
