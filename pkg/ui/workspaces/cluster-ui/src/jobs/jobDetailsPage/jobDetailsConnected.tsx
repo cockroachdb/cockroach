@@ -52,7 +52,7 @@ const mapStateToProps = (
 };
 
 const mapDispatchToProps = (dispatch: Dispatch): JobDetailsDispatchProps => ({
-  refreshJob: (req: JobRequest) => jobActions.refresh(req),
+  refreshJob: (req: JobRequest) => dispatch(jobActions.refresh(req)),
   refreshExecutionDetailFiles: (req: ListJobProfilerExecutionDetailsRequest) =>
     dispatch(jobProfilerActions.refresh(req)),
   onRequestExecutionDetails: (jobID: long) => {
