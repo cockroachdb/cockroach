@@ -47,7 +47,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate execgen       # execgen targets (subset of 'dev generate go')
         dev generate schemachanger # schemachanger targets (subset of 'dev generate go')
         dev generate stringer      # stringer targets (subset of 'dev generate go')
-        dev generate testlogic     # logictest generated code (subset of 'dev generate bazel')
+        dev generate testlogic     # logictest generated code (includes 'dev generate schemachanger')
         dev generate ui            # Create UI assets to be consumed by 'go build'
 `,
 		Args: cobra.MinimumNArgs(0),
@@ -225,9 +225,12 @@ func (d *dev) generateLogicTest(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	return d.exec.CommandContextInheritingStdStreams(
+	if err = d.exec.CommandContextInheritingStdStreams(
 		ctx, "bazel", "run", "pkg/cmd/generate-logictest", "--", fmt.Sprintf("-out-dir=%s", workspace),
-	)
+	); err != nil {
+		return err
+	}
+	return d.generateSchemaChanger(cmd)
 }
 
 func (d *dev) generateAcceptanceTests(cmd *cobra.Command) error {
