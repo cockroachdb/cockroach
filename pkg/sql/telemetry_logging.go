@@ -123,6 +123,9 @@ type TelemetryLoggingMetrics struct {
 
 	// skippedQueryCount is used to produce the count of non-sampled queries.
 	skippedQueryCount atomic.Uint64
+
+	// skippedTransactionCount is used to produce the count of non-sampled transactions.
+	skippedTransactionCount atomic.Uint64
 }
 
 func newTelemetryLoggingMetrics(
@@ -340,4 +343,12 @@ func (t *TelemetryLoggingMetrics) resetLastEmittedTime() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.lastEmittedTime = time.Time{}
+}
+
+func (t *TelemetryLoggingMetrics) resetSkippedTransactionCount() (res uint64) {
+	return t.skippedTransactionCount.Swap(0)
+}
+
+func (t *TelemetryLoggingMetrics) incSkippedTransactionCount() {
+	t.skippedTransactionCount.Add(1)
 }

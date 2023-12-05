@@ -478,6 +478,10 @@ message SampledTransaction {
  // SampledExecStats is a nested field containing execution statistics.
  // This field will be omitted if the stats were not sampled.
  SampledExecStats sampled_exec_stats = 25 [(gogoproto.jsontag) = ",omitempty"];
+
+ // SkippedTransactions is the number of transactions that were not considered for sampling prior to this one.
+  // We only count skipped transactions when telemetry logging is enabled for the transaction type.
+ int64 skipped_transactions = 26 [(gogoproto.jsontag) = ",omitempty"];
 }
 
 // CapturedIndexUsageStats

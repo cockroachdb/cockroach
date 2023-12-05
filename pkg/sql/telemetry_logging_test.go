@@ -113,6 +113,27 @@ func (t *telemetryLogSpy) getStatementLogs(stripRedactMarkers bool) []eventpb.Sa
 	return statementLogs
 }
 
+func (t *telemetryLogSpy) getTransactionLogs() []eventpb.SampledTransaction {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	var transactionLogs []eventpb.SampledTransaction
+	for _, logEntry := range t.mu.logs {
+		if !strings.Contains(logEntry.Message, "sampled_transaction") {
+			continue
+		}
+
+		var transactionLog eventpb.SampledTransaction
+		if err := json.Unmarshal([]byte(logEntry.Message[logEntry.StructuredStart:logEntry.StructuredEnd]), &transactionLog); err != nil {
+			continue
+		}
+
+		transactionLogs = append(transactionLogs, transactionLog)
+	}
+
+	return transactionLogs
+}
+
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
 // and are sampled according to the configured sample rate.
 func TestTelemetryLogging(t *testing.T) {
@@ -522,6 +543,7 @@ func TestTelemetryLogging(t *testing.T) {
 		regexp.MustCompile(`"EventType":"sampled_transaction"`),
 		log.WithMarkedSensitiveData,
 	)
+	require.NoError(t, err)
 	require.Emptyf(t, txnEntries, "found unexpected transaction telemetry events: %v", txnEntries)
 
 	entries, err := log.FetchEntriesFromFiles(
@@ -1838,12 +1860,21 @@ func TestTelemetryLoggingTransactionMode(t *testing.T) {
 			log.FlushAllSync()
 
 			stmtLogs := logSpy.getStatementLogs(true /* stripRedactionMarkers */)
+			txnLogs := logSpy.getTransactionLogs()
+			require.Equal(t, len(txns), len(txnLogs))
 			require.NotEmpty(t, stmtLogs)
 
 			var stmtLogsIdx, skippedStmtsCount int
 			// Verify expected statement logs are present.
-			for _, txnQueries := range txns {
-				var txnID string
+			for ti, txnQueries := range txns {
+				txn := txnLogs[ti]
+				txnID := txn.TransactionID
+
+				if ti == 0 {
+					require.Equal(t, int64(1), txn.SkippedTransactions)
+				} else {
+					require.Zero(t, txn.SkippedTransactions)
+				}
 
 				if txnQueries[0] == "BEGIN" {
 					// BEGIN is skipped in txn mode.
@@ -1854,14 +1885,15 @@ func TestTelemetryLoggingTransactionMode(t *testing.T) {
 				// All the statement logs for a transaction are contiguous in the log file.
 				// If this is not true something is wrong.
 				stmtsCount := 0
-				for stmtsCount == 0 || (stmtLogsIdx < len(stmtLogs) && stmtLogs[stmtLogsIdx].TransactionID == txnID) {
+				for stmtLogsIdx < len(stmtLogs) && stmtLogs[stmtLogsIdx].TransactionID == txnID {
 					stmt := stmtLogs[stmtLogsIdx]
-					if stmtsCount == 0 {
-						txnID = stmt.TransactionID
-					}
 					require.Contains(t, stmt.Statement, txnQueries[stmtsCount])
 					if stmt.StmtPosInTxn == 1 {
 						require.Equal(t, skippedStmtsCount, int(stmt.SkippedQueries))
+					}
+					if stmt.Tag != "COMMIT" {
+						require.Contains(t, txn.StatementFingerprintIDs, appstatspb.StmtFingerprintID(stmt.StatementFingerprintID),
+							"stmt: %v txnStmtFingerprints:: %v", stmt, txn.StatementFingerprintIDs)
 					}
 
 					stmtsCount++
@@ -1869,7 +1901,7 @@ func TestTelemetryLoggingTransactionMode(t *testing.T) {
 				}
 
 				if stmtsCount > stmtsPerTxnLimit {
-					t.Fatalf("expected number of statements logged per txn to be less than or equal to the limit\nlogged: %d", stmtsCount)
+					t.Fatalf("expected number of statements logged per txn to be less than or equal to the limit\nlogged: %d, txn: %v", stmtsCount, txn)
 				}
 
 				if stmtsCount < len(txnQueries) && len(txnQueries) <= stmtsPerTxnLimit {
@@ -2019,26 +2051,34 @@ func TestTelemetryLoggingTransactionMode(t *testing.T) {
 		log.FlushAllSync()
 
 		stmtLogs := logSpy.getStatementLogs(true /* stripRedactionMarkers */)
+		txnLogs := logSpy.getTransactionLogs()
+		require.NotEmpty(t, txnLogs)
 		require.NotEmpty(t, stmtLogs)
 
 		var stmtLogsIdx int
-		for _, expectedTxn := range expectedTxns {
-			var txnID string
+		for ti, expectedTxn := range expectedTxns {
+			txn := txnLogs[ti]
+			txnID := txn.TransactionID
+
+			require.Equalf(t, expectedTxn.skippedTxnCount, txn.SkippedTransactions, "expected txn: %v\n", stmtLogsIdx)
 
 			// All the statement logs for a transaction are contiguous in the log file.
 			// If this is not true something is wrong.
 			stmtsCount := 0
-			for stmtsCount == 0 || (stmtLogsIdx < len(stmtLogs) && stmtLogs[stmtLogsIdx].TransactionID == txnID) {
+			for stmtLogsIdx < len(stmtLogs) && stmtLogs[stmtLogsIdx].TransactionID == txnID {
 				stmt := stmtLogs[stmtLogsIdx]
-				if stmtsCount == 0 {
-					txnID = stmt.TransactionID
-				}
 				expectedStmt := expectedTxn.stmts[stmtsCount]
 				require.Contains(t, stmt.Statement, expectedStmt.logMsg)
 				require.Equal(t, expectedStmt.skippedQueryCount, int(stmt.SkippedQueries))
+				if stmt.Tag != "BEGIN" && stmt.Tag != "COMMIT" {
+					require.Contains(t, txn.StatementFingerprintIDs, appstatspb.StmtFingerprintID(stmt.StatementFingerprintID))
+				}
 
 				stmtsCount++
 				stmtLogsIdx++
+				if stmtLogsIdx == len(stmtLogs) || stmtLogs[stmtLogsIdx].TransactionID != txnID {
+					break
+				}
 			}
 
 			require.Equal(t, len(expectedTxn.stmts), stmtsCount)
