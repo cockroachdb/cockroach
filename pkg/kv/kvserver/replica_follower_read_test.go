@@ -90,6 +90,7 @@ func TestCanServeFollowerRead(t *testing.T) {
 				clock.MaxOffset().Nanoseconds(),
 				0, // coordinatorNodeID
 				0,
+				false, // omitInRangefeeds
 			)
 
 			ba := &kvpb.BatchRequest{}
@@ -172,6 +173,7 @@ func TestCheckExecutionCanProceedAllowsFollowerReadWithInvalidLease(t *testing.T
 		clock.MaxOffset().Nanoseconds(),
 		0, // coordinatorNodeID
 		0,
+		false, // omitInRangefeeds
 	)
 
 	ba := &kvpb.BatchRequest{}

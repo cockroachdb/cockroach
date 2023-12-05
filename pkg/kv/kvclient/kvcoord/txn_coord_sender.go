@@ -1098,6 +1098,28 @@ func (tc *TxnCoordSender) SetDebugName(name string) {
 	tc.mu.txn.Name = name
 }
 
+// GetOmitInRangefeeds is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) GetOmitInRangefeeds() bool {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+	return tc.mu.txn.OmitInRangefeeds
+}
+
+// SetOmitInRangefeeds is part of the kv.TxnSender interface.
+func (tc *TxnCoordSender) SetOmitInRangefeeds() {
+	tc.mu.Lock()
+	defer tc.mu.Unlock()
+
+	if tc.mu.txn.OmitInRangefeeds {
+		return
+	}
+
+	if tc.mu.active {
+		panic("cannot change OmitInRangefeeds of a running transaction")
+	}
+	tc.mu.txn.OmitInRangefeeds = true
+}
+
 // String is part of the kv.TxnSender interface.
 func (tc *TxnCoordSender) String() string {
 	tc.mu.Lock()
