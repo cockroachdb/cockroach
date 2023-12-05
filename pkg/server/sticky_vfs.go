@@ -69,7 +69,7 @@ type StickyVFSRegistry interface {
 	// engines.
 	Open(ctx context.Context, cfg *Config, spec base.StoreSpec) (storage.Engine, error)
 	// Get returns the named in-memory FS.
-	Get(spec base.StoreSpec) (vfs.FS, error)
+	Get(spec base.StoreSpec) (*vfs.MemFS, error)
 	// CloseAllEngines closes all open sticky in-memory engines that were
 	// created by this registry. Calling this method is required when using the
 	// ReuseEnginesDeprecated option.
@@ -170,7 +170,7 @@ func (registry *stickyVFSRegistryImpl) Open(
 	return engine, nil
 }
 
-func (registry *stickyVFSRegistryImpl) Get(spec base.StoreSpec) (vfs.FS, error) {
+func (registry *stickyVFSRegistryImpl) Get(spec base.StoreSpec) (*vfs.MemFS, error) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
