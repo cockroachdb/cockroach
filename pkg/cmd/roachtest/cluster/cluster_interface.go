@@ -64,6 +64,11 @@ type Cluster interface {
 	StopCockroachGracefullyOnNode(ctx context.Context, l *logger.Logger, node int) error
 	NewMonitor(context.Context, ...option.Option) Monitor
 
+	// Starting virtual clusters.
+
+	StartServiceForVirtualClusterE(ctx context.Context, l *logger.Logger, externalNodes option.NodeListOption, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option) error
+	StartServiceForVirtualCluster(ctx context.Context, l *logger.Logger, externalNodes option.NodeListOption, startOpts option.StartOpts, settings install.ClusterSettings, opts ...option.Option)
+
 	// Hostnames and IP addresses of the nodes.
 
 	InternalAddr(ctx context.Context, l *logger.Logger, node option.NodeListOption) ([]string, error)
