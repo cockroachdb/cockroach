@@ -4,6 +4,15 @@ CREATE TABLE abc (a INT, b INT, C INT)
 statement ok
 INSERT INTO abc VALUES (1, 10, 100), (2, 20, 200), (3, 30, 300), (NULL, NULL, NULL)
 
+statement ok
+CREATE TYPE typ AS (x INT, y INT);
+
+statement ok
+CREATE TABLE comp (v typ);
+
+statement ok
+INSERT INTO comp VALUES (ROW(1, 2)), (ROW(3, 4));
+
 # ANY/SOME with arrays.
 
 query B
@@ -473,3 +482,21 @@ query B
 SELECT NULL = ALL(NULL::INTEGER[]);
 ----
 NULL
+
+# Regression test for #102017 - don't throw a "too few columns" error.
+query II
+SELECT * FROM (VALUES (1, 2)) foo(a, b)
+WHERE (a, b) = ANY(ARRAY(SELECT ROW(x, y) FROM (VALUES (1, 2)) bar(x, y)));
+----
+1  2
+
+query II
+SELECT a, b FROM abc WHERE (a, b) = ANY(ARRAY(SELECT ROW(a, b) FROM abc LIMIT 1));
+----
+1  10
+
+query T rowsort
+SELECT * FROM comp WHERE v IN (SELECT v FROM comp);
+----
+(1,2)
+(3,4)
