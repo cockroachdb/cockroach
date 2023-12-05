@@ -581,7 +581,7 @@ func TestShowBackupTenants(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		},
-	)
+	})
 	defer cleanupFn()
 	srv := tc.Server(0)
 
