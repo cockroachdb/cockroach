@@ -393,22 +393,6 @@ type EngineIterator interface {
 	PrevEngineKeyWithLimit(limit roachpb.Key) (state pebble.IterValidityState, err error)
 	// Stats returns statistics about the iterator.
 	Stats() IteratorStats
-	// CanDeterministicallySingleDelete is a specific purpose-built method for
-	// determining whether the current key (UnsafeRawEngineKey()/EngineKey())
-	// may be deterministically deleted through a single delete key on the local
-	// engine state. The determination is completely to local to the Engine, and
-	// a true return value does not mean that clearing the key with a single
-	// delete will be deterministic on other replicas on other Engines.
-	//
-	// CanDeterministicallySingleDelete does not change the iterator position
-	// (all subsequent iterator operations should behave as if
-	// CanDeterministicallySingleDelete was never invoked), although it DOES
-	// invalidate the memory associated with the current iterator position's
-	// value.
-	//
-	// CanDeterministicallySingleDelete may only be called when oriented in the
-	// forward direction and only once at a given iterator position.
-	CanDeterministicallySingleDelete() (ok bool, err error)
 }
 
 // CloneContext is an opaque type encapsulating sufficient context to construct
