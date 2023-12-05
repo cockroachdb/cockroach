@@ -62,6 +62,8 @@ var (
 	serverUrl     = flag.String("serverurl", "https://tanzanite.cluster.engflow.com/", "URL of the EngFlow cluster")
 	tlsClientCert = flag.String("cert", "", "TLS client certificate for accessing EngFlow, probably a .crt file")
 	tlsClientKey  = flag.String("key", "", "TLS client key for accessing EngFlow")
+
+	extraParams = flag.String("extra", "", "comma-separated list of KEY=VALUE pairs like a=b,c=d")
 )
 
 func getSha() (string, error) {
@@ -105,6 +107,15 @@ func failurePoster(res *testResultWithXml, opts *issues.Options) githubpost.Fail
 		}
 		if res.attempt != 0 {
 			req.ExtraParams["attempt"] = fmt.Sprintf("%d", res.attempt)
+		}
+		for _, kv := range strings.Split(*extraParams, ",") {
+			split := strings.SplitN(kv, "=", 2)
+			key := split[0]
+			var value string
+			if len(split) > 1 {
+				value = split[1]
+			}
+			req.ExtraParams[key] = value
 		}
 		return fmter, req
 	}
