@@ -62,5 +62,5 @@ _tc_build_branch() {
 # local copy of tc_release_branch from teamcity-support.sh to avoid imports.
 _tc_release_branch() {
   branch=$(_tc_build_branch)
-  [[ "$branch" == master || "$branch" == release-* || "$branch" == provisional_* ]]
+  [[ "$branch" == master || "$branch" == release-* || "$branch" == "rc-"* || "$branch" == provisional_* ]]
 }
