@@ -15,7 +15,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
@@ -82,21 +83,23 @@ func TestCloudBackupRestoreS3WithLegacyPut(t *testing.T) {
 	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
 }
 
-func requiredS3CredsAndBucket(t *testing.T) (credentials.Value, string) {
+func requiredS3CredsAndBucket(t *testing.T) (aws.Credentials, string) {
 	t.Helper()
-	creds, err := credentials.NewEnvCredentials().Get()
-	if err != nil {
+	envConfig, err := config.NewEnvConfig()
+	require.NoError(t, err)
+	if !envConfig.Credentials.HasKeys() {
 		skip.IgnoreLintf(t, "No AWS env keys (%v)", err)
 	}
+
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
-	return creds, bucket
+	return envConfig.Credentials, bucket
 }
 
 func setupS3URI(
-	t *testing.T, db *sqlutils.SQLRunner, bucket string, prefix string, creds credentials.Value,
+	t *testing.T, db *sqlutils.SQLRunner, bucket string, prefix string, creds aws.Credentials,
 ) url.URL {
 	t.Helper()
 	endpoint := os.Getenv(amazon.NightlyEnvVarS3Params[amazon.AWSEndpointParam])
