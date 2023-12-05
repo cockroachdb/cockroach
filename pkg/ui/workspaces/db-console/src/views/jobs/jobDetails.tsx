@@ -23,7 +23,7 @@ import {
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import { ListJobProfilerExecutionDetailsResponseMessage } from "src/util/api";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
-import { collectExecutionDetailsAction } from "oss/src/redux/jobs/jobsActions";
+import { collectExecutionDetailsAction } from "src/redux/jobs/jobsActions";
 import long from "long";
 import { selectHasAdminRole } from "src/redux/user";
 

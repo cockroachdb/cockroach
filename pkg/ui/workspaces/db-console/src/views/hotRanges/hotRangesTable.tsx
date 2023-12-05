@@ -32,8 +32,8 @@ import {
   uiDebugPages,
 } from "src/util/docs";
 import emptyTableResultsImg from "assets/emptyState/empty-table-results.svg";
-import { sortSettingLocalSetting } from "oss/src/redux/hotRanges";
-import { AdminUIState } from "oss/src/redux/state";
+import { sortSettingLocalSetting } from "src/redux/hotRanges";
+import { AdminUIState } from "src/redux/state";
 import { connect } from "react-redux";
 
 const PAGE_SIZE = 50;
