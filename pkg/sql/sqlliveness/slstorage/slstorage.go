@@ -318,7 +318,7 @@ func (s *Storage) deleteOrFetchSession(
 			return err
 		}
 		livenessProber := regionliveness.NewLivenessProber(s.db, s.codec, nil, s.settings)
-		if unavailableAtRegions, err := livenessProber.QueryUnavailablePhysicalRegions(ctx, txn); err != nil ||
+		if unavailableAtRegions, err := livenessProber.QueryUnavailablePhysicalRegions(ctx, txn, true /*filterAvailable*/); err != nil ||
 			unavailableAtRegions.ContainsPhysicalRepresentation(string(regionPhysicalRep)) {
 			return err
 		}
