@@ -157,6 +157,11 @@ func (w *parquetWriter) close() error {
 	return w.inner.Close()
 }
 
+// closed returns true if the writer was closed.
+func (w *parquetWriter) closed() bool {
+	return w.inner.Closed()
+}
+
 // populateDatums writes the appropriate datums into the datumAlloc slice.
 func (w *parquetWriter) populateDatums(
 	updatedRow cdcevent.Row, prevRow cdcevent.Row, updated, mvcc hlc.Timestamp,

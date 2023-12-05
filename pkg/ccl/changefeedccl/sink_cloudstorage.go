@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
@@ -70,6 +71,11 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
+
+	// This mutex is for all fields and is only used by parquet.
+	parquetCodec *parquetWriter
+	syncutil.Mutex
+
 	created       time.Time
 	codec         io.WriteCloser
 	rawSize       int
@@ -77,7 +83,6 @@ type cloudStorageSinkFile struct {
 	buf           bytes.Buffer
 	alloc         kvevent.Alloc
 	oldestMVCC    hlc.Timestamp
-	parquetCodec  *parquetWriter
 	allocCallback func(delta int64)
 }
 
@@ -513,11 +518,14 @@ func makeCloudStorageSink(
 	return s, nil
 }
 
-func (s *cloudStorageSink) getOrCreateFile(
-	topic TopicDescriptor, eventMVCC hlc.Timestamp,
-) (*cloudStorageSinkFile, error) {
+func (s *cloudStorageSink) makeFileKey(topic TopicDescriptor) cloudStorageSinkKey {
 	name, _ := s.topicNamer.Name(topic)
-	key := cloudStorageSinkKey{name, int64(topic.GetVersion())}
+	return cloudStorageSinkKey{topic: name, schemaID: int64(topic.GetVersion())}
+}
+
+func (s *cloudStorageSink) getOrCreateFile(
+	key cloudStorageSinkKey, eventMVCC hlc.Timestamp,
+) (*cloudStorageSinkFile, error) {
 	if item := s.files.Get(key); item != nil {
 		f := item.(*cloudStorageSinkFile)
 		if eventMVCC.Less(f.oldestMVCC) {
@@ -573,7 +581,7 @@ func (s *cloudStorageSink) EmitRow(
 	}()
 
 	s.metrics.recordMessageSize(int64(len(key) + len(value)))
-	file, err := s.getOrCreateFile(topic, mvcc)
+	file, err := s.getOrCreateFile(s.makeFileKey(topic), mvcc)
 	if err != nil {
 		return err
 	}
@@ -894,9 +902,32 @@ func (s *cloudStorageSink) Dial() error {
 	return nil
 }
 
+// In a set of cloudstorage files, keys are partitioned by topic. The files
+// within a topic are ordered by schema ID (all keys in f1 with schemaID 1
+// should have a greater timestamp than the keys in f2 with schemaID=2). In
+// each file, there is per-key ordering by timestamp except for duplicates which
+// may be re-emitted.
+//
+// For topic t1, the (schemaID, key, timestamp) tuples below are ordered:
+// ordering.
+// s1, a, 1
+// s1, a, 2
+// s1, b, 2
+// s1, a, 1 # re-emitting a previous value
+//
+// s2, b, 3
+// s2, b, 2
+// s2, a, 3
+// s2, b, 3 # re-emitting a previous value
+//
+// In some cases, we will assign a pid, which is a partition id. Instead of
+// having one file per topic and schemaID, we may have several. Keys will be
+// partitioned between these files and  each file will have per-key ordering as
+// explained above.
 type cloudStorageSinkKey struct {
-	topic    string
-	schemaID int64
+	topic       string
+	schemaID    int64
+	partitionID int64
 }
 
 func (k cloudStorageSinkKey) Less(other btree.Item) bool {

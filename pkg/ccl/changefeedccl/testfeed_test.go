@@ -633,9 +633,11 @@ func (s *notifyFlushSink) EncodeAndEmitRow(
 	updated, mvcc hlc.Timestamp,
 	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
+	partitionID int64,
 ) error {
 	if sinkWithEncoder, ok := s.Sink.(SinkWithEncoder); ok {
-		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc)
+		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc,
+			partitionID)
 	}
 	return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.Sink)
 }

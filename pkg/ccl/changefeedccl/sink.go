@@ -95,7 +95,8 @@ type EventSink interface {
 	// Flush blocks until every message enqueued by EmitRow
 	// has been acknowledged by the sink. If an error is
 	// returned, no guarantees are given about which messages have been
-	// delivered or not delivered.
+	// delivered or not delivered. It is expected that emitRow
+	// will not be called concurrently to flushing.
 	Flush(ctx context.Context) error
 }
 
@@ -456,9 +457,11 @@ func (s errorWrapperSink) EncodeAndEmitRow(
 	updated, mvcc hlc.Timestamp,
 	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
+	partitionID int64,
 ) error {
 	if sinkWithEncoder, ok := s.wrapped.(SinkWithEncoder); ok {
-		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc)
+		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc,
+			partitionID)
 	}
 	return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.wrapped)
 }
@@ -706,15 +709,30 @@ func (s *safeSink) Flush(ctx context.Context) error {
 	return s.wrapped.Flush(ctx)
 }
 
-// SinkWithEncoder A sink which both encodes and emits row events. Ideally, this
-// should not be embedding the Sink interface because then all the types that
-// implement this interface will also have to implement EmitRow (instead, they
-// should implement EncodeAndEmitRow), which for a sink with encoder, does not
-// make sense. But since we pass around a type of sink everywhere, we need to
-// embed this for now.
+// SinkWithEncoder implements EventSink and ResolvedTimestampSink.
+// Unlike a normal EventSink, this sink has a method which both encodes and
+// emits row events.
+//
+// Ideally, this should not be embedding the Sink interface because then all the
+// types that implement this interface will also have to implement EmitRow
+// (instead, they should implement EncodeAndEmitRow), which for a sink with
+// encoder, does not make sense. But since we pass around a type of sink
+// everywhere, we need to embed this for now.
 type SinkWithEncoder interface {
-	Sink
+	externalResource
 
+	// EmitRow implements EventSink.
+	EmitRow(ctx context.Context, topic TopicDescriptor, key []byte, value []byte, updated hlc.Timestamp, mvcc hlc.Timestamp, alloc kvevent.Alloc) error
+
+	// Flush implements EventSink.
+	Flush(ctx context.Context) error
+
+	// EmitResolvedTimestamp implements ResolvedTimestampSink.
+	EmitResolvedTimestamp(ctx context.Context, encoder Encoder, resolved hlc.Timestamp) error
+
+	// EncodeAndEmitRow encodes the row and either immediately emits it or
+	// enqueues it for emitting. This depends on the implementer. Can be called
+	// concurrently.
 	EncodeAndEmitRow(
 		ctx context.Context,
 		updatedRow cdcevent.Row,
@@ -723,10 +741,12 @@ type SinkWithEncoder interface {
 		updated, mvcc hlc.Timestamp,
 		encodingOpts changefeedbase.EncodingOptions,
 		alloc kvevent.Alloc,
+		partitionID int64,
 	) error
-
-	Flush(ctx context.Context) error
 }
+
+var _ EventSink = SinkWithEncoder(nil)
+var _ ResolvedTimestampSink = SinkWithEncoder(nil)
 
 // proper JSON schema for sink config:
 //
@@ -904,6 +924,11 @@ func shouldFlushBatch(bytes int, messages int, config sinkBatchConfig) bool {
 }
 
 func sinkSupportsConcurrentEmits(sink EventSink) bool {
-	_, ok := sink.(*batchingSink)
-	return ok
+	switch sink.(type) {
+	case *batchingSink:
+		return true
+	case SinkWithEncoder:
+		return true
+	}
+	return false
 }

@@ -9090,3 +9090,27 @@ func TestCloudstorageBufferedBytesMetric(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
+
+func TestChangefeedSimpleInitialScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		valRange := []int{1, 1000}
+		sqlDB.Exec(t, `CREATE TABLE foo(a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO foo (a) SELECT * FROM generate_series(%d, %d)`, valRange[0], valRange[1]))
+
+		feed, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH format=parquet, initial_scan='only'")
+		require.NoError(t, err)
+		jobFeed := feed.(cdctest.EnterpriseTestFeed)
+		err = jobFeed.WaitForStatus(func(s jobs.Status) bool {
+			return s == jobs.StatusSucceeded
+		})
+		require.NoError(t, err)
+
+		require.NoError(t, feed.Close())
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}

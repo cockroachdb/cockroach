@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -72,6 +73,10 @@ type parquetCloudStorageSink struct {
 	wrapped     *cloudStorageSink
 	compression parquet.CompressionCodec
 	everyN      log.EveryN
+
+	mu struct {
+		sync.Mutex
+	}
 }
 
 func makeParquetCloudStorageSink(
@@ -177,6 +182,33 @@ func (parquetSink *parquetCloudStorageSink) Flush(ctx context.Context) error {
 	return parquetSink.wrapped.Flush(ctx)
 }
 
+func (s *parquetCloudStorageSink) makeFileKey(
+	topic TopicDescriptor, partitionID int64,
+) cloudStorageSinkKey {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	name, _ := s.wrapped.topicNamer.Name(topic)
+	return cloudStorageSinkKey{name, int64(topic.GetVersion()), partitionID}
+}
+
+// getOrCreateFile wraps *cloudStorageSink.getOrCreateFile() with a mutex,
+// making it thread safe.
+func (s *parquetCloudStorageSink) getOrCreateFile(
+	topic TopicDescriptor, eventMVCC hlc.Timestamp, partitionID int64,
+) (f *cloudStorageSinkFile, err error) {
+	key := s.makeFileKey(topic, partitionID)
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		f, err = s.wrapped.getOrCreateFile(key, eventMVCC)
+	}()
+	if err != nil {
+		return nil, err
+	}
+
+	return f, nil
+}
+
 // EncodeAndEmitRow links the buffer in the cloud storage sync file and the
 // parquet writer (see parquetCloudStorageSink). It also takes care of encoding
 // and emitting row event to cloud storage. Implements the SinkWithEncoder
@@ -189,12 +221,29 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	updated, mvcc hlc.Timestamp,
 	encodingOpts changefeedbase.EncodingOptions,
 	alloc kvevent.Alloc,
+	partitionID int64,
 ) error {
-	s := parquetSink.wrapped
-	file, err := s.getOrCreateFile(topic, mvcc)
-	if err != nil {
-		return err
+	gotFile := false
+	var file *cloudStorageSinkFile
+	var err error
+	for !gotFile {
+		file, err = parquetSink.getOrCreateFile(topic, mvcc, partitionID)
+		if err != nil {
+			return err
+		}
+		file.Lock()
+		// A goroutine which previously acquired the luck may have flushed the
+		// file due ot its size being too large. This goroutine needs to try
+		// acquiring the file again.
+		if file.parquetCodec != nil && file.parquetCodec.closed() {
+			file.Unlock()
+		} else {
+			gotFile = true
+		}
 	}
+	defer file.Unlock()
+	s := parquetSink.wrapped
+
 	file.mergeAlloc(&alloc)
 
 	if file.parquetCodec == nil {
@@ -245,6 +294,8 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 		if err = file.parquetCodec.close(); err != nil {
 			return err
 		}
+		// Closes the parquet codec for all these files and
+		// flushes them.
 		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
 			return err
 		}

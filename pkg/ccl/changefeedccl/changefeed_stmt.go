@@ -1283,6 +1283,7 @@ func (b *changefeedResumer) resumeWithRetries(
 			if flowErr == nil {
 				return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
 			}
+			fmt.Println(flowErr)
 
 			if knobs != nil && knobs.HandleDistChangefeedError != nil {
 				flowErr = knobs.HandleDistChangefeedError(flowErr)

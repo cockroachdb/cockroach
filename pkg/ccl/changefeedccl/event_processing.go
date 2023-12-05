@@ -76,6 +76,8 @@ type kvEventToRowConsumer struct {
 	//
 	// The pacer is closed by kvEventToRowConsumer.Close.
 	pacer *admission.Pacer
+
+	cloudstoragePartitionID int64
 }
 
 func newEventConsumer(
@@ -98,7 +100,7 @@ func newEventConsumer(
 	pacerRequestUnit := changefeedbase.EventConsumerPacerRequestSize.Get(&cfg.Settings.SV)
 	enablePacer := changefeedbase.PerEventElasticCPUControlEnabled.Get(&cfg.Settings.SV)
 
-	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
+	makeConsumer := func(s EventSink, frontier frontier, partitionID int64) (eventConsumer, error) {
 		var err error
 		encoder, err := getEncoder(encodingOpts, feed.Targets, spec.Select.Expr != "",
 			makeExternalConnectionProvider(ctx, cfg.DB), sliMetrics)
@@ -135,8 +137,13 @@ func newEventConsumer(
 		}
 
 		execCfg := cfg.ExecutorConfig.(*sql.ExecutorConfig)
-		return newKVEventToRowConsumer(ctx, execCfg, frontier, cursor, s,
+		consumer, err := newKVEventToRowConsumer(ctx, execCfg, frontier, cursor, s,
 			encoder, feed, spec, knobs, topicNamer, sliMetrics, pacer)
+		if err != nil {
+			return nil, err
+		}
+		consumer.cloudstoragePartitionID = partitionID
+		return consumer, err
 	}
 
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
@@ -145,18 +152,10 @@ func newEventConsumer(
 		numWorkers = defaultNumWorkers()
 	}
 
-	// The descriptions for event_consumer_worker settings should also be updated
-	// when these TODOs are completed.
-	//
-	// TODO (ganeshb) Add support for parallel encoding when using parquet.
-	// We cannot have a separate encoder and sink for parquet format (see
-	// parquet_sink_cloudstorage.go). Because of this the current nprox solution
-	// does not work for parquet format.
-	//
 	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds.
 	isSinkless := spec.JobID == 0
-	if numWorkers <= 1 || isSinkless || encodingOpts.Format == changefeedbase.OptFormatParquet {
-		c, err := makeConsumer(sink, spanFrontier)
+	if numWorkers <= 1 || isSinkless {
+		c, err := makeConsumer(sink, spanFrontier, 0)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -179,8 +178,8 @@ func newEventConsumer(
 	if !sinkSupportsConcurrentEmits(sink) {
 		ss = &safeSink{wrapped: sink}
 	}
-	c.makeConsumer = func() (eventConsumer, error) {
-		return makeConsumer(ss, c)
+	c.makeConsumer = func(partitionID int64) (eventConsumer, error) {
+		return makeConsumer(ss, c, partitionID)
 	}
 
 	if err := c.startWorkers(); err != nil {
@@ -476,7 +475,7 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 		return errors.AssertionFailedf("Expected a SinkWithEncoder for parquet format, found %T", c.sink)
 	}
 	if err := sinkWithEncoder.EncodeAndEmitRow(
-		ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc,
+		ctx, updatedRow, prevRow, topic, updated, mvcc, encodingOpts, alloc, c.cloudstoragePartitionID,
 	); err != nil {
 		return err
 	}
@@ -503,7 +502,7 @@ type parallelEventConsumer struct {
 
 	// makeConsumer creates a single-threaded consumer
 	// which encodes and emits events.
-	makeConsumer func() (eventConsumer, error)
+	makeConsumer func(partitionID int64) (eventConsumer, error)
 
 	// numWorkers is the number of worker threads.
 	numWorkers int64
@@ -579,7 +578,7 @@ func (c *parallelEventConsumer) startWorkers() error {
 	// shutting down goroutines.
 	consumers := make([]eventConsumer, c.numWorkers)
 	for i := int64(0); i < c.numWorkers; i++ {
-		consumer, err := c.makeConsumer()
+		consumer, err := c.makeConsumer(i)
 		if err != nil {
 			return err
 		}
