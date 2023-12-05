@@ -528,18 +528,6 @@ func newClient(
 			return s3Client{}, "", err
 		}
 		opts.Config.HTTPClient = client
-	} else {
-		// Content hashing is computationally expensive and disruptive, specifically
-		// due to https://github.com/golang/go/issues/64417. It also does not buy us
-		// much since a) amazon hashes server-side too, so this is just to verify
-		// transport during upload but b) uploads are over TLS, which already check
-		// content signatures anyway, and c) most of what we upload has built-in
-		// checksums as well, for example block checksums in ssts.
-		//
-		// TODO(dt): do this unconditionally w.r.t. custom endpoint once we're not
-		// worried about breaking a custom s3-like that demands these hashes. This
-		// could break some weird s3-like though so do it in a major version.
-		opts.Config.S3DisableContentMD5Validation = aws.Bool(true)
 	}
 
 	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
