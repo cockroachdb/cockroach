@@ -564,6 +564,8 @@ func TestFileRegistryRollover(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRemoteExecutionWithIssue(t, 115617, "probable OOM")
+
 	const dir = "/mydb"
 	mem := vfs.NewMem()
 	require.NoError(t, mem.MkdirAll(dir, 0755))
