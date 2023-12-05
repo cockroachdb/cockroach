@@ -201,3 +201,18 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE '%batch%' AND message LIKE '%Scan%'
 ----
 r67: sending batch 4 Scan to (n1,s1):1
+
+# Regression test for #115377.
+statement ok
+CREATE TABLE t115377 (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  UNIQUE (a, b)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO t115377 VALUES (2, 0, 0)
+
+statement error pgcode 23505 duplicate key value violates unique constraint \"t115377_pkey\"
+INSERT INTO t115377 VALUES (2, 1, 1)
