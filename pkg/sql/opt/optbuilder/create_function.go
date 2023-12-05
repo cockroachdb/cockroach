@@ -129,9 +129,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		if !activeVersion.IsActive(clusterversion.V23_2) {
 			panic(unimplemented.New("PLpgSQL", "PLpgSQL is not supported until version 23.2"))
 		}
-		if err := plpgsql.CheckClusterSupportsPLpgSQL(
-			b.evalCtx.Settings, b.evalCtx.ClusterID,
-		); err != nil {
+		if err := plpgsql.CheckClusterSupportsPLpgSQL(b.evalCtx.Settings); err != nil {
 			panic(err)
 		}
 	}
