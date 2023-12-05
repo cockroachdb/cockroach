@@ -35,6 +35,7 @@ export type StmtInsightsReq = {
   end?: moment.Moment;
   stmtExecutionID?: string;
   stmtFingerprintId?: string;
+  csExportInsights?: boolean;
 };
 
 export type StmtInsightsResponseRow = {
@@ -155,6 +156,7 @@ export async function getStmtInsightsApi(
     execute: true,
     max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
+    use_obs_service: req.csExportInsights,
   };
 
   const result = await executeInternalSql<StmtInsightsResponseRow>(request);

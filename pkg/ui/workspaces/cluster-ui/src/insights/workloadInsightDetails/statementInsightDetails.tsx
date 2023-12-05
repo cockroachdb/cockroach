@@ -43,6 +43,7 @@ export interface StatementInsightDetailsStateProps {
   isTenant?: boolean;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
+  csExportInsights: boolean;
 }
 
 export interface StatementInsightDetailsDispatchProps {
@@ -77,6 +78,7 @@ export const StatementInsightDetails: React.FC<
   timeScale,
   hasAdminRole,
   refreshUserSQLRoles,
+  csExportInsights,
 }) => {
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
     explainPlan: null,
@@ -89,6 +91,8 @@ export const StatementInsightDetails: React.FC<
       loaded: insightEventDetails != null,
       error: insightError,
     });
+  const [prevCsExportInsights, setPrevCsExportInsights] =
+    useState(csExportInsights);
 
   const details = insightDetails.details;
 
@@ -116,11 +120,17 @@ export const StatementInsightDetails: React.FC<
 
   useEffect(() => {
     refreshUserSQLRoles();
-    if (details != null) {
+    if (details != null && prevCsExportInsights === csExportInsights) {
       return;
     }
+    setPrevCsExportInsights(csExportInsights);
     const [start, end] = toDateRange(timeScale);
-    getStmtInsightsApi({ stmtExecutionID: executionID, start, end })
+    getStmtInsightsApi({
+      stmtExecutionID: executionID,
+      start,
+      end,
+      csExportInsights,
+    })
       .then(res => {
         setInsightDetails({
           details: res?.results?.length ? res.results[0] : null,
@@ -130,7 +140,14 @@ export const StatementInsightDetails: React.FC<
       .catch(e => {
         setInsightDetails({ details: null, error: e, loaded: true });
       });
-  }, [details, executionID, timeScale, refreshUserSQLRoles]);
+  }, [
+    details,
+    executionID,
+    timeScale,
+    refreshUserSQLRoles,
+    csExportInsights,
+    prevCsExportInsights,
+  ]);
 
   return (
     <div>

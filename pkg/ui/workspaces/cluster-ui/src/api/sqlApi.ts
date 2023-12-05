@@ -19,6 +19,7 @@ export type SqlExecutionRequest = {
   database?: string; // Defaults to system
   max_result_size?: number; // Default 10kib
   separate_txns?: boolean;
+  use_obs_service?: boolean; // Flag to use Observability Service. Default is false.
 };
 
 export type SqlStatement = {
@@ -210,6 +211,7 @@ export function sqlApiErrorMessage(message: string): string {
 export function createSqlExecutionRequest(
   dbName: string,
   statements: SqlStatement[],
+  useObsService?: boolean,
 ): SqlExecutionRequest {
   return {
     execute: true,
@@ -217,6 +219,7 @@ export function createSqlExecutionRequest(
     database: dbName,
     max_result_size: LARGE_RESULT_SIZE,
     timeout: LONG_TIMEOUT,
+    use_obs_service: useObsService || false,
   };
 }
 
