@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -659,7 +660,10 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == backupbase.BackupManifestName || !strings.HasSuffix(path, ".sst") || info.Name() == backupinfo.BackupMetadataDescriptorsListPath || info.Name() == backupinfo.BackupMetadataFilesListPath {
+		if info.Name() == backupbase.BackupManifestName ||
+			!strings.HasSuffix(path, ".sst") ||
+			info.Name() == backupinfo.BackupMetadataDescriptorsListPath ||
+			info.Name() == backupinfo.BackupMetadataFilesListPath {
 			return nil
 		}
 		return os.Remove(path)
@@ -679,7 +683,12 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	t.Run("during restoration of data", func(t *testing.T) {
 		_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
-		sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM LATEST IN 'nodelocal://1/missing-ssts'`)
+		var jobID jobspb.JobID
+		sqlDBRestore.QueryRow(t, `RESTORE FROM LATEST IN 'nodelocal://1/missing-ssts' WITH detached`).Scan(&jobID)
+		sqlDBRestore.Exec(t, `USE system;`)
+		jobutils.WaitForJobToPause(t, sqlDBRestore, jobID)
+		sqlDBRestore.Exec(t, `CANCEL JOB $1`, jobID)
+		jobutils.WaitForJobToCancel(t, sqlDBRestore, jobID)
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
@@ -705,7 +714,6 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				},
 			)
 		} else {
-			log.Info(context.Background(), "COMING HERE INNIT")
 			sqlDBRestore.CheckQueryResults(t,
 				`SELECT name FROM system.crdb_internal.tables WHERE state = 'DROP' ORDER BY name`,
 				[][]string{

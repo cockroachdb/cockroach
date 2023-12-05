@@ -156,10 +156,7 @@ ORDER BY object_type, object_name`, full)
 	details1Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, d1ID, details1Desc.GetPrimaryIndexID()))
 	details2Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, d2ID, details2Desc.GetPrimaryIndexID()))
 
-	prefix := ""
-	if !codec.ForSystemTenant() {
-		prefix = codec.TenantPrefix().String()
-	}
+	prefix := codec.TenantPrefix().String()
 	sqlDBRestore.CheckQueryResults(t, fmt.Sprintf(`SHOW BACKUP RANGES FROM LATEST IN '%s'`, details), [][]string{
 		{
 			fmt.Sprintf(prefix+"/Table/%d/1", d1ID),

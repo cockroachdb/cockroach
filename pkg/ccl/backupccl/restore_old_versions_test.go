@@ -125,7 +125,6 @@ func TestRestoreOldVersions(t *testing.T) {
 		}
 	})
 	t.Run("cluster-with-tenants", func(t *testing.T) {
-		// TODO(adityamaru): Restrict to only system tenant.
 		dirs, err := os.ReadDir(clusterWithTenants)
 		require.NoError(t, err)
 		for _, dir := range dirs {

@@ -620,8 +620,15 @@ func TestBackupRestoreAppend(t *testing.T) {
 
 	const numAccounts = 1000
 	ctx := context.Background()
+	// TODO(adityamaru): There is another cluster spun up in this test. We should
+	// ensure that either both are the system tenant or both are secondary tenant.
 	tc, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
+
+	if !tc.ApplicationLayer(0).Codec().ForSystemTenant() {
+		systemRunner := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
+		systemRunner.Exec(t, `ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
+	}
 
 	// Ensure that each node has at least one leaseholder. (These splits were
 	// made in backupRestoreTestSetup.) These are wrapped with SucceedsSoon()
@@ -6704,7 +6711,11 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
 
-	tc, systemDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, systemDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	_, _ = tc, systemDB
 	defer cleanupFn()
 	srv := tc.Server(0)
@@ -6713,7 +6724,11 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 	_ = securitytest.EmbeddedTenantIDs()
 
 	// Create another server.
-	tc2, systemDB2, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
+	tc2, systemDB2, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		},
+	})
 	srv2 := tc2.Server(0)
 	defer cleanupEmptyCluster()
 
@@ -6802,7 +6817,11 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 				defer cleanupEmptyHTTPServer()
 
 				_, emptySystemDB, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode,
-					dir, InitManualReplication, base.TestClusterArgs{})
+					dir, InitManualReplication, base.TestClusterArgs{
+						ServerArgs: base.TestServerArgs{
+							DefaultTestTenant: base.TestControlsTenantsExplicitly,
+						},
+					})
 				defer cleanupEmptyCluster()
 
 				emptySystemDB.Exec(t, `BACKUP TO $1`, httpAddrEmpty)
@@ -10678,9 +10697,16 @@ func TestBackupDBWithViewOnAdjacentDBRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 0,
+		InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				// ForceTableGC sends a kvpb.GCRequest that is marked as systemOnly in
+				// authorizer.go.
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			},
+		})
 	defer cleanupFn()
-	s0 := tc.Servers[0]
+	s0 := tc.ApplicationLayer(0)
 
 	// Speeds up the test.
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
