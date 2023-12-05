@@ -179,8 +179,8 @@ func TestRequestSafeFormat(t *testing.T) {
 				PusherTxn: pusherTxn,
 				PusheeTxn: pusheeTxn.TxnMeta,
 			},
-			redactable: "PushTxn(‹PUSH_TIMESTAMP›,00fbff58->00fbff59)",
-			redacted:   "PushTxn(‹×›,00fbff58->00fbff59)",
+			redactable: "PushTxn(PUSH_TIMESTAMP,00fbff58->00fbff59)",
+			redacted:   "PushTxn(PUSH_TIMESTAMP,00fbff58->00fbff59)",
 		},
 	}
 	for _, c := range testCases {
