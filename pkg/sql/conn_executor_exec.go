@@ -820,7 +820,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			stmtFingerprintID,
 			&topLevelQueryStats{},
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	switch s := ast.(type) {
@@ -1760,7 +1760,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						ppInfo.dispatchToExecutionEngine.stmtFingerprintID,
 						ppInfo.dispatchToExecutionEngine.queryStats,
 						ex.statsCollector,
-					)
+						ex.extraTxnState.shouldLogToTelemetry)
 				},
 			})
 		} else {
@@ -1787,7 +1787,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				stmtFingerprintID,
 				&stats,
 				ex.statsCollector,
-			)
+				ex.extraTxnState.shouldLogToTelemetry)
 		}
 	}()
 
@@ -2468,13 +2468,16 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			stmtFingerprintID,
 			&topLevelQueryStats{},
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	ast := parserStmt.AST
 	switch s := ast.(type) {
 	case *tree.BeginTransaction:
 		ex.incrementStartedStmtCounter(ast)
+		if ex.server.TelemetryLoggingMetrics.shouldTrackTransaction(ex.executorType == executorTypeInternal) {
+			ex.extraTxnState.shouldLogToTelemetry = true
+		}
 		defer func() {
 			if !payloadHasError(payload) {
 				ex.incrementExecutedStmtCounter(ast)
@@ -3090,18 +3093,20 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			)
 		}
 
-		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart, txnErr)
+		txnCounter := int(ex.extraTxnState.txnCounter.Load())
+
+		err = ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart, txnErr, txnCounter)
 		if err != nil {
 			if log.V(1) {
 				log.Warningf(ctx, "failed to record transaction stats: %s", err)
 			}
 			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 		}
+
 		// If we have a commitTimestamp, we should use it.
 		ex.previousTransactionCommitTimestamp.Forward(ev.commitTimestamp)
-		if telemetryLoggingEnabled.Get(&ex.server.cfg.Settings.SV) {
-			ex.server.TelemetryLoggingMetrics.onTxnFinish(ev.txnID.String())
-		}
+
+		ex.extraTxnState.shouldLogToTelemetry = false
 	}
 }
 
@@ -3133,6 +3138,10 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 		TxnID:            txnID,
 		TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 	})
+
+	if ex.server.TelemetryLoggingMetrics.shouldTrackTransaction(ex.executorType == executorTypeInternal) {
+		ex.extraTxnState.shouldLogToTelemetry = true
+	}
 
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
@@ -3178,6 +3187,7 @@ func (ex *connExecutor) recordTransactionFinish(
 	implicit bool,
 	txnStart time.Time,
 	txnErr error,
+	txnCounter int,
 ) error {
 	recordingStart := timeutil.Now()
 	defer func() {
@@ -3258,6 +3268,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		transactionFingerprintID,
 		recordedTxnStats,
 	)
+
 }
 
 // Records a SERIALIZATION_CONFLICT contention event to the contention registry event
