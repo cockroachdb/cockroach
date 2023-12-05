@@ -68,6 +68,12 @@ func (v *Version) IsCurrent() bool {
 	return v.Version.Compare(&CurrentVersion().Version) == 0
 }
 
+// AtLeast is a thin wrapper around `(*version.Version).AtLeast`,
+// allowing two `Version` objects to be compared directly.
+func (v *Version) AtLeast(other *Version) bool {
+	return v.Version.AtLeast(&other.Version)
+}
+
 // CurrentVersion returns the version associated with the current
 // build.
 func CurrentVersion() *Version {
@@ -124,7 +130,7 @@ func ClusterVersion(ctx context.Context, db *gosql.DB) (roachpb.Version, error) 
 }
 
 // UploadCockroach stages the cockroach binary in the nodes.
-// Convenience function, see `UploadBinaryVersion` for more details.
+// Convenience function, see `uploadBinaryVersion` for more details.
 func UploadCockroach(
 	ctx context.Context,
 	t test.Test,
@@ -133,11 +139,18 @@ func UploadCockroach(
 	nodes option.NodeListOption,
 	v *Version,
 ) (string, error) {
-	return UploadBinaryVersion(ctx, t, l, "cockroach", c, nodes, v)
+	return uploadBinaryVersion(ctx, t, l, "cockroach", c, nodes, v)
 }
 
+// minWorkloadBinaryVersion is the minimum version for which we have
+// `workload` binaries available.
+var minWorkloadBinaryVersion = MustParseVersion("v22.2.0")
+
 // UploadWorkload stages the workload binary in the nodes.
-// Convenience function, see `UploadBinaryVersion` for more details.
+// Convenience function, see `uploadBinaryVersion` for more details.
+// The boolean return value indicates whether a workload binary was
+// uploaded to the nodes; a `false` value indicates that the version
+// passed is too old and no binary is available.
 func UploadWorkload(
 	ctx context.Context,
 	t test.Test,
@@ -145,14 +158,19 @@ func UploadWorkload(
 	c cluster.Cluster,
 	nodes option.NodeListOption,
 	v *Version,
-) (string, error) {
-	return UploadBinaryVersion(ctx, t, l, "workload", c, nodes, v)
+) (string, bool, error) {
+	if !v.AtLeast(minWorkloadBinaryVersion) {
+		return "", false, nil
+	}
+
+	path, err := uploadBinaryVersion(ctx, t, l, "workload", c, nodes, v)
+	return path, err == nil, err
 }
 
-// UploadBinaryVersion uploads the specified binary associated with
+// uploadBinaryVersion uploads the specified binary associated with
 // the given version to the given nodes. It returns the path of the
 // uploaded binaries on the nodes.
-func UploadBinaryVersion(
+func uploadBinaryVersion(
 	ctx context.Context,
 	t test.Test,
 	l *logger.Logger,
