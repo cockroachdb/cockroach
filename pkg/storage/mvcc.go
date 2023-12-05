@@ -2659,6 +2659,9 @@ func mvccPutInternal(
 	versionValue := MVCCValue{}
 	versionValue.Value = value
 	versionValue.LocalTimestamp = opts.LocalTimestamp
+	if opts.Txn != nil {
+		versionValue.OmitInRangefeeds = opts.Txn.OmitInRangefeeds
+	}
 
 	if buildutil.CrdbTestBuild {
 		if seq, seqOK := kvnemesisutil.FromContext(ctx); seqOK {
