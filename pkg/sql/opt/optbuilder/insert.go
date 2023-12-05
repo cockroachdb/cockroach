@@ -566,10 +566,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	// Handle DEFAULT VALUES case by creating a single empty row as input.
 	if inputRows == nil {
 		mb.outScope = inScope.push()
-		mb.outScope.expr = mb.b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
-			Cols: opt.ColList{},
-			ID:   mb.md.NextUniqueID(),
-		})
+		mb.outScope.expr = mb.b.factory.ConstructNoColsRow()
 		mb.inputForInsertExpr = mb.outScope.expr
 		return
 	}
