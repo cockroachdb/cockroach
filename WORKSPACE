@@ -163,13 +163,13 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.21.3.darwin-amd64.tar.gz", "253d8d4b32a1d7731dff1245f009362858a0c685af8f52b671dd906b2c67d78d"),
-        "darwin_arm64": ("go1.21.3.darwin-arm64.tar.gz", "877543c11149341e4954cb2e625deb7974e94c3c77f5f71a24d35e54cb54fb05"),
-        "linux_amd64": ("go1.21.3.linux-amd64.tar.gz", "3b0307b4e91d6b34870ed1d29366aba77cb864dc93b7098cdfb5d4619cb58566"),
-        "linux_arm64": ("go1.21.3.linux-arm64.tar.gz", "c0d2da5e1b9ff93d0e4262189e59586cc0c17c207578429f716de2d5799ba36a"),
-        "windows_amd64": ("go1.21.3.windows-amd64.tar.gz", "c0e2957014e72056ed1c2c080d772d7c8e96a3143f228f6b511231fc31c07593"),
+        "darwin_amd64": ("go1.21.3.darwin-amd64.tar.gz", "85a9bce961b9bd45d6d67e306c79052f739ea9bda99f234ef7a716129315bfc8"),
+        "darwin_arm64": ("go1.21.3.darwin-arm64.tar.gz", "52d8a95622bf29bb73aa49af0ff73955e034969dba46c7f439399af7adafc787"),
+        "linux_amd64": ("go1.21.3.linux-amd64.tar.gz", "3ff4a24c4e64b46a3ade80abdcf34b8c26704799ec2763814e68edd81142df68"),
+        "linux_arm64": ("go1.21.3.linux-arm64.tar.gz", "29b53edd23dbcc27fc421e9cc83a0cd81f1d5e2bf9d061da6907e8be66fff48f"),
+        "windows_amd64": ("go1.21.3.windows-amd64.tar.gz", "d025882e7d846d722a90ca66204b561c6650e127e338fdc22e39964995253224"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231019-214851/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231205-160258/{}"],
     version = "1.21.3",
 )
 
@@ -641,9 +641,9 @@ distdir_repositories()
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.21.3fips.linux-amd64.tar.gz", "216acc2939bf16748ec240ffe1752b442ec098bd9ac5e12ecd44db4ff77e0ab9"),
+        "linux_amd64": ("go1.21.3fips.linux-amd64.tar.gz", "03a3494f7b9d8a63750f72afd4f398baa723509a3c14dbff888a857ca01f0b5c"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231019-214851/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231205-160258/{}"],
     version = "1.21.3fips",
     # In the golang-fips toolchain, FIPS-ready crypto packages are used by default, regardless of build tags.
     # The boringcrypto experiment does almost nothing in this toolchain, but it does enable the use of the
