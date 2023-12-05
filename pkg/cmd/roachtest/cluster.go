@@ -639,8 +639,11 @@ type clusterImpl struct {
 	expiration    time.Time
 	encAtRest     bool // use encryption at rest
 
-	// clusterSettings are additional cluster settings set on cluster startup.
+	// clusterSettings are additional cluster settings set on the storage cluster startup.
 	clusterSettings map[string]string
+	// virtualClusterSettings are additional cluster settings to set on the
+	// virtual cluster startup.
+	virtualClusterSettings map[string]string
 	// goCoverDir is the directory for Go coverage data (if coverage is enabled).
 	// BAZEL_COVER_DIR will be set to this value when starting a node.
 	goCoverDir string
@@ -1910,6 +1913,38 @@ func (c *clusterImpl) clearStatusForClusterOpt(worker bool) {
 	}
 }
 
+func (c *clusterImpl) configureClusterSettingOptions(
+	defaultClusterSettings install.ClusterSettingsOption, settings install.ClusterSettings,
+) []install.ClusterSettingOption {
+	setUnlessExists := func(name string, value interface{}) {
+		if !envExists(settings.Env, name) {
+			settings.Env = append(settings.Env, fmt.Sprintf("%s=%s", name, fmt.Sprint(value)))
+		}
+	}
+	// Set the same seed on every node, to be used by builds with
+	// runtime assertions enabled.
+	setUnlessExists("COCKROACH_RANDOM_SEED", c.cockroachRandomSeed())
+
+	// Panic on span use-after-Finish, so we catch such bugs.
+	setUnlessExists("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", true)
+
+	if c.goCoverDir != "" {
+		settings.Env = append(settings.Env, fmt.Sprintf("BAZEL_COVER_DIR=%s", c.goCoverDir))
+	}
+
+	return []install.ClusterSettingOption{
+		install.TagOption(settings.Tag),
+		install.PGUrlCertsDirOption(settings.PGUrlCertsDir),
+		install.SecureOption(settings.Secure),
+		install.UseTreeDistOption(settings.UseTreeDist),
+		install.EnvOption(settings.Env),
+		install.NumRacksOption(settings.NumRacks),
+		install.BinaryOption(settings.Binary),
+		defaultClusterSettings,
+		install.ClusterSettingsOption(settings.ClusterSettings),
+	}
+}
+
 // StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
 // can either be a specific node, empty (to indicate all nodes), or a pair of
 // nodes indicating a range.
@@ -1928,17 +1963,6 @@ func (c *clusterImpl) StartE(
 
 	startOpts.RoachprodOpts.EncryptedStores = c.encAtRest
 
-	setUnlessExists := func(name string, value interface{}) {
-		if !envExists(settings.Env, name) {
-			settings.Env = append(settings.Env, fmt.Sprintf("%s=%s", name, fmt.Sprint(value)))
-		}
-	}
-	// Panic on span use-after-Finish, so we catch such bugs.
-	setUnlessExists("COCKROACH_CRASH_ON_SPAN_USE_AFTER_FINISH", true)
-	// Set the same seed on every node, to be used by builds with
-	// runtime assertions enabled.
-	setUnlessExists("COCKROACH_RANDOM_SEED", c.cockroachRandomSeed())
-
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
 	// Remove in v23.2.
 	if !envExists(settings.Env, "COCKROACH_FORCE_DEPRECATED_SHOW_RANGE_BEHAVIOR") {
@@ -1947,21 +1971,7 @@ func (c *clusterImpl) StartE(
 		settings.Env = append(settings.Env, "COCKROACH_FORCE_DEPRECATED_SHOW_RANGE_BEHAVIOR=false")
 	}
 
-	if c.goCoverDir != "" {
-		settings.Env = append(settings.Env, fmt.Sprintf("BAZEL_COVER_DIR=%s", c.goCoverDir))
-	}
-
-	clusterSettingsOpts := []install.ClusterSettingOption{
-		install.TagOption(settings.Tag),
-		install.PGUrlCertsDirOption(settings.PGUrlCertsDir),
-		install.SecureOption(settings.Secure),
-		install.UseTreeDistOption(settings.UseTreeDist),
-		install.EnvOption(settings.Env),
-		install.NumRacksOption(settings.NumRacks),
-		install.BinaryOption(settings.Binary),
-		install.ClusterSettingsOption(c.clusterSettings),
-		install.ClusterSettingsOption(settings.ClusterSettings),
-	}
+	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
 	if err := roachprod.Start(ctx, l, c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
 		return err
@@ -1975,6 +1985,45 @@ func (c *clusterImpl) StartE(
 		}
 	}
 	return nil
+}
+
+func (c *clusterImpl) StartServiceForVirtualClusterE(
+	ctx context.Context,
+	l *logger.Logger,
+	externalNodes option.NodeListOption,
+	startOpts option.StartOpts,
+	settings install.ClusterSettings,
+	opts ...option.Option,
+) error {
+
+	c.setStatusForClusterOpt("starting virtual cluster", startOpts.RoachtestOpts.Worker, opts...)
+	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker)
+
+	clusterSettingsOpts := c.configureClusterSettingOptions(c.virtualClusterSettings, settings)
+
+	if err := roachprod.StartServiceForVirtualCluster(ctx, l, c.MakeNodes(externalNodes), c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
+		return err
+	}
+
+	if settings.Secure {
+		if err := c.RefetchCertsFromNode(ctx, 1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *clusterImpl) StartServiceForVirtualCluster(
+	ctx context.Context,
+	l *logger.Logger,
+	externalNodes option.NodeListOption,
+	startOpts option.StartOpts,
+	settings install.ClusterSettings,
+	opts ...option.Option,
+) {
+	if err := c.StartServiceForVirtualClusterE(ctx, l, externalNodes, startOpts, settings, opts...); err != nil {
+		c.t.Fatal(err)
+	}
 }
 
 func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error {
