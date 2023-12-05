@@ -306,7 +306,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ table: multi_col_parent@multi_col_parent_pkey
-            │ equality: (column2, column3, column4) = (p,q,r)
+            │ equality: (column2, column3, column4) = (p, q, r)
             │ equality cols are key
             │
             └── • filter
@@ -373,7 +373,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ table: multi_ref_parent_bc@multi_ref_parent_bc_pkey
-            │ equality: (column3, column4) = (b,c)
+            │ equality: (column3, column4) = (b, c)
             │ equality cols are key
             │
             └── • filter
@@ -582,7 +582,7 @@ vectorized: true
         │
         └── • lookup join (semi)
             │ table: doublechild@doublechild_p1_p2_idx
-            │ equality: (p1, p2) = (p1,p2)
+            │ equality: (p1, p2) = (p1, p2)
             │
             └── • scan buffer
                   label: buffer 1

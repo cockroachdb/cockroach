@@ -1339,7 +1339,7 @@ vectorized: true
                     │ columns: (column1, column2, column3, column4)
                     │ estimated row count: 0
                     │ table: uniq_partial_enum@uniq_partial_enum_pkey
-                    │ equality: (column1, column2) = (r,a)
+                    │ equality: (column1, column2) = (r, a)
                     │ equality cols are key
                     │
                     └── • values
@@ -3807,7 +3807,7 @@ vectorized: true
 │                       │ columns: (column1, column2, column3, column4, r, s, i, j)
 │                       │ estimated row count: 2 (missing stats)
 │                       │ table: uniq_enum@uniq_enum_pkey
-│                       │ equality: (column1, column3) = (r,i)
+│                       │ equality: (column1, column3) = (r, i)
 │                       │ equality cols are key
 │                       │ locking strength: for update
 │                       │
@@ -4436,7 +4436,7 @@ vectorized: true
 │                       │ columns: (column1, column2, column3, column4, r, a, b, c)
 │                       │ estimated row count: 2
 │                       │ table: uniq_partial_enum@uniq_partial_enum_pkey
-│                       │ equality: (column1, column2) = (r,a)
+│                       │ equality: (column1, column2) = (r, a)
 │                       │ equality cols are key
 │                       │ locking strength: for update
 │                       │
@@ -4518,7 +4518,7 @@ vectorized: true
             │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4, r, a, b, c)
             │ estimated row count: 2
             │ table: uniq_partial_enum@uniq_partial_enum_pkey
-            │ equality: (r, a) = (r,a)
+            │ equality: (r, a) = (r, a)
             │ equality cols are key
             │
             └── • lookup join (left outer)
@@ -4828,7 +4828,7 @@ vectorized: true
         │
         └── • lookup join (semi)
             │ table: t1@t1_b_a_idx
-            │ equality: (column4, column3) = (b,a)
+            │ equality: (column4, column3) = (b, a)
             │ pred: column1 != pk
             │
             └── • scan buffer
@@ -4943,7 +4943,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: multiple_uniq@multiple_uniq_b_c_idx
-│           │ equality: (column2, column3) = (b,c)
+│           │ equality: (column2, column3) = (b, c)
 │           │ pred: rowid_default != rowid
 │           │
 │           └── • scan buffer
@@ -4956,7 +4956,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: multiple_uniq@multiple_uniq_a_b_d_idx
-│           │ equality: (column1, column2, column4) = (a,b,d)
+│           │ equality: (column1, column2, column4) = (a, b, d)
 │           │ pred: rowid_default != rowid
 │           │
 │           └── • scan buffer
@@ -5024,7 +5024,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: multiple_uniq@multiple_uniq_b_c_idx
-│           │ equality: (column2, column3) = (b,c)
+│           │ equality: (column2, column3) = (b, c)
 │           │ pred: rowid_default != rowid
 │           │
 │           └── • scan buffer
@@ -5037,7 +5037,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: multiple_uniq@multiple_uniq_a_b_d_idx
-│           │ equality: (column1, column2, column4) = (a,b,d)
+│           │ equality: (column1, column2, column4) = (a, b, d)
 │           │ pred: rowid_default != rowid
 │           │
 │           └── • scan buffer
@@ -5119,7 +5119,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: multiple_uniq@multiple_uniq_b_c_idx
-│           │ equality: (column2, column3) = (b,c)
+│           │ equality: (column2, column3) = (b, c)
 │           │ pred: rowid_default != rowid
 │           │
 │           └── • scan buffer
@@ -5132,7 +5132,7 @@ vectorized: true
 │       │
 │       └── • lookup join (semi)
 │           │ table: multiple_uniq@multiple_uniq_a_b_d_idx
-│           │ equality: (column1, column2, column4) = (a,b,d)
+│           │ equality: (column1, column2, column4) = (a, b, d)
 │           │ pred: rowid_default != rowid
 │           │
 │           └── • scan buffer

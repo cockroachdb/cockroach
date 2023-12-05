@@ -1091,7 +1091,7 @@ vectorized: true
                     │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_comp, column1, column2, a, b)
                     │ estimated row count: 2 (missing stats)
                     │ table: t_hash_indexed@idx_t_hash_indexed
-                    │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8,b)
+                    │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
                     │ equality cols are key
                     │ locking strength: for update
                     │
@@ -1138,7 +1138,7 @@ vectorized: true
             │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_comp)
             │ estimated row count: 0 (missing stats)
             │ table: t_hash_indexed@idx_t_hash_indexed
-            │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8,b)
+            │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
             │ equality cols are key
             │
             └── • render
@@ -1196,7 +1196,7 @@ vectorized: true
             │ columns: (crdb_internal_b_shard_8_eq, column1, column2, crdb_internal_b_shard_8_comp)
             │ estimated row count: 0 (missing stats)
             │ table: t_hash_indexed@idx_t_hash_indexed
-            │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8,b)
+            │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
             │ equality cols are key
             │
             └── • render
@@ -1294,7 +1294,7 @@ vectorized: true
             │ columns: (crdb_internal_b_shard_8_eq, crdb_internal_b_shard_8_comp, column1, column2)
             │ estimated row count: 0 (missing stats)
             │ table: t_hash_indexed@idx_t_hash_indexed
-            │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8,b)
+            │ equality: (crdb_internal_b_shard_8_eq, column2) = (crdb_internal_b_shard_8, b)
             │ equality cols are key
             │
             └── • render
@@ -1362,7 +1362,7 @@ vectorized: true
                 │ columns: (crdb_internal_id_shard_16_eq, pid)
                 │ estimated row count: 0 (missing stats)
                 │ table: t_parent_pk@t_parent_pk_pkey
-                │ equality: (crdb_internal_id_shard_16_eq, pid) = (crdb_internal_id_shard_16,id)
+                │ equality: (crdb_internal_id_shard_16_eq, pid) = (crdb_internal_id_shard_16, id)
                 │ equality cols are key
                 │
                 └── • render
@@ -1431,7 +1431,7 @@ vectorized: true
                 │ columns: (crdb_internal_real_id_shard_16_eq, pid)
                 │ estimated row count: 0 (missing stats)
                 │ table: t_parent_sec@idx_t_parent_sec_real_id
-                │ equality: (crdb_internal_real_id_shard_16_eq, pid) = (crdb_internal_real_id_shard_16,real_id)
+                │ equality: (crdb_internal_real_id_shard_16_eq, pid) = (crdb_internal_real_id_shard_16, real_id)
                 │ equality cols are key
                 │
                 └── • render

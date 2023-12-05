@@ -2976,12 +2976,12 @@ vectorized: true
 ·
 • lookup join
 │ table: user_settings@user_settings_pkey
-│ equality: (crdb_region, id) = (crdb_region,id)
+│ equality: (crdb_region, id) = (crdb_region, id)
 │ equality cols are key
 │
 └── • lookup join
     │ table: user_settings@user_settings_user_id_idx
-    │ equality: (crdb_region, id) = (crdb_region,user_id)
+    │ equality: (crdb_region, id) = (crdb_region, user_id)
     │ pred: user_id = '5ebfedee-0dcf-41e6-a315-5fa0b51b9882'
     │
     └── • union all
@@ -3012,12 +3012,12 @@ vectorized: true
 ·
 • lookup join
 │ table: user_settings@user_settings_pkey
-│ equality: (crdb_region, id) = (crdb_region,id)
+│ equality: (crdb_region, id) = (crdb_region, id)
 │ equality cols are key
 │
 └── • lookup join
     │ table: user_settings@id2_idx
-    │ equality: (crdb_region, column14) = (crdb_region,id2)
+    │ equality: (crdb_region, column14) = (crdb_region, id2)
     │
     └── • render
         │
@@ -3169,7 +3169,7 @@ vectorized: true
         │
         └── • lookup join (semi)
             │ table: user_settings@user_settings_user_id_idx
-            │ equality: (crdb_region, id) = (crdb_region,user_id)
+            │ equality: (crdb_region, id) = (crdb_region, user_id)
             │
             └── • scan buffer
                   label: buffer 1
@@ -3579,13 +3579,13 @@ vectorized: true
 • lookup join
 │ estimated row count: 1
 │ table: abc@abc_pkey
-│ equality: (crdb_region, id) = (crdb_region,id)
+│ equality: (crdb_region, id) = (crdb_region, id)
 │ equality cols are key
 │
 └── • lookup join
     │ estimated row count: 0
     │ table: abc@abc_id1_id2_idx
-    │ equality: (crdb_region, lookup_join_const_col_@2, id2, abc_id) = (crdb_region,id1,id2,id)
+    │ equality: (crdb_region, lookup_join_const_col_@2, id2, abc_id) = (crdb_region, id1, id2, id)
     │ equality cols are key
     │ pred: (id2 = '68088706-02c6-47d1-b993-a421cd761f2b') AND (crdb_region = 'ap-southeast-2')
     │
@@ -4048,7 +4048,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ table: users@users_pkey
-            │ equality: (crdb_region_default, column2) = (crdb_region,id)
+            │ equality: (crdb_region_default, column2) = (crdb_region, id)
             │ equality cols are key
             │
             └── • scan buffer
