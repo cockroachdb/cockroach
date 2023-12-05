@@ -1289,10 +1289,7 @@ func (b *Builder) buildFrom(
 		outScope = b.buildFromTables(from.Tables, lockCtx, inScope)
 	} else {
 		outScope = inScope.push()
-		outScope.expr = b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
-			Cols: opt.ColList{},
-			ID:   b.factory.Metadata().NextUniqueID(),
-		})
+		outScope.expr = b.factory.ConstructOneRowValues()
 	}
 
 	return outScope

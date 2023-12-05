@@ -507,11 +507,21 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			retCon := b.makeContinuation("_stmt_exec_ret")
 			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
 
-			// We only need the first row from the SQL statement.
+			// Ensure that the SQL statement returns at most one row.
 			stmtScope.expr = b.ob.factory.ConstructLimit(
 				stmtScope.expr,
 				b.ob.factory.ConstructConst(tree.NewDInt(tree.DInt(1)), types.Int),
 				stmtScope.makeOrderingChoice(),
+			)
+
+			// Ensure that the SQL statement returns at least one row. The RIGHT join
+			// ensures that when the SQL statement returns no rows, it is extended
+			// with a single row of NULL values.
+			stmtScope.expr = b.ob.factory.ConstructRightJoin(
+				stmtScope.expr,
+				b.ob.factory.ConstructOneRowValues(),
+				nil, /* on */
+				memo.EmptyJoinPrivate,
 			)
 
 			// Step 2: build the INTO statement into a continuation routine that calls
@@ -1384,10 +1394,7 @@ func (b *plpgsqlBuilder) resolveVariableForAssign(name tree.Name) *types.T {
 
 func (b *plpgsqlBuilder) ensureScopeHasExpr(s *scope) {
 	if s.expr == nil {
-		s.expr = b.ob.factory.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
-			Cols: opt.ColList{},
-			ID:   b.ob.factory.Metadata().NextUniqueID(),
-		})
+		s.expr = b.ob.factory.ConstructOneRowValues()
 	}
 }
 

@@ -4433,14 +4433,19 @@ project
                      │                        ├── columns: "_stmt_exec_ret_2":15
                      │                        ├── project
                      │                        │    ├── columns: i:13 j:14
-                     │                        │    ├── limit
+                     │                        │    ├── right-join (cross)
                      │                        │    │    ├── columns: x:5 y:6
-                     │                        │    │    ├── internal-ordering: -5
-                     │                        │    │    ├── project
+                     │                        │    │    ├── limit
                      │                        │    │    │    ├── columns: x:5 y:6
-                     │                        │    │    │    └── scan xy
-                     │                        │    │    │         └── columns: x:5 y:6 rowid:7!null crdb_internal_mvcc_timestamp:8 tableoid:9
-                     │                        │    │    └── const: 1
+                     │                        │    │    │    ├── internal-ordering: -5
+                     │                        │    │    │    ├── project
+                     │                        │    │    │    │    ├── columns: x:5 y:6
+                     │                        │    │    │    │    └── scan xy
+                     │                        │    │    │    │         └── columns: x:5 y:6 rowid:7!null crdb_internal_mvcc_timestamp:8 tableoid:9
+                     │                        │    │    │    └── const: 1
+                     │                        │    │    ├── values
+                     │                        │    │    │    └── tuple
+                     │                        │    │    └── filters (true)
                      │                        │    └── projections
                      │                        │         ├── variable: x:5 [as=i:13]
                      │                        │         └── variable: y:6 [as=j:14]
@@ -4508,14 +4513,19 @@ project
                      │                        ├── columns: "_stmt_exec_ret_2":27
                      │                        ├── project
                      │                        │    ├── columns: i:26
-                     │                        │    ├── limit
+                     │                        │    ├── right-join (cross)
                      │                        │    │    ├── columns: x:3
-                     │                        │    │    ├── internal-ordering: -3
-                     │                        │    │    ├── project
+                     │                        │    │    ├── limit
                      │                        │    │    │    ├── columns: x:3
-                     │                        │    │    │    └── scan xy
-                     │                        │    │    │         └── columns: x:3 y:4 rowid:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
-                     │                        │    │    └── const: 1
+                     │                        │    │    │    ├── internal-ordering: -3
+                     │                        │    │    │    ├── project
+                     │                        │    │    │    │    ├── columns: x:3
+                     │                        │    │    │    │    └── scan xy
+                     │                        │    │    │    │         └── columns: x:3 y:4 rowid:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+                     │                        │    │    │    └── const: 1
+                     │                        │    │    ├── values
+                     │                        │    │    │    └── tuple
+                     │                        │    │    └── filters (true)
                      │                        │    └── projections
                      │                        │         └── variable: x:3 [as=i:26]
                      │                        └── projections
@@ -4565,21 +4575,26 @@ project
                      │                                                                               └── project
                      │                                                                                    ├── columns: "_stmt_exec_ret_6":23
                      │                                                                                    ├── project
-                     │                                                                                    │    ├── columns: i:22!null
-                     │                                                                                    │    ├── limit
-                     │                                                                                    │    │    ├── columns: x:12!null
-                     │                                                                                    │    │    ├── internal-ordering: -12
-                     │                                                                                    │    │    ├── project
+                     │                                                                                    │    ├── columns: i:22
+                     │                                                                                    │    ├── right-join (cross)
+                     │                                                                                    │    │    ├── columns: x:12
+                     │                                                                                    │    │    ├── limit
                      │                                                                                    │    │    │    ├── columns: x:12!null
-                     │                                                                                    │    │    │    └── select
-                     │                                                                                    │    │    │         ├── columns: x:12!null y:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-                     │                                                                                    │    │    │         ├── scan xy
-                     │                                                                                    │    │    │         │    └── columns: x:12 y:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-                     │                                                                                    │    │    │         └── filters
-                     │                                                                                    │    │    │              └── lt
-                     │                                                                                    │    │    │                   ├── variable: x:12
-                     │                                                                                    │    │    │                   └── variable: i:11
-                     │                                                                                    │    │    └── const: 1
+                     │                                                                                    │    │    │    ├── internal-ordering: -12
+                     │                                                                                    │    │    │    ├── project
+                     │                                                                                    │    │    │    │    ├── columns: x:12!null
+                     │                                                                                    │    │    │    │    └── select
+                     │                                                                                    │    │    │    │         ├── columns: x:12!null y:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+                     │                                                                                    │    │    │    │         ├── scan xy
+                     │                                                                                    │    │    │    │         │    └── columns: x:12 y:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+                     │                                                                                    │    │    │    │         └── filters
+                     │                                                                                    │    │    │    │              └── lt
+                     │                                                                                    │    │    │    │                   ├── variable: x:12
+                     │                                                                                    │    │    │    │                   └── variable: i:11
+                     │                                                                                    │    │    │    └── const: 1
+                     │                                                                                    │    │    ├── values
+                     │                                                                                    │    │    │    └── tuple
+                     │                                                                                    │    │    └── filters (true)
                      │                                                                                    │    └── projections
                      │                                                                                    │         └── variable: x:12 [as=i:22]
                      │                                                                                    └── projections
@@ -5762,3 +5777,200 @@ project
                      │         └── tuple [as=stmt_return_1:1, type=tuple{bool}]
                      │              └── false [type=bool]
                      └── const: 1 [type=int]
+
+# Regression test for #114826 - ensure that SQL statements return at least one
+# row.
+exec-ddl
+CREATE TABLE t114826 (a INT);
+----
+
+exec-ddl
+CREATE FUNCTION f114826() RETURNS INT AS $$
+  DECLARE
+    found INT;
+  BEGIN
+    RAISE NOTICE 'HERE 1';
+    SELECT a INTO found FROM t114826 WHERE a = 3;
+    RAISE NOTICE 'HERE 2';
+    INSERT INTO t114826 (SELECT * FROM t114826) RETURNING a INTO found;
+    RAISE NOTICE 'HERE 3';
+    RETURN 10;
+  END
+$$ LANGUAGE PLpgSQL;
+----
+
+build format=show-scalars
+SELECT f114826();
+----
+project
+ ├── columns: f114826:35
+ ├── values
+ │    └── tuple
+ └── projections
+      └── udf: f114826 [as=f114826:35]
+           └── body
+                └── limit
+                     ├── columns: "_stmt_raise_1":34
+                     ├── project
+                     │    ├── columns: "_stmt_raise_1":34
+                     │    ├── project
+                     │    │    ├── columns: found:1
+                     │    │    ├── values
+                     │    │    │    └── tuple
+                     │    │    └── projections
+                     │    │         └── cast: INT8 [as=found:1]
+                     │    │              └── null
+                     │    └── projections
+                     │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":34]
+                     │              ├── args
+                     │              │    └── variable: found:1
+                     │              ├── params: found:2
+                     │              └── body
+                     │                   ├── project
+                     │                   │    ├── columns: stmt_raise_2:3
+                     │                   │    ├── values
+                     │                   │    │    └── tuple
+                     │                   │    └── projections
+                     │                   │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_2:3]
+                     │                   │              ├── const: 'NOTICE'
+                     │                   │              ├── const: 'HERE 1'
+                     │                   │              ├── const: ''
+                     │                   │              ├── const: ''
+                     │                   │              └── const: '00000'
+                     │                   └── project
+                     │                        ├── columns: "_stmt_exec_3":33
+                     │                        ├── values
+                     │                        │    └── tuple
+                     │                        └── projections
+                     │                             └── udf: _stmt_exec_3 [as="_stmt_exec_3":33]
+                     │                                  ├── args
+                     │                                  │    └── variable: found:2
+                     │                                  ├── params: found:4
+                     │                                  └── body
+                     │                                       └── project
+                     │                                            ├── columns: "_stmt_exec_ret_4":32
+                     │                                            ├── project
+                     │                                            │    ├── columns: found:31
+                     │                                            │    ├── right-join (cross)
+                     │                                            │    │    ├── columns: a:5
+                     │                                            │    │    ├── limit
+                     │                                            │    │    │    ├── columns: a:5!null
+                     │                                            │    │    │    ├── project
+                     │                                            │    │    │    │    ├── columns: a:5!null
+                     │                                            │    │    │    │    └── select
+                     │                                            │    │    │    │         ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+                     │                                            │    │    │    │         ├── scan t114826
+                     │                                            │    │    │    │         │    └── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+                     │                                            │    │    │    │         └── filters
+                     │                                            │    │    │    │              └── eq
+                     │                                            │    │    │    │                   ├── variable: a:5
+                     │                                            │    │    │    │                   └── const: 3
+                     │                                            │    │    │    └── const: 1
+                     │                                            │    │    ├── values
+                     │                                            │    │    │    └── tuple
+                     │                                            │    │    └── filters (true)
+                     │                                            │    └── projections
+                     │                                            │         └── variable: a:5 [as=found:31]
+                     │                                            └── projections
+                     │                                                 └── udf: _stmt_exec_ret_4 [as="_stmt_exec_ret_4":32]
+                     │                                                      ├── args
+                     │                                                      │    └── variable: found:31
+                     │                                                      ├── params: found:9
+                     │                                                      └── body
+                     │                                                           └── project
+                     │                                                                ├── columns: "_stmt_raise_5":30
+                     │                                                                ├── values
+                     │                                                                │    └── tuple
+                     │                                                                └── projections
+                     │                                                                     └── udf: _stmt_raise_5 [as="_stmt_raise_5":30]
+                     │                                                                          ├── args
+                     │                                                                          │    └── variable: found:9
+                     │                                                                          ├── params: found:10
+                     │                                                                          └── body
+                     │                                                                               ├── project
+                     │                                                                               │    ├── columns: stmt_raise_6:11
+                     │                                                                               │    ├── values
+                     │                                                                               │    │    └── tuple
+                     │                                                                               │    └── projections
+                     │                                                                               │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_6:11]
+                     │                                                                               │              ├── const: 'NOTICE'
+                     │                                                                               │              ├── const: 'HERE 2'
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              ├── const: ''
+                     │                                                                               │              └── const: '00000'
+                     │                                                                               └── project
+                     │                                                                                    ├── columns: "_stmt_exec_7":29
+                     │                                                                                    ├── values
+                     │                                                                                    │    └── tuple
+                     │                                                                                    └── projections
+                     │                                                                                         └── udf: _stmt_exec_7 [as="_stmt_exec_7":29]
+                     │                                                                                              ├── args
+                     │                                                                                              │    └── variable: found:10
+                     │                                                                                              ├── params: found:12
+                     │                                                                                              └── body
+                     │                                                                                                   └── project
+                     │                                                                                                        ├── columns: "_stmt_exec_ret_8":28
+                     │                                                                                                        ├── project
+                     │                                                                                                        │    ├── columns: found:27
+                     │                                                                                                        │    ├── right-join (cross)
+                     │                                                                                                        │    │    ├── columns: a:13
+                     │                                                                                                        │    │    ├── limit
+                     │                                                                                                        │    │    │    ├── columns: a:13
+                     │                                                                                                        │    │    │    ├── project
+                     │                                                                                                        │    │    │    │    ├── columns: a:13
+                     │                                                                                                        │    │    │    │    └── insert t114826
+                     │                                                                                                        │    │    │    │         ├── columns: a:13 rowid:14!null
+                     │                                                                                                        │    │    │    │         ├── insert-mapping:
+                     │                                                                                                        │    │    │    │         │    ├── a:17 => a:13
+                     │                                                                                                        │    │    │    │         │    └── rowid_default:21 => rowid:14
+                     │                                                                                                        │    │    │    │         ├── return-mapping:
+                     │                                                                                                        │    │    │    │         │    ├── a:17 => a:13
+                     │                                                                                                        │    │    │    │         │    └── rowid_default:21 => rowid:14
+                     │                                                                                                        │    │    │    │         └── project
+                     │                                                                                                        │    │    │    │              ├── columns: rowid_default:21 a:17
+                     │                                                                                                        │    │    │    │              ├── project
+                     │                                                                                                        │    │    │    │              │    ├── columns: a:17
+                     │                                                                                                        │    │    │    │              │    └── scan t114826
+                     │                                                                                                        │    │    │    │              │         └── columns: a:17 rowid:18!null crdb_internal_mvcc_timestamp:19 tableoid:20
+                     │                                                                                                        │    │    │    │              └── projections
+                     │                                                                                                        │    │    │    │                   └── function: unique_rowid [as=rowid_default:21]
+                     │                                                                                                        │    │    │    └── const: 1
+                     │                                                                                                        │    │    ├── values
+                     │                                                                                                        │    │    │    └── tuple
+                     │                                                                                                        │    │    └── filters (true)
+                     │                                                                                                        │    └── projections
+                     │                                                                                                        │         └── variable: a:13 [as=found:27]
+                     │                                                                                                        └── projections
+                     │                                                                                                             └── udf: _stmt_exec_ret_8 [as="_stmt_exec_ret_8":28]
+                     │                                                                                                                  ├── args
+                     │                                                                                                                  │    └── variable: found:27
+                     │                                                                                                                  ├── params: found:22
+                     │                                                                                                                  └── body
+                     │                                                                                                                       └── project
+                     │                                                                                                                            ├── columns: "_stmt_raise_9":26
+                     │                                                                                                                            ├── values
+                     │                                                                                                                            │    └── tuple
+                     │                                                                                                                            └── projections
+                     │                                                                                                                                 └── udf: _stmt_raise_9 [as="_stmt_raise_9":26]
+                     │                                                                                                                                      ├── args
+                     │                                                                                                                                      │    └── variable: found:22
+                     │                                                                                                                                      ├── params: found:23
+                     │                                                                                                                                      └── body
+                     │                                                                                                                                           ├── project
+                     │                                                                                                                                           │    ├── columns: stmt_raise_10:24
+                     │                                                                                                                                           │    ├── values
+                     │                                                                                                                                           │    │    └── tuple
+                     │                                                                                                                                           │    └── projections
+                     │                                                                                                                                           │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_10:24]
+                     │                                                                                                                                           │              ├── const: 'NOTICE'
+                     │                                                                                                                                           │              ├── const: 'HERE 3'
+                     │                                                                                                                                           │              ├── const: ''
+                     │                                                                                                                                           │              ├── const: ''
+                     │                                                                                                                                           │              └── const: '00000'
+                     │                                                                                                                                           └── project
+                     │                                                                                                                                                ├── columns: stmt_return_11:25!null
+                     │                                                                                                                                                ├── values
+                     │                                                                                                                                                │    └── tuple
+                     │                                                                                                                                                └── projections
+                     │                                                                                                                                                     └── const: 10 [as=stmt_return_11:25]
+                     └── const: 1
