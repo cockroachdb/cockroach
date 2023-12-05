@@ -481,22 +481,25 @@ func (hw hardwareSpecs) makeClusterSpecs(r registry.Registry, backupCloud string
 		clusterOpts = append(clusterOpts, spec.Mem(hw.mem))
 	}
 	if len(hw.zones) > 0 {
-		clusterOpts = append(clusterOpts, spec.Zones(strings.Join(hw.zones, ",")))
+		// Each test is set up to run on one specific cloud, so it's ok that the
+		// zones will only make sense for one of them.
+		// TODO(radu): clean this up.
+		clusterOpts = append(clusterOpts, spec.GCEZones(strings.Join(hw.zones, ",")))
+		clusterOpts = append(clusterOpts, spec.AWSZones(strings.Join(hw.zones, ",")))
 		clusterOpts = append(clusterOpts, spec.Geo())
+	}
+	if hw.ebsThroughput != 0 {
+		clusterOpts = append(clusterOpts, spec.AWSVolumeThroughput(hw.ebsThroughput))
 	}
 	s := r.MakeClusterSpec(hw.nodes, clusterOpts...)
 
-	if hw.ebsThroughput != 0 {
-		s.AWSVolumeThroughput = hw.ebsThroughput
-	}
-
-	if backupCloud == spec.AWS && s.Cloud == spec.AWS && s.VolumeSize != 0 {
+	if backupCloud == spec.AWS && s.VolumeSize != 0 {
 		// Work around an issue that RAID0s local NVMe and GP3 storage together:
 		// https://github.com/cockroachdb/cockroach/issues/98783.
 		//
 		// TODO(srosenberg): Remove this workaround when 98783 is addressed.
-		s.InstanceType, _ = spec.AWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, vm.ArchAMD64)
-		s.InstanceType = strings.Replace(s.InstanceType, "d.", ".", 1)
+		s.AWS.MachineType, _ = spec.SelectAWSMachineType(s.CPUs, s.Mem, s.PreferLocalSSD && s.VolumeSize == 0, vm.ArchAMD64)
+		s.AWS.MachineType = strings.Replace(s.AWS.MachineType, "d.", ".", 1)
 		s.Arch = vm.ArchAMD64
 	}
 	return s
@@ -742,8 +745,7 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
-
-	if rd.c.Spec().Cloud != rd.sp.backup.cloud {
+	if rd.c.Cloud() != rd.sp.backup.cloud {
 		// For now, only run the test on the cloud provider that also stores the backup.
 		rd.t.Skipf("test configured to run on %s", rd.sp.backup.cloud)
 	}
