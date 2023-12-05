@@ -106,6 +106,10 @@ func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Spa
 	return cov.Slice()
 }
 
+func fileFromIntroducedSpan(f *backuppb.BackupManifest_File) bool {
+	return f.StartTime.IsEmpty() && !f.EndTime.IsEmpty()
+}
+
 // backup exports a snapshot of every kv entry into ranged sstables.
 //
 // The output is an sstable per range with files in the following locations:
@@ -158,7 +162,7 @@ func backup(
 		}
 
 		f := it.Value()
-		if f.StartTime.IsEmpty() && !f.EndTime.IsEmpty() {
+		if fileFromIntroducedSpan(f) {
 			completedIntroducedSpans = append(completedIntroducedSpans, f.Span)
 		} else {
 			completedSpans = append(completedSpans, f.Span)
@@ -851,7 +855,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
 		}
 	}
-
 	// We have exhausted retries without getting a "PermanentBulkJobError", but
 	// something must be wrong if we keep seeing errors so give up and fail to
 	// ensure that any alerting on failures is triggered and that any subsequent
