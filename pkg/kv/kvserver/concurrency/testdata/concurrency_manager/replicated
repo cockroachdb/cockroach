@@ -1,0 +1,248 @@
+new-txn name=txn1 ts=10,1 epoch=0
+----
+
+new-txn name=txn2 ts=10,1 epoch=0
+----
+
+new-txn name=txn3 ts=10,1 epoch=0
+----
+
+new-txn name=txn4 ts=10,1 epoch=0
+----
+
+new-txn name=txn5 ts=10,1 epoch=0
+----
+
+# -----------------------------------------------------------------------------
+# Basic test for Replicated Shared locks. Ensure two replicated shared locks can
+# be acquired on the same key, but they are default-discarded by the lock table.
+# Then, ensure they can be pulled into the lock table by a conflicting request.
+# -----------------------------------------------------------------------------
+
+# Acquire two shared locks on a key.
+new-request name=req1 txn=txn1 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req1
+----
+[1] sequence req1: sequencing request
+[1] sequence req1: acquiring latches
+[1] sequence req1: scanning lock table for conflicting locks
+[1] sequence req1: sequencing complete, returned guard
+
+on-lock-acquired req=req1 key=a dur=r str=shared
+----
+[-] acquire lock: txn 00000001 @ ‹a›
+
+finish req=req1
+----
+[-] finish req1: finishing request
+
+new-request name=req2 txn=txn2 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req2
+----
+[2] sequence req2: sequencing request
+[2] sequence req2: acquiring latches
+[2] sequence req2: scanning lock table for conflicting locks
+[2] sequence req2: sequencing complete, returned guard
+
+on-lock-acquired req=req2 key=a dur=r str=shared
+----
+[-] acquire lock: txn 00000002 @ ‹a›
+
+finish req=req2
+----
+[-] finish req2: finishing request
+
+debug-lock-table
+----
+num=0
+
+# A conflicting request should pull the lock into the lock table.
+new-request name=req3 txn=txn3 ts=10,1
+  get key=a str=exclusive
+----
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+handle-lock-conflict-error req=req3 lease-seq=1
+  lock txn=txn1 key=a str=shared
+  lock txn=txn2 key=a str=shared
+----
+[4] handle lock conflict error req3: handled conflicting locks on ‹"a"›, ‹"a"›, released latches
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holders: txn: 00000001-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: repl [Shared]
+           txn: 00000002-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: repl [Shared]
+   queued locking requests:
+    active: false req: 3, strength: Exclusive, txn: 00000003-0000-0000-0000-000000000000
+
+sequence req=req3
+----
+[5] sequence req3: re-sequencing request
+[5] sequence req3: acquiring latches
+[5] sequence req3: scanning lock table for conflicting locks
+[5] sequence req3: waiting in lock wait-queues
+[5] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000001 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req3: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req3: pushing txn 00000001 to abort
+[5] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn1 status=aborted
+----
+[-] update txn: aborting txn1
+[5] sequence req3: resolving intent ‹"a"› for txn 00000001 with ABORTED status
+[5] sequence req3: lock wait-queue event: wait for (distinguished) txn 00000002 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[5] sequence req3: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[5] sequence req3: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req3: pushing txn 00000002 to abort
+[5] sequence req3: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn2 status=committed
+----
+[-] update txn: committing txn2
+[5] sequence req3: resolving intent ‹"a"› for txn 00000002 with COMMITTED status
+[5] sequence req3: lock wait-queue event: done waiting
+[5] sequence req3: conflicted with ‹00000002-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[5] sequence req3: acquiring latches
+[5] sequence req3: scanning lock table for conflicting locks
+[5] sequence req3: sequencing complete, returned guard
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+reset
+----
+
+# -----------------------------------------------------------------------------
+# Basic test for Replicated Exclusive locks. Ensure they can be acquired, but
+# are default-discarded by the lock table. Then, a conflicting request should be
+# able to pull them into the lock table.
+# -----------------------------------------------------------------------------
+
+new-request name=req4 txn=txn3 ts=10,1
+  get key=a str=exclusive
+----
+
+sequence req=req4
+----
+[1] sequence req4: sequencing request
+[1] sequence req4: acquiring latches
+[1] sequence req4: scanning lock table for conflicting locks
+[1] sequence req4: sequencing complete, returned guard
+
+on-lock-acquired req=req4 key=a dur=r str=exclusive
+----
+[-] acquire lock: txn 00000003 @ ‹a›
+
+finish req=req4
+----
+[-] finish req4: finishing request
+
+debug-lock-table
+----
+num=0
+
+# Conflicting requests.
+new-request name=req5 txn=txn4 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req5
+----
+[2] sequence req5: sequencing request
+[2] sequence req5: acquiring latches
+[2] sequence req5: scanning lock table for conflicting locks
+[2] sequence req5: sequencing complete, returned guard
+
+handle-lock-conflict-error req=req5 lease-seq=1
+  lock txn=txn3 key=a str=exclusive
+----
+[3] handle lock conflict error req5: handled conflicting locks on ‹"a"›, released latches
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: repl [Exclusive]
+   queued locking requests:
+    active: false req: 5, strength: Shared, txn: 00000004-0000-0000-0000-000000000000
+
+sequence req=req5
+----
+[4] sequence req5: re-sequencing request
+[4] sequence req5: acquiring latches
+[4] sequence req5: scanning lock table for conflicting locks
+[4] sequence req5: waiting in lock wait-queues
+[4] sequence req5: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key ‹"a"› (queuedLockingRequests: 1, queuedReaders: 0)
+[4] sequence req5: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[4] sequence req5: pushing txn 00000003 to abort
+[4] sequence req5: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+
+new-request name=req6 txn=txn5 ts=10,1
+  get key=a str=shared
+----
+
+sequence req=req6
+----
+[5] sequence req6: sequencing request
+[5] sequence req6: acquiring latches
+[5] sequence req6: scanning lock table for conflicting locks
+[5] sequence req6: waiting in lock wait-queues
+[5] sequence req6: lock wait-queue event: wait for txn 00000003 holding lock @ key ‹"a"› (queuedLockingRequests: 2, queuedReaders: 0)
+[5] sequence req6: pushing after 0s for: liveness detection = false, deadlock detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
+[5] sequence req6: pushing txn 00000003 to abort
+[5] sequence req6: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+debug-lock-table
+----
+num=1
+ lock: "a"
+  holder: txn: 00000003-0000-0000-0000-000000000000 epoch: 0, iso: Serializable, info: repl [Exclusive]
+   queued locking requests:
+    active: true req: 5, strength: Shared, txn: 00000004-0000-0000-0000-000000000000
+    active: true req: 6, strength: Shared, txn: 00000005-0000-0000-0000-000000000000
+   distinguished req: 5
+
+# Abort the exclusive lock holder; both the shared locking requests should be
+# able to proceed.
+on-txn-updated txn=txn3 status=aborted
+----
+[-] update txn: aborting txn3
+[4] sequence req5: resolving intent ‹"a"› for txn 00000003 with ABORTED status
+[4] sequence req5: lock wait-queue event: done waiting
+[4] sequence req5: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[4] sequence req5: acquiring latches
+[4] sequence req5: scanning lock table for conflicting locks
+[4] sequence req5: sequencing complete, returned guard
+[5] sequence req6: resolving intent ‹"a"› for txn 00000003 with ABORTED status
+[5] sequence req6: lock wait-queue event: done waiting
+[5] sequence req6: conflicted with ‹00000003-0000-0000-0000-000000000000› on ‹"a"› for 0.000s
+[5] sequence req6: acquiring latches
+[5] sequence req6: scanning lock table for conflicting locks
+[5] sequence req6: sequencing complete, returned guard
+
+finish req=req5
+----
+[-] finish req5: finishing request
+
+finish req=req6
+----
+[-] finish req6: finishing request
+
+reset
+----
