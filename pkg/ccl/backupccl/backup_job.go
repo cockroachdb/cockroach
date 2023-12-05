@@ -386,6 +386,11 @@ func backup(
 		), "running distributed backup to export %d ranges", errors.Safe(numTotalSpans))
 	}
 
+	knobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+	if knobs != nil && knobs.RunBeforeBackupFlow != nil {
+		knobs.RunBeforeBackupFlow(ctx)
+	}
+
 	if err := ctxgroup.GoAndWait(
 		ctx,
 		jobProgressLoop,
