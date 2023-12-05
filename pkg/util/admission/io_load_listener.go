@@ -208,6 +208,7 @@ type ioLoadListenerState struct {
 		bytesWritten     uint64
 		incomingLSMBytes uint64
 	}
+	cumCompactionStats cumStoreCompactionStats
 
 	// Exponentially smoothed per interval values.
 
@@ -241,6 +242,56 @@ type ioLoadListenerState struct {
 	// elasticDiskTokensAllocated represents what has been given out.
 	elasticDiskBWTokens          int64
 	elasticDiskBWTokensAllocated int64
+}
+
+type cumStoreCompactionStats struct {
+	writeBytes uint64
+	// Not cumulative. This is the number of levels from which bytes will be
+	// moved out to lower levels via compactions.
+	numOutLevelsGauge int
+}
+
+func computeCumStoreCompactionStats(m *pebble.Metrics) cumStoreCompactionStats {
+	var compactedWriteBytes uint64
+	baseLevel := -1
+	for i := range m.Levels {
+		compactedWriteBytes += m.Levels[i].BytesCompacted
+		if i > 0 && m.Levels[i].Size > 0 && baseLevel < 0 {
+			baseLevel = i
+		}
+	}
+	if baseLevel < 0 {
+		baseLevel = len(m.Levels) - 1
+	}
+	return cumStoreCompactionStats{
+		writeBytes:        compactedWriteBytes,
+		numOutLevelsGauge: len(m.Levels) - baseLevel,
+	}
+}
+
+// computeL0CompactionTokensLowerBound is used to give some tokens to L0 even
+// if compactions out of L0 are not happening because the compaction score is
+// not high enough. This allows admission until compaction score is high
+// enough, at which point we stop using l0CompactionTokensLowerBound.
+//
+// See https://github.com/cockroachdb/cockroach/issues/115373 for motivation.
+func computeL0CompactionTokensLowerBound(
+	prev cumStoreCompactionStats, cur cumStoreCompactionStats,
+) int64 {
+	// All levels are expected to have similar write amp, so we expect that each
+	// will be given equal compaction resources. This isn't actually true if the
+	// levels have very different scores, but it suffices for the purpose of
+	// this lower bound. Consider an actual incident where L0 was not
+	// being compacted because it only had 5 sub-levels, and
+	// numOutLevelsGauge=6, and the aggregate compaction bandwidth was ~140MB/s
+	// distributed over 7 concurrent compactions. The aggregated compacted in 15
+	// seconds is 2100MB. So we return 2100MB/6 = 350MB of tokens.
+	intCompactedWriteBytes := int64(cur.writeBytes) - int64(prev.writeBytes)
+	if intCompactedWriteBytes < 0 {
+		// Defensive: ignore bogus stats.
+		intCompactedWriteBytes = 0
+	}
+	return intCompactedWriteBytes / int64(cur.numOutLevelsGauge)
 }
 
 const unlimitedTokens = math.MaxInt64
@@ -408,9 +459,11 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 		io.perWorkTokenEstimator.updateEstimates(metrics.Levels[0], cumLSMIngestedBytes, sas)
 		io.adjustTokensResult = adjustTokensResult{
 			ioLoadListenerState: ioLoadListenerState{
-				cumL0AddedBytes:    m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
-				curL0Bytes:         m.Levels[0].Size,
-				cumWriteStallCount: metrics.WriteStallCount,
+				cumL0AddedBytes:         m.Levels[0].BytesFlushed + m.Levels[0].BytesIngested,
+				curL0Bytes:              m.Levels[0].Size,
+				cumWriteStallCount:      metrics.WriteStallCount,
+				cumFlushWriteThroughput: metrics.Flush.WriteThroughput,
+				cumCompactionStats:      computeCumStoreCompactionStats(metrics.Metrics),
 				// No initial limit, i.e, the first interval is unlimited.
 				totalNumByteTokens:        unlimitedTokens,
 				totalNumElasticByteTokens: unlimitedTokens,
@@ -429,7 +482,6 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 		io.diskBW.bytesRead = metrics.DiskStats.BytesRead
 		io.diskBW.bytesWritten = metrics.DiskStats.BytesWritten
 		io.diskBW.incomingLSMBytes = cumLSMIncomingBytes
-		io.cumFlushWriteThroughput = metrics.Flush.WriteThroughput
 		io.copyAuxEtcFromPerWorkEstimator()
 
 		// Assume system starts off unloaded.
@@ -554,9 +606,10 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	cumDiskBW := io.ioLoadListenerState.diskBW
 	wt := metrics.Flush.WriteThroughput
 	wt.Subtract(io.cumFlushWriteThroughput)
+	cumCompactionStats := computeCumStoreCompactionStats(metrics.Metrics)
 
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState,
-		metrics.Levels[0], metrics.WriteStallCount, wt,
+		metrics.Levels[0], metrics.WriteStallCount, cumCompactionStats, wt,
 		L0FileCountOverloadThreshold.Get(&io.settings.SV),
 		L0SubLevelCountOverloadThreshold.Get(&io.settings.SV),
 		L0MinimumSizePerSubLevel.Get(&io.settings.SV),
@@ -630,9 +683,10 @@ type adjustTokensAuxComputations struct {
 	intFlushUtilization float64
 	intWriteStalls      int64
 
-	prevTokensUsed              int64
-	prevTokensUsedByElasticWork int64
-	tokenKind                   tokenKind
+	prevTokensUsed                 int64
+	prevTokensUsedByElasticWork    int64
+	tokenKind                      tokenKind
+	usedCompactionTokensLowerBound bool
 
 	perWorkTokensAux perWorkTokensAux
 	doLogFlush       bool
@@ -650,6 +704,7 @@ func (io *ioLoadListener) adjustTokensInner(
 	prev ioLoadListenerState,
 	l0Metrics pebble.LevelMetrics,
 	cumWriteStallCount int64,
+	cumCompactionStats cumStoreCompactionStats,
 	flushWriteThroughput pebble.ThroughputMetric,
 	threshNumFiles, threshNumSublevels int64,
 	l0MinSizePerSubLevel int64,
@@ -682,6 +737,9 @@ func (io *ioLoadListener) adjustTokensInner(
 		intL0CompactedBytes = 0
 	}
 	io.l0CompactedBytes.Inc(intL0CompactedBytes)
+	l0CompactionTokensLowerBound := computeL0CompactionTokensLowerBound(
+		io.cumCompactionStats, cumCompactionStats)
+	usedCompactionTokensLowerBound := false
 
 	const alpha = 0.5
 
@@ -922,6 +980,10 @@ func (io *ioLoadListener) adjustTokensInner(
 			// smoothedIntL0CompactedBytes at 1, and 2 * smoothedIntL0CompactedBytes
 			// at 0.5.
 			fTotalNumByteTokens = -score*(2*float64(smoothedIntL0CompactedBytes)) + 3*float64(smoothedIntL0CompactedBytes)
+			if fTotalNumByteTokens < float64(l0CompactionTokensLowerBound) {
+				fTotalNumByteTokens = float64(l0CompactionTokensLowerBound)
+				usedCompactionTokensLowerBound = true
+			}
 		} else {
 			// Medium load. Score in [1, 2). We use linear interpolation from
 			// medium load to overload, to slowly give out fewer tokens as we
@@ -950,6 +1012,12 @@ func (io *ioLoadListener) adjustTokensInner(
 		// results show the sublevels hovering around 4, as expected.
 		//
 		// NB: at score >= 1.2 (12 sublevels), there are 0 elastic tokens.
+		//
+		// NB: we are not using l0CompactionTokensLowerBound at all for elastic
+		// tokens. This is because that lower bound is useful primarily when L0 is
+		// not seeing compactions because a compaction backlog has accumulated in
+		// other levels. For elastic work, we would rather clear that compaction
+		// backlog than admit some elastic work.
 		totalNumElasticByteTokens = int64(float64(smoothedIntL0CompactedBytes) *
 			(1.25 - 1.25*(score-0.2)))
 
@@ -974,6 +1042,7 @@ func (io *ioLoadListener) adjustTokensInner(
 			cumL0AddedBytes:              cumL0AddedBytes,
 			curL0Bytes:                   curL0Bytes,
 			cumWriteStallCount:           cumWriteStallCount,
+			cumCompactionStats:           cumCompactionStats,
 			smoothedIntL0CompactedBytes:  smoothedIntL0CompactedBytes,
 			smoothedCompactionByteTokens: smoothedCompactionByteTokens,
 			smoothedNumFlushTokens:       smoothedNumFlushTokens,
@@ -986,15 +1055,16 @@ func (io *ioLoadListener) adjustTokensInner(
 			elasticByteTokensAllocated:   0,
 		},
 		aux: adjustTokensAuxComputations{
-			intL0AddedBytes:             intL0AddedBytes,
-			intL0CompactedBytes:         intL0CompactedBytes,
-			intFlushTokens:              intFlushTokens,
-			intFlushUtilization:         intFlushUtilization,
-			intWriteStalls:              intWriteStalls,
-			prevTokensUsed:              prev.byteTokensUsed,
-			prevTokensUsedByElasticWork: prev.byteTokensUsedByElasticWork,
-			tokenKind:                   tokenKind,
-			doLogFlush:                  doLogFlush,
+			intL0AddedBytes:                intL0AddedBytes,
+			intL0CompactedBytes:            intL0CompactedBytes,
+			intFlushTokens:                 intFlushTokens,
+			intFlushUtilization:            intFlushUtilization,
+			intWriteStalls:                 intWriteStalls,
+			prevTokensUsed:                 prev.byteTokensUsed,
+			prevTokensUsedByElasticWork:    prev.byteTokensUsedByElasticWork,
+			tokenKind:                      tokenKind,
+			usedCompactionTokensLowerBound: usedCompactionTokensLowerBound,
+			doLogFlush:                     doLogFlush,
 		},
 		ioThreshold: ioThreshold,
 	}
@@ -1063,7 +1133,11 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 			// NB: res.smoothedCompactionByteTokens  is the same as
 			// res.ioLoadListenerState.totalNumByteTokens (printed above) when
 			// res.aux.tokenKind == compactionTokenKind.
-			p.Printf(" due to L0 growth")
+			lowerBoundBoolStr := ""
+			if res.aux.usedCompactionTokensLowerBound {
+				lowerBoundBoolStr = "(used token lower bound)"
+			}
+			p.Printf(" due to L0 growth%s", lowerBoundBoolStr)
 		case flushTokenKind:
 			p.Printf(" due to memtable flush (multiplier %.3f)", res.flushUtilTargetFraction)
 		}
