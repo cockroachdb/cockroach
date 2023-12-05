@@ -462,7 +462,6 @@ func NewServer(
 	}
 
 	telemetryLoggingMetrics := newTelemetryLoggingMetrics(cfg.TelemetryLoggingTestingKnobs, cfg.Settings)
-	telemetryLoggingMetrics.registerOnTelemetrySamplingModeChange(cfg.Settings)
 	s.TelemetryLoggingMetrics = telemetryLoggingMetrics
 
 	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
@@ -1566,6 +1565,11 @@ type connExecutor struct {
 		// createdSequences keeps track of sequences created in the current transaction.
 		// The map key is the sequence descpb.ID.
 		createdSequences map[descpb.ID]struct{}
+
+		// shouldLogToTelemetry indicates if the current transaction should be
+		// logged to telemetry. It is used in telmemetry transaction sampling
+		// mode to emit all statement events for a particular transaction.
+		shouldLogToTelemetry bool
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -2809,7 +2813,7 @@ func (ex *connExecutor) execCopyOut(
 			stmtFingerprintID,
 			&stats,
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
@@ -3058,7 +3062,8 @@ func (ex *connExecutor) execCopyIn(
 			ex.server.TelemetryLoggingMetrics,
 			stmtFingerprintID,
 			&stats,
-			ex.statsCollector)
+			ex.statsCollector,
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	var copyErr error
