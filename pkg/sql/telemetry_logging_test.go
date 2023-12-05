@@ -12,11 +12,9 @@ package sql
 
 import (
 	"context"
-	gosql "database/sql"
 	"encoding/json"
 	"fmt"
 	"math"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -24,11 +22,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -442,6 +439,18 @@ func TestTelemetryLogging(t *testing.T) {
 
 	log.FlushFiles()
 
+	// We should not see any transaction events in statement
+	// telemetry mode.
+	txnEntries, err := log.FetchEntriesFromFiles(
+		0,
+		math.MaxInt64,
+		10000,
+		regexp.MustCompile(`"EventType":"sampled_transaction"`),
+		log.WithMarkedSensitiveData,
+	)
+	require.NoError(t, err)
+	require.Emptyf(t, txnEntries, "found unexpected transaction telemetry events: %v", txnEntries)
+
 	entries, err := log.FetchEntriesFromFiles(
 		0,
 		math.MaxInt64,
@@ -466,6 +475,9 @@ func TestTelemetryLogging(t *testing.T) {
 
 	for _, tc := range testData {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Cleanup(func() {
+				s.SQLServer().(*Server).TelemetryLoggingMetrics.resetLastEmittedTime()
+			})
 			logCount := 0
 			expectedLogCount := len(tc.expectedSkipped)
 			// NB: FetchEntriesFromFiles delivers entries in reverse order.
@@ -482,7 +494,7 @@ func TestTelemetryLogging(t *testing.T) {
 					err = json.Unmarshal([]byte(e.Message), &sampledQueryFromLog)
 					require.NoError(t, err)
 
-					require.Equal(t, tc.expectedSkipped[logCount], sampledQueryFromLog.SkippedQueries)
+					require.Equal(t, tc.expectedSkipped[logCount], sampledQueryFromLog.SkippedQueries, "%v", e.Message)
 
 					logCount++
 
@@ -1669,498 +1681,482 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 	}
 }
 
-type testQuery struct {
-	query          string
-	logTime        float64
-	tracingEnabled bool
-}
-
-type expectedLog struct {
-	logMsg            string
-	skippedQueryCount int
-}
-
-// TestTelemetryLoggingTxnMode tests that when the telemetry logging is set to "transaction",
-// we sample events at the transaction level, which means that we'll emit all statements
-// for a transaction as if they were counted as 1 emitted event.
-func TestTelemetryLoggingTxnMode(t *testing.T) {
+// TestTelemetryShouldEmitStatement test will validate shouldEmitStatement with a
+// combination of parameters under different configurations of cluster settings.
+func TestTelemetryShouldEmitStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
-	defer cleanup()
+	type fnParams struct {
+		timeNowSecs  float64
+		isTrackedTxn bool
+		stmtNum      int
+		force        bool
+		expectedRet  bool
+	}
 
+	type testCase struct {
+		name                         string
+		telemetryDisabled            bool
+		isTxnMode                    bool
+		statementSamplingFrequency   int
+		transactionSamplingFrequency int
+		stmtsPerTxnMax               int
+		params                       []fnParams
+	}
+
+	testCases := []testCase{
+		{
+			name:                       "telemetry-disabled-stmt-mode-on",
+			telemetryDisabled:          true,
+			statementSamplingFrequency: 10,
+			params: []fnParams{
+				{
+					timeNowSecs:  1,
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        false,
+				},
+				{
+					timeNowSecs:  1,
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        true, // Force.
+				},
+				{
+					timeNowSecs:  1,
+					isTrackedTxn: true, // Tracked txn.
+					stmtNum:      1,
+					force:        false,
+				},
+				{
+					timeNowSecs:  2, // Enough time elapsed.
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        false,
+				},
+			},
+		},
+		{
+			name:                       "telemetry-enabled-stmt-mode-on-sampling-frequency-0",
+			statementSamplingFrequency: 0,
+			params: []fnParams{
+				{
+					timeNowSecs:  1,
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        false,
+				},
+				{
+					timeNowSecs:  1,
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        true,
+					expectedRet:  true, // Forced.
+				},
+				{
+					timeNowSecs:  1,
+					isTrackedTxn: true, // Tracked txn.
+					stmtNum:      1,
+					force:        false,
+				},
+				{
+					timeNowSecs:  2, // Enough time elapsed.
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        false,
+				},
+			},
+		},
+		{
+			// Test statement mode.
+			name:                         "telemetry-on-stmt-mode-on",
+			statementSamplingFrequency:   10,
+			transactionSamplingFrequency: 1000, // No effect.
+			params: []fnParams{
+				{
+					timeNowSecs:  1,
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        false,
+					expectedRet:  true,
+				},
+				{
+					timeNowSecs:  1.05, // Not enough time elapsed.
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        false,
+					expectedRet:  false,
+				},
+				{
+					timeNowSecs:  1.05,
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        true, // Force.
+					expectedRet:  true,
+				},
+				{
+					timeNowSecs:  1,
+					isTrackedTxn: true, // Tracked txn, but we are not in txn mode.
+					stmtNum:      1,
+					force:        false,
+					expectedRet:  false,
+				},
+				{
+					timeNowSecs:  1.15, // Enough time elapsed.
+					isTrackedTxn: false,
+					stmtNum:      1000, // Greater than stmtsPerTxnMax, but we are not in stmt mode.
+					force:        false,
+					expectedRet:  true,
+				},
+				{
+					timeNowSecs:  2, // Enough time elapsed.
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        false,
+					expectedRet:  true,
+				},
+			},
+		},
+		{
+			// Test transaction mode.
+			name:      "telemetry-on-txn-mode-on",
+			isTxnMode: true,
+			// The txn sampling freq. shouldn't be observed by this function.
+			transactionSamplingFrequency: 1000000,
+			// The stmt sampling freq. shouldn't be observed in txn mode.
+			statementSamplingFrequency: 1000000,
+			stmtsPerTxnMax:             3,
+			params: []fnParams{
+				{
+					timeNowSecs:  1,
+					isTrackedTxn: true,
+					stmtNum:      1,
+					force:        false,
+					expectedRet:  true,
+				},
+				{
+					timeNowSecs:  2,
+					isTrackedTxn: true,
+					stmtNum:      2,
+					force:        false,
+					expectedRet:  true,
+				},
+				{
+					timeNowSecs:  3,
+					isTrackedTxn: true,
+					stmtNum:      3,
+					force:        false,
+					expectedRet:  true,
+				},
+				{
+					// Stmt num exceeds stmtsPerTxnMax.
+					timeNowSecs:  4,
+					isTrackedTxn: true,
+					stmtNum:      4,
+					force:        false,
+					expectedRet:  false,
+				},
+				{
+					// Stmt num exceeds stmtsPerTxnMax but force is true.
+					timeNowSecs:  4,
+					isTrackedTxn: true,
+					stmtNum:      4,
+					force:        true,
+					expectedRet:  true,
+				},
+				{
+					// Enough time elapsed but txn is not tracked.
+					timeNowSecs:  5,
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        false,
+					expectedRet:  false,
+				},
+				{
+					// Txn is not tracked but force is true.
+					timeNowSecs:  6,
+					isTrackedTxn: false,
+					stmtNum:      1,
+					force:        true,
+					expectedRet:  true,
+				},
+			},
+		},
+	}
+
+	cs := cluster.MakeTestingClusterSettings()
 	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	testingKnobs := NewTelemetryLoggingTestingKnobs(st.TimeNow, nil, nil)
+	telemetryLoggingMetrics := newTelemetryLoggingMetrics(testingKnobs, cs)
+	ctx := context.Background()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			EventLog: &EventLogTestingKnobs{
-				// The sampling checks below need to have a deterministic
-				// number of statements run by internal executor.
-				SyncWrites: true,
-			},
-			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
-				getTimeNow:       st.TimeNow,
-				getTracingStatus: sts.TracingStatus,
-			},
-		},
-	})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
 
-	defer s.Stopper().Stop(context.Background())
+			telemetrySamplingMode.Override(ctx, &cs.SV, telemetryModeStatement)
+			if tc.isTxnMode {
+				telemetrySamplingMode.Override(ctx, &cs.SV, telemetryModeTransaction)
+			}
+			telemetryStatementsPerTransactionMax.Override(ctx, &cs.SV, int64(tc.stmtsPerTxnMax))
+			TelemetryMaxStatementEventFrequency.Override(ctx, &cs.SV, int64(tc.statementSamplingFrequency))
+			telemetryTransactionSamplingFrequency.Override(ctx, &cs.SV, int64(tc.transactionSamplingFrequency))
+			telemetryLoggingEnabled.Override(ctx, &cs.SV, !tc.telemetryDisabled)
 
-	queries := []testQuery{
-		{
-			query:   "BEGIN; TRUNCATE t; COMMIT",
-			logTime: 0, // Logged.
-		},
-		{
-			query:   "BEGIN; SELECT 1; SELECT 2; SELECT 3; COMMIT",
-			logTime: 1, // Logged.
-		},
-		{
-			query:   "SELECT 1, 2;",
-			logTime: 1, // Skipped.
-		},
-		{
-			query:          "SELECT 1, 2;",
-			logTime:        1, // Logged. Tracing is enabled.
-			tracingEnabled: true,
-		},
-		{
-			query:   `SELECT * FROM t LIMIT 1`,
-			logTime: 1.05, // Skipped.
-		},
-		{
-			query:   `SELECT * FROM t LIMIT 1`,
-			logTime: 1.08, // Skipped.
-		},
-		{
-			query:   `SELECT * FROM t LIMIT 2`,
-			logTime: 1.1, // Logged.
-		},
-		{
-			query:   `BEGIN; SELECT * FROM t LIMIT 3; COMMIT`,
-			logTime: 1.15, // Skipped.
-		},
-		{
-			query:   `BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT`,
-			logTime: 1.2, // Logged.
-		},
-	}
+			telemetryLoggingMetrics.resetLastEmittedTime()
 
-	expectedLogs := []expectedLog{
-		{
-			logMsg:            `TRUNCATE TABLE defaultdb.public.t`,
-			skippedQueryCount: 1, // Skipped BEGIN.
-		},
-		{
-			logMsg:            `COMMIT TRANSACTION`,
-			skippedQueryCount: 0,
-		},
-		{
-			logMsg:            `SELECT ‹1›`,
-			skippedQueryCount: 1, // BEGIN skipped.
-		},
-		{
-			logMsg:            `SELECT ‹2›`,
-			skippedQueryCount: 0,
-		},
-		{
-			logMsg:            `SELECT ‹3›`,
-			skippedQueryCount: 0,
-		},
-		{
-			logMsg:            `COMMIT TRANSACTION`,
-			skippedQueryCount: 0,
-		},
-		{
-			logMsg:            `SELECT ‹1›, ‹2›`,
-			skippedQueryCount: 1,
-		},
-		{
-			logMsg:            `SELECT * FROM ""."".t LIMIT ‹2›`,
-			skippedQueryCount: 2,
-		},
-		{
-			logMsg:            `SELECT * FROM ""."".t LIMIT ‹4›`,
-			skippedQueryCount: 4,
-		},
-		{
-			logMsg:            `SELECT * FROM ""."".t LIMIT ‹5›`,
-			skippedQueryCount: 0,
-		},
-		{
-			logMsg:            `COMMIT TRANSACTION`,
-			skippedQueryCount: 0,
-		},
-	}
+			for _, p := range tc.params {
+				fnParamsStr := fmt.Sprintf("timeNow:%f force:%t isTrackedTxn:%t stmtNum:%d expected:%t",
+					p.timeNowSecs, p.force, p.isTrackedTxn, p.stmtNum, p.expectedRet)
+				t.Run(fnParamsStr, func(t *testing.T) {
+					prevTime := telemetryLoggingMetrics.getLastEmittedTime()
+					ts := timeutil.FromUnixMicros(int64(p.timeNowSecs * 1e6))
+					st.SetTime(ts)
 
-	db := sqlutils.MakeSQLRunner(sqlDB)
-	st.SetTime(timeutil.FromUnixMicros(0))
-	db.Exec(t, `SET application_name = 'telemetry-logging-test-txn-mode'`)
-	db.Exec(t, "CREATE TABLE t();")
-	db.Exec(t, "CREATE TABLE u(x int);")
+					shouldEmit := telemetryLoggingMetrics.shouldEmitStatementLog(p.isTrackedTxn, p.stmtNum, p.force)
+					require.Equal(t, p.expectedRet, shouldEmit)
 
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 10;`)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";`)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
-
-	for _, query := range queries {
-		stubTime := timeutil.FromUnixMicros(int64(query.logTime * 1e6))
-		st.SetTime(stubTime)
-		sts.SetTracingStatus(query.tracingEnabled)
-		db.Exec(t, query.query)
-	}
-
-	log.FlushFiles()
-
-	entries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"sampled_query"`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(entries) == 0 {
-		t.Fatal(errors.Newf("no entries found"))
-	}
-
-	for _, e := range entries {
-		if strings.Contains(e.Message, `"ExecMode":"`+executorTypeInternal.logLabel()) {
-			t.Errorf("unexpected telemetry event for internal statement:\n%s", e.Message)
-		}
-	}
-
-	expectedLogCount := len(expectedLogs)
-	require.GreaterOrEqualf(t, len(entries), expectedLogCount,
-		"expected at least %d log entries, got: %d\nentries:\n%v", expectedLogCount, len(entries), entries)
-
-	// FetchEntriesFromFiles delivers entries in reverse order.
-	entryIdx := len(entries) - 1
-
-	// Skip the cluster setting queries.
-	for strings.Contains(entries[entryIdx].Message, "SET CLUSTER SETTING") {
-		entryIdx--
-	}
-
-	for i := 0; i < expectedLogCount; i++ {
-		e := entries[entryIdx-i]
-
-		var sq eventpb.SampledQuery
-		err = json.Unmarshal([]byte(e.Message), &sq)
-		require.NoError(t, err)
-
-		if !strings.Contains(string(sq.Statement), expectedLogs[i].logMsg) {
-			t.Fatalf("expected log message to contain:\n%s\nbut received:\n%s\nentries:\n%v\n",
-				expectedLogs[i].logMsg, sq.Statement, entries)
-		}
-
-		expectedSkipped := expectedLogs[i].skippedQueryCount
-		if expectedSkipped == 0 {
-			require.Zerof(t, sq.SkippedQueries, "expected no skipped queries, found:\n%s", e.Message)
-		} else {
-			require.Equalf(t, uint64(expectedSkipped), sq.SkippedQueries, "expected skipped queries, found:\n%s", e.Message)
-		}
+					if shouldEmit && !tc.isTxnMode {
+						// If we are in stmt mode and the function returns true, we should have
+						// updated the last emitted time to the current time.
+						require.Equal(t, ts, telemetryLoggingMetrics.getLastEmittedTime())
+					} else {
+						require.Equal(t, prevTime, telemetryLoggingMetrics.getLastEmittedTime())
+					}
+				})
+			}
+		})
 	}
 }
 
-// TestTelemetryLoggingClearsTxns tests that when the telemetry logging is set to "statements",
-// the list of tracked txns is cleared.
-func TestTelemetryLoggingClearsTxns(t *testing.T) {
+// TestTelemetryShouldTrackTransaction test will validate shouldEmitTransactionLog with a
+// combination of parameters under different configurations of cluster settings.
+func TestTelemetryShouldTrackTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
-	defer cleanup()
+	type fnParams struct {
+		timeNowSecs float64
+		force       bool
+		isInternal  bool
+		expectedRet bool
+	}
 
+	type testCase struct {
+		name                         string
+		telemetryDisabled            bool
+		isTxnMode                    bool
+		isInternalStatementsEnabled  bool
+		transactionSamplingFrequency int
+		params                       []fnParams
+	}
+
+	allCasesRetFalse := []fnParams{
+		{
+			timeNowSecs: 1,
+			force:       false,
+			isInternal:  false,
+			expectedRet: false,
+		},
+		{
+			timeNowSecs: 2,
+			force:       true,
+			isInternal:  false,
+			expectedRet: false,
+		},
+		{
+			timeNowSecs: 3,
+			force:       false,
+			isInternal:  true,
+			expectedRet: false,
+		},
+		{
+			timeNowSecs: 4,
+			force:       true,
+			isInternal:  true,
+			expectedRet: false,
+		},
+	}
+
+	testCases := []testCase{
+		{
+			name:      "txn-mode-off",
+			isTxnMode: false,
+			params:    allCasesRetFalse,
+		},
+		{
+			name:              "telemetry-disabled",
+			telemetryDisabled: true,
+			isTxnMode:         true,
+			params:            allCasesRetFalse,
+		},
+		{
+			// Transaction mode on, transaction sampling frequency 0.
+			name:                         "txn-mode-sampling-0",
+			isTxnMode:                    true,
+			isInternalStatementsEnabled:  true,
+			transactionSamplingFrequency: 0,
+			params: []fnParams{
+				{
+					timeNowSecs: 1,
+					force:       false,
+					isInternal:  false,
+					expectedRet: false,
+				},
+				{
+					timeNowSecs: 2,
+					force:       true,
+					isInternal:  false,
+					expectedRet: true,
+				},
+				{
+					timeNowSecs: 3,
+					force:       false,
+					isInternal:  true,
+					expectedRet: false,
+				},
+				{
+					timeNowSecs: 4,
+					force:       true,
+					isInternal:  true,
+					expectedRet: true, // Tracing is on.
+				},
+			},
+		},
+		{
+			name: "txn-mode-on-internal-queries-off",
+			// Transaction mode on, internal queries off.
+			isTxnMode:                    true,
+			transactionSamplingFrequency: 1,
+			params: []fnParams{
+				{
+					timeNowSecs: 1,
+					force:       false,
+					isInternal:  false,
+					expectedRet: true,
+				},
+				{
+					timeNowSecs: 1.5, // Not enough time elapsed.
+					force:       false,
+					isInternal:  false,
+					expectedRet: false,
+				},
+				{
+					timeNowSecs: 2, // Enough time elapsed.
+					force:       false,
+					isInternal:  false,
+					expectedRet: true,
+				},
+				{
+					timeNowSecs: 2.5,
+					force:       true,
+					isInternal:  false,
+					expectedRet: true, // Not enough time elapsed but tracing is on.
+				},
+				{
+					timeNowSecs: 4,
+					force:       false,
+					isInternal:  true,
+					expectedRet: false, // Internal queries is not on.
+				},
+				{
+					timeNowSecs: 4,
+					force:       true,
+					isInternal:  true,
+					expectedRet: false, // Internal queries is not on.
+				},
+			},
+		},
+		{
+			// Transaction mode on, internal queries setting on.
+			name:                         "txn-mode-on-internal-queries-on",
+			isTxnMode:                    true,
+			isInternalStatementsEnabled:  true,
+			transactionSamplingFrequency: 1,
+			params: []fnParams{
+				{
+					timeNowSecs: 1,
+					force:       false,
+					isInternal:  true,
+					expectedRet: true,
+				},
+				{
+					timeNowSecs: 1.5, // Not enough time elapsed.
+					force:       false,
+					isInternal:  false,
+					expectedRet: false,
+				},
+				{
+					timeNowSecs: 2, // Enough time elapsed.
+					force:       false,
+					isInternal:  true,
+					expectedRet: true,
+				},
+				{
+					timeNowSecs: 2.5,
+					force:       true,
+					isInternal:  true,
+					expectedRet: true, // Not enough time elapsed but tracing is on.
+				},
+				{
+					timeNowSecs: 4,
+					force:       false,
+					isInternal:  true,
+					expectedRet: true,
+				},
+				{
+					timeNowSecs: 5,
+					force:       false,
+					isInternal:  false, // Non-internal queries should still be logged as normal.
+					expectedRet: true,
+				},
+			},
+		},
+	}
+
+	cs := cluster.MakeTestingClusterSettings()
 	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	testingKnobs := NewTelemetryLoggingTestingKnobs(st.TimeNow, nil, nil)
+	telemetryLoggingMetrics := newTelemetryLoggingMetrics(testingKnobs, cs)
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			EventLog: &EventLogTestingKnobs{
-				// The sampling checks below need to have a deterministic
-				// number of statements run by internal executor.
-				SyncWrites: true,
-			},
-			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
-				getTimeNow:       st.TimeNow,
-				getTracingStatus: sts.TracingStatus,
-			},
-		},
-	})
+	ctx := context.Background()
+	// This value should be ignored.
+	TelemetryMaxStatementEventFrequency.Override(ctx, &cs.SV, 1000000)
 
-	defer s.Stopper().Stop(context.Background())
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
 
-	db := sqlutils.MakeSQLRunner(sqlDB)
+			telemetrySamplingMode.Override(ctx, &cs.SV, telemetryModeStatement)
+			if tc.isTxnMode {
+				telemetrySamplingMode.Override(ctx, &cs.SV, telemetryModeTransaction)
+			}
+			telemetryTransactionSamplingFrequency.Override(ctx, &cs.SV, int64(tc.transactionSamplingFrequency))
+			telemetryInternalQueriesEnabled.Override(ctx, &cs.SV, tc.isInternalStatementsEnabled)
+			telemetryLoggingEnabled.Override(ctx, &cs.SV, !tc.telemetryDisabled)
 
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer cleanupGoDB()
-	sqlDB2, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer sqlDB2.Close()
-	db2 := sqlutils.MakeSQLRunner(sqlDB2)
+			telemetryLoggingMetrics.resetLastEmittedTime()
 
-	st.SetTime(timeutil.FromUnixMicros(0))
-	db.Exec(t, `SET application_name = 'telemetry-logging-test-txns-cleared'`)
+			for _, p := range tc.params {
+				fnParamsStr := fmt.Sprintf("timeNow:%f, force:%t isInternal:%t",
+					p.timeNowSecs, p.force, p.isInternal)
+				t.Run(fnParamsStr, func(t *testing.T) {
+					prevTime := telemetryLoggingMetrics.getLastEmittedTime()
+					ts := timeutil.FromUnixMicros(int64(p.timeNowSecs * 1e6))
+					st.SetTime(ts)
 
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 10;`)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";`)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
+					shouldEmit := telemetryLoggingMetrics.shouldEmitTransactionLog(p.force, p.isInternal)
+					require.Equal(t, p.expectedRet, shouldEmit)
 
-	telemetryLogging := s.SQLServer().(*Server).TelemetryLoggingMetrics
+					if shouldEmit {
+						require.Equal(t, ts, telemetryLoggingMetrics.getLastEmittedTime())
+					} else {
+						require.Equal(t, prevTime, telemetryLoggingMetrics.getLastEmittedTime())
+					}
 
-	require.Zero(t, telemetryLogging.getTrackedTxnsCount())
-	stubTime := timeutil.Now()
-	st.SetTime(stubTime)
-	db.Exec(t, "BEGIN; SELECT 1;")
-	require.Equal(t, 1, telemetryLogging.getTrackedTxnsCount())
-
-	// Ensure that the tracked txn cache is cleared.
-	db2.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "statement";`)
-
-	testutils.SucceedsSoon(t, func() error {
-		if telemetryLogging.getTrackedTxnsCount() != 0 {
-			return errors.Newf("expected no tracked txns")
-		}
-		return nil
-	})
-
-	db.Exec(t, "COMMIT;")
-}
-
-func TestTelemetryLoggingRespectsTxnLimit(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	sc := log.ScopeWithoutShowLogs(t)
-	defer sc.Close(t)
-
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
-	defer cleanup()
-
-	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
-
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			EventLog: &EventLogTestingKnobs{
-				// The sampling checks below need to have a deterministic
-				// number of statements run by internal executor.
-				SyncWrites: true,
-			},
-			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
-				getTimeNow:       st.TimeNow,
-				getTracingStatus: sts.TracingStatus,
-			},
-		},
-	})
-
-	defer s.Stopper().Stop(context.Background())
-
-	// Start 2 txns. Start the second txn with enough elapsed time that would normally allow
-	// txn tracking for telemetry, however since we set the limit to 1 tracked txn, the
-	// statements in the 2nd txn will only be logged if it is non DML or tracing is on.
-
-	queries := []struct {
-		testQuery
-		txnNum int
-	}{
-		{
-			testQuery: testQuery{
-				query:   "BEGIN;",
-				logTime: 1,
-			},
-			txnNum: 1,
-		},
-		{
-			testQuery: testQuery{
-				query:   "BEGIN;",
-				logTime: 2,
-			},
-			txnNum: 2,
-		},
-		{
-			testQuery: testQuery{
-				query:   "SELECT 1;", // Logged.
-				logTime: 2,
-			},
-			txnNum: 1,
-		},
-		{
-			testQuery: testQuery{
-				query:   "SELECT 2;", // Skipped.
-				logTime: 2,
-			},
-			txnNum: 2,
-		},
-		{
-			testQuery: testQuery{
-				query:   "SELECT 1, 1;", // Logged.
-				logTime: 2,
-			},
-			txnNum: 1,
-		},
-		{
-			testQuery: testQuery{
-				query:   "SELECT 2, 2;", // Skipped.
-				logTime: 2,
-			},
-			txnNum: 2,
-		},
-		{
-			testQuery: testQuery{
-				query:   "SELECT 2, 2, 2;", // Not logged, even though enough time has elapsed.
-				logTime: 2.1,
-			},
-			txnNum: 2,
-		},
-		{
-			testQuery: testQuery{
-				query:          "SELECT 2, 2, 2, 2;", // Logged. Tracing is on.
-				logTime:        2.1,
-				tracingEnabled: true,
-			},
-			txnNum: 2,
-		},
-		{
-			testQuery: testQuery{
-				query:   "SELECT 1, 1, 1;", // Logged.
-				logTime: 2.1,
-			},
-			txnNum: 1,
-		},
-		{
-			testQuery: testQuery{
-				query:   "COMMIT;",
-				logTime: 3,
-			},
-			txnNum: 1,
-		},
-		{
-			testQuery: testQuery{
-				query:   "SELECT 2, 2, 2;", // Not logged, even though enough time has elapsed it is not the first stmt.
-				logTime: 3.5,
-			},
-			txnNum: 2,
-		},
-		{
-			testQuery: testQuery{
-				query:   "COMMIT;",
-				logTime: 3,
-			},
-			txnNum: 2,
-		},
-	}
-
-	expectedLogs := []expectedLog{
-		{
-			logMsg:            `SELECT ‹1›`,
-			skippedQueryCount: 2, // Skipped both BEGIN queries.
-		},
-		{
-			logMsg:            `SELECT ‹1›, ‹1›`,
-			skippedQueryCount: 1,
-		},
-		{
-			logMsg:            `SELECT ‹2›, ‹2›, ‹2›, ‹2›`,
-			skippedQueryCount: 2,
-		},
-		{
-			logMsg:            `SELECT ‹1›, ‹1›, ‹1›`,
-			skippedQueryCount: 0,
-		},
-	}
-
-	db := sqlutils.MakeSQLRunner(sqlDB)
-
-	pgURL, cleanupGoDB := sqlutils.PGUrl(
-		t, s.AdvSQLAddr(), "CreateConnections" /* prefix */, url.User(username.RootUser))
-	defer cleanupGoDB()
-	sqlDB2, err := gosql.Open("postgres", pgURL.String())
-	require.NoError(t, err)
-	defer sqlDB2.Close()
-	db2 := sqlutils.MakeSQLRunner(sqlDB2)
-
-	st.SetTime(timeutil.FromUnixMicros(0))
-	db.Exec(t, `SET application_name = 'telemetry-logging-test-txn-limit'`)
-
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.txn_mode.tracking_limit = 1;`)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.max_event_frequency = 10;`)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction";`)
-	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
-
-	for _, query := range queries {
-		stubTime := timeutil.FromUnixMicros(int64(query.logTime * 1e6))
-		st.SetTime(stubTime)
-		sts.SetTracingStatus(query.tracingEnabled)
-		if query.txnNum == 1 {
-			db.Exec(t, query.query)
-		} else {
-			db2.Exec(t, query.query)
-		}
-	}
-
-	log.FlushFiles()
-
-	entries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"sampled_query"`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(entries) == 0 {
-		t.Fatal(errors.Newf("no entries found"))
-	}
-
-	for _, e := range entries {
-		if strings.Contains(e.Message, `"ExecMode":"`+executorTypeInternal.logLabel()) {
-			t.Errorf("unexpected telemetry event for internal statement:\n%s", e.Message)
-		}
-	}
-
-	expectedLogCount := len(expectedLogs)
-	if expectedLogCount > len(entries) {
-		t.Fatalf("expected at least %d log entries, got: %d", expectedLogCount, len(entries))
-	}
-
-	// FetchEntriesFromFiles delivers entries in reverse order.
-	entryIdx := len(entries) - 1
-
-	// Skip the cluster setting queries.
-	for strings.Contains(entries[entryIdx].Message, "SET CLUSTER SETTING") {
-		entryIdx--
-	}
-
-	for i := 0; i < expectedLogCount; i++ {
-		e := entries[entryIdx-i]
-		if !strings.Contains(e.Message, expectedLogs[i].logMsg+"\"") {
-			t.Errorf("expected log message to contain:\n%s\nbut received:\n%s\n",
-				expectedLogs[i].logMsg, e.Message)
-		}
-
-		var sq eventpb.SampledQuery
-		err = json.Unmarshal([]byte(e.Message), &sq)
-		require.NoError(t, err)
-
-		expectedSkipped := expectedLogs[i].skippedQueryCount
-		if expectedSkipped == 0 {
-			require.Zerof(t, sq.SkippedQueries, "expected no skipped queries, found:\n%s", e.Message)
-		} else {
-			require.Equalf(t, uint64(expectedSkipped), sq.SkippedQueries, "expected skipped queries, found:\n%s", e.Message)
-		}
+				})
+			}
+		})
 	}
 }
