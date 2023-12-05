@@ -439,7 +439,6 @@ go_test(
         "grpc_gateway_test.go",
         "helpers_test.go",
         "index_usage_stats_test.go",
-        "init_handshake_test.go",
         "intent_test.go",
         "job_profiler_test.go",
         "load_endpoint_test.go",
