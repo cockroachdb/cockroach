@@ -820,7 +820,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			stmtFingerprintID,
 			&topLevelQueryStats{},
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	switch s := ast.(type) {
@@ -1760,7 +1760,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 						ppInfo.dispatchToExecutionEngine.stmtFingerprintID,
 						ppInfo.dispatchToExecutionEngine.queryStats,
 						ex.statsCollector,
-					)
+						ex.extraTxnState.shouldLogToTelemetry)
 				},
 			})
 		} else {
@@ -1787,7 +1787,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 				stmtFingerprintID,
 				&stats,
 				ex.statsCollector,
-			)
+				ex.extraTxnState.shouldLogToTelemetry)
 		}
 	}()
 
@@ -2468,7 +2468,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			stmtFingerprintID,
 			&topLevelQueryStats{},
 			ex.statsCollector,
-		)
+			ex.extraTxnState.shouldLogToTelemetry)
 	}()
 
 	ast := parserStmt.AST
@@ -3097,11 +3097,9 @@ func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent, txnErr err
 			}
 			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
 		}
+
 		// If we have a commitTimestamp, we should use it.
 		ex.previousTransactionCommitTimestamp.Forward(ev.commitTimestamp)
-		if telemetryLoggingEnabled.Get(&ex.server.cfg.Settings.SV) {
-			ex.server.TelemetryLoggingMetrics.onTxnFinish(ev.txnID.String())
-		}
 	}
 }
 
@@ -3133,6 +3131,11 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 		TxnID:            txnID,
 		TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 	})
+
+	isTracing := ex.planner.ExtendedEvalContext().Tracing.Enabled()
+	if ex.server.TelemetryLoggingMetrics.shouldTrackTransaction(isTracing, ex.executorType == executorTypeInternal) {
+		ex.extraTxnState.shouldLogToTelemetry = true
+	}
 
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
@@ -3258,6 +3261,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		transactionFingerprintID,
 		recordedTxnStats,
 	)
+
 }
 
 // Records a SERIALIZATION_CONFLICT contention event to the contention registry event
