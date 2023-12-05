@@ -35,7 +35,7 @@ var UseStrictMemFS = StickyVFSOption(func(cfg *stickyConfig) {
 type StickyVFSRegistry interface {
 	// Get returns the named in-memory FS, constructing a new one if this is the
 	// first time a FS with the provided ID has been requested.
-	Get(stickyVFSID string) vfs.FS
+	Get(stickyVFSID string) *vfs.MemFS
 }
 
 // stickyVFSRegistryImpl is the bookkeeper for all active sticky filesystems,
@@ -62,7 +62,7 @@ func NewStickyVFSRegistry(opts ...StickyVFSOption) StickyVFSRegistry {
 }
 
 // Get implements the StickyVFSRegistry interface.
-func (registry *stickyVFSRegistryImpl) Get(stickyVFSID string) vfs.FS {
+func (registry *stickyVFSRegistryImpl) Get(stickyVFSID string) *vfs.MemFS {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
