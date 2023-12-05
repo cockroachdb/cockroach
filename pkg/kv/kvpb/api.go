@@ -2152,3 +2152,6 @@ type RangeFeedEventProducer interface {
 	// range needs to be restarted.
 	Recv() (*RangeFeedEvent, error)
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (PushTxnType) SafeValue() {}

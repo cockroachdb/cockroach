@@ -87,6 +87,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"LeaseAppliedIndex": {},
 						"RaftIndex":         {},
 						"RaftTerm":          {},
+						"PushTxnType":       {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb": {
 						"SeqNum": {},

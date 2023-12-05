@@ -101,11 +101,11 @@ func TestAmbiguousResultError(t *testing.T) {
 
 // Unit test the requests that implemented SafeFormatterRequest interface.
 func TestRequestSafeFormat(t *testing.T) {
-	txn := roachpb.MakeTransaction("txn1", []byte("abc"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 6, 0)
+	txn := roachpb.MakeTransaction("txn1", []byte("abc"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 6, 0, false)
 	fixedUuid, _ := uuid.FromString("00fbff57-c1ee-48ce-966c-da568d50e425")
 	txn.ID = fixedUuid
-	pusherTxn := roachpb.MakeTransaction("txn2", []byte("123"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 1, 0)
-	pusheeTxn := roachpb.MakeTransaction("txn3", []byte("1234"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 1, 0)
+	pusherTxn := roachpb.MakeTransaction("txn2", []byte("123"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 1, 0, false)
+	pusheeTxn := roachpb.MakeTransaction("txn3", []byte("1234"), 0, 0, hlc.Timestamp{WallTime: 10}, 0, 1, 0, false)
 	fixedUuid2, _ := uuid.FromString("00fbff58-c1ee-48ce-966c-da568d50e425")
 	fixedUuid3, _ := uuid.FromString("00fbff59-c1ee-48ce-966c-da568d50e425")
 	pusherTxn.ID = fixedUuid2
@@ -180,8 +180,8 @@ func TestRequestSafeFormat(t *testing.T) {
 				PusherTxn: pusherTxn,
 				PusheeTxn: pusheeTxn.TxnMeta,
 			},
-			redactable: "PushTxn(‹PUSH_TIMESTAMP›,00fbff58->00fbff59)",
-			redacted:   "PushTxn(‹×›,00fbff58->00fbff59)",
+			redactable: "PushTxn(PUSH_TIMESTAMP,00fbff58->00fbff59)",
+			redacted:   "PushTxn(PUSH_TIMESTAMP,00fbff58->00fbff59)",
 		},
 	}
 	for _, c := range testCases {
