@@ -13,7 +13,7 @@ import { AdminUIState } from "src/redux/state";
 import { cockroach } from "src/js/protos";
 import moment from "moment-timezone";
 import { CoordinatedUniversalTime, util } from "@cockroachlabs/cluster-ui";
-import { indexUnusedDuration } from "src/util/constants";
+import { indexUnusedDuration, exportInsights } from "src/util/constants";
 
 export const selectClusterSettings = createSelector(
   (state: AdminUIState) => state.cachedData.settings?.data,
@@ -117,5 +117,22 @@ export const selectDropUnusedIndexDuration = createSelector(
       settings["sql.index_recommendation.drop_unused_duration"]?.value ||
       indexUnusedDuration
     );
+  },
+);
+
+export const selectCsExportInsights = createSelector(
+  selectClusterSettings,
+  (settings): boolean => {
+    if (!settings) {
+      return exportInsights;
+    }
+    if (settings["sql.insights.export.enabled"]) {
+      if (settings["sql.insights.export.enabled"]?.value === "false") {
+        return false;
+      }
+      return true;
+    } else {
+      return exportInsights;
+    }
   },
 );

@@ -37,6 +37,7 @@ import { bindActionCreators } from "redux";
 import { LocalSetting } from "src/redux/localsettings";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
+import { selectCsExportInsights } from "src/redux/clusterSettings/clusterSettings.selectors";
 
 export const insightStatementColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -79,6 +80,7 @@ const statementMapStateToProps = (
   timeScale: selectTimeScale(state),
   isLoading: selectStmtInsightsLoading(state),
   maxSizeApiReached: selectStmtInsightsMaxApiReached(state),
+  csExportInsights: selectCsExportInsights(state),
 });
 
 const TransactionDispatchProps = {
