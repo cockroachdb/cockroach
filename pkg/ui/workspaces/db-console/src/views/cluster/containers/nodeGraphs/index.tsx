@@ -413,7 +413,7 @@ export class NodeGraphs extends React.Component<
           {isSystemTenant(currentTenant) && tenantOptions.length > 1 && (
             <PageConfigItem>
               <Dropdown
-                title="Tenant"
+                title="Virtual Cluster"
                 options={tenantOptions}
                 selected={selectedTenant}
                 onChange={selection => this.setClusterPath("tenant", selection)}
