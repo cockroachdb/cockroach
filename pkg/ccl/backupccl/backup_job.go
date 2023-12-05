@@ -103,6 +103,10 @@ func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Spa
 	return cov.Slice()
 }
 
+func fileFromIntroducedSpan(f *backuppb.BackupManifest_File) bool {
+	return f.StartTime.IsEmpty() && !f.EndTime.IsEmpty()
+}
+
 // clusterNodeCount returns the approximate number of nodes in the cluster.
 func clusterNodeCount(gw gossip.OptionalGossip) (int, error) {
 	g, err := gw.OptionalErr(47970)
@@ -176,7 +180,7 @@ func backup(
 		}
 
 		f := it.Value()
-		if f.StartTime.IsEmpty() && !f.EndTime.IsEmpty() {
+		if fileFromIntroducedSpan(f) {
 			completedIntroducedSpans = append(completedIntroducedSpans, f.Span)
 		} else {
 			completedSpans = append(completedSpans, f.Span)
