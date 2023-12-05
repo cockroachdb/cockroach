@@ -712,8 +712,8 @@ func registerTPCC(r registry.Registry) {
 						Chaos: func() Chaos {
 							return Chaos{
 								Timer: Periodic{
-									Period:   300 * time.Second,
-									DownTime: 300 * time.Second,
+									Period:   240 * time.Second,
+									DownTime: 240 * time.Second,
 								},
 								Target: func() option.NodeListOption {
 									ret := tc.chaosTarget(iter)

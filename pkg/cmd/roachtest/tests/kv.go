@@ -703,7 +703,7 @@ func registerKVSplits(r registry.Registry) {
 
 				settings := install.MakeClusterSettings()
 				settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=1m", "COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce))
-				startOpts := option.DefaultStartOpts()
+				startOpts := option.DefaultStartOptsNoBackups()
 				startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, "--cache=256MiB")
 				c.Start(ctx, t.L(), startOpts, settings, c.Range(1, nodes))
 
