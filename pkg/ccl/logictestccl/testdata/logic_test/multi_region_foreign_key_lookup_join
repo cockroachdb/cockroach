@@ -52,7 +52,7 @@ vectorized: true
 ·
 • lookup join
 │ table: parent@parent_pkey
-│ equality: (cr, c_p_id) = (cr,p_id)
+│ equality: (cr, c_p_id) = (cr, p_id)
 │ equality cols are key
 │
 └── • scan
@@ -130,7 +130,7 @@ vectorized: true
 ·
 • lookup join
 │ table: parent_rbr@parent_rbr_pkey
-│ equality: (crdb_region, c_p_id) = (crdb_region,p_id)
+│ equality: (crdb_region, c_p_id) = (crdb_region, p_id)
 │ equality cols are key
 │
 └── • scan
@@ -158,7 +158,7 @@ vectorized: true
 ·
 • lookup join
 │ table: parent_rbr@parent_rbr_pkey
-│ equality: (crdb_region, c_p_id) = (crdb_region,p_id)
+│ equality: (crdb_region, c_p_id) = (crdb_region, p_id)
 │ equality cols are key
 │
 └── • filter
@@ -188,7 +188,7 @@ vectorized: true
 ·
 • lookup join
 │ table: parent_rbr@parent_rbr_pkey
-│ equality: (crdb_region, c_p_id) = (crdb_region,p_id)
+│ equality: (crdb_region, c_p_id) = (crdb_region, p_id)
 │ equality cols are key
 │ pred: column14 = p_int
 │
@@ -223,7 +223,7 @@ vectorized: true
 ·
 • lookup join
 │ table: parent_rbr@parent_rbr_pkey
-│ equality: (crdb_region, c_p_id) = (crdb_region,p_id)
+│ equality: (crdb_region, c_p_id) = (crdb_region, p_id)
 │ equality cols are key
 │
 └── • scan

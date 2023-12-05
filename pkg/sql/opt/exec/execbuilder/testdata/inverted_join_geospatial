@@ -27,7 +27,7 @@ vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
-│ equality: (rk1, rk2) = (rk1,rk2)
+│ equality: (rk1, rk2) = (rk1, rk2)
 │ equality cols are key
 │ pred: st_intersects(geom1, geom)
 │
@@ -50,7 +50,7 @@ vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
-│ equality: (rk1, rk2) = (rk1,rk2)
+│ equality: (rk1, rk2) = (rk1, rk2)
 │ equality cols are key
 │ pred: st_intersects(geom1, geom)
 │
@@ -71,7 +71,7 @@ vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
-│ equality: (rk1, rk2) = (rk1,rk2)
+│ equality: (rk1, rk2) = (rk1, rk2)
 │ equality cols are key
 │ pred: st_dwithin(geom1, geom, 5.0)
 │
@@ -110,7 +110,7 @@ vectorized: true
             │ ordering: +lk
             │ estimated row count: 326,700 (missing stats)
             │ table: rtable@rtable_pkey
-            │ equality: (rk1, rk2) = (rk1,rk2)
+            │ equality: (rk1, rk2) = (rk1, rk2)
             │ equality cols are key
             │ pred: st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)
             │
@@ -159,7 +159,7 @@ vectorized: true
             │ ordering: +lk
             │ estimated row count: 9,801 (missing stats)
             │ table: rtable@rtable_pkey
-            │ equality: (rk1, rk2) = (rk1,rk2)
+            │ equality: (rk1, rk2) = (rk1, rk2)
             │ equality cols are key
             │ pred: st_intersects(geom1, geom) AND st_dwithin(geom, geom1, 2.0)
             │
@@ -200,7 +200,7 @@ vectorized: true
         │ columns: (lk, geom1, geom2, rk1, rk2, rk1, geom)
         │ estimated row count: 3,267 (missing stats)
         │ table: rtable@rtable_pkey
-        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: (st_intersects(geom1, geom) AND st_covers(geom2, geom)) AND (st_dfullywithin(geom, geom1, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom))
         │
@@ -238,7 +238,7 @@ vectorized: true
         │ columns: (lk, geom2, rk1, rk2, cont)
         │ estimated row count: 10 (missing stats)
         │ table: rtable@rtable_pkey
-        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_intersects(geom2, geom)
         │
@@ -275,7 +275,7 @@ vectorized: true
         │ columns: (lk, geom1, rk1, rk2, cont, rk1, geom)
         │ estimated row count: 10,000 (missing stats)
         │ table: rtable@rtable_pkey
-        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_intersects(geom1, geom)
         │
@@ -332,7 +332,7 @@ vectorized: true
 │                   │ columns: (lk, geom1, rk1, rk2, cont, geom)
 │                   │ estimated row count: 3,333 (missing stats)
 │                   │ table: rtable@rtable_pkey
-│                   │ equality: (rk1, rk2) = (rk1,rk2)
+│                   │ equality: (rk1, rk2) = (rk1, rk2)
 │                   │ equality cols are key
 │                   │ pred: st_intersects(geom1, geom)
 │                   │
@@ -404,7 +404,7 @@ vectorized: true
         │ columns: (lk, geom2, rk1, rk2, cont)
         │ estimated row count: 990 (missing stats)
         │ table: rtable@rtable_pkey
-        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_intersects(geom2, geom)
         │
@@ -443,7 +443,7 @@ vectorized: true
         │ columns: (lk, geom1, rk1, rk2, cont)
         │ estimated row count: 997 (missing stats)
         │ table: rtable@rtable_pkey
-        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_covers(geom1, geom)
         │
@@ -484,7 +484,7 @@ vectorized: true
         │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
         │ estimated row count: 9,801 (missing stats)
         │ table: rtable@rtable_pkey
-        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: geom1 ~ geom
         │
@@ -520,7 +520,7 @@ vectorized: true
         │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
         │ estimated row count: 9,801 (missing stats)
         │ table: rtable@rtable_pkey
-        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: geom ~ geom1
         │
@@ -556,7 +556,7 @@ vectorized: true
         │ columns: (lk, geom1, rk1, rk2, rk1, geom, rk2)
         │ estimated row count: 9,801 (missing stats)
         │ table: rtable@rtable_pkey
-        │ equality: (rk1, rk2) = (rk1,rk2)
+        │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: geom && geom1
         │

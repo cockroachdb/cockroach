@@ -1177,7 +1177,7 @@ AgFWBgCPAQIAABNWCgsGBwwHHA0UAXoCBgEFUCJ6AQ==
 │
 └── • lookup join (left outer)
     │ table: ?@?
-    │ equality: (_, _, _) = (?,?,?)
+    │ equality: (_, _, _) = (?, ?, ?)
     │ equality cols are key
     │
     └── • distinct

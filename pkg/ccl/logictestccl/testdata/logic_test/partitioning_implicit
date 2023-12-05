@@ -850,7 +850,7 @@ vectorized: true
             │
             └── • lookup join
                 │ table: t@t_pkey
-                │ equality: (partition_by, pk) = (partition_by,pk)
+                │ equality: (partition_by, pk) = (partition_by, pk)
                 │ equality cols are key
                 │
                 └── • hash join

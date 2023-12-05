@@ -746,7 +746,7 @@ func (e *emitter) emitNodeAttributes(n *Node) error {
 			ob.Attrf(
 				"equality", "(%s) = (%s)",
 				printColumnList(inputCols, a.EqCols),
-				strings.Join(rightEqCols, ","),
+				strings.Join(rightEqCols, ", "),
 			)
 		}
 		if a.EqColsAreKey {
