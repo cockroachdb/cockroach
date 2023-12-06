@@ -3401,6 +3401,7 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name alter_column_on_update
 	| 'ALTER' opt_column column_name alter_column_visible
 	| 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'
+	| 'ALTER' opt_column column_name alter_identity_column_option
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
@@ -4306,6 +4307,10 @@ alter_column_on_update ::=
 alter_column_visible ::=
 	'SET' 'VISIBLE'
 	| 'SET' 'NOT' 'VISIBLE'
+
+alter_identity_column_option ::=
+	'SET' 'GENERATED_ALWAYS' 'ALWAYS'
+	| 'SET' 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT'
 
 opt_set_data ::=
 	'SET' 'DATA'
