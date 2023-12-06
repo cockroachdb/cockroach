@@ -54,21 +54,21 @@ func registerImportNodeShutdown(r registry.Registry) {
 			importStmt := fmt.Sprintf(`
 				IMPORT INTO %[1]s
 				CSV DATA (
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.1?AUTH=implicit',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.2?AUTH=implicit',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.3?AUTH=implicit',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.4?AUTH=implicit',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.5?AUTH=implicit',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.6?AUTH=implicit',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.7?AUTH=implicit',
-				'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.8?AUTH=implicit'
+				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.1?AUTH=implicit',
+				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.2?AUTH=implicit',
+				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.3?AUTH=implicit',
+				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.4?AUTH=implicit',
+				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.5?AUTH=implicit',
+				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.6?AUTH=implicit',
+				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.7?AUTH=implicit',
+				'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.8?AUTH=implicit'
 				) WITH  delimiter='|', detached
 			`, tableName)
 			gatewayDB := c.Conn(ctx, t.L(), gatewayNode)
 			defer gatewayDB.Close()
 
 			createStmt, err := readCreateTableFromFixture(
-				fmt.Sprintf("gs://cockroach-fixtures/tpch-csv/schema/%s.sql?AUTH=implicit", tableName), gatewayDB)
+				fmt.Sprintf("gs://cockroach-fixtures-us-east1/tpch-csv/schema/%s.sql?AUTH=implicit", tableName), gatewayDB)
 			if err != nil {
 				return jobID, err
 			}
@@ -94,7 +94,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Cloud() != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
+				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 			gatewayNode := 2
@@ -113,7 +113,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Cloud() != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
+				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 			gatewayNode := 2
@@ -234,7 +234,7 @@ func registerImportTPCH(r registry.Registry) {
 			Leases:            registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				if c.Cloud() != spec.GCE && !c.IsLocal() {
-					t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
+					t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
 				}
 				tick, perfBuf := initBulkJobPerfArtifacts(t.Name(), item.timeout)
 
@@ -289,7 +289,7 @@ func registerImportTPCH(r registry.Registry) {
 					defer t.WorkerStatus()
 
 					createStmt, err := readCreateTableFromFixture(
-						"gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql?AUTH=implicit", conn)
+						"gs://cockroach-fixtures-us-east1/tpch-csv/schema/lineitem.sql?AUTH=implicit", conn)
 					if err != nil {
 						return err
 					}
@@ -306,14 +306,14 @@ func registerImportTPCH(r registry.Registry) {
 					_, err = conn.Exec(`
 						IMPORT INTO csv.lineitem
 						CSV DATA (
-						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.1?AUTH=implicit',
-						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.2?AUTH=implicit',
-						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.3?AUTH=implicit',
-						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.4?AUTH=implicit',
-						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.5?AUTH=implicit',
-						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.6?AUTH=implicit',
-						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.7?AUTH=implicit',
-						'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.8?AUTH=implicit'
+						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.1?AUTH=implicit',
+						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.2?AUTH=implicit',
+						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.3?AUTH=implicit',
+						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.4?AUTH=implicit',
+						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.5?AUTH=implicit',
+						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.6?AUTH=implicit',
+						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.7?AUTH=implicit',
+						'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/lineitem.tbl.8?AUTH=implicit'
 						) WITH  delimiter='|'
 					`)
 					if err != nil {
