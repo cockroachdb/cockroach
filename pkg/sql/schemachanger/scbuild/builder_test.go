@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -291,6 +292,8 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDeadlock(t, "takes too long")
+
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -325,5 +328,4 @@ func TestBuildIsMemoryMonitored(t *testing.T) {
 		_, err = scbuild.Build(ctx, dependencies, scpb.CurrentState{}, stmt.AST, &memAcc)
 		require.ErrorContainsf(t, err, `test-sc-build-mon: memory budget exceeded:`, "got a memory usage of: %d", memAcc.Allocated())
 	})
-
 }
