@@ -25,7 +25,7 @@ import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { selectTimeScale } from "../../store/utils/selectors";
 import { actions as analyticsActions } from "../../store/analytics";
-import { selectCsExportInsights } from "src/store/clusterSettings/clusterSettings.selectors";
+import { selectUseObsService } from "src/store/clusterSettings/clusterSettings.selectors";
 
 const mapStateToProps = (
   state: AppState,
@@ -39,7 +39,7 @@ const mapStateToProps = (
     isTenant: selectIsTenant(state),
     timeScale: selectTimeScale(state),
     hasAdminRole: selectHasAdminRole(state),
-    csExportInsights: selectCsExportInsights(state),
+    useObsService: selectUseObsService(state),
   };
 };
 

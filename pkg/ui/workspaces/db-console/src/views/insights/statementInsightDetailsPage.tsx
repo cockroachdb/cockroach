@@ -20,7 +20,6 @@ import { selectStatementInsightDetails } from "src/views/insights/insightsSelect
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectHasAdminRole } from "src/redux/user";
-import { selectCsExportInsights } from "src/redux/clusterSettings/clusterSettings.selectors";
 
 const mapStateToProps = (
   state: AdminUIState,
@@ -31,7 +30,7 @@ const mapStateToProps = (
     insightError: state.cachedData?.stmtInsights?.lastError,
     timeScale: selectTimeScale(state),
     hasAdminRole: selectHasAdminRole(state),
-    csExportInsights: selectCsExportInsights(state),
+    useObsService: false,
   };
 };
 
