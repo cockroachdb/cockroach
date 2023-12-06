@@ -1907,6 +1907,32 @@ SELECT f();
 NOTICE: i = 104
 NOTICE: i = 103
 
+# When the SQL statement returns zero rows, the target variables are all set
+# to NULL.
+statement ok
+CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
+  DECLARE
+    i INT := 0;
+  BEGIN
+    RAISE NOTICE 'i = %', i;
+    SELECT x INTO i FROM xy WHERE False;
+    RAISE NOTICE 'i = %', i;
+    i := 1;
+    RAISE NOTICE 'i = %', i;
+    INSERT INTO xy (SELECT 1, 2 FROM generate_series(1, 0)) RETURNING x INTO i;
+    RAISE NOTICE 'i = %', i;
+    RETURN 0;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f();
+----
+NOTICE: i = 0
+NOTICE: i = <NULL>
+NOTICE: i = 1
+NOTICE: i = <NULL>
+
 statement error pgcode 0A000 pq: unimplemented: assigning to a variable more than once in the same INTO statement is not supported
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   DECLARE
@@ -2728,6 +2754,68 @@ INSERT INTO t_text VALUES ('False');
 query I
 SELECT f();
 ----
+1
+
+# Regression test for #114826 - PLpgSQL routines should not prematurely exit
+# when a SELECT INTO statement returns no rows.
+subtest no_row_select_into
+
+statement ok
+CREATE TABLE t114826 (a INT);
+
+statement ok
+CREATE FUNCTION f114826() RETURNS INT AS $$
+  DECLARE
+    found INT;
+  BEGIN
+    RAISE NOTICE 'HERE 1';
+    SELECT a INTO found FROM t114826 WHERE a = 3;
+    RAISE NOTICE 'HERE 2';
+    INSERT INTO t114826 (SELECT * FROM t114826) RETURNING a INTO found;
+    RAISE NOTICE 'HERE 3';
+    RETURN 10;
+  END
+$$ LANGUAGE PLpgSQL;
+
+query T noticetrace
+SELECT f114826();
+----
+NOTICE: HERE 1
+NOTICE: HERE 2
+NOTICE: HERE 3
+
+query I
+SELECT f114826();
+----
+10
+
+statement ok
+INSERT INTO t114826 VALUES (1);
+
+query T noticetrace
+SELECT f114826();
+----
+NOTICE: HERE 1
+NOTICE: HERE 2
+NOTICE: HERE 3
+
+query I
+SELECT * FROM t114826;
+----
+1
+1
+
+query I
+SELECT f114826();
+----
+10
+
+query I
+SELECT * FROM t114826;
+----
+1
+1
+1
 1
 
 subtest end
