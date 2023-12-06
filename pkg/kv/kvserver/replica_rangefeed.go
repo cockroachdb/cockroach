@@ -664,7 +664,9 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 
 	// When reading straight from the Raft log, some logical ops will not be
 	// fully populated. Read from the batch to populate all fields.
-	for _, op := range ops.Ops {
+	// If the MVCCValueHeader for an op has the OmitInRangefeeds = true,
+	// return toKeep = false. For all other ops, return toKeep = false.
+	processOpAndKeep := func(op enginepb.MVCCLogicalOp) (toKeep bool, err error) {
 		var key []byte
 		var ts hlc.Timestamp
 		var valPtr *[]byte
@@ -691,10 +693,10 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			*enginepb.MVCCAbortIntentOp,
 			*enginepb.MVCCAbortTxnOp:
 			// Nothing to do.
-			continue
+			return true, nil
 		case *enginepb.MVCCDeleteRangeOp:
 			if vhf == nil {
-				continue
+				return true, nil
 			}
 			valBytes, err := storage.MVCCLookupRangeKeyValue(
 				ctx, batch, t.StartKey, t.EndKey, t.Timestamp)
@@ -707,7 +709,10 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 				panic(err)
 			}
 			vhf(t.StartKey, t.EndKey, t.Timestamp, v.MVCCValueHeader)
-			continue
+			// MVCCDeleteRangeOps are not transactional, so we don't have to
+			// check the value of OmitInRangefeeds because it's set only for
+			// transactional writes.
+			return true, nil
 		default:
 			panic(errors.AssertionFailedf("unknown logical op %T", t))
 		}
@@ -721,7 +726,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		// point if they are not needed by any registration, but as long as we
 		// avoid the value lookup here, doing any more doesn't seem worth it.
 		if !filter.NeedVal(roachpb.Span{Key: key}) {
-			continue
+			return true, nil
 		}
 
 		// Read the value directly from the batch. This is performed in the
@@ -732,17 +737,35 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			r.disconnectRangefeedWithErr(p, kvpb.NewErrorf(
 				"error consuming %T for key %s @ ts %v: %v", op.GetValue(), roachpb.Key(key), ts, err,
 			))
-			return
+			return true, err
 		}
-
+		// If this value has the flag to omit from the rangefeeds, don't add it to
+		// filteredOps and move on to the next op.
+		if vh.OmitInRangefeeds {
+			return false, nil
+		}
 		if vhf != nil {
 			vhf(key, nil, ts, vh)
 		}
 		*valPtr = val.RawBytes
+		return true, nil
+	}
+
+	// A copy of ops.Ops that excludes ops to be omitted from rangefeeds.
+	var filteredOps []enginepb.MVCCLogicalOp
+
+	for _, op := range ops.Ops {
+		toKeep, err := processOpAndKeep(op)
+		if err != nil {
+			return
+		}
+		if toKeep {
+			filteredOps = append(filteredOps, op)
+		}
 	}
 
 	// Pass the ops to the rangefeed processor.
-	if !p.ConsumeLogicalOps(ctx, ops.Ops...) {
+	if !p.ConsumeLogicalOps(ctx, filteredOps...) {
 		// Consumption failed and the rangefeed was stopped.
 		r.unsetRangefeedProcessor(p)
 	}

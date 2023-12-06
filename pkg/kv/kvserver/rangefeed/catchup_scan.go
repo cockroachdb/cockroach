@@ -280,6 +280,13 @@ func (i *CatchUpIterator) CatchUpScan(
 		}
 		unsafeVal := mvccVal.Value.RawBytes
 
+		// If this value has the flag to omit from rangefeeds, move to the next
+		// version for this the key.
+		if mvccVal.OmitInRangefeeds {
+			i.Next()
+			continue
+		}
+
 		// Ignore the version if its timestamp is at or before the registration's
 		// (exclusive) starting timestamp.
 		ts := unsafeKey.Timestamp

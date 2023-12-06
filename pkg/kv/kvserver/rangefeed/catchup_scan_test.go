@@ -64,6 +64,7 @@ func TestCatchupScan(t *testing.T) {
 		ts3 = hlc.Timestamp{WallTime: 3, Logical: 0}
 		ts4 = hlc.Timestamp{WallTime: 4, Logical: 0}
 		ts5 = hlc.Timestamp{WallTime: 4, Logical: 0}
+		ts6 = hlc.Timestamp{WallTime: 5, Logical: 0}
 	)
 
 	makeTxn := func(key roachpb.Key, val roachpb.Value, ts hlc.Timestamp,
@@ -86,6 +87,7 @@ func TestCatchupScan(t *testing.T) {
 	makeKTV := func(key roachpb.Key, ts hlc.Timestamp, value roachpb.Value) storage.MVCCKeyValue {
 		return storage.MVCCKeyValue{Key: storage.MVCCKey{Key: key, Timestamp: ts}, Value: value.RawBytes}
 	}
+
 	// testKey1 has an intent and provisional value that will be skipped. Both
 	// testKey1 and testKey2 have a value that is older than what we need with
 	// the catchup scan, but will be read if a diff is desired.
@@ -93,10 +95,13 @@ func TestCatchupScan(t *testing.T) {
 	kv1_2_2 := makeKTV(testKey1, ts2, testValue2)
 	kv1_3_3 := makeKTV(testKey1, ts3, testValue3)
 	kv1_4_4 := makeKTV(testKey1, ts4, testValue4)
-	txn, val := makeTxn(testKey1, testValue4, ts4)
+	txn1, val1 := makeTxn(testKey1, testValue4, ts4)
 	kv2_1_1 := makeKTV(testKey2, ts1, testValue1)
 	kv2_2_2 := makeKTV(testKey2, ts2, testValue2)
 	kv2_5_3 := makeKTV(testKey2, ts5, testValue3)
+	kv2_6_4 := makeKTV(testKey2, ts6, testValue4)
+	txn2, val2 := makeTxn(testKey2, testValue4, ts6)
+	txn2.OmitInRangefeeds = true
 
 	eng := storage.NewDefaultInMemForTesting(storage.If(smallEngineBlocks, storage.BlockSize(1)))
 	defer eng.Close()
@@ -111,8 +116,20 @@ func TestCatchupScan(t *testing.T) {
 	}
 	// Put with an intent.
 	if _, err := storage.MVCCPut(
-		ctx, eng, kv1_4_4.Key.Key, txn.ReadTimestamp, val, storage.MVCCWriteOptions{Txn: &txn},
+		ctx, eng, kv1_4_4.Key.Key, txn1.ReadTimestamp, val1, storage.MVCCWriteOptions{Txn: &txn1},
 	); err != nil {
+		t.Fatal(err)
+	}
+	// Transactional put with OmitInRangefeeds = true.
+	if _, err := storage.MVCCPut(
+		ctx, eng, kv2_6_4.Key.Key, txn2.ReadTimestamp, val2, storage.MVCCWriteOptions{Txn: &txn2},
+	); err != nil {
+		t.Fatal(err)
+	}
+	// Resolve the intent.
+	intent := roachpb.LockUpdate{Txn: txn2.TxnMeta, Span: roachpb.Span{Key: kv2_6_4.Key.Key}, Status: roachpb.COMMITTED}
+	if ok, _, _, _, err := storage.MVCCResolveWriteIntent(
+		ctx, eng, nil, intent, storage.MVCCResolveWriteIntentOptions{}); err != nil || !ok {
 		t.Fatal(err)
 	}
 	testutils.RunTrueAndFalse(t, "withDiff", func(t *testing.T, withDiff bool) {
