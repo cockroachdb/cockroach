@@ -6,8 +6,8 @@ go_test(
     srcs = ["generated_test.go"],
     data = [
         "//c-deps:libgeos",  # keep
-        "//pkg/cmd/cockroach-short",  # keep
         "//pkg/ccl/logictestccl:testdata",  # keep
+        "//pkg/cmd/cockroach-short",  # keep
         "//pkg/sql/logictest:cockroach_predecessor_version",  # keep
     ],
     exec_properties = {"Pool": "large"},
