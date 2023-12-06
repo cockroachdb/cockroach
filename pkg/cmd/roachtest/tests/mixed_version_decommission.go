@@ -54,8 +54,8 @@ func runDecommissionMixedVersions(
 	u := newVersionUpgradeTest(c,
 		// We upload both binaries to each node, to be able to vary the binary
 		// used when issuing `cockroach node` subcommands.
-		uploadVersionStep(allNodes, predecessorVersion),
-		uploadVersionStep(allNodes, clusterupgrade.CurrentVersion()),
+		uploadCockroachStep(allNodes, predecessorVersion),
+		uploadCockroachStep(allNodes, clusterupgrade.CurrentVersion()),
 
 		startVersion(allNodes, predecessorVersion),
 		waitForUpgradeStep(allNodes),
@@ -149,7 +149,7 @@ func preloadDataStep(target int) versionStep {
 func partialDecommissionStep(target, from int, binaryVersion *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
-		c.Run(ctx, c.Node(from), clusterupgrade.BinaryPathForVersion(t, binaryVersion), "node", "decommission",
+		c.Run(ctx, c.Node(from), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "decommission",
 			"--wait=none", "--insecure", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
@@ -160,7 +160,7 @@ func partialDecommissionStep(target, from int, binaryVersion *clusterupgrade.Ver
 func recommissionAllStep(from int, binaryVersion *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
-		c.Run(ctx, c.Node(from), clusterupgrade.BinaryPathForVersion(t, binaryVersion), "node", "recommission",
+		c.Run(ctx, c.Node(from), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "recommission",
 			"--insecure", c.All().NodeIDsString(), "--port", fmt.Sprintf("{pgport:%d}", from))
 	}
 }
@@ -170,7 +170,7 @@ func recommissionAllStep(from int, binaryVersion *clusterupgrade.Version) versio
 func fullyDecommissionStep(target, from int, binaryVersion *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		c := u.c
-		c.Run(ctx, c.Node(from), clusterupgrade.BinaryPathForVersion(t, binaryVersion), "node", "decommission",
+		c.Run(ctx, c.Node(from), clusterupgrade.CockroachPathForVersion(t, binaryVersion), "node", "decommission",
 			"--wait=all", "--insecure", strconv.Itoa(target), "--port", fmt.Sprintf("{pgport:%d}", from))
 
 		// If we are decommissioning a target node from the same node, the drain
@@ -316,12 +316,11 @@ func checkAllMembership(from int, membership string) versionStep {
 	}
 }
 
-// uploadVersionStep uploads the specified cockroach binary version on the specified
+// uploadCockroachStep uploads the specified cockroach binary version on the specified
 // nodes.
-func uploadVersionStep(nodes option.NodeListOption, version *clusterupgrade.Version) versionStep {
+func uploadCockroachStep(nodes option.NodeListOption, version *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-		// Put the binary.
-		uploadVersion(ctx, t, u.c, nodes, version)
+		uploadCockroach(ctx, t, u.c, nodes, version)
 	}
 }
 
@@ -330,7 +329,7 @@ func uploadVersionStep(nodes option.NodeListOption, version *clusterupgrade.Vers
 func startVersion(nodes option.NodeListOption, version *clusterupgrade.Version) versionStep {
 	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
 		settings := install.MakeClusterSettings(install.BinaryOption(
-			clusterupgrade.BinaryPathForVersion(t, version),
+			clusterupgrade.CockroachPathForVersion(t, version),
 		))
 		startOpts := option.DefaultStartOpts()
 		u.c.Start(ctx, t.L(), startOpts, settings, nodes)

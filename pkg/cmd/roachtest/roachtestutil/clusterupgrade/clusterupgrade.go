@@ -68,6 +68,12 @@ func (v *Version) IsCurrent() bool {
 	return v.Version.Compare(&CurrentVersion().Version) == 0
 }
 
+// AtLeast is a thin wrapper around `(*version.Version).AtLeast`,
+// allowing two `Version` objects to be compared directly.
+func (v *Version) AtLeast(other *Version) bool {
+	return v.Version.AtLeast(&other.Version)
+}
+
 // CurrentVersion returns the version associated with the current
 // build.
 func CurrentVersion() *Version {
@@ -123,43 +129,107 @@ func ClusterVersion(ctx context.Context, db *gosql.DB) (roachpb.Version, error) 
 	return roachpb.ParseVersion(sv)
 }
 
-// UploadVersion uploads the specified crdb version to the given
-// nodes. It returns the path of the uploaded binaries on the nodes,
-// suitable to be used with `roachdprod start --binary=<path>`.
-func UploadVersion(
+// UploadCockroach stages the cockroach binary in the nodes.
+// Convenience function, see `uploadBinaryVersion` for more details.
+func UploadCockroach(
 	ctx context.Context,
 	t test.Test,
 	l *logger.Logger,
 	c cluster.Cluster,
 	nodes option.NodeListOption,
-	newVersion *Version,
+	v *Version,
 ) (string, error) {
-	dstBinary := BinaryPathForVersion(t, newVersion)
-	// Run with standard binary as older versions retrieved through roachprod stage
-	// are not currently available with crdb_test enabled.
-	// TODO(DarrylWong): Compile older versions with crdb_test flag.
-	srcBinary := t.StandardCockroach()
+	return uploadBinaryVersion(ctx, t, l, "cockroach", c, nodes, v)
+}
 
-	overrideBinary, isOverriden := t.VersionsBinaryOverride()[newVersion.String()]
-	if isOverriden {
-		l.Printf("using binary override for version %s: %s", newVersion, overrideBinary)
-		srcBinary = overrideBinary
+// minWorkloadBinaryVersion is the minimum version for which we have
+// `workload` binaries available.
+var minWorkloadBinaryVersion = MustParseVersion("v22.2.0")
+
+// UploadWorkload stages the workload binary in the nodes.
+// Convenience function, see `uploadBinaryVersion` for more details.
+// The boolean return value indicates whether a workload binary was
+// uploaded to the nodes; a `false` value indicates that the version
+// passed is too old and no binary is available.
+func UploadWorkload(
+	ctx context.Context,
+	t test.Test,
+	l *logger.Logger,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	v *Version,
+) (string, bool, error) {
+	if !v.AtLeast(minWorkloadBinaryVersion) {
+		return "", false, nil
 	}
 
-	if newVersion.IsCurrent() || isOverriden {
-		if err := c.PutE(ctx, l, srcBinary, dstBinary, nodes); err != nil {
+	path, err := uploadBinaryVersion(ctx, t, l, "workload", c, nodes, v)
+	return path, err == nil, err
+}
+
+// uploadBinaryVersion uploads the specified binary associated with
+// the given version to the given nodes. It returns the path of the
+// uploaded binaries on the nodes.
+func uploadBinaryVersion(
+	ctx context.Context,
+	t test.Test,
+	l *logger.Logger,
+	binary string,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	v *Version,
+) (string, error) {
+	dstBinary := BinaryPathForVersion(t, v, binary)
+	var defaultBinary string
+	var isOverridden bool
+	switch binary {
+	case "cockroach":
+		defaultBinary, isOverridden = t.VersionsBinaryOverride()[v.String()]
+		if isOverridden {
+			l.Printf("using cockroach binary override for version %s: %s", v, defaultBinary)
+		} else {
+			// Run with standard binary as older versions retrieved through roachprod stage
+			// are not currently available with crdb_test enabled.
+			// TODO(DarrylWong): Compile older versions with crdb_test flag.
+			defaultBinary = t.StandardCockroach()
+		}
+	case "workload":
+		defaultBinary = t.DeprecatedWorkload()
+	default:
+		return "", fmt.Errorf("unknown binary name: %s", binary)
+	}
+
+	if v.IsCurrent() || isOverridden {
+		if err := c.PutE(ctx, l, defaultBinary, dstBinary, nodes); err != nil {
 			return "", err
 		}
 	} else {
 		dir := filepath.Dir(dstBinary)
+		// Avoid staging the binary if it already exists.
+		if err := c.RunE(ctx, nodes, "test -e", dstBinary); err == nil {
+			return dstBinary, nil
+		}
 
-		// Check if the cockroach binary already exists.
-		cmd := fmt.Sprintf("test -e %s || mkdir -p %s", dstBinary, dir)
-		if err := c.RunE(ctx, nodes, cmd); err != nil {
+		// Ensure binary directory exists.
+		if err := c.RunE(ctx, nodes, "mkdir -p", dir); err != nil {
 			return "", err
 		}
 
-		if err := c.Stage(ctx, l, "release", newVersion.String(), dir, nodes); err != nil {
+		var application, stageVersion string
+		switch binary {
+		case "cockroach":
+			application = "release"
+			stageVersion = v.String()
+		case "workload":
+			application = "workload"
+			// For workload binaries, we do not have a convenient way to get
+			// a build for a specific release. Instead, we stage the binary
+			// for the corresponding release branch, which is good enough in
+			// most cases.
+			stageVersion = fmt.Sprintf("release-%d.%d", v.Major(), v.Minor())
+		}
+
+		if err := c.Stage(ctx, l, application, stageVersion, dir, nodes); err != nil {
 			return "", err
 		}
 	}
@@ -213,18 +283,30 @@ func StartWithSettings(
 	return c.StartE(ctx, l, startOpts, settings, nodes)
 }
 
-// BinaryPathForVersion shows where the binary for the given version
-// is expected to be found on roachprod nodes. The file will only
-// actually exist if there was a previous call to `UploadVersion` with
-// the same version parameter.
-func BinaryPathForVersion(t test.Test, v *Version) string {
+func CockroachPathForVersion(t test.Test, v *Version) string {
+	return BinaryPathForVersion(t, v, "cockroach")
+}
+
+func WorkloadPathForVersion(t test.Test, v *Version) string {
+	return BinaryPathForVersion(t, v, "workload")
+}
+
+// BinaryPathForVersion shows where a certain binary (typically
+// `cockroach`, `workload`) for the given version is expected to be
+// found on roachprod nodes. The file will only actually exist if
+// there was a previous call to `Upload*` with the same version
+// parameter.
+func BinaryPathForVersion(t test.Test, v *Version, binary string) string {
 	if v.IsCurrent() {
-		return "./cockroach"
-	} else if _, ok := t.VersionsBinaryOverride()[v.String()]; ok {
-		// If an override has been specified for `v`, use that binary.
+		if binary == "cockroach" {
+			return test.DefaultCockroachPath
+		}
+		return "./" + binary
+	} else if _, ok := t.VersionsBinaryOverride()[v.String()]; ok && binary == "cockroach" {
+		// If a cockroach override has been specified for `v`, use that binary.
 		return "./cockroach-" + v.String()
 	} else {
-		return filepath.Join(v.String(), "cockroach")
+		return filepath.Join(v.String(), binary)
 	}
 }
 
@@ -264,7 +346,7 @@ func RestartNodesWithNewBinary(
 			return err
 		}
 
-		binary, err := UploadVersion(ctx, t, l, c, c.Node(node), newVersion)
+		binary, err := UploadCockroach(ctx, t, l, c, c.Node(node), newVersion)
 		if err != nil {
 			return err
 		}

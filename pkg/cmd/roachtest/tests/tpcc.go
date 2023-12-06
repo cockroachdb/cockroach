@@ -436,7 +436,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return c.RunE(ctx, workloadNode, cmd)
 	}
 
-	uploadVersion(ctx, t, c, workloadNode, clusterupgrade.CurrentVersion())
+	uploadCockroach(ctx, t, c, workloadNode, clusterupgrade.CurrentVersion())
 	mvt.OnStartup("load TPCC dataset", importTPCC)
 	mvt.OnStartup("load bank dataset", importLargeBank)
 	mvt.InMixedVersion("TPCC workload", runTPCCWorkload)
