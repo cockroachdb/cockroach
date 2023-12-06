@@ -2532,7 +2532,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 // an AOST clause. In these cases the clause is evaluated and applied
 // when the command is executed again.
 func (ex *connExecutor) beginImplicitTxn(
-	ctx context.Context, ast tree.Statement,
+	ctx context.Context, ast tree.Statement, qos sessiondatapb.QoSLevel,
 ) (fsm.Event, fsm.EventPayload) {
 	// NB: Implicit transactions are created with the session's default
 	// historical timestamp even though the statement itself might contain
@@ -2550,7 +2550,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			sqlTs,
 			historicalTs,
 			ex.transitionCtx,
-			ex.QualityOfService(),
+			qos,
 			ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 		)
 }

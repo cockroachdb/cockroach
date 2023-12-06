@@ -14,6 +14,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/cli/clisqlclient",
+        "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/security/securityassets",
@@ -34,6 +35,7 @@ go_test(
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
         "//pkg/util/encoding/csv",
