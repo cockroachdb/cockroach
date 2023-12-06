@@ -409,23 +409,23 @@ func (c *conn) handleSimpleQuery(
 							"COPY together with other statements in a query string is not supported"),
 					})
 			}
-			copyDone := sync.WaitGroup{}
-			copyDone.Add(1)
-			if err := c.stmtBuf.Push(
-				ctx,
-				sql.CopyIn{
-					Conn:         c,
-					ParsedStmt:   stmts[i],
-					Stmt:         cp,
-					CopyDone:     &copyDone,
-					TimeReceived: timeReceived,
-					ParseStart:   startParse,
-					ParseEnd:     endParse,
-				},
-			); err != nil {
+			var wg sync.WaitGroup
+			var once sync.Once
+			wg.Add(1)
+			cmd := sql.CopyIn{
+				Conn:         c,
+				ParsedStmt:   stmts[i],
+				Stmt:         cp,
+				TimeReceived: timeReceived,
+				ParseStart:   startParse,
+				ParseEnd:     endParse,
+			}
+			cmd.CopyDone.WaitGroup = &wg
+			cmd.CopyDone.Once = &once
+			if err := c.stmtBuf.Push(ctx, cmd); err != nil {
 				return err
 			}
-			copyDone.Wait()
+			wg.Wait()
 			return nil
 		}
 		if cp, ok := stmts[i].AST.(*tree.CopyTo); ok {
