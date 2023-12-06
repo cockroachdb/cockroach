@@ -49,7 +49,7 @@ FETCH FORWARD 3 FROM foo;
 ----
 10
 
-# TODO(drewk): postgres returns an ambiguous column error here by default,
+# TODO(#115680): postgres returns an ambiguous column error here by default,
 # although it can be configured to prefer either the variable or the column.
 statement ok
 ABORT;
@@ -280,7 +280,7 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-# TODO(drewk): once CTEs in routines are supported, the error should be:
+# TODO(#92961): once CTEs in routines are supported, the error should be:
 # pgcode 0A000 pq: DECLARE CURSOR must not contain data-modifying statements in WITH
 statement error pgcode 0A000 pq: unimplemented: CTE usage inside a function definition
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
