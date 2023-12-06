@@ -167,7 +167,7 @@ func runDeclSchemaChangeCompatMixedVersions(ctx context.Context, t test.Test, c 
 		},
 	}
 	for _, testInfo := range compatTests {
-		binaryName := uploadVersion(ctx, t, c, c.All(), testInfo.binaryVersion)
+		binaryName := uploadCockroach(ctx, t, c, c.All(), testInfo.binaryVersion)
 		corpusPath, cleanupFn := fetchCorpusToTmpDir(ctx, t, c, testInfo.corpusVersion, testInfo.alternateCorpusVersion)
 		func() {
 			defer cleanupFn()
