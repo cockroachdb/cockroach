@@ -1078,7 +1078,7 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 		retErr = cleanup(ctx, retErr)
 	}()
 	if c.p.ExecCfg().TestingKnobs.BeforeCopyFromInsert != nil {
-		if err := c.p.ExecCfg().TestingKnobs.BeforeCopyFromInsert(); err != nil {
+		if err := c.p.ExecCfg().TestingKnobs.BeforeCopyFromInsert(c.txnOpt.txn); err != nil {
 			return err
 		}
 	}
