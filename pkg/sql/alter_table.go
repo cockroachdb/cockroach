@@ -1058,6 +1058,25 @@ func applyColumnMutation(
 				"column %q is not a stored computed column", col.GetName())
 		}
 		col.ColumnDesc().ComputeExpr = nil
+
+	case *tree.AlterTableSetGeneratedAlways:
+		if !col.IsGeneratedAsIdentity() {
+			return sqlerrors.NewSyntaxErrorf("column %q is not an identity column", col.GetName())
+		}
+		if col.IsGeneratedAlwaysAsIdentity() {
+			return nil
+		}
+		col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+
+	case *tree.AlterTableSetGeneratedDefault:
+		if !col.IsGeneratedAsIdentity() {
+			return sqlerrors.NewSyntaxErrorf("column %q is not an identity column", col.GetName())
+		}
+		if col.IsGeneratedByDefaultAsIdentity() {
+			return nil
+		}
+		col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+
 	}
 	return nil
 }

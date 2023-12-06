@@ -28,6 +28,11 @@ func TestSchemaChangeComparator_alias_types(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/alias_types"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
+func TestSchemaChangeComparator_alter_column_identity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/alter_column_identity"
+	runSchemaChangeComparatorTest(t, logicTestFile)
+}
 func TestSchemaChangeComparator_alter_column_type(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/alter_column_type"

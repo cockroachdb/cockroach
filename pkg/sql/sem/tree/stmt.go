@@ -2249,6 +2249,7 @@ func (n *AlterTableDropColumn) String() string                { return AsString(
 func (n *AlterTableDropConstraint) String() string            { return AsString(n) }
 func (n *AlterTableDropNotNull) String() string               { return AsString(n) }
 func (n *AlterTableDropStored) String() string                { return AsString(n) }
+func (n *AlterTableSetGeneratedAlways) String() string        { return AsString(n) }
 func (n *AlterTableLocality) String() string                  { return AsString(n) }
 func (n *AlterTableSetDefault) String() string                { return AsString(n) }
 func (n *AlterTableSetVisible) String() string                { return AsString(n) }
