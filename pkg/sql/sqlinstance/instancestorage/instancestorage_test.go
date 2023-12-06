@@ -426,7 +426,7 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 			state.Lock()
 			defer state.Unlock()
 			sessionExpiry = clock.Now().Add(expiration.Nanoseconds(), 0)
-			_, err = slStorage.Update(ctx, sessionID, sessionExpiry)
+			_, _, err = slStorage.Update(ctx, sessionID, sessionExpiry)
 			if err != nil {
 				t.Fatal(err)
 			}
