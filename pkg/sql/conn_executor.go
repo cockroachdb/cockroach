@@ -2403,7 +2403,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		copyRes := ex.clientComm.CreateCopyInResult(tcmd, pos)
 		res = copyRes
 		stmtCtx := withStatement(ctx, tcmd.Stmt)
-		ev, payload = ex.execCopyIn(stmtCtx, tcmd, copyRes)
+		ev, payload = ex.execCopyIn(stmtCtx, &tcmd, copyRes)
 
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
 		// because:
@@ -2746,7 +2746,7 @@ func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {
 // ExternalStorage such as nodelocal or userfile. It does so by checking the
 // target table/schema names against the sentinel, internal table/schema names
 // used by these commands.
-func isCopyToExternalStorage(cmd CopyIn) bool {
+func isCopyToExternalStorage(cmd *CopyIn) bool {
 	stmt := cmd.Stmt
 	return (stmt.Table.Table() == NodelocalFileUploadTable ||
 		stmt.Table.Table() == UserFileUploadTable) && stmt.Table.SchemaName == CrdbInternalName
@@ -2971,13 +2971,15 @@ func (ex *connExecutor) setCopyLoggingFields(stmt statements.Statement[tree.Stat
 	ex.planner.curPlan.init(&ex.planner.stmt, &ex.planner.instrumentation)
 }
 
+var copyMultipleEntryErr = errors.New("execCopyIn called multiple times for the same CopyIn command")
+
 // We handle the CopyFrom statement by creating a copyMachine and handing it
 // control over the connection until the copying is done. The contract is that,
 // when this is called, the pgwire.conn is not reading from the network
 // connection any more until this returns. The copyMachine will do the reading
 // and writing up to the CommandComplete message.
 func (ex *connExecutor) execCopyIn(
-	ctx context.Context, cmd CopyIn, res CopyInResult,
+	ctx context.Context, cmd *CopyIn, res CopyInResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload) {
 	// First handle connExecutor state transitions.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
@@ -3005,8 +3007,19 @@ func (ex *connExecutor) execCopyIn(
 		}
 	}()
 
+	// We've seen cases where cmd.CopyDone.Done() is called multiple times on
+	// the same wait group which results in a server crash. To prevent this type
+	// of panic from occurring we check whether Done() has already been called
+	// at lease once, and if so, we return an error.
+	if cmd.WaitGroupDone {
+		return ex.makeErrEvent(copyMultipleEntryErr, cmd.ParsedStmt.AST)
+	}
+
 	// When we're done, unblock the network connection.
-	defer cmd.CopyDone.Done()
+	defer func() {
+		cmd.WaitGroupDone = true
+		cmd.CopyDone.Done()
+	}()
 
 	// The connExecutor state machine has already set us up with a txn at this
 	// point.

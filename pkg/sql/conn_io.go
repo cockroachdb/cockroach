@@ -370,6 +370,9 @@ type CopyIn struct {
 	// CopyDone is decremented once execution finishes, signaling that control of
 	// the connection is being handed back to the network routine.
 	CopyDone *sync.WaitGroup
+	// WaitGroupDone is set to true once CopyDone.Done() is called. It should
+	// only be accessed by the goroutine handling the COPY.
+	WaitGroupDone bool
 	// TimeReceived is the time at which the message was received
 	// from the client. Used to compute the service latency.
 	TimeReceived time.Time
