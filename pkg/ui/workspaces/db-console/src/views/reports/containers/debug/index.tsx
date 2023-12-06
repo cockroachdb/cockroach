@@ -264,13 +264,8 @@ export default function Debug() {
       {disable_kv_level_advanced_debug && (
         <section className="section">
           <InlineAlert
-            title="Some advanced debug options are not available on virtual clusters."
+            title="Some advanced debug options are only available via the system interface."
             intent="warning"
-            message={
-              <span>
-                Contact your system operator to gain access to this interface.
-              </span>
-            }
           />
         </section>
       )}
