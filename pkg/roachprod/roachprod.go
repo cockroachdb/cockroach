@@ -2092,6 +2092,20 @@ func JaegerURL(
 	return urls[0], nil
 }
 
+// DestroyDNS destroys the DNS records for the given cluster.
+func DestroyDNS(ctx context.Context, l *logger.Logger, clusterName string) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
+		return p.DeleteRecordsBySubdomain(ctx, c.Name)
+	})
+}
+
 // StorageCollectionPerformAction either starts or stops workload collection on
 // a target cluster.
 //
