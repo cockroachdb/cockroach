@@ -35,12 +35,6 @@ func MaybeWrap(iter *pebble.Iterator) Iterator {
 	return &assertionIter{Iterator: iter, closedCh: make(chan struct{})}
 }
 
-// CanDeterministicallySingleDelete wraps
-// pebble.CanDeterministicallySingleDelete.
-func CanDeterministicallySingleDelete(it Iterator) (bool, error) {
-	return pebble.CanDeterministicallySingleDelete(it.Iterator)
-}
-
 // assertionIter wraps a *pebble.Iterator with assertion checking.
 type assertionIter struct {
 	*pebble.Iterator

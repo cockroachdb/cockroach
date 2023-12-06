@@ -434,12 +434,6 @@ func (i *EngineIterator) Stats() storage.IteratorStats {
 	return i.i.Stats()
 }
 
-// CanDeterministicallySingleDelete is part of the storage.EngineIterator
-// interface.
-func (i *EngineIterator) CanDeterministicallySingleDelete() (bool, error) {
-	return i.i.CanDeterministicallySingleDelete()
-}
-
 type spanSetReader struct {
 	r     storage.Reader
 	spans *SpanSet
