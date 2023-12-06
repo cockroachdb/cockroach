@@ -1057,6 +1057,66 @@ func applyColumnMutation(
 				"column %q is not a stored computed column", col.GetName())
 		}
 		col.ColumnDesc().ComputeExpr = nil
+
+	case *tree.AlterTableAddIdentity:
+		if typ := col.GetType(); typ == nil || typ.InternalType.Family != types.IntFamily {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"column %q of relation %q type must be an INT", col.GetName(), tableDesc.GetName())
+		}
+		if col.IsGeneratedAsIdentity() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q is already an identity column",
+				col.GetName(), tableDesc.GetName())
+		}
+		if col.HasDefault() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q has a default value specified", col.GetName(), tableDesc.GetName())
+		}
+		if col.IsComputed() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q has a computed expression specified", col.GetName(), tableDesc.GetName())
+		}
+		if col.IsNullable() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q has a NULL declaration", col.GetName(), tableDesc.GetName())
+		}
+		if col.HasOnUpdate() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q has an update expression specified", col.GetName(), tableDesc.GetName())
+		}
+
+		switch t.GeneratedAsIdentityType {
+		case tree.GeneratedAlways:
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+		case tree.GeneratedByDefault:
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+		}
+
+		if len(t.SeqOptions) > 0 {
+			s := tree.Serialize(&t.SeqOptions)
+			col.ColumnDesc().GeneratedAsIdentitySequenceOption = &s
+		}
+
+	case *tree.AlterTableSetIdentity:
+		if !col.IsGeneratedAsIdentity() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q is not an identity column",
+				col.GetName(), tableDesc.GetName())
+		}
+
+		switch t.GeneratedAsIdentityType {
+		case tree.GeneratedAlways:
+			if col.IsGeneratedAlwaysAsIdentity() {
+				return nil
+			}
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+		case tree.GeneratedByDefault:
+			if col.IsGeneratedByDefaultAsIdentity() {
+				return nil
+			}
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+		}
 	}
 	return nil
 }

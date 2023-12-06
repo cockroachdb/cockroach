@@ -3416,6 +3416,12 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name alter_column_on_update
 	| 'ALTER' opt_column column_name alter_column_visible
 	| 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'
+	| 'ALTER' opt_column column_name 'ADD' 'GENERATED_ALWAYS' 'ALWAYS'
+	| 'ALTER' opt_column column_name 'ADD' 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT'
+	| 'ALTER' opt_column column_name 'ADD' 'GENERATED_ALWAYS' 'ALWAYS' '(' opt_sequence_option_list ')'
+	| 'ALTER' opt_column column_name 'ADD' 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' '(' opt_sequence_option_list ')'
+	| 'ALTER' opt_column column_name 'SET' 'GENERATED_ALWAYS' 'ALWAYS'
+	| 'ALTER' opt_column column_name 'SET' 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT'
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior

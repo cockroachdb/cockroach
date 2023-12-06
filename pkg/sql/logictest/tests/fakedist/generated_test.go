@@ -92,6 +92,13 @@ func TestLogic_alias_types(
 	runLogicTest(t, "alias_types")
 }
 
+func TestLogic_alter_column_identity(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_column_identity")
+}
+
 func TestLogic_alter_column_type(
 	t *testing.T,
 ) {
