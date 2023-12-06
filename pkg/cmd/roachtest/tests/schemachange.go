@@ -37,9 +37,9 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Cloud() != spec.GCE && !c.IsLocal() {
-				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
+				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
-			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup?AUTH=implicit`
+			const fixturePath = `gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=10/backup?AUTH=implicit`
 
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload")
 

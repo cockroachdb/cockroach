@@ -22,7 +22,8 @@ import (
 )
 
 const (
-	gcsCacheBaseURL = "https://storage.googleapis.com/cockroach-fixtures/tools/"
+	// We store downloadable content in a public bucket to allow for easy curling.
+	gcsCacheBaseURL = "https://storage.googleapis.com/cockroach-test-artifacts"
 )
 
 //go:embed scripts/download.sh
