@@ -43,7 +43,7 @@ type Writer interface {
 	// Update looks for a Session with the same SessionID as the input Session in
 	// the storage and if found replaces it with the input returning true.
 	// Otherwise it returns false to indicate that the session does not exist.
-	Update(ctx context.Context, id sqlliveness.SessionID, expiration hlc.Timestamp) (bool, error)
+	Update(ctx context.Context, id sqlliveness.SessionID, expiration hlc.Timestamp) (bool, hlc.Timestamp, error)
 	// Delete removes the session from the sqlliveness table.
 	Delete(ctx context.Context, id sqlliveness.SessionID) error
 }
@@ -259,7 +259,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	var found bool
 	// Retry until success or until the context is canceled.
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		if found, err = l.storage.Update(ctx, s.ID(), exp); err != nil {
+		if found, exp, err = l.storage.Update(ctx, s.ID(), exp); err != nil {
 			if ctx.Err() != nil {
 				break
 			}
@@ -277,7 +277,6 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	if !found {
 		return false, nil
 	}
-
 	s.setExpiration(exp)
 	return true, nil
 }
