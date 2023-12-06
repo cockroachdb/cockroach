@@ -1057,6 +1057,129 @@ func applyColumnMutation(
 				"column %q is not a stored computed column", col.GetName())
 		}
 		col.ColumnDesc().ComputeExpr = nil
+
+	case *tree.AlterTableAddIdentity:
+		if typ := col.GetType(); typ == nil || typ.InternalType.Family != types.IntFamily {
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
+				"column %q of relation %q type must be an integer type", col.GetName(), tableDesc.GetName())
+		}
+		if col.IsGeneratedAsIdentity() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q is already an identity column",
+				col.GetName(), tableDesc.GetName())
+		}
+		if col.HasDefault() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q already has a default value", col.GetName(), tableDesc.GetName())
+		}
+		if col.IsComputed() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q already has a computed value", col.GetName(), tableDesc.GetName())
+		}
+		if col.IsNullable() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q must be declared NOT NULL before identity can be added", col.GetName(), tableDesc.GetName())
+		}
+		if col.HasOnUpdate() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q already has an update expression", col.GetName(), tableDesc.GetName())
+		}
+
+		// Create column definition for identity column
+		q := []tree.NamedColumnQualification{{Qualification: t.Qualification}}
+		colDef, err := tree.NewColumnTableDef(tree.Name(col.GetName()), col.GetType(), false /* isSerial */, q)
+		if err != nil {
+			return err
+		}
+		newDef, prefix, seqName, seqOpts, err := params.p.processSerialLikeInColumnDef(params.ctx, colDef, tn)
+		if err != nil {
+			return err
+		}
+		if seqName == nil {
+			return errors.Newf("failed to create sequence %q for new identity column %q in %q", seqName, col.ColName(), tn)
+		}
+		colDef = newDef
+
+		colOwnedSeqDesc, err := doCreateSequence(
+			ctx,
+			params.p,
+			params.SessionData(),
+			prefix.Database,
+			prefix.Schema,
+			seqName,
+			tree.PersistencePermanent,
+			seqOpts,
+			fmt.Sprintf("creating sequence %q for new identity column %q in %q", seqName, col.ColName(), tn),
+		)
+		if err != nil {
+			return err
+		}
+
+		typedExpr, _, err := sanitizeColumnExpression(params, colDef.DefaultExpr.Expr, col, tree.ColumnDefaultExprInSetDefault)
+		if err != nil {
+			return err
+		}
+
+		changedSeqDescs, err := maybeAddSequenceDependencies(
+			params.ctx,
+			params.p.ExecCfg().Settings,
+			params.p,
+			tableDesc,
+			col.ColumnDesc(),
+			typedExpr,
+			nil, /* backrefs */
+			tabledesc.DefaultExpr,
+		)
+		if err != nil {
+			return err
+		}
+		for _, changedSeqDesc := range changedSeqDescs {
+			// `colOwnedSeqDesc` and `changedSeqDesc` should refer to a same instance.
+			// But we still want to use the right copy to write a schema change for by
+			// using `changedSeqDesc` just in case the assumption became false in the
+			// future.
+			if colOwnedSeqDesc != nil && colOwnedSeqDesc.ID == changedSeqDesc.ID {
+				if err := setSequenceOwner(changedSeqDesc, col.ColName(), tableDesc); err != nil {
+					return err
+				}
+			}
+			if err := params.p.writeSchemaChange(
+				params.ctx, changedSeqDesc, descpb.InvalidMutationID, tree.AsStringWithFQNames(t, params.Ann()),
+			); err != nil {
+				return err
+			}
+		}
+
+		// Set column description to identity
+		switch (t.Qualification).(type) {
+		case *tree.GeneratedAlwaysAsIdentity:
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+		case *tree.GeneratedByDefAsIdentity:
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+		}
+		seqOptsStr := tree.Serialize(&seqOpts)
+		col.ColumnDesc().GeneratedAsIdentitySequenceOption = &seqOptsStr
+
+	case *tree.AlterTableSetIdentity:
+		if !col.IsGeneratedAsIdentity() {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"column %q of relation %q is not an identity column",
+				col.GetName(), tableDesc.GetName())
+		}
+
+		switch t.GeneratedAsIdentityType {
+		case tree.GeneratedAlways:
+			if col.IsGeneratedAlwaysAsIdentity() {
+				return nil
+			}
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_ALWAYS
+		case tree.GeneratedByDefault:
+			if col.IsGeneratedByDefaultAsIdentity() {
+				return nil
+			}
+			col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_GENERATED_BY_DEFAULT
+		}
 	}
 	return nil
 }
