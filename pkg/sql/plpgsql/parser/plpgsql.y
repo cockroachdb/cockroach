@@ -331,7 +331,7 @@ func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
 
 %type <[]plpgsqltree.Statement> proc_sect
 %type <[]plpgsqltree.ElseIf> stmt_elsifs
-%type <[]plpgsqltree.Statement> stmt_else loop_body // TODO is this a list of statement?
+%type <[]plpgsqltree.Statement> stmt_else loop_body
 %type <plpgsqltree.Statement>  pl_block
 %type <plpgsqltree.Statement>	proc_stmt
 %type <plpgsqltree.Statement>	stmt_assign stmt_if stmt_loop stmt_while stmt_exit stmt_continue
@@ -354,8 +354,8 @@ func (u *plpgsqlSymUnion) sqlStatement() tree.Statement {
 %type <[]plpgsqltree.Statement> opt_case_else
 
 %type <bool>	getdiag_area_opt
-%type <plpgsqltree.GetDiagnosticsItemList>	getdiag_list // TODO don't know what this is
-%type <*plpgsqltree.GetDiagnosticsItem> getdiag_list_item // TODO don't know what this is
+%type <plpgsqltree.GetDiagnosticsItemList>	getdiag_list
+%type <*plpgsqltree.GetDiagnosticsItem> getdiag_list_item
 %type <int32> getdiag_item
 
 %type <*plpgsqltree.RaiseOption> option_expr
@@ -434,7 +434,7 @@ decl_stmt	: decl_statement
     // This is to allow useless extra "DECLARE" keywords in the declare section.
     $$.val = (plpgsqltree.Statement)(nil)
   }
-// TODO(chengxiong): turn this block on and throw useful error if user
+// TODO(drewk): turn this block on and throw useful error if user
 // tries to put the block label just before BEGIN instead of before
 // DECLARE.
 //| LESS_LESS any_identifier GREATER_GREATER
@@ -767,7 +767,7 @@ stmt_getdiag: GET getdiag_area_opt DIAGNOSTICS getdiag_list ';'
     IsStacked: $2.bool(),
     DiagItems: $4.getDiagnosticsItemList(),
   }
-  // TODO(jane): Check information items are valid for area option.
+  // TODO(drewk): Check information items are valid for area option.
   }
 ;
 
@@ -800,7 +800,7 @@ getdiag_list_item: IDENT assign_operator getdiag_item
     $$.val = &plpgsqltree.GetDiagnosticsItem{
       Kind : $3.getDiagnosticsKind(),
       TargetName: $1,
-      // TODO(jane): set the target from $1.
+      // TODO(drewk): set the target from $1.
     }
   }
 ;
@@ -832,14 +832,14 @@ getdiag_item: unreserved_keyword {
     case "returned_sqlstate":
       $$.val = plpgsqltree.GetDiagnosticsReturnedSQLState;
     default:
-      // TODO(jane): Should this use an unimplemented error instead?
+      // TODO(drewk): Should this use an unimplemented error instead?
       return setErr(plpgsqllex, errors.Newf("unrecognized GET DIAGNOSTICS item: %s", redact.Safe($1)))
   }
 }
 ;
 
 getdiag_target:
-// TODO(jane): remove ident.
+// TODO(drewk): remove ident.
 IDENT
   {
   }
@@ -952,8 +952,6 @@ opt_case_else:
 
 stmt_loop: opt_loop_label LOOP loop_body opt_label ';'
   {
-    // TODO(drewk): does the second usage of the label actually
-    // do anything?
     $$.val = &plpgsqltree.Loop{
       Label: $1,
       Body: $3.statements(),
@@ -963,8 +961,6 @@ stmt_loop: opt_loop_label LOOP loop_body opt_label ';'
 
 stmt_while: opt_loop_label WHILE expr_until_loop LOOP loop_body opt_label ';'
   {
-    // TODO(drewk): does the second usage of the label actually
-    // do anything?
     cond, err := plpgsqllex.(*lexer).ParseExpr($3)
     if err != nil {
       return setErr(plpgsqllex, err)
@@ -984,7 +980,7 @@ stmt_for: opt_loop_label FOR for_control loop_body
 ;
 
 for_control: for_variable IN
-  // TODO need to parse the sql expression here.
+  // TODO(drewk) need to parse the sql expression here.
   {
     return unimplemented(plpgsqllex, "for loop")
   }
@@ -1045,12 +1041,6 @@ stmt_continue: CONTINUE opt_label opt_exitcond
     }
   }
 ;
-
-  // TODO handle variable names
-  // 1. verify if the first token is a variable (this means that we need to track variable scope during parsing)
-  // 2. if yes, check next token is ';'
-  // 3. if no, expecting a sql expression "read_sql_expression"
-  //    we can just read until a ';', then do the sql expression validation during compile time.
 
 stmt_return: RETURN return_variable ';'
   {
