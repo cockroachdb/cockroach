@@ -167,7 +167,7 @@ func (d *dev) getArchivedCdepString(bazelBin string) (string, error) {
 }
 
 func addCommonBuildFlags(cmd *cobra.Command) {
-	cmd.Flags().IntVar(&numCPUs, "cpus", 0, "cap the number of cpu cores used")
+	cmd.Flags().IntVar(&numCPUs, "cpus", 0, "cap the number of CPU cores used for building and testing at the Bazel level (note that this has no impact on GOMAXPROCS or the functionality of any build or test action under the Bazel level)")
 }
 
 func addCommonTestFlags(cmd *cobra.Command) {
