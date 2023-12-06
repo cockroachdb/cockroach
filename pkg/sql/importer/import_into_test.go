@@ -185,3 +185,44 @@ func getFirstStoreReplica(
 	})
 	return store, repl
 }
+
+// TestImportIntoWithUDTArray verifies that we can support importing data into a
+// table with a column typed as an array of user-defined types.
+func TestImportIntoWithUDTArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(db)
+	runner.Exec(t, `
+CREATE TYPE weekday AS ENUM('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday');
+CREATE TABLE shifts (employee STRING, days weekday[]);
+INSERT INTO shifts VALUES ('John', ARRAY['Monday', 'Wednesday', 'Friday']);
+INSERT INTO shifts VALUES ('Bob', ARRAY['Tuesday', 'Thursday']);
+`)
+	// Sanity check that we currently have the expected state.
+	expected := [][]string{
+		{"John", "{Monday,Wednesday,Friday}"},
+		{"Bob", "{Tuesday,Thursday}"},
+	}
+	runner.CheckQueryResults(t, "SELECT * FROM shifts;", expected)
+	// Export has to run in a separate implicit txn.
+	runner.Exec(t, `EXPORT INTO CSV 'nodelocal://1/export1/' FROM SELECT * FROM shifts;`)
+	// Now clear the table since we'll be importing into it.
+	runner.Exec(t, `DELETE FROM shifts WHERE true;`)
+	runner.CheckQueryResults(t, "SELECT count(*) FROM shifts;", [][]string{{"0"}})
+	// Import two rows once.
+	runner.Exec(t, "IMPORT INTO shifts CSV DATA ('nodelocal://1/export1/export*-n*.0.csv');")
+	runner.CheckQueryResults(t, "SELECT * FROM shifts;", expected)
+	// Import two rows again - we'll now have four rows in the table.
+	runner.Exec(t, "IMPORT INTO shifts CSV DATA ('nodelocal://1/export1/export*-n*.0.csv');")
+	runner.CheckQueryResults(t, "SELECT * FROM shifts;", append(expected, expected...))
+}

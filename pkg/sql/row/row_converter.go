@@ -218,6 +218,7 @@ type DatumRowConverter struct {
 	// The rest of these are derived from tableDesc, just cached here.
 	ri                        Inserter
 	EvalCtx                   *eval.Context
+	SemaCtx                   *tree.SemaContext
 	cols                      []catalog.Column
 	VisibleCols               []catalog.Column
 	VisibleColTypes           []*types.T
@@ -352,8 +353,9 @@ func NewDatumRowConverter(
 	// We take a copy of the baseSemaCtx since this method is called by the parallel
 	// import workers.
 	semaCtxCopy := *baseSemaCtx
+	c.SemaCtx = &semaCtxCopy
 	cols := schemaexpr.ProcessColumnSet(targetCols, tableDesc, relevantColumns)
-	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, &semaCtxCopy)
+	defaultExprs, err := schemaexpr.MakeDefaultExprs(ctx, cols, &txCtx, c.EvalCtx, c.SemaCtx)
 	if err != nil {
 		return nil, errors.Wrap(err, "process default and computed columns")
 	}
@@ -463,7 +465,8 @@ func NewDatumRowConverter(
 		c.tableDesc,
 		tree.NewUnqualifiedTableName(tree.Name(c.tableDesc.GetName())),
 		c.EvalCtx,
-		&semaCtxCopy)
+		c.SemaCtx,
+	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error type checking and building computed expression for IMPORT INTO")
 	}
@@ -471,8 +474,9 @@ func NewDatumRowConverter(
 	// Here, partialIndexExprs will be nil if there are no partial indexes, or a
 	// map of predicate expressions for each partial index in the input list of
 	// indexes.
-	c.partialIndexExprs, _, err = schemaexpr.MakePartialIndexExprs(ctx, c.tableDesc.PartialIndexes(),
-		c.tableDesc.PublicColumns(), c.tableDesc, c.EvalCtx, &semaCtxCopy)
+	c.partialIndexExprs, _, err = schemaexpr.MakePartialIndexExprs(
+		ctx, c.tableDesc.PartialIndexes(), c.tableDesc.PublicColumns(), c.tableDesc, c.EvalCtx, c.SemaCtx,
+	)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error type checking and building partial index expression for IMPORT INTO")
 	}

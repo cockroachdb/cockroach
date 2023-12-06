@@ -27,7 +27,10 @@ type importTypeResolver struct {
 	typeNameToDesc map[string]*descpb.TypeDescriptor
 }
 
-func newImportTypeResolver(typeDescs []*descpb.TypeDescriptor) importTypeResolver {
+var _ tree.TypeReferenceResolver = importTypeResolver{}
+var _ catalog.TypeDescriptorResolver = importTypeResolver{}
+
+func makeImportTypeResolver(typeDescs []*descpb.TypeDescriptor) importTypeResolver {
 	itr := importTypeResolver{
 		typeIDToDesc:   make(map[descpb.ID]*descpb.TypeDescriptor),
 		typeNameToDesc: make(map[string]*descpb.TypeDescriptor),
@@ -39,21 +42,35 @@ func newImportTypeResolver(typeDescs []*descpb.TypeDescriptor) importTypeResolve
 	return itr
 }
 
-var _ tree.TypeReferenceResolver = &importTypeResolver{}
-
+// ResolveType implements the tree.TypeReferenceResolver interface.
+//
+// We currently have an incomplete implementation of this method - namely, it
+// works whenever typeDescs are provided in makeImportTypeResolver (which is the
+// case when we're importing into exactly one table). In such a case, the type
+// resolution can be simplified to only look up into the provided types based on
+// the type's name (meaning we can avoid resolving the db and the schema names).
 func (i importTypeResolver) ResolveType(
-	_ context.Context, _ *tree.UnresolvedObjectName,
+	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
-	return nil, errors.New("importTypeResolver does not implement ResolveType")
+	var desc *descpb.TypeDescriptor
+	var ok bool
+	if desc, ok = i.typeNameToDesc[name.Parts[0]]; !ok {
+		return nil, errors.Newf("type descriptor could not be resolved for type name %s", name.Parts[0])
+	}
+	typeDesc := typedesc.NewBuilder(desc).BuildImmutableType()
+	t := typeDesc.AsTypesT()
+	if err := typedesc.EnsureTypeIsHydrated(ctx, t, i); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
 
+// ResolveTypeByOID implements the tree.TypeReferenceResolver interface.
 func (i importTypeResolver) ResolveTypeByOID(ctx context.Context, oid oid.Oid) (*types.T, error) {
 	return typedesc.ResolveHydratedTByOID(ctx, oid, i)
 }
 
-var _ catalog.TypeDescriptorResolver = &importTypeResolver{}
-
-// GetTypeDescriptor implements the sqlbase.TypeDescriptorResolver interface.
+// GetTypeDescriptor implements the catalog.TypeDescriptorResolver interface.
 func (i importTypeResolver) GetTypeDescriptor(
 	_ context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
