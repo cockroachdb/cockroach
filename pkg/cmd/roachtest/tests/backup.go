@@ -1115,7 +1115,7 @@ func registerBackup(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().Cloud != spec.GCE {
-				t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
+				t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
 			}
 			runBackupMVCCRangeTombstones(ctx, t, c)
 		},
@@ -1168,7 +1168,7 @@ revert=2'`)
 	_, err = conn.Exec(`USE tpch`)
 	require.NoError(t, err)
 	createStmt, err := readCreateTableFromFixture(
-		"gs://cockroach-fixtures/tpch-csv/schema/orders.sql?AUTH=implicit", conn)
+		"gs://cockroach-fixtures-us-east1/tpch-csv/schema/orders.sql?AUTH=implicit", conn)
 	require.NoError(t, err)
 	_, err = conn.ExecContext(ctx, createStmt)
 	require.NoError(t, err)
@@ -1232,10 +1232,10 @@ revert=2'`)
 	// Import the odd-numbered files.
 	t.Status("importing odd-numbered files")
 	files := []string{
-		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.1?AUTH=implicit`,
-		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.3?AUTH=implicit`,
-		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.5?AUTH=implicit`,
-		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.7?AUTH=implicit`,
+		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.1?AUTH=implicit`,
+		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.3?AUTH=implicit`,
+		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.5?AUTH=implicit`,
+		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.7?AUTH=implicit`,
 	}
 	_, err = conn.ExecContext(ctx, fmt.Sprintf(
 		`IMPORT INTO orders CSV DATA ('%s') WITH delimiter='|'`, strings.Join(files, "', '")))
@@ -1258,10 +1258,10 @@ revert=2'`)
 
 	// Import and cancel even-numbered files twice.
 	files = []string{
-		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.2?AUTH=implicit`,
-		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.4?AUTH=implicit`,
-		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.6?AUTH=implicit`,
-		`gs://cockroach-fixtures/tpch-csv/sf-100/orders.tbl.8?AUTH=implicit`,
+		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.2?AUTH=implicit`,
+		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.4?AUTH=implicit`,
+		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.6?AUTH=implicit`,
+		`gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/orders.tbl.8?AUTH=implicit`,
 	}
 
 	_, err = conn.ExecContext(ctx,

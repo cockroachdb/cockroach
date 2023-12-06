@@ -106,7 +106,7 @@ var tpchMeta = workload.Meta{
 		g.flags.BoolVar(&g.enableChecks, `enable-checks`, false,
 			"Enable checking the output against the expected rows (default false). "+
 				"Note that the checks are only supported for scale factor 1 of the backup "+
-				"stored at 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup'")
+				"stored at 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup'")
 		g.flags.StringVar(&g.vectorize, `vectorize`, `on`,
 			`Set vectorize session variable`)
 		g.flags.BoolVar(&g.useClusterVectorizeSetting, `default-vectorize`, false,

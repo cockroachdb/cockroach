@@ -249,7 +249,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 
 				// 10 GiB restore.
 				restoreQuery := `RESTORE bank.bank FROM
-					'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=10000000,seed=1/bank?AUTH=implicit'`
+					'gs://cockroach-fixtures-us-east1/workload/bank/version=1.0.0,payload-bytes=100,ranges=10,rows=10000000,seed=1/bank?AUTH=implicit'`
 
 				t.L().Printf("starting to run the restore job")
 				if _, err := gatewayDB.Exec(restoreQuery); err != nil {
@@ -347,7 +347,7 @@ func (dataBank2TB) runRestore(ctx context.Context, c cluster.Cluster) {
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				RESTORE csv.bank FROM
-				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
+				'gs://cockroach-fixtures-us-east1/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
 				WITH into_db = 'restore2tb'"`)
 }
 
@@ -357,7 +357,7 @@ func (dataBank2TB) runRestoreDetached(
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE restore2tb"`)
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
 				RESTORE csv.bank FROM
-				'gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
+				'gs://cockroach-fixtures-us-east1/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/bank?AUTH=implicit'
 				WITH into_db = 'restore2tb', detached"`)
 	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
 	if err != nil {
