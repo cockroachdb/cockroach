@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	crypto_rand "crypto/rand"
 	"fmt"
 	"math"
 	"strings"
@@ -64,6 +65,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -2588,6 +2590,7 @@ func createSchemaChangeEvalCtx(
 			Locality:             execCfg.Locality,
 			OriginalLocality:     execCfg.Locality,
 			Tracer:               execCfg.AmbientCtx.Tracer,
+			ULIDEntropy:          ulid.Monotonic(crypto_rand.Reader, 0),
 		},
 	}
 	// TODO(andrei): This is wrong (just like on the main code path on
