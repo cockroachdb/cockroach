@@ -2757,7 +2757,7 @@ func (ex *connExecutor) execCopyOut(
 ) (retEv fsm.Event, retPayload fsm.EventPayload) {
 	// First handle connExecutor state transitions.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
-		return ex.beginImplicitTxn(ctx, cmd.ParsedStmt.AST)
+		return ex.beginImplicitTxn(ctx, cmd.ParsedStmt.AST, ex.copyQualityOfService())
 	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
 		return ex.makeErrEvent(sqlerrors.NewTransactionAbortedError("" /* customMsg */), cmd.ParsedStmt.AST)
 	}
@@ -2981,7 +2981,7 @@ func (ex *connExecutor) execCopyIn(
 ) (retEv fsm.Event, retPayload fsm.EventPayload) {
 	// First handle connExecutor state transitions.
 	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
-		return ex.beginImplicitTxn(ctx, cmd.ParsedStmt.AST)
+		return ex.beginImplicitTxn(ctx, cmd.ParsedStmt.AST, ex.copyQualityOfService())
 	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
 		return ex.makeErrEvent(sqlerrors.NewTransactionAbortedError("" /* customMsg */), cmd.ParsedStmt.AST)
 	}
@@ -3506,6 +3506,16 @@ func (ex *connExecutor) QualityOfService() sessiondatapb.QoSLevel {
 		return sessiondatapb.Normal
 	}
 	return ex.sessionData().DefaultTxnQualityOfService
+}
+
+// copyQualityOfService returns the QoSLevel session setting for COPY if the
+// session settings are populated, otherwise the background QoSLevel.
+func (ex *connExecutor) copyQualityOfService() sessiondatapb.QoSLevel {
+	// TODO(yuzefovich): investigate whether we need this check here and above.
+	if ex.sessionData() == nil {
+		return sessiondatapb.UserLow
+	}
+	return ex.sessionData().CopyTxnQualityOfService
 }
 
 func (ex *connExecutor) readWriteModeWithSessionDefault(
