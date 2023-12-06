@@ -150,9 +150,18 @@ func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t
 
 // ColumnTypeIsIndexable returns whether the type t is valid as an indexed column.
 func ColumnTypeIsIndexable(t *types.T) bool {
+	// NB: .IsAmbiguous checks the content type of array types.
 	if t.IsAmbiguous() || t.Family() == types.TupleFamily || t.Family() == types.RefCursorFamily {
 		return false
 	}
+
+	// If the type is an array, check its content type as well.
+	if unwrapped := t.ArrayContents(); unwrapped != nil {
+		if unwrapped.Family() == types.TupleFamily || unwrapped.Family() == types.RefCursorFamily {
+			return false
+		}
+	}
+
 	// Some inverted index types also have a key encoding, but we don't
 	// want to support those yet. See #50659.
 	return !MustBeValueEncoded(t) && !ColumnTypeIsOnlyInvertedIndexable(t)
@@ -162,7 +171,9 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 // using an inverted index.
 func ColumnTypeIsInvertedIndexable(t *types.T) bool {
 	switch t.Family() {
-	case types.JsonFamily, types.ArrayFamily, types.StringFamily:
+	case types.ArrayFamily:
+		return t.ArrayContents().Family() != types.RefCursorFamily
+	case types.JsonFamily, types.StringFamily:
 		return true
 	}
 	return ColumnTypeIsOnlyInvertedIndexable(t)
