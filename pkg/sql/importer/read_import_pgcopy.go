@@ -336,7 +336,7 @@ func (p *pgCopyConsumer) FillDatums(
 		if s == nil {
 			conv.Datums[i] = tree.DNull
 		} else {
-			conv.Datums[i], err = rowenc.ParseDatumStringAs(ctx, conv.VisibleColTypes[i], *s, conv.EvalCtx)
+			conv.Datums[i], err = rowenc.ParseDatumStringAs(ctx, conv.VisibleColTypes[i], *s, conv.EvalCtx, conv.SemaCtx)
 			if err != nil {
 				col := conv.VisibleCols[i]
 				return newImportRowError(errors.Wrapf(

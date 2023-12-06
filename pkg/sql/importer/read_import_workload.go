@@ -69,6 +69,7 @@ func makeDatumFromColOffset(
 	alloc *tree.DatumAlloc,
 	hint *types.T,
 	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
 	col coldata.Vec,
 	rowIdx int,
 ) (tree.Datum, error) {
@@ -122,7 +123,7 @@ func makeDatumFromColOffset(
 		default:
 			data := col.Bytes().Get(rowIdx)
 			str := *(*string)(unsafe.Pointer(&data))
-			return rowenc.ParseDatumStringAs(ctx, hint, str, evalCtx)
+			return rowenc.ParseDatumStringAs(ctx, hint, str, evalCtx, semaCtx)
 		}
 	}
 	return nil, errors.Errorf(
@@ -238,8 +239,10 @@ func NewWorkloadKVConverter(
 func (w *WorkloadKVConverter) Worker(
 	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext,
 ) error {
-	conv, err := row.NewDatumRowConverter(ctx, semaCtx, w.tableDesc, nil, /* targetColNames */
-		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */, w.db)
+	conv, err := row.NewDatumRowConverter(
+		ctx, semaCtx, w.tableDesc, nil, /* targetColNames */
+		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */, w.db,
+	)
 	if err != nil {
 		return err
 	}
@@ -263,7 +266,8 @@ func (w *WorkloadKVConverter) Worker(
 				// TODO(dan): This does a type switch once per-datum. Reduce this to
 				// a one-time switch per column.
 				converted, err := makeDatumFromColOffset(
-					ctx, &alloc, conv.VisibleColTypes[colIdx], evalCtx, col, rowIdx)
+					ctx, &alloc, conv.VisibleColTypes[colIdx], conv.EvalCtx, conv.SemaCtx, col, rowIdx,
+				)
 				if err != nil {
 					return err
 				}

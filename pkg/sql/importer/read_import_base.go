@@ -60,7 +60,7 @@ func runImport(
 
 	// Install type metadata in all of the import tables.
 	spec = protoutil.Clone(spec).(*execinfrapb.ReadImportDataSpec)
-	importResolver := newImportTypeResolver(spec.Types)
+	importResolver := makeImportTypeResolver(spec.Types)
 	for _, table := range spec.Tables {
 		cpy := tabledesc.NewBuilder(table.Desc).BuildCreatedMutableTable()
 		if err := typedesc.HydrateTypesInDescriptor(ctx, cpy, importResolver); err != nil {
@@ -493,7 +493,8 @@ func makeDatumConverter(
 ) (*row.DatumRowConverter, error) {
 	conv, err := row.NewDatumRowConverter(
 		ctx, importCtx.semaCtx, importCtx.tableDesc, importCtx.targetCols, importCtx.evalCtx,
-		importCtx.kvCh, importCtx.seqChunkProvider, nil /* metrics */, db)
+		importCtx.kvCh, importCtx.seqChunkProvider, nil /* metrics */, db,
+	)
 	if err == nil {
 		conv.KvBatch.Source = fileCtx.source
 	}
