@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -502,7 +504,17 @@ func TestCopyFromRetries(t *testing.T) {
 			var params base.TestServerArgs
 			var attemptNumber int
 			params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-				BeforeCopyFromInsert: func() error {
+				BeforeCopyFromInsert: func(txn *kv.Txn) error {
+					if !tc.inTxn {
+						// When we're not in an explicit txn, we expect that all
+						// txns used by the COPY use the background QoS.
+						if txn.AdmissionHeader().Priority != int32(admissionpb.UserLowPri) {
+							t.Errorf(
+								"unexpected QoS level %d (expected %d)",
+								txn.AdmissionHeader().Priority, admissionpb.UserLowPri,
+							)
+						}
+					}
 					attemptNumber++
 					return tc.hook(attemptNumber)
 				},
