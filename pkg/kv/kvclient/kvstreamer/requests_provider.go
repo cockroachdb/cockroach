@@ -74,8 +74,8 @@ type singleRangeBatch struct {
 	// the responses to these single-range requests (which might come back in
 	// any order) correctly.
 	//
-	// subRequestIdx is only allocated in InOrder mode when
-	// Hints.SingleRowLookup is false and some Scan requests were enqueued.
+	// subRequestIdx is only allocated in InOrder mode when some Scan requests
+	// were enqueued.
 	subRequestIdx []int32
 	// isScanStarted tracks whether we have already received at least one
 	// response for the corresponding ScanRequest (i.e. whether the ScanRequest
@@ -305,7 +305,7 @@ func (p *outOfOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
 	p.Lock()
 	defer p.Unlock()
 	if len(p.requests) > 0 {
-		panic(errors.AssertionFailedf("outOfOrderRequestsProvider has old requests in enqueue"))
+		panic(errors.AssertionFailedf("outOfOrderRequestsProvider has %d old requests in enqueue", len(p.requests)))
 	}
 	p.requests = requests
 	p.hasWork.Signal()
@@ -429,7 +429,7 @@ func (p *inOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
 	p.Lock()
 	defer p.Unlock()
 	if len(p.requests) > 0 {
-		panic(errors.AssertionFailedf("inOrderRequestsProvider has old requests in enqueue"))
+		panic(errors.AssertionFailedf("inOrderRequestsProvider has %d old requests in enqueue", len(p.requests)))
 	}
 	p.requests = requests
 	p.heapInit()
