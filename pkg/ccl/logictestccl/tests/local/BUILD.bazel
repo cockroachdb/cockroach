@@ -9,7 +9,7 @@ go_test(
         "//pkg/ccl/logictestccl:testdata",  # keep
     ],
     exec_properties = {"Pool": "large"},
-    shard_count = 21,
+    shard_count = 29,
     tags = [
         "ccl_test",
         "cpu:1",
