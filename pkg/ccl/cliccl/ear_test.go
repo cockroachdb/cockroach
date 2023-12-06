@@ -25,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/datadriven"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -141,68 +143,20 @@ func TestList(t *testing.T) {
 	require.NoError(t, err)
 	p.Close()
 
-	// List the files in the registry.
-	cmd := getTool(cli.DebugCmd, []string{"debug", "encryption-registry-list"})
-	require.NotNil(t, cmd)
-	var b bytes.Buffer
-	cmd.SetOut(&b)
-	cmd.SetErr(&b)
-	err = runList(cmd, []string{dir})
-	require.NoError(t, err)
-
-	const want = `000002.log:
-  env type: Data, AES128_CTR
-  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 06 c2 26 f9 68 f0 fc ff b9 e7 82 8f
-  counter: 914487965
-000004.log:
-  env type: Data, AES128_CTR
-  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: d1 05 79 53 68 35 a0 f1 44 01 22 79
-  counter: 1497766936
-000005.sst:
-  env type: Data, AES128_CTR
-  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: d0 b1 31 4b 08 b9 f6 08 7e e6 af 40
-  counter: 2167389540
-COCKROACHDB_DATA_KEYS_000001_monolith:
-  env type: Store, AES128_CTR
-  keyID: f594229216d81add7811c4360212eb7629b578ef4eab6e5d05679b3c5de48867
-  nonce: 8f 4c ba 1a a3 4f db 3c db 84 cf f5
-  counter: 2436226951
-CURRENT:
-  env type: Data, AES128_CTR
-  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 71 12 f7 22 9a fb 90 24 4e 58 27 01
-  counter: 3082989236
-MANIFEST-000001:
-  env type: Data, AES128_CTR
-  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 2e fd 49 2f 5f c5 53 0a e8 8f 78 cc
-  counter: 110434741
-OPTIONS-000003:
-  env type: Data, AES128_CTR
-  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: c3 6d b2 7b 3f 3e 67 b9 28 b9 81 b1
-  counter: 3050109376
-marker.datakeys.000001.COCKROACHDB_DATA_KEYS_000001_monolith:
-  env type: Store, AES128_CTR
-  keyID: f594229216d81add7811c4360212eb7629b578ef4eab6e5d05679b3c5de48867
-  nonce: 55 d7 d4 27 6c 97 9b dd f1 5d 40 c8
-  counter: 467030050
-marker.format-version.000012.013:
-  env type: Data, AES128_CTR
-  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: 86 a7 78 ad 4b da 62 56 d5 e2 d1 70
-  counter: 798955289
-marker.manifest.000001.MANIFEST-000001:
-  env type: Data, AES128_CTR
-  keyID: bbb65a9d114c2a18740f27b6933b74f61018bd5adf545c153b48ffe6473336ef
-  nonce: d3 97 11 b3 1a ed 22 2b 74 fb 02 0c
-  counter: 1229228536
-`
-
-	require.Equal(t, want, b.String())
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "ear-list"), func(t *testing.T, d *datadriven.TestData) string {
+		if d.Cmd != "list" {
+			d.Fatalf(t, "invalid command %q", d.Cmd)
+		}
+		// List the files in the registry.
+		cmd := getTool(cli.DebugCmd, []string{"debug", "encryption-registry-list"})
+		require.NotNil(t, cmd)
+		var b bytes.Buffer
+		cmd.SetOut(&b)
+		cmd.SetErr(&b)
+		err = runList(cmd, []string{dir})
+		require.NoError(t, err)
+		return b.String()
+	})
 }
 
 // getTool traverses the given cobra.Command recursively, searching for a tool
