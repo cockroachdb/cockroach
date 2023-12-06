@@ -16,8 +16,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -62,14 +60,6 @@ type createTenantOptions struct {
 	envVars []string
 }
 type createTenantOpt func(*createTenantOptions)
-
-func createTenantCertNodes(nodes option.NodeListOption) createTenantOpt {
-	return func(c *createTenantOptions) { c.certNodes = nodes }
-}
-
-func createTenantEnvVar(envVar string) createTenantOpt {
-	return func(c *createTenantOptions) { c.envVars = append(c.envVars, envVar) }
-}
 
 func createTenantNodeInternal(
 	ctx context.Context,
@@ -282,44 +272,6 @@ func startTenantServer(
 		close(errCh)
 	}()
 	return errCh
-}
-
-func newTenantInstance(
-	ctx context.Context, tn *tenantNode, t test.Test, c cluster.Cluster, node, http, sql int,
-) (*tenantNode, error) {
-	instID := tenantIds[tn.tenantID] + 1
-	tenantIds[tn.tenantID] = instID
-	inst := tenantNode{
-		tenantID:   tn.tenantID,
-		instanceID: instID,
-		kvAddrs:    tn.kvAddrs,
-		node:       node,
-		httpPort:   http,
-		sqlPort:    sql,
-		envVars:    tn.envVars,
-	}
-	tenantCertsDir, err := os.MkdirTemp("", "tenant-certs")
-	if err != nil {
-		return nil, err
-	}
-	key, crt := fmt.Sprintf("client-tenant.%d.key", tn.tenantID), fmt.Sprintf("client-tenant.%d.crt", tn.tenantID)
-	err = c.Get(ctx, t.L(), filepath.Join("certs", key), filepath.Join(tenantCertsDir, key), c.Node(tn.node))
-	if err != nil {
-		return nil, err
-	}
-	err = c.Get(ctx, t.L(), filepath.Join("certs", crt), filepath.Join(tenantCertsDir, crt), c.Node(tn.node))
-	if err != nil {
-		return nil, err
-	}
-	c.Put(ctx, filepath.Join(tenantCertsDir, key), filepath.Join("certs", key), c.Node(node))
-	c.Put(ctx, filepath.Join(tenantCertsDir, crt), filepath.Join("certs", crt), c.Node(node))
-	// sigh: locally theses are symlinked which breaks our crypto cert checks
-	if c.IsLocal() {
-		c.Run(ctx, c.Node(node), "rm", filepath.Join("certs", key))
-		c.Run(ctx, c.Node(node), "cp", filepath.Join(tenantCertsDir, key), filepath.Join("certs", key))
-	}
-	c.Run(ctx, c.Node(node), "chmod", "0600", filepath.Join("certs", key))
-	return &inst, nil
 }
 
 // createTenantAdminRole creates a role that can be used to log into a secure cluster's db console.
