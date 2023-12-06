@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -1592,4 +1593,11 @@ func TestCompactionConcurrencyEnvVars(t *testing.T) {
 				require.Equal(t, tc.want, getMaxConcurrentCompactions())
 			})
 	}
+}
+
+func TestMinimumSupportedFormatVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	require.Equal(t, pebbleFormatVersionMap[clusterversion.MinSupported], MinimumSupportedFormatVersion,
+		"MinimumSupportedFormatVersion must match the format version for %s", clusterversion.MinSupported)
 }
