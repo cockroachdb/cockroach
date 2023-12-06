@@ -55,7 +55,7 @@ export const selectDropUnusedIndexDuration = (state: AppState): string => {
   );
 };
 
-export const selectCsExportInsights = (state: AppState): boolean => {
+export const selectUseObsService = (state: AppState): boolean => {
   const settings = state.adminUI?.clusterSettings.data?.key_values;
   if (!settings) {
     return exportInsights;
