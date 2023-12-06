@@ -14,7 +14,7 @@ http_archive(
         # cockroachdb/rules_go as of 1360c0a3a4a1b3ff12ed685013e34b37f99fdf01
         # (upstream release-0.42 plus a few patches).
         "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-386-g1360c0a.tar.gz",
-    ]
+    ],
 )
 
 # Like the above, but for JS.
@@ -24,12 +24,14 @@ http_archive(
     strip_prefix = "rules_js-1.26.1",
     url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v1.26.1.tar.gz",
 )
+
 http_archive(
     name = "aspect_rules_ts",
     sha256 = "ace5b609603d9b5b875d56c9c07182357c4ee495030f40dcefb10d443ba8c208",
     strip_prefix = "rules_ts-1.4.0",
     url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_ts-v1.4.0.tar.gz",
 )
+
 # NOTE: aspect_rules_webpack exists for webpack, but it's incompatible with webpack v4.
 http_archive(
     name = "aspect_rules_jest",
@@ -163,14 +165,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.21.3.darwin-amd64.tar.gz", "85a9bce961b9bd45d6d67e306c79052f739ea9bda99f234ef7a716129315bfc8"),
-        "darwin_arm64": ("go1.21.3.darwin-arm64.tar.gz", "52d8a95622bf29bb73aa49af0ff73955e034969dba46c7f439399af7adafc787"),
-        "linux_amd64": ("go1.21.3.linux-amd64.tar.gz", "3ff4a24c4e64b46a3ade80abdcf34b8c26704799ec2763814e68edd81142df68"),
-        "linux_arm64": ("go1.21.3.linux-arm64.tar.gz", "29b53edd23dbcc27fc421e9cc83a0cd81f1d5e2bf9d061da6907e8be66fff48f"),
-        "windows_amd64": ("go1.21.3.windows-amd64.tar.gz", "d025882e7d846d722a90ca66204b561c6650e127e338fdc22e39964995253224"),
+        "darwin_amd64": ("go1.21.5.darwin-amd64.tar.gz", "6878b009493b8b2e5518b090209f63af478a6bdf889c6db4d3c6b68e43839e8e"),
+        "darwin_arm64": ("go1.21.5.darwin-arm64.tar.gz", "1f3673055f681982bda589bfb23938cb83bef4030efd3516bed0dc3ebd125f41"),
+        "linux_amd64": ("go1.21.5.linux-amd64.tar.gz", "78e55b80d0a5ef27e8e0913321cae31ba9509c05ed79c429e489ae3a25c74885"),
+        "linux_arm64": ("go1.21.5.linux-arm64.tar.gz", "89fe32d10a4a3831154bc740bfbc89405a5a8de0655e0cbe91e5ad952dfd6a52"),
+        "windows_amd64": ("go1.21.5.windows-amd64.tar.gz", "350b40fb129d0eac7eafd5ea2044c6dd1ce8b5a43572f22ef02b53e3d999f28a"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231205-160258/{}"],
-    version = "1.21.3",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231206-175156/{}"],
+    version = "1.21.5",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -225,35 +227,39 @@ toolchain_dependencies()
 
 # Configure nodeJS.
 load("//build:nodejs.bzl", "declare_nodejs_repos")
+
 declare_nodejs_repos()
 
 # NOTE: The version is expected to match up to what version of typescript we
 # use for all packages in pkg/ui.
 # TODO(ricky): We should add a lint check to ensure it does match.
 load("@aspect_rules_ts//ts/private:npm_repositories.bzl", ts_http_archive = "http_archive_version")
+
 ts_http_archive(
     name = "npm_typescript",
     build_file = "@aspect_rules_ts//ts:BUILD.typescript",
-    urls = ["https://storage.googleapis.com/cockroach-npm-deps/typescript/-/typescript-{}.tgz"],
-    version = "5.1.6",
     # v5.1.6 isn't known to rules_ts 1.4.0 (nor to any published rules_ts version as-of 7 Aug 2023).
     integrity = "sha512-zaWCozRZ6DLEWAWFrVDz1H6FVXzUSfTy5FUMWsQlU8Ym5JP9eO4xkTIROFCQvhQf61z6O/G6ugw3SgAnvvm+HA==",
+    urls = ["https://storage.googleapis.com/cockroach-npm-deps/typescript/-/typescript-{}.tgz"],
+    version = "5.1.6",
 )
+
 # NOTE: The version is expected to match up to what version we use in db-console.
 # TODO(ricky): We should add a lint check to ensure it does match.
 load("@aspect_rules_js//npm:repositories.bzl", "npm_import")
+
 npm_import(
     name = "pnpm",
-    integrity = "sha512-W6elL7Nww0a/MCICkzpkbxW6f99TQuX4DuJoDjWp39X08PKDkEpg4cgj3d6EtgYADcdQWl/eM8NdlLJVE3RgpA==",
-    package = "pnpm",
-    url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
-    version = "8.5.1",
     # Declare an @pnpm//:pnpm rule that can be called externally.
     # Copied from https://github.com/aspect-build/rules_js/blob/14724d9b27b2c45f088aa003c091cbe628108170/npm/private/pnpm_repository.bzl#L27-L30
     extra_build_content = "\n".join([
         """load("@aspect_rules_js//js:defs.bzl", "js_binary")""",
         """js_binary(name = "pnpm", entry_point = "package/dist/pnpm.cjs", visibility = ["//visibility:public"])""",
     ]),
+    integrity = "sha512-W6elL7Nww0a/MCICkzpkbxW6f99TQuX4DuJoDjWp39X08PKDkEpg4cgj3d6EtgYADcdQWl/eM8NdlLJVE3RgpA==",
+    package = "pnpm",
+    url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
+    version = "8.5.1",
 )
 
 load("@aspect_rules_js//js:repositories.bzl", "rules_js_dependencies")
@@ -265,25 +271,26 @@ load("@aspect_rules_js//npm:repositories.bzl", "npm_translate_lock")
 npm_translate_lock(
     name = "npm",
     data = [
-        "//pkg/ui:pnpm-workspace.yaml",
         "//pkg/ui:package.json",
+        "//pkg/ui:pnpm-workspace.yaml",
         "//pkg/ui/patches:topojson@3.0.2.patch",
-        "//pkg/ui/workspaces/db-console/src/js:package.json",
-        "//pkg/ui/workspaces/db-console:package.json",
         "//pkg/ui/workspaces/cluster-ui:package.json",
-        "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
+        "//pkg/ui/workspaces/db-console:package.json",
+        "//pkg/ui/workspaces/db-console/src/js:package.json",
         "//pkg/ui/workspaces/e2e-tests:package.json",
+        "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
     ],
-    patch_args = {
-        "*": ["-p1"]
-    },
     npmrc = "//pkg/ui:.npmrc.bazel",
+    patch_args = {
+        "*": ["-p1"],
+    },
     pnpm_lock = "//pkg/ui:pnpm-lock.yaml",
     verify_node_modules_ignored = "//:.bazelignore",
 )
-load("@npm//:repositories.bzl", npm_repositories = "npm_repositories")
-npm_repositories()
 
+load("@npm//:repositories.bzl", "npm_repositories")
+
+npm_repositories()
 
 #################################
 # end rules_js dependencies #
@@ -631,6 +638,7 @@ http_archive(
 
 # Cockroach binaries for use by mixed-version logictests.
 load("//pkg/sql/logictest:REPOSITORIES.bzl", "cockroach_binaries_for_testing")
+
 cockroach_binaries_for_testing()
 
 load("//build/bazelutil:repositories.bzl", "distdir_repositories")
@@ -640,11 +648,6 @@ distdir_repositories()
 # Download and register the FIPS enabled Go toolchain at the end to avoid toolchain conflicts for gazelle.
 go_download_sdk(
     name = "go_sdk_fips",
-    sdks = {
-        "linux_amd64": ("go1.21.3fips.linux-amd64.tar.gz", "03a3494f7b9d8a63750f72afd4f398baa723509a3c14dbff888a857ca01f0b5c"),
-    },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231205-160258/{}"],
-    version = "1.21.3fips",
     # In the golang-fips toolchain, FIPS-ready crypto packages are used by default, regardless of build tags.
     # The boringcrypto experiment does almost nothing in this toolchain, but it does enable the use of the
     # crypto/boring.Enabled() method which is the only application-visible way to inspect whether FIPS mode
@@ -655,4 +658,9 @@ go_download_sdk(
     # because A) we also want to detect the case when the kernel is not in FIPS mode and B) we want to be
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
+    sdks = {
+        "linux_amd64": ("go1.21.5fips.linux-amd64.tar.gz", "4368ab9cf7c8d75d6d33927917426d587f5be39fb18a87fbe2d59281a8569819"),
+    },
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231206-175156/{}"],
+    version = "1.21.5fips",
 )
