@@ -570,7 +570,9 @@ func (r *testRunner) runWorker(
 
 		// If we are reusing a cluster, wipe it.
 		if testToRun.canReuseCluster {
-			err := c.WipeForReuse(ctx, l, testToRun.spec.Cluster)
+			if err = c.WipeForReuse(ctx, l, testToRun.spec.Cluster); err == nil {
+				err = c.MaybeExtendCluster(ctx, l, testToRun.spec)
+			}
 			if err != nil {
 				shout(ctx, l, stdout, "Unable to reuse cluster: %s due to: %s. Will attempt to create a fresh one",
 					c.Name(), err)
@@ -1049,23 +1051,6 @@ func (r *testRunner) runTest(
 
 	t.start = timeutil.Now()
 
-	timeout := 10 * time.Hour
-	if d := s.Timeout; d != 0 {
-		timeout = d
-	}
-	// Make sure the cluster has enough life left for the test plus enough headroom
-	// after the test finishes so that the next test can be selected. If it
-	// doesn't, extend it.
-	minExp := timeutil.Now().Add(timeout + time.Hour)
-	if c.expiration.Before(minExp) {
-		extend := minExp.Sub(c.expiration)
-		l.PrintfCtx(ctx, "cluster needs to survive until %s, but has expiration: %s. Extending.",
-			minExp, c.expiration)
-		if err := c.Extend(ctx, extend, l); err != nil {
-			return errors.Wrapf(err, "failed to extend cluster: %s", c.name)
-		}
-	}
-
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	t.mu.Lock()
@@ -1096,6 +1081,7 @@ func (r *testRunner) runTest(
 	}()
 
 	var timedOut bool
+	timeout := testTimeout(t.spec)
 
 	if grafanaAvailable {
 		// Shout this to the log and stdout to make it available to anyone watching the test via CI or locally.
@@ -1705,4 +1691,14 @@ func zipArtifacts(t *testImpl) error {
 		return err
 	}
 	return moveToZipArchive("artifacts.zip", t.ArtifactsDir(), list...)
+}
+
+// testTimeout returns the timeout of a test. The default is set
+// to 3 hours but tests may specify their own timeouts.
+func testTimeout(spec *registry.TestSpec) time.Duration {
+	timeout := 3 * time.Hour
+	if d := spec.Timeout; d != 0 {
+		timeout = d
+	}
+	return timeout
 }
