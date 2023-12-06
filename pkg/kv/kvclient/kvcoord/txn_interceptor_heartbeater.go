@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -525,6 +526,11 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		// concurrent requests from failing to notice the transaction was aborted.
 		Poison: true,
 	})
+	ba.AdmissionHeader = kvpb.AdmissionHeader{
+		Priority:   int32(admissionpb.NormalPri),
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     kvpb.AdmissionHeader_OTHER,
+	}
 
 	const taskName = "txnHeartbeater: aborting txn"
 	log.VEventf(ctx, 2, "async abort for txn: %s", txn)

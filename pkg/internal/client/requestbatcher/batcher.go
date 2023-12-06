@@ -296,10 +296,13 @@ func (b *RequestBatcher) SendWithChan(
 // is canceled before the sending of the request completes. The context with
 // the latest deadline for a batch is used to send the underlying batch request.
 func (b *RequestBatcher) Send(
-	ctx context.Context, rangeID roachpb.RangeID, req kvpb.Request,
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	req kvpb.Request,
+	admissionHeader kvpb.AdmissionHeader,
 ) (kvpb.Response, error) {
 	responseChan := b.pool.getResponseChan()
-	if err := b.SendWithChan(ctx, responseChan, rangeID, req, kvpb.AdmissionHeader{}); err != nil {
+	if err := b.SendWithChan(ctx, responseChan, rangeID, req, admissionHeader); err != nil {
 		return nil, err
 	}
 	select {

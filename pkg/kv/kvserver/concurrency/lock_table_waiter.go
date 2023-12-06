@@ -12,6 +12,7 @@ package concurrency
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -329,6 +331,9 @@ func (w *lockTableWaiterImpl) WaitOn(
 				// the comment in lockTableImpl.tryActiveWait for the proper way to
 				// remove this and other evaluation races.
 				toResolve := guard.ResolveBeforeScanning()
+				if req.AdmissionHeader == (kvpb.AdmissionHeader{}) {
+					panic(fmt.Sprintf("empty admission header provided by %+v", req))
+				}
 				return w.ResolveDeferredIntents(ctx, req.AdmissionHeader, toResolve)
 
 			default:
@@ -659,6 +664,9 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	}
 	logResolveIntent(ctx, resolve)
 	opts := intentresolver.ResolveOptions{Poison: true, AdmissionHeader: req.AdmissionHeader}
+	if req.AdmissionHeader == (kvpb.AdmissionHeader{}) {
+		panic(fmt.Sprintf("empty admission header provided by %+v", req))
+	}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
 }
 
@@ -850,6 +858,13 @@ func (w *lockTableWaiterImpl) ResolveDeferredIntents(
 	log.VEventf(ctx, 2, "resolving a batch of %d intent(s)", len(deferredResolution))
 	for _, intent := range deferredResolution {
 		logResolveIntent(ctx, intent)
+	}
+	if admissionHeader == (kvpb.AdmissionHeader{}) {
+		admissionHeader = kvpb.AdmissionHeader{
+			Priority:   int32(admissionpb.NormalPri),
+			CreateTime: timeutil.Now().UnixNano(),
+			Source:     kvpb.AdmissionHeader_OTHER,
+		}
 	}
 	// See pushLockTxn for an explanation of these options.
 	opts := intentresolver.ResolveOptions{Poison: true, AdmissionHeader: admissionHeader}

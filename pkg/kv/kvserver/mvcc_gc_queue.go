@@ -773,6 +773,7 @@ func (mgcq *mvccGCQueue) process(
 				intents[i] = roachpb.MakeIntent(&l.Txn, l.Key)
 			}
 			intentCount, err := repl.store.intentResolver.CleanupIntents(
+				// TODO(aaditya) should this still be gcAdmissionHeader?
 				ctx, gcAdmissionHeader(repl.store.ClusterSettings()), intents, gcTimestamp, kvpb.PUSH_TOUCH)
 			if err == nil {
 				mgcq.store.metrics.GCResolveSuccess.Inc(int64(intentCount))

@@ -509,6 +509,9 @@ func (m *managerImpl) HandleLockConflictError(
 	// next evaluation attempt, do so.
 	if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
 		if err := m.ltw.ResolveDeferredIntents(ctx, g.Req.AdmissionHeader, toResolve); err != nil {
+			if g.Req.AdmissionHeader == (kvpb.AdmissionHeader{}) {
+				panic(fmt.Sprintf("empty admission header provided by %+v", g.Req))
+			}
 			m.FinishReq(g)
 			return nil, err
 		}
