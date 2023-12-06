@@ -44,11 +44,13 @@ func (s *Exception) PlpgSQLStatementTag() string {
 	return "proc_exception"
 }
 
-func (s *Exception) WalkStmt(visitor StatementVisitor) {
-	visitor.Visit(s)
+func (s *Exception) WalkStmt(visitor StatementVisitor) (newStmt Statement, changed bool) {
+	newStmt, _ = visitor.Visit(s)
 	for _, stmt := range s.Action {
+		// TODO
 		stmt.WalkStmt(visitor)
 	}
+	return newStmt, changed
 }
 
 type Condition struct {

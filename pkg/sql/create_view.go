@@ -13,6 +13,9 @@ package sql
 import (
 	"context"
 	"fmt"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -425,9 +428,9 @@ func makeViewTableDesc(
 	return desc, nil
 }
 
-// replaceSeqNamesWithIDs prepares to walk the given viewQuery by defining the
+// replaceSeqNamesWithIDs prepares to walk the given query by defining the
 // function used to replace sequence names with IDs, and parsing the
-// viewQuery into a statement.
+// queryStr into a statement.
 // TODO (Chengxiong): move this to a better place.
 func replaceSeqNamesWithIDs(
 	ctx context.Context, sc resolver.SchemaResolver, queryStr string, multiStmt bool,
@@ -483,6 +486,50 @@ func replaceSeqNamesWithIDs(
 			fmtCtx.WriteString(";")
 		}
 	}
+
+	return fmtCtx.String(), nil
+}
+
+// replaceSeqNamesWithIDsPLpgSQL prepares to walk the given PLpgSQL query by
+// defining the function used to replace sequence names with IDs, and parsing
+// the query into a statement.
+func replaceSeqNamesWithIDsPLpgSQL(
+	ctx context.Context, sc resolver.SchemaResolver, queryStr string, multiStmt bool,
+) (string, error) {
+	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if expr == nil {
+			return false, expr, nil
+		}
+		seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
+		if err != nil {
+			return false, expr, err
+		}
+		seqNameToID := make(map[string]descpb.ID)
+		for _, seqIdentifier := range seqIdentifiers {
+			seqDesc, err := GetSequenceDescFromIdentifier(ctx, sc, seqIdentifier)
+			if err != nil {
+				return false, expr, err
+			}
+			seqNameToID[seqIdentifier.SeqName] = seqDesc.ID
+		}
+		newExpr, err = seqexpr.ReplaceSequenceNamesWithIDs(expr, seqNameToID)
+		if err != nil {
+			return false, expr, err
+		}
+		return false, newExpr, nil
+	}
+	var stmts plpgsqltree.Statement
+	plstmt, err := plpgsql.Parse(queryStr)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse query string")
+	}
+	stmts = plstmt.AST
+
+	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	v := utils.SQLStmtVisitor{Fn: replaceSeqFunc}
+	newStmt := plpgsqltree.Walk(&v, stmts)
+	log.Infof(context.Background(), "New stmt: %s", newStmt)
+	fmtCtx.FormatNode(newStmt)
 
 	return fmtCtx.String(), nil
 }

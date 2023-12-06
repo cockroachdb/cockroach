@@ -472,7 +472,11 @@ func setFuncOptions(
 	case catpb.Function_PLPGSQL:
 		// TODO(#115627): make replaceSeqNamesWithIDs and serializeUserDefinedTypes
 		// play nice with PL/pgSQL.
-		udfDesc.SetFuncBody(body)
+		seqReplacedFuncBody, err := replaceSeqNamesWithIDsPLpgSQL(params.ctx, params.p, body, false)
+		if err != nil {
+			return err
+		}
+		udfDesc.SetFuncBody(seqReplacedFuncBody)
 	}
 
 	return nil

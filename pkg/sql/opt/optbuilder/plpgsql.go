@@ -1476,7 +1476,7 @@ func newRecordTypeVisitor(
 
 var _ ast.StatementVisitor = &recordTypeVisitor{}
 
-func (r *recordTypeVisitor) Visit(stmt ast.Statement) {
+func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, changed bool){
 	if retStmt, ok := stmt.(*ast.Return); ok {
 		desired := types.Any
 		if r.typ != types.Unknown {
@@ -1489,7 +1489,7 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) {
 		}
 		typ := typedExpr.ResolvedType()
 		if typ == types.Unknown {
-			return
+			return stmt, false
 		}
 		if typ.Family() != types.TupleFamily {
 			panic(pgerror.New(pgcode.DatatypeMismatch,
@@ -1498,7 +1498,7 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) {
 		}
 		if r.typ == types.Unknown {
 			r.typ = typ
-			return
+			return stmt, false
 		}
 		if !typ.Identical(r.typ) {
 			panic(errors.WithHint(
@@ -1509,4 +1509,5 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) {
 			))
 		}
 	}
+	return stmt, false
 }
