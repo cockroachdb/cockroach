@@ -370,6 +370,8 @@ type CopyIn struct {
 	// CopyDone is decremented once execution finishes, signaling that control of
 	// the connection is being handed back to the network routine.
 	CopyDone *sync.WaitGroup
+	// Once is used to decrement CopyDone exactly once.
+	Once *sync.Once
 	// TimeReceived is the time at which the message was received
 	// from the client. Used to compute the service latency.
 	TimeReceived time.Time

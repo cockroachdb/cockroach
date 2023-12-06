@@ -409,7 +409,8 @@ func (c *conn) handleSimpleQuery(
 							"COPY together with other statements in a query string is not supported"),
 					})
 			}
-			copyDone := sync.WaitGroup{}
+			var copyDone sync.WaitGroup
+			var once sync.Once
 			copyDone.Add(1)
 			if err := c.stmtBuf.Push(
 				ctx,
@@ -418,6 +419,7 @@ func (c *conn) handleSimpleQuery(
 					ParsedStmt:   stmts[i],
 					Stmt:         cp,
 					CopyDone:     &copyDone,
+					Once:         &once,
 					TimeReceived: timeReceived,
 					ParseStart:   startParse,
 					ParseEnd:     endParse,
