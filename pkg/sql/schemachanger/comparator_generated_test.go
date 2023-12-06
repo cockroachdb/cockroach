@@ -1033,11 +1033,6 @@ func TestSchemaChangeComparator_mixed_version_partially_visible_index(t *testing
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_partially_visible_index"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_mixed_version_plpgsql(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_plpgsql"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_mixed_version_procedure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/mixed_version_procedure"
@@ -1238,19 +1233,9 @@ func TestSchemaChangeComparator_plpgsql_builtins(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/plpgsql_builtins"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_plpgsql_cursor(t *testing.T) {
+func TestSchemaChangeComparator_plpgsql_license(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/plpgsql_cursor"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_plpgsql_record(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/plpgsql_record"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_plpgsql_unsupported(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/plpgsql_unsupported"
+	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/plpgsql_license"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_poison_after_push(t *testing.T) {
@@ -1291,11 +1276,6 @@ func TestSchemaChangeComparator_privileges_table(t *testing.T) {
 func TestSchemaChangeComparator_procedure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_procedure_plpgsql(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/procedure_plpgsql"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_procedure_privileges(t *testing.T) {
@@ -1341,11 +1321,6 @@ func TestSchemaChangeComparator_record(t *testing.T) {
 func TestSchemaChangeComparator_redact_descriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/redact_descriptor"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_refcursor(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/refcursor"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_rename_atomic(t *testing.T) {
@@ -1958,11 +1933,6 @@ func TestSchemaChangeComparator_udf_options(t *testing.T) {
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_options"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
-func TestSchemaChangeComparator_udf_plpgsql(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_plpgsql"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
 func TestSchemaChangeComparator_udf_prepare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_prepare"
@@ -2021,11 +1991,6 @@ func TestSchemaChangeComparator_udf_update(t *testing.T) {
 func TestSchemaChangeComparator_udf_upsert(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_upsert"
-	runSchemaChangeComparatorTest(t, logicTestFile)
-}
-func TestSchemaChangeComparator_udf_volatility_check(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	var logicTestFile = "pkg/sql/logictest/testdata/logic_test/udf_volatility_check"
 	runSchemaChangeComparatorTest(t, logicTestFile)
 }
 func TestSchemaChangeComparator_union(t *testing.T) {
