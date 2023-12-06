@@ -872,7 +872,7 @@ upsert xy
                      └── x:27 = r2:32 [outer=(27,32), constraints=(/27: (/NULL - ]; /32: (/NULL - ]), fd=(27)==(32), (32)==(27)]
 
 # Case with a multi-row data source with a lax key.
-# TODO(drewk): the UpsertDistinctOn isn't removed in this case because the lax
+# TODO(#75070): the UpsertDistinctOn isn't removed in this case because the lax
 # key for nullablecols isn't fully simplified.
 norm
 INSERT INTO xy SELECT c1, c2 FROM nullablecols ON CONFLICT (x) DO UPDATE SET x = xy.x + 100

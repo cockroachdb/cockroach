@@ -208,8 +208,6 @@ statement error pgcode 2BP01 pq: cannot drop column "b" because function "f_unqu
 ALTER TABLE t_twocol DROP COLUMN b;
 
 # Drop all but one of the functions with an implicit record return value.
-# TODO(#96368): Allow these UDFs to be dropped in the CASCADE when the cross-
-# references are fixed instead.
 statement ok
 DROP FUNCTION f_tuplestar;
 DROP FUNCTION f_allcolsel_alias;

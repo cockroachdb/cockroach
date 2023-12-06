@@ -485,8 +485,8 @@ func (g *routineGenerator) newCursorHelper(plan *planComponents) (*plpgsqlCursor
 // plpgsqlCursorHelper wraps a row container in order to feed the results of
 // executing a SQL statement to a SQL cursor. Note that the SQL statement is not
 // lazily executed; its entire result is written to the container.
-// TODO(drewk): while the row container can spill to disk, we should default to
-// lazy execution for cursors for performance reasons.
+// TODO(#111479): while the row container can spill to disk, we should default
+// to lazy execution for cursors for performance reasons.
 type plpgsqlCursorHelper struct {
 	ctx         context.Context
 	cursorName  tree.Name
