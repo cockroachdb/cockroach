@@ -58,7 +58,7 @@ type telemetryVisitor struct {
 var _ plpgsqltree.StatementVisitor = &telemetryVisitor{}
 
 // Visit implements the StatementVisitor interface
-func (v *telemetryVisitor) Visit(stmt plpgsqltree.Statement) {
+func (v *telemetryVisitor) Visit(stmt plpgsqltree.Statement) (newStmt plpgsqltree.Statement, changed bool) {
 	taggedStmt, ok := stmt.(plpgsqltree.TaggedStatement)
 	if !ok {
 		v.Err = errors.AssertionFailedf("no tag found for stmt %q", stmt)
@@ -75,6 +75,7 @@ func (v *telemetryVisitor) Visit(stmt plpgsqltree.Statement) {
 	}
 	v.Err = nil
 
+	return stmt, false
 }
 
 // MakePLpgSQLTelemetryVisitor makes a plpgsql telemetry visitor, for capturing
@@ -113,4 +114,377 @@ func ParseAndCollectTelemetryForPLpgSQLFunc(stmt *tree.CreateRoutine) error {
 		return errors.Wrap(err, "plpgsql not supported in user-defined functions")
 	}
 	return unimp.New("plpgsql", "plpgsql not supported in user-defined functions")
+}
+
+
+// SQLStmtVisitor calls Fn for every SQL statement and expression found while
+// walking the PLpgSQL AST. Since PLpgSQL nodes may have statement and
+// expression fields that are nil, Fn should handle the nil case.
+type SQLStmtVisitor struct {
+	ctx   context.Context
+	Fn    tree.SimpleVisitFn
+	TypFn func(typ tree.ResolvableTypeReference) (newTyp tree.ResolvableTypeReference, err error)
+	Err   error
+}
+
+var _ plpgsqltree.StatementVisitor = &SQLStmtVisitor{}
+
+func (v *SQLStmtVisitor) Visit(stmt plpgsqltree.Statement) (newStmt plpgsqltree.Statement, changed bool) {
+	if v.Err != nil {
+		return stmt, false
+	}
+	newStmt = stmt
+	var s tree.Statement
+	var e tree.Expr
+	switch t := stmt.(type) {
+	case *plpgsqltree.CursorDeclaration:
+		s, v.Err = tree.SimpleStmtVisit(t.Query, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Query != s
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Query = s
+			newStmt = cpy
+		}
+	case *plpgsqltree.Execute:
+		s, v.Err = tree.SimpleStmtVisit(t.SqlStmt, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.SqlStmt != s
+		if changed {
+			cpy := t.CopyNode()
+			cpy.SqlStmt = s
+			newStmt = cpy
+		}
+	case *plpgsqltree.Open:
+		s, v.Err = tree.SimpleStmtVisit(t.Query, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Query != s
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Query = s
+			newStmt = cpy
+		}
+	case *plpgsqltree.Declaration:
+		e, v.Err = tree.SimpleVisit(t.Expr, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Expr != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Expr = e
+			newStmt = cpy
+		}
+		if v.TypFn != nil {
+			var newTyp tree.ResolvableTypeReference
+			newTyp, v.Err = v.TypFn(t.Typ)
+			if v.Err != nil {
+				return stmt, false
+			}
+			changed = changed || t.Typ != newTyp
+			if changed {
+				if newStmt == stmt {
+					newStmt = t.CopyNode()
+				}
+				newStmt.(*plpgsqltree.Declaration).Typ = newTyp
+			}
+		}
+	case *plpgsqltree.Assignment:
+		e, v.Err = tree.SimpleVisit(t.Value, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Value != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Value = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.If:
+		e, v.Err = tree.SimpleVisit(t.Condition, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Condition != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Condition = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.ElseIf:
+		e, v.Err = tree.SimpleVisit(t.Condition, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Condition != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Condition = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.While:
+		e, v.Err = tree.SimpleVisit(t.Condition, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Condition != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Condition = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.ForInt:
+		el, err := tree.SimpleVisit(t.Lower, v.Fn)
+		if err != nil {
+			v.Err = err
+			return stmt, false
+		}
+		changed = t.Lower != el
+		eu, err := tree.SimpleVisit(t.Upper, v.Fn)
+		if err != nil {
+			v.Err = err
+			return stmt, false
+		}
+		changed = changed || (t.Upper != eu)
+		es, err := tree.SimpleVisit(t.Step, v.Fn)
+		if err != nil {
+			v.Err = err
+			return stmt, false
+		}
+		changed = changed || (t.Step != es)
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Lower = el
+			cpy.Upper = eu
+			cpy.Step = es
+			newStmt = cpy
+		}
+	case *plpgsqltree.ForSelect:
+		e, v.Err = tree.SimpleVisit(t.Query, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Query != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Query = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.ForCursor:
+		e, v.Err = tree.SimpleVisit(t.ArgQuery, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.ArgQuery != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.ArgQuery = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.ForDynamic:
+		e, v.Err = tree.SimpleVisit(t.Query, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Query != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Query = e
+			newStmt = cpy
+		}
+		for i, p := range t.Params {
+			e, v.Err = tree.SimpleVisit(p, v.Fn)
+			if v.Err != nil {
+				return stmt, false
+			}
+			changed = changed || (t.Params[i] != e)
+			if changed {
+				if newStmt != stmt {
+					cpy := t.CopyNode()
+					newStmt = cpy
+				}
+				newStmt.(*plpgsqltree.ForDynamic).Params[i] = e
+			}
+		}
+	case *plpgsqltree.ForEachArray:
+		e, v.Err = tree.SimpleVisit(t.Expr, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Expr != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Expr = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.Exit:
+		e, v.Err = tree.SimpleVisit(t.Condition, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Condition != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Condition = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.Continue:
+		e, v.Err = tree.SimpleVisit(t.Condition, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Condition != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Condition = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.Return:
+		e, v.Err = tree.SimpleVisit(t.Expr, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Expr != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Expr = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.ReturnNext:
+		e, v.Err = tree.SimpleVisit(t.Expr, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Expr != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Expr = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.ReturnQuery:
+		e, v.Err = tree.SimpleVisit(t.Query, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Query != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Query = e
+			newStmt = cpy
+		}
+		e, v.Err = tree.SimpleVisit(t.DynamicQuery, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = changed || (t.DynamicQuery != e)
+		if changed {
+			if newStmt == stmt {
+				cpy := t.CopyNode()
+				newStmt = cpy
+			}
+			newStmt.(*plpgsqltree.ReturnQuery).DynamicQuery = e
+		}
+		t.DynamicQuery = e
+		for i, p := range t.Params {
+			e, v.Err = tree.SimpleVisit(p, v.Fn)
+			if v.Err != nil {
+				return stmt, false
+			}
+			changed = changed || (t.Params[i] != e)
+			if changed {
+				if newStmt != stmt {
+					cpy := t.CopyNode()
+					newStmt = cpy
+				}
+				newStmt.(*plpgsqltree.ReturnQuery).Params[i] = e
+			}
+		}
+	case *plpgsqltree.Raise:
+		for i, p := range t.Params {
+			e, v.Err = tree.SimpleVisit(p, v.Fn)
+			if v.Err != nil {
+				return stmt, false
+			}
+			changed = changed || (t.Params[i] != e)
+			if changed {
+				if newStmt != stmt {
+					cpy := t.CopyNode()
+					newStmt = cpy
+				}
+				newStmt.(*plpgsqltree.Raise).Params[i] = e
+			}
+		}
+		for i, p := range t.Options {
+			e, v.Err = tree.SimpleVisit(p.Expr, v.Fn)
+			if v.Err != nil {
+				return stmt, false
+			}
+			changed = changed || (t.Options[i].Expr != e)
+			if changed {
+				if newStmt != stmt {
+					cpy := t.CopyNode()
+					newStmt = cpy
+				}
+				newStmt.(*plpgsqltree.Raise).Options[i].Expr = e
+			}
+		}
+	case *plpgsqltree.Assert:
+		e, v.Err = tree.SimpleVisit(t.Condition, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Condition != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Condition = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.DynamicExecute:
+		for i, p := range t.Params {
+			e, v.Err = tree.SimpleVisit(p, v.Fn)
+			if v.Err != nil {
+				return stmt, false
+			}
+			changed = changed || (t.Params[i] != e)
+			if changed {
+				if newStmt != stmt {
+					cpy := t.CopyNode()
+					newStmt = cpy
+				}
+				newStmt.(*plpgsqltree.DynamicExecute).Params[i] = e
+			}
+		}
+	case *plpgsqltree.Perform:
+		e, v.Err = tree.SimpleVisit(t.Expr, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Expr != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Expr = e
+			newStmt = cpy
+		}
+	case *plpgsqltree.Call:
+		e, v.Err = tree.SimpleVisit(t.Expr, v.Fn)
+		if v.Err != nil {
+			return stmt, false
+		}
+		changed = t.Expr != e
+		if changed {
+			cpy := t.CopyNode()
+			cpy.Expr = e
+			newStmt = cpy
+		}
+	}
+	if v.Err != nil {
+		return stmt, false
+	}
+	return newStmt, changed
 }

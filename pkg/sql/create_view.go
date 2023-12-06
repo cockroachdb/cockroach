@@ -30,8 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -425,14 +428,26 @@ func makeViewTableDesc(
 	return desc, nil
 }
 
-// replaceSeqNamesWithIDs prepares to walk the given viewQuery by defining the
+// replaceSeqNamesWithIDs prepares to walk the given query by defining the
 // function used to replace sequence names with IDs, and parsing the
-// viewQuery into a statement.
+// queryStr into a statement.
 // TODO (Chengxiong): move this to a better place.
 func replaceSeqNamesWithIDs(
 	ctx context.Context, sc resolver.SchemaResolver, queryStr string, multiStmt bool,
 ) (string, error) {
+	return replaceSeqNamesWithIDsLang(ctx, sc, queryStr, multiStmt, catpb.Function_SQL)
+}
+
+// replaceSeqNamesWithIDsLang prepares to walk the given query by defining the
+// function used to replace sequence names with IDs, and parsing the
+// queryStr into a statement.
+func replaceSeqNamesWithIDsLang(
+	ctx context.Context, sc resolver.SchemaResolver, queryStr string, multiStmt bool, lang catpb.Function_Language,
+) (string, error) {
 	replaceSeqFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if expr == nil {
+			return false, expr, nil
+		}
 		seqIdentifiers, err := seqexpr.GetUsedSequences(expr)
 		if err != nil {
 			return false, expr, err
@@ -452,48 +467,72 @@ func replaceSeqNamesWithIDs(
 		return false, newExpr, nil
 	}
 
-	var stmts tree.Statements
-	if multiStmt {
-		parsedStmtd, err := parser.Parse(queryStr)
-		if err != nil {
-			return "", errors.Wrap(err, "failed to parse query string")
-		}
-		for _, s := range parsedStmtd {
-			stmts = append(stmts, s.AST)
-		}
-	} else {
-		stmt, err := parser.ParseOne(queryStr)
-		if err != nil {
-			return "", errors.Wrap(err, "failed to parse query string")
-		}
-		stmts = tree.Statements{stmt.AST}
-	}
-
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, stmt := range stmts {
-		newStmt, err := tree.SimpleStmtVisit(stmt, replaceSeqFunc)
-		if err != nil {
-			return "", err
-		}
-		if i > 0 {
-			fmtCtx.WriteString("\n")
-		}
-		fmtCtx.FormatNode(newStmt)
+	switch lang {
+	case catpb.Function_SQL:
+		var stmts tree.Statements
 		if multiStmt {
-			fmtCtx.WriteString(";")
+			parsedStmtd, err := parser.Parse(queryStr)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to parse query string")
+			}
+			for _, s := range parsedStmtd {
+				stmts = append(stmts, s.AST)
+			}
+		} else {
+			stmt, err := parser.ParseOne(queryStr)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to parse query string")
+			}
+			stmts = tree.Statements{stmt.AST}
 		}
+
+		for i, stmt := range stmts {
+			newStmt, err := tree.SimpleStmtVisit(stmt, replaceSeqFunc)
+			if err != nil {
+				return "", err
+			}
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			fmtCtx.FormatNode(newStmt)
+			if multiStmt {
+				fmtCtx.WriteString(";")
+			}
+		}
+	case catpb.Function_PLPGSQL:
+		var stmts plpgsqltree.Statement
+		plstmt, err := plpgsql.Parse(queryStr)
+		if err != nil {
+		return "", errors.Wrap(err, "failed to parse query string")
+		}
+		stmts = plstmt.AST
+
+		v := utils.SQLStmtVisitor{Fn: replaceSeqFunc}
+		newStmt := plpgsqltree.Walk(&v, stmts)
+		fmtCtx.FormatNode(newStmt)
 	}
 
 	return fmtCtx.String(), nil
 }
 
-// serializeUserDefinedTypes will walk the given view query
-// and serialize any user defined types, so that renaming the type
-// does not corrupt the view.
+// serializeUserDefinedTypes will walk the given query and serialize any user
+// defined types, so that renaming the type does not cause corruption.
 func serializeUserDefinedTypes(
 	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool, parentType string,
 ) (string, error) {
+	return serializeUserDefinedTypesLang(ctx, semaCtx, queries, multiStmt, parentType, catpb.Function_SQL)
+}
+
+// serializeUserDefinedTypesLang will walk the given query and serialize any
+// user defined types, so that renaming the type does not cause corruption.
+func serializeUserDefinedTypesLang(
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool, parentType string, lang catpb.Function_Language,
+) (string, error) {
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if expr == nil {
+			return false, expr, nil
+		}
 		var innerExpr tree.Expr
 		var typRef tree.ResolvableTypeReference
 		switch n := expr.(type) {
@@ -539,39 +578,75 @@ func serializeUserDefinedTypes(
 		}
 		return false, parsedExpr, nil
 	}
-
-	var stmts tree.Statements
-	if multiStmt {
-		parsedStmts, err := parser.Parse(queries)
+	replaceTypeFunc := func(typ tree.ResolvableTypeReference) (newTyp tree.ResolvableTypeReference, err error) {
+		if typ == nil {
+			return  typ, nil
+		}
+		// semaCtx may be nil if this is a virtual view being created at
+		// init time.
+		var typeResolver tree.TypeReferenceResolver
+		if semaCtx != nil {
+			typeResolver = semaCtx.TypeResolver
+		}
+		var t *types.T
+		t, err = tree.ResolveType(ctx, typ, typeResolver)
 		if err != nil {
-			return "", errors.Wrap(err, "failed to parse query")
+			return typ, err
 		}
-		stmts = make(tree.Statements, len(parsedStmts))
-		for i, stmt := range parsedStmts {
-			stmts[i] = stmt.AST
+		if !t.UserDefined() {
+			return typ, nil
 		}
-	} else {
-		stmt, err := parser.ParseOne(queries)
-		if err != nil {
-			return "", errors.Wrap(err, "failed to parse query")
-		}
-		stmts = tree.Statements{stmt.AST}
+		return &tree.OIDTypeReference{OID: t.Oid()}, nil
 	}
 
 	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	for i, stmt := range stmts {
-		newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
-		if err != nil {
-			return "", err
-		}
-		if i > 0 {
-			fmtCtx.WriteString("\n")
-		}
-		fmtCtx.FormatNode(newStmt)
+	switch lang {
+	case catpb.Function_SQL:
+		var stmts tree.Statements
 		if multiStmt {
-			fmtCtx.WriteString(";")
+			parsedStmts, err := parser.Parse(queries)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to parse query")
+			}
+			stmts = make(tree.Statements, len(parsedStmts))
+			for i, stmt := range parsedStmts {
+				stmts[i] = stmt.AST
+			}
+		} else {
+			stmt, err := parser.ParseOne(queries)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to parse query")
+			}
+			stmts = tree.Statements{stmt.AST}
 		}
+
+		for i, stmt := range stmts {
+			newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+			if err != nil {
+				return "", err
+			}
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			fmtCtx.FormatNode(newStmt)
+			if multiStmt {
+				fmtCtx.WriteString(";")
+			}
+		}
+	case catpb.Function_PLPGSQL:
+		var stmts plpgsqltree.Statement
+		plstmt, err := plpgsql.Parse(queries)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to parse query string")
+		}
+		stmts = plstmt.AST
+
+		v := utils.SQLStmtVisitor{Fn: replaceFunc, TypFn: replaceTypeFunc}
+		newStmt := plpgsqltree.Walk(&v, stmts)
+		fmtCtx.FormatNode(newStmt)
+		fmtCtx.WriteString(";")
 	}
+
 	return fmtCtx.CloseAndGetString(), nil
 }
 

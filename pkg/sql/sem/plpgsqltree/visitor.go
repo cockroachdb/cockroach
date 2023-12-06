@@ -14,10 +14,11 @@ package plpgsqltree
 // a statement walk.
 type StatementVisitor interface {
 	// Visit is called during a statement walk.
-	Visit(stmt Statement)
+	Visit(stmt Statement) (newStmt Statement, changed bool)
 }
 
 // Walk traverses the plpgsql statement.
-func Walk(v StatementVisitor, stmt Statement) {
-	stmt.WalkStmt(v)
+func Walk(v StatementVisitor, stmt Statement) Statement {
+	newStmt, _ := stmt.WalkStmt(v)
+	return newStmt
 }
