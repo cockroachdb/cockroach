@@ -123,22 +123,27 @@ func registerIntentResolutionOverload(r registry.Registry) {
 				}
 				// Loop for up to 20 minutes. Intents take ~10min to resolve, and
 				// we're padding by another 10min.
-				//
-				// TODO(sumeer): change subLevelThreshold to 20 after intent
-				// resolution is subject to admission control.
-				const subLevelThreshold = 100
+				const subLevelThreshold = 20
+				const sampleCountForL0Sublevel = 12
 				numErrors := 0
 				numSuccesses := 0
 				latestIntentCount := math.MaxInt
-				for i := 0; i < 40; i++ {
-					time.Sleep(30 * time.Second)
+				var l0SublevelCount []float64
+				for i := 0; i < 120; i++ {
+					time.Sleep(10 * time.Second)
 					val, err := getMetricVal(subLevelMetric)
 					if err != nil {
 						numErrors++
 						continue
 					}
-					if val > subLevelThreshold {
-						t.Fatalf("sub-level count %f exceeded threshold", val)
+					l0SublevelCount = append(l0SublevelCount, val)
+					// We want to use the mean of the last 2m of data to avoid short-lived
+					// spikes causing failures.
+					if len(l0SublevelCount) >= sampleCountForL0Sublevel {
+						latestSampleMeanL0Sublevels := getMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
+						if latestSampleMeanL0Sublevels > subLevelThreshold {
+							t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
+						}
 					}
 					val, err = getMetricVal(intentCountMetric)
 					if err != nil {
@@ -164,4 +169,20 @@ func registerIntentResolutionOverload(r registry.Registry) {
 			m.Wait()
 		},
 	})
+}
+
+// Returns the mean over the last n samples. If n > len(items), returns the mean
+// over the entire items slice.
+func getMeanOverLastN(n int, items []float64) float64 {
+	count := n
+	if len(items) < n {
+		count = len(items)
+	}
+	sum := float64(0)
+	i := 0
+	for i < count {
+		sum += items[len(items)-1-i]
+		i++
+	}
+	return sum / float64(count)
 }
