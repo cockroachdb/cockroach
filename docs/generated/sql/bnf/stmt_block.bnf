@@ -3420,6 +3420,12 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name alter_column_on_update
 	| 'ALTER' opt_column column_name alter_column_visible
 	| 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'
+	| 'ALTER' opt_column column_name 'ADD' generated_always_as 'IDENTITY'
+	| 'ALTER' opt_column column_name 'ADD' generated_by_default_as 'IDENTITY'
+	| 'ALTER' opt_column column_name 'ADD' generated_always_as 'IDENTITY' '(' opt_sequence_option_list ')'
+	| 'ALTER' opt_column column_name 'ADD' generated_by_default_as 'IDENTITY' '(' opt_sequence_option_list ')'
+	| 'ALTER' opt_column column_name set_generated_always
+	| 'ALTER' opt_column column_name set_generated_default
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
 	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
@@ -4337,6 +4343,18 @@ alter_column_visible ::=
 	'SET' 'VISIBLE'
 	| 'SET' 'NOT' 'VISIBLE'
 
+generated_always_as ::=
+	'GENERATED_ALWAYS' 'ALWAYS' 'AS'
+
+generated_by_default_as ::=
+	'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS'
+
+set_generated_always ::=
+	'SET' 'GENERATED_ALWAYS' 'ALWAYS'
+
+set_generated_default ::=
+	'SET' 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT'
+
 opt_set_data ::=
 	'SET' 'DATA'
 	| 
@@ -4764,12 +4782,6 @@ opt_name_parens ::=
 generated_as ::=
 	'AS'
 	| generated_always_as
-
-generated_always_as ::=
-	'GENERATED_ALWAYS' 'ALWAYS' 'AS'
-
-generated_by_default_as ::=
-	'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS'
 
 frame_bound ::=
 	'UNBOUNDED' 'PRECEDING'
