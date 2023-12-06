@@ -1855,7 +1855,7 @@ func (k kafkaManager) confluentDownloadScript() string {
 	var downloadURL string
 	var downloadSHA string
 	if k.useKafka2 {
-		downloadURL = "https://storage.googleapis.com/cockroach-fixtures/tools/confluent-community-6.1.0.tar.gz"
+		downloadURL = "https://storage.googleapis.com/cockroach-test-artifacts/confluent/confluent-community-6.1.0.tar.gz"
 		downloadSHA = "53b0e2f08c4cfc55087fa5c9120a614ef04d306db6ec3bcd7710f89f05355355"
 	} else {
 		downloadURL = "https://packages.confluent.io/archive/7.4/confluent-community-7.4.0.tar.gz"
