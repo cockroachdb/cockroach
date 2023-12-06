@@ -4,7 +4,7 @@
 --
 -- To load the data:
 --   > CREATE DATABASE tpch;
---   > RESTORE workload.* FROM 'gs://cockroach-fixtures/workload/tpch/scalefactor=1/backup' WITH into_db = 'tpch';
+--   > RESTORE workload.* FROM 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup' WITH into_db = 'tpch';
 --
 -- To run the queries using the querybench workload:
 --   $ workload run querybench --concurrency 1 --max-ops 20 --db tpch --query-file 2.1-sql-20

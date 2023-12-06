@@ -29,7 +29,7 @@ import (
 var defaultConfig = workloadccl.FixtureConfig{
 	StorageProvider: "gs",
 	AuthParams:      "AUTH=implicit",
-	Bucket:          `cockroach-fixtures`,
+	Bucket:          `cockroach-fixtures-us-east1`,
 	Basename:        `workload`,
 }
 
