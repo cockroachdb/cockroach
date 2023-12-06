@@ -335,10 +335,10 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 		return nil
 	})
 
-	require.NoError(t, tx.Rollback())
+	require.ErrorContainsf(t, tx.Rollback(), "driver: bad connection", "connection should have been dropped, node is dead.")
 
 	// Validate we can have a "dropped" region and the query won't fail.
-	lm := tenants[0].LeaseManager().(*lease.Manager)
+	lm := tenants[1].LeaseManager().(*lease.Manager)
 	cachedDatabaseRegions, err := regions.NewCachedDatabaseRegions(ctx, tenants[0].DB(), lm)
 	require.NoError(t, err)
 	regions.TestingModifyRegionEnum(cachedDatabaseRegions, func(descriptor catalog.TypeDescriptor) catalog.TypeDescriptor {
