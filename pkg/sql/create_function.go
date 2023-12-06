@@ -455,26 +455,17 @@ func setFuncOptions(
 		}
 	}
 
-	switch lang {
-	case catpb.Function_SQL:
-		// Replace any sequence names in the function body with IDs.
-		seqReplacedFuncBody, err := replaceSeqNamesWithIDs(params.ctx, params.p, body, true)
-		if err != nil {
-			return err
-		}
-		typeReplacedFuncBody, err := serializeUserDefinedTypes(
-			params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */, "UDFs",
-		)
-		if err != nil {
-			return err
-		}
-		udfDesc.SetFuncBody(typeReplacedFuncBody)
-	case catpb.Function_PLPGSQL:
-		// TODO(#115627): make replaceSeqNamesWithIDs and serializeUserDefinedTypes
-		// play nice with PL/pgSQL.
-		udfDesc.SetFuncBody(body)
+	// Replace any sequence names in the function body with IDs.
+	seqReplacedFuncBody, err := replaceSeqNamesWithIDsLang(params.ctx, params.p, body, true, lang)
+	if err != nil {
+		return err
 	}
-
+	typeReplacedFuncBody, err := serializeUserDefinedTypesLang(
+		params.ctx, params.p.SemaCtx(), seqReplacedFuncBody, true /* multiStmt */, "UDFs", lang)
+	if err != nil {
+		return err
+	}
+	udfDesc.SetFuncBody(typeReplacedFuncBody)
 	return nil
 }
 
