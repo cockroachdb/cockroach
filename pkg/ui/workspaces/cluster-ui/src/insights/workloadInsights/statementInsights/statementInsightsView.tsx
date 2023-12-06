@@ -65,7 +65,7 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type StatementInsightsViewStateProps = {
-  csExportInsights: boolean;
+  useObsService: boolean;
   filters: WorkloadInsightEventFilters;
   insightTypes: string[];
   isDataValid: boolean;
@@ -113,7 +113,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
   selectedColumnNames,
   dropDownSelect,
   maxSizeApiReached,
-  csExportInsights,
+  useObsService,
 }: StatementInsightsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
@@ -129,10 +129,10 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
     const req = {
       start: ts.start,
       end: ts.end,
-      csExportInsights: csExportInsights,
+      useObsService: useObsService,
     };
     refreshStatementInsights(req);
-  }, [refreshStatementInsights, timeScale, csExportInsights]);
+  }, [refreshStatementInsights, timeScale, useObsService]);
 
   const shouldPoll = timeScale.key !== "Custom";
   const [refetch, clearPolling] = useScheduleFunction(
