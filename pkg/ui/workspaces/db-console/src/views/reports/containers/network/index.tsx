@@ -48,6 +48,8 @@ import { getMatchParamByName } from "src/util/query";
 import "./network.styl";
 import { connectivitySelector } from "src/redux/connectivity";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { getDataFromServer } from "src/util/dataFromServer";
+import { InlineAlert } from "src/components";
 
 interface NetworkOwnProps {
   nodesSummary: NodesSummary;
@@ -451,32 +453,45 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
   render() {
     const { nodesSummary, location, connectivity } = this.props;
     const filters = getFilters(location);
+    const canShowPage =
+      !getDataFromServer().FeatureFlags.disable_kv_level_advanced_debug;
 
     return (
       <Fragment>
         <Helmet title="Network" />
         <h3 className="base-heading">Network</h3>
-        <Loading
-          loading={
-            !contentAvailable(nodesSummary) || !connectivity?.data?.connections
-          }
-          page={"network"}
-          error={this.props.nodeSummaryErrors}
-          className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
-          render={() => (
-            <div>
-              <NodeFilterList
-                nodeIDs={filters.nodeIDs}
-                localityRegex={filters.localityRegex}
-              />
-              {this.renderContent(
-                nodesSummary,
-                filters,
-                connectivity?.data?.connections,
-              )}
-            </div>
-          )}
-        />
+        {!canShowPage && (
+          <section className="section">
+            <InlineAlert
+              title="The network page is only available via the sytem interface."
+              intent="warning"
+            />
+          </section>
+        )}
+        {canShowPage && (
+          <Loading
+            loading={
+              !contentAvailable(nodesSummary) ||
+              !connectivity?.data?.connections
+            }
+            page={"network"}
+            error={this.props.nodeSummaryErrors}
+            className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
+            render={() => (
+              <div>
+                <NodeFilterList
+                  nodeIDs={filters.nodeIDs}
+                  localityRegex={filters.localityRegex}
+                />
+                {this.renderContent(
+                  nodesSummary,
+                  filters,
+                  connectivity?.data?.connections,
+                )}
+              </div>
+            )}
+          />
+        )}
       </Fragment>
     );
   }
