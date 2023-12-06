@@ -220,6 +220,7 @@ func runMultiTenantDistSQL(
 			// Open bundle and verify its contents
 			sqlConnCtx := clisqlclient.Context{}
 			pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(1), tenantName, 0)
+			require.NoError(t, err)
 			conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, pgURL[0])
 			bundles, err := clisqlclient.StmtDiagListBundles(ctx, conn)
 			require.NoError(t, err)
