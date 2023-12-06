@@ -241,6 +241,7 @@ func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 
 	skip.UnderRace(t, "the test is too slow and the goodness of fit test "+
 		"assumes large N")
+	skip.UnderDeadlock(t, "the test is too slow")
 
 	ctx := context.Background()
 
