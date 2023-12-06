@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -91,6 +92,7 @@ func (n *alterFunctionOptionsNode) startExec(params runParams) error {
 		}
 	}
 
+	log.Infof(context.Background(), "AlterFunction")
 	if err := setFuncOptions(params, fnDesc, n.n.Options); err != nil {
 		return err
 	}
