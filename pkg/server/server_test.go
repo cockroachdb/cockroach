@@ -1050,6 +1050,19 @@ func TestAssertEnginesEmpty(t *testing.T) {
 	require.Error(t, assertEnginesEmpty([]storage.Engine{eng}))
 }
 
+// TestAssertExternalStorageInitializedBeforeJobSchedulerStart is a
+// bit silly, but the goal is to make sure we don't accidentally move
+// things around related to external storage in a way that would break
+// the job scheduler.
+func TestAssertExternalStorageInitializedBeforeJobSchedulerStart(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tlServer := &topLevelServer{
+		externalStorageBuilder: &externalStorageBuilder{},
+	}
+	require.Error(t, tlServer.initJobScheduler(context.Background()))
+}
+
 func Test_makeFakeNodeStatuses(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
