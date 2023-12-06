@@ -742,10 +742,7 @@ func (c *CustomFuncs) ConstructBinary(op opt.Operator, left, right opt.ScalarExp
 // ConstructNoColsRow returns a Values operator having a single row with zero
 // columns.
 func (c *CustomFuncs) ConstructNoColsRow() memo.RelExpr {
-	return c.f.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
-		Cols: opt.ColList{},
-		ID:   c.f.Metadata().NextUniqueID(),
-	})
+	return c.f.ConstructNoColsRow()
 }
 
 // referenceSingleColumn returns a Variable operator that refers to the one and

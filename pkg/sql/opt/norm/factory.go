@@ -464,6 +464,14 @@ func (f *Factory) ConstructZeroValues() memo.RelExpr {
 	})
 }
 
+// ConstructNoColsRow constructs a Values operator with no columns and one row.
+func (f *Factory) ConstructNoColsRow() memo.RelExpr {
+	return f.ConstructValues(memo.ScalarListWithEmptyTuple, &memo.ValuesPrivate{
+		Cols: opt.ColList{},
+		ID:   f.Metadata().NextUniqueID(),
+	})
+}
+
 // ConstructJoin constructs the join operator that corresponds to the given join
 // operator type.
 func (f *Factory) ConstructJoin(
