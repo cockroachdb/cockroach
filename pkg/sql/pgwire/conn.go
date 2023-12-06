@@ -18,7 +18,6 @@ import (
 	"io"
 	"net"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -409,15 +408,21 @@ func (c *conn) handleSimpleQuery(
 							"COPY together with other statements in a query string is not supported"),
 					})
 			}
-			copyDone := sync.WaitGroup{}
-			copyDone.Add(1)
+			// copyDone should act as a wait group to block this goroutine until
+			// the copy machine returns control to us. That is done by sending
+			// on the channel, so we could have used an unbuffered channel here.
+			// However, due to not fully understood circumstances (see #112095),
+			// sometimes the send can happen more than once, so we create a
+			// buffered channel with a buffer of 4 to make it extremely unlikely
+			// that the connExecutor for the COPY will get stuck.
+			copyDone := make(chan struct{}, 4)
 			if err := c.stmtBuf.Push(
 				ctx,
 				sql.CopyIn{
 					Conn:         c,
 					ParsedStmt:   stmts[i],
 					Stmt:         cp,
-					CopyDone:     &copyDone,
+					CopyDone:     copyDone,
 					TimeReceived: timeReceived,
 					ParseStart:   startParse,
 					ParseEnd:     endParse,
@@ -425,7 +430,7 @@ func (c *conn) handleSimpleQuery(
 			); err != nil {
 				return err
 			}
-			copyDone.Wait()
+			<-copyDone
 			return nil
 		}
 		if cp, ok := stmts[i].AST.(*tree.CopyTo); ok {
