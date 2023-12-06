@@ -3006,7 +3006,9 @@ func (ex *connExecutor) execCopyIn(
 	}()
 
 	// When we're done, unblock the network connection.
-	defer cmd.CopyDone.Done()
+	defer func() {
+		cmd.CopyDone <- struct{}{}
+	}()
 
 	// The connExecutor state machine has already set us up with a txn at this
 	// point.
