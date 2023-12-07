@@ -279,10 +279,10 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		checkBundle(
 			t, fmt.Sprint(rows), "child", func(name, contents string) error {
 				if name == "schema.sql" {
-					reg := regexp.MustCompile("CREATE TABLE public.parent")
+					reg := regexp.MustCompile("CREATE TABLE defaultdb.public.parent")
 					if reg.FindString(contents) == "" {
 						return errors.Newf(
-							"could not find 'CREATE TABLE public.parent' in schema.sql:\n%s", contents)
+							"could not find 'CREATE TABLE defaultdb.public.parent' in schema.sql:\n%s", contents)
 					}
 				}
 				return nil
@@ -384,6 +384,23 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		checkBundle(
 			t, fmt.Sprint(rows), "" /* tableName */, nil /* contentCheck */, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt inflight-trace-n1.txt inflight-trace-jaeger-n1.json",
+		)
+	})
+
+	t.Run("multiple databases", func(t *testing.T) {
+		r.Exec(t, "CREATE DATABASE db1;")
+		r.Exec(t, "CREATE DATABASE db2;")
+		r.Exec(t, "CREATE SCHEMA db2.s2;")
+		r.Exec(t, "CREATE TABLE db1.t1 (pk INT PRIMARY KEY);")
+		r.Exec(t, "CREATE TABLE db2.s2.t2 (pk INT PRIMARY KEY);")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM db1.t1, db2.s2.t2;")
+		checkBundle(
+			t, fmt.Sprint(rows), "db1.public.t1", nil, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
+		)
+		checkBundle(
+			t, fmt.Sprint(rows), "db2.s2.t2", nil, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
 		)
 	})
 }
