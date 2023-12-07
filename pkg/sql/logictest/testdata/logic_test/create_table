@@ -1039,3 +1039,30 @@ public  generated_by_default_t_notnull_b_seq     INT8
 public  generated_always_t_notnull_b_seq         INT8
 public  generated_by_default_t_b_seq             INT8
 public  generated_always_t_b_seq                 INT8
+
+subtest end
+
+# This subtest ensures we can create not valid unique-without-index constraint
+# during table creation, which will be treated as a "normal"
+# unique-without-index constraint (meaning the NOT VALID will be dropped).
+subtest 115352
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true
+
+statement ok
+CREATE TABLE t_115352 (i INT, UNIQUE WITHOUT INDEX (i) NOT VALID);
+
+# NOT VALID constraint specified within `CREATE TABLE` is a no-op and does not
+# skip validation.
+query T
+SELECT create_statement FROM [SHOW CREATE t_115352];
+----
+CREATE TABLE public.t_115352 (
+    i INT8 NULL,
+    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+    CONSTRAINT t_115352_pkey PRIMARY KEY (rowid ASC),
+    CONSTRAINT unique_i UNIQUE WITHOUT INDEX (i)
+)
+
+subtest end

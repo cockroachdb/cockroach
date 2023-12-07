@@ -9821,7 +9821,7 @@ table_elem:
   {
     def := $1.constraintDef()
     valBehavior := $2.validationBehavior()
-    if u, ok := def.(*tree.UniqueConstraintTableDef); ok && valBehavior == tree.ValidationSkip {
+    if u, ok := def.(*tree.UniqueConstraintTableDef); ok && valBehavior == tree.ValidationSkip && !u.WithoutIndex {
       typ := "PRIMARY KEY"
       if !u.PrimaryKey {
         typ = "UNIQUE"
