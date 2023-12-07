@@ -42,7 +42,8 @@ import (
 
 func isKafkaSink(u *url.URL) bool {
 	switch u.Scheme {
-	case changefeedbase.SinkSchemeConfluentKafka, changefeedbase.SinkSchemeKafka:
+	case changefeedbase.SinkSchemeConfluentKafka, changefeedbase.SinkSchemeAzureKafka,
+		changefeedbase.SinkSchemeKafka:
 		return true
 	default:
 		return false
@@ -893,19 +894,9 @@ type kafkaDialConfig struct {
 	saslGrantType    string
 }
 
-// TODO: refactor this function by splitting it up.
-// There is a large number of security-related params and it's hard to tell what
-// combinations work, which combinations work but should not work, which
-// combinations should not be passed together but still work etc.
-// It makes sense to split based on SASL mechanism and separate the TLS
-// related params (which I believe are common to all the SASL schemes). It would
-// also make sense to update the docs to reflect these cases
-// rather than having a huge table of auth params like we have now.
-func buildDialConfig(u sinkURL) (kafkaDialConfig, error) {
-	if u.Scheme == changefeedbase.SinkSchemeConfluentKafka {
-		return buildConfluentKafkaConfig(u)
-	}
-
+// buildDefaultKafkaConfig parses the given sinkURL and constructs its
+// corresponding dialConfig for kafka.
+func buildDefaultKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 	dialConfig := kafkaDialConfig{}
 
 	if _, err := u.consumeBool(changefeedbase.SinkParamTLSEnabled, &dialConfig.tlsEnabled); err != nil {
@@ -1006,75 +997,73 @@ func buildDialConfig(u sinkURL) (kafkaDialConfig, error) {
 	return dialConfig, nil
 }
 
-// buildConfluentKafkaConfig constructs a simple dial config which is supported
-// by kafka on confluent cloud. The dial config should have `api_key` and
-// `api_secret`. It automatically sets should also have sasl_enabled=true,
-// sasl_mechanism=PLAIN, tls_enabled=true, and sasl_handshake=true.
-//
-// See https://docs.confluent.io/platform/current/security/security_tutorial.html#overview
-// information on how to connect to confluent cloud kafka. There are also
-// instructions when you go to the `Clients` page of the cluster in confluent
-// cloud.
-func buildConfluentKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
-	newMissingParameterError := func(param string) error {
-		return errors.Newf("scheme %s requires parameter %s", changefeedbase.SinkSchemeConfluentKafka, param)
-	}
-	newRequiredValueError := func(param string, unsupportedValue, allowedValue string) error {
-		return errors.Newf("unsupported value %s for parameter %s, please use %s instead", unsupportedValue,
-			param, allowedValue)
-	}
+// newMissingParameterError returns an error message for missing parameters in
+// sinkURL.
+func newMissingParameterError(scheme string, param string) error {
+	return errors.Newf("scheme %s requires parameter %s", scheme, param)
+}
 
-	// Check for api_key and api_secret.
-	dialConfig := kafkaDialConfig{}
-	if dialConfig.saslUser = u.consumeParam(changefeedbase.SinkParamConfluentAPIKey); dialConfig.saslUser == `` {
-		return kafkaDialConfig{}, newMissingParameterError(changefeedbase.SinkParamConfluentAPIKey)
-	}
-	if dialConfig.saslPassword = u.consumeParam(changefeedbase.SinkParamConfluentAPISecret); dialConfig.saslPassword == `` {
-		return kafkaDialConfig{}, newMissingParameterError(changefeedbase.SinkParamConfluentAPISecret)
-	}
+// newInvalidParameterError returns an error message for invalid parameters in
+// sinkURL.
+func newInvalidParameterError(scheme string, invalidParams string) error {
+	return errors.Newf("invalid query parameters %s for scheme %s", invalidParams, scheme)
+}
 
-	// If sasl_enabled is specified, it must be set to true.
-	if wasSet, err := u.consumeBool(changefeedbase.SinkParamSASLEnabled, &dialConfig.saslEnabled); err != nil {
-		return kafkaDialConfig{}, err
-	} else if wasSet && !dialConfig.saslEnabled {
-		return kafkaDialConfig{}, newRequiredValueError(changefeedbase.SinkParamSASLEnabled, "false",
-			"true")
-	}
-	// If sasl_mechanism is specified, it must be set to PLAIN.
-	if dialConfig.saslMechanism = u.consumeParam(changefeedbase.SinkParamSASLMechanism); dialConfig.saslMechanism != `` &&
-		dialConfig.saslMechanism != sarama.SASLTypePlaintext {
-		return kafkaDialConfig{}, newRequiredValueError(changefeedbase.SinkParamSASLMechanism, dialConfig.saslMechanism,
-			sarama.SASLTypePlaintext)
-	}
-	// If tls_enabled is specified, it must be set to true.
-	if wasSet, err := u.consumeBool(changefeedbase.SinkParamTLSEnabled, &dialConfig.tlsEnabled); err != nil {
-		return kafkaDialConfig{}, err
-	} else if wasSet && !dialConfig.tlsEnabled {
-		return kafkaDialConfig{}, newRequiredValueError(changefeedbase.SinkParamTLSEnabled, "false", "true")
-	}
-	// If sasl_handshake is specified, it must be set to true.
-	if wasSet, err := u.consumeBool(changefeedbase.SinkParamSASLHandshake, &dialConfig.saslHandshake); err != nil {
-		return kafkaDialConfig{}, err
-	} else if wasSet && !dialConfig.saslHandshake {
-		return kafkaDialConfig{}, newRequiredValueError(changefeedbase.SinkParamSASLHandshake, "false", "true")
-	}
+// newUnsupportedValueForParameterError returns an error message for using
+// unsupported values for parameters in sinkURL.
+func newUnsupportedValueForParameterError(
+	param string, unsupportedValue, allowedValue string,
+) error {
+	return errors.Newf("unsupported value %s for parameter %s, please use %s instead",
+		unsupportedValue, param, allowedValue)
+}
 
-	if _, err := u.consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
-		return kafkaDialConfig{}, err
+// validateAndConsumeParams consumes and validates if the given sinkURL contains
+// any unsupported values for the parameters using paramsWithAcceptedValues.
+func validateAndConsumeParamsIfSet(u *sinkURL, paramsWithAcceptedValues map[string]string) error {
+	for param, allowedValue := range paramsWithAcceptedValues {
+		if v := u.consumeParam(param); v != "" && v != allowedValue {
+			return newUnsupportedValueForParameterError(param, /*param*/
+				v /*unsupportedValue*/, allowedValue /*allowedBoolValue*/)
+		}
 	}
+	return nil
+}
 
-	dialConfig.saslEnabled = true
-	dialConfig.saslMechanism = sarama.SASLTypePlaintext
-	dialConfig.tlsEnabled = true
-	dialConfig.saslHandshake = true
-
-	remaining := u.remainingQueryParams()
-	if len(remaining) > 0 {
-		return kafkaDialConfig{}, errors.Newf("invalid query parameters for scheme %s", remaining, changefeedbase.SinkParamConfluentAPISecret)
+// validateAndConsumeBoolParamsIfSet mirrors validateAndConsumeParamsIfSet but
+// specifically for boolean parameters.
+func validateAndConsumeBoolParamsIfSet(u *sinkURL, paramsWithAcceptedValues map[string]bool) error {
+	for param, allowedBoolValue := range paramsWithAcceptedValues {
+		var dest bool
+		wasSet, err := u.consumeBool(param, &dest)
+		if err != nil {
+			return err
+		}
+		if wasSet && dest != allowedBoolValue {
+			return newUnsupportedValueForParameterError(
+				param /*param*/, fmt.Sprintf("%t", dest), /*unsupportedValue*/
+				fmt.Sprintf("%t", allowedBoolValue) /*allowedBoolValue*/)
+		}
 	}
+	return nil
+}
 
-	// Ignore all other configurations.
-	return dialConfig, nil
+// TODO(cdc): refactor this function by splitting it up. There is a large number
+// of security-related params and it's hard to tell what combinations work,
+// which combinations work but should not work, which combinations should not be
+// passed together but still work etc. It makes sense to split based on SASL
+// mechanism and separate the TLS related params (which I believe are common to
+// all the SASL schemes). It would also make sense to update the docs to reflect
+// these cases rather than having a huge table of auth params like we have now.
+func buildDialConfig(u sinkURL) (kafkaDialConfig, error) {
+	switch u.Scheme {
+	case changefeedbase.SinkSchemeConfluentKafka:
+		return buildConfluentKafkaConfig(u)
+	case changefeedbase.SinkSchemeAzureKafka:
+		return buildAzureKafkaConfig(u)
+	default:
+		return buildDefaultKafkaConfig(u)
+	}
 }
 
 func buildKafkaConfig(
@@ -1160,6 +1149,118 @@ func buildKafkaConfig(
 		return nil, errors.Wrap(err, "failed to apply kafka client configuration")
 	}
 	return config, nil
+}
+
+// setDefaultParametersForConfluentAndAzure populates the given kafkaDialConfig with other
+// parameters from the sinkURL. Additionally, it validates options based on the
+// given sinkURL and returns an error for unsupported values.
+func setDefaultParametersForConfluentAndAzure(
+	u *sinkURL, dialConfig kafkaDialConfig,
+) (kafkaDialConfig, error) {
+	// Check required values for parameters.
+	boolParamsWithRequiredValues := map[string]bool{
+		changefeedbase.SinkParamSASLEnabled:   true,
+		changefeedbase.SinkParamTLSEnabled:    true,
+		changefeedbase.SinkParamSASLHandshake: true,
+	}
+	if err := validateAndConsumeBoolParamsIfSet(u, boolParamsWithRequiredValues); err != nil {
+		return kafkaDialConfig{}, err
+	}
+	stringParamsWithRequiredValues := map[string]string{
+		changefeedbase.SinkParamSASLMechanism: sarama.SASLTypePlaintext,
+	}
+	if err := validateAndConsumeParamsIfSet(u, stringParamsWithRequiredValues); err != nil {
+		return kafkaDialConfig{}, err
+	}
+
+	// Set values.
+	dialConfig.tlsEnabled = true
+	dialConfig.saslHandshake = true
+	dialConfig.saslEnabled = true
+	dialConfig.saslMechanism = sarama.SASLTypePlaintext
+
+	// Ignore all other configurations.
+	return dialConfig, nil
+}
+
+// buildAzureKafkaConfig parses the given sinkURL and constructs its
+// correponding kafkaDialConfig for streaming to Azure Event Hub kafka protocol.
+// Additionally, it validates options based on the given sinkURL and returns an
+// error for unsupported or missing options. The sinkURL must include mandatory
+// parameters shared_access_key_name and shared_access_key.  Default options,
+// including "tls_enabled=true," "sasl_handshake=true," "sasl_enabled=true," and
+// "sasl_mechanism=PLAIN," are automatically applied, as they are the only
+// supported values.
+//
+// See
+// https://learn.microsoft.com/en-us/azure/event-hubs/azure-event-hubs-kafka-overview
+// on how to connect to azure event hub kafka protocol.
+func buildAzureKafkaConfig(u sinkURL) (dialConfig kafkaDialConfig, _ error) {
+	hostName := u.Hostname()
+	// saslUser="$ConnectionString"
+	// saslPassword="Endpoint=sb://<NamespaceName>.servicebus.windows.net/;SharedAccessKeyName=<KeyName>;SharedAccessKey=<KeyValue>;
+	sharedAccessKeyName := u.consumeParam(changefeedbase.SinkParamAzureAccessKeyName)
+	if sharedAccessKeyName == `` {
+		return kafkaDialConfig{},
+			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKeyName /*param*/)
+	}
+	sharedAccessKey := u.consumeParam(changefeedbase.SinkParamAzureAccessKey)
+	if sharedAccessKey == `` {
+		return kafkaDialConfig{},
+			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKey /*param*/)
+	}
+
+	dialConfig.saslUser = "$ConnectionString"
+	dialConfig.saslPassword = fmt.Sprintf(
+		"Endpoint=sb://%s/;SharedAccessKeyName=%s;SharedAccessKey=%s",
+		hostName, sharedAccessKeyName, sharedAccessKey)
+	dialConfig, err := setDefaultParametersForConfluentAndAzure(&u, dialConfig)
+	if err != nil {
+		return kafkaDialConfig{}, err
+	}
+
+	remaining := u.remainingQueryParams()
+	if len(remaining) > 0 {
+		return kafkaDialConfig{}, newInvalidParameterError(u.Scheme, /*scheme*/
+			fmt.Sprintf("%v", remaining) /*invalidParams*/)
+	}
+	return dialConfig, nil
+}
+
+// buildConfluentKafkaConfig constructs a simple dial config which is supported
+// by kafka on confluent cloud. The dial config should have `api_key` and
+// `api_secret`. It automatically sets should also have sasl_enabled=true,
+// sasl_mechanism=PLAIN, tls_enabled=true, and sasl_handshake=true.
+//
+// See https://docs.confluent.io/platform/current/security/security_tutorial.html#overview
+// information on how to connect to confluent cloud kafka. There are also
+// instructions when you go to the `Clients` pagex of the cluster in confluent
+// cloud.
+func buildConfluentKafkaConfig(u sinkURL) (dialConfig kafkaDialConfig, _ error) {
+	// Check for api_key and api_secret.
+	if dialConfig.saslUser = u.consumeParam(changefeedbase.SinkParamConfluentAPIKey); dialConfig.saslUser == "" {
+		return kafkaDialConfig{},
+			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamConfluentAPIKey /*param*/)
+	}
+	if dialConfig.saslPassword = u.consumeParam(changefeedbase.SinkParamConfluentAPISecret); dialConfig.saslPassword == "" {
+		return kafkaDialConfig{},
+			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamConfluentAPISecret /*param*/)
+	}
+
+	dialConfig, err := setDefaultParametersForConfluentAndAzure(&u, dialConfig)
+	if err != nil {
+		return kafkaDialConfig{}, err
+	}
+	if _, err := u.consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
+		return kafkaDialConfig{}, err
+	}
+
+	remaining := u.remainingQueryParams()
+	if len(remaining) > 0 {
+		return kafkaDialConfig{}, newInvalidParameterError(u.Scheme, /*scheme*/
+			fmt.Sprintf("%v", remaining) /*invalidParams*/)
+	}
+	return dialConfig, nil
 }
 
 func makeKafkaSink(
