@@ -564,12 +564,17 @@ func TestFileRegistryRollover(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRemoteExecutionWithIssue(t, 115617, "probable OOM")
-
 	const dir = "/mydb"
 	mem := vfs.NewMem()
 	require.NoError(t, mem.MkdirAll(dir, 0755))
-	registry := &PebbleFileRegistry{FS: mem, DBDir: dir}
+	registry := &PebbleFileRegistry{
+		FS:    mem,
+		DBDir: dir,
+		// SoftMaxSize configures the registry size at which the registry will
+		// first roll over to a new registry size. Setting a lower size reduces
+		// the memory footprint and runtime of this function.
+		SoftMaxSize: 32 << 10, /* 32 KiB */
+	}
 	require.NoError(t, registry.Load(context.Background()))
 
 	// All the registry files created so far. Some may have been subsequently
