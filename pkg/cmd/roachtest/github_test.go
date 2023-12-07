@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -137,6 +138,7 @@ func TestCreatePostRequest(t *testing.T) {
 		arch                    vm.CPUArch
 		failure                 failure
 		expectedPost            bool
+		expectedLabels          []string
 		expectedReleaseBlocker  bool
 		expectedSkipTestFailure bool
 		expectedParams          map[string]string
@@ -145,6 +147,7 @@ func TestCreatePostRequest(t *testing.T) {
 			nonReleaseBlocker: true,
 			failure:           createFailure(errors.New("other")),
 			expectedPost:      true,
+			expectedLabels:    []string{"C-test-failure"},
 			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"encrypted":        "false",
@@ -157,13 +160,12 @@ func TestCreatePostRequest(t *testing.T) {
 			}),
 		},
 		{
-			nonReleaseBlocker:       true,
-			localSSD:                true,
-			metamorphicBuild:        true,
-			arch:                    vm.ArchARM64,
-			failure:                 createFailure(errClusterProvisioningFailed),
-			expectedPost:            true,
-			expectedSkipTestFailure: true,
+			localSSD:         true,
+			metamorphicBuild: true,
+			arch:             vm.ArchARM64,
+			failure:          createFailure(errClusterProvisioningFailed),
+			expectedPost:     true,
+			expectedLabels:   []string{"T-testeng", "X-infra-flake"},
 			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"encrypted":        "false",
@@ -180,10 +182,10 @@ func TestCreatePostRequest(t *testing.T) {
 		// in the event of a failed cluster creation, nil `vmOptions` and
 		// `clusterImpl` are not dereferenced
 		{
-			clusterCreationFailed:   true,
-			failure:                 createFailure(rperrors.ErrSSH255),
-			expectedPost:            true,
-			expectedSkipTestFailure: true,
+			clusterCreationFailed: true,
+			failure:               createFailure(rperrors.ErrSSH255),
+			expectedPost:          true,
+			expectedLabels:        []string{"T-testeng", "X-infra-flake"},
 			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"ssd":              "0",
@@ -196,25 +198,27 @@ func TestCreatePostRequest(t *testing.T) {
 			nonReleaseBlocker: true,
 			loadTeamsFailed:   true,
 			failure:           createFailure(errors.New("other")),
+			expectedLabels:    []string{"C-test-failure"},
 		},
 		// Error during post test assertions
 		{
 			nonReleaseBlocker: true,
 			failure:           createFailure(errDuringPostAssertions),
+			expectedLabels:    []string{"C-test-failure"},
 		},
 		// Error during dns operation.
 		{
-			nonReleaseBlocker:       true,
-			failure:                 createFailure(gce.ErrDNSOperation),
-			expectedPost:            true,
-			expectedSkipTestFailure: true,
+			nonReleaseBlocker: true,
+			failure:           createFailure(gce.ErrDNSOperation),
+			expectedPost:      true,
+			expectedLabels:    []string{"T-testeng", "X-infra-flake"},
 		},
 		// Assert that extra labels in the test spec are added to the issue.
 		{
-			nonReleaseBlocker: true,
-			extraLabels:       []string{"foo-label"},
-			failure:           createFailure(errors.New("other")),
-			expectedPost:      true,
+			extraLabels:    []string{"foo-label"},
+			failure:        createFailure(errors.New("other")),
+			expectedPost:   true,
+			expectedLabels: []string{"C-test-failure", "release-blocker", "foo-label"},
 			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"encrypted":        "false",
@@ -289,31 +293,27 @@ func TestCreatePostRequest(t *testing.T) {
 					require.Equal(t, c.expectedParams, req.ExtraParams)
 				}
 
-				require.True(t, contains(req.ExtraLabels, nil, "O-roachtest"))
-				for _, l := range c.extraLabels {
-					require.True(t, contains(req.ExtraLabels, nil, l), "expected extra label %q", l)
-				}
-				require.Equal(t, c.expectedReleaseBlocker, contains(req.ExtraLabels, nil, "release-blocker"))
-				require.Equal(t, c.expectedSkipTestFailure, req.SkipLabelTestFailure)
+				expLabels := append([]string{"O-roachtest"}, c.expectedLabels...)
+				sort.Strings(expLabels)
+				labels := append([]string{}, req.Labels...)
+				sort.Strings(expLabels)
+				sort.Strings(labels)
+				require.Equal(t, expLabels, labels)
 
 				expectedTeam := "@cockroachdb/unowned"
 				expectedName := "github_test"
-				expectedLabels := []string{}
 				expectedMessagePrefix := ""
 
 				if errors.Is(c.failure.squashedErr, gce.ErrDNSOperation) {
 					expectedTeam = "@cockroachdb/test-eng"
-					expectedLabels = []string{"T-testeng", "X-infra-flake"}
 					expectedName = "dns_problem"
 					expectedMessagePrefix = "test github_test failed due to "
 				} else if errors.Is(c.failure.squashedErr, errClusterProvisioningFailed) {
 					expectedTeam = "@cockroachdb/test-eng"
-					expectedLabels = []string{"T-testeng", "X-infra-flake"}
 					expectedName = "cluster_creation"
 					expectedMessagePrefix = "test github_test was skipped due to "
 				} else if errors.Is(c.failure.squashedErr, rperrors.ErrSSH255) {
 					expectedTeam = "@cockroachdb/test-eng"
-					expectedLabels = []string{"T-testeng", "X-infra-flake"}
 					expectedName = "ssh_problem"
 					expectedMessagePrefix = "test github_test failed due to "
 				} else if errors.Is(c.failure.squashedErr, errDuringPostAssertions) {
@@ -323,11 +323,6 @@ func TestCreatePostRequest(t *testing.T) {
 				require.Contains(t, req.MentionOnCreate, expectedTeam)
 				require.Equal(t, expectedName, req.TestName)
 				require.True(t, strings.HasPrefix(req.Message, expectedMessagePrefix), req.Message)
-				if len(expectedLabels) > 0 {
-					for _, expectedLabel := range expectedLabels {
-						require.Contains(t, req.ExtraLabels, expectedLabel)
-					}
-				}
 			}
 		})
 	}
