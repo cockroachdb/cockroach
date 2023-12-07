@@ -3,8 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "regionliveness",
     srcs = [
+        "cleaner.go",
         "prober.go",
-        "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/regionliveness",
     visibility = ["//visibility:public"],
