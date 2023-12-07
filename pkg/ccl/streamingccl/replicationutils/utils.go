@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -271,16 +270,10 @@ func fingerprintClustersByTable(
 func TestingGetStreamIngestionStatsFromReplicationJob(
 	t *testing.T, ctx context.Context, sqlRunner *sqlutils.SQLRunner, ingestionJobID int,
 ) *streampb.StreamIngestionStats {
-	var payloadBytes []byte
-	var progressBytes []byte
-	var payload jobspb.Payload
-	var progress jobspb.Progress
-	stmt := fmt.Sprintf(`SELECT payload, progress FROM (%s)`, jobutils.InternalSystemJobsBaseQuery)
-	sqlRunner.QueryRow(t, stmt, ingestionJobID).Scan(&payloadBytes, &progressBytes)
-	require.NoError(t, protoutil.Unmarshal(payloadBytes, &payload))
-	require.NoError(t, protoutil.Unmarshal(progressBytes, &progress))
+	payload := jobutils.GetJobPayload(t, sqlRunner, jobspb.JobID(ingestionJobID))
+	progress := jobutils.GetJobProgress(t, sqlRunner, jobspb.JobID(ingestionJobID))
 	details := payload.GetStreamIngestion()
-	stats, err := GetStreamIngestionStats(ctx, *details, progress)
+	stats, err := GetStreamIngestionStats(ctx, *details, *progress)
 	require.NoError(t, err)
 	return stats
 }

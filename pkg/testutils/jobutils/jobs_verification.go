@@ -68,14 +68,21 @@ func WaitForJobReverting(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobI
 	waitForJobToHaveStatus(t, db, jobID, jobs.StatusReverting)
 }
 
-// InternalSystemJobsBaseQuery runs the query against an empty database string.
-// Since crdb_internal.system_jobs is a virtual table, by default, the query
-// will take a lease on the current database the SQL session is connected to. If
-// this database has been dropped or is unavailable then the query on the
-// virtual table will fail. The "" prefix prevents this lease acquisition.
-var InternalSystemJobsBaseQuery = `
-SELECT status, payload, progress FROM "".crdb_internal.system_jobs WHERE id = $1
-`
+const (
+	// InternalSystemJobsBaseQuery runs the query against an empty database string.
+	// Since crdb_internal.system_jobs is a virtual table, by default, the query
+	// will take a lease on the current database the SQL session is connected to. If
+	// this database has been dropped or is unavailable then the query on the
+	// virtual table will fail. The "" prefix prevents this lease acquisition.
+	//
+	// NB: Until the crdb_internal.system_jobs is turned into a
+	// view structured such that unnecessary joins can be elided,
+	// some users may prefer JobPayloadByIDQuery or
+	// JobPayloadByIDQuery
+	InternalSystemJobsBaseQuery = `SELECT status, payload, progress FROM "".crdb_internal.system_jobs WHERE id = $1`
+	JobProgressByIDQuery        = "SELECT value FROM system.job_info WHERE job_id = $1 AND info_key::string = 'legacy_progress' ORDER BY written DESC LIMIT 1"
+	JobPayloadByIDQuery         = "SELECT value FROM system.job_info WHERE job_id = $1 AND info_key::string = 'legacy_payload' ORDER BY written DESC LIMIT 1"
+)
 
 func waitForJobToHaveStatus(
 	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
@@ -83,18 +90,13 @@ func waitForJobToHaveStatus(
 	t.Helper()
 	testutils.SucceedsWithin(t, func() error {
 		var status string
-		var payloadBytes []byte
-		query := fmt.Sprintf("SELECT status, payload FROM (%s)", InternalSystemJobsBaseQuery)
-		db.QueryRow(t, query, jobID).Scan(&status, &payloadBytes)
+		db.QueryRow(t, "SELECT status FROM system.jobs WHERE id = $1", jobID).Scan(&status)
 		if jobs.Status(status) == jobs.StatusFailed {
 			if expectedStatus == jobs.StatusFailed {
 				return nil
 			}
-			payload := &jobspb.Payload{}
-			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
-				t.Fatalf("job failed: %s", payload.Error)
-			}
-			t.Fatalf("job failed")
+			payload := GetJobPayload(t, db, jobID)
+			t.Fatalf("job failed: %s", payload.Error)
 		}
 		if e, a := expectedStatus, jobs.Status(status); e != a {
 			return errors.Errorf("expected job status %s, but got %s", e, a)
@@ -248,8 +250,8 @@ func VerifySystemJob(
 // GetJobID gets a particular job's ID.
 func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) jobspb.JobID {
 	var jobID jobspb.JobID
-	db.QueryRow(t, `
-	SELECT job_id FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`, offset,
+	db.QueryRow(t,
+		"SELECT id FROM system.jobs ORDER BY created LIMIT 1 OFFSET $1", offset,
 	).Scan(&jobID)
 	return jobID
 }
@@ -257,17 +259,17 @@ func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) jobspb.JobID {
 // GetLastJobID gets the most recent job's ID.
 func GetLastJobID(t testing.TB, db *sqlutils.SQLRunner) jobspb.JobID {
 	var jobID jobspb.JobID
-	db.QueryRow(
-		t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`,
+	db.QueryRow(t,
+		"SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1",
 	).Scan(&jobID)
 	return jobID
 }
 
 // GetJobProgress loads the Progress message associated with the job.
-func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Progress {
+func GetJobProgress(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Progress {
 	ret := &jobspb.Progress{}
 	var buf []byte
-	db.QueryRow(t, `SELECT progress FROM crdb_internal.system_jobs WHERE id = $1`, jobID).Scan(&buf)
+	db.QueryRow(t, JobProgressByIDQuery, jobID).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, ret); err != nil {
 		t.Fatal(err)
 	}
@@ -275,11 +277,10 @@ func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *j
 }
 
 // GetJobPayload loads the Payload message associated with the job.
-func GetJobPayload(t *testing.T, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Payload {
+func GetJobPayload(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) *jobspb.Payload {
 	ret := &jobspb.Payload{}
-	query := fmt.Sprintf(`SELECT payload FROM (%s)`, InternalSystemJobsBaseQuery)
 	var buf []byte
-	db.QueryRow(t, query, jobID).Scan(&buf)
+	db.QueryRow(t, JobPayloadByIDQuery, jobID).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, ret); err != nil {
 		t.Fatal(err)
 	}
