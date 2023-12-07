@@ -26,6 +26,7 @@ sed -i "s/go mod tidy/go mod tidy -go=1.16/g" scripts/create-secondary-patch.sh
 cd go/src
 # Apply the CRL patch
 patch -p2 < /bootstrap/diff.patch
+patch -p2 < /bootstrap/6446af9.diff
 # add a special version modifier so we can explicitly use it in bazel
 sed -i 's/$/fips/' ../VERSION 
 ./make.bash -v

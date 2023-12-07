@@ -14,7 +14,7 @@ http_archive(
         # cockroachdb/rules_go as of f1ab26925b5da24119d38115a657f27a90288db5
         # (upstream release-0.40 plus a few patches).
         "https://storage.googleapis.com/public-bazel-artifacts/bazel/cockroachdb-rules_go-v0.27.0-341-gf1ab269.tar.gz",
-    ]
+    ],
 )
 
 # Like the above, but for JS.
@@ -24,12 +24,14 @@ http_archive(
     strip_prefix = "rules_js-1.26.1",
     url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v1.26.1.tar.gz",
 )
+
 http_archive(
     name = "aspect_rules_ts",
     sha256 = "ace5b609603d9b5b875d56c9c07182357c4ee495030f40dcefb10d443ba8c208",
     strip_prefix = "rules_ts-1.4.0",
     url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_ts-v1.4.0.tar.gz",
 )
+
 # NOTE: aspect_rules_webpack exists for webpack, but it's incompatible with webpack v4.
 http_archive(
     name = "aspect_rules_jest",
@@ -162,14 +164,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.19.13.darwin-amd64.tar.gz", "98eae563d602271866830199958413a2354a1ea77311b7bd44597f632eab3555"),
-        "darwin_arm64": ("go1.19.13.darwin-arm64.tar.gz", "74d5abe1ae5bed5556c4a158d0eecd51ac470ff9a920acf14bbfa10e2f7650a8"),
+        "darwin_amd64": ("go1.19.13.darwin-amd64.tar.gz", "26b28dd32295bb44f8e963c94cf6135832d4c2acaa62b3c93de2c34eff4b020d"),
+        "darwin_arm64": ("go1.19.13.darwin-arm64.tar.gz", "6ab2eff10cb80e26f734726b9eef34f5943904e6855b1d22b8cccaa4697b6d6d"),
         "freebsd_amd64": ("go1.19.13.freebsd-amd64.tar.gz", "97fd4990c5349ab922b9bf3e4c655e899135559ea6ad666d4b3c7a27b1e147a2"),
-        "linux_amd64": ("go1.19.13.linux-amd64.tar.gz", "3586f3e01bc1946321efbe752df39ad61d9697d59080a656096f0622b2ceb10f"),
-        "linux_arm64": ("go1.19.13.linux-arm64.tar.gz", "a5cf4bce57682560152f918b587e2af2e2eac499ae4d851d78138269147a11c7"),
-        "windows_amd64": ("go1.19.13.windows-amd64.tar.gz", "991137d500e0f2feb412bdc7e9c7c0a9e99ff0912b27264894740233bb3086a7"),
+        "linux_amd64": ("go1.19.13.linux-amd64.tar.gz", "f5ac3d7014fdc429785f335d3b672d470a75e90e8f7d49a27c9b72be9c633909"),
+        "linux_arm64": ("go1.19.13.linux-arm64.tar.gz", "07b0c2e4d94cd81adfcbcbd39a7a6af638697e20f0c7c4760317512061c0ffb8"),
+        "windows_amd64": ("go1.19.13.windows-amd64.tar.gz", "5273166fb2baa784e26b2ffe19efba362c933e9dba05a953fec90b6117e09c8d"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231011-223645/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231207-165216/{}"],
     version = "1.19.13",
 )
 
@@ -227,33 +229,37 @@ toolchain_dependencies()
 
 # Configure nodeJS.
 load("//build:nodejs.bzl", "declare_nodejs_repos")
+
 declare_nodejs_repos()
 
 # NOTE: The version is expected to match up to what version of typescript we
 # use for all packages in pkg/ui.
 # TODO(ricky): We should add a lint check to ensure it does match.
 load("@aspect_rules_ts//ts/private:npm_repositories.bzl", ts_http_archive = "http_archive_version")
+
 ts_http_archive(
     name = "npm_typescript",
     build_file = "@aspect_rules_ts//ts:BUILD.typescript",
     urls = ["https://storage.googleapis.com/cockroach-npm-deps/typescript/-/typescript-{}.tgz"],
     version = "4.2.4",
 )
+
 # NOTE: The version is expected to match up to what version we use in db-console.
 # TODO(ricky): We should add a lint check to ensure it does match.
 load("@aspect_rules_js//npm:repositories.bzl", "npm_import")
+
 npm_import(
     name = "pnpm",
-    integrity = "sha512-W6elL7Nww0a/MCICkzpkbxW6f99TQuX4DuJoDjWp39X08PKDkEpg4cgj3d6EtgYADcdQWl/eM8NdlLJVE3RgpA==",
-    package = "pnpm",
-    url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
-    version = "8.5.1",
     # Declare an @pnpm//:pnpm rule that can be called externally.
     # Copied from https://github.com/aspect-build/rules_js/blob/14724d9b27b2c45f088aa003c091cbe628108170/npm/private/pnpm_repository.bzl#L27-L30
     extra_build_content = "\n".join([
         """load("@aspect_rules_js//js:defs.bzl", "js_binary")""",
         """js_binary(name = "pnpm", entry_point = "package/dist/pnpm.cjs", visibility = ["//visibility:public"])""",
     ]),
+    integrity = "sha512-W6elL7Nww0a/MCICkzpkbxW6f99TQuX4DuJoDjWp39X08PKDkEpg4cgj3d6EtgYADcdQWl/eM8NdlLJVE3RgpA==",
+    package = "pnpm",
+    url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
+    version = "8.5.1",
 )
 
 load("@aspect_rules_js//js:repositories.bzl", "rules_js_dependencies")
@@ -265,25 +271,26 @@ load("@aspect_rules_js//npm:repositories.bzl", "npm_translate_lock")
 npm_translate_lock(
     name = "npm",
     data = [
-        "//pkg/ui:pnpm-workspace.yaml",
         "//pkg/ui:package.json",
+        "//pkg/ui:pnpm-workspace.yaml",
         "//pkg/ui/patches:topojson@3.0.2.patch",
-        "//pkg/ui/workspaces/db-console/src/js:package.json",
-        "//pkg/ui/workspaces/db-console:package.json",
         "//pkg/ui/workspaces/cluster-ui:package.json",
-        "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
+        "//pkg/ui/workspaces/db-console:package.json",
+        "//pkg/ui/workspaces/db-console/src/js:package.json",
         "//pkg/ui/workspaces/e2e-tests:package.json",
+        "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
     ],
-    patch_args = {
-        "*": ["-p1"]
-    },
     npmrc = "//pkg/ui:.npmrc.bazel",
+    patch_args = {
+        "*": ["-p1"],
+    },
     pnpm_lock = "//pkg/ui:pnpm-lock.yaml",
     verify_node_modules_ignored = "//:.bazelignore",
 )
-load("@npm//:repositories.bzl", npm_repositories = "npm_repositories")
-npm_repositories()
 
+load("@npm//:repositories.bzl", "npm_repositories")
+
+npm_repositories()
 
 #################################
 # end rules_js dependencies #
@@ -608,8 +615,8 @@ distdir_repositories()
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.19.13fips.linux-amd64.tar.gz", "13e5a63e9b29c178fb003c428c95c0a09e84840caebe95c5406b11a7dc99d7aa"),
+        "linux_amd64": ("go1.19.13fips.linux-amd64.tar.gz", "48c3d498fd133c973b9d79d12a75f1627154f64edce2d07bc656eec7c2969369"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231011-223645/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231207-165216/{}"],
     version = "1.19.13fips",
 )
