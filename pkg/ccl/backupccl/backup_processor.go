@@ -324,48 +324,10 @@ func runBackupProcessor(
 	backupProcessorSpan := tracing.SpanFromContext(ctx)
 	clusterSettings := flowCtx.Cfg.Settings
 
-	totalSpans := len(spec.Spans) + len(spec.IntroducedSpans)
-	requestSpans := make([]spanAndTime, 0, totalSpans)
 	rangeSizedSpans := preSplitExports.Get(&flowCtx.EvalCtx.Settings.SV)
+	spanCountFromSpecs := len(spec.Spans) + len(spec.IntroducedSpans)
 
-	splitSpans := func(spans []roachpb.Span, start, end hlc.Timestamp) error {
-		for _, fullSpan := range spans {
-			remainingSpan := fullSpan
-
-			if rangeSizedSpans {
-				rdi, err := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).RangeDescIteratorFactory.NewIterator(ctx, fullSpan)
-				if err != nil {
-					return err
-				}
-				for ; rdi.Valid(); rdi.Next() {
-					rangeDesc := rdi.CurRangeDescriptor()
-					rangeSpan := roachpb.Span{Key: rangeDesc.StartKey.AsRawKey(), EndKey: rangeDesc.EndKey.AsRawKey()}
-					subspan := remainingSpan.Intersect(rangeSpan)
-					if !subspan.Valid() {
-						return errors.AssertionFailedf("%s not in %s of %s", rangeSpan, remainingSpan, fullSpan)
-					}
-					requestSpans = append(requestSpans, spanAndTime{span: subspan, start: start, end: end})
-					remainingSpan.Key = subspan.EndKey
-				}
-			}
-
-			if remainingSpan.Valid() {
-				requestSpans = append(requestSpans, spanAndTime{span: remainingSpan, start: start, end: end})
-			}
-			requestSpans[len(requestSpans)-1].finishesSpec = true
-		}
-		return nil
-	}
-
-	if err := splitSpans(spec.IntroducedSpans, hlc.Timestamp{}, spec.BackupStartTime); err != nil {
-		return err
-	}
-	if err := splitSpans(spec.Spans, spec.BackupStartTime, spec.BackupEndTime); err != nil {
-		return err
-	}
-
-	log.Infof(ctx, "backup processor is assigned %d spans covering %d ranges", totalSpans, len(requestSpans))
-
+	// TODO(msbutler): move this destination resolution code into a helper as well.
 	destURI := spec.DefaultURI
 	var destLocalityKV string
 
@@ -382,7 +344,7 @@ func runBackupProcessor(
 			}
 		}
 		if localitySinkURI != "" {
-			log.Infof(ctx, "backing up %d spans to destination specified by locality %s", totalSpans, destLocalityKV)
+			log.Infof(ctx, "backing up %d spans to destination specified by locality %s", spanCountFromSpecs, destLocalityKV)
 			destURI = localitySinkURI
 		} else {
 			nodeLocalities := make([]string, 0, len(flowCtx.EvalCtx.Locality.Tiers))
@@ -393,7 +355,7 @@ func runBackupProcessor(
 			for i := range spec.URIsByLocalityKV {
 				backupLocalities = append(backupLocalities, i)
 			}
-			log.Infof(ctx, "backing up %d spans to default locality because backup localities %s have no match in node's localities %s", totalSpans, backupLocalities, nodeLocalities)
+			log.Infof(ctx, "backing up %d spans to default locality because backup localities %s have no match in node's localities %s", spanCountFromSpecs, backupLocalities, nodeLocalities)
 		}
 	}
 	if testingDiscardBackupData {
@@ -416,9 +378,6 @@ func runBackupProcessor(
 	}
 	defer logClose(ctx, storage, "external storage")
 
-	// Start start a group of goroutines which each pull spans off of `todo` and
-	// send export requests. Any spans that encounter lock conflict errors during
-	// Export are put back on the todo queue for later processing.
 	numSenders, release, err := reserveWorkerMemory(ctx, clusterSettings, memAcc)
 	if err != nil {
 		return err
@@ -426,32 +385,10 @@ func runBackupProcessor(
 	log.Infof(ctx, "starting %d backup export workers", numSenders)
 	defer release()
 
-	todo := make(chan []spanAndTime, len(requestSpans))
-
-	const maxChunkSize = 100
-	// Aim to make at least 4 chunks per worker, ensuring size is >=1 and <= max.
-	chunkSize := (len(requestSpans) / (numSenders * 4)) + 1
-	if chunkSize > maxChunkSize {
-		chunkSize = maxChunkSize
+	todo, err := queueRequestSpans(ctx, spec, flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).RangeDescIteratorFactory, rangeSizedSpans, numSenders)
+	if err != nil {
+		return err
 	}
-
-	chunk := make([]spanAndTime, 0, chunkSize)
-	for i := range requestSpans {
-		if !rangeSizedSpans {
-			todo <- []spanAndTime{requestSpans[i]}
-			continue
-		}
-
-		chunk = append(chunk, requestSpans[i])
-		if len(chunk) > chunkSize {
-			todo <- chunk
-			chunk = make([]spanAndTime, 0, chunkSize)
-		}
-	}
-	if len(chunk) > 0 {
-		todo <- chunk
-	}
-
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
 		readTime := spec.BackupEndTime.GoTime()
 		sink := makeFileSSTSink(sinkConf, storage)
