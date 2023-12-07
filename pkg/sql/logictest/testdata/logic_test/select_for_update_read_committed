@@ -268,22 +268,6 @@ COMMIT;
 6  1  5
 7  2  5
 
-query III async,rowsort q12
-BEGIN ISOLATION LEVEL READ COMMITTED;
-UPDATE abc SET b = b + 1 WHERE a > 4 RETURNING *;
-COMMIT;
-----
-5  3  7
-6  2  7
-
-query III async,rowsort q13
-BEGIN ISOLATION LEVEL READ COMMITTED;
-UPDATE bcd SET c = c + 1 WHERE b < 8 RETURNING *;
-COMMIT;
-----
-6  2  5
-7  3  5
-
 user testuser
 
 query IIIIII rowsort
@@ -318,6 +302,91 @@ user root
 awaitquery q10
 
 awaitquery q11
+
+# Test the same as above, but with UPDATE instead of SELECT FOR UPDATE.
+
+user testuser
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+# Try locking the same row twice from a single statement.
+query IIIIII rowsort
+SELECT * FROM bcd JOIN abc ON a = d WHERE bcd.b IN (6, 7) FOR UPDATE OF abc
+----
+6  1  5  5  2  7
+7  2  5  5  2  7
+
+# Try locking the same row twice from the same transaction, with another waiter
+# in between the two.
+
+query III rowsort
+SELECT * FROM bcd WHERE b = 7 FOR UPDATE
+----
+7  2  5
+
+user root
+
+query III rowsort
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM abc WHERE a > 4 FOR UPDATE SKIP LOCKED;
+COMMIT;
+----
+6  1  7
+
+query III rowsort
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT * FROM bcd WHERE b < 8 FOR UPDATE SKIP LOCKED;
+COMMIT;
+----
+6  1  5
+
+query III async,rowsort q12
+BEGIN ISOLATION LEVEL READ COMMITTED;
+UPDATE abc SET b = b + 1 WHERE a > 4 RETURNING *;
+COMMIT;
+----
+5  4  7
+6  2  7
+
+query III async,rowsort q13
+BEGIN ISOLATION LEVEL READ COMMITTED;
+UPDATE bcd SET c = c + 1 WHERE b < 8 RETURNING *;
+COMMIT;
+----
+6  2  5
+7  4  5
+
+user testuser
+
+query IIIIII rowsort
+SELECT * FROM abc JOIN bcd ON bcd.b = abc.c WHERE a IN (5, 6) FOR UPDATE OF bcd
+----
+5  2  7  7  2  5
+6  1  7  7  2  5
+
+statement ok
+UPDATE abc SET b = b + 1 WHERE a = 5
+
+statement ok
+UPDATE bcd SET c = c + 1 WHERE b = 7
+
+query III rowsort
+SELECT * FROM abc WHERE a > 4
+----
+5  3  7
+6  1  7
+
+query III rowsort
+SELECT * FROM bcd WHERE b < 8
+----
+6  1  5
+7  3  5
+
+statement ok
+COMMIT
+
+user root
 
 awaitquery q12
 
