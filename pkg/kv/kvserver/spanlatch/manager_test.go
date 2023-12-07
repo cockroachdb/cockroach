@@ -756,7 +756,7 @@ func TestSizeOfLatch(t *testing.T) {
 func TestSizeOfLatchGuard(t *testing.T) {
 	var lg Guard
 	size := int(unsafe.Sizeof(lg))
-	require.Equal(t, 112, size)
+	require.Equal(t, 120, size)
 }
 
 // TestLatchStringAndSafeformat tests the output of latch.SafeFormat.

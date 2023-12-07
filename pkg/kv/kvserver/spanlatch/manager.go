@@ -12,6 +12,7 @@ package spanlatch
 
 import (
 	"context"
+	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -62,8 +64,10 @@ type Manager struct {
 	idAlloc uint64
 	scopes  [spanset.NumSpanScope]scopedManager
 
-	stopper  *stop.Stopper
-	slowReqs *metric.Gauge
+	stopper           *stop.Stopper
+	slowReqs          *metric.Gauge
+	settings          *cluster.Settings
+	everySecondLogger log.EveryN
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
@@ -75,10 +79,12 @@ type scopedManager struct {
 
 // Make returns an initialized Manager. Using this constructor is optional as
 // the type's zero value is valid to use directly.
-func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
+func Make(stopper *stop.Stopper, slowReqs *metric.Gauge, settings *cluster.Settings) Manager {
 	return Manager{
-		stopper:  stopper,
-		slowReqs: slowReqs,
+		stopper:           stopper,
+		slowReqs:          slowReqs,
+		settings:          settings,
+		everySecondLogger: log.Every(1 * time.Second),
 	}
 }
 
@@ -137,7 +143,8 @@ type Guard struct {
 	latchesLens [spanset.NumSpanScope][spanset.NumSpanAccess]int32
 	// Non-nil only when AcquireOptimistic has retained the snapshot for later
 	// checking of conflicts, and waiting.
-	snap *snapshot
+	snap        *snapshot
+	acquireTime int64
 }
 
 func (lg *Guard) latches(s spanset.SpanScope, a spanset.SpanAccess) []latch {
@@ -522,6 +529,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 			}
 		}
 	}
+	lg.acquireTime = timeutil.Now().UnixNano()
 	return nil
 }
 
@@ -624,6 +632,14 @@ func (m *Manager) Release(lg *Guard) {
 	m.mu.Lock()
 	m.removeLocked(lg)
 	m.mu.Unlock()
+	held := timeutil.Now().UnixNano() - lg.acquireTime
+	if lg.acquireTime != 0 && m.settings != nil && held > longLatchHoldDuration.Get(&m.settings.SV).Nanoseconds() {
+		if m.everySecondLogger.ShouldLog() {
+			log.Warningf(context.Background(), LongLatchHeldMsg, lg.baFmt, held)
+		} else {
+			log.VEventf(context.Background(), 2, LongLatchHeldMsg, lg.baFmt, held)
+		}
+	}
 }
 
 // removeLocked removes the latches owned by the provided Guard from the
