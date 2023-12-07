@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tochar"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -286,6 +287,9 @@ type Context struct {
 	// execution until control returns to the parent routine. It is only valid
 	// during local execution. It may be unset.
 	RoutineSender DeferredRoutineSender
+
+	// ULIDEntropy is the entropy source for ULID generation.
+	ULIDEntropy ulid.MonotonicReader
 }
 
 // JobsProfiler is the interface used to fetch job specific execution details
