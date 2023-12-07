@@ -9123,3 +9123,81 @@ func TestBatchSizeMetric(t *testing.T) {
 	}
 	cdcTest(t, testFn)
 }
+
+// TestParallelIOMetrics tests parallel io metrics.
+func TestParallelIOMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
+
+		// Add delay so queuing occurs, which results in the below metrics being
+		// nonzero.
+		defer enablePubsubTestfeedDelay()()
+
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `SET CLUSTER SETTING changefeed.new_pubsub_sink_enabled = true`)
+		db.Exec(t, `
+		  CREATE TABLE foo (a INT PRIMARY KEY);
+		`)
+
+		// Keep writing data to the same key to ensure contention.
+		ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+		g := ctxgroup.WithContext(ctx)
+		done := make(chan struct{})
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-done:
+					return nil
+				default:
+					_, err := s.DB.Exec(`UPSERT INTO foo (a)  SELECT * FROM generate_series(1, 10)`)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		})
+
+		foo, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo")
+		require.NoError(t, err)
+
+		testutils.SucceedsSoon(t, func() error {
+			numSamples, sum := metrics.ParallelIOPendingQueueNanos.TotalWindowed()
+			if numSamples <= 0 && sum <= 0.0 {
+				return errors.Newf("waiting for queue nanos: %d %f", numSamples, sum)
+			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
+			pendingKeys := metrics.ParallelIOPendingKeys.Value()
+			t.Logf("%p %d %s", metrics.ParallelIOPendingKeys, metrics.ParallelIOPendingKeys.Value(), time.Now())
+			if pendingKeys <= 0 {
+				return errors.Newf("waiting for pending keys: %d", pendingKeys)
+			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
+			inFlightKeys := metrics.ParallelIOInFlightKeys.Value()
+			if inFlightKeys <= 0 {
+				return errors.Newf("waiting for in-flight keys: %d", inFlightKeys)
+			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
+			numSamples, sum := metrics.ParallelIOResultQueueNanos.TotalWindowed()
+			if numSamples <= 0 && sum <= 0.0 {
+				return errors.Newf("waiting for result queue nanos: %d %f", numSamples, sum)
+			}
+			return nil
+		})
+		close(done)
+		require.NoError(t, g.Wait())
+		require.NoError(t, foo.Close())
+	}
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}

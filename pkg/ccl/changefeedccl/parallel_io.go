@@ -51,9 +51,11 @@ type IORequest interface {
 type ioResult struct {
 	request IORequest
 	err     error
+	// Time representing when this result was received from the sink.
+	arrivalTime time.Time
 }
 
-var resultPool sync.Pool = sync.Pool{
+var resultPool = sync.Pool{
 	New: func() interface{} {
 		return new(ioResult)
 	},
@@ -63,6 +65,7 @@ func newIOResult(req IORequest, err error) *ioResult {
 	res := resultPool.Get().(*ioResult)
 	res.request = req
 	res.err = err
+	res.arrivalTime = timeutil.Now()
 	return res
 }
 func freeIOResult(e *ioResult) {
@@ -197,12 +200,14 @@ func (p *parallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 	// in a Queue to be sent to IO workers once the conflicting requests complete.
 	var inflight intsets.Fast
 	var pending []queuedRequest
+	metricsRec := p.metrics.newParallelIOMetricsRecorder()
 
 	handleResult := func(res *ioResult) error {
 		if res.err == nil {
 			// Clear out the completed keys to check for newly valid pending requests.
-			inflight.DifferenceWith(res.request.Keys())
-
+			requestKeys := res.request.Keys()
+			inflight.DifferenceWith(requestKeys)
+			metricsRec.setInFlightKeys(int64(inflight.Len()))
 			// Check for a pending request that is now able to be sent i.e. is not
 			// conflicting with any inflight requests or any requests that arrived
 			// earlier than itself in the pending queue.
@@ -211,7 +216,7 @@ func (p *parallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 				if !inflight.Intersects(pendingReq.req.Keys()) && !pendingKeys.Intersects(pendingReq.req.Keys()) {
 					inflight.UnionWith(pendingReq.req.Keys())
 					pending = append(pending[:i], pending[i+1:]...)
-					p.metrics.recordParallelIOQueueLatency(timeutil.Since(pendingReq.admitTime))
+					metricsRec.recordPendingQueuePop(int64(pendingReq.req.Keys().Len()), timeutil.Since(pendingReq.admitTime))
 					if err := submitIO(pendingReq.req); err != nil {
 						return err
 					}
@@ -228,6 +233,7 @@ func (p *parallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 		case <-p.doneCh:
 			return nil
 		case p.resultCh <- res:
+			metricsRec.recordResultQueueLatency(timeutil.Since(res.arrivalTime))
 			return nil
 		}
 	}
@@ -263,8 +269,11 @@ func (p *parallelIO) processIO(ctx context.Context, numEmitWorkers int) error {
 				// If a request conflicts with any currently unhandled requests, add it
 				// to the pending queue to be rechecked for validity later.
 				pending = append(pending, queuedRequest{req: req, admitTime: timeutil.Now()})
+				metricsRec.recordPendingQueuePush(int64(req.Keys().Len()))
 			} else {
-				inflight.UnionWith(req.Keys())
+				newInFlightKeys := req.Keys()
+				inflight.UnionWith(newInFlightKeys)
+				metricsRec.setInFlightKeys(int64(inflight.Len()))
 				if err := submitIO(req); err != nil {
 					return err
 				}

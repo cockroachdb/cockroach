@@ -2314,6 +2314,10 @@ func (ps *fakePubsubServer) React(req interface{}) (handled bool, ret interface{
 	if ok {
 		ps.mu.Lock()
 		defer ps.mu.Unlock()
+
+		if pubsubTestfeedDelay > 0*time.Second {
+			time.Sleep(pubsubTestfeedDelay)
+		}
 		for _, msg := range publishReq.Messages {
 			ps.mu.buffer = append(ps.mu.buffer, mockPubsubMessage{data: string(msg.Data), topic: publishReq.Topic})
 		}
@@ -2386,6 +2390,15 @@ func makePubsubFeedFactory(srvOrCluster interface{}, rootDB *gosql.DB) cdctest.T
 			rootDB: rootDB,
 			di:     newDepInjector(injectables...),
 		},
+	}
+}
+
+var pubsubTestfeedDelay = 0 * time.Second
+
+var enablePubsubTestfeedDelay = func() func() {
+	pubsubTestfeedDelay = 5 * time.Millisecond
+	return func() {
+		pubsubTestfeedDelay = 0 * time.Second
 	}
 }
 
