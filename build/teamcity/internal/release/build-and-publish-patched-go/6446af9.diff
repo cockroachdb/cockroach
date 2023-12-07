@@ -1,0 +1,171 @@
+From 6446af942e2e2b161c4ec1b60d9703a2b55dc4dd Mon Sep 17 00:00:00 2001
+From: Damien Neil <dneil@google.com>
+Date: Tue, 07 Nov 2023 10:47:56 -0800
+Subject: [PATCH] [release-branch.go1.20] net/http: limit chunked data overhead
+
+The chunked transfer encoding adds some overhead to
+the content transferred. When writing one byte per
+chunk, for example, there are five bytes of overhead
+per byte of data transferred: "1\r\nX\r\n" to send "X".
+
+Chunks may include "chunk extensions",
+which we skip over and do not use.
+For example: "1;chunk extension here\r\nX\r\n".
+
+A malicious sender can use chunk extensions to add
+about 4k of overhead per byte of data.
+(The maximum chunk header line size we will accept.)
+
+Track the amount of overhead read in chunked data,
+and produce an error if it seems excessive.
+
+Updates #64433
+Fixes #64434
+Fixes CVE-2023-39326
+
+Change-Id: I40f8d70eb6f9575fb43f506eb19132ccedafcf39
+Reviewed-on: https://team-review.git.corp.google.com/c/golang/go-private/+/2076135
+Reviewed-by: Tatiana Bradley <tatianabradley@google.com>
+Reviewed-by: Roland Shoemaker <bracewell@google.com>
+(cherry picked from commit 3473ae72ee66c60744665a24b2fde143e8964d4f)
+Reviewed-on: https://team-review.git.corp.google.com/c/golang/go-private/+/2095407
+Run-TryBot: Roland Shoemaker <bracewell@google.com>
+TryBot-Result: Security TryBots <security-trybots@go-security-trybots.iam.gserviceaccount.com>
+Reviewed-by: Damien Neil <dneil@google.com>
+Reviewed-on: https://go-review.googlesource.com/c/go/+/547355
+Reviewed-by: Dmitri Shuralyov <dmitshur@google.com>
+LUCI-TryBot-Result: Go LUCI <golang-scoped@luci-project-accounts.iam.gserviceaccount.com>
+---
+
+diff --git a/src/net/http/internal/chunked.go b/src/net/http/internal/chunked.go
+index 5a17441..8b6e94b 100644
+--- a/src/net/http/internal/chunked.go
++++ b/src/net/http/internal/chunked.go
+@@ -39,7 +39,8 @@
+ 	n        uint64 // unread bytes in chunk
+ 	err      error
+ 	buf      [2]byte
+-	checkEnd bool // whether need to check for \r\n chunk footer
++	checkEnd bool  // whether need to check for \r\n chunk footer
++	excess   int64 // "excessive" chunk overhead, for malicious sender detection
+ }
+ 
+ func (cr *chunkedReader) beginChunk() {
+@@ -49,10 +50,38 @@
+ 	if cr.err != nil {
+ 		return
+ 	}
++	cr.excess += int64(len(line)) + 2 // header, plus \r\n after the chunk data
++	line = trimTrailingWhitespace(line)
++	line, cr.err = removeChunkExtension(line)
++	if cr.err != nil {
++		return
++	}
+ 	cr.n, cr.err = parseHexUint(line)
+ 	if cr.err != nil {
+ 		return
+ 	}
++	// A sender who sends one byte per chunk will send 5 bytes of overhead
++	// for every byte of data. ("1\r\nX\r\n" to send "X".)
++	// We want to allow this, since streaming a byte at a time can be legitimate.
++	//
++	// A sender can use chunk extensions to add arbitrary amounts of additional
++	// data per byte read. ("1;very long extension\r\nX\r\n" to send "X".)
++	// We don't want to disallow extensions (although we discard them),
++	// but we also don't want to allow a sender to reduce the signal/noise ratio
++	// arbitrarily.
++	//
++	// We track the amount of excess overhead read,
++	// and produce an error if it grows too large.
++	//
++	// Currently, we say that we're willing to accept 16 bytes of overhead per chunk,
++	// plus twice the amount of real data in the chunk.
++	cr.excess -= 16 + (2 * int64(cr.n))
++	if cr.excess < 0 {
++		cr.excess = 0
++	}
++	if cr.excess > 16*1024 {
++		cr.err = errors.New("chunked encoding contains too much non-data")
++	}
+ 	if cr.n == 0 {
+ 		cr.err = io.EOF
+ 	}
+@@ -140,11 +169,6 @@
+ 	if len(p) >= maxLineLength {
+ 		return nil, ErrLineTooLong
+ 	}
+-	p = trimTrailingWhitespace(p)
+-	p, err = removeChunkExtension(p)
+-	if err != nil {
+-		return nil, err
+-	}
+ 	return p, nil
+ }
+ 
+diff --git a/src/net/http/internal/chunked_test.go b/src/net/http/internal/chunked_test.go
+index 5e29a78..b99090c 100644
+--- a/src/net/http/internal/chunked_test.go
++++ b/src/net/http/internal/chunked_test.go
+@@ -239,3 +239,62 @@
+ 		t.Errorf("expected %v, got %v", readErr, err)
+ 	}
+ }
++
++func TestChunkReaderTooMuchOverhead(t *testing.T) {
++	// If the sender is sending 100x as many chunk header bytes as chunk data,
++	// we should reject the stream at some point.
++	chunk := []byte("1;")
++	for i := 0; i < 100; i++ {
++		chunk = append(chunk, 'a') // chunk extension
++	}
++	chunk = append(chunk, "\r\nX\r\n"...)
++	const bodylen = 1 << 20
++	r := NewChunkedReader(&funcReader{f: func(i int) ([]byte, error) {
++		if i < bodylen {
++			return chunk, nil
++		}
++		return []byte("0\r\n"), nil
++	}})
++	_, err := io.ReadAll(r)
++	if err == nil {
++		t.Fatalf("successfully read body with excessive overhead; want error")
++	}
++}
++
++func TestChunkReaderByteAtATime(t *testing.T) {
++	// Sending one byte per chunk should not trip the excess-overhead detection.
++	const bodylen = 1 << 20
++	r := NewChunkedReader(&funcReader{f: func(i int) ([]byte, error) {
++		if i < bodylen {
++			return []byte("1\r\nX\r\n"), nil
++		}
++		return []byte("0\r\n"), nil
++	}})
++	got, err := io.ReadAll(r)
++	if err != nil {
++		t.Errorf("unexpected error: %v", err)
++	}
++	if len(got) != bodylen {
++		t.Errorf("read %v bytes, want %v", len(got), bodylen)
++	}
++}
++
++type funcReader struct {
++	f   func(iteration int) ([]byte, error)
++	i   int
++	b   []byte
++	err error
++}
++
++func (r *funcReader) Read(p []byte) (n int, err error) {
++	if len(r.b) == 0 && r.err == nil {
++		r.b, r.err = r.f(r.i)
++		r.i++
++	}
++	n = copy(p, r.b)
++	r.b = r.b[n:]
++	if len(r.b) > 0 {
++		return n, nil
++	}
++	return n, r.err
++}

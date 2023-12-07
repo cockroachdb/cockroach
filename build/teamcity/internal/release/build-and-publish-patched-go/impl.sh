@@ -64,7 +64,7 @@ rm golang.tar.gz
 cd /tmp/go$GOVERS/go
 # NB: we apply a patch to the Go runtime to keep track of running time on a
 # per-goroutine basis. See #82356 and #82625.
-git apply /bootstrap/diff.patch
+git apply /bootstrap/diff.patch /bootstrap/6446af9.diff
 cd ..
 
 for CONFIG in linux_amd64 linux_arm64 darwin_amd64 windows_amd64; do

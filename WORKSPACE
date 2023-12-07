@@ -170,14 +170,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.19.6.darwin-amd64.tar.gz", "1d4c893d34183143eb79e8be18f099014f9d91786eabf51bf124a84f6a6f7345"),
+        "darwin_amd64": ("go1.19.6.darwin-amd64.tar.gz", "fa612b2b9e1e30518c99b8eb1701913faf021968ca03c8bed30836f6e4cdc716"),
         "darwin_arm64": ("go1.19.6.darwin-arm64.tar.gz", "dfbf3e4686dd7fee7a9c0223c52b124c1af5f02508baf07e1e59489cd9df2a90"),
         "freebsd_amd64": ("go1.19.6.freebsd-amd64.tar.gz", "f4b432ebe462a6edd6131e94360b9f0fb3b8136bba39caeacb4aa22a89ba1dd8"),
-        "linux_amd64": ("go1.19.6.linux-amd64.tar.gz", "d78cb765b95fe10f559cc6a5d59841f23b9252911af4f2a322ba3f804e2bbcda"),
-        "linux_arm64": ("go1.19.6.linux-arm64.tar.gz", "2ae769c5367b21f82a4fb25a1cf5cb42625431b82a6d34e7aa120083d607b316"),
-        "windows_amd64": ("go1.19.6.windows-amd64.tar.gz", "1f8233566b6604d72b73665e0047c9647a226581892e64d4b460cec1cb39657e"),
+        "linux_amd64": ("go1.19.6.linux-amd64.tar.gz", "d7e6148a3eb6132e64bd6c8a24dba3a3a47dbf52319b7c010bcf4855cf02a8d0"),
+        "linux_arm64": ("go1.19.6.linux-arm64.tar.gz", "094fdc44f947aa978cd4f3a2a4283c2c529ab04c6caaf68f3f9628d5e8ed0b0b"),
+        "windows_amd64": ("go1.19.6.windows-amd64.tar.gz", "9d92f856c5e9d838874c824ed1607afddb477dd3b83df3bf53d6939f0adc422a"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20230227-221815/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231207-173854/{}"],
     version = "1.19.6",
 )
 
@@ -662,8 +662,8 @@ new_local_repository(
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.19.5fips.linux-amd64.tar.gz", "b143b3c384d70700f3ad171dcf9fa1a4b434efa0012c4b1d4ebfb6a0cb7a50b6"),
+        "linux_amd64": ("go1.19.6fips.linux-amd64.tar.gz", "504c42875f0a08069de325347ce8d6295605ab1705f1ddca3b9251739516eefc"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go-fips/20230207-040328/{}"],
-    version = "1.19.5fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231207-173854/{}"],
+    version = "1.19.6fips",
 )
