@@ -247,6 +247,11 @@ func (j *Job) taskName() string {
 // Started marks the tracked job as started by updating status to running in
 // jobs table.
 func (u Updater) started(ctx context.Context) error {
+	sp := tracing.SpanFromContext(ctx)
+	traceID := tracingpb.TraceID(0)
+	if sp != nil {
+		traceID = sp.TraceID()
+	}
 	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status != StatusPending && md.Status != StatusRunning {
 			return errors.Errorf("job with status %s cannot be marked started", md.Status)
@@ -265,6 +270,10 @@ func (u Updater) started(ctx context.Context) error {
 		// TODO (sajjad): Update this comment after version 22.2 has been released.
 		if md.RunStats != nil {
 			ju.UpdateRunStats(md.RunStats.NumRuns+1, u.now())
+		}
+		if traceID != 0 && md.Progress != nil && md.Progress.TraceID != traceID {
+			md.Progress.TraceID = traceID
+			ju.UpdateProgress(md.Progress)
 		}
 		return nil
 	})
@@ -483,6 +492,12 @@ func (u Updater) PauseRequested(ctx context.Context, reason string) error {
 func (u Updater) reverted(
 	ctx context.Context, err error, fn func(context.Context, isql.Txn) error,
 ) error {
+	sp := tracing.SpanFromContext(ctx)
+	traceID := tracingpb.TraceID(0)
+	if sp != nil {
+		traceID = sp.TraceID()
+	}
+
 	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
 		if md.Status != StatusReverting &&
 			md.Status != StatusCancelRequested &&
@@ -525,6 +540,10 @@ func (u Updater) reverted(
 				numRuns = 1
 			}
 			ju.UpdateRunStats(numRuns, u.now())
+		}
+		if traceID != 0 && md.Progress != nil && md.Progress.TraceID != traceID {
+			md.Progress.TraceID = traceID
+			ju.UpdateProgress(md.Progress)
 		}
 		return nil
 	})

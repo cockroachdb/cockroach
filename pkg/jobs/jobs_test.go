@@ -966,53 +966,6 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.mu.e.ResumeExit++
 		rts.check(t, jobs.StatusSucceeded)
 	})
-	t.Run("fail setting trace ID", func(t *testing.T) {
-		// The trace ID is set on the job above the state machine loop.
-		// This tests a regression where we fail to set trace ID and then
-		// don't clear the in-memory state that we were running this job.
-		// That prevents the job from being re-run.
-
-		rts := registryTestSuite{}
-		rts.setUp(t)
-		defer rts.tearDown()
-		rts.traceRealSpan = true
-
-		// Inject an error in the update to record the trace ID.
-		var failed atomic.Value
-		failed.Store(false)
-		rts.beforeUpdate = func(orig, updated jobs.JobMetadata) error {
-			if !failed.Load().(bool) &&
-				orig.Progress.TraceID == 0 &&
-				updated.Progress != nil &&
-				updated.Progress.TraceID != 0 {
-				failed.Store(true)
-				return errors.New("boom")
-			}
-			return nil
-		}
-
-		j, err := jobs.TestingCreateAndStartJob(context.Background(), rts.registry, rts.idb(), rts.mockJob)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rts.job = j
-
-		testutils.SucceedsSoon(t, func() error {
-			if !failed.Load().(bool) {
-				return errors.New("not yet failed")
-			}
-			return nil
-		})
-
-		// Make sure the job retries and then succeeds.
-		rts.resumeCheckCh <- struct{}{}
-		rts.resumeCh <- nil
-		rts.mu.e.ResumeStart = true
-		rts.mu.e.ResumeExit++
-		rts.mu.e.Success = true
-		rts.check(t, jobs.StatusSucceeded)
-	})
-
 	t.Run("dump traces on pause-unpause-success", func(t *testing.T) {
 		ctx := context.Background()
 		completeCh := make(chan struct{})

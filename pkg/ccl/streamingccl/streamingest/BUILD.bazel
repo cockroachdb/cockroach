@@ -109,6 +109,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":streamingest"],
+    exec_properties = {"Pool": "large"},
     shard_count = 16,
     tags = ["ccl_test"],
     deps = [
