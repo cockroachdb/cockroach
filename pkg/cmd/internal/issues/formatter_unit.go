@@ -27,6 +27,11 @@ func (unitTestFormatterTyp) Title(data TemplateData) string {
 
 // Body is part of the IssueFormatter interface.
 func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
+	for _, note := range data.TopLevelNotes {
+		r.Escaped("**Note:** ")
+		r.Escaped(note)
+		r.printf("\n\n")
+	}
 	r.Escaped(fmt.Sprintf("%s.%s ", data.PackageNameShort, data.TestName))
 	r.A(
 		"failed",

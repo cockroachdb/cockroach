@@ -472,6 +472,9 @@ type PostRequest struct {
 	TestName string
 	// If set, the C-test-failure label will not be applied.
 	SkipLabelTestFailure bool
+	// TopLevelNotes are messages that are printed prominently at the top of the
+	// issue description.
+	TopLevelNotes []string
 	// The test output.
 	Message string
 	// ExtraParams contains the parameters to be included in a failure
