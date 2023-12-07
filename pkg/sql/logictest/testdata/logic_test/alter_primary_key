@@ -1607,27 +1607,21 @@ COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
 statement ok
 ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
 
-# Verify that all comments are appropriately carried over. The output of `SHOW
-# CREATE` between LSC and DSC are slightly different so we query them
-# separately.
-skipif config local-legacy-schema-changer
+# Verify that all comments are appropriately carried over. The order of comments
+# from `SHOW CREATE` between LSC and DSC are slightly different so we used
+# slightly complicated query to extract all comments from `SHOW CREATE` and
+# order them by comments for a unified output.
 query T
-SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+SELECT trim(trailing ';' from unnest(regexp_split_to_array(substring(create_statement, strpos(create_statement, 'COMMENT')), '\n', 'g'))) AS comment
+FROM [SHOW CREATE pkey_comment]
+ORDER BY comment;
 ----
-COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
-COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
-COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3';
-COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const'
-
-onlyif config local-legacy-schema-changer
-query T
-SELECT substring(create_statement, strpos(create_statement, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
-----
-COMMENT ON INDEX public.pkey_comment@pkey_comment_pkey IS 'idx';
-COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
-COMMENT ON CONSTRAINT pkey_comment_pkey ON public.pkey_comment IS 'const';
 COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const'
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2'
+COMMENT ON INDEX public.pkey_comment@pkey IS 'idx'
 
+subtest end
 
 subtest test-index-deduplication
 
