@@ -80,15 +80,17 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 		}
 		sort.Strings(params)
 
-		r.P(func() {
-			r.Escaped("Parameters: ")
-			separator := ""
+		if len(params) > 0 {
+			r.nl()
+			r.printf("\n")
+			r.Escaped("Parameters:")
+			r.nl()
 			for _, name := range params {
-				r.Escaped(separator)
+				r.Escaped(" - ")
 				r.Code(fmt.Sprintf("%s=%s", name, data.Parameters[name]))
-				separator = ", "
+				r.nl()
 			}
-		})
+		}
 	}
 
 	if data.HelpCommand != nil {
