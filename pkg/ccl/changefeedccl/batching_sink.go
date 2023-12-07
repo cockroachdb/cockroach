@@ -258,6 +258,11 @@ func (sb *sinkBatch) Keys() intsets.Fast {
 	return sb.keys
 }
 
+// NumMessages implements the IORequest interface.
+func (sb *sinkBatch) NumMessages() int {
+	return sb.numMessages
+}
+
 func (sb *sinkBatch) isEmpty() bool {
 	return sb.numMessages == 0
 }
