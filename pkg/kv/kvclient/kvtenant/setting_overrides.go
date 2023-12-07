@@ -72,7 +72,14 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 				err := errors.DecodeError(ctx, e.Error)
 				log.Errorf(ctx, "error consuming TenantSettings RPC: %v", err)
 				if startupCh != nil && errors.Is(err, &kvpb.MissingRecordError{}) && c.earlyShutdownIfMissingTenantRecord {
-					startupCh <- err
+					select {
+					case startupCh <- err:
+					case <-ctx.Done():
+						// Shutdown or cancellation may prevent the receiver from getting
+						// this error, so short circuit.
+						return
+					}
+
 					close(startupCh)
 					c.tryForgetClient(ctx, client)
 					return
@@ -131,7 +138,13 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 					log.Infof(ctx, "received initial tenant settings")
 
 					if startupCh != nil {
-						startupCh <- nil
+						select {
+						case startupCh <- nil:
+						case <-ctx.Done():
+							// Shutdown or cancellation may prevent the receiver from getting
+							// this completion message, so short circuit.
+							return
+						}
 						close(startupCh)
 						startupCh = nil
 					}
