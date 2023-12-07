@@ -386,6 +386,28 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			base, plans, "distsql.html vec.txt vec-v.txt inflight-trace-n1.txt inflight-trace-jaeger-n1.json",
 		)
 	})
+
+	t.Run("virtual table", func(t *testing.T) {
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT count(*) FROM pg_catalog.pg_class;")
+		// tableName is empty since we expect that the table is not included
+		// into schema.sql.
+		var tableName string
+		contentCheck := func(name, contents string) error {
+			if name != "schema.sql" {
+				return nil
+			}
+			if strings.Contains(contents, "CREATE TABLE pg_catalog.pg_class") {
+				return errors.New("virtual tables should be omitted from schema.sql")
+			}
+			return nil
+		}
+		checkBundle(
+			t, fmt.Sprint(rows), tableName, contentCheck, false, /* expectErrors */
+			// Note that the list of files doesn't include stats for the virtual
+			// table - this will probably change when #27611 is addressed.
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
+	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
