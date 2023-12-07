@@ -478,8 +478,9 @@ func registerTPCC(r registry.Registry) {
 		// node and on a mixed version cluster which runs its long-running
 		// migrations while TPCC runs. It simulates a real production
 		// deployment in the middle of the migration into a new cluster version.
-		Name:  "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
-		Owner: registry.OwnerTestEng,
+		Name:    "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
+		Timeout: 6 * time.Hour,
+		Owner:   registry.OwnerTestEng,
 		// TODO(tbg): add release_qualification tag once we know the test isn't
 		// buggy.
 		CompatibleClouds:  registry.AllExceptAWS,
@@ -1161,6 +1162,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		Cluster:           nodes,
 		CompatibleClouds:  b.Clouds,
 		Suites:            b.Suites,
+		Timeout:           5 * time.Hour,
 		Tags:              b.Tags,
 		EncryptionSupport: encryptionSupport,
 		Leases:            leases,
