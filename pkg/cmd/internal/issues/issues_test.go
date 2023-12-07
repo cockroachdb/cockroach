@@ -387,16 +387,18 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 				repro = HelpCommandAsLink(c.reproTitle, c.reproURL)
 			}
 			req := PostRequest{
-				PackageName:          c.packageName,
-				TestName:             c.testName,
-				TopLevelNotes:        c.topLevelNotes,
-				Message:              c.message,
-				SkipLabelTestFailure: c.skipTestFailure,
-				Artifacts:            c.artifacts,
-				MentionOnCreate:      []string{"@cockroachdb/idonotexistbecausethisisatest"},
-				HelpCommand:          repro,
-				ExtraLabels:          []string{"release-blocker"},
-				ExtraParams:          map[string]string{"ROACHTEST_cloud": "gce"},
+				PackageName:     c.packageName,
+				TestName:        c.testName,
+				TopLevelNotes:   c.topLevelNotes,
+				Message:         c.message,
+				Artifacts:       c.artifacts,
+				MentionOnCreate: []string{"@cockroachdb/idonotexistbecausethisisatest"},
+				HelpCommand:     repro,
+				ExtraParams:     map[string]string{"ROACHTEST_cloud": "gce"},
+			}
+			if c.skipTestFailure {
+				// Override the default.
+				req.Labels = []string{}
 			}
 			require.NoError(t, p.post(context.Background(), UnitTestFormatter, req))
 
@@ -450,7 +452,6 @@ func TestPostEndToEnd(t *testing.T) {
 		PackageName: "github.com/cockroachdb/cockroach/pkg/foo/bar",
 		TestName:    "TestFooBarBaz",
 		Message:     "I'm a message",
-		ExtraLabels: []string{"release-blocker"},
 		ExtraParams: params,
 		HelpCommand: UnitTestHelpCommand(""),
 	}
@@ -497,4 +498,26 @@ func ghURL(t *testing.T, title, body string) string {
 	q.Add("body", body)
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+func TestDataDriven(t *testing.T) {
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "issues"), func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "build-issue-queries":
+			var req PostRequest
+			if arg, ok := d.Arg("labels"); ok {
+				req.Labels = arg.Vals
+			}
+			if arg, ok := d.Arg("label-match-set"); ok {
+				req.AdoptIssueLabelMatchSet = arg.Vals
+			}
+			existing, related := buildIssueQueries("repo", "org", "master", "foo: bar failed", req)
+			return fmt.Sprintf("Existing issue query:\n  %s\nRelated issues query:\n  %s", existing, related)
+
+		default:
+			t.Fatalf("unknown command %q", d.Cmd)
+			return ""
+		}
+	})
+
 }

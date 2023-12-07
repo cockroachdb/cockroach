@@ -178,12 +178,13 @@ func (g *githubIssues) createPostRequest(
 	labels := []string{"O-roachtest"}
 	if infraFlake {
 		labels = append(labels, "X-infra-flake")
-	} else if !spec.NonReleaseBlocker {
-		labels = append(labels, "release-blocker")
+	} else {
+		labels = append(labels, issues.TestFailureLabel)
+		if !spec.NonReleaseBlocker {
+			labels = append(labels, issues.ReleaseBlockerLabel)
+		}
 	}
-	if len(spec.ExtraLabels) > 0 {
-		labels = append(labels, spec.ExtraLabels...)
-	}
+	labels = append(labels, spec.ExtraLabels...)
 
 	teams, err := g.teamLoader()
 	if err != nil {
@@ -240,16 +241,15 @@ func (g *githubIssues) createPostRequest(
 			"consult the logs for details. WARNING: DO NOT COPY UNREDACTED ARTIFACTS TO THIS ISSUE."
 	}
 	return issues.PostRequest{
-		MentionOnCreate:      mention,
-		ProjectColumnID:      projColID,
-		PackageName:          "roachtest",
-		TestName:             issueName,
-		Message:              issueMessage,
-		SkipLabelTestFailure: infraFlake, // infra-flakes are not marked as C-test-failure
-		Artifacts:            artifacts,
-		ExtraLabels:          labels,
-		ExtraParams:          clusterParams,
-		HelpCommand:          generateHelpCommand(testName, issueClusterName, roachtestflags.Cloud, start, end),
+		MentionOnCreate: mention,
+		ProjectColumnID: projColID,
+		PackageName:     "roachtest",
+		TestName:        issueName,
+		Labels:          labels,
+		Message:         issueMessage,
+		Artifacts:       artifacts,
+		ExtraParams:     clusterParams,
+		HelpCommand:     generateHelpCommand(testName, issueClusterName, roachtestflags.Cloud, start, end),
 	}, nil
 }
 
