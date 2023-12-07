@@ -672,13 +672,15 @@ func (n *Node) start(
 		err := n.stopper.RunAsyncTaskEx(ctx,
 			stop.TaskOpts{TaskName: "initialize-stores", SpanOpt: stop.FollowsFromSpan, Sem: sem, WaitForSem: true},
 			func(ctx context.Context) {
+				start := timeutil.Now()
 				s := kvserver.NewStore(ctx, n.storeCfg, engine, &n.Descriptor)
 				if err := s.Start(workersCtx, n.stopper); err != nil {
 					engineErrC <- errors.Wrap(err, "failed to start store")
 					return
 				}
 				n.addStore(ctx, s)
-				log.Infof(ctx, "initialized store s%s", s.StoreID())
+				log.Infof(ctx, "initialized store s%s in %s (%d replicas)",
+					s.StoreID(), timeutil.Since(start).Truncate(time.Millisecond), s.ReplicaCount())
 				engineErrC <- nil
 			})
 		if err != nil {
@@ -908,7 +910,7 @@ func (n *Node) initializeAdditionalStores(
 			}
 
 			n.addStore(ctx, s)
-			log.Infof(ctx, "initialized store s%s", s.StoreID())
+			log.Infof(ctx, "initialized new store s%s", s.StoreID())
 
 			// Done regularly in Node.startGossiping, but this cuts down the time
 			// until this store is used for range allocations.
