@@ -83,7 +83,7 @@ func registerElasticIO(r registry.Registry) {
 				url := fmt.Sprintf(" {pgurl:1-%d}", crdbNodes)
 				cmd := "./workload run kv --init --histograms=perf/stats.json --concurrency=512 " +
 					"--splits=1000 --read-percent=0 --min-block-bytes=65536 --max-block-bytes=65536 " +
-					"--background-qos=true --tolerate-errors" + dur + url
+					"--txn-qos=background --tolerate-errors" + dur + url
 				c.Run(ctx, c.Node(workAndPromNode), cmd)
 				return nil
 			})

@@ -96,7 +96,7 @@ type kv struct {
 	enum                                 bool
 	keySize                              int
 	insertCount                          int
-	useBackgroundTxnQoS                  bool
+	txnQoS                               string
 }
 
 func init() {
@@ -182,8 +182,9 @@ var kvMeta = workload.Meta{
 			`Use string key of appropriate size instead of int`)
 		g.flags.DurationVar(&g.sfuDelay, `sfu-wait-delay`, 10*time.Millisecond,
 			`Delay before sfu write transaction commits or aborts`)
-		g.flags.BoolVar(&g.useBackgroundTxnQoS, `background-qos`, false,
-			`Set default_transaction_quality_of_service session variable to "background".`)
+		g.flags.StringVar(&g.txnQoS, `txn-qos`, `regular`,
+			`Set default_transaction_quality_of_service session variable, accepted`+
+				`values are 'background', 'regular' and 'critical'.`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -273,6 +274,12 @@ func (w *kv) validateConfig() (err error) {
 			return errors.Errorf(
 				"zipfian --write-seq is incompatible with a --sequential or default (random) key sequence")
 		}
+	}
+	if w.txnQoS != "" && w.txnQoS != "background" &&
+		w.txnQoS != "regular" && w.txnQoS != "critical" {
+		return errors.Errorf(
+			"--txn-qos must be one of 'background', 'regular' or 'critical', found %s", w.txnQoS,
+		)
 	}
 	// We create generator and discard it to have a single piece of code that
 	// handles generator type which affects target key range.
@@ -542,8 +549,9 @@ func (w *kv) Ops(
 			op.sfuStmt = op.sr.Define(sfuStmtStr)
 		}
 		op.spanStmt = op.sr.Define(spanStmtStr)
-		if w.useBackgroundTxnQoS {
-			stmt := op.sr.Define(" SET default_transaction_quality_of_service = background")
+		if w.txnQoS != `regular` {
+			stmt := op.sr.Define(fmt.Sprintf(
+				" SET default_transaction_quality_of_service = %s", w.txnQoS))
 			op.qosStmt = &stmt
 		}
 		op.delStmt = op.sr.Define(delStmtStr)
