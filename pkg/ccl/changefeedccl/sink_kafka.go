@@ -42,7 +42,8 @@ import (
 
 func isKafkaSink(u *url.URL) bool {
 	switch u.Scheme {
-	case changefeedbase.SinkSchemeConfluentKafka, changefeedbase.SinkSchemeKafka:
+	case changefeedbase.SinkSchemeConfluentKafka, changefeedbase.SinkSchemeAzureKafka,
+		changefeedbase.SinkSchemeKafka:
 		return true
 	default:
 		return false
@@ -904,6 +905,8 @@ func buildDialConfig(u sinkURL) (kafkaDialConfig, error) {
 	switch u.Scheme {
 	case changefeedbase.SinkSchemeConfluentKafka:
 		return buildConfluentKafkaConfig(u)
+	case changefeedbase.SinkSchemeAzureKafka:
+		return buildAzureKafkaConfig(u)
 	default:
 		return buildDefaultKafkaConfig(u)
 	}
@@ -1127,6 +1130,51 @@ func buildConfluentKafkaConfig(u sinkURL) (kafkaDialConfig, error) {
 		return kafkaDialConfig{}, err
 	}
 	if _, err := u.consumeBool(changefeedbase.SinkParamSkipTLSVerify, &dialConfig.tlsSkipVerify); err != nil {
+		return kafkaDialConfig{}, err
+	}
+
+	remaining := u.remainingQueryParams()
+	if len(remaining) > 0 {
+		return kafkaDialConfig{}, newInvalidParameterError(u.Scheme, /*scheme*/
+			fmt.Sprintf("%v", remaining) /*invalidParams*/)
+	}
+	return dialConfig, nil
+}
+
+
+// buildAzureKafkaConfig parses the given sinkURL and constructs its
+// correponding kafkaDialConfig for streaming to Azure Event Hub kafka protocol.
+// Additionally, it validates options based on the given sinkURL and returns an
+// error for unsupported or missing options. The sinkURL must include mandatory
+// parameters shared_access_key_name and shared_access_key.  Default options,
+// including "tls_enabled=true," "sasl_handshake=true," "sasl_enabled=true," and
+// "sasl_mechanism=PLAIN," are automatically applied, as they are the only
+// supported values.
+//
+// See
+// https://learn.microsoft.com/en-us/azure/event-hubs/azure-event-hubs-kafka-overview
+// on how to connect to azure event hub kafka protocol.
+func buildAzureKafkaConfig(u sinkURL) (dialConfig kafkaDialConfig, _ error) {
+	hostName := u.Hostname()
+	// saslUser="$ConnectionString"
+	// saslPassword="Endpoint=sb://<NamespaceName>.servicebus.windows.net/;SharedAccessKeyName=<KeyName>;SharedAccessKey=<KeyValue>;
+	sharedAccessKeyName := u.consumeParam(changefeedbase.SinkParamAzureAccessKeyName)
+	if sharedAccessKeyName == `` {
+		return kafkaDialConfig{},
+			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKeyName /*param*/)
+	}
+	sharedAccessKey := u.consumeParam(changefeedbase.SinkParamAzureAccessKey)
+	if sharedAccessKey == `` {
+		return kafkaDialConfig{},
+			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKey /*param*/)
+	}
+
+	dialConfig.saslUser = "$ConnectionString"
+	dialConfig.saslPassword = fmt.Sprintf(
+		"Endpoint=sb://%s/;SharedAccessKeyName=%s;SharedAccessKey=%s",
+		hostName, sharedAccessKeyName, sharedAccessKey)
+	dialConfig, err := setDefaultParametersForConfluentAndAzure(&u, dialConfig)
+	if err != nil {
 		return kafkaDialConfig{}, err
 	}
 
