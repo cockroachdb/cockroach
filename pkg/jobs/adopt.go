@@ -424,24 +424,11 @@ func (r *Registry) runJob(
 	if tj, ok := resumer.(TraceableJob); ok && tj.ForceRealSpan() {
 		spanOptions = append(spanOptions, tracing.WithRecording(tracingpb.RecordingStructured))
 	}
-	// TODO(ajwerner): Move this writing up the trace ID down into
-	// stepThroughStateMachine where we're already often (and soon with
-	// exponential backoff, always) updating the job in that call.
+
 	ctx, span := r.ac.Tracer.StartSpanCtx(ctx,
 		fmt.Sprintf("%s-%d", typ.String(), job.ID()), spanOptions...)
 	span.SetTag("job-id", attribute.Int64Value(int64(job.ID())))
 	defer span.Finish()
-	if span.TraceID() != 0 {
-		if err := job.NoTxn().Update(ctx, func(txn isql.Txn, md JobMetadata,
-			ju *JobUpdater) error {
-			progress := *md.Progress
-			progress.TraceID = span.TraceID()
-			ju.UpdateProgress(&progress)
-			return nil
-		}); err != nil {
-			return err
-		}
-	}
 
 	// Run the actual job.
 	err := r.stepThroughStateMachine(ctx, execCtx, resumer, job, status, finalResumeError)

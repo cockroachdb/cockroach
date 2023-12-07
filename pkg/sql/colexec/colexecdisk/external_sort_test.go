@@ -51,6 +51,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "the test is very memory-intensive and is likely to OOM under stress")
+	skip.UnderRace(t, "likely to OOM due to increased memory pressure under race")
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
