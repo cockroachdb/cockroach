@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -46,6 +47,8 @@ import (
 func TestCreateStatsControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "possible OOM")
 
 	// Test with 3 nodes and rowexec.SamplerProgressInterval=100 to ensure
 	// that progress metadata is sent correctly after every 100 input rows.
