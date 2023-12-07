@@ -132,6 +132,16 @@ message SessionData {
   // head-of-the-line request in case the "eager" memory usage limit has been
   // exceeded.
   double streamer_head_of_line_only_fraction = 30;
+  // DistSQLPlanGatewayBias controls the factor of times more partition spans
+  // the gateway node is allowed to be assigned in the absence of a better
+  // choice relative to the distribution of partition spans on other eligible
+  // instances. Refer to `shouldPickGateway` for more details.
+  //
+  // This field is in SessionData because that is the format in which a job
+  // serializes and stores session variables at the time of job creation. A job
+  // could be adopted by any node in the cluster (not necessarily the gateway)
+  // and so we will need this information available on all nodes.
+  int64 distsql_plan_gateway_bias = 31;
 }
 
 // DataConversionConfig contains the parameters that influence the output
