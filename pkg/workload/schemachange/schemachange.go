@@ -427,10 +427,10 @@ func (w *schemaChangeWorker) runInTxn(
 
 func (w *schemaChangeWorker) run(ctx context.Context) error {
 	conn, err := w.pool.Get().Acquire(ctx)
-	defer conn.Release()
 	if err != nil {
 		return errors.Wrap(err, "cannot get a connection")
 	}
+	defer conn.Release()
 	useDeclarativeSchemaChanger := w.opGen.randIntn(100) > w.workload.declarativeSchemaChangerPct
 	if useDeclarativeSchemaChanger {
 		if _, err := conn.Exec(ctx, "SET use_declarative_schema_changer='unsafe_always';"); err != nil {
