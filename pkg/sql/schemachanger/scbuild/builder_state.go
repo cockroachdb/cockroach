@@ -330,6 +330,9 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 	if b.hasAdmin {
 		return true
 	}
+	if b.evalCtx.SessionData().User() == role {
+		return true
+	}
 	memberships, err := b.auth.MemberOfWithAdminOption(b.ctx, role)
 	if err != nil {
 		panic(err)
