@@ -977,3 +977,31 @@ func TestBitmaskOrAndXor(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkGenerateID(b *testing.B) {
+	defer log.Scope(b).Close(b)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(b, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	for _, fn := range []string{
+		"gen_random_uuid",
+		"gen_random_ulid",
+	} {
+		b.Run(fn, func(b *testing.B) {
+			for _, rowCount := range []int{1, 10, 100, 1000} {
+				b.Run(fmt.Sprintf("rows=%d", rowCount), func(b *testing.B) {
+					q := fmt.Sprintf(`select %s() from generate_series(0, %d);`, fn, rowCount)
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						db.Exec(b, q)
+					}
+					b.StopTimer()
+				})
+			}
+		})
+	}
+}

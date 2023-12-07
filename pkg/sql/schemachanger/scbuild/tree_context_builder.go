@@ -12,12 +12,14 @@ package scbuild
 
 import (
 	"context"
+	crypto_rand "crypto/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/ulid"
 )
 
 var _ scbuildstmt.TreeContextBuilder = buildCtx{}
@@ -60,6 +62,7 @@ func newEvalCtx(ctx context.Context, d Dependencies) *eval.Context {
 		Settings:             d.ClusterSettings(),
 		Codec:                d.Codec(),
 		DescIDGenerator:      d.DescIDGenerator(),
+		ULIDEntropy:          ulid.Monotonic(crypto_rand.Reader, 0),
 	}
 	evalCtx.SetDeprecatedContext(ctx)
 	return evalCtx
