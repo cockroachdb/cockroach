@@ -367,9 +367,14 @@ type CopyIn struct {
 	// Conn is the network connection. Execution of the CopyFrom statement takes
 	// control of the connection.
 	Conn pgwirebase.Conn
-	// CopyDone is decremented once execution finishes, signaling that control of
-	// the connection is being handed back to the network routine.
-	CopyDone *sync.WaitGroup
+	// CopyDone is used to signal that control of the connection is being handed
+	// back to the network routine.
+	CopyDone struct {
+		// WaitGroup is decremented once execution finishes.
+		*sync.WaitGroup
+		// Once is used to decrement the WaitGroup exactly once.
+		*sync.Once
+	}
 	// TimeReceived is the time at which the message was received
 	// from the client. Used to compute the service latency.
 	TimeReceived time.Time

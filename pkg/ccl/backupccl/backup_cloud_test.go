@@ -41,16 +41,27 @@ import (
 func TestCloudBackupRestoreS3(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	creds, bucket := requiredS3CredsAndBucket(t)
+	creds, baseBucket := requiredS3CredsAndBucket(t)
 
 	const numAccounts = 1000
-
 	ctx := context.Background()
-	tc, db, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
-	defer cleanupFn()
-	prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
-	uri := setupS3URI(t, db, bucket, prefix, creds)
-	backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
+
+	for _, locked := range []bool{true, false} {
+		bucket := baseBucket
+		testName := "regular-bucket"
+		if locked {
+			testName = "object-locked-bucket"
+			bucket += "-locked"
+		}
+
+		t.Run(testName, func(t *testing.T) {
+			tc, db, _, cleanupFn := backupRestoreTestSetup(t, 1, numAccounts, InitManualReplication)
+			defer cleanupFn()
+			prefix := fmt.Sprintf("TestBackupRestoreS3-%d", timeutil.Now().UnixNano())
+			uri := setupS3URI(t, db, bucket, prefix, creds)
+			backupAndRestore(ctx, t, tc, []string{uri.String()}, []string{uri.String()}, numAccounts, nil)
+		})
+	}
 }
 
 // TestCloudBackupRestoreS3WithLegacyPut tests that backup/restore works when
