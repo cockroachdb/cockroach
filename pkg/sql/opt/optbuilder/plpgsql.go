@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
@@ -33,6 +34,10 @@ import (
 // can be optimized and executed just like a native SQL statement. This allows
 // CRDB to support PLpgSQL syntax without having to implement a specialized
 // interpreter, and takes advantage of existing SQL optimizations.
+//
+// +---------+
+// | Outline |
+// +---------+
 //
 // The main difficulty of executing PLpgSQL with the SQL execution engine lies
 // in modeling the control flow. PLpgSQL supports typical control-flow
@@ -99,6 +104,34 @@ import (
 //	$$ LANGUAGE SQL;
 //
 // Note that some of these routines may be inlined in practice (e.g. exit()).
+//
+// +--------------+
+// | Side Effects |
+// +--------------+
+//
+// Side-effecting expressions must be executed in order as dictated by the
+// control flow of the PLpgSQL statements. This is necessary in order to provide
+// the imperative interface of PLpgSQL (vs the declarative interface of SQL).
+// This is guaranteed by taking care to avoid duplicating, eliminating, and
+// reordering volatile expressions.
+//
+// When possible, these guarantees are provided by executing a volatile
+// expression alone in a subroutine's body statement. Routine body statements
+// are always executed in order, and serve as an optimization barrier.
+//
+// There are cases where a volatile expression cannot be executed as its own
+// body statement, and must instead be projected from a previous scope. One
+// example of this is assignment - the assigned value must be able to reference
+// previous values for the PLpgSQL variables, and its result must be available
+// to whichever statement comes next in the control flow. Such cases are handled
+// by adding explicit optimization barriers before and after projecting the
+// volatile expression. This prevents optimizations that would change side
+// effects, such as pushing a volatile expression into a join or union.
+// See addBarrierIfVolatile for more information.
+//
+// +-----------------+
+// | Further Reading |
+// +-----------------+
 //
 // See the buildPLpgSQLStatements comments for details. For further reference,
 // see citations: [9] - the logic here is based on the transformation outlined
@@ -262,6 +295,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// RETURN is handled by projecting a single column with the expression
 			// that is being returned.
 			returnScalar := b.buildPLpgSQLExpr(t.Expr, b.returnType, s)
+			b.addBarrierIfVolatile(s, returnScalar)
 			returnColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_return"))
 			returnScope := s.push()
 			b.ensureScopeHasExpr(returnScope)
@@ -345,6 +379,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			returnScope := s.push()
 			b.ensureScopeHasExpr(returnScope)
 			scalar = b.coerceType(scalar, b.returnType)
+			b.addBarrierIfVolatile(s, scalar)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, scalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
@@ -776,6 +811,7 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(inScope *scope, ident ast.Variable, va
 	// Project the assignment as a new column.
 	colName := scopeColName(ident)
 	scalar := b.buildPLpgSQLExpr(val, typ, inScope)
+	b.addBarrierIfVolatile(inScope, scalar)
 	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	return assignScope
@@ -1206,6 +1242,7 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 			Overload:   &overloads[0],
 		},
 	)
+	b.addBarrierIfVolatile(s, fetchCall)
 	fetchColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_fetch"))
 	fetchScope := s.push()
 	b.ob.synthesizeColumn(fetchScope, fetchColName, returnType, nil /* expr */, fetchCall)
@@ -1330,6 +1367,7 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 	}
 	// PLpgSQL continuation routines are always in tail-call position.
 	call := b.ob.factory.ConstructUDFCall(args, &memo.UDFCallPrivate{Def: con.def, TailCall: true})
+	b.addBarrierIfVolatile(s, call)
 
 	returnColName := scopeColName("").WithMetadataName(con.def.Name)
 	returnScope := s.push()
@@ -1337,6 +1375,23 @@ func (b *plpgsqlBuilder) callContinuation(con *continuation, s *scope) *scope {
 	b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, call)
 	b.ob.constructProjectForScope(s, returnScope)
 	return returnScope
+}
+
+// addBarrierIfVolatile checks if the given expression is volatile, and adds an
+// optimization barrier to the given scope if it is. This should be used before
+// projecting an expression within an existing scope. It is used to prevent
+// side effects from being duplicated, eliminated, or reordered.
+func (b *plpgsqlBuilder) addBarrierIfVolatile(s *scope, expr opt.ScalarExpr) {
+	if s.expr.Relational().OutputCols.Empty() && s.expr.Relational().Cardinality.IsOne() {
+		// As an optimization, don't add a barrier for the common case when the
+		// input is a dummy expression that returns no columns and exactly one row.
+		return
+	}
+	var p props.Shared
+	memo.BuildSharedProps(expr, &p, b.ob.evalCtx)
+	if p.VolatilitySet.HasVolatile() {
+		s.expr = b.ob.factory.ConstructBarrier(s.expr)
+	}
 }
 
 // buildPLpgSQLExpr parses and builds the given SQL expression into a ScalarExpr

@@ -2403,12 +2403,14 @@ project
                      ├── columns: "_stmt_raise_1":28
                      ├── project
                      │    ├── columns: "_stmt_raise_1":28
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: i:1!null
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── const: 0 [as=i:1]
+                     │    │    └── project
+                     │    │         ├── columns: i:1!null
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── const: 0 [as=i:1]
                      │    └── projections
                      │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":28]
                      │              ├── args
@@ -2435,12 +2437,14 @@ project
                      │                   │              └── const: '00000'
                      │                   └── project
                      │                        ├── columns: "_stmt_raise_3":27
-                     │                        ├── project
+                     │                        ├── barrier
                      │                        │    ├── columns: i:4!null
-                     │                        │    ├── values
-                     │                        │    │    └── tuple
-                     │                        │    └── projections
-                     │                        │         └── const: 100 [as=i:4]
+                     │                        │    └── project
+                     │                        │         ├── columns: i:4!null
+                     │                        │         ├── values
+                     │                        │         │    └── tuple
+                     │                        │         └── projections
+                     │                        │              └── const: 100 [as=i:4]
                      │                        └── projections
                      │                             └── udf: _stmt_raise_3 [as="_stmt_raise_3":27]
                      │                                  ├── args
@@ -2467,21 +2471,23 @@ project
                      │                                       │              └── const: '00000'
                      │                                       └── project
                      │                                            ├── columns: "_stmt_raise_5":26
-                     │                                            ├── project
+                     │                                            ├── barrier
                      │                                            │    ├── columns: i:13
-                     │                                            │    ├── values
-                     │                                            │    │    └── tuple
-                     │                                            │    └── projections
-                     │                                            │         └── subquery [as=i:13]
-                     │                                            │              └── max1-row
-                     │                                            │                   ├── columns: count_rows:12!null
-                     │                                            │                   └── scalar-group-by
+                     │                                            │    └── project
+                     │                                            │         ├── columns: i:13
+                     │                                            │         ├── values
+                     │                                            │         │    └── tuple
+                     │                                            │         └── projections
+                     │                                            │              └── subquery [as=i:13]
+                     │                                            │                   └── max1-row
                      │                                            │                        ├── columns: count_rows:12!null
-                     │                                            │                        ├── project
-                     │                                            │                        │    └── scan xy
-                     │                                            │                        │         └── columns: x:7 y:8 rowid:9!null crdb_internal_mvcc_timestamp:10 tableoid:11
-                     │                                            │                        └── aggregations
-                     │                                            │                             └── count-rows [as=count_rows:12]
+                     │                                            │                        └── scalar-group-by
+                     │                                            │                             ├── columns: count_rows:12!null
+                     │                                            │                             ├── project
+                     │                                            │                             │    └── scan xy
+                     │                                            │                             │         └── columns: x:7 y:8 rowid:9!null crdb_internal_mvcc_timestamp:10 tableoid:11
+                     │                                            │                             └── aggregations
+                     │                                            │                                  └── count-rows [as=count_rows:12]
                      │                                            └── projections
                      │                                                 └── udf: _stmt_raise_5 [as="_stmt_raise_5":26]
                      │                                                      ├── args
@@ -2583,12 +2589,14 @@ project
                      ├── columns: stmt_loop_5:17
                      ├── project
                      │    ├── columns: stmt_loop_5:17
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: i:1!null
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── const: 0 [as=i:1]
+                     │    │    └── project
+                     │    │         ├── columns: i:1!null
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── const: 0 [as=i:1]
                      │    └── projections
                      │         └── udf: stmt_loop_5 [as=stmt_loop_5:17]
                      │              ├── args
@@ -2882,12 +2890,14 @@ project
                      ├── columns: stmt_loop_5:24
                      ├── project
                      │    ├── columns: stmt_loop_5:24
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: i:1!null
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── const: 0 [as=i:1]
+                     │    │    └── project
+                     │    │         ├── columns: i:1!null
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── const: 0 [as=i:1]
                      │    └── projections
                      │         └── udf: stmt_loop_5 [as=stmt_loop_5:24]
                      │              ├── args
@@ -3772,14 +3782,16 @@ project
                      ├── columns: exception_block_3:9
                      ├── project
                      │    ├── columns: exception_block_3:9
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: i:2
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── floor-div [as=i:2]
-                     │    │              ├── const: 100
-                     │    │              └── variable: n:1
+                     │    │    └── project
+                     │    │         ├── columns: i:2
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── floor-div [as=i:2]
+                     │    │                   ├── const: 100
+                     │    │                   └── variable: n:1
                      │    └── projections
                      │         └── udf: exception_block_3 [as=exception_block_3:9]
                      │              ├── args
@@ -3839,12 +3851,14 @@ project
                      ├── columns: exception_block_3:33
                      ├── project
                      │    ├── columns: exception_block_3:33
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: x:4!null
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── const: 0 [as=x:4]
+                     │    │    └── project
+                     │    │         ├── columns: x:4!null
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── const: 0 [as=x:4]
                      │    └── projections
                      │         └── udf: exception_block_3 [as=exception_block_3:33]
                      │              ├── args
@@ -3856,14 +3870,16 @@ project
                      │              ├── body
                      │              │    └── project
                      │              │         ├── columns: assign_exception_block_4:32
-                     │              │         ├── project
+                     │              │         ├── barrier
                      │              │         │    ├── columns: x:14
-                     │              │         │    ├── values
-                     │              │         │    │    └── tuple
-                     │              │         │    └── projections
-                     │              │         │         └── floor-div [as=x:14]
-                     │              │         │              ├── const: 1
-                     │              │         │              └── variable: i:11
+                     │              │         │    └── project
+                     │              │         │         ├── columns: x:14
+                     │              │         │         ├── values
+                     │              │         │         │    └── tuple
+                     │              │         │         └── projections
+                     │              │         │              └── floor-div [as=x:14]
+                     │              │         │                   ├── const: 1
+                     │              │         │                   └── variable: i:11
                      │              │         └── projections
                      │              │              └── udf: assign_exception_block_4 [as=assign_exception_block_4:32]
                      │              │                   ├── args
@@ -3875,14 +3891,16 @@ project
                      │              │                   └── body
                      │              │                        └── project
                      │              │                             ├── columns: assign_exception_block_5:31
-                     │              │                             ├── project
+                     │              │                             ├── barrier
                      │              │                             │    ├── columns: x:19
-                     │              │                             │    ├── values
-                     │              │                             │    │    └── tuple
-                     │              │                             │    └── projections
-                     │              │                             │         └── floor-div [as=x:19]
-                     │              │                             │              ├── const: 2
-                     │              │                             │              └── variable: j:17
+                     │              │                             │    └── project
+                     │              │                             │         ├── columns: x:19
+                     │              │                             │         ├── values
+                     │              │                             │         │    └── tuple
+                     │              │                             │         └── projections
+                     │              │                             │              └── floor-div [as=x:19]
+                     │              │                             │                   ├── const: 2
+                     │              │                             │                   └── variable: j:17
                      │              │                             └── projections
                      │              │                                  └── udf: assign_exception_block_5 [as=assign_exception_block_5:31]
                      │              │                                       ├── args
@@ -3894,14 +3912,16 @@ project
                      │              │                                       └── body
                      │              │                                            └── project
                      │              │                                                 ├── columns: assign_exception_block_6:30
-                     │              │                                                 ├── project
+                     │              │                                                 ├── barrier
                      │              │                                                 │    ├── columns: x:24
-                     │              │                                                 │    ├── values
-                     │              │                                                 │    │    └── tuple
-                     │              │                                                 │    └── projections
-                     │              │                                                 │         └── floor-div [as=x:24]
-                     │              │                                                 │              ├── const: 3
-                     │              │                                                 │              └── variable: k:23
+                     │              │                                                 │    └── project
+                     │              │                                                 │         ├── columns: x:24
+                     │              │                                                 │         ├── values
+                     │              │                                                 │         │    └── tuple
+                     │              │                                                 │         └── projections
+                     │              │                                                 │              └── floor-div [as=x:24]
+                     │              │                                                 │                   ├── const: 3
+                     │              │                                                 │                   └── variable: k:23
                      │              │                                                 └── projections
                      │              │                                                      └── udf: assign_exception_block_6 [as=assign_exception_block_6:30]
                      │              │                                                           ├── args
@@ -3964,13 +3984,15 @@ project
                      ├── columns: exception_block_3:30
                      ├── project
                      │    ├── columns: exception_block_3:30
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: x:2
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── cast: INT8 [as=x:2]
-                     │    │              └── null
+                     │    │    └── project
+                     │    │         ├── columns: x:2
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── cast: INT8 [as=x:2]
+                     │    │                   └── null
                      │    └── projections
                      │         └── udf: exception_block_3 [as=exception_block_3:30]
                      │              ├── args
@@ -3992,12 +4014,14 @@ project
                      │              │                   │    └── subquery
                      │              │                   │         └── project
                      │              │                   │              ├── columns: assign_exception_block_6:19
-                     │              │                   │              ├── project
+                     │              │                   │              ├── barrier
                      │              │                   │              │    ├── columns: x:11!null
-                     │              │                   │              │    ├── values
-                     │              │                   │              │    │    └── tuple
-                     │              │                   │              │    └── projections
-                     │              │                   │              │         └── const: 100 [as=x:11]
+                     │              │                   │              │    └── project
+                     │              │                   │              │         ├── columns: x:11!null
+                     │              │                   │              │         ├── values
+                     │              │                   │              │         │    └── tuple
+                     │              │                   │              │         └── projections
+                     │              │                   │              │              └── const: 100 [as=x:11]
                      │              │                   │              └── projections
                      │              │                   │                   └── udf: assign_exception_block_6 [as=assign_exception_block_6:19]
                      │              │                   │                        ├── args
@@ -4047,12 +4071,14 @@ project
                      │              │                   └── subquery
                      │              │                        └── project
                      │              │                             ├── columns: assign_exception_block_9:28
-                     │              │                             ├── project
+                     │              │                             ├── barrier
                      │              │                             │    ├── columns: x:20!null
-                     │              │                             │    ├── values
-                     │              │                             │    │    └── tuple
-                     │              │                             │    └── projections
-                     │              │                             │         └── const: 200 [as=x:20]
+                     │              │                             │    └── project
+                     │              │                             │         ├── columns: x:20!null
+                     │              │                             │         ├── values
+                     │              │                             │         │    └── tuple
+                     │              │                             │         └── projections
+                     │              │                             │              └── const: 200 [as=x:20]
                      │              │                             └── projections
                      │              │                                  └── udf: assign_exception_block_9 [as=assign_exception_block_9:28]
                      │              │                                       ├── args
@@ -4145,17 +4171,19 @@ project
                      ├── columns: exception_block_3:44
                      ├── project
                      │    ├── columns: exception_block_3:44
-                     │    ├── project
-                     │    │    ├── columns: i:4!null x:3
-                     │    │    ├── project
-                     │    │    │    ├── columns: x:3
-                     │    │    │    ├── values
-                     │    │    │    │    └── tuple
-                     │    │    │    └── projections
-                     │    │    │         └── cast: INT8 [as=x:3]
-                     │    │    │              └── null
-                     │    │    └── projections
-                     │    │         └── const: 0 [as=i:4]
+                     │    ├── barrier
+                     │    │    ├── columns: x:3 i:4!null
+                     │    │    └── project
+                     │    │         ├── columns: i:4!null x:3
+                     │    │         ├── project
+                     │    │         │    ├── columns: x:3
+                     │    │         │    ├── values
+                     │    │         │    │    └── tuple
+                     │    │         │    └── projections
+                     │    │         │         └── cast: INT8 [as=x:3]
+                     │    │         │              └── null
+                     │    │         └── projections
+                     │    │              └── const: 0 [as=i:4]
                      │    └── projections
                      │         └── udf: exception_block_3 [as=exception_block_3:44]
                      │              ├── args
@@ -4225,16 +4253,18 @@ project
                      │              │                                                           └── body
                      │              │                                                                └── project
                      │              │                                                                     ├── columns: assign_exception_block_8:39
-                     │              │                                                                     ├── project
+                     │              │                                                                     ├── barrier
                      │              │                                                                     │    ├── columns: x:27
-                     │              │                                                                     │    ├── values
-                     │              │                                                                     │    │    └── tuple
-                     │              │                                                                     │    └── projections
-                     │              │                                                                     │         └── floor-div [as=x:27]
-                     │              │                                                                     │              ├── const: 1
-                     │              │                                                                     │              └── minus
-                     │              │                                                                     │                   ├── variable: i:24
-                     │              │                                                                     │                   └── variable: a:26
+                     │              │                                                                     │    └── project
+                     │              │                                                                     │         ├── columns: x:27
+                     │              │                                                                     │         ├── values
+                     │              │                                                                     │         │    └── tuple
+                     │              │                                                                     │         └── projections
+                     │              │                                                                     │              └── floor-div [as=x:27]
+                     │              │                                                                     │                   ├── const: 1
+                     │              │                                                                     │                   └── minus
+                     │              │                                                                     │                        ├── variable: i:24
+                     │              │                                                                     │                        └── variable: a:26
                      │              │                                                                     └── projections
                      │              │                                                                          └── udf: assign_exception_block_8 [as=assign_exception_block_8:39]
                      │              │                                                                               ├── args
@@ -4246,14 +4276,16 @@ project
                      │              │                                                                               └── body
                      │              │                                                                                    └── project
                      │              │                                                                                         ├── columns: assign_exception_block_9:38
-                     │              │                                                                                         ├── project
+                     │              │                                                                                         ├── barrier
                      │              │                                                                                         │    ├── columns: i:32
-                     │              │                                                                                         │    ├── values
-                     │              │                                                                                         │    │    └── tuple
-                     │              │                                                                                         │    └── projections
-                     │              │                                                                                         │         └── plus [as=i:32]
-                     │              │                                                                                         │              ├── variable: i:29
-                     │              │                                                                                         │              └── const: 1
+                     │              │                                                                                         │    └── project
+                     │              │                                                                                         │         ├── columns: i:32
+                     │              │                                                                                         │         ├── values
+                     │              │                                                                                         │         │    └── tuple
+                     │              │                                                                                         │         └── projections
+                     │              │                                                                                         │              └── plus [as=i:32]
+                     │              │                                                                                         │                   ├── variable: i:29
+                     │              │                                                                                         │                   └── const: 1
                      │              │                                                                                         └── projections
                      │              │                                                                                              └── udf: assign_exception_block_9 [as=assign_exception_block_9:38]
                      │              │                                                                                                   ├── args
@@ -4496,13 +4528,15 @@ project
                      ├── columns: "_stmt_exec_1":28
                      ├── project
                      │    ├── columns: "_stmt_exec_1":28
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: i:1
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── cast: INT8 [as=i:1]
-                     │    │              └── null
+                     │    │    └── project
+                     │    │         ├── columns: i:1
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── cast: INT8 [as=i:1]
+                     │    │                   └── null
                      │    └── projections
                      │         └── udf: _stmt_exec_1 [as="_stmt_exec_1":28]
                      │              ├── args
@@ -4511,23 +4545,25 @@ project
                      │              └── body
                      │                   └── project
                      │                        ├── columns: "_stmt_exec_ret_2":27
-                     │                        ├── project
+                     │                        ├── barrier
                      │                        │    ├── columns: i:26
-                     │                        │    ├── right-join (cross)
-                     │                        │    │    ├── columns: x:3
-                     │                        │    │    ├── limit
-                     │                        │    │    │    ├── columns: x:3
-                     │                        │    │    │    ├── internal-ordering: -3
-                     │                        │    │    │    ├── project
-                     │                        │    │    │    │    ├── columns: x:3
-                     │                        │    │    │    │    └── scan xy
-                     │                        │    │    │    │         └── columns: x:3 y:4 rowid:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
-                     │                        │    │    │    └── const: 1
-                     │                        │    │    ├── values
-                     │                        │    │    │    └── tuple
-                     │                        │    │    └── filters (true)
-                     │                        │    └── projections
-                     │                        │         └── variable: x:3 [as=i:26]
+                     │                        │    └── project
+                     │                        │         ├── columns: i:26
+                     │                        │         ├── right-join (cross)
+                     │                        │         │    ├── columns: x:3
+                     │                        │         │    ├── limit
+                     │                        │         │    │    ├── columns: x:3
+                     │                        │         │    │    ├── internal-ordering: -3
+                     │                        │         │    │    ├── project
+                     │                        │         │    │    │    ├── columns: x:3
+                     │                        │         │    │    │    └── scan xy
+                     │                        │         │    │    │         └── columns: x:3 y:4 rowid:5!null crdb_internal_mvcc_timestamp:6 tableoid:7
+                     │                        │         │    │    └── const: 1
+                     │                        │         │    ├── values
+                     │                        │         │    │    └── tuple
+                     │                        │         │    └── filters (true)
+                     │                        │         └── projections
+                     │                        │              └── variable: x:3 [as=i:26]
                      │                        └── projections
                      │                             └── udf: _stmt_exec_ret_2 [as="_stmt_exec_ret_2":27]
                      │                                  ├── args
@@ -4574,29 +4610,31 @@ project
                      │                                                                          └── body
                      │                                                                               └── project
                      │                                                                                    ├── columns: "_stmt_exec_ret_6":23
-                     │                                                                                    ├── project
+                     │                                                                                    ├── barrier
                      │                                                                                    │    ├── columns: i:22
-                     │                                                                                    │    ├── right-join (cross)
-                     │                                                                                    │    │    ├── columns: x:12
-                     │                                                                                    │    │    ├── limit
-                     │                                                                                    │    │    │    ├── columns: x:12!null
-                     │                                                                                    │    │    │    ├── internal-ordering: -12
-                     │                                                                                    │    │    │    ├── project
-                     │                                                                                    │    │    │    │    ├── columns: x:12!null
-                     │                                                                                    │    │    │    │    └── select
-                     │                                                                                    │    │    │    │         ├── columns: x:12!null y:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-                     │                                                                                    │    │    │    │         ├── scan xy
-                     │                                                                                    │    │    │    │         │    └── columns: x:12 y:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
-                     │                                                                                    │    │    │    │         └── filters
-                     │                                                                                    │    │    │    │              └── lt
-                     │                                                                                    │    │    │    │                   ├── variable: x:12
-                     │                                                                                    │    │    │    │                   └── variable: i:11
-                     │                                                                                    │    │    │    └── const: 1
-                     │                                                                                    │    │    ├── values
-                     │                                                                                    │    │    │    └── tuple
-                     │                                                                                    │    │    └── filters (true)
-                     │                                                                                    │    └── projections
-                     │                                                                                    │         └── variable: x:12 [as=i:22]
+                     │                                                                                    │    └── project
+                     │                                                                                    │         ├── columns: i:22
+                     │                                                                                    │         ├── right-join (cross)
+                     │                                                                                    │         │    ├── columns: x:12
+                     │                                                                                    │         │    ├── limit
+                     │                                                                                    │         │    │    ├── columns: x:12!null
+                     │                                                                                    │         │    │    ├── internal-ordering: -12
+                     │                                                                                    │         │    │    ├── project
+                     │                                                                                    │         │    │    │    ├── columns: x:12!null
+                     │                                                                                    │         │    │    │    └── select
+                     │                                                                                    │         │    │    │         ├── columns: x:12!null y:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+                     │                                                                                    │         │    │    │         ├── scan xy
+                     │                                                                                    │         │    │    │         │    └── columns: x:12 y:13 rowid:14!null crdb_internal_mvcc_timestamp:15 tableoid:16
+                     │                                                                                    │         │    │    │         └── filters
+                     │                                                                                    │         │    │    │              └── lt
+                     │                                                                                    │         │    │    │                   ├── variable: x:12
+                     │                                                                                    │         │    │    │                   └── variable: i:11
+                     │                                                                                    │         │    │    └── const: 1
+                     │                                                                                    │         │    ├── values
+                     │                                                                                    │         │    │    └── tuple
+                     │                                                                                    │         │    └── filters (true)
+                     │                                                                                    │         └── projections
+                     │                                                                                    │              └── variable: x:12 [as=i:22]
                      │                                                                                    └── projections
                      │                                                                                         └── udf: _stmt_exec_ret_6 [as="_stmt_exec_ret_6":23]
                      │                                                                                              ├── args
@@ -4665,12 +4703,14 @@ project
                      ├── columns: "_gen_cursor_name_3":8
                      ├── project
                      │    ├── columns: "_gen_cursor_name_3":8
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: curs:1!null
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── const: 'foo' [as=curs:1]
+                     │    │    └── project
+                     │    │         ├── columns: curs:1!null
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── const: 'foo' [as=curs:1]
                      │    └── projections
                      │         └── udf: _gen_cursor_name_3 [as="_gen_cursor_name_3":8]
                      │              ├── args
@@ -4679,13 +4719,15 @@ project
                      │              └── body
                      │                   └── project
                      │                        ├── columns: "_stmt_open_1":7
-                     │                        ├── project
+                     │                        ├── barrier
                      │                        │    ├── columns: curs:6
-                     │                        │    ├── values
-                     │                        │    │    └── tuple
-                     │                        │    └── projections
-                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:6]
-                     │                        │              └── variable: curs:5
+                     │                        │    └── project
+                     │                        │         ├── columns: curs:6
+                     │                        │         ├── values
+                     │                        │         │    └── tuple
+                     │                        │         └── projections
+                     │                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:6]
+                     │                        │                   └── variable: curs:5
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":7]
                      │                                  ├── args
@@ -4733,16 +4775,18 @@ project
                      ├── columns: "_gen_cursor_name_3":15
                      ├── project
                      │    ├── columns: "_gen_cursor_name_3":15
-                     │    ├── project
-                     │    │    ├── columns: curs:2!null i:1!null
-                     │    │    ├── project
-                     │    │    │    ├── columns: i:1!null
-                     │    │    │    ├── values
-                     │    │    │    │    └── tuple
-                     │    │    │    └── projections
-                     │    │    │         └── const: 3 [as=i:1]
-                     │    │    └── projections
-                     │    │         └── const: 'foo' [as=curs:2]
+                     │    ├── barrier
+                     │    │    ├── columns: i:1!null curs:2!null
+                     │    │    └── project
+                     │    │         ├── columns: curs:2!null i:1!null
+                     │    │         ├── project
+                     │    │         │    ├── columns: i:1!null
+                     │    │         │    ├── values
+                     │    │         │    │    └── tuple
+                     │    │         │    └── projections
+                     │    │         │         └── const: 3 [as=i:1]
+                     │    │         └── projections
+                     │    │              └── const: 'foo' [as=curs:2]
                      │    └── projections
                      │         └── udf: _gen_cursor_name_3 [as="_gen_cursor_name_3":15]
                      │              ├── args
@@ -4752,13 +4796,15 @@ project
                      │              └── body
                      │                   └── project
                      │                        ├── columns: "_stmt_open_1":14
-                     │                        ├── project
+                     │                        ├── barrier
                      │                        │    ├── columns: curs:13
-                     │                        │    ├── values
-                     │                        │    │    └── tuple
-                     │                        │    └── projections
-                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:13]
-                     │                        │              └── variable: curs:12
+                     │                        │    └── project
+                     │                        │         ├── columns: curs:13
+                     │                        │         ├── values
+                     │                        │         │    └── tuple
+                     │                        │         └── projections
+                     │                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:13]
+                     │                        │                   └── variable: curs:12
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":14]
                      │                                  ├── args
@@ -4814,20 +4860,22 @@ project
                      ├── columns: "_gen_cursor_name_7":34
                      ├── project
                      │    ├── columns: "_gen_cursor_name_7":34
-                     │    ├── project
-                     │    │    ├── columns: curs3:3!null curs:1!null curs2:2!null
-                     │    │    ├── project
-                     │    │    │    ├── columns: curs2:2!null curs:1!null
-                     │    │    │    ├── project
-                     │    │    │    │    ├── columns: curs:1!null
-                     │    │    │    │    ├── values
-                     │    │    │    │    │    └── tuple
-                     │    │    │    │    └── projections
-                     │    │    │    │         └── const: 'foo' [as=curs:1]
-                     │    │    │    └── projections
-                     │    │    │         └── const: 'bar' [as=curs2:2]
-                     │    │    └── projections
-                     │    │         └── const: 'baz' [as=curs3:3]
+                     │    ├── barrier
+                     │    │    ├── columns: curs:1!null curs2:2!null curs3:3!null
+                     │    │    └── project
+                     │    │         ├── columns: curs3:3!null curs:1!null curs2:2!null
+                     │    │         ├── project
+                     │    │         │    ├── columns: curs2:2!null curs:1!null
+                     │    │         │    ├── project
+                     │    │         │    │    ├── columns: curs:1!null
+                     │    │         │    │    ├── values
+                     │    │         │    │    │    └── tuple
+                     │    │         │    │    └── projections
+                     │    │         │    │         └── const: 'foo' [as=curs:1]
+                     │    │         │    └── projections
+                     │    │         │         └── const: 'bar' [as=curs2:2]
+                     │    │         └── projections
+                     │    │              └── const: 'baz' [as=curs3:3]
                      │    └── projections
                      │         └── udf: _gen_cursor_name_7 [as="_gen_cursor_name_7":34]
                      │              ├── args
@@ -4838,13 +4886,15 @@ project
                      │              └── body
                      │                   └── project
                      │                        ├── columns: "_stmt_open_1":33
-                     │                        ├── project
+                     │                        ├── barrier
                      │                        │    ├── columns: curs:32
-                     │                        │    ├── values
-                     │                        │    │    └── tuple
-                     │                        │    └── projections
-                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:32]
-                     │                        │              └── variable: curs:29
+                     │                        │    └── project
+                     │                        │         ├── columns: curs:32
+                     │                        │         ├── values
+                     │                        │         │    └── tuple
+                     │                        │         └── projections
+                     │                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:32]
+                     │                        │                   └── variable: curs:29
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":33]
                      │                                  ├── args
@@ -4874,13 +4924,15 @@ project
                      │                                                      └── body
                      │                                                           └── project
                      │                                                                ├── columns: "_stmt_open_2":27
-                     │                                                                ├── project
+                     │                                                                ├── barrier
                      │                                                                │    ├── columns: curs2:26
-                     │                                                                │    ├── values
-                     │                                                                │    │    └── tuple
-                     │                                                                │    └── projections
-                     │                                                                │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs2:26]
-                     │                                                                │              └── variable: curs2:24
+                     │                                                                │    └── project
+                     │                                                                │         ├── columns: curs2:26
+                     │                                                                │         ├── values
+                     │                                                                │         │    └── tuple
+                     │                                                                │         └── projections
+                     │                                                                │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs2:26]
+                     │                                                                │                   └── variable: curs2:24
                      │                                                                └── projections
                      │                                                                     └── udf: _stmt_open_2 [as="_stmt_open_2":27]
                      │                                                                          ├── args
@@ -4910,13 +4962,15 @@ project
                      │                                                                                              └── body
                      │                                                                                                   └── project
                      │                                                                                                        ├── columns: "_stmt_open_3":21
-                     │                                                                                                        ├── project
+                     │                                                                                                        ├── barrier
                      │                                                                                                        │    ├── columns: curs3:20
-                     │                                                                                                        │    ├── values
-                     │                                                                                                        │    │    └── tuple
-                     │                                                                                                        │    └── projections
-                     │                                                                                                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs3:20]
-                     │                                                                                                        │              └── variable: curs3:19
+                     │                                                                                                        │    └── project
+                     │                                                                                                        │         ├── columns: curs3:20
+                     │                                                                                                        │         ├── values
+                     │                                                                                                        │         │    └── tuple
+                     │                                                                                                        │         └── projections
+                     │                                                                                                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs3:20]
+                     │                                                                                                        │                   └── variable: curs3:19
                      │                                                                                                        └── projections
                      │                                                                                                             └── udf: _stmt_open_3 [as="_stmt_open_3":21]
                      │                                                                                                                  ├── args
@@ -4988,20 +5042,25 @@ project
                      │    ├── stats: [rows=1]
                      │    ├── key: ()
                      │    ├── fd: ()-->(11)
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: curs:1(refcursor!null)
                      │    │    ├── cardinality: [1 - 1]
                      │    │    ├── stats: [rows=1]
                      │    │    ├── key: ()
                      │    │    ├── fd: ()-->(1)
-                     │    │    ├── prune: (1)
-                     │    │    ├── values
-                     │    │    │    ├── cardinality: [1 - 1]
-                     │    │    │    ├── stats: [rows=1]
-                     │    │    │    ├── key: ()
-                     │    │    │    └── tuple [type=tuple]
-                     │    │    └── projections
-                     │    │         └── const: 'foo' [as=curs:1, type=refcursor]
+                     │    │    └── project
+                     │    │         ├── columns: curs:1(refcursor!null)
+                     │    │         ├── cardinality: [1 - 1]
+                     │    │         ├── stats: [rows=1]
+                     │    │         ├── key: ()
+                     │    │         ├── fd: ()-->(1)
+                     │    │         ├── values
+                     │    │         │    ├── cardinality: [1 - 1]
+                     │    │         │    ├── stats: [rows=1]
+                     │    │         │    ├── key: ()
+                     │    │         │    └── tuple [type=tuple]
+                     │    │         └── projections
+                     │    │              └── const: 'foo' [as=curs:1, type=refcursor]
                      │    └── projections
                      │         └── udf: _gen_cursor_name_5 [as="_gen_cursor_name_5":11, type=int, outer=(1), volatile, udf]
                      │              ├── args
@@ -5016,7 +5075,7 @@ project
                      │                        ├── stats: [rows=1]
                      │                        ├── key: ()
                      │                        ├── fd: ()-->(10)
-                     │                        ├── project
+                     │                        ├── barrier
                      │                        │    ├── columns: curs:9(refcursor)
                      │                        │    ├── outer: (8)
                      │                        │    ├── cardinality: [1 - 1]
@@ -5024,15 +5083,22 @@ project
                      │                        │    ├── stats: [rows=1]
                      │                        │    ├── key: ()
                      │                        │    ├── fd: ()-->(9)
-                     │                        │    ├── prune: (9)
-                     │                        │    ├── values
-                     │                        │    │    ├── cardinality: [1 - 1]
-                     │                        │    │    ├── stats: [rows=1]
-                     │                        │    │    ├── key: ()
-                     │                        │    │    └── tuple [type=tuple]
-                     │                        │    └── projections
-                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:9, type=refcursor, outer=(8), volatile]
-                     │                        │              └── variable: curs:8 [type=refcursor]
+                     │                        │    └── project
+                     │                        │         ├── columns: curs:9(refcursor)
+                     │                        │         ├── outer: (8)
+                     │                        │         ├── cardinality: [1 - 1]
+                     │                        │         ├── volatile
+                     │                        │         ├── stats: [rows=1]
+                     │                        │         ├── key: ()
+                     │                        │         ├── fd: ()-->(9)
+                     │                        │         ├── values
+                     │                        │         │    ├── cardinality: [1 - 1]
+                     │                        │         │    ├── stats: [rows=1]
+                     │                        │         │    ├── key: ()
+                     │                        │         │    └── tuple [type=tuple]
+                     │                        │         └── projections
+                     │                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:9, type=refcursor, outer=(8), volatile]
+                     │                        │                   └── variable: curs:8 [type=refcursor]
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":10, type=int, outer=(9), volatile, udf]
                      │                                  ├── args
@@ -5133,12 +5199,14 @@ project
                      ├── columns: exception_block_5:18
                      ├── project
                      │    ├── columns: exception_block_5:18
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: curs:1!null
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── const: 'foo' [as=curs:1]
+                     │    │    └── project
+                     │    │         ├── columns: curs:1!null
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── const: 'foo' [as=curs:1]
                      │    └── projections
                      │         └── udf: exception_block_5 [as=exception_block_5:18]
                      │              ├── args
@@ -5157,13 +5225,15 @@ project
                      │              │                   └── body
                      │              │                        └── project
                      │              │                             ├── columns: "_stmt_open_6":16
-                     │              │                             ├── project
+                     │              │                             ├── barrier
                      │              │                             │    ├── columns: curs:15
-                     │              │                             │    ├── values
-                     │              │                             │    │    └── tuple
-                     │              │                             │    └── projections
-                     │              │                             │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:15]
-                     │              │                             │              └── variable: curs:14
+                     │              │                             │    └── project
+                     │              │                             │         ├── columns: curs:15
+                     │              │                             │         ├── values
+                     │              │                             │         │    └── tuple
+                     │              │                             │         └── projections
+                     │              │                             │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:15]
+                     │              │                             │                   └── variable: curs:14
                      │              │                             └── projections
                      │              │                                  └── udf: _stmt_open_6 [as="_stmt_open_6":16]
                      │              │                                       ├── args
@@ -5199,13 +5269,15 @@ project
                      │                                       └── body
                      │                                            └── project
                      │                                                 ├── columns: "_stmt_open_2":8
-                     │                                                 ├── project
+                     │                                                 ├── barrier
                      │                                                 │    ├── columns: curs:7
-                     │                                                 │    ├── values
-                     │                                                 │    │    └── tuple
-                     │                                                 │    └── projections
-                     │                                                 │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:7]
-                     │                                                 │              └── variable: curs:6
+                     │                                                 │    └── project
+                     │                                                 │         ├── columns: curs:7
+                     │                                                 │         ├── values
+                     │                                                 │         │    └── tuple
+                     │                                                 │         └── projections
+                     │                                                 │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:7]
+                     │                                                 │                   └── variable: curs:6
                      │                                                 └── projections
                      │                                                      └── udf: _stmt_open_2 [as="_stmt_open_2":8]
                      │                                                           ├── args
@@ -5276,31 +5348,37 @@ project
                      │    ├── stats: [rows=1]
                      │    ├── key: ()
                      │    ├── fd: ()-->(23)
-                     │    ├── project
-                     │    │    ├── columns: x:2(int) curs:1(refcursor!null)
+                     │    ├── barrier
+                     │    │    ├── columns: curs:1(refcursor!null) x:2(int)
                      │    │    ├── cardinality: [1 - 1]
                      │    │    ├── immutable
                      │    │    ├── stats: [rows=1]
                      │    │    ├── key: ()
                      │    │    ├── fd: ()-->(1,2)
-                     │    │    ├── prune: (1,2)
-                     │    │    ├── project
-                     │    │    │    ├── columns: curs:1(refcursor!null)
-                     │    │    │    ├── cardinality: [1 - 1]
-                     │    │    │    ├── stats: [rows=1]
-                     │    │    │    ├── key: ()
-                     │    │    │    ├── fd: ()-->(1)
-                     │    │    │    ├── prune: (1)
-                     │    │    │    ├── values
-                     │    │    │    │    ├── cardinality: [1 - 1]
-                     │    │    │    │    ├── stats: [rows=1]
-                     │    │    │    │    ├── key: ()
-                     │    │    │    │    └── tuple [type=tuple]
-                     │    │    │    └── projections
-                     │    │    │         └── const: 'foo' [as=curs:1, type=refcursor]
-                     │    │    └── projections
-                     │    │         └── cast: INT8 [as=x:2, type=int, immutable]
-                     │    │              └── null [type=unknown]
+                     │    │    └── project
+                     │    │         ├── columns: x:2(int) curs:1(refcursor!null)
+                     │    │         ├── cardinality: [1 - 1]
+                     │    │         ├── immutable
+                     │    │         ├── stats: [rows=1]
+                     │    │         ├── key: ()
+                     │    │         ├── fd: ()-->(1,2)
+                     │    │         ├── project
+                     │    │         │    ├── columns: curs:1(refcursor!null)
+                     │    │         │    ├── cardinality: [1 - 1]
+                     │    │         │    ├── stats: [rows=1]
+                     │    │         │    ├── key: ()
+                     │    │         │    ├── fd: ()-->(1)
+                     │    │         │    ├── prune: (1)
+                     │    │         │    ├── values
+                     │    │         │    │    ├── cardinality: [1 - 1]
+                     │    │         │    │    ├── stats: [rows=1]
+                     │    │         │    │    ├── key: ()
+                     │    │         │    │    └── tuple [type=tuple]
+                     │    │         │    └── projections
+                     │    │         │         └── const: 'foo' [as=curs:1, type=refcursor]
+                     │    │         └── projections
+                     │    │              └── cast: INT8 [as=x:2, type=int, immutable]
+                     │    │                   └── null [type=unknown]
                      │    └── projections
                      │         └── udf: _gen_cursor_name_6 [as="_gen_cursor_name_6":23, type=int, outer=(1,2), volatile, udf]
                      │              ├── args
@@ -5316,7 +5394,7 @@ project
                      │                        ├── stats: [rows=1]
                      │                        ├── key: ()
                      │                        ├── fd: ()-->(22)
-                     │                        ├── project
+                     │                        ├── barrier
                      │                        │    ├── columns: curs:21(refcursor)
                      │                        │    ├── outer: (19)
                      │                        │    ├── cardinality: [1 - 1]
@@ -5324,15 +5402,22 @@ project
                      │                        │    ├── stats: [rows=1]
                      │                        │    ├── key: ()
                      │                        │    ├── fd: ()-->(21)
-                     │                        │    ├── prune: (21)
-                     │                        │    ├── values
-                     │                        │    │    ├── cardinality: [1 - 1]
-                     │                        │    │    ├── stats: [rows=1]
-                     │                        │    │    ├── key: ()
-                     │                        │    │    └── tuple [type=tuple]
-                     │                        │    └── projections
-                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:21, type=refcursor, outer=(19), volatile]
-                     │                        │              └── variable: curs:19 [type=refcursor]
+                     │                        │    └── project
+                     │                        │         ├── columns: curs:21(refcursor)
+                     │                        │         ├── outer: (19)
+                     │                        │         ├── cardinality: [1 - 1]
+                     │                        │         ├── volatile
+                     │                        │         ├── stats: [rows=1]
+                     │                        │         ├── key: ()
+                     │                        │         ├── fd: ()-->(21)
+                     │                        │         ├── values
+                     │                        │         │    ├── cardinality: [1 - 1]
+                     │                        │         │    ├── stats: [rows=1]
+                     │                        │         │    ├── key: ()
+                     │                        │         │    └── tuple [type=tuple]
+                     │                        │         └── projections
+                     │                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:21, type=refcursor, outer=(19), volatile]
+                     │                        │                   └── variable: curs:19 [type=refcursor]
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":22, type=int, outer=(20,21), volatile, udf]
                      │                                  ├── args
@@ -5460,12 +5545,14 @@ project
                      ├── columns: "_gen_cursor_name_5":15
                      ├── project
                      │    ├── columns: "_gen_cursor_name_5":15
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: curs:1!null
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── const: 'foo' [as=curs:1]
+                     │    │    └── project
+                     │    │         ├── columns: curs:1!null
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── const: 'foo' [as=curs:1]
                      │    └── projections
                      │         └── udf: _gen_cursor_name_5 [as="_gen_cursor_name_5":15]
                      │              ├── args
@@ -5474,13 +5561,15 @@ project
                      │              └── body
                      │                   └── project
                      │                        ├── columns: "_stmt_open_1":14
-                     │                        ├── project
+                     │                        ├── barrier
                      │                        │    ├── columns: curs:13
-                     │                        │    ├── values
-                     │                        │    │    └── tuple
-                     │                        │    └── projections
-                     │                        │         └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:13]
-                     │                        │              └── variable: curs:12
+                     │                        │    └── project
+                     │                        │         ├── columns: curs:13
+                     │                        │         ├── values
+                     │                        │         │    └── tuple
+                     │                        │         └── projections
+                     │                        │              └── function: crdb_internal.plpgsql_gen_cursor_name [as=curs:13]
+                     │                        │                   └── variable: curs:12
                      │                        └── projections
                      │                             └── udf: _stmt_open_1 [as="_stmt_open_1":14]
                      │                                  ├── args
@@ -5659,12 +5748,14 @@ project
                      ├── columns: stmt_loop_5:14(int)
                      ├── project
                      │    ├── columns: stmt_loop_5:14(int)
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: i:1(int!null)
-                     │    │    ├── values
-                     │    │    │    └── tuple [type=tuple]
-                     │    │    └── projections
-                     │    │         └── const: 0 [as=i:1, type=int]
+                     │    │    └── project
+                     │    │         ├── columns: i:1(int!null)
+                     │    │         ├── values
+                     │    │         │    └── tuple [type=tuple]
+                     │    │         └── projections
+                     │    │              └── const: 0 [as=i:1, type=int]
                      │    └── projections
                      │         └── udf: stmt_loop_5 [as=stmt_loop_5:14, type=int]
                      │              ├── args
@@ -5813,13 +5904,15 @@ project
                      ├── columns: "_stmt_raise_1":34
                      ├── project
                      │    ├── columns: "_stmt_raise_1":34
-                     │    ├── project
+                     │    ├── barrier
                      │    │    ├── columns: found:1
-                     │    │    ├── values
-                     │    │    │    └── tuple
-                     │    │    └── projections
-                     │    │         └── cast: INT8 [as=found:1]
-                     │    │              └── null
+                     │    │    └── project
+                     │    │         ├── columns: found:1
+                     │    │         ├── values
+                     │    │         │    └── tuple
+                     │    │         └── projections
+                     │    │              └── cast: INT8 [as=found:1]
+                     │    │                   └── null
                      │    └── projections
                      │         └── udf: _stmt_raise_1 [as="_stmt_raise_1":34]
                      │              ├── args
@@ -5849,28 +5942,30 @@ project
                      │                                  └── body
                      │                                       └── project
                      │                                            ├── columns: "_stmt_exec_ret_4":32
-                     │                                            ├── project
+                     │                                            ├── barrier
                      │                                            │    ├── columns: found:31
-                     │                                            │    ├── right-join (cross)
-                     │                                            │    │    ├── columns: a:5
-                     │                                            │    │    ├── limit
-                     │                                            │    │    │    ├── columns: a:5!null
-                     │                                            │    │    │    ├── project
-                     │                                            │    │    │    │    ├── columns: a:5!null
-                     │                                            │    │    │    │    └── select
-                     │                                            │    │    │    │         ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
-                     │                                            │    │    │    │         ├── scan t114826
-                     │                                            │    │    │    │         │    └── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
-                     │                                            │    │    │    │         └── filters
-                     │                                            │    │    │    │              └── eq
-                     │                                            │    │    │    │                   ├── variable: a:5
-                     │                                            │    │    │    │                   └── const: 3
-                     │                                            │    │    │    └── const: 1
-                     │                                            │    │    ├── values
-                     │                                            │    │    │    └── tuple
-                     │                                            │    │    └── filters (true)
-                     │                                            │    └── projections
-                     │                                            │         └── variable: a:5 [as=found:31]
+                     │                                            │    └── project
+                     │                                            │         ├── columns: found:31
+                     │                                            │         ├── right-join (cross)
+                     │                                            │         │    ├── columns: a:5
+                     │                                            │         │    ├── limit
+                     │                                            │         │    │    ├── columns: a:5!null
+                     │                                            │         │    │    ├── project
+                     │                                            │         │    │    │    ├── columns: a:5!null
+                     │                                            │         │    │    │    └── select
+                     │                                            │         │    │    │         ├── columns: a:5!null rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+                     │                                            │         │    │    │         ├── scan t114826
+                     │                                            │         │    │    │         │    └── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
+                     │                                            │         │    │    │         └── filters
+                     │                                            │         │    │    │              └── eq
+                     │                                            │         │    │    │                   ├── variable: a:5
+                     │                                            │         │    │    │                   └── const: 3
+                     │                                            │         │    │    └── const: 1
+                     │                                            │         │    ├── values
+                     │                                            │         │    │    └── tuple
+                     │                                            │         │    └── filters (true)
+                     │                                            │         └── projections
+                     │                                            │              └── variable: a:5 [as=found:31]
                      │                                            └── projections
                      │                                                 └── udf: _stmt_exec_ret_4 [as="_stmt_exec_ret_4":32]
                      │                                                      ├── args
@@ -5910,36 +6005,38 @@ project
                      │                                                                                              └── body
                      │                                                                                                   └── project
                      │                                                                                                        ├── columns: "_stmt_exec_ret_8":28
-                     │                                                                                                        ├── project
+                     │                                                                                                        ├── barrier
                      │                                                                                                        │    ├── columns: found:27
-                     │                                                                                                        │    ├── right-join (cross)
-                     │                                                                                                        │    │    ├── columns: a:13
-                     │                                                                                                        │    │    ├── limit
-                     │                                                                                                        │    │    │    ├── columns: a:13
-                     │                                                                                                        │    │    │    ├── project
-                     │                                                                                                        │    │    │    │    ├── columns: a:13
-                     │                                                                                                        │    │    │    │    └── insert t114826
-                     │                                                                                                        │    │    │    │         ├── columns: a:13 rowid:14!null
-                     │                                                                                                        │    │    │    │         ├── insert-mapping:
-                     │                                                                                                        │    │    │    │         │    ├── a:17 => a:13
-                     │                                                                                                        │    │    │    │         │    └── rowid_default:21 => rowid:14
-                     │                                                                                                        │    │    │    │         ├── return-mapping:
-                     │                                                                                                        │    │    │    │         │    ├── a:17 => a:13
-                     │                                                                                                        │    │    │    │         │    └── rowid_default:21 => rowid:14
-                     │                                                                                                        │    │    │    │         └── project
-                     │                                                                                                        │    │    │    │              ├── columns: rowid_default:21 a:17
-                     │                                                                                                        │    │    │    │              ├── project
-                     │                                                                                                        │    │    │    │              │    ├── columns: a:17
-                     │                                                                                                        │    │    │    │              │    └── scan t114826
-                     │                                                                                                        │    │    │    │              │         └── columns: a:17 rowid:18!null crdb_internal_mvcc_timestamp:19 tableoid:20
-                     │                                                                                                        │    │    │    │              └── projections
-                     │                                                                                                        │    │    │    │                   └── function: unique_rowid [as=rowid_default:21]
-                     │                                                                                                        │    │    │    └── const: 1
-                     │                                                                                                        │    │    ├── values
-                     │                                                                                                        │    │    │    └── tuple
-                     │                                                                                                        │    │    └── filters (true)
-                     │                                                                                                        │    └── projections
-                     │                                                                                                        │         └── variable: a:13 [as=found:27]
+                     │                                                                                                        │    └── project
+                     │                                                                                                        │         ├── columns: found:27
+                     │                                                                                                        │         ├── right-join (cross)
+                     │                                                                                                        │         │    ├── columns: a:13
+                     │                                                                                                        │         │    ├── limit
+                     │                                                                                                        │         │    │    ├── columns: a:13
+                     │                                                                                                        │         │    │    ├── project
+                     │                                                                                                        │         │    │    │    ├── columns: a:13
+                     │                                                                                                        │         │    │    │    └── insert t114826
+                     │                                                                                                        │         │    │    │         ├── columns: a:13 rowid:14!null
+                     │                                                                                                        │         │    │    │         ├── insert-mapping:
+                     │                                                                                                        │         │    │    │         │    ├── a:17 => a:13
+                     │                                                                                                        │         │    │    │         │    └── rowid_default:21 => rowid:14
+                     │                                                                                                        │         │    │    │         ├── return-mapping:
+                     │                                                                                                        │         │    │    │         │    ├── a:17 => a:13
+                     │                                                                                                        │         │    │    │         │    └── rowid_default:21 => rowid:14
+                     │                                                                                                        │         │    │    │         └── project
+                     │                                                                                                        │         │    │    │              ├── columns: rowid_default:21 a:17
+                     │                                                                                                        │         │    │    │              ├── project
+                     │                                                                                                        │         │    │    │              │    ├── columns: a:17
+                     │                                                                                                        │         │    │    │              │    └── scan t114826
+                     │                                                                                                        │         │    │    │              │         └── columns: a:17 rowid:18!null crdb_internal_mvcc_timestamp:19 tableoid:20
+                     │                                                                                                        │         │    │    │              └── projections
+                     │                                                                                                        │         │    │    │                   └── function: unique_rowid [as=rowid_default:21]
+                     │                                                                                                        │         │    │    └── const: 1
+                     │                                                                                                        │         │    ├── values
+                     │                                                                                                        │         │    │    └── tuple
+                     │                                                                                                        │         │    └── filters (true)
+                     │                                                                                                        │         └── projections
+                     │                                                                                                        │              └── variable: a:13 [as=found:27]
                      │                                                                                                        └── projections
                      │                                                                                                             └── udf: _stmt_exec_ret_8 [as="_stmt_exec_ret_8":28]
                      │                                                                                                                  ├── args

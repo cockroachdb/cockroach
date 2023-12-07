@@ -1424,6 +1424,14 @@ define RecursiveCTEPrivate {
     Deduplicate bool
 }
 
+# Barrier is a relational operator that simply passes through its input columns
+# with no changes. It serves as an optimization barrier, and is not included in
+# the final execution plan.
+[Relational]
+define Barrier {
+    Input RelExpr
+}
+
 # FakeRel is a mock relational operator used for testing and as a dummy binding
 # relation for building cascades; its logical properties are pre-determined and
 # stored in the private. It can be used as the child of an operator for which we

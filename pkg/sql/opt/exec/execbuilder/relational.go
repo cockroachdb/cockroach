@@ -295,6 +295,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.LockExpr:
 		ep, err = b.buildLock(t)
 
+	case *memo.BarrierExpr:
+		ep, err = b.buildBarrier(t)
+
 	case *memo.CreateTableExpr:
 		ep, err = b.buildCreateTable(t)
 
@@ -3527,6 +3530,12 @@ func (b *Builder) buildOpaque(opaque *memo.OpaqueRelPrivate) (execPlan, error) {
 	}
 
 	return ep, nil
+}
+
+func (b *Builder) buildBarrier(barrier *memo.BarrierExpr) (execPlan, error) {
+	// BarrierExpr is only used as an optimization barrier. In the execution plan,
+	// it is replaced with its input.
+	return b.buildRelational(barrier.Input)
 }
 
 // needProjection figures out what projection is needed on top of the input plan
