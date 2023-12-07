@@ -2702,6 +2702,39 @@ func (sb *statisticsBuilder) colStatLock(colSet opt.ColSet, lock *LockExpr) *pro
 	return colStat
 }
 
+// +---------+
+// | Barrier |
+// +---------+
+
+func (sb *statisticsBuilder) buildBarrier(barrier *BarrierExpr, relProps *props.Relational) {
+	s := relProps.Statistics()
+	if zeroCardinality := s.Init(relProps); zeroCardinality {
+		// Short cut if cardinality is 0.
+		return
+	}
+	s.Available = sb.availabilityFromInput(barrier)
+
+	inputStats := barrier.Input.Relational().Statistics()
+
+	s.RowCount = inputStats.RowCount
+	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatBarrier(
+	colSet opt.ColSet, barrier *BarrierExpr,
+) *props.ColumnStatistic {
+	s := barrier.Relational().Statistics()
+
+	inColStat := sb.colStatFromChild(colSet, barrier, 0 /* childIdx */)
+
+	// Construct colstat using the corresponding input stats.
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = inColStat.DistinctCount
+	colStat.NullCount = inColStat.NullCount
+	sb.finalizeFromRowCountAndDistinctCounts(colStat, s)
+	return colStat
+}
+
 // +-----------------+
 // | Sequence Select |
 // +-----------------+
