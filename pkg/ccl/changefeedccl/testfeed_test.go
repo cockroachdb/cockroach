@@ -2437,6 +2437,7 @@ func (ps *fakePubsubServer) React(req interface{}) (handled bool, ret interface{
 	if ok {
 		ps.mu.Lock()
 		defer ps.mu.Unlock()
+
 		for _, msg := range publishReq.Messages {
 			ps.mu.buffer = append(ps.mu.buffer,
 				mockPubsubMessage{data: string(msg.Data), topic: publishReq.Topic, attributes: msg.Attributes})
