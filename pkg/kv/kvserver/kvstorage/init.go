@@ -268,7 +268,7 @@ func IterateRangeDescriptorsFromDisk(
 	}
 	lastReportTime := timeutil.Now()
 	kvToDesc := func(kv roachpb.KeyValue) error {
-		const reportPeriod = 15 * time.Second
+		const reportPeriod = 10 * time.Second
 		if timeutil.Since(lastReportTime) >= reportPeriod {
 			// Note: MVCCIterate scans and buffers 1000 keys at a time which could
 			// make the scan stats confusing. However, because this callback can't
