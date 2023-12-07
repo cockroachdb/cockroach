@@ -304,16 +304,31 @@ func (o *channelOrchestrator) startControlledServer(
 			// To prevent this, we call requestImmediateStop() which tells
 			// the goroutine above to call tenantStopper.Stop() and
 			// terminate.
+
+			var (
+				tid roachpb.TenantID
+				iid base.SQLInstanceID
+			)
 			state.requestImmediateStop()
 			func() {
 				state.startedMu.Lock()
 				defer state.startedMu.Unlock()
+				if state.startedMu.server != nil {
+					tid = state.startedMu.server.getTenantID()
+					iid = state.startedMu.server.getInstanceID()
+				}
 				state.startedMu.server = nil
+
 			}()
 			close(stoppedCh)
 			if !startedOrStoppedChAlreadyClosed {
 				state.startErr = errors.New("server stop before successful start")
 				close(startedOrStoppedCh)
+			} else if serverStoppingFn != nil && false {
+				// If our server was started, then
+				// exiting here means it was stopped,
+				// so call the serverStoppingFn
+				serverStoppingFn(ctx, tenantName, tid, iid)
 			}
 
 			// Call the finalizer.
@@ -417,15 +432,9 @@ func (o *channelOrchestrator) startControlledServer(
 			return
 		}
 
-		// Log the start event and ensure the stop event is logged eventually.
-		tid, iid := tenantServer.getTenantID(), tenantServer.getInstanceID()
 		if startCompleteFn != nil {
-			startCompleteFn(ctx, tenantName, tid, iid)
-		}
-		if serverStoppingFn != nil {
-			tenantStopper.AddCloser(stop.CloserFn(func() {
-				serverStoppingFn(ctx, tenantName, tid, iid)
-			}))
+			startCompleteFn(ctx, tenantName, tenantServer.getTenantID(),
+				tenantServer.getInstanceID())
 		}
 
 		// Indicate the server has started.
@@ -440,10 +449,9 @@ func (o *channelOrchestrator) startControlledServer(
 		// Wait for a request to shut down.
 		for {
 			select {
-			case <-tenantStopper.ShouldQuiesce():
+			case <-tenantStopper.IsStopped():
 				log.Infof(ctx, "tenant %q finishing their own control loop", tenantName)
 				return
-
 			case shutdownRequest := <-tenantServer.shutdownRequested():
 				log.Infof(ctx, "tenant %q requesting their own shutdown: %v",
 					tenantName, shutdownRequest.ShutdownCause())
@@ -499,7 +507,7 @@ func (o *channelOrchestrator) propagateGracefulDrainAsync(
 	return ctlStopper.RunAsyncTask(ctx, "propagate-graceful-drain", func(ctx context.Context) {
 		defer log.Infof(ctx, "propagate-graceful-drain task terminating")
 		select {
-		case <-tenantStopper.ShouldQuiesce():
+		case <-tenantStopper.IsStopped():
 			// Tenant server shutting down on its own.
 			return
 		case <-ctlStopper.ShouldQuiesce():

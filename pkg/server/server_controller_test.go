@@ -12,7 +12,10 @@ package server
 
 import (
 	"context"
+	"runtime/pprof"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -123,6 +126,117 @@ func TestServerControllerStopStart(t *testing.T) {
 	shouldFailToConnectSoon()
 	sqlRunner.Exec(t, "ALTER VIRTUAL CLUSTER hello START SERVICE SHARED")
 	shouldConnectSoon()
+}
+
+// TestServerControllerStopReallyStops starts and stops a
+// share-process test tenant and tries to detect if any goroutines
+// related to the tenant server are still running after the server has
+// been removed from the server controller.
+func TestServerControllerStopReallyStops(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	waitForNoServiceForTenant := func() {
+		// We don't use succeeds soon here because we want to
+		// return as soon as we can after our server has been
+		// removed from the list.
+		for {
+			_, _, err := s.TenantController().ServerController().(*serverController).getServer(ctx, "hello")
+			if errors.Is(err, errNoTenantServerRunning) {
+				return
+			}
+			time.Sleep(time.Duration(1))
+		}
+	}
+	waitForServiceForTenant := func() {
+		testutils.SucceedsSoon(t, func() error {
+			_, _, err := s.TenantController().ServerController().(*serverController).getServer(ctx, "hello")
+			return err
+		})
+	}
+
+	failIfTaggedGoRoutines := func(dump string) {
+		// We expect a profile that looks like:
+		// goroutine profile: total 445
+		// 20 @ 0x102108788 0x1020d3dd4 0x1020d39a4 0x102e80d70 0x10228ce70 0x102e80ccc 0x10213d5f4
+		// # labels: {"pebble":"table-cache"}
+		// #      0x102e80d6f     github.com/cockroachdb/pebble.(*tableCacheShard).releaseLoop....
+		// #      ...
+		// #      0x102e80ccb     github.com/cockroachdb/pebble.(*tableCacheShard).releas...
+		//
+		// 13 @ 0x102108788 0x102119aa8 0x1050a2e50 0x1050a3044 0x1050a7b14 0x102d3a508 0x10213d5f4
+		// #      0x1050a2e4f     github.com/cockroachdb/cockroach/pkg/kv/kvserver/...
+		// #      ...
+		// #      0x102d3a507     github.com/cockroachdb/cockroach/pkg/util/stop.(*Sto...
+		goroutines := strings.Split(dump, "\n\n")
+		labelWeCareAbout := `"cluster":"hello"`
+		exceptions := []string{
+			// When using a shared-process server, we may end up
+			// using the internalClientAdapter. As a result, async
+			// processes started on the kvserver-side of some
+			// request may actually be started from a goroutine with
+			// the cluster tags.
+			//
+			// TODO(ssd): Understand what the abvoe implies for when
+			// we can actually be gauaranteed no more
+			// (user-observable) writes to the tenant keyspace will
+			// happen.
+			"(*IntentResolver).cleanupFinishedTxnIntents",
+			// TODO(ssd): I suspect we see this with our label for a
+			// reason similar to the above. But, I've yet to trace
+			// it in the same way.
+			"github.com/cockroachdb/pebble/vfs.(*diskHealthCheckingFS).startTickerLocked",
+			"github.com/cockroachdb/pebble/vfs.(*diskHealthCheckingFile).startTicker",
+		}
+
+		var errBuf strings.Builder
+		for _, goRoutine := range goroutines {
+			if strings.Contains(goRoutine, labelWeCareAbout) {
+				var ignore bool
+				for _, e := range exceptions {
+					if strings.Contains(goRoutine, e) {
+						t.Logf("ignoring goroutine that matches %s", e)
+						ignore = true
+						break
+					}
+				}
+				if !ignore {
+					errBuf.WriteString(goRoutine)
+					errBuf.WriteString("\n")
+				}
+			}
+		}
+		errStr := errBuf.String()
+		if errStr != "" {
+			t.Fatalf("unexpected goroutines from tenant server still running after stop:\n%s", errStr)
+		}
+	}
+
+	sqlRunner := sqlutils.MakeSQLRunner(db)
+	sqlRunner.Exec(t, "CREATE TENANT hello")
+	sqlRunner.Exec(t, "ALTER VIRTUAL CLUSTER hello START SERVICE SHARED")
+	waitForServiceForTenant()
+	sqlRunner.Exec(t, "ALTER VIRTUAL CLUSTER hello STOP SERVICE")
+	waitForNoServiceForTenant()
+	// Every method of "waiting" for a goroutine technically
+	// returns just before the goroutine actually completes. As a
+	// aresult, in some race/stress builds this test ends up
+	// catching goroutines that are properly accounted for.
+	//
+	// Unfortunately this defeates the point of the test somewhat
+	// so it is useful to remove when investigating a shutdown
+	// problem.
+	time.Sleep(10 * time.Millisecond)
+	var buf strings.Builder
+	require.NoError(t, pprof.Lookup("goroutine").WriteTo(&buf, 1))
+	failIfTaggedGoRoutines(buf.String())
 }
 
 // TestServerControllerWaitForDefaultTenant tests that the server SQL
