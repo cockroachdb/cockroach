@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -224,7 +225,7 @@ func TestConstructFrontierExecutionDetailFile(t *testing.T) {
 }
 
 func listExecutionDetails(
-	t *testing.T, s serverutils.TestServerInterface, jobID jobspb.JobID,
+	t *testing.T, s serverutils.ApplicationLayerInterface, jobID jobspb.JobID,
 ) []string {
 	t.Helper()
 
@@ -252,7 +253,7 @@ func listExecutionDetails(
 }
 
 func checkExecutionDetails(
-	t *testing.T, s serverutils.TestServerInterface, jobID jobspb.JobID, filename string,
+	t *testing.T, s serverutils.ApplicationLayerInterface, jobID jobspb.JobID, filename string,
 ) ([]byte, error) {
 	t.Helper()
 
@@ -297,6 +298,7 @@ func checkExecutionDetails(
 
 func TestEndToEndFrontierExecutionDetailFile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
@@ -372,9 +374,9 @@ func TestEndToEndFrontierExecutionDetailFile(t *testing.T) {
 		return jobs.WriteChunkedFileToJobInfo(ctx, frontierEntriesFilename, frontierBytes, txn, ingestionJobID)
 	}))
 	require.NoError(t, generateSpanFrontierExecutionDetailFile(ctx, &execCfg, ingestionJobID, true /* skipBehindBy */))
-	files := listExecutionDetails(t, srv, ingestionJobID)
+	files := listExecutionDetails(t, ts, ingestionJobID)
 	require.Len(t, files, 1)
-	data, err := checkExecutionDetails(t, srv, ingestionJobID, files[0])
+	data, err := checkExecutionDetails(t, ts, ingestionJobID, files[0])
 	require.NoError(t, err)
 	require.NotEmpty(t, data)
 
