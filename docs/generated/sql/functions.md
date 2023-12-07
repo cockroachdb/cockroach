@@ -2806,6 +2806,10 @@ Can be used to define the tile bounds required by ST_AsMVTGeom to convert geomet
 <tbody>
 <tr><td><a name="ascii"></a><code>ascii(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the character code of the first character in <code>val</code>. Despite the name, the function supports Unicode too.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="bit_count"></a><code>bit_count(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits set used to represent <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="bit_count"></a><code>bit_count(val: varbit) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits set used to represent <code>val</code>.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="bit_length"></a><code>bit_length(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="bit_length"></a><code>bit_length(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>

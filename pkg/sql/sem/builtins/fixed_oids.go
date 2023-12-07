@@ -2537,6 +2537,8 @@ var builtinOidsArray = []string{
 	2568: `array_position(array: tuple[], elem: tuple, start: int) -> int`,
 	2569: `array_position(array: pg_lsn[], elem: pg_lsn, start: int) -> int`,
 	2570: `array_position(array: refcursor[], elem: refcursor, start: int) -> int`,
+	2571: `bit_count(val: bytes) -> int`,
+	2572: `bit_count(val: varbit) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
