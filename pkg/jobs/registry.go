@@ -1562,6 +1562,30 @@ func getRegisterOptions(typ jobspb.Type) (registerOptions, bool) {
 	return opts, ok
 }
 
+// TestingClearConstructors clears all previously registered
+// constructors. This is useful in tests when you want to ensure that
+// the job system will only run a particular job.
+//
+// The returned function should be called at the end of the test to
+// restore the constructors.
+func TestingClearConstructors() func() {
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	oldConstructors := globalMu.constructors
+	oldOptions := globalMu.options
+
+	globalMu.constructors = make(map[jobspb.Type]Constructor)
+	globalMu.options = make(map[jobspb.Type]registerOptions)
+	return func() {
+		globalMu.Lock()
+		defer globalMu.Unlock()
+		globalMu.constructors = oldConstructors
+		globalMu.options = oldOptions
+	}
+
+}
+
 // RegisterConstructor registers a Resumer constructor for a certain job type.
 //
 // NOTE: You must pass either jobs.UsesTenantCostControl or
