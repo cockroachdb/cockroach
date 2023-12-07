@@ -624,6 +624,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 		defer func() {
 			require.EqualValues(t, 0, metrics.RangefeedRanges.Value())
 			require.EqualValues(t, 0, metrics.Errors.Stuck.Count())
+			require.EqualValues(t, 0, metrics.RangefeedLocalRanges.Value())
 
 			// We injected numRangesToRetry transient errors during catchup scan.
 			// It is possible however, that we will observe key-mismatch error when restarting
@@ -638,6 +639,7 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 			// Even though numCatchupToBlock ranges were blocked in the catchup scan phase,
 			// the counter should be 0 once rangefeed is done.
 			require.EqualValues(t, 0, metrics.RangefeedCatchupRanges.Value())
+
 		}()
 
 		frontier, err := span.MakeFrontier(fooSpan)
@@ -741,6 +743,9 @@ func TestRangeFeedMetricsManagement(t *testing.T) {
 
 		// At this point, we know the rangefeed for all ranges are running.
 		require.EqualValues(t, numRanges, metrics.RangefeedRanges.Value(), frontier.String())
+
+		// All ranges expected to be local.
+		require.EqualValues(t, numRanges, metrics.RangefeedLocalRanges.Value(), frontier.String())
 
 		// We also know that we have blocked numCatchupToBlock ranges in their catchup scan.
 		require.EqualValues(t, numCatchupToBlock, metrics.RangefeedCatchupRanges.Value())
