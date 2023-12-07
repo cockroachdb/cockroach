@@ -141,8 +141,11 @@ func TestCreatePostRequest(t *testing.T) {
 		expectedSkipTestFailure bool
 		expectedParams          map[string]string
 	}{
-		{true, false, false, false, false, nil, "", createFailure(errors.New("other")), true, false, false,
-			prefixAll(map[string]string{
+		{
+			nonReleaseBlocker: true,
+			failure:           createFailure(errors.New("other")),
+			expectedPost:      true,
+			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"encrypted":        "false",
 				"fs":               "ext4",
@@ -153,8 +156,15 @@ func TestCreatePostRequest(t *testing.T) {
 				"metamorphicBuild": "false",
 			}),
 		},
-		{true, false, false, true, true, nil, vm.ArchARM64, createFailure(errClusterProvisioningFailed), true, false, true,
-			prefixAll(map[string]string{
+		{
+			nonReleaseBlocker:       true,
+			localSSD:                true,
+			metamorphicBuild:        true,
+			arch:                    vm.ArchARM64,
+			failure:                 createFailure(errClusterProvisioningFailed),
+			expectedPost:            true,
+			expectedSkipTestFailure: true,
+			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"encrypted":        "false",
 				"fs":               "ext4",
@@ -169,23 +179,43 @@ func TestCreatePostRequest(t *testing.T) {
 		// !nonReleaseBlocker and issue is an SSH flake. Also ensure that
 		// in the event of a failed cluster creation, nil `vmOptions` and
 		// `clusterImpl` are not dereferenced
-		{false, true, false, false, false, nil, "", createFailure(rperrors.ErrSSH255), true, false, true,
-			prefixAll(map[string]string{
+		{
+			clusterCreationFailed:   true,
+			failure:                 createFailure(rperrors.ErrSSH255),
+			expectedPost:            true,
+			expectedSkipTestFailure: true,
+			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"ssd":              "0",
 				"cpu":              "4",
 				"metamorphicBuild": "false",
 			}),
 		},
-		//Simulate failure loading TEAMS.yaml
-		{true, false, true, false, false, nil, "", createFailure(errors.New("other")), false, false, false, nil},
-		//Error during post test assertions
-		{true, false, false, false, false, nil, "", createFailure(errDuringPostAssertions), false, false, false, nil},
-		//Error during dns operation
-		{true, false, false, false, false, nil, "", createFailure(gce.ErrDNSOperation), true, false, true, nil},
+		// Simulate failure loading TEAMS.yaml
+		{
+			nonReleaseBlocker: true,
+			loadTeamsFailed:   true,
+			failure:           createFailure(errors.New("other")),
+		},
+		// Error during post test assertions
+		{
+			nonReleaseBlocker: true,
+			failure:           createFailure(errDuringPostAssertions),
+		},
+		// Error during dns operation.
+		{
+			nonReleaseBlocker:       true,
+			failure:                 createFailure(gce.ErrDNSOperation),
+			expectedPost:            true,
+			expectedSkipTestFailure: true,
+		},
 		// Assert that extra labels in the test spec are added to the issue.
-		{true, false, false, false, false, []string{"foo-label"}, "", createFailure(errors.New("other")), true, false, false,
-			prefixAll(map[string]string{
+		{
+			nonReleaseBlocker: true,
+			extraLabels:       []string{"foo-label"},
+			failure:           createFailure(errors.New("other")),
+			expectedPost:      true,
+			expectedParams: prefixAll(map[string]string{
 				"cloud":            "gce",
 				"encrypted":        "false",
 				"fs":               "ext4",
@@ -200,7 +230,7 @@ func TestCreatePostRequest(t *testing.T) {
 
 	reg := makeTestRegistry()
 	for idx, c := range testCases {
-		t.Run(fmt.Sprintf("%d", idx+1), func(t *testing.T) {
+		t.Run("", func(t *testing.T) {
 			clusterSpec := reg.MakeClusterSpec(1, spec.Arch(c.arch))
 
 			testSpec := &registry.TestSpec{
