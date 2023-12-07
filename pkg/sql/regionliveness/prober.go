@@ -93,6 +93,8 @@ type Prober interface {
 	// GetTableTimeout gets maximum timeout waiting on a table before issuing
 	// liveness queries.
 	GetTableTimeout() (bool, time.Duration)
+	// MarkPhysicalRegionAsAvailable deletes the unavailable_at timestamp for a region.
+	MarkPhysicalRegionAsAvailable(ctx context.Context, txn *kv.Txn, region string, timestamp *tree.DTimestamp) error
 }
 
 // RegionProvider abstracts the lookup of regions (see regions.Provider).
@@ -297,6 +299,19 @@ func (l *livenessProber) QueryUnavailablePhysicalRegions(
 		}
 	}
 	return unavailableAtRegions, nil
+}
+
+// MarkPhysicalRegionAsAvailable implements Prober.
+func (l *livenessProber) MarkPhysicalRegionAsAvailable(
+	ctx context.Context, txn *kv.Txn, region string, timestamp *tree.DTimestamp,
+) error {
+	ba := txn.NewBatch()
+	// Encode a key for this region, and delete it.
+	err := l.kvWriter.Delete(ctx, ba, false /*kvTrace*/, tree.NewDBytes(tree.DBytes(region)), timestamp)
+	if err != nil {
+		return err
+	}
+	return txn.Run(ctx, ba)
 }
 
 // GetTableTimeout gets maximum timeout waiting on a table before issuing

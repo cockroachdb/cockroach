@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -338,4 +339,26 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 		return builder.BuildExistingMutableType()
 	})
 	require.NoError(t, lm.WaitForNoVersion(ctx, descpb.ID(tableID), cachedDatabaseRegions, retry.Options{}))
+	// Add a new region which will execute a recovery and clean up dead rows.
+	tenantArgs := base.TestTenantArgs{
+		Settings: makeSettings(),
+		TenantID: id,
+		Locality: testCluster.Servers[0].Locality(),
+	}
+	_, newRegionSQL := serverutils.StartTenant(t, testCluster.Servers[0], tenantArgs)
+	tr := sqlutils.MakeSQLRunner(newRegionSQL)
+	// Validate everything was cleaned bringing up a new node in the down region.
+	require.Equalf(t,
+		tr.QueryStr(t, "SELECT * FROM system.region_liveness"),
+		[][]string{},
+		"expected no unavaialble regions.")
+	require.Equalf(t,
+		tr.QueryStr(t, "SELECT COUNT(*) FROM system.sql_instances WHERE session_id IS NOT NULL"),
+		[][]string{{"3"}},
+		"extra sql instances are being used.")
+	require.Equalf(t,
+		tr.QueryStr(t, "SELECT COUNT(*) FROM system.sqlliveness"),
+		[][]string{{"3"}},
+		"extra sql sessions detected.")
+	require.NoError(t, err)
 }

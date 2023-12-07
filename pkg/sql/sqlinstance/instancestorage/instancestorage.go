@@ -30,12 +30,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -77,12 +82,14 @@ var errNoPreallocatedRows = errors.New("no preallocated rows")
 // instances ids if the owning session has expired.
 type Storage struct {
 	db            *kv.DB
+	codec         keys.SQLCodec
 	slReader      sqlliveness.Reader
 	rowCodec      rowCodec
 	settings      *cluster.Settings
 	settingsWatch *settingswatcher.SettingsWatcher
 	clock         *hlc.Clock
 	f             *rangefeed.Factory
+	cf            *descs.CollectionFactory
 	// TestingKnobs refers to knobs used for testing.
 	TestingKnobs struct {
 		// JitteredIntervalFn corresponds to the function used to jitter the
@@ -123,12 +130,14 @@ func NewTestingStorage(
 ) *Storage {
 	s := &Storage{
 		db:            db,
+		codec:         codec,
 		rowCodec:      makeRowCodec(codec, table, true),
 		slReader:      slReader,
 		clock:         clock,
 		f:             f,
 		settings:      settings,
 		settingsWatch: settingsWatch,
+		cf:            descs.NewBareBonesCollectionFactory(settings, codec),
 	}
 	return s
 }
@@ -257,6 +266,64 @@ func (s *Storage) createInstanceRow(
 			err = txn.UpdateDeadline(ctx, sessionExpiration)
 			if err != nil {
 				return err
+			}
+
+			regionLiveness := regionliveness.NewLivenessProber(s.db, s.codec, nil, s.settings)
+			downRegions, err := regionLiveness.QueryUnavailablePhysicalRegions(ctx, txn, false)
+			if err != nil {
+				return err
+			}
+			if downRegions.ContainsPhysicalRepresentation(string(region)) {
+				// Delete all rows for the region in system.sqlliveness, system.sql_instances,
+				// system.leases.
+				instanceSpan, err := regionliveness.GetSystemTableSpanForRegion(systemschema.SQLInstancesTable(), s.codec, string(region))
+				if err != nil {
+					return err
+				}
+				leaseTableSpan, err := regionliveness.GetSystemTableSpanForRegion(systemschema.LeaseTable(), s.codec, string(region))
+				if err != nil {
+					return err
+				}
+				livenessTableSpan, err := regionliveness.GetSystemTableSpanForRegion(systemschema.SqllivenessTable(), s.codec, string(region))
+				if err != nil {
+					return err
+				}
+				// Save our own session ID before wiping out sessions.
+				sqlLivenessKeyBytesForOurSessionBytes := make([]byte, len(livenessTableSpan.Key))
+				copy(sqlLivenessKeyBytesForOurSessionBytes, livenessTableSpan.Key)
+				sqlLivenessKeyBytesForOurSessionBytes, err = keyside.Encode(sqlLivenessKeyBytesForOurSessionBytes, tree.NewDBytes(tree.DBytes(sessionID.UnsafeBytes())), encoding.Ascending)
+				if err != nil {
+					return err
+				}
+				sqlLivenessKeyBytesForOurSessionBytes = keys.MakeFamilyKey(sqlLivenessKeyBytesForOurSessionBytes, 0)
+				sqlLivenessKeyForOurSession := roachpb.Key(sqlLivenessKeyBytesForOurSessionBytes)
+				lastValue, err := txn.Get(ctx, sqlLivenessKeyForOurSession)
+				if err != nil {
+					return err
+				}
+				// Clear all the spans from above.
+				if _, err := txn.DelRange(ctx, instanceSpan.Key, instanceSpan.EndKey, false); err != nil {
+					return err
+				}
+				if _, err := txn.DelRange(ctx, leaseTableSpan.Key, leaseTableSpan.EndKey, false); err != nil {
+					return err
+				}
+				if _, err := txn.DelRange(ctx, livenessTableSpan.Key, livenessTableSpan.EndKey, false); err != nil {
+					return err
+				}
+				// Put the SQL liveness session back.
+				lastValue.Value.ClearChecksum()
+				lastValue.Value.Timestamp = hlc.Timestamp{}
+				if err = txn.Put(ctx, lastValue.Key, lastValue.Value); err != nil {
+					return err
+				}
+				// Make the region as available again.
+				if err := regionLiveness.MarkPhysicalRegionAsAvailable(ctx, txn, string(region), downRegions[string(region)]); err != nil {
+					return err
+				}
+				if err := s.generateAvailableInstanceRowsWithTxn(ctx, [][]byte{region}, sessionExpiration, txn, false); err != nil {
+					return err
+				}
 			}
 
 			// TODO(dt): do we need this at all? this keeps nodeID == instanceID when
@@ -548,6 +615,7 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 				// and delete surplus IDs. Cleaning up surplus IDs is necessary
 				// to avoid ID exhaustion.
 				for _, region := range regions {
+
 					if err := s.reclaimRegion(ctx, region); err != nil {
 						log.Warningf(ctx, "failed to reclaim instances in region '%v': %v", region, err)
 					}
@@ -562,6 +630,82 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 	})
 }
 
+// readRegionsFromSystemDatabase reads physical representation for regions from the system database.
+func (s *Storage) readRegionsFromSystemDatabase(
+	ctx context.Context, txn *kv.Txn,
+) ([][]byte, error) {
+	descs := s.cf.NewCollection(ctx)
+	descs.SetDescriptorSessionDataProvider(catsessiondata.DefaultDescriptorSessionDataProvider)
+	defer descs.ReleaseAll(ctx)
+	systemDB, err := descs.ByID(txn).Get().Database(ctx, keys.SystemDatabaseID)
+	if err != nil {
+		return nil, err
+	}
+	if !systemDB.IsMultiRegion() {
+		return [][]byte{enum.One}, nil
+	}
+	regionEnumID, err := systemDB.MultiRegionEnumID()
+	if err != nil {
+		return nil, err
+	}
+	typeEnum, err := descs.ByID(txn).Get().Type(ctx, regionEnumID)
+	if err != nil {
+		return nil, err
+	}
+	regionEnum := typeEnum.AsRegionEnumTypeDescriptor()
+	result := make([][]byte, 0, regionEnum.NumEnumMembers())
+	for i := 0; i < regionEnum.NumEnumMembers(); i++ {
+		result = append(result, regionEnum.GetMemberPhysicalRepresentation(i))
+	}
+	return result, nil
+}
+
+// generateAvailableInstanceRows allocates available instance IDs, and store
+// them in the sql_instances table. When instance IDs are pre-allocated, all
+// other fields in that row will be NULL.
+func (s *Storage) generateAvailableInstanceRowsWithTxn(
+	ctx context.Context, regions [][]byte, sessionExpiration hlc.Timestamp, txn *kv.Txn, commit bool,
+) error {
+	target := int(PreallocatedCount.Get(&s.settings.SV))
+	// Figure out which regions are down, so that we can skip them in the allocation
+	// loop below.
+	regionLiveness := regionliveness.NewLivenessProber(s.db, s.codec, nil, s.settings)
+	downRegions, err := regionLiveness.QueryUnavailablePhysicalRegions(ctx, txn, true)
+	if err != nil {
+		return err
+	}
+	var onlineInstances []instancerow
+	// Read all available regions from the system database.
+	allRegions, err := s.readRegionsFromSystemDatabase(ctx, txn)
+	if err != nil {
+		return err
+	}
+	// Allocate instance rows by region, skipping over any regions
+	// that were detected as down.
+	for _, region := range allRegions {
+		if downRegions.ContainsPhysicalRepresentation(string(region)) {
+			continue
+		}
+		instances, err := s.getInstanceRows(ctx, region /*global*/, txn, lock.WaitPolicy_Block)
+		if err != nil {
+			return err
+		}
+		onlineInstances = append(onlineInstances, instances...)
+	}
+	b := txn.NewBatch()
+	for _, row := range idsToAllocate(target, regions, onlineInstances) {
+		value, err := s.rowCodec.encodeAvailableValue()
+		if err != nil {
+			return errors.Wrapf(err, "failed to encode row for instance id %d", row.instanceID)
+		}
+		b.Put(s.rowCodec.encodeKey(row.region, row.instanceID), value)
+	}
+	if commit {
+		return txn.CommitInBatch(ctx, b)
+	}
+	return txn.Run(ctx, b)
+}
+
 // generateAvailableInstanceRows allocates available instance IDs, and store
 // them in the sql_instances table. When instance IDs are pre-allocated, all
 // other fields in that row will be NULL.
@@ -569,22 +713,8 @@ func (s *Storage) generateAvailableInstanceRows(
 	ctx context.Context, regions [][]byte, sessionExpiration hlc.Timestamp,
 ) error {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	target := int(PreallocatedCount.Get(&s.settings.SV))
 	return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		instances, err := s.getInstanceRows(ctx, nil /*global*/, txn, lock.WaitPolicy_Block)
-		if err != nil {
-			return err
-		}
-
-		b := txn.NewBatch()
-		for _, row := range idsToAllocate(target, regions, instances) {
-			value, err := s.rowCodec.encodeAvailableValue()
-			if err != nil {
-				return errors.Wrapf(err, "failed to encode row for instance id %d", row.instanceID)
-			}
-			b.Put(s.rowCodec.encodeKey(row.region, row.instanceID), value)
-		}
-		return txn.CommitInBatch(ctx, b)
+		return s.generateAvailableInstanceRowsWithTxn(ctx, regions, sessionExpiration, txn, true)
 	})
 }
 
