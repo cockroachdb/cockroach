@@ -33,9 +33,13 @@ import (
 func (b *Builder) buildJoin(
 	join *tree.JoinTableExpr, lockCtx lockingContext, inScope *scope,
 ) (outScope *scope) {
-	// TODO(michae2, 97434): Poison the lockCtx for the null-extended side(s) if
-	// this is an outer join.
-	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, lockCtx, inScope)
+	joinType := descpb.JoinTypeFromAstString(join.JoinType)
+	leftLockCtx := lockCtx
+	// Poison the lockCtx for the null-extended side(s) if this is an outer join.
+	if joinType == descpb.RightOuterJoin || joinType == descpb.FullOuterJoin {
+		leftLockCtx.isNullExtended = true
+	}
+	leftScope := b.buildDataSource(join.Left, nil /* indexFlags */, leftLockCtx, inScope)
 
 	inScopeRight := inScope
 	isLateral := b.exprIsLateral(join.Right)
@@ -47,12 +51,16 @@ func (b *Builder) buildJoin(
 		inScopeRight.context = exprKindLateralJoin
 	}
 
-	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, lockCtx, inScopeRight)
+	rightLockCtx := lockCtx
+	// Poison the lockCtx for the null-extended side(s) if this is an outer join.
+	if joinType == descpb.LeftOuterJoin || joinType == descpb.FullOuterJoin {
+		rightLockCtx.isNullExtended = true
+	}
+	rightScope := b.buildDataSource(join.Right, nil /* indexFlags */, rightLockCtx, inScopeRight)
 
 	// Check that the same table name is not used on both sides.
 	b.validateJoinTableNames(leftScope, rightScope)
 
-	joinType := descpb.JoinTypeFromAstString(join.JoinType)
 	var flags memo.JoinFlags
 	switch join.Hint {
 	case "":

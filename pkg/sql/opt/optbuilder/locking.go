@@ -154,6 +154,12 @@ type lockingContext struct {
 	// either because they did not have a target or because one of their targets
 	// matched an ancestor of this scope.
 	locking lockingSpec
+
+	// isNullExtended is set to true if this lockingContext is being passed down
+	// to the null-extended side of an outer join. This is needed so that we can
+	// return an error if the locking is set when we are building a table scan and
+	// isNullExtended is true.
+	isNullExtended bool
 }
 
 // noLocking indicates that no row-level locking has been specified.
@@ -216,6 +222,11 @@ func (lockCtx *lockingContext) filter(alias tree.Name) {
 // cannot be applied. Already applied locking items remain applied.
 func (lockCtx *lockingContext) withoutTargets() {
 	lockCtx.lockScope = append(lockCtx.lockScope, &blankLockingScope)
+	// Reset isNullExtended if no lock applies at this point, since we shouldn't
+	// throw an error if locking is introduced lower in the plan tree.
+	if !lockCtx.locking.isSet() {
+		lockCtx.isNullExtended = false
+	}
 }
 
 // ignoreLockingForCTE is a placeholder for the following comment:
