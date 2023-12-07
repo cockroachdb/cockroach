@@ -54,6 +54,7 @@ func TestPost(t *testing.T) {
 		name                 string
 		packageName          string
 		testName             string
+		topLevelNotes        []string
 		message              string
 		artifacts            string
 		reproCmd             string
@@ -145,15 +146,17 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 			reproCmd: "make test TESTS=TestRandomSyntaxSQLSmith PKG=./pkg/sql/tests 2>&1",
 		},
 		{
-			name:        "failure-with-url",
-			packageName: "github.com/cockroachdb/cockroach/pkg/cmd/roachtest",
-			testName:    "some-roachtest",
-			message:     "boom",
-			reproURL:    "https://github.com/cockroachdb/cockroach",
-			reproTitle:  "FooBar README",
+			name:          "failure-with-url",
+			packageName:   "github.com/cockroachdb/cockroach/pkg/cmd/roachtest",
+			testName:      "some-roachtest",
+			topLevelNotes: []string{"first note", "second note"},
+			message:       "boom",
+			reproURL:      "https://github.com/cockroachdb/cockroach",
+			reproTitle:    "FooBar README",
 		},
 		{
 			name:            "infrastructure-flake",
+			topLevelNotes:   []string{"This is a special type of run that you should know about."},
 			packageName:     "roachtest",
 			testName:        "TestCDC",
 			message:         "Something went wrong",
@@ -363,6 +366,7 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 			req := PostRequest{
 				PackageName:          c.packageName,
 				TestName:             c.testName,
+				TopLevelNotes:        c.topLevelNotes,
 				Message:              c.message,
 				SkipLabelTestFailure: c.skipTestFailure,
 				Artifacts:            c.artifacts,
