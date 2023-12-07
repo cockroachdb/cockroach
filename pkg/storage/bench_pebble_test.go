@@ -408,40 +408,34 @@ func BenchmarkMVCCPut_Pebble(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	type testCase struct {
-		batch     bool
 		valueSize int
 		versions  int
 	}
 	var testCases []testCase
 
-	for _, batch := range []bool{false, true} {
-		for _, valueSize := range []int{10, 100, 1000, 10000} {
-			for _, versions := range []int{1, 10} {
-				testCases = append(testCases, testCase{
-					batch:     batch,
-					valueSize: valueSize,
-					versions:  versions,
-				})
-			}
+	for _, valueSize := range []int{10, 100, 1000, 10000} {
+		for _, versions := range []int{1, 10} {
+			testCases = append(testCases, testCase{
+				valueSize: valueSize,
+				versions:  versions,
+			})
 		}
 	}
 
 	if testing.Short() {
 		// Choose a few configurations for the short version.
 		testCases = []testCase{
-			{batch: false, valueSize: 10, versions: 1},
-			{batch: true, valueSize: 1000, versions: 10},
+			{valueSize: 10, versions: 1},
+			{valueSize: 1000, versions: 10},
 		}
 	}
 
 	for _, tc := range testCases {
-		name := fmt.Sprintf(
-			"batch=%t/valueSize=%d/versions=%d",
-			tc.batch, tc.valueSize, tc.versions,
-		)
+		// We use "batch=false" so that we can compare with corresponding benchmarks in older branches.
+		name := fmt.Sprintf("batch=false/valueSize=%d/versions=%d", tc.valueSize, tc.versions)
 		b.Run(name, func(b *testing.B) {
 			ctx := context.Background()
-			runMVCCPut(ctx, b, setupMVCCInMemPebble, tc.valueSize, tc.versions, tc.batch)
+			runMVCCPut(ctx, b, setupMVCCInMemPebble, tc.valueSize, tc.versions)
 		})
 	}
 }
