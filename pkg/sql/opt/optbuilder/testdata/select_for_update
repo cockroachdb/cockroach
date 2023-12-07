@@ -1671,6 +1671,221 @@ lock u
                                └── t.a:1 = u.a:5
 
 # ------------------------------------------------------------------------------
+# Tests with outer joins.
+# ------------------------------------------------------------------------------
+
+build
+SELECT * FROM t LEFT JOIN u ON b = c FOR UPDATE
+----
+error (0A000): FOR UPDATE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t LEFT JOIN u ON b = c FOR UPDATE of t
+----
+project
+ ├── columns: a:1!null b:2 a:5 c:6
+ └── left-join (hash)
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5 c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      │    └── locking: for-update
+      ├── scan u
+      │    └── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      └── filters
+           └── b:2 = c:6
+
+build
+SELECT * FROM t LEFT JOIN u ON b = c FOR UPDATE of u
+----
+error (0A000): FOR UPDATE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t RIGHT JOIN u ON b = c FOR UPDATE
+----
+error (0A000): FOR UPDATE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t RIGHT JOIN u ON b = c FOR UPDATE of t
+----
+error (0A000): FOR UPDATE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t RIGHT JOIN u ON b = c FOR UPDATE of u
+----
+project
+ ├── columns: a:1 b:2 a:5!null c:6
+ └── right-join (hash)
+      ├── columns: t.a:1 b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      ├── scan t
+      │    └── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      ├── scan u
+      │    ├── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      │    └── locking: for-update
+      └── filters
+           └── b:2 = c:6
+
+build
+SELECT * FROM t FULL JOIN u ON b = c FOR UPDATE
+----
+error (0A000): FOR UPDATE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t FULL JOIN u ON b = c FOR UPDATE of t
+----
+error (0A000): FOR UPDATE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t FULL JOIN u ON b = c FOR UPDATE of u
+----
+error (0A000): FOR UPDATE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t LEFT JOIN u ON b = c FOR KEY SHARE
+----
+error (0A000): FOR KEY SHARE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t RIGHT JOIN u ON b = c FOR SHARE
+----
+error (0A000): FOR SHARE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t FULL JOIN u ON b = c FOR NO KEY UPDATE
+----
+error (0A000): FOR NO KEY UPDATE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t LEFT JOIN (SELECT t.a FROM t JOIN u ON b = c) j ON j.a = t.a FOR UPDATE
+----
+error (0A000): FOR UPDATE cannot be applied to the nullable side of an outer join
+
+# Since the locking is happening below the join, this query should not error.
+build
+SELECT * FROM t LEFT JOIN (SELECT t.a FROM t JOIN u ON b = c FOR UPDATE) j ON j.a = t.a
+----
+project
+ ├── columns: a:1!null b:2 a:5
+ └── left-join (hash)
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 t.a:5
+      ├── scan t
+      │    └── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      ├── project
+      │    ├── columns: t.a:5!null
+      │    └── inner-join (hash)
+      │         ├── columns: t.a:5!null b:6!null t.crdb_internal_mvcc_timestamp:7 t.tableoid:8 u.a:9!null c:10!null u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
+      │         ├── scan t
+      │         │    ├── columns: t.a:5!null b:6 t.crdb_internal_mvcc_timestamp:7 t.tableoid:8
+      │         │    └── locking: for-update
+      │         ├── scan u
+      │         │    ├── columns: u.a:9!null c:10 u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
+      │         │    └── locking: for-update
+      │         └── filters
+      │              └── b:6 = c:10
+      └── filters
+           └── t.a:5 = t.a:1
+
+# Since the locking is happening below the join, this query should not error.
+build
+SELECT * FROM t RIGHT JOIN (SELECT t.a FROM t JOIN u ON b = c FOR UPDATE) j ON j.a = t.a
+----
+project
+ ├── columns: a:1 b:2 a:5!null
+ └── right-join (hash)
+      ├── columns: t.a:1 b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 t.a:5!null
+      ├── scan t
+      │    └── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      ├── project
+      │    ├── columns: t.a:5!null
+      │    └── inner-join (hash)
+      │         ├── columns: t.a:5!null b:6!null t.crdb_internal_mvcc_timestamp:7 t.tableoid:8 u.a:9!null c:10!null u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
+      │         ├── scan t
+      │         │    ├── columns: t.a:5!null b:6 t.crdb_internal_mvcc_timestamp:7 t.tableoid:8
+      │         │    └── locking: for-update
+      │         ├── scan u
+      │         │    ├── columns: u.a:9!null c:10 u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
+      │         │    └── locking: for-update
+      │         └── filters
+      │              └── b:6 = c:10
+      └── filters
+           └── t.a:5 = t.a:1
+
+build
+SELECT * FROM t LEFT JOIN (SELECT t.a FROM t JOIN u ON b = c) j ON j.a = t.a FOR UPDATE of t
+----
+project
+ ├── columns: a:1!null b:2 a:5
+ └── left-join (hash)
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 t.a:5
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      │    └── locking: for-update
+      ├── project
+      │    ├── columns: t.a:5!null
+      │    └── inner-join (hash)
+      │         ├── columns: t.a:5!null b:6!null t.crdb_internal_mvcc_timestamp:7 t.tableoid:8 u.a:9!null c:10!null u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
+      │         ├── scan t
+      │         │    └── columns: t.a:5!null b:6 t.crdb_internal_mvcc_timestamp:7 t.tableoid:8
+      │         ├── scan u
+      │         │    └── columns: u.a:9!null c:10 u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
+      │         └── filters
+      │              └── b:6 = c:10
+      └── filters
+           └── t.a:5 = t.a:1
+
+build
+SELECT * FROM t LEFT JOIN (SELECT t.a FROM t JOIN u ON b = c) j ON j.a = t.a FOR UPDATE of j
+----
+error (0A000): FOR UPDATE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM t LEFT JOIN (SELECT t.a FROM t LEFT JOIN u ON b = c FOR UPDATE of t) j ON j.a = t.a FOR UPDATE of t
+----
+project
+ ├── columns: a:1!null b:2 a:5
+ └── left-join (hash)
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 t.a:5
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      │    └── locking: for-update
+      ├── project
+      │    ├── columns: t.a:5!null
+      │    └── left-join (hash)
+      │         ├── columns: t.a:5!null b:6 t.crdb_internal_mvcc_timestamp:7 t.tableoid:8 u.a:9 c:10 u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
+      │         ├── scan t
+      │         │    ├── columns: t.a:5!null b:6 t.crdb_internal_mvcc_timestamp:7 t.tableoid:8
+      │         │    └── locking: for-update
+      │         ├── scan u
+      │         │    └── columns: u.a:9!null c:10 u.crdb_internal_mvcc_timestamp:11 u.tableoid:12
+      │         └── filters
+      │              └── b:6 = c:10
+      └── filters
+           └── t.a:5 = t.a:1
+
+build
+SELECT * FROM (SELECT t.a FROM t LEFT JOIN u ON b = c FOR UPDATE of t) j RIGHT JOIN t ON j.a = t.a FOR UPDATE of t
+----
+project
+ ├── columns: a:1 a:9!null b:10
+ └── right-join (hash)
+      ├── columns: t.a:1 t.a:9!null b:10 t.crdb_internal_mvcc_timestamp:11 t.tableoid:12
+      ├── project
+      │    ├── columns: t.a:1!null
+      │    └── left-join (hash)
+      │         ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5 c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      │         ├── scan t
+      │         │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      │         │    └── locking: for-update
+      │         ├── scan u
+      │         │    └── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      │         └── filters
+      │              └── b:2 = c:6
+      ├── scan t
+      │    ├── columns: t.a:9!null b:10 t.crdb_internal_mvcc_timestamp:11 t.tableoid:12
+      │    └── locking: for-update
+      └── filters
+           └── t.a:1 = t.a:9
+
+# ------------------------------------------------------------------------------
 # Tests with joins of aliased tables and aliased joins.
 # ------------------------------------------------------------------------------
 
