@@ -172,6 +172,7 @@ func NewManager(cfg Config) Manager {
 			m: spanlatch.Make(
 				cfg.Stopper,
 				cfg.SlowLatchGauge,
+				cfg.Settings,
 			),
 		},
 		lt: lt,
