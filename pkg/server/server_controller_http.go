@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -33,6 +34,8 @@ const (
 	// ClusterNameParamInQueryURL is the HTTP query URL parameter used
 	// to select a particular virtual cluster.
 	ClusterNameParamInQueryURL = "cluster"
+
+	NoFallbackParam = "nofallback"
 
 	// AcceptHeader is the canonical header name for accept.
 	AcceptHeader = "Accept"
@@ -81,8 +84,18 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tenantName := getTenantNameFromHTTPRequest(c.st, r)
+	noFallback := false
+	if noFallbackValue := r.URL.Query().Get(NoFallbackParam); noFallbackValue != "" {
+		noFallback, _ = strconv.ParseBool(noFallbackValue)
+	}
+
 	s, _, err := c.getServer(ctx, tenantName)
 	if err != nil {
+		if noFallback {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+
 		log.Warningf(ctx, "unable to find server for tenant %q: %v", tenantName, err)
 		// Clear session and tenant cookies since it appears they reference invalid state.
 		http.SetCookie(w, &http.Cookie{
