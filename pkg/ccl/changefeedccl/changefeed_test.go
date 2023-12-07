@@ -899,8 +899,7 @@ func TestChangefeedCursor(t *testing.T) {
 		// statement timestamp, so only verify this for enterprise.
 		if e, ok := fooLogical.(cdctest.EnterpriseTestFeed); ok {
 			var bytes []byte
-			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT payload FROM (%s)`,
-				jobutils.InternalSystemJobsBaseQuery), e.JobID()).Scan(&bytes)
+			sqlDB.QueryRow(t, jobutils.JobPayloadByIDQuery, e.JobID()).Scan(&bytes)
 			var payload jobspb.Payload
 			require.NoError(t, protoutil.Unmarshal(bytes, &payload))
 			require.Equal(t, tsLogical, payload.GetChangefeed().StatementTime)
@@ -7578,10 +7577,10 @@ func TestChangefeedPredicates(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
 			sqlDB.Exec(t, `
 CREATE TABLE foo (
-  a INT, 
-  b STRING, 
+  a INT,
+  b STRING,
   c STRING,
-  d STRING AS (concat(b, c)) VIRTUAL, 
+  d STRING AS (concat(b, c)) VIRTUAL,
   e status DEFAULT 'inactive',
   PRIMARY KEY (a, b)
 )`)
@@ -7596,9 +7595,9 @@ INSERT INTO foo (a, b, e) VALUES (2, 'two', 'closed');
 				topic, fromClause = "foo", "foo AS "+alias
 			}
 			feed := feed(t, f, `
-CREATE CHANGEFEED 
+CREATE CHANGEFEED
 WITH schema_change_policy='stop'
-AS SELECT * FROM `+fromClause+` 
+AS SELECT * FROM `+fromClause+`
 WHERE e IN ('open', 'closed') AND event_op() != 'delete'`)
 			defer closeFeed(t, feed)
 
@@ -7644,10 +7643,10 @@ func TestChangefeedInvalidPredicate(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open', 'closed', 'inactive')`)
 	sqlDB.Exec(t, `
 CREATE TABLE foo (
-  a INT, 
-  b STRING, 
+  a INT,
+  b STRING,
   c STRING,
-  d STRING AS (concat(b, c)) VIRTUAL, 
+  d STRING AS (concat(b, c)) VIRTUAL,
   e status DEFAULT 'inactive',
   PRIMARY KEY (a, b)
 )`)
@@ -7705,8 +7704,8 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 		`CREATE SCHEMA alt`,
 		`CREATE TYPE alt.status AS ENUM ('alt_open', 'alt_closed')`,
 		`CREATE TABLE foo (
-  a INT, 
-  b STRING, 
+  a INT,
+  b STRING,
   c STRING,
   e status DEFAULT 'inactive',
   PRIMARY KEY (a, b)
