@@ -1535,6 +1535,19 @@ func (b *logicalPropsBuilder) buildLockProps(lock *LockExpr, rel *props.Relation
 	}
 }
 
+func (b *logicalPropsBuilder) buildBarrierProps(barrier *BarrierExpr, rel *props.Relational) {
+	BuildSharedProps(barrier, &rel.Shared, b.evalCtx)
+
+	inputProps := barrier.Child(0).(RelExpr).Relational()
+	rel.OutputCols = inputProps.OutputCols.Copy()
+	rel.NotNullCols = inputProps.NotNullCols.Copy()
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	rel.Cardinality = inputProps.Cardinality
+	if !b.disableStats {
+		b.sb.buildBarrier(barrier, rel)
+	}
+}
+
 func (b *logicalPropsBuilder) buildCreateTableProps(ct *CreateTableExpr, rel *props.Relational) {
 	BuildSharedProps(ct, &rel.Shared, b.evalCtx)
 }
