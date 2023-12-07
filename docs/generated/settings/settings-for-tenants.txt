@@ -16,6 +16,8 @@ changefeed.batch_reduction_retry_enabled	boolean	false	if true, kafka changefeed
 changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled
 changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation
+changefeed.lagging_ranges_polling_interval	duration	1m0s	the polling rate at which lagging ranges are checked and corresponding metrics are updated. will be removed in v23.2 onwards
+changefeed.lagging_ranges_threshold	duration	3m0s	specifies the duration by which a range must be lagging behind the present to be considered as 'lagging' behind in metrics. will be removed in v23.2 in favor of a changefeed option
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds
 changefeed.schema_feed.read_with_priority_after	duration	1m0s	retry with high priority if we were not able to read descriptors for too long; 0 disables
 changefeed.sink_io_workers	integer	0	the number of workers used by changefeeds when sending requests to the sink (currently webhook only): <0 disables, 0 assigns a reasonable default, >0 assigns the setting value.

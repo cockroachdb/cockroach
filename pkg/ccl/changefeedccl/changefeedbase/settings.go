@@ -321,7 +321,7 @@ var LaggingRangesThreshold = settings.RegisterDurationSetting(
 		"removed in v23.2 in favor of a changefeed option",
 	defaultLaggingRangesThreshold,
 	settings.PositiveDuration,
-)
+).WithPublic()
 
 // LaggingRangesPollingInterval is the polling rate at which lagging ranges are
 // checked and metrics are updated.
@@ -332,4 +332,4 @@ var LaggingRangesPollingInterval = settings.RegisterDurationSetting(
 		"corresponding metrics are updated. will be removed in v23.2 onwards",
 	defaultLaggingRangesPollingInterval,
 	settings.PositiveDuration,
-)
+).WithPublic()
