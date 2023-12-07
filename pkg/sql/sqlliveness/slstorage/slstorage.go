@@ -501,9 +501,26 @@ func (s *Storage) Insert(
 	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		batch := txn.NewBatch()
 
-		k, _, err := s.keyCodec.encode(sid)
+		k, region, err := s.keyCodec.encode(sid)
 		if err != nil {
 			return err
+		}
+		unavailableRegions, err := s.livenessProber.QueryUnavailablePhysicalRegions(ctx, txn, true /*filterAvailable*/)
+		if err != nil {
+			return err
+		}
+		if unavailableRegions.ContainsPhysicalRepresentation(region) {
+			// Delete all rows for the region in system.sqlliveness, system.sql_instances,
+			// system.leases.
+			if err := regionliveness.CleanupSystemTableForRegion(ctx,
+				s.codec, region, txn); err != nil {
+				return err
+			}
+			// Make the region as available again.
+			if err := s.livenessProber.MarkPhysicalRegionAsAvailable(ctx, txn, region, unavailableRegions[region]); err != nil {
+				return err
+			}
+
 		}
 		v := encodeValue(expiration)
 		batch.InitPut(k, &v, true)
@@ -524,11 +541,12 @@ func (s *Storage) Update(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (sessionExists bool, newExpiry hlc.Timestamp, err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
+	resetUnavailableAtTime := false
+	k, region, err := s.keyCodec.encode(sid)
+	if err != nil {
+		return false, hlc.Timestamp{}, err
+	}
 	err = s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		k, region, err := s.keyCodec.encode(sid)
-		if err != nil {
-			return err
-		}
 		kv, err := txn.Get(ctx, k)
 		if err != nil {
 			return err
@@ -540,8 +558,8 @@ func (s *Storage) Update(
 		if err != nil {
 			return err
 		}
-		if unavailableRegions.ContainsPhysicalRepresentation(string(region)) {
-			ts := unavailableRegions[string(region)].Time
+		if unavailableRegions.ContainsPhysicalRepresentation(region) {
+			ts := unavailableRegions[region].Time
 			// If the read timestamp is past the expiration, then we cannot allow
 			// this session to renew.
 			if txn.ReadTimestamp().GoTime().After(ts) {
@@ -556,6 +574,8 @@ func (s *Storage) Update(
 				timeDelta := ts.Sub(expirationTS)
 				expiration = expiration.AddDuration(timeDelta)
 			}
+			// If we aren't past the number yet then attempt a recovery.
+			resetUnavailableAtTime = true
 		}
 		v := encodeValue(expiration)
 		ba := txn.NewBatch()
@@ -569,6 +589,38 @@ func (s *Storage) Update(
 		return false, hlc.Timestamp{}, errors.Wrapf(err, "could not update session %s", sid)
 	}
 	s.metrics.WriteSuccesses.Inc(1)
+	// If we were able to write to the sqlliveness table, then region communication
+	// may be restored. At this point lets attempt to clean up any unavailable
+	// region liveness time if it was set.
+	if resetUnavailableAtTime {
+		if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Check if this region has an unavailable_at time set.
+			unavailableRegions, err := s.livenessProber.QueryUnavailablePhysicalRegions(ctx, txn, false /*filterAvailable*/)
+			if err != nil {
+				return err
+			}
+			readTS := txn.ReadTimestamp()
+			ts, exists := unavailableRegions[region]
+			if !exists {
+				return nil
+			}
+			// If it took us longer then the unavailable_at to recover, then fail
+			// at this point. This could happen if the deadline is hit while
+			// recovering, and we are forced to retry.
+			if ts.Before(txn.ReadTimestamp().GoTime()) {
+				return errors.New("region is unavailable, so unable to recover session")
+			}
+
+			// Set a transaction deadline before clearing it.
+			deadLineTS := readTS.AddDuration(ts.Time.Sub(readTS.GoTime()))
+			if err := txn.UpdateDeadline(ctx, deadLineTS); err != nil {
+				return err
+			}
+			return s.livenessProber.MarkPhysicalRegionAsAvailable(ctx, txn, region, ts)
+		}); err != nil {
+			return false, hlc.Timestamp{}, err
+		}
+	}
 	return sessionExists, expiration, nil
 }
 
