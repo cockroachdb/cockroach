@@ -470,6 +470,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	}
 	buf.Reset()
 
+	// TODO(#27611): when we support stats on virtual tables, we'll need to
+	// update this logic to not include virtual tables into schema.sql but still
+	// create stats files for them.
 	var tables, sequences, views []tree.TableName
 	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
@@ -477,6 +480,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 			ctx, b.plan.catalog, func(ds cat.DataSource) (cat.DataSourceName, error) {
 				return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, ds, txn)
 			},
+			false, /* includeVirtualTables */
 		)
 		return err
 	})
