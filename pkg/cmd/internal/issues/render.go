@@ -19,9 +19,9 @@ import (
 
 // An IssueFormatter turns TemplateData for a test failure into markdown
 // that can form a GitHub issue comment.
-type IssueFormatter struct {
-	Title func(TemplateData) string
-	Body  func(*Renderer, TemplateData) error
+type IssueFormatter interface {
+	Title(data TemplateData) string
+	Body(r *Renderer, data TemplateData) error
 }
 
 // A Renderer facilitates creating a reduced and opinionated subset of markdown.
