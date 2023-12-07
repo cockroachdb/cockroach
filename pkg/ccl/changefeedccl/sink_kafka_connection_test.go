@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // externalConnectionKafkaSink is a wrapper sink that asserts the underlying
@@ -249,6 +251,47 @@ func TestChangefeedExternalConnections(t *testing.T) {
 			uri:           "confluent-cloud://nope?api_key=fee&api_secret=bar&ca_cert=abcd",
 			expectedError: "invalid query parameters",
 		},
+		// azure-event-hub scheme tests
+		{
+			name:          "requires parameter SharedAccessKeyName",
+			uri:           "azure-event-hub://nope?",
+			expectedError: "requires parameter shared_access_key_name",
+		},
+		{
+			name:          "requires parameter SharedAccessKey",
+			uri:           "azure-event-hub://nope?shared_access_key_name=saspolicytpcc",
+			expectedError: "requires parameter shared_access_key",
+		},
+		{
+			name:          "requires sasl_enabled=true",
+			uri:           "azure-event-hub://nope?shared_access_key_name=saspolicytpcc&shared_access_key=123&sasl_enabled=false",
+			expectedError: "unsupported value false for parameter sasl_enabled, please use true",
+		},
+		{
+			name:          "requires parameter sasl_mechanism=PLAIN",
+			uri:           "azure-event-hub://nope?shared_access_key_name=saspolicytpcc&shared_access_key=123&sasl_mechanism=OAUTHBEARER",
+			expectedError: "unsupported value OAUTHBEARER for parameter sasl_mechanism, please use PLAIN",
+		},
+		{
+			name:          "requires parameter sasl_handshake=true",
+			uri:           "azure-event-hub://nope?shared_access_key_name=saspolicytpcc&shared_access_key=123&sasl_handshake=false",
+			expectedError: "unsupported value false for parameter sasl_handshake, please use true",
+		},
+		{
+			name:          "requires parameter tls_enabled=true",
+			uri:           "azure-event-hub://nope?shared_access_key_name=saspolicytpcc&shared_access_key=123&tls_enabled=false",
+			expectedError: "unsupported value false for parameter tls_enabled, please use true",
+		},
+		{
+			name:          "invalid query parameters",
+			uri:           "azure-event-hub://nope?shared_access_key_name=saspolicytpcc&shared_access_key=123&ca_cert=abcd",
+			expectedError: "invalid query parameters",
+		},
+		{
+			name:          "test error with entity_path",
+			uri:           "azure-event-hub://nope?shared_access_key_name=saspolicytpcc&shared_access_key=123&entity_path=history",
+			expectedError: "invalid query parameters",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sqlDB.ExpectErr(
@@ -286,4 +329,47 @@ func TestChangefeedExternalConnections(t *testing.T) {
 			t, `CREATE CHANGEFEED FOR foo INTO 'external://confluent2/' WITH kafka_sink_config='{"Flush": {"Messages": 100, "Frequency": "1s"}}'`,
 		)
 	})
+}
+
+// TestBuildAzureKafkaConfig verifies that buildAzureKafkaConfig correctly
+// parses the parameter and constructs kafka dial config correctly for azure
+// data streaming.
+func TestBuildAzureKafkaConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name   string
+		oldUri string
+		newUri string
+	}{
+		{
+			name:   "test basic key/password",
+			oldUri: "kafka://wenyieventhubs.servicebus.windows.net:9093?tls_enabled=true&sasl_enabled=true&sasl_user=$ConnectionString&sasl_password=Endpoint%3Dsb%3A%2F%2Fwenyieventhubs.servicebus.windows.net%2F%3BSharedAccessKeyName%3Dsaspolicytpcc%3BSharedAccessKey%3D123&sasl_mechanism=PLAIN",
+			newUri: "azure-event-hub://wenyieventhubs.servicebus.windows.net:9093?shared_access_key_name=saspolicytpcc&shared_access_key=123&sasl_mechanism=PLAIN",
+		},
+		{
+			name:   "test more complex key/password",
+			oldUri: "kafka://wenyieventhubs.servicebus.windows.net:9093?tls_enabled=true&sasl_enabled=true&sasl_user=$ConnectionString&sasl_password=Endpoint%3Dsb%3A%2F%2Fwenyieventhubs.servicebus.windows.net%2F%3BSharedAccessKeyName%3DRootManageSharedAccessKey%3BSharedAccessKey%3DBPkhDFhzc9v9z9grIx73en31n3tpIj%2BAEhBHykhg&sasl_mechanism=PLAIN",
+			newUri: "azure-event-hub://wenyieventhubs.servicebus.windows.net:9093?shared_access_key_name=RootManageSharedAccessKey&shared_access_key=BPkhDFhzc9v9z9grIx73en31n3tpIj%2BAEhBHykhg",
+		},
+		{
+			name:   "test more complex key/password",
+			oldUri: "kafka://wenyieventhubs.servicebus.windows.net:9093?tls_enabled=true&sasl_enabled=true&sasl_user=$ConnectionString&sasl_password=Endpoint%3Dsb%3A%2F%2Fwenyieventhubs.servicebus.windows.net%2F%3BSharedAccessKeyName%3Dsaspolicyhistory%3BSharedAccessKey%3D7LDWg1Cv5wiNsXXDqXFQG77LldyV97Pdq%2BAEhE2eJyE%3D&sasl_mechanism=PLAIN",
+			newUri: "azure-event-hub://wenyieventhubs.servicebus.windows.net:9093?shared_access_key_name=saspolicyhistory&shared_access_key=7LDWg1Cv5wiNsXXDqXFQG77LldyV97Pdq%2BAEhE2eJyE%3D",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			oldUri, err := url.Parse(tc.oldUri)
+			require.NoError(t, err)
+			newUri, err := url.Parse(tc.newUri)
+			require.NoError(t, err)
+			// oldUri uses kafka:// (buildDefaultKafkaConfig), and newUri uses
+			// azure-event-hub:// (buildAzureKafkaConfig).
+			expectedConfig, expectedError := buildDialConfig(sinkURL{URL: oldUri})
+			actualConfig, actualError := buildDialConfig(sinkURL{URL: newUri})
+			require.Equal(t, expectedError, actualError)
+			require.Equal(t, expectedConfig, actualConfig)
+		})
+	}
 }
