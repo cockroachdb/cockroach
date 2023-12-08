@@ -13,7 +13,6 @@ import (
 	"context"
 	"math"
 	"sort"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -33,21 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-)
-
-var replanRestoreThreshold = settings.RegisterFloatSetting(
-	settings.ApplicationLevel,
-	"bulkio.restore.replan_flow_threshold",
-	"fraction of initial flow instances that would be added or updated above which a RESTORE execution plan is restarted from the last checkpoint (0=disabled)",
-	0.0,
-)
-
-var replanRestoreFrequency = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"bulkio.restore.replan_flow_frequency",
-	"frequency at which RESTORE checks to see if restarting would change its updates its physical execution plan",
-	time.Minute*2,
-	settings.PositiveDuration,
 )
 
 var memoryMonitorSSTs = settings.RegisterBoolSetting(
