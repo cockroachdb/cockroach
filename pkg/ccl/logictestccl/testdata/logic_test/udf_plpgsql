@@ -331,7 +331,7 @@ SELECT f(1, 5), f(-5, 5), f(0, 1)
 ----
 10  10  0
 
-# TODO(drewk): add back the dijkstra test once UDFs calling other UDFs is
+# TODO(#88198): add back the dijkstra test once UDFs calling other UDFs is
 # allowed.
 
 # --------------------------------------------------
@@ -2530,7 +2530,6 @@ SELECT f();
 ----
 a
 
-# TODO(drewk): postgres doesn't truncate the values.
 # string -> char succeeds even though the string is too long.
 statement ok
 DROP FUNCTION f();
