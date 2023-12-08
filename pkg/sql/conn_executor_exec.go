@@ -1827,7 +1827,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			// un-pausable (normal) portal.
 			// With pauseInfo is nil, no cleanup function will be added to the stack
 			// and all clean-up steps will be performed as for normal portals.
-			// TODO(harding): We may need to move resetting pauseInfo before we add
+			// TODO(#115887): We may need to move resetting pauseInfo before we add
 			// the pausable portal cleanup step above.
 			planner.pausablePortal.pauseInfo = nil
 			// We need this so that the result consumption for this portal cannot be
