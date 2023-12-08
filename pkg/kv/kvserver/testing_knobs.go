@@ -312,6 +312,11 @@ type StoreTestingKnobs struct {
 	// EnableUnconditionalRefreshesInRaftReady will always set the refresh reason
 	// in handleRaftReady to refreshReasonNewLeaderOrConfigChange.
 	EnableUnconditionalRefreshesInRaftReady bool
+	// DisableSyncLogWriteToss forces raft log appends to always be asynchronous
+	// when possible, if configured so by the cluster settings. If false, some
+	// asynchronous log writes can be randomly made synchronous in tests. Should
+	// be set to true by tests that require or test asynchronous log writes.
+	DisableSyncLogWriteToss bool
 
 	// SendSnapshot is run after receiving a DelegateRaftSnapshot request but
 	// before any throttling or sending logic.
