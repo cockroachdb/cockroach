@@ -32,10 +32,10 @@ func registerRustPostgres(r registry.Registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 
-		// Most other ORM tests use an in-memory cluster. However, for this test, we
-		// need to restart the cluster with a different port, so we need disk
-		// storage.
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
+		// We hardcode port 5433 since that's the port rust-postgres expects.
+		startOpts := option.DefaultStartOptsInMemory()
+		startOpts.RoachprodOpts.SQLPort = 5433
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 		db := c.Conn(ctx, t.L(), 1)
 		_, err := db.Exec("create user postgres with createdb createlogin createrole cancelquery")
 		if err != nil {
@@ -125,16 +125,6 @@ func registerRustPostgres(r registry.Registry) {
 		}
 		t.L().Printf("%s", status)
 
-		// We stop the cluster and restart with a port of 5433 since Rust postgres
-		// has all of it's test hardcoded to use that port.
-		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
-
-		// Don't restart the cluster with automatic scheduled backups because roachprod's internal sql
-		// interface, through which the scheduled backup executes, is naive to the port change.
-		startOpts := option.DefaultStartOptsNoBackups()
-		startOpts.RoachprodOpts.ExtraArgs = []string{"--port=5433"}
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
-
 		t.Status("Running rust-postgres test suite")
 
 		result, err := c.RunWithDetailsSingleNode(
@@ -164,11 +154,6 @@ func registerRustPostgres(r registry.Registry) {
 		results.summarizeAll(
 			t, "rust-postgres" /* ormName */, blocklistName, expectedFailures, version, "",
 		)
-
-		// We restart the cluster with the default port again so that any post-test
-		// validation will be able to connect using the default port.
-		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.All())
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 	}
 
 	r.Add(registry.TestSpec{
