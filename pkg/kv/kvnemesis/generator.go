@@ -460,18 +460,32 @@ func NewDefaultConfig() GeneratorConfig {
 	// avoid mixing skip locked and non-skip locked requests, we disable these ops
 	// in the batchOpConfig.
 	// TODO(nvanbenschoten): support multi-operation SkipLocked batches.
-	config.Ops.Batch.Ops.GetMissingSkipLocked = 0
-	config.Ops.Batch.Ops.GetMissingForUpdateSkipLocked = 0
-	config.Ops.Batch.Ops.GetMissingForShareSkipLocked = 0
-	config.Ops.Batch.Ops.GetExistingSkipLocked = 0
-	config.Ops.Batch.Ops.GetExistingForUpdateSkipLocked = 0
-	config.Ops.Batch.Ops.GetExistingForShareSkipLocked = 0
-	config.Ops.Batch.Ops.ScanSkipLocked = 0
-	config.Ops.Batch.Ops.ScanForUpdateSkipLocked = 0
-	config.Ops.Batch.Ops.ScanForShareSkipLocked = 0
-	config.Ops.Batch.Ops.ReverseScanSkipLocked = 0
-	config.Ops.Batch.Ops.ReverseScanForUpdateSkipLocked = 0
-	config.Ops.Batch.Ops.ReverseScanForShareSkipLocked = 0
+	for _, batchOps := range []*ClientOperationConfig{
+		&config.Ops.Batch.Ops,
+		&config.Ops.ClosureTxn.TxnBatchOps.Ops,
+		&config.Ops.ClosureTxn.CommitBatchOps,
+	} {
+		batchOps.GetMissingSkipLocked = 0
+		batchOps.GetMissingForUpdateSkipLocked = 0
+		batchOps.GetMissingForUpdateSkipLockedGuaranteedDurability = 0
+		batchOps.GetMissingForShareSkipLocked = 0
+		batchOps.GetMissingForShareSkipLockedGuaranteedDurability = 0
+		batchOps.GetExistingSkipLocked = 0
+		batchOps.GetExistingForUpdateSkipLocked = 0
+		batchOps.GetExistingForUpdateSkipLockedGuaranteedDurability = 0
+		batchOps.GetExistingForShareSkipLocked = 0
+		batchOps.GetExistingForShareSkipLockedGuaranteedDurability = 0
+		batchOps.ScanSkipLocked = 0
+		batchOps.ScanForUpdateSkipLocked = 0
+		batchOps.ScanForUpdateSkipLockedGuaranteedDurability = 0
+		batchOps.ScanForShareSkipLocked = 0
+		batchOps.ScanForShareSkipLockedGuaranteedDurability = 0
+		batchOps.ReverseScanSkipLocked = 0
+		batchOps.ReverseScanForUpdateSkipLocked = 0
+		batchOps.ReverseScanForUpdateSkipLockedGuaranteedDurability = 0
+		batchOps.ReverseScanForShareSkipLocked = 0
+		batchOps.ReverseScanForShareSkipLockedGuaranteedDurability = 0
+	}
 	// AddSSTable cannot be used in transactions, nor in batches.
 	config.Ops.Batch.Ops.AddSSTable = 0
 	config.Ops.ClosureTxn.CommitBatchOps.AddSSTable = 0
