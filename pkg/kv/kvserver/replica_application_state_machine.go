@@ -249,6 +249,19 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		}
 		cmd.proposal.applied = true
 	}
+
+	if f := sm.r.store.TestingKnobs().TestingPostApplySideEffectsFilter; f != nil {
+		// NB: ReplicatedEvalResult is emptied by now, so don't include it.
+		if _, pErr := f(kvserverbase.ApplyFilterArgs{
+			CmdID:       cmd.ID,
+			StoreID:     sm.r.store.StoreID(),
+			RangeID:     sm.r.RangeID,
+			ForcedError: cmd.ForcedError,
+		}); pErr != nil {
+			return nil, pErr.GoError()
+		}
+	}
+
 	return cmd, nil
 }
 
