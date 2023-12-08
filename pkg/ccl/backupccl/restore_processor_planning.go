@@ -279,18 +279,8 @@ func distRestore(
 		return errors.Wrap(err, "making distSQL plan")
 	}
 
-	replanner, stopReplanner := sql.PhysicalPlanChangeChecker(ctx,
-		p,
-		makePlan,
-		execCtx,
-		sql.ReplanOnChangedFraction(func() float64 { return replanRestoreThreshold.Get(execCtx.ExecCfg().SV()) }),
-		func() time.Duration { return replanRestoreFrequency.Get(execCtx.ExecCfg().SV()) },
-	)
-
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		defer stopReplanner()
-
 		metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 			if meta.BulkProcessorProgress != nil {
 				// Send the progress up a level to be written to the manifest.
@@ -324,8 +314,6 @@ func distRestore(
 		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return errors.Wrap(rowResultWriter.Err(), "running distSQL flow")
 	})
-
-	g.GoCtx(replanner)
 
 	return g.Wait()
 }
