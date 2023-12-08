@@ -1328,7 +1328,6 @@ var builtinOidsArray = []string{
 	1351: `crdb_internal.unsafe_delete_namespace_entry(parent_id: int, parent_schema_id: int, name: string, desc_id: int) -> bool`,
 	1352: `crdb_internal.unsafe_delete_namespace_entry(parent_id: int, parent_schema_id: int, name: string, desc_id: int, force: bool) -> bool`,
 	1353: `crdb_internal.sql_liveness_is_alive(session_id: bytes) -> bool`,
-	1354: `crdb_internal.gc_tenant(id: int) -> int`,
 	1355: `crdb_internal.update_tenant_resource_limits(tenant_id: int, available_request_units: float, refill_rate: float, max_burst_request_units: float, as_of: timestamp, as_of_consumed_request_units: float) -> int`,
 	1356: `crdb_internal.compact_engine_span(node_id: int, store_id: int, start_key: bytes, end_key: bytes) -> bool`,
 	1357: `crdb_internal.increment_feature_counter(feature: string) -> bool`,

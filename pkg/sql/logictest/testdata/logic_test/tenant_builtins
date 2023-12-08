@@ -112,11 +112,6 @@ id  active  name
 10  true    tenant-number-ten
 11  true    tenant-number-eleven
 
-# Garbage collect a non-drop tenant fails.
-
-query error tenant 5 is not in data state DROP
-SELECT crdb_internal.gc_tenant(5)
-
 # Note this just marks the tenant as dropped but does not call GC.
 
 statement ok
@@ -272,9 +267,6 @@ SELECT crdb_internal.create_tenant('not-allowed')
 
 statement error user testuser does not have MANAGEVIRTUALCLUSTER system privilege
 DROP TENANT [1]
-
-statement error crdb_internal.gc_tenant\(\): user testuser does not have REPAIRCLUSTERMETADATA system privilege
-SELECT crdb_internal.gc_tenant(314)
 
 user root
 

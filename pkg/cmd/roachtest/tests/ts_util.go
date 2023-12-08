@@ -48,9 +48,9 @@ type tsQuery struct {
 }
 
 func mustGetMetrics(
-	t test.Test, adminURL string, start, end time.Time, tsQueries []tsQuery,
+	ctx context.Context, t test.Test, adminURL string, start, end time.Time, tsQueries []tsQuery,
 ) tspb.TimeSeriesQueryResponse {
-	response, err := getMetrics(adminURL, start, end, tsQueries)
+	response, err := getMetrics(ctx, adminURL, start, end, tsQueries)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,13 +58,17 @@ func mustGetMetrics(
 }
 
 func getMetrics(
-	adminURL string, start, end time.Time, tsQueries []tsQuery,
+	ctx context.Context, adminURL string, start, end time.Time, tsQueries []tsQuery,
 ) (tspb.TimeSeriesQueryResponse, error) {
-	return getMetricsWithSamplePeriod(adminURL, start, end, defaultSamplePeriod, tsQueries)
+	return getMetricsWithSamplePeriod(ctx, adminURL, start, end, defaultSamplePeriod, tsQueries)
 }
 
 func getMetricsWithSamplePeriod(
-	adminURL string, start, end time.Time, samplePeriod time.Duration, tsQueries []tsQuery,
+	ctx context.Context,
+	adminURL string,
+	start, end time.Time,
+	samplePeriod time.Duration,
+	tsQueries []tsQuery,
 ) (tspb.TimeSeriesQueryResponse, error) {
 	url := "http://" + adminURL + "/ts/query"
 	queries := make([]tspb.Query, len(tsQueries))
@@ -99,7 +103,7 @@ func getMetricsWithSamplePeriod(
 		Queries:     queries,
 	}
 	var response tspb.TimeSeriesQueryResponse
-	err := httputil.PostJSON(http.Client{Timeout: 500 * time.Millisecond}, url, &request, &response)
+	err := httputil.PostProtobuf(ctx, http.Client{Timeout: 500 * time.Millisecond}, url, &request, &response)
 	return response, err
 
 }
@@ -118,7 +122,7 @@ func verifyTxnPerSecond(
 		t.Fatal(err)
 	}
 	adminURL := adminUIAddrs[0]
-	response := mustGetMetrics(t, adminURL, start, end, []tsQuery{
+	response := mustGetMetrics(ctx, t, adminURL, start, end, []tsQuery{
 		{name: "cr.node.txn.commits", queryType: rate},
 		{name: "cr.node.txn.commits", queryType: total},
 	})
@@ -169,7 +173,7 @@ func verifyLookupsPerSec(
 		t.Fatal(err)
 	}
 	adminURL := adminUIAddrs[0]
-	response := mustGetMetrics(t, adminURL, start, end, []tsQuery{
+	response := mustGetMetrics(ctx, t, adminURL, start, end, []tsQuery{
 		{name: "cr.node.distsender.rangelookups", queryType: rate},
 	})
 
