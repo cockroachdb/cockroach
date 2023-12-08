@@ -29,3 +29,7 @@ export const selectHasViewActivityRedactedRole = createSelector(
 export const selectHasAdminRole = createSelector(selectUIConfig, uiConfig =>
   uiConfig?.userSQLRoles.includes("ADMIN"),
 );
+
+export const selectUseObsService = createSelector(selectUIConfig, uiConfig => {
+  return uiConfig?.useObsService;
+});

@@ -50,8 +50,7 @@ import { TimeScale } from "../../timeScaleDropdown";
 import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
 import { actions as analyticsActions } from "../../store/analytics";
-import { selectIsTenant } from "../../store/uiConfig";
-import { selectUseObsService } from "src/store/clusterSettings/clusterSettings.selectors";
+import { selectIsTenant, selectUseObsService } from "../../store/uiConfig";
 
 const transactionMapStateToProps = (
   state: AppState,

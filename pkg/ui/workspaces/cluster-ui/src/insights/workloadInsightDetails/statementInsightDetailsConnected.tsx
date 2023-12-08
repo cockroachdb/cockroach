@@ -20,12 +20,15 @@ import {
   selectStmtInsightDetails,
   selectStmtInsightsError,
 } from "src/store/insights/statementInsights";
-import { selectHasAdminRole, selectIsTenant } from "src/store/uiConfig";
+import {
+  selectHasAdminRole,
+  selectIsTenant,
+  selectUseObsService,
+} from "src/store/uiConfig";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { selectTimeScale } from "../../store/utils/selectors";
 import { actions as analyticsActions } from "../../store/analytics";
-import { selectUseObsService } from "src/store/clusterSettings/clusterSettings.selectors";
 
 const mapStateToProps = (
   state: AppState,
