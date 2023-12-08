@@ -49,6 +49,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDeadlock(t, "possible OOM")
+	skip.UnderRace(t, "possible OOM")
 
 	// Test with 3 nodes and rowexec.SamplerProgressInterval=100 to ensure
 	// that progress metadata is sent correctly after every 100 input rows.
