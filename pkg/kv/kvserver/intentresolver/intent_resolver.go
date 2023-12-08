@@ -18,6 +18,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1025,7 +1026,9 @@ func (ir *IntentResolver) resolveIntents(
 	var singleReq [1]kvpb.Request //gcassert:noescape
 	reqs := resolveIntentReqs(intents, opts, singleReq[:])
 	h := opts.AdmissionHeader
-	if h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
+	// We skip the warning for release builds to avoid printing out verbose stack traces.
+	// TODO(aaditya): reconsider this once #112680 is resolved.
+	if !build.IsRelease() && h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
 		log.Warningf(ctx, "empty admission header provided by %s", string(debug.Stack()))
 	}
 	// Send the requests ...
