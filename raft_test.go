@@ -97,7 +97,7 @@ func TestProgressLeader(t *testing.T) {
 	r := newTestRaft(1, 5, 1, s)
 	r.becomeCandidate()
 	r.becomeLeader()
-	r.prs.Progress[2].BecomeReplicate()
+	r.trk.Progress[2].BecomeReplicate()
 
 	// Send proposals to r1. The first 5 entries should be queued in the unstable log.
 	propMsg := pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("foo")}}}
@@ -106,7 +106,7 @@ func TestProgressLeader(t *testing.T) {
 			t.Fatalf("proposal resulted in error: %v", err)
 		}
 	}
-	if m := r.prs.Progress[1].Match; m != 0 {
+	if m := r.trk.Progress[1].Match; m != 0 {
 		t.Fatalf("expected zero match, got %d", m)
 	}
 	ents := r.raftLog.nextUnstableEnts()
@@ -114,10 +114,10 @@ func TestProgressLeader(t *testing.T) {
 		t.Fatalf("unexpected entries: %v", ents)
 	}
 	r.advanceMessagesAfterAppend()
-	if m := r.prs.Progress[1].Match; m != 6 {
+	if m := r.trk.Progress[1].Match; m != 6 {
 		t.Fatalf("unexpected Match %d", m)
 	}
-	if m := r.prs.Progress[1].Next; m != 7 {
+	if m := r.trk.Progress[1].Next; m != 7 {
 		t.Fatalf("unexpected Next %d", m)
 	}
 }
@@ -128,21 +128,21 @@ func TestProgressResumeByHeartbeatResp(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 
-	r.prs.Progress[2].MsgAppFlowPaused = true
+	r.trk.Progress[2].MsgAppFlowPaused = true
 
 	r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
-	if !r.prs.Progress[2].MsgAppFlowPaused {
-		t.Errorf("paused = %v, want true", r.prs.Progress[2].MsgAppFlowPaused)
+	if !r.trk.Progress[2].MsgAppFlowPaused {
+		t.Errorf("paused = %v, want true", r.trk.Progress[2].MsgAppFlowPaused)
 	}
 
-	r.prs.Progress[2].BecomeReplicate()
-	if r.prs.Progress[2].MsgAppFlowPaused {
-		t.Errorf("paused = %v, want false", r.prs.Progress[2].MsgAppFlowPaused)
+	r.trk.Progress[2].BecomeReplicate()
+	if r.trk.Progress[2].MsgAppFlowPaused {
+		t.Errorf("paused = %v, want false", r.trk.Progress[2].MsgAppFlowPaused)
 	}
-	r.prs.Progress[2].MsgAppFlowPaused = true
+	r.trk.Progress[2].MsgAppFlowPaused = true
 	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgHeartbeatResp})
-	if r.prs.Progress[2].MsgAppFlowPaused {
-		t.Errorf("paused = %v, want false", r.prs.Progress[2].MsgAppFlowPaused)
+	if r.trk.Progress[2].MsgAppFlowPaused {
+		t.Errorf("paused = %v, want false", r.trk.Progress[2].MsgAppFlowPaused)
 	}
 }
 
@@ -173,7 +173,7 @@ func TestProgressFlowControl(t *testing.T) {
 	r.readMessages()
 
 	// While node 2 is in probe state, propose a bunch of entries.
-	r.prs.Progress[2].BecomeProbe()
+	r.trk.Progress[2].BecomeProbe()
 	blob := []byte(strings.Repeat("a", 1000))
 	large := []byte(strings.Repeat("b", 5000))
 	for i := 0; i < 22; i++ {
@@ -260,8 +260,8 @@ func TestUncommittedEntryLimit(t *testing.T) {
 
 	// Set the two followers to the replicate state. Commit to tail of log.
 	const numFollowers = 2
-	r.prs.Progress[2].BecomeReplicate()
-	r.prs.Progress[3].BecomeReplicate()
+	r.trk.Progress[2].BecomeReplicate()
+	r.trk.Progress[3].BecomeReplicate()
 	r.uncommittedSize = 0
 
 	// Send proposals to r1. The first 5 entries should be appended to the log.
@@ -759,7 +759,7 @@ func TestLearnerLogReplication(t *testing.T) {
 		t.Errorf("peer 2 wants committed to %d, but still %d", n1.raftLog.committed, n2.raftLog.committed)
 	}
 
-	match := n1.prs.Progress[2].Match
+	match := n1.trk.Progress[2].Match
 	if match != n2.raftLog.committed {
 		t.Errorf("progress 2 of leader 1 wants match %d, but got %d", n2.raftLog.committed, match)
 	}
@@ -1214,7 +1214,7 @@ func TestCommit(t *testing.T) {
 			if id > 1 {
 				sm.applyConfChange(pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: id}.AsV2())
 			}
-			pr := sm.prs.Progress[id]
+			pr := sm.trk.Progress[id]
 			pr.Match, pr.Next = tt.matches[j], tt.matches[j]+1
 		}
 		sm.maybeCommit()
@@ -1831,7 +1831,7 @@ func testCandidateSelfVoteAfterLostElection(t *testing.T, preVote bool) {
 	}
 
 	// Its self-vote does not make its way to its ProgressTracker.
-	granted, _, _ := sm.prs.TallyVotes()
+	granted, _, _ := sm.trk.TallyVotes()
 	if granted != 0 {
 		t.Errorf("granted = %v, want %v", granted, 0)
 	}
@@ -1866,7 +1866,7 @@ func TestCandidateDeliversPreCandidateSelfVoteAfterBecomingCandidate(t *testing.
 	steps = sm.takeMessagesAfterAppend()
 
 	// Its pre-vote self-vote does not make its way to its ProgressTracker.
-	granted, _, _ := sm.prs.TallyVotes()
+	granted, _, _ := sm.trk.TallyVotes()
 	if granted != 0 {
 		t.Errorf("granted = %v, want %v", granted, 0)
 	}
@@ -2635,7 +2635,7 @@ func TestLeaderAppResp(t *testing.T) {
 				},
 			))
 
-			p := sm.prs.Progress[2]
+			p := sm.trk.Progress[2]
 			require.EqualValues(t, tt.wmatch, p.Match)
 			require.EqualValues(t, tt.wnext, p.Next)
 
@@ -2681,9 +2681,9 @@ func TestBcastBeat(t *testing.T) {
 	sm.advanceMessagesAfterAppend()
 
 	// slow follower
-	sm.prs.Progress[2].Match, sm.prs.Progress[2].Next = 5, 6
+	sm.trk.Progress[2].Match, sm.trk.Progress[2].Next = 5, 6
 	// normal follower
-	sm.prs.Progress[3].Match, sm.prs.Progress[3].Next = sm.raftLog.lastIndex(), sm.raftLog.lastIndex()+1
+	sm.trk.Progress[3].Match, sm.trk.Progress[3].Next = sm.raftLog.lastIndex(), sm.raftLog.lastIndex()+1
 
 	sm.Step(pb.Message{Type: pb.MsgBeat})
 	msgs := sm.readMessages()
@@ -2691,8 +2691,8 @@ func TestBcastBeat(t *testing.T) {
 		t.Fatalf("len(msgs) = %v, want 2", len(msgs))
 	}
 	wantCommitMap := map[uint64]uint64{
-		2: min(sm.raftLog.committed, sm.prs.Progress[2].Match),
-		3: min(sm.raftLog.committed, sm.prs.Progress[3].Match),
+		2: min(sm.raftLog.committed, sm.trk.Progress[2].Match),
+		3: min(sm.raftLog.committed, sm.trk.Progress[3].Match),
 	}
 	for i, m := range msgs {
 		if m.Type != pb.MsgHeartbeat {
@@ -2778,11 +2778,11 @@ func TestLeaderIncreaseNext(t *testing.T) {
 		sm.raftLog.append(previousEnts...)
 		sm.becomeCandidate()
 		sm.becomeLeader()
-		sm.prs.Progress[2].State = tt.state
-		sm.prs.Progress[2].Next = tt.next
+		sm.trk.Progress[2].State = tt.state
+		sm.trk.Progress[2].Next = tt.next
 		sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 
-		p := sm.prs.Progress[2]
+		p := sm.trk.Progress[2]
 		if p.Next != tt.wnext {
 			t.Errorf("#%d next = %d, want %d", i, p.Next, tt.wnext)
 		}
@@ -2794,7 +2794,7 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 	r.readMessages()
-	r.prs.Progress[2].BecomeProbe()
+	r.trk.Progress[2].BecomeProbe()
 
 	// each round is a heartbeat
 	for i := 0; i < 3; i++ {
@@ -2813,8 +2813,8 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 			}
 		}
 
-		if !r.prs.Progress[2].MsgAppFlowPaused {
-			t.Errorf("paused = %v, want true", r.prs.Progress[2].MsgAppFlowPaused)
+		if !r.trk.Progress[2].MsgAppFlowPaused {
+			t.Errorf("paused = %v, want true", r.trk.Progress[2].MsgAppFlowPaused)
 		}
 		for j := 0; j < 10; j++ {
 			mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
@@ -2828,8 +2828,8 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 		for j := 0; j < r.heartbeatTimeout; j++ {
 			r.Step(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
 		}
-		if !r.prs.Progress[2].MsgAppFlowPaused {
-			t.Errorf("paused = %v, want true", r.prs.Progress[2].MsgAppFlowPaused)
+		if !r.trk.Progress[2].MsgAppFlowPaused {
+			t.Errorf("paused = %v, want true", r.trk.Progress[2].MsgAppFlowPaused)
 		}
 
 		// consume the heartbeat
@@ -2851,8 +2851,8 @@ func TestSendAppendForProgressProbe(t *testing.T) {
 	if msg[0].Index != 0 {
 		t.Errorf("index = %d, want %d", msg[0].Index, 0)
 	}
-	if !r.prs.Progress[2].MsgAppFlowPaused {
-		t.Errorf("paused = %v, want true", r.prs.Progress[2].MsgAppFlowPaused)
+	if !r.trk.Progress[2].MsgAppFlowPaused {
+		t.Errorf("paused = %v, want true", r.trk.Progress[2].MsgAppFlowPaused)
 	}
 }
 
@@ -2861,7 +2861,7 @@ func TestSendAppendForProgressReplicate(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 	r.readMessages()
-	r.prs.Progress[2].BecomeReplicate()
+	r.trk.Progress[2].BecomeReplicate()
 
 	for i := 0; i < 10; i++ {
 		mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
@@ -2878,7 +2878,7 @@ func TestSendAppendForProgressSnapshot(t *testing.T) {
 	r.becomeCandidate()
 	r.becomeLeader()
 	r.readMessages()
-	r.prs.Progress[2].BecomeSnapshot(10)
+	r.trk.Progress[2].BecomeSnapshot(10)
 
 	for i := 0; i < 10; i++ {
 		mustAppendEntry(r, pb.Entry{Data: []byte("somedata")})
@@ -2899,17 +2899,17 @@ func TestRecvMsgUnreachable(t *testing.T) {
 	r.becomeLeader()
 	r.readMessages()
 	// set node 2 to state replicate
-	r.prs.Progress[2].Match = 3
-	r.prs.Progress[2].BecomeReplicate()
-	r.prs.Progress[2].OptimisticUpdate(5)
+	r.trk.Progress[2].Match = 3
+	r.trk.Progress[2].BecomeReplicate()
+	r.trk.Progress[2].OptimisticUpdate(5)
 
 	r.Step(pb.Message{From: 2, To: 1, Type: pb.MsgUnreachable})
 
-	if r.prs.Progress[2].State != tracker.StateProbe {
-		t.Errorf("state = %s, want %s", r.prs.Progress[2].State, tracker.StateProbe)
+	if r.trk.Progress[2].State != tracker.StateProbe {
+		t.Errorf("state = %s, want %s", r.trk.Progress[2].State, tracker.StateProbe)
 	}
-	if wnext := r.prs.Progress[2].Match + 1; r.prs.Progress[2].Next != wnext {
-		t.Errorf("next = %d, want %d", r.prs.Progress[2].Next, wnext)
+	if wnext := r.trk.Progress[2].Match + 1; r.trk.Progress[2].Next != wnext {
+		t.Errorf("next = %d, want %d", r.trk.Progress[2].Next, wnext)
 	}
 }
 
@@ -2934,7 +2934,7 @@ func TestRestore(t *testing.T) {
 	if mustTerm(sm.raftLog.term(s.Metadata.Index)) != s.Metadata.Term {
 		t.Errorf("log.lastTerm = %d, want %d", mustTerm(sm.raftLog.term(s.Metadata.Index)), s.Metadata.Term)
 	}
-	sg := sm.prs.VoterNodes()
+	sg := sm.trk.VoterNodes()
 	if !reflect.DeepEqual(sg, s.Metadata.ConfState.Voters) {
 		t.Errorf("sm.Voters = %+v, want %+v", sg, s.Metadata.ConfState.Voters)
 	}
@@ -2973,22 +2973,22 @@ func TestRestoreWithLearner(t *testing.T) {
 	if mustTerm(sm.raftLog.term(s.Metadata.Index)) != s.Metadata.Term {
 		t.Errorf("log.lastTerm = %d, want %d", mustTerm(sm.raftLog.term(s.Metadata.Index)), s.Metadata.Term)
 	}
-	sg := sm.prs.VoterNodes()
+	sg := sm.trk.VoterNodes()
 	if len(sg) != len(s.Metadata.ConfState.Voters) {
 		t.Errorf("sm.Voters = %+v, length not equal with %+v", sg, s.Metadata.ConfState.Voters)
 	}
-	lns := sm.prs.LearnerNodes()
+	lns := sm.trk.LearnerNodes()
 	if len(lns) != len(s.Metadata.ConfState.Learners) {
 		t.Errorf("sm.LearnerNodes = %+v, length not equal with %+v", sg, s.Metadata.ConfState.Learners)
 	}
 	for _, n := range s.Metadata.ConfState.Voters {
-		if sm.prs.Progress[n].IsLearner {
-			t.Errorf("sm.Node %x isLearner = %s, want %t", n, sm.prs.Progress[n], false)
+		if sm.trk.Progress[n].IsLearner {
+			t.Errorf("sm.Node %x isLearner = %s, want %t", n, sm.trk.Progress[n], false)
 		}
 	}
 	for _, n := range s.Metadata.ConfState.Learners {
-		if !sm.prs.Progress[n].IsLearner {
-			t.Errorf("sm.Node %x isLearner = %s, want %t", n, sm.prs.Progress[n], true)
+		if !sm.trk.Progress[n].IsLearner {
+			t.Errorf("sm.Node %x isLearner = %s, want %t", n, sm.trk.Progress[n], true)
 		}
 	}
 
@@ -3019,7 +3019,7 @@ func TestRestoreWithVotersOutgoing(t *testing.T) {
 	if mustTerm(sm.raftLog.term(s.Metadata.Index)) != s.Metadata.Term {
 		t.Errorf("log.lastTerm = %d, want %d", mustTerm(sm.raftLog.term(s.Metadata.Index)), s.Metadata.Term)
 	}
-	sg := sm.prs.VoterNodes()
+	sg := sm.trk.VoterNodes()
 	if !reflect.DeepEqual(sg, []uint64{1, 2, 3, 4}) {
 		t.Errorf("sm.Voters = %+v, want %+v", sg, s.Metadata.ConfState.Voters)
 	}
@@ -3176,8 +3176,8 @@ func TestProvideSnap(t *testing.T) {
 	sm.becomeLeader()
 
 	// force set the next of node 2, so that node 2 needs a snapshot
-	sm.prs.Progress[2].Next = sm.raftLog.firstIndex()
-	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: sm.prs.Progress[2].Next - 1, Reject: true})
+	sm.trk.Progress[2].Next = sm.raftLog.firstIndex()
+	sm.Step(pb.Message{From: 2, To: 1, Type: pb.MsgAppResp, Index: sm.trk.Progress[2].Next - 1, Reject: true})
 
 	msgs := sm.readMessages()
 	if len(msgs) != 1 {
@@ -3207,8 +3207,8 @@ func TestIgnoreProvidingSnap(t *testing.T) {
 
 	// force set the next of node 2, so that node 2 needs a snapshot
 	// change node 2 to be inactive, expect node 1 ignore sending snapshot to 2
-	sm.prs.Progress[2].Next = sm.raftLog.firstIndex() - 1
-	sm.prs.Progress[2].RecentActive = false
+	sm.trk.Progress[2].Next = sm.raftLog.firstIndex() - 1
+	sm.trk.Progress[2].RecentActive = false
 
 	sm.Step(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{Data: []byte("somedata")}}})
 
@@ -3248,7 +3248,7 @@ func TestSlowNodeRestore(t *testing.T) {
 	}
 	lead := nt.peers[1].(*raft)
 	nextEnts(lead, nt.storage[1])
-	nt.storage[1].CreateSnapshot(lead.raftLog.applied, &pb.ConfState{Voters: lead.prs.VoterNodes()}, nil)
+	nt.storage[1].CreateSnapshot(lead.raftLog.applied, &pb.ConfState{Voters: lead.trk.VoterNodes()}, nil)
 	nt.storage[1].Compact(lead.raftLog.applied)
 
 	nt.recover()
@@ -3256,7 +3256,7 @@ func TestSlowNodeRestore(t *testing.T) {
 	// node 3 will only be considered as active when node 1 receives a reply from it.
 	for {
 		nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgBeat})
-		if lead.prs.Progress[3].RecentActive {
+		if lead.trk.Progress[3].RecentActive {
 			break
 		}
 	}
@@ -3343,7 +3343,7 @@ func TestNewLeaderPendingConfig(t *testing.T) {
 func TestAddNode(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1)))
 	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddNode}.AsV2())
-	nodes := r.prs.VoterNodes()
+	nodes := r.trk.VoterNodes()
 	wnodes := []uint64{1, 2}
 	if !reflect.DeepEqual(nodes, wnodes) {
 		t.Errorf("nodes = %v, want %v", nodes, wnodes)
@@ -3358,24 +3358,24 @@ func TestAddLearner(t *testing.T) {
 	if r.isLearner {
 		t.Fatal("expected 1 to be voter")
 	}
-	nodes := r.prs.LearnerNodes()
+	nodes := r.trk.LearnerNodes()
 	wnodes := []uint64{2}
 	if !reflect.DeepEqual(nodes, wnodes) {
 		t.Errorf("nodes = %v, want %v", nodes, wnodes)
 	}
-	if !r.prs.Progress[2].IsLearner {
+	if !r.trk.Progress[2].IsLearner {
 		t.Fatal("expected 2 to be learner")
 	}
 
 	// Promote peer to voter.
 	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeAddNode}.AsV2())
-	if r.prs.Progress[2].IsLearner {
+	if r.trk.Progress[2].IsLearner {
 		t.Fatal("expected 2 to be voter")
 	}
 
 	// Demote r.
 	r.applyConfChange(pb.ConfChange{NodeID: 1, Type: pb.ConfChangeAddLearnerNode}.AsV2())
-	if !r.prs.Progress[1].IsLearner {
+	if !r.trk.Progress[1].IsLearner {
 		t.Fatal("expected 1 to be learner")
 	}
 	if !r.isLearner {
@@ -3384,7 +3384,7 @@ func TestAddLearner(t *testing.T) {
 
 	// Promote r again.
 	r.applyConfChange(pb.ConfChange{NodeID: 1, Type: pb.ConfChangeAddNode}.AsV2())
-	if r.prs.Progress[1].IsLearner {
+	if r.trk.Progress[1].IsLearner {
 		t.Fatal("expected 1 to be voter")
 	}
 	if r.isLearner {
@@ -3432,7 +3432,7 @@ func TestRemoveNode(t *testing.T) {
 	r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(1, 2)))
 	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeRemoveNode}.AsV2())
 	w := []uint64{1}
-	if g := r.prs.VoterNodes(); !reflect.DeepEqual(g, w) {
+	if g := r.trk.VoterNodes(); !reflect.DeepEqual(g, w) {
 		t.Errorf("nodes = %v, want %v", g, w)
 	}
 
@@ -3451,12 +3451,12 @@ func TestRemoveLearner(t *testing.T) {
 	r := newTestLearnerRaft(1, 10, 1, newTestMemoryStorage(withPeers(1), withLearners(2)))
 	r.applyConfChange(pb.ConfChange{NodeID: 2, Type: pb.ConfChangeRemoveNode}.AsV2())
 	w := []uint64{1}
-	if g := r.prs.VoterNodes(); !reflect.DeepEqual(g, w) {
+	if g := r.trk.VoterNodes(); !reflect.DeepEqual(g, w) {
 		t.Errorf("nodes = %v, want %v", g, w)
 	}
 
 	w = nil
-	if g := r.prs.LearnerNodes(); !reflect.DeepEqual(g, w) {
+	if g := r.trk.LearnerNodes(); !reflect.DeepEqual(g, w) {
 		t.Errorf("nodes = %v, want %v", g, w)
 	}
 
@@ -3504,8 +3504,8 @@ func TestRaftNodes(t *testing.T) {
 	}
 	for i, tt := range tests {
 		r := newTestRaft(1, 10, 1, newTestMemoryStorage(withPeers(tt.ids...)))
-		if !reflect.DeepEqual(r.prs.VoterNodes(), tt.wids) {
-			t.Errorf("#%d: nodes = %+v, want %+v", i, r.prs.VoterNodes(), tt.wids)
+		if !reflect.DeepEqual(r.trk.VoterNodes(), tt.wids) {
+			t.Errorf("#%d: nodes = %+v, want %+v", i, r.trk.VoterNodes(), tt.wids)
 		}
 	}
 }
@@ -3708,8 +3708,8 @@ func TestLeaderTransferToSlowFollower(t *testing.T) {
 
 	nt.recover()
 	lead := nt.peers[1].(*raft)
-	if lead.prs.Progress[3].Match != 1 {
-		t.Fatalf("node 1 has match %x for node 3, want %x", lead.prs.Progress[3].Match, 1)
+	if lead.trk.Progress[3].Match != 1 {
+		t.Fatalf("node 1 has match %x for node 3, want %x", lead.trk.Progress[3].Match, 1)
 	}
 
 	// Transfer leadership to 3 when node 3 is lack of log.
@@ -3727,12 +3727,12 @@ func TestLeaderTransferAfterSnapshot(t *testing.T) {
 	nt.send(pb.Message{From: 1, To: 1, Type: pb.MsgProp, Entries: []pb.Entry{{}}})
 	lead := nt.peers[1].(*raft)
 	nextEnts(lead, nt.storage[1])
-	nt.storage[1].CreateSnapshot(lead.raftLog.applied, &pb.ConfState{Voters: lead.prs.VoterNodes()}, nil)
+	nt.storage[1].CreateSnapshot(lead.raftLog.applied, &pb.ConfState{Voters: lead.trk.VoterNodes()}, nil)
 	nt.storage[1].Compact(lead.raftLog.applied)
 
 	nt.recover()
-	if lead.prs.Progress[3].Match != 1 {
-		t.Fatalf("node 1 has match %x for node 3, want %x", lead.prs.Progress[3].Match, 1)
+	if lead.trk.Progress[3].Match != 1 {
+		t.Fatalf("node 1 has match %x for node 3, want %x", lead.trk.Progress[3].Match, 1)
 	}
 
 	filtered := pb.Message{}
@@ -3836,8 +3836,8 @@ func TestLeaderTransferIgnoreProposal(t *testing.T) {
 		t.Fatalf("should return drop proposal error while transferring")
 	}
 
-	if lead.prs.Progress[1].Match != 1 {
-		t.Fatalf("node 1 has match %x, want %x", lead.prs.Progress[1].Match, 1)
+	if lead.trk.Progress[1].Match != 1 {
+		t.Fatalf("node 1 has match %x, want %x", lead.trk.Progress[1].Match, 1)
 	}
 }
 
@@ -4867,24 +4867,24 @@ func newNetworkWithConfig(configFunc func(*Config), peers ...stateMachine) *netw
 			npeers[id] = sm
 		case *raft:
 			// TODO(tbg): this is all pretty confused. Clean this up.
-			learners := make(map[uint64]bool, len(v.prs.Learners))
-			for i := range v.prs.Learners {
+			learners := make(map[uint64]bool, len(v.trk.Learners))
+			for i := range v.trk.Learners {
 				learners[i] = true
 			}
 			v.id = id
-			v.prs = tracker.MakeProgressTracker(v.prs.MaxInflight, v.prs.MaxInflightBytes)
+			v.trk = tracker.MakeProgressTracker(v.trk.MaxInflight, v.trk.MaxInflightBytes)
 			if len(learners) > 0 {
-				v.prs.Learners = map[uint64]struct{}{}
+				v.trk.Learners = map[uint64]struct{}{}
 			}
 			for i := 0; i < size; i++ {
 				pr := &tracker.Progress{}
 				if _, ok := learners[peerAddrs[i]]; ok {
 					pr.IsLearner = true
-					v.prs.Learners[peerAddrs[i]] = struct{}{}
+					v.trk.Learners[peerAddrs[i]] = struct{}{}
 				} else {
-					v.prs.Voters[0][peerAddrs[i]] = struct{}{}
+					v.trk.Voters[0][peerAddrs[i]] = struct{}{}
 				}
-				v.prs.Progress[peerAddrs[i]] = pr
+				v.trk.Progress[peerAddrs[i]] = pr
 			}
 			v.reset(v.Term)
 			npeers[id] = v

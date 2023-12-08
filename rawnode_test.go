@@ -883,7 +883,7 @@ func TestRawNodeStatus(t *testing.T) {
 	if status.RaftState != StateLeader {
 		t.Fatal("not leader")
 	}
-	if exp, act := *rn.raft.prs.Progress[1], status.Progress[1]; !reflect.DeepEqual(exp, act) {
+	if exp, act := *rn.raft.trk.Progress[1], status.Progress[1]; !reflect.DeepEqual(exp, act) {
 		t.Fatalf("want: %+v\ngot:  %+v", exp, act)
 	}
 	expCfg := tracker.Config{Voters: quorum.JointConfig{

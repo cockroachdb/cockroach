@@ -89,13 +89,13 @@ func TestRestore(t *testing.T) {
 			Tracker:   tracker.MakeProgressTracker(20, 0),
 			LastIndex: 10,
 		}
-		cfg, prs, err := Restore(chg, cs)
+		cfg, trk, err := Restore(chg, cs)
 		if err != nil {
 			t.Error(err)
 			return false
 		}
 		chg.Tracker.Config = cfg
-		chg.Tracker.Progress = prs
+		chg.Tracker.Progress = trk
 
 		for _, sl := range [][]uint64{
 			cs.Voters,

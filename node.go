@@ -392,13 +392,13 @@ func (n *node) run() {
 				close(pm.result)
 			}
 		case m := <-n.recvc:
-			if IsResponseMsg(m.Type) && !IsLocalMsgTarget(m.From) && r.prs.Progress[m.From] == nil {
+			if IsResponseMsg(m.Type) && !IsLocalMsgTarget(m.From) && r.trk.Progress[m.From] == nil {
 				// Filter out response message from unknown From.
 				break
 			}
 			r.Step(m)
 		case cc := <-n.confc:
-			_, okBefore := r.prs.Progress[r.id]
+			_, okBefore := r.trk.Progress[r.id]
 			cs := r.applyConfChange(cc)
 			// If the node was removed, block incoming proposals. Note that we
 			// only do this if the node was in the config before. Nodes may be
@@ -409,7 +409,7 @@ func (n *node) run() {
 			// NB: propc is reset when the leader changes, which, if we learn
 			// about it, sort of implies that we got readded, maybe? This isn't
 			// very sound and likely has bugs.
-			if _, okAfter := r.prs.Progress[r.id]; okBefore && !okAfter {
+			if _, okAfter := r.trk.Progress[r.id]; okBefore && !okAfter {
 				var found bool
 				for _, sl := range [][]uint64{cs.Voters, cs.VotersOutgoing} {
 					for _, id := range sl {
