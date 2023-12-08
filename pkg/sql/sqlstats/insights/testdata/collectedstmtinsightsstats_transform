@@ -25,7 +25,7 @@
     Contention:           &time.Duration(10000000000),
     IndexRecommendations: {"rec1", "rec2"},
     Problem:              1,
-    Causes:               {0, 1},
+    Causes:               {3, 2},
     CPUSQLNanos:          500,
     ErrorCode:            "myErrorCode",
     IdleLatSeconds:       0,

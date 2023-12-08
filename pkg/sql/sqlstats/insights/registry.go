@@ -273,15 +273,15 @@ func (s *Statement) CopyTo(
 	}
 
 	other.Causes = []obspb.StatementInsightsStatistics_Cause{}
-	for c := range s.Causes {
-		switch int32(c) {
-		case Cause_value["SuboptimalPlan"]:
+	for _, c := range s.Causes {
+		switch c {
+		case Cause_SuboptimalPlan:
 			other.Causes = append(other.Causes, obspb.StatementInsightsStatistics_SuboptimalPlan)
-		case Cause_value["HighRetryCount"]:
+		case Cause_HighRetryCount:
 			other.Causes = append(other.Causes, obspb.StatementInsightsStatistics_HighRetryCount)
-		case Cause_value["PlanRegression"]:
+		case Cause_PlanRegression:
 			other.Causes = append(other.Causes, obspb.StatementInsightsStatistics_PlanRegression)
-		case Cause_value["HighContention"]:
+		case Cause_HighContention:
 			other.Causes = append(other.Causes, obspb.StatementInsightsStatistics_HighContention)
 		default:
 			other.Causes = append(other.Causes, obspb.StatementInsightsStatistics_Unset)
