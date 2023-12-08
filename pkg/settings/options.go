@@ -86,6 +86,13 @@ var Retired SettingOption = SettingOption{commonOpt: func(c *common) {
 	c.setRetired()
 }}
 
+// Sensitive marks the setting as sensitive, which means that it will always
+// be redacted in any output. It also makes the setting non-reportable. It can
+// only be used for string settings.
+var Sensitive SettingOption = SettingOption{commonOpt: func(c *common) {
+	c.setSensitive()
+}}
+
 // WithValidateDuration adds a validation function for a duration setting.
 func WithValidateDuration(fn func(time.Duration) error) SettingOption {
 	return SettingOption{validateDurationFn: fn}
