@@ -1707,7 +1707,6 @@ SELECT f(5)
 ----
 error (0A000): unimplemented: conditional CONTINUE statements are not yet supported
 
-# TODO(drewk): consider adding a norm rules to fold nested UDFs.
 # Testing RAISE statements.
 exec-ddl
 CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
@@ -4329,7 +4328,7 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
 $$ LANGUAGE PLpgSQL;
 ----
 
-# TODO(drewk): add norm rule to fold the non-output body statements of nested
+# TODO(#115681): add norm rule to fold the non-output body statements of nested
 # routines.
 build format=show-scalars
 SELECT f();

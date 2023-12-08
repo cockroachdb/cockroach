@@ -451,7 +451,7 @@ func (node *RoutineObj) Format(ctx *FmtCtx) {
 func (node RoutineObj) ParamTypes(
 	ctx context.Context, res TypeReferenceResolver,
 ) ([]*types.T, error) {
-	// TODO(chengxiong): handle INOUT, OUT and VARIADIC argument classes when we
+	// TODO(#100405): handle INOUT, OUT and VARIADIC argument classes when we
 	// support them. This is because only IN and INOUT arg types need to be
 	// considered to match a overload.
 	var argTypes []*types.T

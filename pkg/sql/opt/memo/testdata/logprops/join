@@ -2951,9 +2951,7 @@ inner-join (hash)
            ├── variable: xyz.x:1 [type=int]
            └── variable: foo.x:6 [type=int]
 
-# Self-join filters can only be inferred even if the join key was a key in the
-# base table.
-# TODO(drewk): if the optimizer could see that the same row is being selected
+# TODO(#39054): if the optimizer could see that the same row is being selected
 # from each input, we could still infer equalities.
 norm
 SELECT * FROM xyz INNER JOIN xyz foo ON xyz.x = foo.x AND xyz.y = 1 AND foo.y = 1

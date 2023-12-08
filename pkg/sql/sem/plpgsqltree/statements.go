@@ -33,14 +33,14 @@ type TaggedStatement interface {
 }
 
 type StatementImpl struct {
-	// TODO(Chengxiong): figure out how to get line number from scanner.
+	// TODO(drewk): figure out how to get line number from scanner.
 	LineNo int
 	/*
 	 * Unique statement ID in this function (starting at 1; 0 is invalid/not
 	 * set).  This can be used by a profiler as the index for an array of
 	 * per-statement metrics.
 	 */
-	// TODO(Chengxiong): figure out how to get statement id from parser.
+	// TODO(drewk): figure out how to get statement id from parser.
 	StmtID uint
 }
 
@@ -471,7 +471,7 @@ func (s *ForSelect) WalkStmt(visitor StatementVisitor) {
 
 type ForCursor struct {
 	ForQuery
-	CurVar   int // TODO(drewk): is this CursorVariable?
+	CurVar   int
 	ArgQuery Expr
 }
 
@@ -857,7 +857,7 @@ func (s *GetDiagnostics) Format(ctx *tree.FmtCtx) {
 
 type GetDiagnosticsItem struct {
 	Kind GetDiagnosticsKind
-	// TODO(jane): TargetName is temporary -- should be removed and use Target.
+	// TODO(drewk): TargetName is temporary -- should be removed and use Target.
 	TargetName string
 	Target     int // where to assign it?
 }
