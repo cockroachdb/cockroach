@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	// Needed for roachpb.Span.String().
 	_ "github.com/cockroachdb/cockroach/pkg/keys"
@@ -167,7 +168,7 @@ type btreeFrontier struct {
 	// disallowMutationWhileIterating is set when iterating
 	// over frontier entries.  Attempts to mutate this frontier
 	// will panic under the test or return an error.
-	disallowMutationWhileIterating bool
+	disallowMutationWhileIterating atomic.Bool
 }
 
 // btreeFrontierEntry represents a timestamped span. It is used as the nodes in both
@@ -555,9 +556,9 @@ func (f *btreeFrontier) forward(span roachpb.Span, insertTS hlc.Timestamp) error
 }
 
 func (f *btreeFrontier) disallowMutations() func() {
-	f.disallowMutationWhileIterating = true
+	f.disallowMutationWhileIterating.Store(true)
 	return func() {
-		f.disallowMutationWhileIterating = false
+		f.disallowMutationWhileIterating.Store(false)
 	}
 }
 
@@ -621,6 +622,8 @@ func (f *btreeFrontier) SpanEntries(span roachpb.Span, op Operation) {
 
 // String implements Stringer.
 func (f *btreeFrontier) String() string {
+	defer f.disallowMutations()()
+
 	var buf strings.Builder
 	it := f.tree.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
@@ -793,7 +796,7 @@ func (f *btreeFrontier) checkUnsafeKeyModification() error {
 }
 
 func (f *btreeFrontier) checkDisallowedMutation() error {
-	if f.disallowMutationWhileIterating {
+	if f.disallowMutationWhileIterating.Load() {
 		err := errors.AssertionFailedWithDepthf(1, "attempt to mutate frontier while iterating")
 		if buildutil.CrdbTestBuild {
 			panic(err)
