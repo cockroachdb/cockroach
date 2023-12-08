@@ -139,6 +139,13 @@ func (b *Builder) buildDataSource(
 		ds, depName, resName := b.resolveDataSource(tn, privilege.SELECT)
 		lockCtx.filter(tn.ObjectName)
 		if lockCtx.locking.isSet() {
+			// If this table was on the null-extended side of an outer join, we are not
+			// allowed to lock it.
+			if lockCtx.isNullExtended {
+				panic(pgerror.Newf(
+					pgcode.FeatureNotSupported, "%s cannot be applied to the nullable side of an outer join",
+					lockCtx.locking.get().Strength))
+			}
 			// SELECT ... FOR [KEY] UPDATE/SHARE also requires UPDATE privileges.
 			b.checkPrivilege(depName, ds, privilege.UPDATE)
 		}
