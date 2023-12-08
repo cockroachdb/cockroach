@@ -115,6 +115,8 @@ type LogStore struct {
 	EntryCache  *raftentry.Cache
 	Settings    *cluster.Settings
 	Metrics     Metrics
+
+	DisableSyncLogWriteToss bool // for testing only
 }
 
 // SyncCallback is a callback that is notified when a raft log write has been
@@ -247,8 +249,9 @@ func (s *LogStore) storeEntriesAndCommitBatch(
 		// optimizing for.
 		!overwriting &&
 		// Also, randomly disable non-blocking sync in test builds to exercise the
-		// interleaved blocking and non-blocking syncs.
-		!(buildutil.CrdbTestBuild && rand.Intn(2) == 0)
+		// interleaved blocking and non-blocking syncs (unless the testing knobs
+		// disable this randomization explicitly).
+		!(buildutil.CrdbTestBuild && !s.DisableSyncLogWriteToss && rand.Intn(2) == 0)
 	if nonBlockingSync {
 		// If non-blocking synchronization is enabled, apply the batched updates to
 		// the engine and initiate a synchronous disk write, but don't wait for the
