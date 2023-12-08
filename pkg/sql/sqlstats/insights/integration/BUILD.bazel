@@ -10,6 +10,8 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/settings/cluster",
+        "//pkg/sql",
+        "//pkg/sql/appstatspb",
         "//pkg/sql/sqlstats/insights",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
@@ -19,6 +21,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/timeutil",
+        "//pkg/util/uuid",
         "@com_github_stretchr_testify//require",
     ],
 )
