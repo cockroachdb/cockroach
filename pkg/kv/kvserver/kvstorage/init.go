@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -416,19 +415,6 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 
 	// INVARIANT: all replicas have a persisted full ReplicaID (i.e. a "ReplicaID from disk").
 	//
-	// This invariant is true for replicas created in 22.1. Without further action, it
-	// would be violated for clusters that originated before 22.1. In this method, we
-	// backfill the ReplicaID (for initialized replicas) and we remove uninitialized
-	// replicas lacking a ReplicaID (see below for rationale).
-	//
-	// The migration can be removed when the KV host cluster MinSupportedVersion
-	// matches or exceeds 23.1 (i.e. once we know that a store has definitely
-	// started up on >=23.1 at least once).
-
-	// Collect all the RangeIDs that either have a RaftReplicaID or HardState. For
-	// unmigrated replicas we see only the HardState - that is how we detect
-	// replicas that still need to be migrated.
-	//
 	// TODO(tbg): tighten up the case where we see a RaftReplicaID but no HardState.
 	// This leads to the general desire to validate the internal consistency of the
 	// entire raft state (i.e. HardState, TruncatedState, Log).
@@ -495,10 +481,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 	log.Infof(ctx, "loaded %d replicas", len(sl))
 
 	// Check invariants.
-	//
-	// Migrate into RaftReplicaID for all replicas that need it.
 	logEvery := log.Every(10 * time.Second)
-	var newIdx int
 	for i, repl := range sl {
 		// Log progress regularly, but not for the first replica (we only want to
 		// log when this is slow). The last replica is logged after iteration.
@@ -506,7 +489,11 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 			log.Infof(ctx, "verified %d/%d replicas", i, len(sl))
 		}
 
-		var descReplicaID roachpb.ReplicaID
+		// INVARIANT: a Replica always has a replica ID.
+		if repl.ReplicaID == 0 {
+			return nil, errors.AssertionFailedf("no RaftReplicaID for %s", repl.Desc)
+		}
+
 		if repl.Desc != nil {
 			// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
 			// i.e. a Store is a member of all of its local initialized Replicas.
@@ -514,52 +501,15 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 			if !found {
 				return nil, errors.AssertionFailedf("s%d not found in %s", ident.StoreID, repl.Desc)
 			}
-			if repl.ReplicaID != 0 && replDesc.ReplicaID != repl.ReplicaID {
+			// INVARIANT: a Replica's ID always matches the descriptor.
+			if replDesc.ReplicaID != repl.ReplicaID {
 				return nil, errors.AssertionFailedf("conflicting RaftReplicaID %d for %s", repl.ReplicaID, repl.Desc)
 			}
-			descReplicaID = replDesc.ReplicaID
-		}
-
-		if repl.ReplicaID != 0 {
-			sl[newIdx] = repl
-			newIdx++
-			// RaftReplicaID present, no need to migrate.
-			continue
-		}
-
-		// Migrate into RaftReplicaID. This migration can be removed once the
-		// MinSupportedVersion is >= 23.1, and we can assert that
-		// repl.ReplicaID != 0 always holds.
-
-		if descReplicaID != 0 {
-			// Backfill RaftReplicaID for an initialized Replica.
-			if err := logstore.NewStateLoader(repl.RangeID).SetRaftReplicaID(ctx, eng, descReplicaID); err != nil {
-				return nil, errors.Wrapf(err, "backfilling ReplicaID for r%d", repl.RangeID)
-			}
-			repl.ReplicaID = descReplicaID
-			sl[newIdx] = repl
-			newIdx++
-			log.Eventf(ctx, "backfilled replicaID for initialized replica %s", repl.ID())
-		} else {
-			// We found an uninitialized replica that did not have a persisted
-			// ReplicaID. We can't determine the ReplicaID now, so we migrate by
-			// removing this uninitialized replica. This technically violates raft
-			// invariants if this replica has cast a vote, but the conditions under
-			// which this matters are extremely unlikely.
-			//
-			// TODO(tbg): if clearRangeData were in this package we could destroy more
-			// effectively even if for some reason we had in the past written state
-			// other than the HardState here (not supposed to happen, but still).
-			if err := eng.ClearUnversioned(logstore.NewStateLoader(repl.RangeID).RaftHardStateKey(), storage.ClearOptions{}); err != nil {
-				return nil, errors.Wrapf(err, "removing HardState for r%d", repl.RangeID)
-			}
-			log.Eventf(ctx, "removed legacy uninitialized replica for r%s", repl.RangeID)
-			// NB: removed from `sl` since we're not incrementing `newIdx`.
 		}
 	}
 	log.Infof(ctx, "verified %d/%d replicas", len(sl), len(sl))
 
-	return sl[:newIdx], nil
+	return sl, nil
 }
 
 // A NotBootstrappedError indicates that an engine has not yet been
