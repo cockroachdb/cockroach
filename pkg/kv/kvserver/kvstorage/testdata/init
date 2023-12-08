@@ -1,49 +1,33 @@
-# Uninitialized deprecated replica: doesn't have a RaftReplicaID, it's just a
-# HardState. We expect this to be removed by load-and-reconcile.
-new-replica range-id=5
-----
-ok
-
 # Uninitialized replica. Expect this to stay around and be returned as such.
 new-replica range-id=6 replica-id=60
 ----
 ok
 
-# Initialized deprecated replica: no RaftReplicaID. Expect ID to be backfilled.
-new-replica range-id=7 replica-id=70 k=a ek=c skip-raft-replica-id=true
-----
-r7:{a-c} [(n1,s1):70, next=71, gen=0]
-
-# Initialized replica without a need for a backfill.
+# Initialized replica with a replica ID.
 new-replica range-id=8 replica-id=80 k=c ek=f
 ----
 r8:{c-f} [(n1,s1):80, next=81, gen=0]
 
-# Loading the replicas returns only the ones that
-# had a ReplicaID.
+# Load the replicas.
 load-and-reconcile trace=true
 ----
 r6/60: uninitialized
-r7/70: r7:{a-c} [(n1,s1):70, next=71, gen=0]
 r8/80: r8:{c-f} [(n1,s1):80, next=81, gen=0]
 beginning range descriptor iteration
-range descriptor iteration done: 2 keys, 2 range descriptors (by suffix: map[rdsc:2]); scan stats: <redacted>
-loaded replica ID for 3/3 replicas
-loaded Raft state for 4/4 replicas
-loaded 4 replicas
-removed legacy uninitialized replica for r5
-backfilled replicaID for initialized replica r7/70
-verified 4/4 replicas
+range descriptor iteration done: 1 keys, 1 range descriptors (by suffix: map[rdsc:1]); scan stats: <redacted>
+loaded replica ID for 2/2 replicas
+loaded Raft state for 2/2 replicas
+loaded 2 replicas
+verified 2/2 replicas
 
 # Idempotency.
 load-and-reconcile trace=true
 ----
 r6/60: uninitialized
-r7/70: r7:{a-c} [(n1,s1):70, next=71, gen=0]
 r8/80: r8:{c-f} [(n1,s1):80, next=81, gen=0]
 beginning range descriptor iteration
-range descriptor iteration done: 2 keys, 2 range descriptors (by suffix: map[rdsc:2]); scan stats: <redacted>
-loaded replica ID for 3/3 replicas
-loaded Raft state for 3/3 replicas
-loaded 3 replicas
-verified 3/3 replicas
+range descriptor iteration done: 1 keys, 1 range descriptors (by suffix: map[rdsc:1]); scan stats: <redacted>
+loaded replica ID for 2/2 replicas
+loaded Raft state for 2/2 replicas
+loaded 2 replicas
+verified 2/2 replicas
