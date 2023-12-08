@@ -80,22 +80,22 @@ func TestConfChangeDataDriven(t *testing.T) {
 			}
 
 			var cfg tracker.Config
-			var prs tracker.ProgressMap
+			var trk tracker.ProgressMap
 			var err error
 			switch d.Cmd {
 			case "simple":
-				cfg, prs, err = c.Simple(ccs...)
+				cfg, trk, err = c.Simple(ccs...)
 			case "enter-joint":
 				var autoLeave bool
 				if len(d.CmdArgs) > 0 {
 					d.ScanArgs(t, "autoleave", &autoLeave)
 				}
-				cfg, prs, err = c.EnterJoint(autoLeave, ccs...)
+				cfg, trk, err = c.EnterJoint(autoLeave, ccs...)
 			case "leave-joint":
 				if len(ccs) > 0 {
 					err = errors.New("this command takes no input")
 				} else {
-					cfg, prs, err = c.LeaveJoint()
+					cfg, trk, err = c.LeaveJoint()
 				}
 			default:
 				return "unknown command"
@@ -103,7 +103,7 @@ func TestConfChangeDataDriven(t *testing.T) {
 			if err != nil {
 				return err.Error() + "\n"
 			}
-			c.Tracker.Config, c.Tracker.Progress = cfg, prs
+			c.Tracker.Config, c.Tracker.Progress = cfg, trk
 			return fmt.Sprintf("%s\n%s", c.Tracker.Config, c.Tracker.Progress)
 		})
 	})
