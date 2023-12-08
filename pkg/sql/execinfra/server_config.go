@@ -319,6 +319,11 @@ type TestingKnobs struct {
 	// run. The associated transaction ID of the statement performing the cascade
 	// or check query is passed in as an argument.
 	RunBeforeCascadesAndChecks func(txnID uuid.UUID)
+
+	// MinimumNumberOfGatewayPartitions is the minimum number of partitions that
+	// will be assigned to the gateway before we start assigning partitions to
+	// other nodes.
+	MinimumNumberOfGatewayPartitions int
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
