@@ -966,6 +966,7 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 			s.pgPreServer,
 			s.serveConn,
 			s.pgL,
+			s.ClusterSettings(),
 			&s.sqlServer.cfg.SocketFile,
 		); err != nil {
 			return err
