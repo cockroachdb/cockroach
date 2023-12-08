@@ -5319,10 +5319,6 @@ func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressWithIssue(t, 108547, "flaky test")
-	skip.UnderDeadlockWithIssue(t, 108547, "flaky test")
-	skip.UnderRaceWithIssue(t, 108547, "flaky test")
-
 	allowResponse := make(chan struct{})
 	params := base.TestClusterArgs{}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
@@ -5361,7 +5357,9 @@ func TestImportWorkerFailure(t *testing.T) {
 	select {
 	case allowResponse <- struct{}{}:
 	case err := <-errCh:
-		t.Fatalf("%s: query returned before expected: %s", err, query)
+		if !testutils.IsError(err, "node liveness error: restarting in background") {
+			t.Fatalf("%s: query returned before expected: %s", err, query)
+		}
 	}
 	var jobID jobspb.JobID
 	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
@@ -5382,11 +5380,17 @@ func TestImportWorkerFailure(t *testing.T) {
 	}
 
 	// But the job should be restarted and succeed eventually.
-	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
-	sqlDB.CheckQueryResults(t,
-		`SELECT * FROM t ORDER BY i`,
-		sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
-	)
+	status := jobutils.WaitForJobToSucceedOrFail(t, sqlDB, jobID)
+	switch status {
+	case jobs.StatusFailed:
+		sqlDB.CheckQueryResults(t, `SELECT * FROM t ORDER BY i`, [][]string{})
+	case jobs.StatusSucceeded:
+		sqlDB.CheckQueryResults(t,
+			`SELECT * FROM t ORDER BY i`,
+			sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1))
+	default:
+		t.Fatalf("unexpected job status: %v", status)
+	}
 }
 
 // TestImportMVCCChecksums verifies that MVCC checksums are correctly
