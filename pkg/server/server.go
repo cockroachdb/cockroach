@@ -2243,6 +2243,7 @@ func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 		s.pgPreServer,
 		s.serverController.sqlMux,
 		s.pgL,
+		s.ClusterSettings(),
 		&s.cfg.SocketFile,
 	); err != nil {
 		return err
