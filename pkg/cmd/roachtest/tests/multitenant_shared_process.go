@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 )
 
 func registerMultiTenantSharedProcess(r registry.Registry) {
@@ -48,12 +47,10 @@ func registerMultiTenantSharedProcess(r registry.Registry) {
 			clusterSettings := install.MakeClusterSettings(install.SecureOption(true))
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), clusterSettings, crdbNodes)
 
-			sysConn := c.Conn(ctx, t.L(), crdbNodes.RandNode()[0])
-			sysSQL := sqlutils.MakeSQLRunner(sysConn)
-
-			createTenantAdminRole(t, "system", sysSQL)
-
-			createInMemoryTenant(ctx, t, c, appTenantName, crdbNodes, true)
+			startOpts := option.DefaultStartOpts()
+			startOpts.RoachprodOpts.VirtualClusterName = appTenantName
+			startOpts.RoachprodOpts.Target = install.StartSharedProcessForVirtualCluster
+			c.StartServiceForVirtualCluster(ctx, t.L(), crdbNodes, startOpts, clusterSettings, crdbNodes)
 
 			t.Status(`initialize tpcc workload`)
 			initCmd := fmt.Sprintf(`./workload init tpcc --data-loader import --warehouses %d {pgurl%s:%s}`,
