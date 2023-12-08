@@ -296,9 +296,11 @@ func restore(
 	}
 
 	on231 := clusterversion.ByKey(clusterversion.V23_1).LessEq(job.Payload().CreationClusterVersion)
+	restoreCheckpoint := job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
+	requiredSpans := dataToRestore.getSpans()
 	progressTracker, err := makeProgressTracker(
-		dataToRestore.getSpans(),
-		job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint,
+		requiredSpans,
+		restoreCheckpoint,
 		on231,
 		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV),
 		endTime)
@@ -308,10 +310,9 @@ func restore(
 
 	var filter spanCoveringFilter
 	if filter, err = func() (spanCoveringFilter, error) {
-		progressTracker.mu.Lock()
-		defer progressTracker.mu.Unlock()
 		return makeSpanCoveringFilter(
-			progressTracker.mu.checkpointFrontier,
+			requiredSpans,
+			restoreCheckpoint,
 			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
 			introducedSpanFrontier,
 			targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV),

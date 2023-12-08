@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -134,18 +135,23 @@ type spanCoveringFilter struct {
 }
 
 func makeSpanCoveringFilter(
-	checkpointFrontier *spanUtils.Frontier,
+	requiredSpans roachpb.Spans,
+	checkpointedSpans []jobspb.RestoreProgress_FrontierEntry,
 	highWater roachpb.Key,
 	introducedSpanFrontier *spanUtils.Frontier,
 	targetSize int64,
 	useFrontierCheckpointing bool,
 ) (spanCoveringFilter, error) {
+	f, err := loadCheckpointFrontier(requiredSpans, checkpointedSpans)
+	if err != nil {
+		return spanCoveringFilter{}, err
+	}
 	sh := spanCoveringFilter{
 		introducedSpanFrontier:   introducedSpanFrontier,
 		targetSize:               targetSize,
 		highWaterMark:            highWater,
 		useFrontierCheckpointing: useFrontierCheckpointing,
-		checkpointFrontier:       checkpointFrontier,
+		checkpointFrontier:       f,
 	}
 	return sh, nil
 }

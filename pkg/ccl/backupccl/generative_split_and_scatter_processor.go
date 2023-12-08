@@ -462,12 +462,10 @@ func runGenerativeSplitAndScatter(
 		if err != nil {
 			return errors.Wrap(err, "making backup locality map")
 		}
-		checkpointFrontier, err := loadCheckpointFrontier(spec.Spans, spec.CheckpointedSpans)
-		if err != nil {
-			return errors.Wrap(err, "loading checkpoint frontier")
-		}
+
 		filter, err := makeSpanCoveringFilter(
-			checkpointFrontier,
+			spec.Spans,
+			spec.CheckpointedSpans,
 			spec.HighWater,
 			introducedSpanFrontier,
 			spec.TargetSize,
