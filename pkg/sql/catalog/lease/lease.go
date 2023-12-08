@@ -103,7 +103,6 @@ var LeaseEnableSessionBasedLeasing = settings.RegisterEnumSetting(
 		int64(SessionBasedDrain):      "drain",
 		int64(SessionBasedOnly):       "session",
 	},
-	settings.WithReportable(false),
 )
 
 // sessionBasedLeasingModeActive determines if the current mode at least meets
