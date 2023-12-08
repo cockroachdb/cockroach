@@ -34,7 +34,7 @@ func TestFakeSpanResolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRemoteExecutionWithIssue(t, 115619, "probable OOM")
+	skip.UnderRaceWithIssue(t, 115619, "probable OOM")
 
 	ctx := context.Background()
 	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
