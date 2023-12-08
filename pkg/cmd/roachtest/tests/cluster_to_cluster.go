@@ -1234,18 +1234,20 @@ func registerClusterToCluster(r registry.Registry) {
 			maxAcceptedLatency: 1 * time.Hour,
 			clouds:             registry.AllExceptAWS,
 			suites:             registry.Suites("nightly"),
+			skip:               "flakes on 23.2. known limitation",
 		},
 		{
-			name:               "c2c/BulkOps/singleImport",
-			srcNodes:           4,
-			dstNodes:           4,
-			cpus:               8,
-			pdSize:             100,
-			workload:           replicateBulkOps{short: true, debugSkipRollback: true},
-			timeout:            2 * time.Hour,
-			cutoverTimeout:     1 * time.Hour,
+			name:     "c2c/BulkOps/short",
+			srcNodes: 4,
+			dstNodes: 4,
+			cpus:     8,
+			pdSize:   100,
+			workload: replicateBulkOps{short: true},
+			timeout:  2 * time.Hour,
+			// Give the cluster plenty of time to catch up after the cutover command is issued.
+			cutoverTimeout:     30 * time.Minute,
 			additionalDuration: 0,
-			cutover:            1 * time.Minute,
+			cutover:            5 * time.Minute,
 			maxAcceptedLatency: 1 * time.Hour,
 
 			// skipNodeDistributionCheck is set to true because the roachtest
@@ -1253,7 +1255,6 @@ func registerClusterToCluster(r registry.Registry) {
 			skipNodeDistributionCheck: true,
 			clouds:                    registry.AllExceptAWS,
 			suites:                    registry.Suites("nightly"),
-			skip:                      "used for debugging when the full test fails",
 		},
 	} {
 		sp := sp
