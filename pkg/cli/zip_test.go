@@ -441,7 +441,7 @@ func TestUnavailableZip(t *testing.T) {
 
 		out, err := c.RunWithCapture(debugZipCommand)
 		if err != nil {
-			t.Fatal(err)
+			c.fail(err)
 		}
 
 		// Assert debug zip output for cluster, node 1, node 2, node 3.
@@ -477,7 +477,7 @@ func TestUnavailableZip(t *testing.T) {
 
 		out, err := c.RunWithCapture(debugZipCommand)
 		if err != nil {
-			t.Fatal(err)
+			c.fail(err)
 		}
 
 		// Assert debug zip output for cluster, node 2.
