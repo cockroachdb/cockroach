@@ -2123,7 +2123,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "loaded %d replicas, initializing", len(repls))
 	logEvery := log.Every(10 * time.Second)
 	for i, repl := range repls {
 		// Log progress regularly, but not for the first replica (we only want to
