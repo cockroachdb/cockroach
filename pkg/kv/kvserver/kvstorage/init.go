@@ -478,12 +478,20 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 	if err != nil {
 		return nil, err
 	}
+	log.Infof(ctx, "loaded %d replicas", len(sl))
 
 	// Check invariants.
 	//
 	// Migrate into RaftReplicaID for all replicas that need it.
+	logEvery := log.Every(10 * time.Second)
 	var newIdx int
-	for _, repl := range sl {
+	for i, repl := range sl {
+		// Log progress regularly, but not for the first replica (we only want to
+		// log when this is slow). The last replica is logged after iteration.
+		if logEvery.ShouldLog() && i > 0 {
+			log.Infof(ctx, "verified %d/%d replicas", i, len(sl))
+		}
+
 		var descReplicaID roachpb.ReplicaID
 		if repl.Desc != nil {
 			// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
@@ -535,6 +543,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 			// NB: removed from `sl` since we're not incrementing `newIdx`.
 		}
 	}
+	log.Infof(ctx, "verified %d/%d replicas", len(sl), len(sl))
 
 	return sl[:newIdx], nil
 }
