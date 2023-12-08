@@ -649,11 +649,6 @@ type TenantOperator interface {
 	// the gc job will not wait for a GC ttl.
 	DropTenantByID(ctx context.Context, tenantID uint64, synchronous, ignoreServiceMode bool) error
 
-	// GCTenant attempts to garbage collect a DROP tenant from the system. Upon
-	// success it also removes the tenant record.
-	// It returns an error if the tenant does not exist.
-	GCTenant(ctx context.Context, tenantID uint64) error
-
 	// LookupTenantID returns the ID for the given tenant name.o
 	LookupTenantID(ctx context.Context, tenantName roachpb.TenantName) (roachpb.TenantID, error)
 

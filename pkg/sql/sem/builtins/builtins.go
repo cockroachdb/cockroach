@@ -6796,33 +6796,6 @@ Parameters:` + randgencfg.ConfigDoc,
 		},
 	),
 
-	"crdb_internal.gc_tenant": makeBuiltin(
-		// TODO(jeffswenson): Delete crdb_internal.gc_tenant after the DestroyTenant
-		// changes are deployed to all Cockroach Cloud serverless hosts.
-		tree.FunctionProperties{
-			Category:     builtinconstants.CategoryMultiTenancy,
-			Undocumented: true,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "id", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				sTenID, err := mustBeDIntInTenantRange(args[0])
-				if err != nil {
-					return nil, err
-				}
-				if err := evalCtx.Tenant.GCTenant(ctx, uint64(sTenID)); err != nil {
-					return nil, err
-				}
-				return args[0], nil
-			},
-			Info:       "Garbage collects a tenant with the provided ID. Must be run by the System tenant.",
-			Volatility: volatility.Volatile,
-		},
-	),
-
 	// Used to configure the tenant token bucket. See UpdateTenantResourceLimits.
 	"crdb_internal.update_tenant_resource_limits": makeBuiltin(
 		tree.FunctionProperties{
