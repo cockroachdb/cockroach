@@ -68,6 +68,20 @@ type StoreTestingKnobs struct {
 	// reproposed due to ticks.
 	TestingProposalSubmitFilter func(*ProposalData) (drop bool, err error)
 
+	// TestingAfterRaftLogSync is invoked after completion of a synced write to
+	// Raft log for the given replica, before the corresponding message is sent
+	// back to Raft and these entries can next be applied to the state machine.
+	//
+	// If async log writes are enabled, this callback blocks state machine
+	// application for the entire store, until it returns. Note that this does not
+	// block the entire raft flow, and commands are still being committed.
+	//
+	// If async log writes are disabled, blocks this replica's entire raft
+	// processing while also holding raftMu for the replica. May block raft
+	// processing for other replicas in the same raft scheduler shard, so must be
+	// used with caution.
+	TestingAfterRaftLogSync func(storage.FullReplicaID)
+
 	// TestingApplyCalledTwiceFilter is called before applying the results of a command on
 	// each replica assuming the command was cleared for application (i.e. no
 	// forced error occurred; the supplied AppliedFilterArgs will have a nil
@@ -99,6 +113,13 @@ type StoreTestingKnobs struct {
 	// with a forced error. That is, the "command" will apply as a
 	// no-op write, and the ForcedError field will be set.
 	TestingPostApplyFilter kvserverbase.ReplicaApplyFilter
+
+	// TestingPostApplySideEffectsFilter is called after a command is applied to
+	// state machine, and its side effects are applied to memory. Called on each
+	// replica that applies the command.
+	//
+	// NB: not all fields are passed in to this callback, see the implementation.
+	TestingPostApplySideEffectsFilter kvserverbase.ReplicaApplyFilter
 
 	// TestingResponseErrorEvent is called when an error is returned applying
 	// a command.
