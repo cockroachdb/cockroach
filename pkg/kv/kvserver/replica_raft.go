@@ -1000,6 +1000,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				Metrics: logstore.Metrics{
 					RaftLogCommitLatency: r.store.metrics.RaftLogCommitLatency,
 				},
+				DisableSyncLogWriteToss: buildutil.CrdbTestBuild &&
+					r.store.TestingKnobs().DisableSyncLogWriteToss,
 			}
 			m := logstore.MakeMsgStorageAppend(msgStorageAppend)
 			cb := (*replicaSyncCallback)(r)
