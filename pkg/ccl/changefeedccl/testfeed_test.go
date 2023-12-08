@@ -460,11 +460,8 @@ func (f *jobFeed) Resume() error {
 
 // Details implements FeedJob interface.
 func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
-	stmt := fmt.Sprintf(`
-SELECT payload FROM (%s)
-`, jobutils.InternalSystemJobsBaseQuery)
 	var payloadBytes []byte
-	if err := f.db.QueryRow(stmt, f.jobID).Scan(&payloadBytes); err != nil {
+	if err := f.db.QueryRow(jobutils.JobPayloadByIDQuery, f.jobID).Scan(&payloadBytes); err != nil {
 		return nil, errors.Wrapf(err, "Details for job %d", f.jobID)
 	}
 	var payload jobspb.Payload
@@ -476,11 +473,8 @@ SELECT payload FROM (%s)
 
 // HighWaterMark implements FeedJob interface.
 func (f *jobFeed) HighWaterMark() (hlc.Timestamp, error) {
-	stmt := fmt.Sprintf(`
-SELECT progress FROM (%s)
-`, jobutils.InternalSystemJobsBaseQuery)
 	var details []byte
-	if err := f.db.QueryRow(stmt, f.jobID).Scan(&details); err != nil {
+	if err := f.db.QueryRow(jobutils.JobProgressByIDQuery, f.jobID).Scan(&details); err != nil {
 		return hlc.Timestamp{}, errors.Wrapf(err, "HighWaterMark for job %d", f.jobID)
 	}
 	var progress jobspb.Progress
