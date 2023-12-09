@@ -281,6 +281,9 @@ func (s *systemStatusServer) statsForSpan(
 			if descSpan.EndKey.Compare(rSpan.EndKey) == -1 {
 				scanEnd = descSpan.EndKey
 			}
+			log.VEventf(ctx, 1, "Range %v exceeds span %v, calculating stats for subspan %v",
+				descSpan, rSpan, roachpb.RSpan{Key: scanStart, EndKey: scanEnd},
+			)
 			err = s.stores.VisitStores(func(s *kvserver.Store) error {
 				stats, err := storage.ComputeStats(
 					ctx,
