@@ -33,6 +33,8 @@ message SpanStatsRequest {
   bytes end_key = 3 [(gogoproto.casttype) = "RKey"];
 
   repeated Span spans = 4 [(gogoproto.nullable) = false];
+
+  bool skip_mvcc_stats = 5;
 }
 
 message SpanStats {
