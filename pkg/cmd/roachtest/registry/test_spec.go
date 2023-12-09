@@ -139,6 +139,11 @@ type TestSpec struct {
 	// If one is not specified, the default behavior is to upload
 	// a binary with the crdb_test flag randomly enabled or disabled.
 	CockroachBinary ClusterCockroachBinary
+
+	// SkipCockroachBinaryOnLastNode skips putting the crdb binary on the last
+	// node when PutCockroach is called which can avoid the extra upload if that
+	// last node is only in use as a workload node.
+	SkipCockroachBinaryOnLastNode bool
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.

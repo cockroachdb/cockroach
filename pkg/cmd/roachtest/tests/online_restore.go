@@ -86,11 +86,12 @@ func registerOnlineRestore(r registry.Registry) {
 					Timeout:   sp.timeout,
 					// These tests measure performance. To ensure consistent perf,
 					// disable metamorphic encryption.
-					EncryptionSupport: registry.EncryptionAlwaysDisabled,
-					CompatibleClouds:  sp.clouds,
-					Suites:            sp.suites,
-					Tags:              sp.tags,
-					Skip:              sp.skip,
+					EncryptionSupport:             registry.EncryptionAlwaysDisabled,
+					SkipCockroachBinaryOnLastNode: sp.hardware.workloadNode,
+					CompatibleClouds:              sp.clouds,
+					Suites:                        sp.suites,
+					Tags:                          sp.tags,
+					Skip:                          sp.skip,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 						testStartTime := timeutil.Now()

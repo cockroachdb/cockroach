@@ -1759,17 +1759,21 @@ func (c *clusterImpl) PutE(
 // runtime assertions enabled. Note that we upload to all nodes even if they
 // don't use the binary, so that the test runner can always fetch logs.
 func (c *clusterImpl) PutCockroach(ctx context.Context, l *logger.Logger, t *testImpl) error {
+	nodes := c.All()
+	if t.spec.SkipCockroachBinaryOnLastNode {
+		nodes = nodes[:len(nodes)-1]
+	}
 	switch t.spec.CockroachBinary {
 	case registry.RandomizedCockroach:
 		if tests.UsingRuntimeAssertions(t) {
 			t.l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
 		}
-		return c.PutE(ctx, l, t.Cockroach(), test.DefaultCockroachPath, c.All())
+		return c.PutE(ctx, l, t.Cockroach(), test.DefaultCockroachPath, nodes)
 	case registry.StandardCockroach:
-		return c.PutE(ctx, l, t.StandardCockroach(), test.DefaultCockroachPath, c.All())
+		return c.PutE(ctx, l, t.StandardCockroach(), test.DefaultCockroachPath, nodes)
 	case registry.RuntimeAssertionsCockroach:
 		t.l.Printf("To reproduce the same set of metamorphic constants, run this test with %s=%d", test.EnvAssertionsEnabledSeed, c.cockroachRandomSeed())
-		return c.PutE(ctx, l, t.RuntimeAssertionsCockroach(), test.DefaultCockroachPath, c.All())
+		return c.PutE(ctx, l, t.RuntimeAssertionsCockroach(), test.DefaultCockroachPath, nodes)
 	default:
 		return errors.Errorf("Specified cockroach binary does not exist.")
 	}
