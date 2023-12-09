@@ -1874,7 +1874,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err := r.execCfg.ProtectedTimestampManager.Unprotect(ctx, r.job); err != nil {
 		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
-	r.notifyStatsRefresherOfNewTables()
+	if !details.ExperimentalOnline {
+		r.notifyStatsRefresherOfNewTables()
+	}
 
 	r.restoreStats = resTotal
 
