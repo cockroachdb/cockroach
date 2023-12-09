@@ -5921,6 +5921,7 @@ explainable_stmt:
   preparable_stmt
 | comment_stmt
 | execute_stmt
+| call_stmt
 
 preparable_stmt:
   alter_stmt     // help texts in sub-rule

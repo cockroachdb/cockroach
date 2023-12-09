@@ -707,6 +707,10 @@ type UDFDefinition struct {
 	// applies to direct as well as indirect recursive calls (mutual recursion).
 	IsRecursive bool
 
+	// RoutineType indicates whether this routine is a UDF, stored procedure, or
+	// builtin function.
+	RoutineType tree.RoutineType
+
 	// Params is the list of columns representing parameters of the function. The
 	// i-th column in the list corresponds to the i-th parameter of the function.
 	// During execution of the UDF, these columns are replaced with the arguments

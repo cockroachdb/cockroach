@@ -111,6 +111,13 @@ func TestExecBuild_autocommit(
 	runExecBuildLogicTest(t, "autocommit")
 }
 
+func TestExecBuild_call(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "call")
+}
+
 func TestExecBuild_cascade(
 	t *testing.T,
 ) {

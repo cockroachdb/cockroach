@@ -671,6 +671,7 @@ explainable_stmt ::=
 	preparable_stmt
 	| comment_stmt
 	| execute_stmt
+	| call_stmt
 
 explain_option_list ::=
 	( explain_option_name ) ( ( ',' explain_option_name ) )*
