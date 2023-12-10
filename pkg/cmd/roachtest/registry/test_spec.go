@@ -239,6 +239,9 @@ var AllExceptLocal = AllClouds.NoLocal()
 // AllExceptAWS contains all clouds except AWS.
 var AllExceptAWS = AllClouds.NoAWS()
 
+// OnlyAWS contains only the AWS cloud.
+var OnlyAWS = Clouds(spec.AWS)
+
 // OnlyGCE contains only the GCE cloud.
 var OnlyGCE = Clouds(spec.GCE)
 

@@ -133,7 +133,7 @@ func registerRestore(r registry.Registry) {
 		Benchmark:        true,
 		Cluster:          withPauseSpecs.hardware.makeClusterSpecs(r, withPauseSpecs.backup.cloud),
 		Timeout:          withPauseSpecs.timeout,
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.Clouds(withPauseSpecs.backup.cloud),
 		Suites:           registry.Suites(registry.Nightly),
 		Tags:             registry.Tags("aws"),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -279,7 +279,6 @@ func registerRestore(r registry.Registry) {
 			hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
 			backup:                 makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:                1 * time.Hour,
-			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
 			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
@@ -290,7 +289,6 @@ func registerRestore(r registry.Registry) {
 			hardware:               makeHardwareSpecs(hardwareSpecs{}),
 			backup:                 makeRestoringBackupSpecs(backupSpecs{cloud: spec.GCE}),
 			timeout:                1 * time.Hour,
-			clouds:                 registry.AllExceptAWS,
 			suites:                 registry.Suites(registry.Nightly),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
@@ -300,7 +298,6 @@ func registerRestore(r registry.Registry) {
 			hardware:               makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
 			backup:                 makeRestoringBackupSpecs(backupSpecs{cloud: spec.GCE}),
 			timeout:                1 * time.Hour,
-			clouds:                 registry.AllExceptAWS,
 			suites:                 registry.Suites(registry.Nightly),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
 		},
@@ -310,7 +307,6 @@ func registerRestore(r registry.Registry) {
 			hardware:               makeHardwareSpecs(hardwareSpecs{nodes: 8, ebsThroughput: 250 /* MB/s */}),
 			backup:                 makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:                1 * time.Hour,
-			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
 			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
@@ -323,7 +319,6 @@ func registerRestore(r registry.Registry) {
 				zones: []string{"us-east-2b", "us-west-2b", "eu-west-1b"}}), // These zones are AWS-specific.
 			backup:                 makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:                90 * time.Minute,
-			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
 			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
@@ -334,7 +329,6 @@ func registerRestore(r registry.Registry) {
 			hardware:               makeHardwareSpecs(hardwareSpecs{cpus: 16, ebsThroughput: 250 /* MB/s */}),
 			backup:                 makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:                1 * time.Hour,
-			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
 			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
@@ -345,7 +339,6 @@ func registerRestore(r registry.Registry) {
 			hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
 			backup:                 makeRestoringBackupSpecs(backupSpecs{}),
 			timeout:                1 * time.Hour,
-			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
 			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: 48,
@@ -360,7 +353,6 @@ func registerRestore(r registry.Registry) {
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 500000}}),
 			timeout:                5 * time.Hour,
-			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
 			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
@@ -373,7 +365,6 @@ func registerRestore(r registry.Registry) {
 				version:  "v22.2.1",
 				workload: tpceRestore{customers: 2000000}}),
 			timeout:                24 * time.Hour,
-			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Weekly),
 			tags:                   registry.Tags("weekly", "aws-weekly"),
 			restoreUptoIncremental: defaultRestoreUptoIncremental,
@@ -395,7 +386,6 @@ func registerRestore(r registry.Registry) {
 				numBackupsInChain: 400,
 			}),
 			timeout: 30 * time.Hour,
-			clouds:  registry.AllClouds,
 			suites:  registry.Suites(registry.Weekly),
 			tags:    registry.Tags("weekly", "aws-weekly"),
 			setUpStmts: []string{
@@ -413,7 +403,6 @@ func registerRestore(r registry.Registry) {
 				numBackupsInChain: 400,
 			}),
 			timeout: 30 * time.Hour,
-			clouds:  registry.AllExceptAWS,
 			suites:  registry.Suites(registry.Weekly),
 			tags:    registry.Tags("weekly"),
 			setUpStmts: []string{
@@ -429,7 +418,6 @@ func registerRestore(r registry.Registry) {
 				backupSpecs{workload: tpceRestore{customers: 1000},
 					version: "v22.2.1"}),
 			timeout:                3 * time.Hour,
-			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
 			tags:                   registry.Tags("aws"),
 			fingerprint:            8445446819555404274,
@@ -451,7 +439,7 @@ func registerRestore(r registry.Registry) {
 			// These tests measure performance. To ensure consistent perf,
 			// disable metamorphic encryption.
 			EncryptionSupport: registry.EncryptionAlwaysDisabled,
-			CompatibleClouds:  sp.clouds,
+			CompatibleClouds:  registry.Clouds(sp.backup.cloud),
 			Suites:            sp.suites,
 			Tags:              sp.tags,
 			Skip:              sp.skip,
@@ -826,7 +814,6 @@ type restoreSpecs struct {
 	// backup describes the backup fixture from which we will restore.
 	backup  backupSpecs
 	timeout time.Duration
-	clouds  registry.CloudSet
 	suites  registry.SuiteSet
 	tags    map[string]struct{}
 
@@ -906,10 +893,6 @@ func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreD
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
-	if rd.c.Cloud() != rd.sp.backup.cloud {
-		// For now, only run the test on the cloud provider that also stores the backup.
-		rd.t.Skipf("test configured to run on %s", rd.sp.backup.cloud)
-	}
 	rd.c.Start(ctx, rd.t.L(), option.DefaultStartOptsNoBackups(), install.MakeClusterSettings(), rd.sp.hardware.getCRDBNodes())
 	rd.getAOST(ctx)
 }
