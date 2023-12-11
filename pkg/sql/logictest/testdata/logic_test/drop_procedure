@@ -167,3 +167,18 @@ SET search_path = public
 
 statement ok
 DROP SCHEMA sc1
+
+# Regression test for #114677 - it should be possible to drop a procedure with
+# a UDT parameter
+subtest udt_parameter
+
+statement ok
+CREATE TYPE t114677 AS (x INT, y INT);
+
+statement ok
+CREATE PROCEDURE p114677(v t114677) LANGUAGE SQL AS $$ SELECT 0; $$;
+
+statement ok
+DROP PROCEDURE p114677(t114677);
+
+subtest end
