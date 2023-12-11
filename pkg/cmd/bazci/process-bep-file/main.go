@@ -108,14 +108,16 @@ func failurePoster(res *testResultWithXml, opts *issues.Options) githubpost.Fail
 		if res.attempt != 0 {
 			req.ExtraParams["attempt"] = fmt.Sprintf("%d", res.attempt)
 		}
-		for _, kv := range strings.Split(*extraParams, ",") {
-			split := strings.SplitN(kv, "=", 2)
-			key := split[0]
-			var value string
-			if len(split) > 1 {
-				value = split[1]
+		if *extraParams != "" {
+			for _, kv := range strings.Split(*extraParams, ",") {
+				split := strings.SplitN(kv, "=", 2)
+				key := split[0]
+				var value string
+				if len(split) > 1 {
+					value = split[1]
+				}
+				req.ExtraParams[key] = value
 			}
-			req.ExtraParams[key] = value
 		}
 		return fmter, req
 	}

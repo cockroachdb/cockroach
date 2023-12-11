@@ -83,6 +83,11 @@ func (p *StmtInsightsProcessor) prepareInsightExport() (string, []interface{}) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for insightIdx, stmtInsight := range p.mu.insights {
+		var causes []string
+		for _, cause := range stmtInsight.Causes {
+			causes = append(causes, cause.String())
+		}
+
 		args = append(args,
 			stmtInsight.EventInfo.Timestamp,
 			stmtInsight.EventInfo.OrgID,
@@ -94,10 +99,10 @@ func (p *StmtInsightsProcessor) prepareInsightExport() (string, []interface{}) {
 			fmt.Sprint(stmtInsight.TxnFingerprintID),
 			stmtInsight.ID,
 			fmt.Sprint(stmtInsight.FingerprintID),
-			stmtInsight.Problem,
-			stmtInsight.Causes,
+			stmtInsight.Problem.String(),
+			causes,
 			stmtInsight.Query,
-			stmtInsight.Status,
+			stmtInsight.Status.String(),
 			stmtInsight.StartTime,
 			stmtInsight.EndTime,
 			stmtInsight.FullScan,
