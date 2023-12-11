@@ -361,14 +361,14 @@ export default function (props: GraphDashboardProps) {
               name="cr.node.admission.wait_durations.kv-p75"
               title={"KV " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
-              downsampleMax
+              nonNegativeRate
             />
             <Metric
               key={nid}
               name="cr.node.admission.wait_durations.kv-stores-p75"
               title={"KV write " + nodeDisplayName(nodeDisplayNameByID, nid)}
               sources={[nid]}
-              downsampleMax
+              nonNegativeRate
             />
             <Metric
               key={nid}
@@ -377,7 +377,7 @@ export default function (props: GraphDashboardProps) {
                 "SQL-KV response " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
-              downsampleMax
+              nonNegativeRate
             />
             <Metric
               key={nid}
@@ -386,7 +386,7 @@ export default function (props: GraphDashboardProps) {
                 "SQL-SQL response " + nodeDisplayName(nodeDisplayNameByID, nid)
               }
               sources={[nid]}
-              downsampleMax
+              nonNegativeRate
             />
           </>
         ))}
