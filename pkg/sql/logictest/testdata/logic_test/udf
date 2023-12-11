@@ -736,3 +736,55 @@ statement error unknown function: public.LOWERCASE_HINT_ERROR_EXPLICIT_SCHEMA_FN
 SELECT public."LOWERCASE_HINT_ERROR_EXPLICIT_SCHEMA_FN"();
 
 subtest end
+
+# Regression test for #102227 - it should be possible to use a UDF with a
+# composite type parameter after the type is updated.
+subtest udt_parameter
+
+statement ok
+CREATE TYPE amount AS ("value" INT, "currency" STRING, "minor_units" INT)
+
+statement ok
+CREATE TABLE "purchase" (
+    "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    "amount" amount NOT NULL,
+    "timestamp" TIMESTAMP NOT NULL DEFAULT now()
+)
+
+statement ok
+INSERT INTO "purchase" (amount) VALUES
+    ((1000,  'GBP', 100)),
+    ((10,    'YEN', 1)),
+    ((10000, 'BHD', 1000))
+
+statement ok
+CREATE FUNCTION decimal_amount(a amount) RETURNS DECIMAL(10, 2) IMMUTABLE LANGUAGE SQL AS $$
+    SELECT (a)."value" / (a)."minor_units";
+$$
+
+query RT rowsort
+SELECT
+    decimal_amount(amount) AS amount,
+    (amount).currency
+FROM purchase
+----
+10.00  YEN
+10.00  BHD
+10.00  GBP
+
+statement ok
+UPDATE purchase
+SET amount = ((amount).value, (amount).currency, 10000)
+WHERE (amount).currency = 'BHD'
+
+query RT rowsort
+SELECT
+    decimal_amount(amount) AS amount,
+    (amount).currency
+FROM purchase
+----
+10.00  YEN
+1.00   BHD
+10.00  GBP
+
+subtest end
