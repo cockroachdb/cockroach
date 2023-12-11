@@ -330,9 +330,10 @@ func getActiveNodes(nl *liveness.NodeLiveness) []roachpb.NodeID {
 func TestGetActiveNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// This test starts a 5 node cluster and is prone to timeouts during stress
-	// race builds.
-	skip.UnderStressRace(t)
+	// This test starts a 5 node cluster and is prone to overload remote execution
+	// during race and deadlock builds.
+	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	numNodes := 5
 	ctx := context.Background()
