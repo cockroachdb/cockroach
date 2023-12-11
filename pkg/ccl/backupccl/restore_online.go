@@ -345,7 +345,8 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		var remaining uint64
 		for _, span := range details.DownloadSpans {
 			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
-				Spans: []roachpb.Span{span},
+				Spans:         []roachpb.Span{span},
+				SkipMvccStats: true,
 			})
 			if err != nil {
 				return err

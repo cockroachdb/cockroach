@@ -188,7 +188,7 @@ func (s *systemStatusServer) getLocalStats(
 ) (*roachpb.SpanStatsResponse, error) {
 	var res = &roachpb.SpanStatsResponse{SpanToStats: make(map[string]*roachpb.SpanStats)}
 	for _, span := range req.Spans {
-		spanStats, err := s.statsForSpan(ctx, span)
+		spanStats, err := s.statsForSpan(ctx, span, req.SkipMvccStats)
 		if err != nil {
 			return nil, err
 		}
@@ -198,7 +198,7 @@ func (s *systemStatusServer) getLocalStats(
 }
 
 func (s *systemStatusServer) statsForSpan(
-	ctx context.Context, span roachpb.Span,
+	ctx context.Context, span roachpb.Span, skipMVCCStats bool,
 ) (*roachpb.SpanStats, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "systemStatusServer.statsForSpan")
 	defer sp.Finish()
@@ -220,11 +220,32 @@ func (s *systemStatusServer) statsForSpan(
 	}
 
 	spanStats := &roachpb.SpanStats{}
-	var fullyContainedKeysBatch []roachpb.Key
 	rSpan, err := keys.SpanAddr(span)
 	if err != nil {
 		return nil, err
 	}
+
+	// First, get the approximate disk bytes from each store.
+	err = s.stores.VisitStores(func(store *kvserver.Store) error {
+		approxDiskBytes, remoteBytes, externalBytes, err := store.TODOEngine().ApproximateDiskBytes(rSpan.Key.AsRawKey(), rSpan.EndKey.AsRawKey())
+		if err != nil {
+			return err
+		}
+		spanStats.ApproximateDiskBytes += approxDiskBytes
+		spanStats.RemoteFileBytes += remoteBytes
+		spanStats.ExternalFileBytes += externalBytes
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if skipMVCCStats {
+		return spanStats, nil
+	}
+
+	var fullyContainedKeysBatch []roachpb.Key
 	// Iterate through the span's ranges.
 	for _, desc := range descriptors {
 
@@ -260,6 +281,9 @@ func (s *systemStatusServer) statsForSpan(
 			if descSpan.EndKey.Compare(rSpan.EndKey) == -1 {
 				scanEnd = descSpan.EndKey
 			}
+			log.VEventf(ctx, 1, "Range %v exceeds span %v, calculating stats for subspan %v",
+				descSpan, rSpan, roachpb.RSpan{Key: scanStart, EndKey: scanEnd},
+			)
 			err = s.stores.VisitStores(func(s *kvserver.Store) error {
 				stats, err := storage.ComputeStats(
 					ctx,
@@ -292,21 +316,7 @@ func (s *systemStatusServer) statsForSpan(
 		// Nil the batch.
 		fullyContainedKeysBatch = nil
 	}
-	// Finally, get the approximate disk bytes from each store.
-	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		approxDiskBytes, remoteBytes, externalBytes, err := store.TODOEngine().ApproximateDiskBytes(rSpan.Key.AsRawKey(), rSpan.EndKey.AsRawKey())
-		if err != nil {
-			return err
-		}
-		spanStats.ApproximateDiskBytes += approxDiskBytes
-		spanStats.RemoteFileBytes += remoteBytes
-		spanStats.ExternalFileBytes += externalBytes
-		return nil
-	})
 
-	if err != nil {
-		return nil, err
-	}
 	return spanStats, nil
 }
 
