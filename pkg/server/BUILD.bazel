@@ -362,7 +362,6 @@ go_test(
         "drain_test.go",
         "graphite_test.go",
         "index_usage_stats_test.go",
-        "init_handshake_test.go",
         "intent_test.go",
         "main_test.go",
         "migration_test.go",
