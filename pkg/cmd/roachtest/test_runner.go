@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
@@ -1239,7 +1240,7 @@ func (r *testRunner) postTestAssertions(
 			// If this validation fails due to a timeout, it is very likely that
 			// the replica divergence check below will also fail.
 			if t.spec.SkipPostValidations&registry.PostValidationInvalidDescriptors == 0 {
-				if err := c.assertValidDescriptors(ctx, db, t); err != nil {
+				if err := roachtestutil.CheckInvalidDescriptors(ctx, db); err != nil {
 					postAssertionErr(errors.WithDetail(err, "invalid descriptors check failed"))
 				}
 			}
