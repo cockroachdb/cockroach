@@ -1828,6 +1828,8 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 	defer log.Scope(testingT).Close(testingT)
 
+	skip.UnderDeadlockWithIssue(testingT, 115910, "likely to time out")
+
 	ctx := context.Background()
 
 	var mu syncutil.Mutex
