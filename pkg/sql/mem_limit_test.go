@@ -41,17 +41,23 @@ func TestMemoryLimit(t *testing.T) {
 	// BatchResponses do hit the memory limit.
 	//
 	// When the Streamer API is not used, then SQL creates a single BatchRequest
-	// for both blobs without setting TargetBytes, so the storage layer is happy
-	// to get two blobs only to hit the memory limit. A concurrency of 1 is
-	// sufficient.
+	// with TargetBytes of 10MiB (controlled by
+	// rowinfra.defaultBatchBytesLimitProductionValue), so the storage layer is
+	// happy to get two blobs only to hit the memory limit. A concurrency of 1
+	// is sufficient.
 	//
 	// When the Streamer API is used, TargetBytes are set, so each blob gets a
 	// separate BatchResponse. Thus, we need concurrency of 2 so that the
 	// aggregate memory usage exceeds the memory limit. It's also likely that
 	// the error is encountered in the SQL layer when performing accounting for
 	// the read datums.
+	//
+	// The size here is constructed in such a manner that both rows are returned
+	// in a single ScanResponse, meaning that both rows together (including
+	// non-blob columns) don't exceed 10MiB.
+	const blobSize = 5<<20 - 1<<10 /* 5MiB - 1KiB */
 	serverArgs := base.TestServerArgs{
-		SQLMemoryPoolSize: 5 << 20, /* 5MiB */
+		SQLMemoryPoolSize: 2*blobSize - 1,
 	}
 	serverArgs.Knobs.SQLEvalContext = &eval.TestingKnobs{
 		// This test expects the default value of
@@ -63,9 +69,9 @@ func TestMemoryLimit(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	_, err := db.Exec("CREATE TABLE foo (id INT PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute))")
 	require.NoError(t, err)
-	_, err = db.Exec("INSERT INTO foo SELECT 1, 10, repeat('a', 3000000)")
+	_, err = db.Exec(fmt.Sprintf("INSERT INTO foo SELECT 1, 10, repeat('a', %d)", blobSize))
 	require.NoError(t, err)
-	_, err = db.Exec("INSERT INTO foo SELECT 2, 10, repeat('a', 3000000)")
+	_, err = db.Exec(fmt.Sprintf("INSERT INTO foo SELECT 2, 10, repeat('a', %d)", blobSize))
 	require.NoError(t, err)
 
 	for _, tc := range []struct {
