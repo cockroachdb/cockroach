@@ -216,6 +216,7 @@ const (
 	SinkParamSASLTokenURL           = `sasl_token_url`
 	SinkParamSASLScopes             = `sasl_scopes`
 	SinkParamSASLGrantType          = `sasl_grant_type`
+	SinkParamTableNameAttribute     = `with_table_name_attribute`
 
 	SinkSchemeConfluentKafka    = `confluent-cloud`
 	SinkParamConfluentAPIKey    = `api_key`
