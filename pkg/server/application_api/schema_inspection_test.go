@@ -480,6 +480,8 @@ func TestAdminAPITableStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDeadlockWithIssue(t, 115914, "likely to time out")
+
 	skip.UnderStress(t, "flaky under stress #107156")
 	skip.UnderRace(t, "flaky under race #107156")
 
