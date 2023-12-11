@@ -149,6 +149,19 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	// ts 10 has errored, so validate can return its error without blocking
 	require.EqualError(t, m.waitForTS(ctx, ts(10)), `descriptor: whoops!`)
 
+	// This test is very brittle and probably needs to be rewritten.
+	// Clear out any waiters we may have (ts(8)).  This waitor
+	// is still pending (since errors injected above (for ts=9, and ts=10)
+	// do not clear out callers waiting for lower timestamp).
+	// But, we are about to wait for ts=8 again -- and the goroutine
+	// created below may not start running immediately, causing this test
+	// to block until it fails due to a timeout.
+	func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.mu.waiters = m.mu.waiters[:0]
+	}()
+
 	// ts 8 and 9 are still unknown
 	errCh8 = make(chan error, 1)
 	errCh9 := make(chan error, 1)
