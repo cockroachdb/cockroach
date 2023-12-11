@@ -3031,6 +3031,12 @@ func (ex *connExecutor) execCopyIn(
 		},
 	}
 
+	if ex.implicitTxn() && !ex.planner.SessionData().CopyWritePipeliningEnabled {
+		if err := txnOpt.txn.DisablePipelining(); err != nil {
+			return ex.makeErrEvent(err, cmd.ParsedStmt.AST)
+		}
+	}
+
 	ex.setCopyLoggingFields(cmd.ParsedStmt)
 
 	var cm copyMachineInterface
