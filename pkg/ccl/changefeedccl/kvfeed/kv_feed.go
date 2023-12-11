@@ -116,11 +116,18 @@ func Run(ctx context.Context, cfg Config) error {
 		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, cfg.Metrics)
 	}
 
+	// withFiltering is propagated via the RangefeedRequest to the rangefeed
+	// server, where if true, the server respects the OmitInRangefeeds flag and
+	// enables filtering out any transactional writes with that flag set to true.
+	// OmitInRangefeeds is set to true for all transactional writes when the
+	// disable_changefeed_replication session variable is on.
+	const withFiltering = true
+
 	g := ctxgroup.WithContext(ctx)
 	f := newKVFeed(
 		cfg.Writer, cfg.Spans, cfg.CheckpointSpans, cfg.CheckpointTimestamp,
 		cfg.SchemaChangeEvents, cfg.SchemaChangePolicy,
-		cfg.NeedsInitialScan, cfg.WithDiff,
+		cfg.NeedsInitialScan, cfg.WithDiff, withFiltering,
 		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
@@ -241,6 +248,7 @@ type kvFeed struct {
 	checkpoint          []roachpb.Span
 	checkpointTimestamp hlc.Timestamp
 	withDiff            bool
+	withFiltering       bool
 	withInitialBackfill bool
 	initialHighWater    hlc.Timestamp
 	endTime             hlc.Timestamp
@@ -272,7 +280,7 @@ func newKVFeed(
 	checkpointTimestamp hlc.Timestamp,
 	schemaChangeEvents changefeedbase.SchemaChangeEventClass,
 	schemaChangePolicy changefeedbase.SchemaChangePolicy,
-	withInitialBackfill, withDiff bool,
+	withInitialBackfill, withDiff, withFiltering bool,
 	initialHighWater hlc.Timestamp,
 	endTime hlc.Timestamp,
 	codec keys.SQLCodec,
@@ -291,6 +299,7 @@ func newKVFeed(
 		checkpointTimestamp: checkpointTimestamp,
 		withInitialBackfill: withInitialBackfill,
 		withDiff:            withDiff,
+		withFiltering:       withFiltering,
 		initialHighWater:    initialHighWater,
 		endTime:             endTime,
 		schemaChangeEvents:  schemaChangeEvents,
@@ -562,6 +571,7 @@ func (f *kvFeed) runUntilTableEvent(ctx context.Context, resumeFrontier span.Fro
 		Spans:         stps,
 		Frontier:      resumeFrontier.Frontier(),
 		WithDiff:      f.withDiff,
+		WithFiltering: f.withFiltering,
 		Knobs:         f.knobs,
 		UseMux:        f.useMux,
 		RangeObserver: f.rangeObserver,
