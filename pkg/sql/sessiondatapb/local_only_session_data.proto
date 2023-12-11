@@ -470,6 +470,9 @@ message LocalOnlySessionData {
   // CopyTxnQualityOfService indicates the default QoSLevel/WorkPriority of the
   // transactions used to evaluate COPY commands.
   int32 copy_txn_quality_of_service = 117 [(gogoproto.casttype)="QoSLevel"];
+  // CopyWritePipeliningEnabled indicates whether the write pipelining is
+  // enabled for txns used by COPY.
+  bool copy_write_pipelining_enabled = 118;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

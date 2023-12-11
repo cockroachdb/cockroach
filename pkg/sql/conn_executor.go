@@ -3031,6 +3031,13 @@ func (ex *connExecutor) execCopyIn(
 		},
 	}
 
+	if !ex.planner.SessionData().CopyWritePipeliningEnabled {
+		// Ignore the error since disabling the write pipelining is done on the
+		// best-effort basis. An error here means that we're probably in an
+		// explicit txn that has already done some work.
+		_ = txnOpt.txn.DisablePipelining()
+	}
+
 	ex.setCopyLoggingFields(cmd.ParsedStmt)
 
 	var cm copyMachineInterface
