@@ -282,13 +282,9 @@ func makeImportSpans(
 		return nil
 	})
 
-	checkpointFrontier, err := loadCheckpointFrontier(spans, completedSpans)
-	if err != nil {
-		return nil, err
-	}
-
 	filter, err := makeSpanCoveringFilter(
-		checkpointFrontier,
+		spans,
+		completedSpans,
 		highWaterMark,
 		introducedSpanFrontier,
 		targetSize,
@@ -296,6 +292,7 @@ func makeImportSpans(
 	if err != nil {
 		return nil, err
 	}
+	defer filter.close()
 
 	err = generateAndSendImportSpans(
 		ctx,
@@ -679,20 +676,21 @@ func TestCheckpointFilter(t *testing.T) {
 			expectedToDoSpans: roachpb.Spans{c.sp("c", "d")},
 		},
 	} {
-		frontier, err := spanUtils.MakeFrontier(requiredSpan)
-		require.NoError(t, err)
+		var checkpointedSpans []jobspb.RestoreProgress_FrontierEntry
 		for i := range tc.completedSpans {
-			_, err := frontier.Forward(tc.completedSpans[i], completedSpanTime)
-			require.NoError(t, err)
+			checkpointedSpans = append(checkpointedSpans,
+				jobspb.RestoreProgress_FrontierEntry{Span: tc.completedSpans[i], Timestamp: completedSpanTime})
 		}
 
 		f, err := makeSpanCoveringFilter(
-			frontier,
+			[]roachpb.Span{requiredSpan},
+			checkpointedSpans,
 			nil,
 			nil,
 			0,
 			true)
 		require.NoError(t, err)
+		defer f.close()
 		require.Equal(t, tc.expectedToDoSpans, f.filterCompleted(requiredSpan))
 	}
 }
