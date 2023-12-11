@@ -271,6 +271,8 @@ func TestImportFixtureNodeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRaceWithIssue(t, 115977, "probable OOM")
+
 	ctx := context.Background()
 
 	const (
