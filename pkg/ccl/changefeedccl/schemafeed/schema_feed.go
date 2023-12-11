@@ -523,29 +523,16 @@ func (tf *schemaFeed) highWater() hlc.Timestamp {
 // `validateFn` is deterministic and the ingested descriptors are read
 // transactionally).
 func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
-	var errCh chan error
+	waitCh, feedErr := tf.tryWaitForTS(ts)
+	if feedErr != nil {
+		return feedErr
+	}
 
-	highWater := tf.highWater()
-	var err error
-	var fastPath bool
-	func() {
-		tf.mu.Lock()
-		defer tf.mu.Unlock()
-		if !tf.mu.errTS.IsEmpty() && tf.mu.errTS.LessEq(ts) {
-			err = tf.mu.err
-		}
-		fastPath = err != nil || ts.LessEq(highWater)
-		if !fastPath {
-			// non-fastPath is when we need to prove the invariant holds from [`high_water`, `ts].
-			errCh = make(chan error, 1)
-			tf.mu.waiters = append(tf.mu.waiters, tableHistoryWaiter{ts: ts, errCh: errCh})
-		}
-	}()
-	if fastPath {
+	if waitCh == nil {
 		if log.V(1) {
-			log.Infof(ctx, "fastpath for %s: %v", ts, err)
+			log.Infof(ctx, "fastpath for %s", ts)
 		}
-		return err
+		return nil
 	}
 
 	if log.V(1) {
@@ -555,7 +542,7 @@ func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case err := <-errCh:
+	case err := <-waitCh:
 		if log.V(1) {
 			log.Infof(ctx, "waited %s for %s highwater: err=%v", timeutil.Since(start), ts, err)
 		}
@@ -564,6 +551,27 @@ func (tf *schemaFeed) waitForTS(ctx context.Context, ts hlc.Timestamp) error {
 		}
 		return err
 	}
+}
+
+// tryWaitForTS is a fast path for waitForTS.  Returns non-nil channel
+// if the fast path not available.
+func (tf *schemaFeed) tryWaitForTS(ts hlc.Timestamp) (chan error, error) {
+	tf.mu.Lock()
+	defer tf.mu.Unlock()
+
+	if !tf.mu.errTS.IsEmpty() && tf.mu.errTS.LessEq(ts) {
+		// Schema feed error occurred.
+		return nil, tf.mu.err
+	}
+
+	if ts.LessEq(tf.mu.highWater) {
+		return nil, nil // Fast path.
+	}
+
+	// non-fastPath is when we need to prove the invariant holds from [`high_water`, `ts].
+	waitCh := make(chan error, 1)
+	tf.mu.waiters = append(tf.mu.waiters, tableHistoryWaiter{ts: ts, errCh: waitCh})
+	return waitCh, nil
 }
 
 // descLess orders descriptors by (modificationTime, id).
