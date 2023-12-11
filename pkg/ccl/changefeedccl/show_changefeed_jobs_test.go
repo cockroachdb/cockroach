@@ -159,6 +159,10 @@ func TestShowChangefeedJobsRedacted(t *testing.T) {
 			name: "ca_cert",
 			uri:  fmt.Sprintf("kafka://nope?ca_cert=%s&tls_enabled=true", certSecret),
 		},
+		{
+			name: "shared_access_key",
+			uri:  fmt.Sprintf("azure-event-hub://nope?shared_access_key=%s&shared_access_key_name=plain", apiSecret),
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR TABLE foo INTO '%s'`, tc.uri)
@@ -170,8 +174,8 @@ func TestShowChangefeedJobsRedacted(t *testing.T) {
 			expectedSinkURI = strings.Replace(expectedSinkURI, certSecret, "redacted", 1)
 			expectedDescription := strings.Replace(createStmt, apiSecret, "redacted", 1)
 			expectedDescription = strings.Replace(expectedDescription, certSecret, "redacted", 1)
-			require.Equal(t, sinkURI, expectedSinkURI)
-			require.Equal(t, description, expectedDescription)
+			require.Equal(t, expectedSinkURI, sinkURI)
+			require.Equal(t, expectedDescription, description)
 		})
 	}
 
