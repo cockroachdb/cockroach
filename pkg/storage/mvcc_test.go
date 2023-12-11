@@ -346,6 +346,60 @@ func TestMVCCGetWithValueHeader(t *testing.T) {
 	}
 }
 
+func TestMVCCOmitInRangefeeds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, omitPut := range []bool{false, true} {
+		for _, omitDel := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%t/%t", omitPut, omitDel), func(t *testing.T) {
+				ctx := context.Background()
+				engine := NewDefaultInMemForTesting()
+				defer engine.Close()
+
+				txn := *txn1
+				txn.OmitInRangefeeds = omitPut
+				_, err := MVCCPut(ctx, engine, testKey1, txn.WriteTimestamp, value1, MVCCWriteOptions{Txn: &txn})
+				require.NoError(t, err)
+
+				txnCommit := txn
+				txnCommit.Status = roachpb.COMMITTED
+				txnCommit.WriteTimestamp = txn.WriteTimestamp
+				_, _, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
+					roachpb.MakeLockUpdate(&txnCommit, roachpb.Span{Key: testKey1}),
+					MVCCResolveWriteIntentOptions{})
+				require.NoError(t, err)
+
+				valueRes, vh, err := MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 4}, MVCCGetOptions{})
+				require.NoError(t, err)
+				require.NotNil(t, valueRes.Value)
+				require.Equal(t, omitPut, vh.OmitInRangefeeds)
+
+				txn = *txn2
+				txn.OmitInRangefeeds = omitDel
+				_, _, err = MVCCDelete(ctx, engine, testKey1, txn.WriteTimestamp, MVCCWriteOptions{Txn: &txn})
+				require.NoError(t, err)
+
+				txnCommit = txn
+				txnCommit.Status = roachpb.COMMITTED
+				txnCommit.WriteTimestamp = txn.WriteTimestamp
+				_, _, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
+					roachpb.MakeLockUpdate(&txnCommit, roachpb.Span{Key: testKey1}),
+					MVCCResolveWriteIntentOptions{})
+				require.NoError(t, err)
+
+				// Read the latest version with tombstone.
+				valueRes, vh, err = MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 4},
+					MVCCGetOptions{Tombstones: true})
+				require.NoError(t, err)
+				require.NotNil(t, valueRes.Value)
+				require.Zero(t, len(valueRes.Value.RawBytes))
+				require.Equal(t, omitDel, vh.OmitInRangefeeds)
+			})
+		}
+	}
+}
+
 // TestMVCCWriteWithOlderTimestampAfterDeletionOfNonexistentKey tests a write
 // that comes after a delete on a nonexistent key, with the write holding a
 // timestamp earlier than the delete timestamp. The delete must write a
