@@ -39,7 +39,7 @@ type SinkClient interface {
 // BatchBuffer is an interface to aggregate KVs into a payload that can be sent
 // to the sink.
 type BatchBuffer interface {
-	Append(key []byte, value []byte)
+	Append(key []byte, value []byte, attributes attributes)
 	ShouldFlush() bool
 
 	// Once all data has been Append'ed, Close can be called to return a finalized
@@ -91,13 +91,19 @@ type flushReq struct {
 	waiter chan struct{}
 }
 
+// attributes contain additional metadata which may be emitted alongside a row
+// but separate from the encoded keys and values.
+type attributes struct {
+	tableName string
+}
+
 type rowEvent struct {
 	key             []byte
 	val             []byte
 	topicDescriptor TopicDescriptor
-
-	alloc kvevent.Alloc
-	mvcc  hlc.Timestamp
+	alloc           kvevent.Alloc
+	mvcc            hlc.Timestamp
+	attributes      attributes
 }
 
 // Flush implements the Sink interface, returning the first error that has
@@ -137,7 +143,7 @@ var _ Sink = (*batchingSink)(nil)
 // therefore escape to the heap) can both be incredibly frequent (every event
 // may be its own batch) and temporary, so to avoid GC thrashing they are both
 // claimed and freed from object pools.
-var eventPool sync.Pool = sync.Pool{
+var eventPool = sync.Pool{
 	New: func() interface{} {
 		return new(rowEvent)
 	},
@@ -181,6 +187,7 @@ func (s *batchingSink) EmitRow(
 	payload.topicDescriptor = topic
 	payload.mvcc = mvcc
 	payload.alloc = alloc
+	payload.attributes.tableName = topic.GetTableName()
 
 	select {
 	case <-ctx.Done():
@@ -279,7 +286,7 @@ func (sb *sinkBatch) Append(e *rowEvent) {
 		sb.bufferTime = timeutil.Now()
 	}
 
-	sb.buffer.Append(e.key, e.val)
+	sb.buffer.Append(e.key, e.val, e.attributes)
 
 	sb.keys.Add(hashToInt(sb.hasher, e.key))
 	sb.numMessages += 1
