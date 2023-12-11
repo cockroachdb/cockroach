@@ -32,6 +32,13 @@ func makeVal(val string) roachpb.Value {
 	return roachpb.MakeValueFromString(val)
 }
 
+func makeMVCCVal(val string, header enginepb.MVCCValueHeader) storage.MVCCValue {
+	return storage.MVCCValue{
+		MVCCValueHeader: header,
+		Value:           roachpb.MakeValueFromString(val),
+	}
+}
+
 func makeValWithTs(val string, ts int64) roachpb.Value {
 	v := makeVal(val)
 	v.Timestamp = hlc.Timestamp{WallTime: ts}
@@ -45,6 +52,19 @@ func makeKV(key, val string, ts int64) storage.MVCCKeyValue {
 			Timestamp: hlc.Timestamp{WallTime: ts},
 		},
 		Value: makeVal(val).RawBytes,
+	}
+}
+
+func makeKVWithHeader(
+	key, val string, ts int64, header enginepb.MVCCValueHeader,
+) storage.MVCCKeyValue {
+	v, _ := storage.EncodeMVCCValue(makeMVCCVal(val, header))
+	return storage.MVCCKeyValue{
+		Key: storage.MVCCKey{
+			Key:       roachpb.Key(key),
+			Timestamp: hlc.Timestamp{WallTime: ts},
+		},
+		Value: v,
 	}
 }
 

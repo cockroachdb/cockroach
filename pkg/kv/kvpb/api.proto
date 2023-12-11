@@ -3113,6 +3113,11 @@ message RangeFeedRequest {
   // When CloseStream is set, only the StreamID must be set, and
   // other fields (such as Span) are ignored.
   bool close_stream = 6;
+  // WithFiltering specifies if the rangefeed server should respect the
+  // OmitInRangefeeds flag of a transactional write. If WithFiltering = true and
+  // OmitInRangefeeds = true, the write will not be emitted on the rangefeed.
+  // WithFiltering should NOT be set for system-table rangefeeds.
+  bool with_filtering = 7;
 }
 
 // RangeFeedValue is a variant of RangeFeedEvent that represents an update to

@@ -79,6 +79,7 @@ type registration struct {
 	span             roachpb.Span
 	catchUpTimestamp hlc.Timestamp // exclusive
 	withDiff         bool
+	withFiltering    bool
 	metrics          *Metrics
 
 	// Output.
@@ -117,6 +118,7 @@ func newRegistration(
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
 	withDiff bool,
+	withFiltering bool,
 	bufferSz int,
 	blockWhenFull bool,
 	metrics *Metrics,
@@ -128,6 +130,7 @@ func newRegistration(
 		span:             span,
 		catchUpTimestamp: startTS,
 		withDiff:         withDiff,
+		withFiltering:    withFiltering,
 		metrics:          metrics,
 		stream:           stream,
 		done:             done,
@@ -397,7 +400,7 @@ func (r *registration) maybeRunCatchUpScan(ctx context.Context) error {
 		r.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff)
+	return catchUpIter.CatchUpScan(ctx, r.stream.Send, r.withDiff, r.withFiltering)
 }
 
 // ID implements interval.Interface.
@@ -457,7 +460,11 @@ func (reg *registry) nextID() int64 {
 // PublishToOverlapping publishes the provided event to all registrations whose
 // range overlaps the specified span.
 func (reg *registry) PublishToOverlapping(
-	ctx context.Context, span roachpb.Span, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
+	ctx context.Context,
+	span roachpb.Span,
+	event *kvpb.RangeFeedEvent,
+	omitInRangefeeds bool,
+	alloc *SharedBudgetAllocation,
 ) {
 	// Determine the earliest starting timestamp that a registration
 	// can have while still needing to hear about this event.
@@ -481,9 +488,10 @@ func (reg *registry) PublishToOverlapping(
 	}
 
 	reg.forOverlappingRegs(span, func(r *registration) (bool, *kvpb.Error) {
-		// Don't publish events if they are equal to or less
-		// than the registration's starting timestamp.
-		if r.catchUpTimestamp.Less(minTS) {
+		// Don't publish events if they:
+		// 1. are equal to or less than the registration's starting timestamp, or
+		// 2. have OmitInRangefeeds = true and this registration has opted into filtering.
+		if r.catchUpTimestamp.Less(minTS) && !(r.withFiltering && omitInRangefeeds) {
 			r.publish(ctx, event, alloc)
 		}
 		return false, nil

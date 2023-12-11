@@ -295,6 +295,7 @@ func (p *ScheduledProcessor) Register(
 	startTS hlc.Timestamp,
 	catchUpIter *CatchUpIterator,
 	withDiff bool,
+	withFiltering bool,
 	stream Stream,
 	disconnectFn func(),
 	done *future.ErrorFuture,
@@ -306,7 +307,7 @@ func (p *ScheduledProcessor) Register(
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff,
+		span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering,
 		p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn, done,
 	)
 
@@ -652,9 +653,12 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 	for _, op := range ops {
 		// Publish RangeFeedValue updates, if necessary.
 		switch t := op.GetValue().(type) {
+		// OmitInRangefeeds is relevant only for transactional writes, so it's
+		// propagated only in the case of a MVCCCommitIntentOp and
+		// MVCCWriteValueOp (could be the result of a 1PC write).
 		case *enginepb.MVCCWriteValueOp:
 			// Publish the new value directly.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, alloc)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, t.OmitInRangefeeds, alloc)
 
 		case *enginepb.MVCCDeleteRangeOp:
 			// Publish the range deletion directly.
@@ -668,7 +672,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 
 		case *enginepb.MVCCCommitIntentOp:
 			// Publish the newly committed value.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, alloc)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, t.OmitInRangefeeds, alloc)
 
 		case *enginepb.MVCCAbortIntentOp:
 			// No updates to publish.
@@ -715,6 +719,7 @@ func (p *ScheduledProcessor) publishValue(
 	key roachpb.Key,
 	timestamp hlc.Timestamp,
 	value, prevValue []byte,
+	omitInRangefeeds bool,
 	alloc *SharedBudgetAllocation,
 ) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
@@ -734,7 +739,7 @@ func (p *ScheduledProcessor) publishValue(
 		},
 		PrevValue: prevVal,
 	})
-	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, alloc)
+	p.reg.PublishToOverlapping(ctx, roachpb.Span{Key: key}, &event, omitInRangefeeds, alloc)
 }
 
 func (p *ScheduledProcessor) publishDeleteRange(
@@ -753,7 +758,7 @@ func (p *ScheduledProcessor) publishDeleteRange(
 		Span:      span,
 		Timestamp: timestamp,
 	})
-	p.reg.PublishToOverlapping(ctx, span, &event, alloc)
+	p.reg.PublishToOverlapping(ctx, span, &event, false /* omitInRangefeeds */, alloc)
 }
 
 func (p *ScheduledProcessor) publishSSTable(
@@ -775,7 +780,7 @@ func (p *ScheduledProcessor) publishSSTable(
 			Span:    sstSpan,
 			WriteTS: sstWTS,
 		},
-	}, alloc)
+	}, false /* omitInRangefeeds */, alloc)
 }
 
 func (p *ScheduledProcessor) publishCheckpoint(ctx context.Context) {
@@ -783,7 +788,7 @@ func (p *ScheduledProcessor) publishCheckpoint(ctx context.Context) {
 	// TODO(nvanbenschoten): rate limit these? send them periodically?
 
 	event := p.newCheckpointEvent()
-	p.reg.PublishToOverlapping(ctx, all, event, nil)
+	p.reg.PublishToOverlapping(ctx, all, event, false /* omitInRangefeeds */, nil)
 }
 
 func (p *ScheduledProcessor) newCheckpointEvent() *kvpb.RangeFeedEvent {

@@ -357,9 +357,10 @@ func TestMVCCOmitInRangefeeds(t *testing.T) {
 				engine := NewDefaultInMemForTesting()
 				defer engine.Close()
 
+				// Transactional put
 				txn := *txn1
-				txn.OmitInRangefeeds = omitPut
-				_, err := MVCCPut(ctx, engine, testKey1, txn.WriteTimestamp, value1, MVCCWriteOptions{Txn: &txn})
+				_, err := MVCCPut(ctx, engine, testKey1, txn.WriteTimestamp, value1,
+					MVCCWriteOptions{Txn: &txn, OmitInRangefeeds: omitPut})
 				require.NoError(t, err)
 
 				txnCommit := txn
@@ -376,8 +377,9 @@ func TestMVCCOmitInRangefeeds(t *testing.T) {
 				require.Equal(t, omitPut, vh.OmitInRangefeeds)
 
 				txn = *txn2
-				txn.OmitInRangefeeds = omitDel
-				_, _, err = MVCCDelete(ctx, engine, testKey1, txn.WriteTimestamp, MVCCWriteOptions{Txn: &txn})
+				// Transactional delete
+				_, _, err = MVCCDelete(ctx, engine, testKey1, txn.WriteTimestamp,
+					MVCCWriteOptions{Txn: &txn, OmitInRangefeeds: omitDel})
 				require.NoError(t, err)
 
 				txnCommit = txn
@@ -386,6 +388,29 @@ func TestMVCCOmitInRangefeeds(t *testing.T) {
 				_, _, _, _, err = MVCCResolveWriteIntent(ctx, engine, nil,
 					roachpb.MakeLockUpdate(&txnCommit, roachpb.Span{Key: testKey1}),
 					MVCCResolveWriteIntentOptions{})
+				require.NoError(t, err)
+
+				// Read the latest version with tombstone.
+				valueRes, vh, err = MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 4},
+					MVCCGetOptions{Tombstones: true})
+				require.NoError(t, err)
+				require.NotNil(t, valueRes.Value)
+				require.Zero(t, len(valueRes.Value.RawBytes))
+				require.Equal(t, omitDel, vh.OmitInRangefeeds)
+
+				// Non-transactional put (e.g. 1PC put)
+				writeTs := hlc.Timestamp{Logical: 3}
+				_, err = MVCCPut(ctx, engine, testKey1, writeTs, value2, MVCCWriteOptions{OmitInRangefeeds: omitPut})
+				require.NoError(t, err)
+
+				valueRes, vh, err = MVCCGetWithValueHeader(ctx, engine, testKey1, hlc.Timestamp{WallTime: 4}, MVCCGetOptions{})
+				require.NoError(t, err)
+				require.NotNil(t, valueRes.Value)
+				require.Equal(t, omitPut, vh.OmitInRangefeeds)
+
+				// Non-transactional delete (e.g. 1PC delete)
+				writeTs = hlc.Timestamp{Logical: 4}
+				_, _, err = MVCCDelete(ctx, engine, testKey1, writeTs, MVCCWriteOptions{OmitInRangefeeds: omitDel})
 				require.NoError(t, err)
 
 				// Read the latest version with tombstone.
