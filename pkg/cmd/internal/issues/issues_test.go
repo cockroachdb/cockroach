@@ -58,7 +58,11 @@ func TestPost(t *testing.T) {
 		Branch: "release-0.1",
 		SHA:    "abcd123",
 		EngFlowOptions: &EngFlowOptions{
+			Attempt:      1,
+			Label:        "//the/fake/label:label_test",
+			Run:          2,
 			ServerURL:    "https://fake.cluster.engflow.com",
+			Shard:        3,
 			InvocationID: "fake-invocation-id",
 		},
 	}
