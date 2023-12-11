@@ -8966,3 +8966,108 @@ func TestCloudstorageBufferedBytesMetric(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
+
+// TestPubsubAttributes tests that the "attributes" field in the
+// `pubsub_sink_config` behaves as expected.
+func TestPubsubAttributes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		ctx := context.Background()
+		PubsubV2Enabled.Override(ctx, &s.Server.ClusterSettings().SV, true)
+		db := sqlutils.MakeSQLRunner(s.DB)
+
+		// asserts the next message has these attributes and is sent to each of the supplied topics.
+		expectAttributes := func(feed cdctest.TestFeed, attributes map[string]string, allowedTopics ...string) {
+			// Keep popping messages until we see all the expected topics.
+			seenTopics := make(map[string]struct{})
+			for len(seenTopics) < len(allowedTopics) {
+				msg, err := feed.(*pubsubFeed).Next()
+				require.NoError(t, err)
+
+				raw := msg.RawMessage.(*mockPubsubMessage)
+
+				require.Contains(t, allowedTopics, msg.Topic)
+				if attributes == nil {
+					require.Nil(t, raw.attributes)
+				} else {
+					require.True(t, reflect.DeepEqual(attributes, raw.attributes),
+						"%#v=%#v", attributes, raw.attributes)
+				}
+				seenTopics[msg.Topic] = struct{}{}
+				t.Logf("message %s: %s -> %s, %v", msg.Key, msg.Value, msg.Topic, raw.attributes)
+			}
+		}
+
+		t.Run("separate tables", func(t *testing.T) {
+			db.Exec(t, "CREATE TABLE one (i int)")
+			db.Exec(t, "CREATE TABLE two (i int)")
+
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE one, TABLE two ` +
+				`INTO 'gcpubsub://testfeed?with_table_name_attribute=true' `)
+			require.NoError(t, err)
+
+			db.Exec(t, "INSERT INTO one VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "one"}, "one")
+
+			db.Exec(t, "INSERT INTO two VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "two"}, "two")
+
+			require.NoError(t, foo.Close())
+		})
+
+		t.Run("same table different families", func(t *testing.T) {
+			db.Exec(t, "CREATE TABLE withFams (i int, j int, k int, FAMILY ifam(i), FAMILY jfam(j))")
+			db.Exec(t, "CREATE TABLE withoutFams (i int)")
+
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE withFams FAMILY ifam, TABLE withFams FAMILY jfam, ` +
+				`TABLE withoutFams INTO 'gcpubsub://testfeed?with_table_name_attribute=true'`)
+			require.NoError(t, err)
+
+			// We get two messages because the changefeed is targeting two familes.
+			// Each message should reference the same table.
+			db.Exec(t, "INSERT INTO withFams VALUES (1, 2, 3)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "withfams"}, "withfams.jfam", "withfams.ifam")
+
+			db.Exec(t, "INSERT INTO withoutFams VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "withoutfams"}, "withoutfams")
+
+			require.NoError(t, foo.Close())
+		})
+
+		t.Run("different tables with one topic", func(t *testing.T) {
+			db.Exec(t, "CREATE TABLE a (i int)")
+			db.Exec(t, "CREATE TABLE b (i int)")
+			db.Exec(t, "CREATE TABLE c (i int)")
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE a, TABLE b, TABLE c ` +
+				`INTO 'gcpubsub://testfeed?topic_name=mytopicname&with_table_name_attribute=true'`)
+			require.NoError(t, err)
+
+			// Ensure each message goes in a different batch with its own
+			// attributes. Ie. ensure batching is not per-topic only, but also
+			// per-table when we enable the table name attribute.
+			db.Exec(t, "INSERT INTO a VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "a"}, "mytopicname")
+			db.Exec(t, "INSERT INTO b VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "b"}, "mytopicname")
+			db.Exec(t, "INSERT INTO c VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "c"}, "mytopicname")
+
+			require.NoError(t, foo.Close())
+		})
+
+		t.Run("no attributes", func(t *testing.T) {
+			db.Exec(t, "CREATE TABLE non (i int)")
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE non`)
+			require.NoError(t, err)
+
+			db.Exec(t, "INSERT INTO non VALUES (1)")
+			expectAttributes(foo, nil, "non")
+
+			require.NoError(t, foo.Close())
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}
