@@ -96,6 +96,7 @@ type rangeFeedConfig struct {
 	useMuxRangeFeed bool
 	overSystemTable bool
 	withDiff        bool
+	withFiltering   bool
 	rangeObserver   func(ForEachRangeFn)
 
 	knobs struct {
@@ -142,6 +143,14 @@ func WithSystemTablePriority() RangeFeedOption {
 func WithDiff() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.withDiff = true
+	})
+}
+
+// WithFiltering opts into rangefeed filtering. When rangefeed filtering is on,
+// any transactional write with OmitInRangefeeds = true will be dropped.
+func WithFiltering() RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.withFiltering = true
 	})
 }
 
@@ -746,6 +755,7 @@ func makeRangeFeedRequest(
 	isSystemRange bool,
 	startAfter hlc.Timestamp,
 	withDiff bool,
+	withFiltering bool,
 ) kvpb.RangeFeedRequest {
 	admissionPri := admissionpb.BulkNormalPri
 	if isSystemRange {
@@ -757,7 +767,8 @@ func makeRangeFeedRequest(
 			Timestamp: startAfter,
 			RangeID:   rangeID,
 		},
-		WithDiff: withDiff,
+		WithDiff:      withDiff,
+		WithFiltering: withFiltering,
 		AdmissionHeader: kvpb.AdmissionHeader{
 			// NB: AdmissionHeader is used only at the start of the range feed
 			// stream since the initial catch-up scan is expensive.
@@ -815,7 +826,7 @@ func (ds *DistSender) singleRangeFeed(
 		cancelFeed()
 	}()
 
-	args := makeRangeFeedRequest(span, desc.RangeID, cfg.overSystemTable, startAfter, cfg.withDiff)
+	args := makeRangeFeedRequest(span, desc.RangeID, cfg.overSystemTable, startAfter, cfg.withDiff, cfg.withFiltering)
 	transport, err := newTransportForRange(ctx, desc, ds)
 	if err != nil {
 		return args.Timestamp, err
