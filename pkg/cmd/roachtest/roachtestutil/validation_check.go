@@ -14,6 +14,7 @@ package roachtestutil
 import (
 	"context"
 	gosql "database/sql"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -69,8 +70,9 @@ func CheckInvalidDescriptors(ctx context.Context, db *gosql.DB) error {
 	// query will take a lease on the database sqlDB is connected to and only run
 	// the query on the given database. The "" prefix prevents this lease
 	// acquisition and allows the query to fetch all descriptors in the cluster.
-	rows, err := db.QueryContext(ctx, `
-SET statement_timeout = '1m'; 
+	validationContext, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	rows, err := db.QueryContext(validationContext, `
 SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
 	if err != nil {
 		return err

@@ -96,6 +96,11 @@ func MakeHTTPClient(settings *cluster.Settings) (*http.Client, error) {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	// Add our custom CA.
 	t.TLSClientConfig = tlsConf
+
+	// Bump up the default idle conn pool size as we have many parallel workers in
+	// most bulk jobs.
+	t.MaxIdleConnsPerHost = 64
+
 	return &http.Client{Transport: t}, nil
 }
 
