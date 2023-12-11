@@ -41,9 +41,7 @@ func registerOnlineRestore(r registry.Registry) {
 			hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */, workloadNode: true}),
 			backup:                 makeRestoringBackupSpecs(backupSpecs{nonRevisionHistory: true, version: "v23.1.11"}),
 			timeout:                5 * time.Hour,
-			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: 1,
 			skip:                   "used for ad hoc experiments",
 		},
@@ -56,9 +54,7 @@ func registerOnlineRestore(r registry.Registry) {
 				version:            "v23.1.11",
 				workload:           tpceRestore{customers: 500000}}),
 			timeout:                5 * time.Hour,
-			clouds:                 registry.AllClouds,
 			suites:                 registry.Suites(registry.Nightly),
-			tags:                   registry.Tags("aws"),
 			restoreUptoIncremental: 1,
 			skip:                   "used for ad hoc experiments",
 		},
@@ -87,9 +83,9 @@ func registerOnlineRestore(r registry.Registry) {
 					// These tests measure performance. To ensure consistent perf,
 					// disable metamorphic encryption.
 					EncryptionSupport: registry.EncryptionAlwaysDisabled,
-					CompatibleClouds:  sp.clouds,
+					CompatibleClouds:  registry.Clouds(sp.backup.cloud),
 					Suites:            sp.suites,
-					Tags:              sp.tags,
+					Tags:              tagsFromSuiteAndCloud(sp.backup.cloud, sp.suites),
 					Skip:              sp.skip,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
