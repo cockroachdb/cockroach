@@ -26,13 +26,22 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const numAccounts = 1000
-	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		// Online restore is not supported in a secondary tenant yet.
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
 	defer cleanupFn()
 	externalStorage := "nodelocal://1/backup"
 
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
-	params := base.TestClusterArgs{}
+	params := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	}
 	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 	defer cleanupFnRestored()
 	bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
@@ -53,9 +62,19 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1, InitManualReplication, base.TestClusterArgs{
+		// Online restore is not supported in a secondary tenant yet.
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
 	defer cleanupFn()
-	params := base.TestClusterArgs{}
+	params := base.TestClusterArgs{
+		// Online restore is not supported in a secondary tenant yet.
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	}
 	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 	defer cleanupFnRestored()
 	rSQLDB.Exec(t, "CREATE DATABASE data")
