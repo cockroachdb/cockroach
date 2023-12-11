@@ -84,13 +84,8 @@ type EventSink interface {
 
 	// EmitRow enqueues a row message for asynchronous delivery on the sink. An
 	// error may be returned if a previously enqueued message has failed.
-	EmitRow(
-		ctx context.Context,
-		topic TopicDescriptor,
-		key, value []byte,
-		updated, mvcc hlc.Timestamp,
-		alloc kvevent.Alloc,
-	) error
+	EmitRow(ctx context.Context, topic TopicDescriptor, key, value []byte,
+		updated, mvcc hlc.Timestamp, alloc kvevent.Alloc, tableName string) error
 
 	// Flush blocks until every message enqueued by EmitRow
 	// has been acknowledged by the sink. If an error is
@@ -414,8 +409,9 @@ func (s errorWrapperSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	tableName string,
 ) error {
-	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc); err != nil {
+	if err := s.wrapped.(EventSink).EmitRow(ctx, topic, key, value, updated, mvcc, alloc, tableName); err != nil {
 		return changefeedbase.MarkRetryableError(err)
 	}
 	return nil
@@ -505,6 +501,7 @@ func (s *bufferSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
+	tableName string,
 ) error {
 	defer r.Release(ctx)
 	defer s.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
@@ -616,6 +613,7 @@ func (n *nullSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	r kvevent.Alloc,
+	tableName string,
 ) error {
 	defer r.Release(ctx)
 	defer n.metrics.recordOneMessage()(mvcc, len(key)+len(value), sinkDoesNotCompress)
@@ -694,10 +692,11 @@ func (s *safeSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	tableName string,
 ) error {
 	s.Lock()
 	defer s.Unlock()
-	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc)
+	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc, tableName)
 }
 
 func (s *safeSink) Flush(ctx context.Context) error {

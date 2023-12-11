@@ -111,6 +111,7 @@ func (parquetSink *parquetCloudStorageSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	tableName string,
 ) error {
 	return errors.AssertionFailedf("EmitRow unimplemented by the parquet cloud storage sink")
 }

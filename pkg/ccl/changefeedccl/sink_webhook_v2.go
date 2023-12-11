@@ -329,7 +329,7 @@ func (jb *webhookJSONBuffer) Close() (SinkPayload, error) {
 }
 
 // MakeBatchBuffer implements the SinkClient interface
-func (sc *webhookSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
+func (sc *webhookSinkClient) MakeBatchBuffer(topic string, tableName string) BatchBuffer {
 	if sc.format == changefeedbase.OptFormatCSV {
 		return &webhookCSVBuffer{sc: sc}
 	} else {
