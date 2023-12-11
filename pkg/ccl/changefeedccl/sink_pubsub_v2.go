@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -35,6 +36,15 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
+
+func testingEnableTableNameAttribute() func() {
+	tableNameAttributeEnabled = true
+	return func() {
+		tableNameAttributeEnabled = false
+	}
+}
+
+var tableNameAttributeEnabled = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_TABLE_NAME_PUSBUB_ATTRIBUTE", false)
 
 const credentialsParam = "CREDENTIALS"
 
@@ -66,7 +76,16 @@ type pubsubSinkClient struct {
 		// Caches whether or not we've already created a topic
 		topicCache map[string]struct{}
 	}
+	// A cache containing attributes to be emitted with each row.
+	attributesMu struct {
+		syncutil.Mutex
+		cache *cache.UnorderedCache
+	}
 }
+
+// The number of distinct attribute maps to cache per-sink client (which is
+// the same as per-changefeed).
+var attributesCacheSize = 128
 
 var _ SinkClient = (*pubsubSinkClient)(nil)
 var _ SinkPayload = (*pb.PubsubMessage)(nil)
@@ -129,6 +148,14 @@ func makePubsubSinkClient(
 		projectID: projectID,
 	}
 	sinkClient.mu.topicCache = make(map[string]struct{})
+	sinkClient.attributesMu.cache = cache.NewUnorderedCache(cache.Config{
+		// TODO: Using a LFU policy is ideal because we want to avoid
+		// frequent allocs. Settle for LRU for now.
+		Policy: cache.CacheLRU,
+		ShouldEvict: func(size int, key, value interface{}) bool {
+			return size > attributesCacheSize
+		},
+	})
 
 	return sinkClient, nil
 }
@@ -218,7 +245,7 @@ type pubsubBuffer struct {
 var _ BatchBuffer = (*pubsubBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (psb *pubsubBuffer) Append(key []byte, value []byte) {
+func (psb *pubsubBuffer) Append(key []byte, value []byte, attributes attributes) {
 	var content []byte
 	switch psb.sc.format {
 	case changefeedbase.OptFormatJSON:
@@ -237,7 +264,21 @@ func (psb *pubsubBuffer) Append(key []byte, value []byte) {
 		content = value
 	}
 
-	psb.messages = append(psb.messages, &pb.PubsubMessage{Data: content})
+	msg := &pb.PubsubMessage{Data: content}
+	if tableNameAttributeEnabled {
+		psb.sc.attributesMu.Lock()
+		defer psb.sc.attributesMu.Unlock()
+		v, ok := psb.sc.attributesMu.cache.Get(attributes)
+		if !ok {
+			m := map[string]string{"TABLE_NAME": attributes.tableName}
+			psb.sc.attributesMu.cache.Add(attributes, m)
+			msg.Attributes = m
+		} else {
+			msg.Attributes = (v).(map[string]string)
+		}
+	}
+
+	psb.messages = append(psb.messages, msg)
 	psb.numBytes += len(content)
 }
 
@@ -258,12 +299,13 @@ func (psb *pubsubBuffer) ShouldFlush() bool {
 func (sc *pubsubSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
 	var topicBuffer bytes.Buffer
 	json.FromString(topic).Format(&topicBuffer)
-	return &pubsubBuffer{
+	psb := &pubsubBuffer{
 		sc:           sc,
 		topic:        topic,
 		topicEncoded: topicBuffer.Bytes(),
 		messages:     make([]*pb.PubsubMessage, 0, sc.batchCfg.Messages),
 	}
+	return psb
 }
 
 // Close implements the SinkClient interface
