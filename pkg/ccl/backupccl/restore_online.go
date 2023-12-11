@@ -194,6 +194,7 @@ func sendAddRemoteSSTWorker(
 				// span rather than one we have added to, since we add with estimated
 				// stats and splitting a span with estimated stats is slow.
 				if batchSize > targetBatchSize {
+					log.Infof(ctx, "flushing %s batch of %d SSTs due to size limit", sz(batchSize), len(toAdd))
 					if err := flush(file.BackupFileEntrySpan.Key); err != nil {
 						return err
 					}
@@ -203,9 +204,16 @@ func sendAddRemoteSSTWorker(
 				toAdd = append(toAdd, file)
 				batchSize += file.BackupFileEntryCounts.DataSize
 			}
+			// TODO(msbutler): think hard about if this restore span entry is a safe
+			// key to split on. Note that it only is safe with
+			// https://github.com/cockroachdb/cockroach/pull/114464
+			log.Infof(ctx, "flushing %s batch of %d SSTs at end of restore span entry", sz(batchSize), len(toAdd))
+			if err := flush(entry.Span.EndKey); err != nil {
+				return err
+			}
 			requestFinishedCh <- struct{}{}
 		}
-		return flush(nil)
+		return nil
 	}
 }
 
