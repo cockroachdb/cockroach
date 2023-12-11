@@ -94,6 +94,10 @@ func (b *Builder) buildJoin(
 		telemetry.Inc(sqltelemetry.MergeJoinHintUseCounter)
 		flags = memo.AllowOnlyMergeJoin
 
+	case tree.AstStraight:
+		telemetry.Inc(sqltelemetry.StraightJoinHintUseCounter)
+		flags = memo.AllowAllJoinsIntoRight
+
 	default:
 		panic(pgerror.Newf(
 			pgcode.FeatureNotSupported, "join hint %s not supported", join.Hint,

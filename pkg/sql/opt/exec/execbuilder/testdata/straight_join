@@ -1,0 +1,273 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t1 (x INT, PRIMARY KEY (x))
+
+statement ok
+CREATE TABLE t2 (x INT, y INT, z INT, PRIMARY KEY (x), INDEX idx_y (y))
+
+# Set up the statistics as if t1 is much smaller than t2.
+statement ok
+ALTER TABLE t1 INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100,
+    "null_count": 0
+  }
+]'
+
+statement ok
+ALTER TABLE t2 INJECT STATISTICS '[
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000,
+    "null_count": 0
+  },
+  {
+    "columns": ["z"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000,
+    "null_count": 0
+  }
+]'
+
+# --------------------------------------------------
+# INNER JOIN
+# --------------------------------------------------
+
+# The best plan should be a lookup join into t2 (right).
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t1 INNER JOIN t2 ON t1.x = t2.y
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (x, x, y, z)
+│ estimated row count: 100
+│ table: t2@t2_pkey
+│ equality: (x) = (x)
+│ equality cols are key
+│
+└── • lookup join (inner)
+    │ columns: (x, x, y)
+    │ estimated row count: 100
+    │ table: t2@idx_y
+    │ equality: (x) = (y)
+    │
+    └── • scan
+          columns: (x)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: t1@t1_pkey
+          spans: FULL SCAN
+
+# Should not change the plan, as the table on the right side of the join is still t2.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t1 INNER STRAIGHT JOIN t2 ON t1.x = t2.y
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (x, x, y, z)
+│ estimated row count: 100
+│ table: t2@t2_pkey
+│ equality: (x) = (x)
+│ equality cols are key
+│
+└── • lookup join (inner)
+    │ columns: (x, x, y)
+    │ estimated row count: 100
+    │ table: t2@idx_y
+    │ equality: (x) = (y)
+    │
+    └── • scan
+          columns: (x)
+          estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+          table: t1@t1_pkey
+          spans: FULL SCAN
+
+# Now, the best plan (lookup join into t2) should no longer be picked as t1 is now on the right.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t2 INNER STRAIGHT JOIN t1 ON t1.x = t2.y
+----
+distribution: local
+vectorized: true
+·
+• hash join (inner)
+│ columns: (x, y, z, x)
+│ estimated row count: 100
+│ equality: (y) = (x)
+│ right cols are key
+│
+├── • scan
+│     columns: (x, y, z)
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: t2@t2_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+
+# The best plan should be a hash join into t1 (smaller table).
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t1 INNER JOIN t2 ON t1.x = t2.z
+----
+distribution: local
+vectorized: true
+·
+• hash join (inner)
+│ columns: (x, x, y, z)
+│ estimated row count: 100
+│ equality: (z) = (x)
+│ right cols are key
+│
+├── • scan
+│     columns: (x, y, z)
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: t2@t2_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# Should not change the plan, as the table on the right side of the join is t1.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t2 INNER STRAIGHT JOIN t1 ON t1.x = t2.z
+----
+distribution: local
+vectorized: true
+·
+• hash join (inner)
+│ columns: (x, y, z, x)
+│ estimated row count: 100
+│ equality: (z) = (x)
+│ right cols are key
+│
+├── • scan
+│     columns: (x, y, z)
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: t2@t2_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# Now, the best plan (hash join into t1) should no longer be picked as t2 is now on the right.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t1 INNER STRAIGHT JOIN t2 ON t1.x = t2.z
+----
+distribution: local
+vectorized: true
+·
+• hash join (inner)
+│ columns: (x, x, y, z)
+│ estimated row count: 100
+│ equality: (x) = (z)
+│ left cols are key
+│
+├── • scan
+│     columns: (x)
+│     estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+│     table: t1@t1_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+      table: t2@t2_pkey
+      spans: FULL SCAN
+
+# --------------------------------------------------
+# LEFT JOIN
+# --------------------------------------------------
+
+# The best plan should be a (commuted) right outer hash join into t1.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t1 LEFT JOIN t2 ON t1.x = t2.z
+----
+distribution: local
+vectorized: true
+·
+• hash join (right outer)
+│ columns: (x, x, y, z)
+│ estimated row count: 100
+│ equality: (z) = (x)
+│ right cols are key
+│
+├── • scan
+│     columns: (x, y, z)
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: t2@t2_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# Now, the best plan should no longer be picked, as we're forcing the join order.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t1 LEFT STRAIGHT JOIN t2 ON t1.x = t2.z
+----
+distribution: local
+vectorized: true
+·
+• hash join (left outer)
+│ columns: (x, x, y, z)
+│ estimated row count: 100
+│ equality: (x) = (z)
+│ left cols are key
+│
+├── • scan
+│     columns: (x)
+│     estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+│     table: t1@t1_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+      table: t2@t2_pkey
+      spans: FULL SCAN
+
+# Should produce the same plan except with a right outer hash join.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t1 RIGHT STRAIGHT JOIN t2 ON t1.x = t2.z
+----
+distribution: local
+vectorized: true
+·
+• hash join (right outer)
+│ columns: (x, x, y, z)
+│ estimated row count: 10,000
+│ equality: (x) = (z)
+│ left cols are key
+│
+├── • scan
+│     columns: (x)
+│     estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+│     table: t1@t1_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x, y, z)
+      estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+      table: t2@t2_pkey
+      spans: FULL SCAN

@@ -518,6 +518,11 @@ const (
 
 	// AllowOnlyMergeJoin has all "disallow" flags set except DisallowMergeJoin.
 	AllowOnlyMergeJoin = disallowAll ^ DisallowMergeJoin
+
+	// AllowAllJoinsIntoRight has all "disallow" flags set except
+	// DisallowHashJoinStoreRight, DisallowLookupJoinIntoRight,
+	// DisallowInvertedJoinIntoRight, and DisallowMergeJoin.
+	AllowAllJoinsIntoRight = disallowAll ^ DisallowHashJoinStoreRight ^ DisallowLookupJoinIntoRight ^ DisallowInvertedJoinIntoRight ^ DisallowMergeJoin
 )
 
 var joinFlagStr = map[JoinFlags]string{
