@@ -153,7 +153,7 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 	ts := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
 	endKey := roachpb.Key("z")
-	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0)
+	txn := roachpb.MakeTransaction("test", k, 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
 	desc := roachpb.RangeDescriptor{
 		RangeID:  99,
 		StartKey: roachpb.RKey(k),
@@ -297,7 +297,7 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 		}
 		values[i] = roachpb.MakeValueFromBytes([]byte{b})
 	}
-	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, ts, 0, 1, 0)
+	txn := roachpb.MakeTransaction("test", roachpb.Key("a"), 0, 0, ts, 0, 1, 0, false /* omitInRangefeeds */)
 
 	testutils.RunTrueAndFalse(t, "ranged", func(t *testing.T, ranged bool) {
 		db := storage.NewDefaultInMemForTesting()

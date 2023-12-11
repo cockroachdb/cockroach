@@ -103,6 +103,16 @@ func (m *MockTransactionalSender) SetDebugName(name string) {
 	m.txn.Name = name
 }
 
+// GetOmitInRangefeeds is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetOmitInRangefeeds() bool {
+	return m.txn.OmitInRangefeeds
+}
+
+// SetOmitInRangefeeds is part of the TxnSender interface.
+func (m *MockTransactionalSender) SetOmitInRangefeeds() {
+	m.txn.OmitInRangefeeds = true
+}
+
 // String is part of the TxnSender interface.
 func (m *MockTransactionalSender) String() string {
 	return m.txn.String()
