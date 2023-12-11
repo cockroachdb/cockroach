@@ -52,6 +52,7 @@ var SQLPasses = []reduce.Pass{
 	removeIndexCols,
 	removeIndexPredicate,
 	removeIndexStoringCols,
+	removeIndexInvisibility,
 	removeIndexPartitionBy,
 	removeIndexPartitions,
 	removeIndexPartitionListValues,
@@ -899,6 +900,19 @@ var (
 			return removeStoringCol(node)
 		case *tree.UniqueConstraintTableDef:
 			return removeStoringCol(&node.IndexTableDef)
+		}
+		return 0
+	})
+	removeIndexInvisibility = walkSQL("remove index Invisibility", func(xfi int, node interface{}) int {
+		xf := xfi == 0
+		switch node := node.(type) {
+		case *tree.IndexTableDef:
+			if node.Invisibility.Value != 0 {
+				if xf {
+					node.Invisibility = tree.IndexInvisibility{Value: 0.0}
+				}
+				return 1
+			}
 		}
 		return 0
 	})
