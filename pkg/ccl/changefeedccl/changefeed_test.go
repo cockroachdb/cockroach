@@ -9206,3 +9206,123 @@ func TestParallelIOMetrics(t *testing.T) {
 	}
 	cdcTest(t, testFn, feedTestForceSink("pubsub"))
 }
+
+// TestPubsubAttributes tests that the "attributes" field in the
+// `pubsub_sink_config` behaves as expected.
+func TestPubsubAttributes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		ctx := context.Background()
+		PubsubV2Enabled.Override(ctx, &s.Server.ClusterSettings().SV, true)
+		db := sqlutils.MakeSQLRunner(s.DB)
+
+		// asserts the next message has these attributes and is sent to each of the supplied topics.
+		expectAttributes := func(feed cdctest.TestFeed, attributes map[string]string, allowedTopics ...string) {
+			for i, to := range allowedTopics {
+				allowedTopics[i] = fmt.Sprintf("projects/testfeed/topics/%s", to)
+			}
+			// Keep popping messages until we see all the expected topics.
+			// There may be duplicates, so we use the map below for tracking.
+			seenTopics := make(map[string]struct{})
+			for len(seenTopics) < len(allowedTopics) {
+				msg, err := feed.(*pubsubFeed).NextRaw(false)
+				require.NoError(t, err)
+
+				require.Contains(t, allowedTopics, msg.topic)
+				if attributes == nil {
+					require.Nil(t, msg.attributes)
+				} else {
+					require.True(t, reflect.DeepEqual(attributes, msg.attributes),
+						"%#v=%#v", attributes, msg.attributes)
+				}
+				t.Logf("message %s, %v", msg.topic, msg.attributes)
+				seenTopics[msg.topic] = struct{}{}
+			}
+
+			// Wait for a resolved timestamp, implying a checkpoint. Throw away
+			// any duplicate rows.
+			for {
+				msg, err := feed.(*pubsubFeed).Next()
+				require.NoError(t, err)
+				if msg.Resolved != nil {
+					return
+				}
+				t.Logf("skipping message %s:%s -> %s", msg.Key, msg.Value, msg.Topic)
+			}
+		}
+
+		t.Run("separate tables", func(t *testing.T) {
+			defer testingEnableTableNameAttribute()()
+			db.Exec(t, "CREATE TABLE one (i int)")
+			db.Exec(t, "CREATE TABLE two (i int)")
+
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE one, TABLE two WITH RESOLVED='10ms'`)
+			require.NoError(t, err)
+
+			db.Exec(t, "INSERT INTO one VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "one"}, "one")
+
+			db.Exec(t, "INSERT INTO two VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "two"}, "two")
+
+			require.NoError(t, foo.Close())
+		})
+
+		t.Run("same table different families", func(t *testing.T) {
+			defer testingEnableTableNameAttribute()()
+			db.Exec(t, "CREATE TABLE withFams (i int, j int, k int, FAMILY ifam(i), FAMILY jfam(j))")
+			db.Exec(t, "CREATE TABLE withoutFams (i int)")
+
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE withFams FAMILY ifam, TABLE withFams FAMILY jfam, ` +
+				`TABLE withoutFams WITH RESOLVED='10ms'`)
+			require.NoError(t, err)
+
+			// We get two messages because the changefeed is targeting two familes.
+			// Each message should reference the same table.
+			db.Exec(t, "INSERT INTO withFams VALUES (1, 2, 3)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "withfams"}, "withfams.jfam", "withfams.ifam")
+
+			db.Exec(t, "INSERT INTO withoutFams VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "withoutfams"}, "withoutfams")
+
+			require.NoError(t, foo.Close())
+		})
+
+		t.Run("different tables with one topic", func(t *testing.T) {
+			defer testingEnableTableNameAttribute()()
+			db.Exec(t, "CREATE TABLE a (i int)")
+			db.Exec(t, "CREATE TABLE b (i int)")
+			db.Exec(t, "CREATE TABLE c (i int)")
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE a, TABLE b, TABLE c ` +
+				`INTO 'gcpubsub://testfeed?topic_name=mytopicname' WITH RESOLVED='10ms'`)
+			require.NoError(t, err)
+
+			// Ensure each message goes in a different batch with its own
+			// attributes. Ie. ensure batching is not per-topic only, but also
+			// per-table when we enable the table name attribute.
+			db.Exec(t, "INSERT INTO a VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "a"}, "mytopicname")
+			db.Exec(t, "INSERT INTO b VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "b"}, "mytopicname")
+			db.Exec(t, "INSERT INTO c VALUES (1)")
+			expectAttributes(foo, map[string]string{"TABLE_NAME": "c"}, "mytopicname")
+
+			require.NoError(t, foo.Close())
+		})
+
+		t.Run("no attributes", func(t *testing.T) {
+			db.Exec(t, "CREATE TABLE non (i int)")
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE non WITH RESOLVED='10ms'`)
+			require.NoError(t, err)
+
+			db.Exec(t, "INSERT INTO non VALUES (1)")
+			expectAttributes(foo, nil, "non")
+
+			require.NoError(t, foo.Close())
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}
