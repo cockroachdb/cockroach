@@ -36,6 +36,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+func testingEnableTableNameAttribute() func() {
+	tableNameAttributeEnabled = true
+	return func() {
+		tableNameAttributeEnabled = false
+	}
+}
+
+var tableNameAttributeEnabled = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_TABLE_NAME_PUSBUB_ATTRIBUTE", false)
+
 const credentialsParam = "CREDENTIALS"
 
 // GcpScheme to be used in testfeed and sink.go
@@ -67,6 +76,10 @@ type pubsubSinkClient struct {
 		topicCache map[string]struct{}
 	}
 }
+
+// The number of distinct attribute maps to cache per-sink client (which is
+// the same as per-changefeed).
+var attributesCacheSize = 128
 
 var _ SinkClient = (*pubsubSinkClient)(nil)
 var _ SinkPayload = (*pb.PubsubMessage)(nil)
@@ -213,12 +226,16 @@ type pubsubBuffer struct {
 	topicEncoded []byte
 	messages     []*pb.PubsubMessage
 	numBytes     int
+	// Cache for attributes which are sent along with each message.
+	// This lets us re-use expensive map allocs for messages in the batch
+	// with the same attributes.
+	attributesCache map[attributes]map[string]string
 }
 
 var _ BatchBuffer = (*pubsubBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (psb *pubsubBuffer) Append(key []byte, value []byte) {
+func (psb *pubsubBuffer) Append(key []byte, value []byte, attributes attributes) {
 	var content []byte
 	switch psb.sc.format {
 	case changefeedbase.OptFormatJSON:
@@ -237,7 +254,16 @@ func (psb *pubsubBuffer) Append(key []byte, value []byte) {
 		content = value
 	}
 
-	psb.messages = append(psb.messages, &pb.PubsubMessage{Data: content})
+	msg := &pb.PubsubMessage{Data: content}
+	if tableNameAttributeEnabled {
+		attrMap, ok := psb.attributesCache[attributes]
+		if !ok {
+			attrMap = map[string]string{"TABLE_NAME": attributes.tableName}
+		}
+		msg.Attributes = attrMap
+	}
+
+	psb.messages = append(psb.messages, msg)
 	psb.numBytes += len(content)
 }
 
@@ -258,12 +284,13 @@ func (psb *pubsubBuffer) ShouldFlush() bool {
 func (sc *pubsubSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
 	var topicBuffer bytes.Buffer
 	json.FromString(topic).Format(&topicBuffer)
-	return &pubsubBuffer{
+	psb := &pubsubBuffer{
 		sc:           sc,
 		topic:        topic,
 		topicEncoded: topicBuffer.Bytes(),
 		messages:     make([]*pb.PubsubMessage, 0, sc.batchCfg.Messages),
 	}
+	return psb
 }
 
 // Close implements the SinkClient interface
