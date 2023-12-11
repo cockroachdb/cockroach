@@ -324,7 +324,11 @@ func (t *TestSpec) CrossCheckTags() {
 	expected.nightlyAWS = matchesAll(t.Tags, []string{"aws"})
 	expected.weeklyAWS = matchesAll(t.Tags, []string{"aws-weekly"})
 
-	actual.nightlyGCE = t.Suites.Contains(Nightly) && t.CompatibleClouds.Contains(spec.GCE)
+	// Unfortunately lots of tests that are are aws only hae tag AWS but use the
+	// AllClouds filter and then skip themselves, so they so they are technically
+	// considered "nightly GCE" even though they will internally skip.
+	// This goes away when we get rid of tags entirely so for now ignore them.
+	actual.nightlyGCE = t.Suites.Contains(Nightly) && (t.CompatibleClouds.Contains(spec.GCE) || t.CompatibleClouds.Contains(spec.AWS))
 	actual.weeklyGCE = t.Suites.Contains(Weekly) && t.CompatibleClouds.Contains(spec.GCE)
 	actual.nightlyAWS = t.Suites.Contains(Nightly) && t.CompatibleClouds.Contains(spec.AWS)
 	actual.weeklyAWS = t.Suites.Contains(Weekly) && t.CompatibleClouds.Contains(spec.AWS)
