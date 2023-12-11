@@ -140,7 +140,7 @@ func TestKVFeed(t *testing.T) {
 		tf := newRawTableFeed(tc.descs, tc.initialHighWater)
 		f := newKVFeed(buf, tc.spans, tc.checkpoint, hlc.Timestamp{},
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
-			tc.needsInitialScan, tc.withDiff,
+			tc.needsInitialScan, tc.withDiff, true, /* withFiltering */
 			tc.initialHighWater, tc.endTime,
 			codec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,
