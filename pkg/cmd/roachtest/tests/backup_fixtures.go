@@ -97,10 +97,9 @@ type backupFixtureSpecs struct {
 	// specified in the scheduledBackupSpecs field above.
 	initWorkloadViaRestore *restoreSpecs
 
-	timeout  time.Duration
-	clouds   registry.CloudSet
-	suites   registry.SuiteSet
-	tags     map[string]struct{}
+	timeout time.Duration
+	suites  registry.SuiteSet
+
 	testName string
 
 	// If non-empty, the test will be skipped with the supplied reason.
@@ -242,11 +241,8 @@ func registerBackupFixtures(r registry.Registry) {
 				backup:                 backupSpecs{version: "v22.2.0", numBackupsInChain: 48},
 				restoreUptoIncremental: 48,
 			},
-			skip: "only for fixture generation",
-			// TODO(radu): this should be only AWS.
-			clouds: registry.AllClouds,
+			skip:   "only for fixture generation",
 			suites: registry.Suites(registry.Nightly),
-			tags:   registry.Tags("aws"),
 		},
 		{
 			// 15 GB backup fixture with 48 incremental layers. This is used by
@@ -263,9 +259,7 @@ func registerBackupFixtures(r registry.Registry) {
 				restoreUptoIncremental: 48,
 			},
 			timeout: 2 * time.Hour,
-			clouds:  registry.AllClouds,
 			suites:  registry.Suites(registry.Weekly),
-			tags:    registry.Tags("weekly", "aws-weekly"),
 		},
 		{
 			// 8TB Backup Fixture.
@@ -278,11 +272,9 @@ func registerBackupFixtures(r registry.Registry) {
 				backup:                 backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
 				restoreUptoIncremental: 48,
 			},
-			clouds: registry.AllClouds,
+			// Use weekly to allow an over 24 hour timeout.
 			suites: registry.Suites(registry.Weekly),
-			// add the weekly tags to allow an over 24 hour timeout.
-			tags: registry.Tags("weekly", "aws-weekly"),
-			skip: "only for fixture generation",
+			skip:   "only for fixture generation",
 		},
 		{
 			// Default Fixture, Run on GCE. Initiated by the tpce --init.
@@ -290,7 +282,6 @@ func registerBackupFixtures(r registry.Registry) {
 			scheduledBackupSpecs: makeBackupFixtureSpecs(scheduledBackupSpecs{
 				backupSpecs: backupSpecs{cloud: spec.GCE}}),
 			// TODO(radu): this should be OnlyGCE.
-			clouds:  registry.AllExceptAWS,
 			suites:  registry.Suites(registry.Nightly),
 			timeout: 5 * time.Hour,
 			skip:    "only for fixture generation",
@@ -304,12 +295,10 @@ func registerBackupFixtures(r registry.Registry) {
 				backup:                 backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
 				restoreUptoIncremental: 48,
 			},
-			timeout: 48 * time.Hour,
-			clouds:  registry.AllClouds,
+			// Use weekly to allow an over 24 hour timeout.
 			suites:  registry.Suites(registry.Weekly),
-			// add the weekly tags to allow an over 24 hour timeout.
-			tags: registry.Tags("weekly", "aws-weekly"),
-			skip: "only for fixture generation",
+			timeout: 48 * time.Hour,
+			skip:    "only for fixture generation",
 		},
 	} {
 		bf := bf
@@ -320,9 +309,9 @@ func registerBackupFixtures(r registry.Registry) {
 			Cluster:           bf.hardware.makeClusterSpecs(r, bf.scheduledBackupSpecs.cloud),
 			Timeout:           bf.timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
-			CompatibleClouds:  bf.clouds,
+			CompatibleClouds:  registry.Clouds(bf.scheduledBackupSpecs.cloud),
 			Suites:            bf.suites,
-			Tags:              bf.tags,
+			Tags:              tagsFromSuiteAndCloud(bf.scheduledBackupSpecs.cloud, bf.suites),
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 

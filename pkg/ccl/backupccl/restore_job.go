@@ -287,9 +287,11 @@ func restore(
 	}
 
 	on231 := clusterversion.V23_1.Version().LessEq(job.Payload().CreationClusterVersion)
+	restoreCheckpoint := job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
+	requiredSpans := dataToRestore.getSpans()
 	progressTracker, err := makeProgressTracker(
-		dataToRestore.getSpans(),
-		job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint,
+		requiredSpans,
+		restoreCheckpoint,
 		on231,
 		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV),
 		endTime)
@@ -311,10 +313,9 @@ func restore(
 
 	var filter spanCoveringFilter
 	if filter, err = func() (spanCoveringFilter, error) {
-		progressTracker.mu.Lock()
-		defer progressTracker.mu.Unlock()
 		return makeSpanCoveringFilter(
-			progressTracker.mu.checkpointFrontier,
+			requiredSpans,
+			restoreCheckpoint,
 			job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater,
 			introducedSpanFrontier,
 			targetSize,
@@ -322,6 +323,7 @@ func restore(
 	}(); err != nil {
 		return roachpb.RowCount{}, err
 	}
+	defer filter.close()
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.

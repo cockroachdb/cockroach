@@ -91,16 +91,15 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 
 											spanCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
 
-											checkpointFrontier, err := loadCheckpointFrontier(backups[numBackups-1].Spans, []jobspb.RestoreProgress_FrontierEntry{})
-											require.NoError(b, err)
-
 											filter, err := makeSpanCoveringFilter(
-												checkpointFrontier,
+												backups[numBackups-1].Spans,
+												[]jobspb.RestoreProgress_FrontierEntry{},
 												nil,
 												introducedSpanFrontier,
 												0,
 												false)
 											require.NoError(b, err)
+											defer filter.close()
 
 											g := ctxgroup.WithContext(ctx)
 											g.GoCtx(func(ctx context.Context) error {
