@@ -94,6 +94,19 @@ func (b *Builder) buildJoin(
 		telemetry.Inc(sqltelemetry.MergeJoinHintUseCounter)
 		flags = memo.AllowOnlyMergeJoin
 
+	case tree.AstStraight:
+		telemetry.Inc(sqltelemetry.StraightJoinHintUseCounter)
+		flags = memo.AllowAllJoinsIntoRight
+		if joinType != descpb.InnerJoin {
+			// Relevant only for INNER joins where the join order can impact
+			// performance but not the fundamental logic of the join.
+			// This is unlike OUTER joins where the specified order
+			// is inherently part of the join's logic.
+			panic(pgerror.Newf(pgcode.Syntax,
+				"%s can only be used with INNER joins", tree.AstStraight,
+			))
+		}
+
 	default:
 		panic(pgerror.Newf(
 			pgcode.FeatureNotSupported, "join hint %s not supported", join.Hint,

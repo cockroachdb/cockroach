@@ -573,6 +573,13 @@ func TestExecBuild_srfs(
 	runExecBuildLogicTest(t, "srfs")
 }
 
+func TestExecBuild_straight_join(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "straight_join")
+}
+
 func TestExecBuild_subquery(
 	t *testing.T,
 ) {

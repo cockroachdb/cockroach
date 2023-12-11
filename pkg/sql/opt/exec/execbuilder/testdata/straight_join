@@ -1,0 +1,97 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t1 (x INT, PRIMARY KEY (x))
+
+statement ok
+CREATE TABLE t2 (x INT, y INT, PRIMARY KEY (x), INDEX idx_y (y))
+
+# Set up the statistics as if t1 is much smaller than t2.
+# This will make lookup join into t2 be the best plan.
+statement ok
+ALTER TABLE t1 INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  }
+]'
+
+statement ok
+ALTER TABLE t2 INJECT STATISTICS '[
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10000,
+    "distinct_count": 10000
+  }
+]'
+
+# The best plan should be a lookup join into t2 (right).
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t1 INNER JOIN t2 ON t1.x = t2.y
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (x, x, y)
+│ estimated row count: 100
+│ table: t2@idx_y
+│ equality: (x) = (y)
+│
+└── • scan
+      columns: (x)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+# STRAIGHT should not change the plan, as the table on the right side of the join is still t2
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t1 INNER STRAIGHT JOIN t2 ON t1.x = t2.y
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (x, x, y)
+│ estimated row count: 100
+│ table: t2@idx_y
+│ equality: (x) = (y)
+│
+└── • scan
+      columns: (x)
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: t1@t1_pkey
+      spans: FULL SCAN
+
+
+# Now, the "best" plan (lookup join into t2) should no longer be used as t1 is now on the right,
+# thus enforcing t1 to be on the right side of the join.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t2 INNER STRAIGHT JOIN t1 ON t1.x = t2.y
+----
+distribution: local
+vectorized: true
+·
+• merge join (inner)
+│ columns: (x, y, x)
+│ estimated row count: 100
+│ equality: (y) = (x)
+│ right cols are key
+│ merge ordering: +"(y=x)"
+│
+├── • scan
+│     columns: (x, y)
+│     ordering: +y
+│     estimated row count: 10,000 (100% of the table; stats collected <hidden> ago)
+│     table: t2@idx_y
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (x)
+      ordering: +x
+      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+      table: t1@t1_pkey
+      spans: FULL SCAN
