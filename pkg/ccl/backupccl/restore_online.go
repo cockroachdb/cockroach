@@ -362,6 +362,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		)
 
 		if remaining == 0 {
+			r.notifyStatsRefresherOfNewTables()
 			return nil
 		}
 
