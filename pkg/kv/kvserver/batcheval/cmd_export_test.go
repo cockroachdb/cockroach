@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -431,6 +432,11 @@ INTO
 func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// This test runs into overload issues when run with the {race, deadlock}
+	// detector using remote execution.
+	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
