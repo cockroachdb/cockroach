@@ -644,6 +644,19 @@ func (r *Replica) evaluate1PC(
 	br.Responses = append(br.Responses, kvpb.ResponseUnion{})
 	br.Responses[len(br.Responses)-1].Value = &etAlloc.union
 
+	if clonedTxn.OmitInRangefeeds {
+		for _, op := range res.LogicalOpLog.Ops {
+			switch t := op.GetValue().(type) {
+			case *enginepb.MVCCWriteValueOp:
+				t.OmitInRangefeeds = true
+			case *enginepb.MVCCCommitIntentOp:
+				t.OmitInRangefeeds = true
+			default:
+				continue
+			}
+		}
+	}
+
 	return onePCResult{
 		success: onePCSucceeded,
 		stats:   *ms,

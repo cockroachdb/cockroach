@@ -256,11 +256,17 @@ message MVCCStatsDelta {
 
 // MVCCWriteValueOp corresponds to a value being written outside of a
 // transaction. Inline values (without timestamp) are not logged.
+// Note that 1PC writes are included here.
 message MVCCWriteValueOp {
   bytes key = 1;
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   bytes value = 3;
   bytes prev_value = 4;
+  // When set to true, this value will be filtered out by rangefeeds and will
+  // not be available in changefeeds. OmitInRangefeeds is populated only for
+  // transactional writes, which in the case of MVCCWriteValueOp are only 1PC
+  // writes. It is populated directly in evaluate1PC.
+  bool omit_in_rangefeeds = 6;
 }
 
 // MVCCUpdateIntentOp corresponds to an intent being written for a given
@@ -297,6 +303,11 @@ message MVCCCommitIntentOp {
   util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
   bytes value = 4;
   bytes prev_value = 5;
+  // When set to true, this value will be filtered out by rangefeeds and will
+  // not be available in changefeeds. OmitInRangefeeds is populated from the
+  // MVCCValueHeader of the corresponding write. It is only relevant for
+  // transactional writes.
+  bool omit_in_rangefeeds = 6;
 }
 
 // MVCCAbortIntentOp corresponds to an intent being aborted for a given
