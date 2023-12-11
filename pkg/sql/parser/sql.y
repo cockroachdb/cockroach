@@ -1000,7 +1000,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %token <str> SHARE SHARED SHOW SIMILAR SIMPLE SIZE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SKIP_MISSING_UDFS SMALLINT SMALLSERIAL
 %token <str> SNAPSHOT SOME SPLIT SQL SQLLOGIN
-%token <str> STABLE START STATE STATISTICS STATUS STDIN STDOUT STOP STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
+%token <str> STABLE START STATE STATISTICS STATUS STDIN STDOUT STOP STRAIGHT STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
 %token <str> SUPPORT SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TENANT_NAME TENANTS TESTING_RELOCATE TEXT THEN
@@ -13466,7 +13466,7 @@ opt_index_flags:
 //   '{' FORCE_ZIGZAG = <idxname> [, ...]  '}'
 //
 // Join types:
-//   { INNER | { LEFT | RIGHT | FULL } [OUTER] } [ { HASH | MERGE | LOOKUP | INVERTED } ]
+//   { INNER | { LEFT | RIGHT | FULL } [OUTER] } [ { HASH | MERGE | LOOKUP | INVERTED | STRAIGHT } ]
 //
 // %SeeAlso: WEBDOCS/table-expressions.html
 table_ref:
@@ -13790,6 +13790,7 @@ join_outer:
 //  - INVERTED forces an inverted join into the right side; the right side must
 //    be a table with a suitable inverted index. `INVERTED` can only be used
 //    with INNER and LEFT joins (though this is not enforced by the syntax).
+//  - STRAIGHT forces the join order, but not the algorithm.
 //  - If it is not possible to use the algorithm in the hint, an error is
 //    returned.
 //  - When a join hint is specified, the two tables will not be reordered
@@ -13810,6 +13811,10 @@ opt_join_hint:
 | INVERTED
   {
     $$ = tree.AstInverted
+  }
+| STRAIGHT
+  {
+    $$ = tree.AstStraight
   }
 | /* EMPTY */
   {
@@ -17284,6 +17289,7 @@ unreserved_keyword:
 | STORE
 | STORED
 | STORING
+| STRAIGHT
 | STREAM
 | STRICT
 | SUBSCRIPTION
@@ -17848,6 +17854,7 @@ bare_label_keywords:
 | STORE
 | STORED
 | STORING
+| STRAIGHT
 | STREAM
 | STRICT
 | STRING
