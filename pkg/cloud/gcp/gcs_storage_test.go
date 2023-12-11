@@ -348,7 +348,7 @@ func TestFileDoesNotExist(t *testing.T) {
 
 	{
 		// Invalid gsFile.
-		gsFile := "gs://cockroach-fixtures/tpch-csv/sf-1/invalid_region.tbl?AUTH=implicit"
+		gsFile := "gs://cockroach-fixtures-us-east1/tpch-csv/sf-1/invalid_region.tbl?AUTH=implicit"
 		conf, err := cloud.ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
@@ -366,7 +366,7 @@ func TestFileDoesNotExist(t *testing.T) {
 
 	{
 		// Invalid gsBucket.
-		gsFile := "gs://cockroach-fixtures-invalid/tpch-csv/sf-1/region.tbl?AUTH=implicit"
+		gsFile := "gs://cockroach-fixtures-us-east1-invalid/tpch-csv/sf-1/region.tbl?AUTH=implicit"
 		conf, err := cloud.ExternalStorageConfFromURI(gsFile, user)
 		require.NoError(t, err)
 
@@ -395,11 +395,11 @@ func TestCompressedGCS(t *testing.T) {
 
 	testSettings := cluster.MakeTestingClusterSettings()
 
-	// gsutil cp /usr/share/dict/words gs://cockroach-fixtures/words-compressed.txt
-	gsFile1 := "gs://cockroach-fixtures/words.txt?AUTH=implicit"
+	// gsutil cp /usr/share/dict/words gs://cockroach-fixtures-us-east1/words-compressed.txt
+	gsFile1 := "gs://cockroach-fixtures-us-east1/words.txt?AUTH=implicit"
 
-	// gsutil cp -Z /usr/share/dict/words gs://cockroach-fixtures/words-compressed.txt
-	gsFile2 := "gs://cockroach-fixtures/words-compressed.txt?AUTH=implicit"
+	// gsutil cp -Z /usr/share/dict/words gs://cockroach-fixtures-us-east1/words-compressed.txt
+	gsFile2 := "gs://cockroach-fixtures-us-east1/words-compressed.txt?AUTH=implicit"
 
 	conf1, err := cloud.ExternalStorageConfFromURI(gsFile1, user)
 	require.NoError(t, err)
