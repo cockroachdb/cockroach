@@ -3488,3 +3488,55 @@ inner-join (merge)
 exploretrace rule=ReorderJoins set=reorder_joins_limit=0
 SELECT * FROM bx INNER JOIN cy ON b = c;
 ----
+
+# Tests for straight join - join reordering should not be
+# explored when the STRAIGHT keyword is present.
+exec-ddl
+CREATE TABLE straight_join1 (x INT, PRIMARY KEY (x));
+----
+
+exec-ddl
+CREATE TABLE straight_join2 (x INT, y INT, PRIMARY KEY (x));
+----
+
+reorderjoins format=hide-all
+SELECT * FROM straight_join1 INNER STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
+----
+Joins Considered: 0
+================================================================================
+Final Plan
+================================================================================
+inner-join (hash)
+ ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+ ├── scan straight_join1
+ ├── scan straight_join2
+ └── filters
+      └── straight_join1.x = y
+
+reorderjoins format=hide-all
+SELECT * FROM straight_join1 LEFT STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
+----
+Joins Considered: 0
+================================================================================
+Final Plan
+================================================================================
+left-join (hash)
+ ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+ ├── scan straight_join1
+ ├── scan straight_join2
+ └── filters
+      └── straight_join1.x = y
+
+reorderjoins format=hide-all
+SELECT * FROM straight_join1 RIGHT STRAIGHT JOIN straight_join2 ON straight_join1.x = straight_join2.y
+----
+Joins Considered: 0
+================================================================================
+Final Plan
+================================================================================
+right-join (hash)
+ ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
+ ├── scan straight_join1
+ ├── scan straight_join2
+ └── filters
+      └── straight_join1.x = y
