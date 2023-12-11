@@ -140,7 +140,7 @@ type outputEventFn func(e *kvpb.RangeFeedEvent) error
 // TODO(sumeer): ctx is not used for SeekGE and Next. Fix by adding a method
 // to SimpleMVCCIterator to replace the context.
 func (i *CatchUpIterator) CatchUpScan(
-	ctx context.Context, outputFn outputEventFn, withDiff bool,
+	ctx context.Context, outputFn outputEventFn, withDiff bool, withFiltering bool,
 ) error {
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
@@ -279,6 +279,14 @@ func (i *CatchUpIterator) CatchUpScan(
 			return errors.Wrapf(err, "decoding mvcc value: %v", unsafeKey)
 		}
 		unsafeVal := mvccVal.Value.RawBytes
+
+		// If this value has the flag to omit from rangefeeds, and if the consumer
+		// has opted into filtering, move to the next version for this the key
+		// (which may or may not have OmitInRangefeeds = true).
+		if mvccVal.OmitInRangefeeds && withFiltering {
+			i.Next()
+			continue
+		}
 
 		// Ignore the version if its timestamp is at or before the registration's
 		// (exclusive) starting timestamp.

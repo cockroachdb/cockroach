@@ -297,6 +297,9 @@ message MVCCCommitIntentOp {
   util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
   bytes value = 4;
   bytes prev_value = 5;
+  // OmitInRangefeeds is populated from the MVCCValueHeader of the corresponding
+  // write. It is only relevant for transactional writes.
+  bool omit_in_rangefeeds = 6;
 }
 
 // MVCCAbortIntentOp corresponds to an intent being aborted for a given

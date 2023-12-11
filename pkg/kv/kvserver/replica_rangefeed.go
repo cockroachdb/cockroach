@@ -289,7 +289,7 @@ func (r *Replica) RangeFeed(
 	}
 	var done future.ErrorFuture
 	p := r.registerWithRangefeedRaftMuLocked(
-		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, lockedStream, &done,
+		ctx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, lockedStream, &done,
 	)
 	r.raftMu.Unlock()
 
@@ -385,6 +385,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	startTS hlc.Timestamp, // exclusive
 	catchUpIter *rangefeed.CatchUpIterator,
 	withDiff bool,
+	withFiltering bool,
 	stream rangefeed.Stream,
 	done *future.ErrorFuture,
 ) rangefeed.Processor {
@@ -406,7 +407,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p := r.rangefeedMu.proc
 
 	if p != nil {
-		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
+		reg, filter := p.Register(span, startTS, catchUpIter, withDiff, withFiltering,
+			stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
@@ -493,7 +495,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg, filter := p.Register(span, startTS, catchUpIter, withDiff, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
+	reg, filter := p.Register(span, startTS, catchUpIter, withDiff,
+		withFiltering, stream, func() { r.maybeDisconnectEmptyRangefeed(p) }, done)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
@@ -660,6 +663,16 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		return
 	}
 
+	// The RangefeedValueHeaderFilter function is supposed to be applied for all
+	// emitted events to enable kvnemesis to match rangefeed events to kvnemesis
+	// operations. Applying the function here could mean we apply it to a
+	// rangefeed event that is later filtered out and not actually emitted; this
+	// filtering happens in the registry's PublishToOverlapping if the event has
+	// OmitInRangefeeds = true and the registration has WithFiltering = true.
+	//
+	// The above is not an issue because (a) for all emitted events, the
+	// RangefeedValueHeaderFilter will be called, and (b) the kvnemesis rangefeed
+	// is an internal rangefeed and should always have WithFiltering = false.
 	vhf := r.store.TestingKnobs().RangefeedValueHeaderFilter
 
 	// When reading straight from the Raft log, some logical ops will not be
@@ -739,6 +752,16 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			vhf(key, nil, ts, vh)
 		}
 		*valPtr = val.RawBytes
+
+		// If this op is an intent resolution, propagate the OmitInRangefeeds flag
+		// from the MVCCValueHeader to the MVCCCommitIntentOp. It will be used
+		// later, in the registry's PublishToOverlapping, to potentially filter this
+		// event out of the rangefeed of any registrations that opted into filtering.
+		if o, ok := op.GetValue().(*enginepb.MVCCCommitIntentOp); ok {
+			if vh.OmitInRangefeeds {
+				o.OmitInRangefeeds = true
+			}
+		}
 	}
 
 	// Pass the ops to the rangefeed processor.

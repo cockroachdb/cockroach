@@ -161,8 +161,9 @@ func TestReplicaRangefeed(t *testing.T) {
 					Timestamp: initTime,
 					RangeID:   rangeID,
 				},
-				Span:     rangefeedSpan,
-				WithDiff: true,
+				Span:          rangefeedSpan,
+				WithDiff:      true,
+				WithFiltering: true,
 			}
 			timer := time.AfterFunc(10*time.Second, stream.Cancel)
 			defer timer.Stop()
@@ -400,6 +401,47 @@ func TestReplicaRangefeed(t *testing.T) {
 		true /* ingestAsWrites */, ts7)
 	require.Nil(t, pErr)
 
+	// Delete range non-transactionally.
+	ts8 := initTime.Add(0, 3)
+	dArgs := delRangeArgs(roachpb.Key("c"), roachpb.Key("d"), true /* useRangeTombstone */)
+	_, err = kv.SendWrappedWith(ctx, db, kvpb.Header{Timestamp: ts8}, dArgs)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert a key transactionally with omitInRangefeeds = true.
+	ts9 := initTime.Add(0, 3)
+	if err := store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.SetFixedTimestamp(ctx, ts9); err != nil {
+			return err
+		}
+		txn.SetOmitInRangefeeds()
+		return txn.Put(ctx, roachpb.Key("n"), []byte("val"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Read to force intent resolution.
+	if _, err := store1.DB().Get(ctx, roachpb.Key("n")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Delete range transactionally with omitInRangefeeds = true.
+	ts10 := initTime.Add(0, 3)
+	if err := store1.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := txn.SetFixedTimestamp(ctx, ts10); err != nil {
+			return err
+		}
+		txn.SetOmitInRangefeeds()
+		_, err := txn.DelRange(ctx, "f", "g", false)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Read to force intent resolution.
+	if _, err := store1.DB().Get(ctx, roachpb.Key("f")); err != nil {
+		t.Fatal(err)
+	}
+
 	// Wait for all streams to observe the expected events.
 	expVal2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), ts2)
 	expVal3 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val3"), ts3)
@@ -436,6 +478,9 @@ func TestReplicaRangefeed(t *testing.T) {
 		}},
 		{Val: &kvpb.RangeFeedValue{
 			Key: roachpb.Key("q"), Value: expVal7q, PrevValue: expVal6q,
+		}},
+		{DeleteRange: &kvpb.RangeFeedDeleteRange{
+			Span: roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")}, Timestamp: ts8,
 		}},
 	}...)
 	// here
