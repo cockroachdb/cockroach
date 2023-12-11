@@ -274,7 +274,7 @@ type webhookCSVBuffer struct {
 var _ BatchBuffer = (*webhookCSVBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (cb *webhookCSVBuffer) Append(key []byte, value []byte) {
+func (cb *webhookCSVBuffer) Append(key []byte, value []byte, _ attributes) {
 	cb.bytes = append(cb.bytes, value...)
 	cb.messageCount += 1
 }
@@ -298,7 +298,7 @@ type webhookJSONBuffer struct {
 var _ BatchBuffer = (*webhookJSONBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (jb *webhookJSONBuffer) Append(key []byte, value []byte) {
+func (jb *webhookJSONBuffer) Append(key []byte, value []byte, _ attributes) {
 	jb.messages = append(jb.messages, value)
 	jb.numBytes += len(value)
 }
