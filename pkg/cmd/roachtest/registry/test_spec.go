@@ -372,7 +372,7 @@ func (t *TestSpec) CrossCheckTags() {
 	actual.weeklyAWS = t.Suites.Contains(Weekly) && t.CompatibleClouds.Contains(spec.AWS)
 
 	if actual != expected {
-		panic(fmt.Sprintf("CompatibleClouds/Suites inconsistent with Tags\nexpected: %#v\nactual:   %#v\nclouds: %s  suites:%s  tags:%v\n", expected, actual, t.CompatibleClouds, t.Suites, t.Tags))
+		panic(fmt.Sprintf("%q CompatibleClouds/Suites inconsistent with Tags\nexpected: %#v\nactual:   %#v\nclouds: %s  suites:%s  tags:%v\n", t.Name, expected, actual, t.CompatibleClouds, t.Suites, t.Tags))
 	}
 
 	otherSuiteTags := fmt.Sprintf("%v", removeFromSet(t.Tags, "default", "weekly", "aws-weekly", "aws", "owner-"+string(t.Owner)))
