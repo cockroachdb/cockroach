@@ -233,6 +233,18 @@ var (
 		Measurement: "Bytes",
 		Help:        "Bytes received on all network interfaces since this process started (as reported by the OS)",
 	}
+	metaHostNetRecvDrop = metric.Metadata{
+		Name:        "sys.host.net.recv.drop",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Packets",
+		Help:        "Receiving packets that got dropped on all network interfaces since this process started (as reported by the OS)",
+	}
+	metaHostNetRecvErr = metric.Metadata{
+		Name:        "sys.host.net.recv.err",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Packets",
+		Help:        "Error receiving packets on all network interfaces since this process started (as reported by the OS)",
+	}
 	metaHostNetRecvPackets = metric.Metadata{
 		Name:        "sys.host.net.recv.packets",
 		Unit:        metric.Unit_COUNT,
@@ -244,6 +256,18 @@ var (
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Bytes sent on all network interfaces since this process started (as reported by the OS)",
+	}
+	metaHostNetSendDrop = metric.Metadata{
+		Name:        "sys.host.net.send.drop",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Packets",
+		Help:        "Sending packets that got dropped on all network interfaces since this process started (as reported by the OS)",
+	}
+	metaHostNetSendErr = metric.Metadata{
+		Name:        "sys.host.net.send.err",
+		Unit:        metric.Unit_BYTES,
+		Measurement: "Packets",
+		Help:        "Error on sending packets on all network interfaces since this process started (as reported by the OS)",
 	}
 	metaHostNetSendPackets = metric.Metadata{
 		Name:        "sys.host.net.send.packets",
@@ -340,8 +364,12 @@ type RuntimeStatSampler struct {
 	HostDiskWeightedIOTime *metric.Gauge
 	IopsInProgress         *metric.Gauge
 	HostNetRecvBytes       *metric.Gauge
+	HostNetRecvErr         *metric.Gauge
+	HostNetRecvDrop        *metric.Gauge
 	HostNetRecvPackets     *metric.Gauge
 	HostNetSendBytes       *metric.Gauge
+	HostNetSendErr         *metric.Gauge
+	HostNetSendDrop        *metric.Gauge
 	HostNetSendPackets     *metric.Gauge
 	// Uptime and build.
 	Uptime         *metric.Gauge // We use a gauge to be able to call Update.
@@ -418,8 +446,12 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		HostDiskWeightedIOTime: metric.NewGauge(metaHostDiskWeightedIOTime),
 		IopsInProgress:         metric.NewGauge(metaHostIopsInProgress),
 		HostNetRecvBytes:       metric.NewGauge(metaHostNetRecvBytes),
+		HostNetRecvDrop:        metric.NewGauge(metaHostNetRecvDrop),
+		HostNetRecvErr:         metric.NewGauge(metaHostNetRecvErr),
 		HostNetRecvPackets:     metric.NewGauge(metaHostNetRecvPackets),
 		HostNetSendBytes:       metric.NewGauge(metaHostNetSendBytes),
+		HostNetSendDrop:        metric.NewGauge(metaHostNetSendDrop),
+		HostNetSendErr:         metric.NewGauge(metaHostNetSendErr),
 		HostNetSendPackets:     metric.NewGauge(metaHostNetSendPackets),
 		FDOpen:                 metric.NewGauge(metaFDOpen),
 		FDSoftLimit:            metric.NewGauge(metaFDSoftLimit),
@@ -554,8 +586,12 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		subtractNetworkCounters(&netCounters, rsr.initialNetCounters)
 
 		rsr.HostNetSendBytes.Update(int64(netCounters.BytesSent))
+		rsr.HostNetSendErr.Update(int64(netCounters.Errout))
+		rsr.HostNetSendDrop.Update(int64(netCounters.Dropout))
 		rsr.HostNetSendPackets.Update(int64(netCounters.PacketsSent))
 		rsr.HostNetRecvBytes.Update(int64(netCounters.BytesRecv))
+		rsr.HostNetRecvErr.Update(int64(netCounters.Errin))
+		rsr.HostNetRecvErr.Update(int64(netCounters.Errout))
 		rsr.HostNetRecvPackets.Update(int64(netCounters.PacketsRecv))
 	}
 
@@ -784,6 +820,10 @@ func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
 	from.BytesSent -= sub.BytesSent
 	from.PacketsRecv -= sub.PacketsRecv
 	from.PacketsSent -= sub.PacketsSent
+	from.Errin -= sub.Errin
+	from.Dropin -= sub.Dropin
+	from.Errin -= sub.Errin
+	from.Errout -= sub.Errout
 }
 
 // GetProcCPUTime returns the cumulative user/system time (in ms) since the process start.
