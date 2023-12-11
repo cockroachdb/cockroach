@@ -941,7 +941,7 @@ func TestSecondaryTenantFollowerReadsRouting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer utilccl.TestingEnableEnterprise()()
 
-	skip.UnderStressRace(t, "times out")
+	skip.UnderRace(t, "times out")
 
 	for _, testCase := range []struct {
 		name             string
