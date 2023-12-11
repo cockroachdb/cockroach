@@ -2258,6 +2258,25 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`copy_write_pipelining_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`copy_write_pipelining_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("copy_write_pipelining_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetCopyWritePipeliningEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().CopyWritePipeliningEnabled), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(false)
+		},
+	},
+
+	// CockroachDB extension.
 	`opt_split_scan_limit`: {
 		GetStringVal: makeIntGetStringValFn(`opt_split_scan_limit`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
