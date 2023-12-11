@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,7 +29,7 @@ func registerDisaggRebalance(r registry.Registry) {
 	disaggRebalanceSpec := r.MakeClusterSpec(4)
 	r.Add(registry.TestSpec{
 		Name:              fmt.Sprintf("disagg-rebalance/aws/%s", disaggRebalanceSpec),
-		CompatibleClouds:  registry.AllClouds,
+		CompatibleClouds:  registry.OnlyAWS,
 		Suites:            registry.Suites(registry.Nightly),
 		Tags:              registry.Tags("aws"),
 		Owner:             registry.OwnerStorage,
@@ -39,9 +38,6 @@ func registerDisaggRebalance(r registry.Registry) {
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Timeout:           1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if c.Cloud() != spec.AWS {
-				t.Skip("disagg-rebalance is only configured to run on AWS")
-			}
 			s3dir := fmt.Sprintf("s3://%s/disagg-rebalance/%s?AUTH=implicit", testutils.BackupTestingBucketLongTTL(), c.Name())
 			startOpts := option.DefaultStartOptsNoBackups()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs, fmt.Sprintf("--experimental-shared-storage=%s", s3dir))
