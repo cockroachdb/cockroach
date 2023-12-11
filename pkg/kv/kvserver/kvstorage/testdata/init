@@ -28,8 +28,12 @@ r7/70: r7:{a-c} [(n1,s1):70, next=71, gen=0]
 r8/80: r8:{c-f} [(n1,s1):80, next=81, gen=0]
 beginning range descriptor iteration
 range descriptor iteration done: 2 keys, 2 range descriptors (by suffix: map[rdsc:2]); scan stats: <redacted>
+loaded replica ID for 3/3 replicas
+loaded Raft state for 4/4 replicas
+loaded 4 replicas
 removed legacy uninitialized replica for r5
 backfilled replicaID for initialized replica r7/70
+verified 4/4 replicas
 
 # Idempotency.
 load-and-reconcile trace=true
@@ -39,3 +43,7 @@ r7/70: r7:{a-c} [(n1,s1):70, next=71, gen=0]
 r8/80: r8:{c-f} [(n1,s1):80, next=81, gen=0]
 beginning range descriptor iteration
 range descriptor iteration done: 2 keys, 2 range descriptors (by suffix: map[rdsc:2]); scan stats: <redacted>
+loaded replica ID for 3/3 replicas
+loaded Raft state for 3/3 replicas
+loaded 3 replicas
+verified 3/3 replicas

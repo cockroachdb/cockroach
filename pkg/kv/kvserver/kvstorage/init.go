@@ -433,25 +433,39 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	// This leads to the general desire to validate the internal consistency of the
 	// entire raft state (i.e. HardState, TruncatedState, Log).
 	{
+		logEvery := log.Every(10 * time.Second)
+		var i int
 		var msg kvserverpb.RaftReplicaID
 		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
 			return keys.RaftReplicaIDKey(rangeID)
 		}, &msg, func(rangeID roachpb.RangeID) error {
+			if logEvery.ShouldLog() && i > 0 { // only log if slow
+				log.Infof(ctx, "loaded replica ID for %d/%d replicas", i, len(s))
+			}
+			i++
 			s.setReplicaID(rangeID, msg.ReplicaID)
 			return nil
 		}); err != nil {
 			return nil, err
 		}
+		log.Infof(ctx, "loaded replica ID for %d/%d replicas", len(s), len(s))
 
+		logEvery = log.Every(10 * time.Second)
+		i = 0
 		var hs raftpb.HardState
 		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
 			return keys.RaftHardStateKey(rangeID)
 		}, &hs, func(rangeID roachpb.RangeID) error {
+			if logEvery.ShouldLog() && i > 0 { // only log if slow
+				log.Infof(ctx, "loaded Raft state for %d/%d replicas", i, len(s))
+			}
+			i++
 			s.setHardState(rangeID, hs)
 			return nil
 		}); err != nil {
 			return nil, err
 		}
+		log.Infof(ctx, "loaded Raft state for %d/%d replicas", len(s), len(s))
 	}
 	sl := make([]Replica, 0, len(s))
 	for _, repl := range s {
@@ -478,12 +492,20 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 	if err != nil {
 		return nil, err
 	}
+	log.Infof(ctx, "loaded %d replicas", len(sl))
 
 	// Check invariants.
 	//
 	// Migrate into RaftReplicaID for all replicas that need it.
+	logEvery := log.Every(10 * time.Second)
 	var newIdx int
-	for _, repl := range sl {
+	for i, repl := range sl {
+		// Log progress regularly, but not for the first replica (we only want to
+		// log when this is slow). The last replica is logged after iteration.
+		if logEvery.ShouldLog() && i > 0 {
+			log.Infof(ctx, "verified %d/%d replicas", i, len(sl))
+		}
+
 		var descReplicaID roachpb.ReplicaID
 		if repl.Desc != nil {
 			// INVARIANT: a Replica's RangeDescriptor always contains the local Store,
@@ -535,6 +557,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 			// NB: removed from `sl` since we're not incrementing `newIdx`.
 		}
 	}
+	log.Infof(ctx, "verified %d/%d replicas", len(sl), len(sl))
 
 	return sl[:newIdx], nil
 }

@@ -2123,9 +2123,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "loaded %d replicas, initializing", len(repls))
 	logEvery := log.Every(10 * time.Second)
 	for i, repl := range repls {
+		// Log progress regularly, but not for the first replica (we only want to
+		// log when this is slow). The last replica is logged after iteration.
+		if logEvery.ShouldLog() && i > 0 {
+			log.Infof(ctx, "initialized %d/%d replicas", i, len(repls))
+		}
+
 		if repl.Desc == nil {
 			// Uninitialized Replicas are not currently instantiated at store start.
 			continue
@@ -2173,13 +2178,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		// also check Sequence > 0 to omit ranges that haven't seen a lease yet.
 		if l, _ := rep.GetLease(); l.Type() == roachpb.LeaseExpiration && l.Sequence > 0 {
 			rep.maybeUnquiesce(true /* wakeLeader */, true /* mayCampaign */)
-		}
-
-		// Log progress regularly, but not for the first replica (we only want to
-		// log when this is slow) and the last replica (which is always logged after
-		// we're done).
-		if logEvery.ShouldLog() && i > 0 && i+1 < len(repls) {
-			log.Infof(ctx, "initialized %d/%d replicas", i+1, len(repls))
 		}
 	}
 	log.Infof(ctx, "initialized %d/%d replicas", len(repls), len(repls))
