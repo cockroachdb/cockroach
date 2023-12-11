@@ -51,7 +51,7 @@ func registerKV(r registry.Registry) {
 		spanReads bool
 		batchSize int
 		blockSize int
-		splits    int // 0 implies default, negative implies 0
+		splits    int
 		// If true, load-based splitting will be disabled.
 		disableLoadSplits        bool
 		encryption               bool
@@ -66,19 +66,6 @@ func registerKV(r registry.Registry) {
 		weekly                   bool
 		owner                    registry.Owner // defaults to KV
 		sharedProcessMT          bool
-	}
-	computeNumSplits := func(opts kvOptions) int {
-		// TODO(ajwerner): set this default to a more sane value or remove it and
-		// rely on load-based splitting.
-		const defaultNumSplits = 1000
-		switch {
-		case opts.splits == 0:
-			return defaultNumSplits
-		case opts.splits < 0:
-			return 0
-		default:
-			return opts.splits
-		}
 	}
 	computeConcurrency := func(opts kvOptions) int {
 		// Scale the workload concurrency with the number of nodes in the cluster to
@@ -148,7 +135,10 @@ func registerKV(r registry.Registry) {
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal(c, "", " --concurrency="+fmt.Sprint(computeConcurrency(opts)))
-			splits := " --splits=" + strconv.Itoa(computeNumSplits(opts))
+			splits := ""
+			if opts.splits > 0 {
+				splits = " --splits=" + strconv.Itoa(opts.splits)
+			}
 			if opts.duration == 0 {
 				opts.duration = 30 * time.Minute
 			}
@@ -219,14 +209,10 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 8, readPercent: 95},
 		{nodes: 3, cpus: 8, readPercent: 95, sharedProcessMT: true},
 		{nodes: 3, cpus: 8, readPercent: 95, tracing: true, owner: registry.OwnerObsInf},
-		{nodes: 3, cpus: 8, readPercent: 0, splits: -1 /* no splits */},
-		{nodes: 3, cpus: 8, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0},
 		{nodes: 3, cpus: 32, readPercent: 0, sharedProcessMT: true},
 		{nodes: 3, cpus: 32, readPercent: 95},
 		{nodes: 3, cpus: 32, readPercent: 95, sharedProcessMT: true},
-		{nodes: 3, cpus: 32, readPercent: 0, splits: -1 /* no splits */},
-		{nodes: 3, cpus: 32, readPercent: 95, splits: -1 /* no splits */},
 		{nodes: 3, cpus: 32, readPercent: 0, globalMVCCRangeTombstone: true},
 		{nodes: 3, cpus: 32, readPercent: 95, globalMVCCRangeTombstone: true},
 
@@ -269,8 +255,8 @@ func registerKV(r registry.Registry) {
 		{nodes: 3, cpus: 32, readPercent: 95, sequential: true},
 
 		// Configs with reads, that are of limited spans, along with SFU writes.
-		{nodes: 1, cpus: 8, readPercent: 95, spanReads: true, splits: -1 /* no splits */, disableLoadSplits: true, sequential: true},
-		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true, splits: -1 /* no splits */, disableLoadSplits: true, sequential: true},
+		{nodes: 1, cpus: 8, readPercent: 95, spanReads: true, disableLoadSplits: true, sequential: true},
+		{nodes: 1, cpus: 32, readPercent: 95, spanReads: true, disableLoadSplits: true, sequential: true},
 
 		// Weekly larger scale configurations.
 		{nodes: 32, cpus: 8, readPercent: 0, weekly: true, duration: time.Hour},
@@ -299,7 +285,7 @@ func registerKV(r registry.Registry) {
 			nameParts = append(nameParts, fmt.Sprintf("size=%dkb", opts.blockSize>>10))
 		}
 		if opts.splits != 0 { // support legacy test name which didn't include splits
-			nameParts = append(nameParts, fmt.Sprintf("splt=%d", computeNumSplits(opts)))
+			nameParts = append(nameParts, fmt.Sprintf("splt=%d", opts.splits))
 		}
 		if opts.sequential {
 			nameParts = append(nameParts, "seq")
