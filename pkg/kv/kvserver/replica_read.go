@@ -461,7 +461,8 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		}
 		now := timeutil.Now()
 		br, res, pErr = evaluateBatch(
-			ctx, kvserverbase.CmdIDKey(""), rw, rec, nil /* ms */, ba, g, st, ui, evalPath,
+			ctx, kvserverbase.CmdIDKey(""), rw, rec, nil /* ms */, ba, g,
+			st, ui, evalPath, false, /* omitInRangefeeds */
 		)
 		r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
 		// Allow only one retry.

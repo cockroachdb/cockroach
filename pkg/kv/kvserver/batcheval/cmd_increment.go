@@ -38,6 +38,7 @@ func Increment(
 		LocalTimestamp:                 cArgs.Now,
 		Stats:                          cArgs.Stats,
 		ReplayWriteTimestampProtection: h.AmbiguousReplayProtection,
+		OmitInRangefeeds:               cArgs.OmitInRangefeeds,
 		MaxLockConflicts:               storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
 	}
 

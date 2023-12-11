@@ -451,8 +451,11 @@ func (r *Replica) evaluateWriteBatch(
 	defer releaseMVCCStats(ms)
 	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
 	defer rec.Release()
+	// For non-transactional writes, omitInRangefeeds should always be false.
+	// For transactional writes, we propagate the flag from the txn.
+	omitInRangefeeds := ba.Txn != nil && ba.Txn.OmitInRangefeeds
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, g, st, ui, hlc.Timestamp{} /* deadline */)
+		ctx, idKey, rec, ms, ba, g, st, ui, hlc.Timestamp{} /* deadline */, omitInRangefeeds)
 	return batch, *ms, br, res, pErr
 }
 
@@ -536,10 +539,10 @@ func (r *Replica) evaluate1PC(
 	defer releaseMVCCStats(ms)
 	if ba.CanForwardReadTimestamp {
 		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
-			ctx, idKey, rec, ms, &strippedBa, g, st, ui, etArg.Deadline)
+			ctx, idKey, rec, ms, &strippedBa, g, st, ui, etArg.Deadline, ba.Txn.OmitInRangefeeds)
 	} else {
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
-			ctx, idKey, rec, ms, &strippedBa, g, st, ui)
+			ctx, idKey, rec, ms, &strippedBa, g, st, ui, ba.Txn.OmitInRangefeeds)
 	}
 
 	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
@@ -668,6 +671,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	deadline hlc.Timestamp,
+	omitInRangefeeds bool,
 ) (batch storage.Batch, br *kvpb.BatchResponse, res result.Result, pErr *kvpb.Error) {
 	goldenMS := *ms
 	for retries := 0; ; retries++ {
@@ -680,7 +684,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, g, st, ui)
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, g, st, ui, omitInRangefeeds)
 
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
@@ -709,10 +713,11 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
+	omitInRangefeeds bool,
 ) (storage.Batch, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
 	batch, opLogger := r.newBatchedEngine(ba, g)
 	now := timeutil.Now()
-	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite)
+	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite, omitInRangefeeds)
 	r.store.metrics.ReplicaWriteBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
 	if pErr == nil {
 		if opLogger != nil {

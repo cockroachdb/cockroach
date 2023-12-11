@@ -216,4 +216,5 @@ type CommandArgs struct {
 	Concurrency           *concurrency.Guard
 	Uncertainty           uncertainty.Interval
 	DontInterleaveIntents bool
+	OmitInRangefeeds      bool
 }

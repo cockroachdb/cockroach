@@ -59,7 +59,7 @@ func runCatchUpBenchmark(b *testing.B, emk engineMaker, opts benchOptions) (numE
 			err = iter.CatchUpScan(ctx, func(*kvpb.RangeFeedEvent) error {
 				counter++
 				return nil
-			}, opts.withDiff)
+			}, opts.withDiff, false /* withFiltering */)
 			if err != nil {
 				b.Fatalf("failed catchUp scan: %+v", err)
 			}

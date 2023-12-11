@@ -2601,9 +2601,7 @@ func mvccPutInternal(
 	versionValue := MVCCValue{}
 	versionValue.Value = value
 	versionValue.LocalTimestamp = opts.LocalTimestamp
-	if opts.Txn != nil {
-		versionValue.OmitInRangefeeds = opts.Txn.OmitInRangefeeds
-	}
+	versionValue.OmitInRangefeeds = opts.OmitInRangefeeds
 
 	if buildutil.CrdbTestBuild {
 		if seq, seqOK := kvnemesisutil.FromContext(ctx); seqOK {
@@ -4478,6 +4476,7 @@ type MVCCWriteOptions struct {
 	LocalTimestamp                 hlc.ClockTimestamp
 	Stats                          *enginepb.MVCCStats
 	ReplayWriteTimestampProtection bool
+	OmitInRangefeeds               bool
 	// MaxLockConflicts is a maximum number of conflicting locks collected before
 	// returning LockConflictError. Even single-key writes can encounter multiple
 	// conflicting shared locks, so the limit is important to bound the number of
