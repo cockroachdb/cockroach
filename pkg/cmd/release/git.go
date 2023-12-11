@@ -23,6 +23,8 @@ import (
 	"github.com/Masterminds/semver/v3"
 )
 
+const remoteOrigin = "origin"
+
 type releaseInfo struct {
 	prevReleaseVersion string
 	nextReleaseVersion string
@@ -220,7 +222,7 @@ func getCommonBaseRef(fromRef, toRef string) (string, error) {
 // findCandidateCommits finds all potential merge commits that can be used for the current release.
 // It includes all merge commits since previous release.
 func findCandidateCommits(prevRelease string, releaseSeries string) ([]string, error) {
-	releaseBranch := fmt.Sprintf("origin/release-%s", releaseSeries)
+	releaseBranch := fmt.Sprintf("%s/release-%s", remoteOrigin, releaseSeries)
 	commonBaseRef, err := getCommonBaseRef(prevRelease, releaseBranch)
 	if err != nil {
 		return []string{}, fmt.Errorf("cannot find common base ref: %w", err)
@@ -252,7 +254,7 @@ func findHealthyBuild(potentialRefs []string) (buildInfo, error) {
 
 // listRemoteBranches retrieves a list of remote branches using a pattern, assuming the remote name is `origin`.
 func listRemoteBranches(pattern string) ([]string, error) {
-	cmd := exec.Command("git", "ls-remote", "--refs", "origin", "refs/heads/"+pattern)
+	cmd := exec.Command("git", "ls-remote", "--refs", remoteOrigin, "refs/heads/"+pattern)
 	out, err := cmd.Output()
 	if err != nil {
 		return []string{}, fmt.Errorf("git ls-remote: %w", err)
@@ -279,10 +281,10 @@ func listRemoteBranches(pattern string) ([]string, error) {
 
 // fileExistsInGit checks if a file exists in a local repository, assuming the remote name is `origin`.
 func fileExistsInGit(branch string, f string) (bool, error) {
-	cmd := exec.Command("git", "ls-tree", "origin/"+branch, f)
+	cmd := exec.Command("git", "ls-tree", remoteOrigin+"/"+branch, f)
 	out, err := cmd.Output()
 	if err != nil {
-		return false, fmt.Errorf("git ls-tree: %w, `%s`", err, out)
+		return false, fmt.Errorf("git ls-tree: %s %s %w, `%s`", branch, f, err, out)
 	}
 	if len(out) == 0 {
 		return false, nil
@@ -295,7 +297,7 @@ func fileContent(ref string, f string) (string, error) {
 	cmd := exec.Command("git", "cat-file", "-p", ref+":"+f)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("git cat-file: %w", err)
+		return "", fmt.Errorf("git cat-file %s:%s: %w, `%s`", ref, f, err, out)
 	}
 	return string(out), nil
 }
