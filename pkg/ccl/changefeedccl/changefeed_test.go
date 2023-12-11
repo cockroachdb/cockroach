@@ -7967,6 +7967,7 @@ func (s *memoryHoggingSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	tableName string,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -8016,6 +8017,7 @@ func (s *countEmittedRowsSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	tableName string,
 ) error {
 	alloc.Release(ctx)
 	atomic.AddInt64(&s.numRows, 1)
@@ -9122,4 +9124,101 @@ func TestBatchSizeMetric(t *testing.T) {
 		require.NoError(t, foo.Close())
 	}
 	cdcTest(t, testFn)
+}
+
+// TestPubsubAttributes tests that the "attributes" field in the
+// `pubsub_sink_config` behaves as expected.
+func TestPubsubAttributes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		ctx := context.Background()
+		PubsubV2Enabled.Override(ctx, &s.Server.ClusterSettings().SV, true)
+		db := sqlutils.MakeSQLRunner(s.DB)
+
+		defer testingEnableTableNameAttribute()()
+
+		t.Run("separate tables", func(t *testing.T) {
+			db.Exec(t, "CREATE TABLE one (i int)")
+			db.Exec(t, "CREATE TABLE two (i int)")
+
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE one, TABLE two`)
+			require.NoError(t, err)
+
+			expectAttributes := func(attributes map[string]string) {
+				msg, err := foo.(*pubsubFeed).NextRaw(false)
+				require.NoError(t, err)
+				require.True(t, reflect.DeepEqual(attributes, msg.attributes),
+					"%#v=%#v", attributes, msg.attributes)
+			}
+
+			db.Exec(t, "INSERT INTO one VALUES (1)")
+			expectAttributes(map[string]string{"TABLE_NAME": "one"})
+
+			db.Exec(t, "INSERT INTO two VALUES (1)")
+			expectAttributes(map[string]string{"TABLE_NAME": "two"})
+
+			require.NoError(t, foo.Close())
+		})
+
+		t.Run("same table different families", func(t *testing.T) {
+			db.Exec(t, "CREATE TABLE withFams (i int, j int, k int, FAMILY ifam(i), FAMILY jfam(j))")
+			db.Exec(t, "CREATE TABLE withoutFams (i int)")
+
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE withFams FAMILY ifam, TABLE withFams FAMILY jfam, ` +
+				`TABLE withoutFams`)
+			require.NoError(t, err)
+
+			expectAttributes := func(attributes map[string]string) {
+				msg, err := foo.(*pubsubFeed).NextRaw(false)
+				require.NoError(t, err)
+				require.True(t, reflect.DeepEqual(attributes, msg.attributes),
+					"%#v=%#v", attributes, msg.attributes)
+			}
+
+			// We get two messages because the changefeed is targeting two familes.
+			// Each message should reference the same table.
+			db.Exec(t, "INSERT INTO withFams VALUES (1, 2, 3)")
+			expectAttributes(map[string]string{"TABLE_NAME": "withfams"})
+			expectAttributes(map[string]string{"TABLE_NAME": "withfams"})
+
+			db.Exec(t, "INSERT INTO withoutFams VALUES (1)")
+			expectAttributes(map[string]string{"TABLE_NAME": "withoutfams"})
+
+			require.NoError(t, foo.Close())
+		})
+
+		t.Run("different tables with one topic", func(t *testing.T) {
+			db.Exec(t, "CREATE TABLE a (i int)")
+			db.Exec(t, "CREATE TABLE b (i int)")
+			db.Exec(t, "CREATE TABLE c (i int)")
+			foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE a, TABLE b, TABLE c ` +
+				`INTO 'gcpubsub://testfeed?topic_name=mytopicname'`)
+			require.NoError(t, err)
+
+			expectAttributes := func(attributes map[string]string) {
+				msg, err := foo.(*pubsubFeed).NextRaw(false)
+				require.NoError(t, err)
+				// Ensure the topic name above was applied.
+				require.Equal(t, "projects/testfeed/topics/mytopicname", msg.topic)
+				require.True(t, reflect.DeepEqual(attributes, msg.attributes),
+					"%#v=%#v", attributes, msg.attributes)
+			}
+
+			// Ensure each message goes in a different batch with its own
+			// attributes. Ie. ensure batching is not per-topic only, but also
+			// per-table when we enable the table name attribute.
+			db.Exec(t, "INSERT INTO a VALUES (1)")
+			expectAttributes(map[string]string{"TABLE_NAME": "a"})
+			db.Exec(t, "INSERT INTO b VALUES (1)")
+			expectAttributes(map[string]string{"TABLE_NAME": "b"})
+			db.Exec(t, "INSERT INTO c VALUES (1)")
+			expectAttributes(map[string]string{"TABLE_NAME": "c"})
+
+			require.NoError(t, foo.Close())
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
 }

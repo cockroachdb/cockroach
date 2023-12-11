@@ -196,9 +196,9 @@ func (p *deprecatedPubsubSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
-	updated hlc.Timestamp,
-	mvcc hlc.Timestamp,
+	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	tableName string,
 ) error {
 	p.metrics.recordMessageSize(int64(len(key) + len(value)))
 

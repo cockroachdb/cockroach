@@ -442,9 +442,12 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	// than len(key)+len(bytes) worth of resources, adjust allocation to match.
 	alloc.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
 
-	if err := c.sink.EmitRow(
-		ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc,
-	); err != nil {
+	tableName := ""
+	if tableNameAttributeEnabled {
+		tableName = updatedRow.TableName
+	}
+
+	if err := c.sink.EmitRow(ctx, topic, keyCopy, valueCopy, schemaTS, updatedRow.MvccTimestamp, alloc, tableName); err != nil {
 		return err
 	}
 	if log.V(3) {

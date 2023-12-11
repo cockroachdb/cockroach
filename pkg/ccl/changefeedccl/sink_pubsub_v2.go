@@ -36,6 +36,15 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+func testingEnableTableNameAttribute() func() {
+	tableNameAttributeEnabled = true
+	return func() {
+		tableNameAttributeEnabled = false
+	}
+}
+
+var tableNameAttributeEnabled = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_TABLE_NAME_PUSBUB_ATTRIBUTE", false)
+
 const credentialsParam = "CREDENTIALS"
 
 // GcpScheme to be used in testfeed and sink.go
@@ -210,6 +219,7 @@ func (sc *pubsubSinkClient) Flush(ctx context.Context, payload SinkPayload) erro
 type pubsubBuffer struct {
 	sc           *pubsubSinkClient
 	topic        string
+	tableName    string
 	topicEncoded []byte
 	messages     []*pb.PubsubMessage
 	numBytes     int
@@ -237,7 +247,8 @@ func (psb *pubsubBuffer) Append(key []byte, value []byte) {
 		content = value
 	}
 
-	psb.messages = append(psb.messages, &pb.PubsubMessage{Data: content})
+	psb.messages = append(psb.messages, &pb.PubsubMessage{
+		Data: content, Attributes: map[string]string{"TABLE_NAME": psb.tableName}})
 	psb.numBytes += len(content)
 }
 
@@ -255,12 +266,13 @@ func (psb *pubsubBuffer) ShouldFlush() bool {
 }
 
 // MakeBatchBuffer implements the SinkClient interface
-func (sc *pubsubSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
+func (sc *pubsubSinkClient) MakeBatchBuffer(topic string, tableName string) BatchBuffer {
 	var topicBuffer bytes.Buffer
 	json.FromString(topic).Format(&topicBuffer)
 	return &pubsubBuffer{
 		sc:           sc,
 		topic:        topic,
+		tableName:    tableName,
 		topicEncoded: topicBuffer.Bytes(),
 		messages:     make([]*pb.PubsubMessage, 0, sc.batchCfg.Messages),
 	}

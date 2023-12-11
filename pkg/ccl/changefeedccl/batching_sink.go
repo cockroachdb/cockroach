@@ -27,7 +27,7 @@ import (
 // SinkClient is an interface to an external sink, where messages are written
 // into batches as they arrive and once ready are flushed out.
 type SinkClient interface {
-	MakeBatchBuffer(topic string) BatchBuffer
+	MakeBatchBuffer(topic string, tableName string) BatchBuffer
 	// FlushResolvedPayload flushes the resolved payload to the sink. It takes
 	// an iterator over the set of topics in case the client chooses to emit
 	// the payload to multiple topics.
@@ -95,9 +95,9 @@ type rowEvent struct {
 	key             []byte
 	val             []byte
 	topicDescriptor TopicDescriptor
-
-	alloc kvevent.Alloc
-	mvcc  hlc.Timestamp
+	alloc           kvevent.Alloc
+	mvcc            hlc.Timestamp
+	tableName       string
 }
 
 // Flush implements the Sink interface, returning the first error that has
@@ -172,6 +172,7 @@ func (s *batchingSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	tableName string,
 ) error {
 	s.metrics.recordMessageSize(int64(len(key) + len(value)))
 
@@ -181,6 +182,7 @@ func (s *batchingSink) EmitRow(
 	payload.topicDescriptor = topic
 	payload.mvcc = mvcc
 	payload.alloc = alloc
+	payload.tableName = tableName
 
 	select {
 	case <-ctx.Done():
@@ -293,22 +295,38 @@ func (s *batchingSink) handleError(err error) {
 	}
 }
 
-func (s *batchingSink) newBatchBuffer(topic string) *sinkBatch {
+func (s *batchingSink) newBatchBuffer(hashKey batchKey) *sinkBatch {
 	batch := newSinkBatch()
-	batch.buffer = s.client.MakeBatchBuffer(topic)
+	batch.buffer = s.client.MakeBatchBuffer(hashKey.topic, hashKey.tableName)
 	batch.hasher = s.hasher
 	return batch
+}
+
+type batchKey struct {
+	// topic is used to separate batches because it's possible that data for
+	// different topics should be delivered to different endpoints.
+	topic string
+	// tableName is used to separate batches because the table name might be
+	// used in the pubsub attributes attached to each batch. Therefore,
+	// each batch must have rows for the same table.
+	tableName string
+}
+
+func makeBatchHashKey(topic, tableName string) batchKey {
+	return batchKey{
+		topic:     topic,
+		tableName: tableName,
+	}
 }
 
 // runBatchingWorker combines 1 or more row events into batches, sending the IO
 // requests out either once the batch is full or a flush request arrives.
 func (s *batchingSink) runBatchingWorker(ctx context.Context) {
-	// topicBatches stores per-topic sinkBatches which are flushed individually
+	// batches stores per batchkey batches which are flushed individually
 	// when one reaches its size limit, but are all flushed together if the
-	// frequency timer triggers.  Messages for different topics cannot be allowed
-	// to be batched together as the data may need to end up at a specific
-	// endpoint for that topic.
-	topicBatches := make(map[string]*sinkBatch)
+	// frequency timer triggers.  Messages for different keys cannot be allowed
+	// to be batched together. See the comment on batchKey for more information.
+	batches := make(map[batchKey]*sinkBatch)
 
 	// Once finalized, batches are sent to a parallelIO struct which handles
 	// performing multiple Flushes in parallel while maintaining Keys() ordering.
@@ -349,12 +367,12 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 		freeSinkBatchEvent(batch)
 	}
 
-	tryFlushBatch := func(topic string) error {
-		batchBuffer, ok := topicBatches[topic]
+	tryFlushBatch := func(key batchKey) error {
+		batchBuffer, ok := batches[key]
 		if !ok || batchBuffer.isEmpty() {
 			return nil
 		}
-		topicBatches[topic] = s.newBatchBuffer(topic)
+		batches[key] = s.newBatchBuffer(key)
 
 		if err := batchBuffer.FinalizePayload(); err != nil {
 			return err
@@ -379,8 +397,8 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 	}
 
 	flushAll := func() error {
-		for topic := range topicBatches {
-			if err := tryFlushBatch(topic); err != nil {
+		for key := range batches {
+			if err := tryFlushBatch(key); err != nil {
 				return err
 			}
 		}
@@ -422,6 +440,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 						continue
 					}
 				}
+				hashKey := makeBatchHashKey(topic, r.tableName)
 
 				// If the timer isn't pending then this message is the first message to
 				// arrive either ever or since the timer last triggered a flush,
@@ -432,10 +451,10 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 					isTimerPending = true
 				}
 
-				batchBuffer, ok := topicBatches[topic]
+				batchBuffer, ok := batches[hashKey]
 				if !ok {
-					batchBuffer = s.newBatchBuffer(topic)
-					topicBatches[topic] = batchBuffer
+					batchBuffer = s.newBatchBuffer(hashKey)
+					batches[hashKey] = batchBuffer
 				}
 
 				batchBuffer.Append(r)
@@ -449,7 +468,7 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 				if batchBuffer.buffer.ShouldFlush() {
 					s.metrics.recordSizeBasedFlush()
-					if err := tryFlushBatch(topic); err != nil {
+					if err := tryFlushBatch(hashKey); err != nil {
 						s.handleError(err)
 					}
 				}

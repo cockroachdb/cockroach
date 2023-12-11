@@ -349,6 +349,7 @@ func (s *kafkaSink) EmitRow(
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	tableName string,
 ) error {
 	topic, err := s.topics.Name(topicDescr)
 	if err != nil {
