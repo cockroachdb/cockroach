@@ -2802,6 +2802,7 @@ client_min_messages                                        notice              N
 copy_from_atomic_enabled                                   on                  NULL      NULL        NULL        string
 copy_from_retries_enabled                                  on                  NULL      NULL        NULL        string
 copy_transaction_quality_of_service                        background          NULL      NULL        NULL        string
+copy_write_pipelining_enabled                              off                 NULL      NULL        NULL        string
 cost_scans_with_default_col_size                           off                 NULL      NULL        NULL        string
 database                                                   test                NULL      NULL        NULL        string
 datestyle                                                  ISO, MDY            NULL      NULL        NULL        string
@@ -2973,6 +2974,7 @@ client_min_messages                                        notice              N
 copy_from_atomic_enabled                                   on                  NULL  user     NULL      on                  on
 copy_from_retries_enabled                                  on                  NULL  user     NULL      on                  on
 copy_transaction_quality_of_service                        background          NULL  user     NULL      background          background
+copy_write_pipelining_enabled                              off                 NULL  user     NULL      off                 off
 cost_scans_with_default_col_size                           off                 NULL  user     NULL      off                 off
 database                                                   test                NULL  user     NULL      ·                   test
 datestyle                                                  ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
@@ -3138,6 +3140,7 @@ copy_fast_path_enabled                                     NULL    NULL     NULL
 copy_from_atomic_enabled                                   NULL    NULL     NULL     NULL        NULL
 copy_from_retries_enabled                                  NULL    NULL     NULL     NULL        NULL
 copy_transaction_quality_of_service                        NULL    NULL     NULL     NULL        NULL
+copy_write_pipelining_enabled                              NULL    NULL     NULL     NULL        NULL
 cost_scans_with_default_col_size                           NULL    NULL     NULL     NULL        NULL
 crdb_version                                               NULL    NULL     NULL     NULL        NULL
 database                                                   NULL    NULL     NULL     NULL        NULL
