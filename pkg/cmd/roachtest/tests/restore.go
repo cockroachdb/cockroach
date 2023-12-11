@@ -666,7 +666,7 @@ func (bs backupSpecs) backupCollection() string {
 		return fmt.Sprintf(`'s3://cockroach-fixtures-us-east-2/backups/%s/%s/inc-count=%d%s?AUTH=implicit'`,
 			bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain, properties)
 	case "gs":
-		return fmt.Sprintf(`'gs://cockroach-fixtures/backups/%s/%s/inc-count=%d%s?AUTH=implicit'`,
+		return fmt.Sprintf(`'gs://cockroach-fixtures-us-east1/backups/%s/%s/inc-count=%d%s?AUTH=implicit'`,
 			bs.workload.fixtureDir(), bs.version, bs.numBackupsInChain, properties)
 	default:
 		panic(fmt.Sprintf("unknown storage prefix: %s", bs.storagePrefix()))
