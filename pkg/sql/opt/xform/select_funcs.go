@@ -920,7 +920,7 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 			return
 		}
 		if minimizeSpans {
-			newSpanExpr, ok := reduceInvertedSpans(c.e.ctx, input, scanPrivate.Table, index, spanExpr)
+			newSpanExpr, ok := reduceInvertedSpans(c.e.ctx, c.e.mem, input, scanPrivate.Table, index, spanExpr)
 			if !ok {
 				// The span expression could not be reduced, so skip this index.
 				// An inverted index scan may still be generated for it when
@@ -1007,6 +1007,7 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 // span expression cannot be reduced, ok=false is returned.
 func reduceInvertedSpans(
 	ctx context.Context,
+	mem *memo.Memo,
 	grp memo.RelExpr,
 	tabID opt.TableID,
 	index cat.Index,
@@ -1018,7 +1019,7 @@ func reduceInvertedSpans(
 	}
 
 	colID := tabID.ColumnID(index.InvertedColumn().Ordinal())
-	colStat, ok := grp.Memo().RequestColStat(grp, opt.MakeColSet(colID))
+	colStat, ok := mem.RequestColStat(grp, opt.MakeColSet(colID))
 	if !ok || colStat.Histogram == nil {
 		// Only attempt to reduce spans if we have histogram statistics.
 		// TODO(mgartner): We could blindly reduce the spans without a
