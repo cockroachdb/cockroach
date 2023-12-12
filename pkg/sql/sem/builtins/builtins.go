@@ -4976,13 +4976,21 @@ value if you rely on the HLC for accuracy.`,
 					return nil, errors.AssertionFailedf("expected string value, got %T", args[1])
 				}
 				name := settings.SettingName(strings.ToLower(string(s)))
-				setting, ok, _ := settings.LookupForLocalAccess(name, evalCtx.Codec.ForSystemTenant())
+
+				hasModify, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
+				if err != nil {
+					return nil, err
+				}
+				setting, ok, _ := settings.LookupForDisplay(name, evalCtx.Codec.ForSystemTenant(), hasModify)
 				if !ok {
 					return nil, errors.Newf("unknown cluster setting '%s'", name)
 				}
-				repr, err := setting.DecodeToString(string(encoded))
-				if err != nil {
-					return nil, errors.Wrapf(err, "%v", name)
+				repr := "<redacted>"
+				if nonMasked, ok := setting.(settings.NonMaskedSetting); ok {
+					repr, err = nonMasked.DecodeToString(string(encoded))
+					if err != nil {
+						return nil, errors.Wrapf(err, "%v", name)
+					}
 				}
 				return tree.NewDString(repr), nil
 			},

@@ -591,6 +591,13 @@ func (ep *DummySessionAccessor) SetSessionVar(
 	return errors.WithStack(errEvalSessionVar)
 }
 
+// HasGlobalPrivilegeOrRoleOption is part of the eval.SessionAccessor interface.
+func (ep *DummySessionAccessor) HasGlobalPrivilegeOrRoleOption(
+	ctx context.Context, privilege privilege.Kind,
+) (bool, error) {
+	return false, nil
+}
+
 // HasAdminRole is part of the eval.SessionAccessor interface.
 func (ep *DummySessionAccessor) HasAdminRole(_ context.Context) (bool, error) {
 	return false, errors.WithStack(errEvalSessionVar)
