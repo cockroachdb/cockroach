@@ -194,7 +194,6 @@ func registerAWSDMS(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Weekly),
-		Tags:             registry.Tags(`weekly`, `aws-weekly`),
 		Run:              runAWSDMS,
 	})
 }

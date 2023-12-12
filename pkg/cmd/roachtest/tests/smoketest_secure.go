@@ -30,7 +30,6 @@ func registerSecure(r registry.Registry) {
 			Name:             fmt.Sprintf("smoketest/secure/nodes=%d", numNodes),
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Smoketest, registry.Weekly),
-			Tags:             registry.Tags("smoketest", "weekly"),
 			Owner:            registry.OwnerTestEng,
 			Cluster:          r.MakeClusterSpec(numNodes),
 			Leases:           registry.MetamorphicLeases,

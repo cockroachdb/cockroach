@@ -85,7 +85,6 @@ func registerOnlineRestore(r registry.Registry) {
 					EncryptionSupport: registry.EncryptionAlwaysDisabled,
 					CompatibleClouds:  registry.Clouds(sp.backup.cloud),
 					Suites:            sp.suites,
-					Tags:              tagsFromSuiteAndCloud(sp.backup.cloud, sp.suites),
 					Skip:              sp.skip,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 

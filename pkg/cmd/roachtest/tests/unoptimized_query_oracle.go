@@ -58,7 +58,6 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 				NativeLibs:       registry.LibGEOS,
 				Timeout:          time.Hour * 1,
 				RequiresLicense:  true,
-				Tags:             nil,
 				Cluster:          clusterSpec,
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Nightly),

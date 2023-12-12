@@ -167,7 +167,6 @@ func registerTPCCOverload(r registry.Registry) {
 			Benchmark:         true,
 			CompatibleClouds:  registry.AllExceptAWS,
 			Suites:            registry.Suites(registry.Weekly),
-			Tags:              registry.Tags(`weekly`),
 			Cluster:           r.MakeClusterSpec(s.Nodes+1, spec.CPU(s.CPUs)),
 			Run:               s.run,
 			EncryptionSupport: registry.EncryptionMetamorphic,

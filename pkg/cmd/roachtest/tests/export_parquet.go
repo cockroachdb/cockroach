@@ -34,7 +34,6 @@ func registerExportParquet(r registry.Registry) {
 		Owner:            registry.OwnerCDC,
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.ManualOnly,
-		Tags:             registry.Tags("manual"),
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
 		RequiresLicense:  false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

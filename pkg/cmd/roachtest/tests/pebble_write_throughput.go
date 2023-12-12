@@ -40,7 +40,6 @@ func registerPebbleWriteThroughput(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.PebbleNightlyWrite),
-		Tags:             registry.Tags("pebble_nightly_write"),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPebbleWriteBenchmark(ctx, t, c, size, pebble)
 		},

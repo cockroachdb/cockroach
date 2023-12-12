@@ -252,7 +252,6 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 		NativeLibs:       registry.LibGEOS,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
-		Tags:             registry.Tags(`default`, `orm`),
 		Timeout:          4 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runHibernate(ctx, t, c)
