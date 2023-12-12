@@ -295,11 +295,11 @@ func (f *Factory) EvalContext() *eval.Context {
 // memo should always be treated as immutable, and the destination memo must be
 // completely independent of it once CopyAndReplace has completed.
 func (f *Factory) CopyAndReplace(
-	from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
+	fromMemo *memo.Memo, from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
 ) {
 	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 
-	f.CopyMetadataFrom(from.Memo())
+	f.CopyMetadataFrom(fromMemo)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
@@ -394,7 +394,7 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 		}
 		return f.CopyAndReplaceDefault(e, replaceFn)
 	}
-	f.CopyAndReplace(from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
+	f.CopyAndReplace(from, from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
 
 	return nil
 }
