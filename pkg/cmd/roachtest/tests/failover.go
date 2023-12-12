@@ -76,7 +76,7 @@ func registerFailover(r registry.Registry) {
 				Name:                "failover/chaos" + suffix,
 				Owner:               registry.OwnerKV,
 				Timeout:             60 * time.Minute,
-				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.PreferLocalSSD(false), spec.ReuseNone()), // uses disk stalls
+				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.DisableLocalSSD(), spec.ReuseNone()), // uses disk stalls
 				CompatibleClouds:    registry.AllExceptAWS,
 				Suites:              registry.Suites(registry.Nightly),
 				Leases:              leases,
@@ -133,7 +133,7 @@ func registerFailover(r registry.Registry) {
 			if failureMode == failureModeDiskStall {
 				// Use PDs in an attempt to work around flakes encountered when using
 				// SSDs. See #97968.
-				clusterOpts = append(clusterOpts, spec.PreferLocalSSD(false))
+				clusterOpts = append(clusterOpts, spec.DisableLocalSSD())
 				// Don't reuse the cluster for tests that call dmsetup to avoid
 				// spurious flakes from previous runs. See #107865
 				clusterOpts = append(clusterOpts, spec.ReuseNone())
