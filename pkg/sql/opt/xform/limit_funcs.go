@@ -342,7 +342,7 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 		input := sb.BuildNewExpr()
 		// Use the overlapping indexes and requiredOrdering ordering.
 		newPrivate := *tp
-		grp.Memo().AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
+		c.e.mem.AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
 	})
 }
 
@@ -417,6 +417,6 @@ func (c *CustomFuncs) GeneratePartialOrderTopK(
 		newPrivate := *private
 		newPrivate.PartialOrdering = newOrd
 
-		grp.Memo().AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
+		c.e.mem.AddTopKToGroup(&memo.TopKExpr{Input: input, TopKPrivate: newPrivate}, grp)
 	}
 }

@@ -372,7 +372,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	// Initialize the constraint builder.
 	c.cb.Init(
 		c.e.f,
-		c.e.mem.Metadata(),
+		md,
 		c.e.evalCtx,
 		scanPrivate.Table,
 		inputProps.OutputCols,
@@ -400,8 +400,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			scanPrivate2 = &scanExpr.ScanPrivate
 			// The scan should already exist in the memo. We need to look it up so we
 			// have a `ScanExpr` with properties fully populated.
-			input2 = scanExpr.Memo().MemoizeScan(scanPrivate)
-			tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate2.Table)
+			input2 = c.e.mem.MemoizeScan(scanPrivate)
+			tabMeta := md.TableMeta(scanPrivate2.Table)
 			indexCols2 = tabMeta.IndexColumns(scanPrivate2.Index)
 			onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols, lookupIsKey2 =
 				c.GetEquijoinStrictKeyCols(on, scanPrivate2, input2)

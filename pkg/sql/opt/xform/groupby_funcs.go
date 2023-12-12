@@ -307,7 +307,7 @@ func (c *CustomFuncs) GenerateStreamingGroupByLimitOrderingHint(
 			Limit:    limitExpr.Limit,
 			Ordering: limitExpr.Ordering,
 		}
-	grp.Memo().AddLimitToGroup(newLimitExpr, grp)
+	c.e.mem.AddLimitToGroup(newLimitExpr, grp)
 }
 
 // GenerateStreamingGroupBy generates variants of a GroupBy, DistinctOn,
@@ -590,6 +590,8 @@ func (c *CustomFuncs) GenerateLimitedGroupByScans(
 		// Reconstruct the GroupBy and Limit so the new expression in the memo is
 		// equivalent.
 		input = c.e.f.ConstructGroupBy(input, aggs, gp)
-		grp.Memo().AddLimitToGroup(&memo.LimitExpr{Limit: limit, Ordering: requiredOrdering, Input: input}, grp)
+		c.e.mem.AddLimitToGroup(
+			&memo.LimitExpr{Limit: limit, Ordering: requiredOrdering, Input: input}, grp,
+		)
 	})
 }

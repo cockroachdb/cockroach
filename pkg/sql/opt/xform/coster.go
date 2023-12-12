@@ -847,7 +847,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	if scan.Distribution.Regions != nil {
 		regionsAccessed = scan.Distribution
 	} else {
-		tabMeta := scan.Memo().Metadata().TableMeta(scan.Table)
+		tabMeta := c.mem.Metadata().TableMeta(scan.Table)
 		regionsAccessed.FromIndexScan(c.ctx, c.evalCtx, tabMeta, scan.Index, scan.Constraint)
 	}
 	if scan.LocalityOptimized {

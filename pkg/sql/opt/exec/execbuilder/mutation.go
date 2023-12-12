@@ -115,7 +115,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	// Construct the output column map.
 	ep := execPlan{root: node}
 	if ins.NeedResults() {
-		ep.outputCols = mutationOutputColMap(ins)
+		ep.outputCols = b.mutationOutputColMap(ins)
 	}
 
 	if err := b.buildUniqueChecks(ins.UniqueChecks); err != nil {
@@ -322,7 +322,7 @@ func (b *Builder) tryBuildFastPathInsert(ins *memo.InsertExpr) (_ execPlan, ok b
 	// Construct the output column map.
 	ep := execPlan{root: node}
 	if ins.NeedResults() {
-		ep.outputCols = mutationOutputColMap(ins)
+		ep.outputCols = b.mutationOutputColMap(ins)
 	}
 	return ep, true, nil
 }
@@ -437,7 +437,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	// Construct the output column map.
 	ep := execPlan{root: node}
 	if upd.NeedResults() {
-		ep.outputCols = mutationOutputColMap(upd)
+		ep.outputCols = b.mutationOutputColMap(upd)
 	}
 	return ep, nil
 }
@@ -530,7 +530,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 	// result of the UPSERT operation for that row.
 	ep := execPlan{root: node}
 	if ups.NeedResults() {
-		ep.outputCols = mutationOutputColMap(ups)
+		ep.outputCols = b.mutationOutputColMap(ups)
 	}
 	return ep, nil
 }
@@ -598,7 +598,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	// Construct the output column map.
 	ep := execPlan{root: node}
 	if del.NeedResults() {
-		ep.outputCols = mutationOutputColMap(del)
+		ep.outputCols = b.mutationOutputColMap(del)
 	}
 
 	return ep, nil
@@ -720,9 +720,9 @@ func ordinalSetFromColList(colList opt.OptionalColList) intsets.Fast {
 // mutationOutputColMap constructs a ColMap for the execPlan that maps from the
 // opt.ColumnID of each output column to the ordinal position of that column in
 // the result.
-func mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
+func (b *Builder) mutationOutputColMap(mutation memo.RelExpr) opt.ColMap {
 	private := mutation.Private().(*memo.MutationPrivate)
-	tab := mutation.Memo().Metadata().Table(private.Table)
+	tab := b.mem.Metadata().Table(private.Table)
 	outCols := mutation.Relational().OutputCols
 
 	var colMap opt.ColMap

@@ -126,7 +126,7 @@ func TestDetachMemoRace(t *testing.T) {
 			// Rewrite the filter to use a different column, which will trigger creation
 			// of new table statistics. If the statistics object is aliased, this will
 			// be racy.
-			f.CopyAndReplace(mem.RootExpr().(memo.RelExpr), mem.RootProps(), replaceFn)
+			f.CopyAndReplace(mem, mem.RootExpr().(memo.RelExpr), mem.RootProps(), replaceFn)
 			wg.Done()
 		}()
 	}

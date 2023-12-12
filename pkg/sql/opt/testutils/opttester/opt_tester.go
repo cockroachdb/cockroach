@@ -910,7 +910,7 @@ func (ot *OptTester) checkExpectedRules(tb testing.TB, d *datadriven.TestData) {
 func (ot *OptTester) postProcess(
 	tb testing.TB, d *datadriven.TestData, mem *memo.Memo, e opt.Expr,
 ) {
-	ot.fillInLazyProps(e)
+	ot.fillInLazyProps(mem, e)
 
 	if rel, ok := e.(memo.RelExpr); ok {
 		for _, cols := range ot.Flags.ColStats {
@@ -921,7 +921,7 @@ func (ot *OptTester) postProcess(
 }
 
 // Fills in lazily-derived properties (for display).
-func (ot *OptTester) fillInLazyProps(e opt.Expr) {
+func (ot *OptTester) fillInLazyProps(mem *memo.Memo, e opt.Expr) {
 	if rel, ok := e.(memo.RelExpr); ok {
 		// These properties are derived from the normalized expression.
 		rel = rel.FirstExpr()
@@ -930,14 +930,14 @@ func (ot *OptTester) fillInLazyProps(e opt.Expr) {
 		ot.f.CustomFuncs().DerivePruneCols(rel, intsets.Fast{} /* disabledRules */)
 
 		// Derive columns that are candidates for null rejection.
-		norm.DeriveRejectNullCols(rel, intsets.Fast{} /* disabledRules */)
+		norm.DeriveRejectNullCols(mem, rel, intsets.Fast{} /* disabledRules */)
 
 		// Make sure the interesting orderings are calculated.
 		ordering.DeriveInterestingOrderings(rel)
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {
-		ot.fillInLazyProps(e.Child(i))
+		ot.fillInLazyProps(mem, e.Child(i))
 	}
 }
 
