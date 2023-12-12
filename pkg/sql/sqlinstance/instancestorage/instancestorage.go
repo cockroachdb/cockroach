@@ -346,7 +346,7 @@ func (s *Storage) createInstanceRow(
 // sql_instances table. newInstanceCache blocks until the initial scan is
 // complete.
 func (s *Storage) newInstanceCache(ctx context.Context) (instanceCache, error) {
-	return newRangeFeedCache(ctx, s.rowCodec, s.clock, s.f)
+	return newRangeFeedCache(ctx, s.rowCodec, s.clock, s.f, s)
 }
 
 // getAvailableInstanceIDForRegion retrieves an available instance ID for the
