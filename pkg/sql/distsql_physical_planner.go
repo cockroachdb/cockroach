@@ -4867,12 +4867,18 @@ func (dsp *DistSQLPlanner) NewPlanningCtxWithOracle(
 		onFlowCleanup: []func(){infra.Release},
 	}
 	if !distribute {
-		if planner == nil || dsp.spanResolver == nil || planner.curPlan.flags.IsSet(planFlagContainsMutation) ||
+		if planner == nil ||
+			evalCtx.SessionData().Internal ||
+			planner.curPlan.flags.IsSet(planFlagContainsMutation) ||
 			planner.curPlan.flags.IsSet(planFlagContainsNonDefaultLocking) {
 			// Don't parallelize the scans if we have a local plan if
 			// - we don't have a planner which is the case when we are not on
 			// the main query path;
-			// - we don't have a span resolver (this can happen only in tests);
+			// - we're in the internal executor context - it's unlikely that any
+			// of the internal queries will benefit from this parallelization,
+			// and returning early in this function allows us to avoid the race
+			// on dsp.spanResolver in fakedist logic test configs without adding
+			// any synchronization (see #116039);
 			// - the plan contains a mutation operation - we currently don't
 			// support any parallelism when mutations are present;
 			// - the plan uses non-default key locking strength (see #94290).
