@@ -16,6 +16,11 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//proto",
+        "@org_golang_google_protobuf//encoding/protojson",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//reflect/protodesc",
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//types/dynamicpb",
     ],
 )
 
@@ -34,6 +39,7 @@ go_test(
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect/test",
+        "//pkg/sql/protoreflect/gprototest",
         "//pkg/sql/types",
         "//pkg/util/json",
         "//pkg/util/leaktest",
@@ -43,6 +49,7 @@ go_test(
         "//pkg/util/tracing/tracingpb",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//types",
+        "@org_golang_google_protobuf//proto",
         "@com_github_stretchr_testify//require",
     ],
 )

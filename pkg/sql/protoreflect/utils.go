@@ -11,6 +11,10 @@
 package protoreflect
 
 import (
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 	"reflect"
 	"strings"
 
@@ -19,6 +23,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 var shorthands map[string]protoutil.Message = map[string]protoutil.Message{}
@@ -76,6 +81,40 @@ func NewMessage(name string) (protoutil.Message, error) {
 			name, rv.Interface())
 	}
 	return msg, nil
+}
+
+// NewJSONMessageFromFileDescriptor decodes a protobuf message from binary to JSON
+// based on the provided protoreflect.FileDescriptor
+func NewJSONMessageFromFileDescriptor(name string, fd protoreflect.FileDescriptor, data []byte, resolver protodesc.Resolver) (jsonb.JSON, error) {
+	//convert FileDescriptor to FileDescriptorProto
+	fdp := protodesc.ToFileDescriptorProto(fd)
+
+	//create new proto File from FileDescriptorProto
+	f, err := protodesc.NewFile(fdp, resolver)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating protodesc.NewFile: %w")
+	}
+
+	//get MessageDescriptor from File based on provided name
+	md := f.Messages().ByName(protoreflect.Name(name))
+	if md == nil {
+		return nil, errors.Newf("message descriptor was nil for name %s", name)
+	}
+
+	//Get message to unmarshall protobuf binary from the MessageDescriptor
+	mt := dynamicpb.NewMessageType(md)
+	msg := mt.New().Interface()
+
+	//Unmarshal
+	err = gproto.Unmarshal(data, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	//Format Protobuf message to JSON string
+	json := protojson.Format(msg)
+
+	return jsonb.ParseJSON(json)
 }
 
 // DecodeMessage decodes protocol message specified as its fully
