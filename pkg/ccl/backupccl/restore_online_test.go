@@ -47,15 +47,9 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	bankOnlineRestore(t, rSQLDB, numAccounts, externalStorage)
 
 	// Wait for the download job to complete.
-	//
-	// TODO(adityamaru): Change to wait for successful completion once
-	// storage lands https://github.com/cockroachdb/pebble/pull/3067.
 	var downloadJobID jobspb.JobID
 	rSQLDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&downloadJobID)
-	jobutils.WaitForJobToFail(t, rSQLDB, downloadJobID)
-	var error string
-	rSQLDB.QueryRow(t, `SELECT error FROM [SHOW JOBS] WHERE description LIKE '%Background Data Download%'`).Scan(&error)
-	require.Contains(t, error, "not implemented")
+	jobutils.WaitForJobToSucceed(t, rSQLDB, downloadJobID)
 }
 
 func TestOnlineRestoreErrors(t *testing.T) {
