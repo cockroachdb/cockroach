@@ -306,6 +306,8 @@ func TestMultiRegionExportImportRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "probable OOM")
+
 	validateNumRows := func(sqlDB *gosql.DB, tableName string, expected int) {
 		res := sqlDB.QueryRow(fmt.Sprintf(`SELECT count(*) FROM %s`, tableName))
 		require.NoError(t, res.Err())
