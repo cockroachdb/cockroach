@@ -333,8 +333,10 @@ const (
 	// full control of node selection and distribution.
 )
 
+// RangeDistributionStrategy is used to determine how the changefeed balances
+// ranges between nodes.
 // TODO: deprecate this setting in favor of a changefeed option.
-var rangeDistributionStrategy = settings.RegisterEnumSetting(
+var RangeDistributionStrategy = settings.RegisterEnumSetting(
 	settings.ApplicationLevel,
 	"changefeed.default_range_distribution_strategy",
 	"configures how work is distributed among nodes for a given changefeed. "+
