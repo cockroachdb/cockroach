@@ -94,6 +94,7 @@ func newTestingSideloadStorage(eng storage.Engine) *DiskSideloadStorage {
 		rate.NewLimiter(rate.Inf, math.MaxInt64), eng)
 }
 
+// TODO(pavelkalinnikov): give these tests a good refactor.
 func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	ctx := context.Background()
 	ss := newTestingSideloadStorage(eng)
@@ -284,6 +285,10 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 		// Ensure directory is removed, now that all files should be gone.
 		_, err = eng.Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
+		// Ensure HasAnyEntry doesn't find anything.
+		found, err := ss.HasAnyEntry(ctx, 0, 10000)
+		require.NoError(t, err)
+		require.False(t, found)
 
 		// Repopulate with some random indexes to test deletion when there are a
 		// non-zero number of filepath.Glob matches.
@@ -293,6 +298,22 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 			require.NoError(t, ss.Put(ctx, i, highTerm, file(i, highTerm)))
 		}
 		assertExists(true)
+		// Verify the HasAnyEntry semantics.
+		for _, check := range []struct {
+			from, to kvpb.RaftIndex
+			want     bool
+		}{
+			{from: 0, to: 3, want: false}, // 3 is excluded
+			{from: 0, to: 4, want: true},  // but included if to == 4
+			{from: 3, to: 5, want: true},  // 3 is included
+			{from: 4, to: 5, want: false},
+			{from: 50, to: 60, want: false},
+			{from: 1, to: 10, want: true},
+		} {
+			found, err := ss.HasAnyEntry(ctx, check.from, check.to)
+			require.NoError(t, err)
+			require.Equal(t, check.want, found)
+		}
 		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, math.MaxUint64)
 		require.NoError(t, err)
 		require.Zero(t, retained)
