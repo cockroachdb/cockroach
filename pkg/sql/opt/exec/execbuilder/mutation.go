@@ -1154,23 +1154,24 @@ func (b *Builder) buildLock(lock *memo.LockExpr) (execPlan, error) {
 	// ordering. That is, make locking a physical property required by Lock, and
 	// make various operators provide the physical property, with a
 	// locking-semi-LookupJoin as the enforcer of last resort.
+	md := b.mem.Metadata()
 	switch input := lock.Input.(type) {
 	case *memo.ScanExpr:
-		if input.Table == lock.Table && input.Index == cat.PrimaryIndex {
+		if md.Table(input.Table) == md.Table(lock.Table) && input.Index == cat.PrimaryIndex {
 			// Make a shallow copy of the scan to avoid mutating the original.
 			scan := *input
 			scan.Locking = scan.Locking.Max(locking)
 			return b.buildRelational(&scan)
 		}
 	case *memo.IndexJoinExpr:
-		if input.Table == lock.Table {
+		if md.Table(input.Table) == md.Table(lock.Table) {
 			// Make a shallow copy of the join to avoid mutating the original.
 			join := *input
 			join.Locking = join.Locking.Max(locking)
 			return b.buildRelational(&join)
 		}
 	case *memo.LookupJoinExpr:
-		if input.Table == lock.Table && input.Index == cat.PrimaryIndex &&
+		if md.Table(input.Table) == md.Table(lock.Table) && input.Index == cat.PrimaryIndex &&
 			(input.JoinType == opt.InnerJoinOp || input.JoinType == opt.SemiJoinOp) &&
 			!input.IsFirstJoinInPairedJoiner && !input.IsSecondJoinInPairedJoiner &&
 			// We con't push the locking down if the lookup join has additional on

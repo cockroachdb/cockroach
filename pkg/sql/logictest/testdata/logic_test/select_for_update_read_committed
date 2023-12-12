@@ -4,6 +4,9 @@ statement ok
 SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 
 statement ok
+SET statement_timeout = '5s'
+
+statement ok
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX (b), FAMILY (a, b, c))
 
 statement ok
@@ -391,3 +394,111 @@ user root
 awaitquery q12
 
 awaitquery q13
+
+subtest lock_column_family
+
+# Check that we only lock the column families specified by the SFU.
+
+statement ok
+CREATE TABLE abcde (a INT NOT NULL PRIMARY KEY, b INT NOT NULL, c INT NOT NULL, d INT NOT NULL, e INT NOT NULL, FAMILY (a, b), FAMILY (c), FAMILY (d), FAMILY (e))
+
+statement ok
+GRANT ALL on abcde TO testuser
+
+statement ok
+INSERT INTO abcde VALUES (5, 6, 7, 8, 9)
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Only lock one column family.
+query I rowsort
+SELECT e FROM abcde WHERE a = 5 FOR UPDATE
+----
+9
+
+user root
+
+# Reading from other column families shouldn't block.
+query III rowsort
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT b, c, d FROM abcde WHERE a = 5 FOR UPDATE;
+COMMIT;
+----
+6  7  8
+
+# Reading from the same column family should block on the lock.
+query I async,rowsort q14
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT e FROM abcde WHERE a = 5 FOR UPDATE;
+COMMIT;
+----
+19
+
+user testuser
+
+query I rowsort
+SELECT e FROM abcde WHERE a = 5 FOR UPDATE
+----
+9
+
+statement ok
+UPDATE abcde SET e = e + 10 WHERE a = 5
+
+statement ok
+COMMIT
+
+user root
+
+awaitquery q14
+
+# Now try again with a conflicting update instead of a conflicting SFU.
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Only lock one column family.
+query I rowsort
+SELECT e FROM abcde WHERE a = 5 FOR UPDATE
+----
+19
+
+user root
+
+# Updating other column families shouldn't block.
+query III rowsort
+BEGIN ISOLATION LEVEL READ COMMITTED;
+UPDATE abcde SET b = b + 10, c = c + 10, d = d + 10 WHERE a = 5 RETURNING b, c, d;
+COMMIT;
+----
+16  17  18
+
+# Updating the same column family should block on the lock (and then retry).
+query I async,rowsort q15
+BEGIN ISOLATION LEVEL READ COMMITTED;
+UPDATE abcde SET e = e + 10 WHERE a = 5 RETURNING e;
+COMMIT;
+----
+39
+
+user testuser
+
+# Should see 19 because we still hold the lock.
+query I rowsort
+SELECT e FROM abcde WHERE a = 5 FOR UPDATE
+----
+19
+
+statement ok
+UPDATE abcde SET e = e + 10 WHERE a = 5
+
+statement ok
+COMMIT
+
+user root
+
+awaitquery q15
