@@ -107,6 +107,9 @@ func registerOnlineRestore(r registry.Registry) {
 							if _, err := db.Exec("SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled=true"); err != nil {
 								return err
 							}
+							if _, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false"); err != nil {
+								return err
+							}
 							opts := ""
 							if runOnline {
 								opts = "WITH EXPERIMENTAL DEFERRED COPY"
