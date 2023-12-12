@@ -41,6 +41,7 @@ func BackupSuccess(t *testing.T, path string, factory TestServerFactory) {
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupSuccess(t, factory, cs)
@@ -53,6 +54,7 @@ func BackupRollbacks(t *testing.T, path string, factory TestServerFactory) {
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 	// These tests are only marginally more useful than BackupSuccess
 	// and at least as expensive to run.
 	skip.UnderShort(t)
@@ -68,6 +70,7 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 	// These tests are only marginally more useful than BackupSuccess
 	// and at least as expensive to run.
 	skip.UnderShort(t)
@@ -84,6 +87,7 @@ func BackupRollbacksMixedVersion(t *testing.T, path string, factory TestServerFa
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 	// These tests are only marginally more useful than BackupSuccess
 	// and at least as expensive to run.
 	skip.UnderShort(t)

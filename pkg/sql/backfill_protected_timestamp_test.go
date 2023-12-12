@@ -42,6 +42,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDeadlock(t, "test takes too long")
 	skip.UnderStress(t, "test takes too long")
 	skip.UnderRace(t, "test takes too long")
 
