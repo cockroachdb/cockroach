@@ -966,11 +966,13 @@ func (md *Metadata) getAllReferencedTables(
 // AllDataSourceNames returns the fully qualified names of all datasources
 // referenced by the metadata. This includes all tables, sequences, and views
 // that are directly stored in the metadata, as well as tables that are
-// recursively referenced from foreign keys.
+// recursively referenced from foreign keys. If includeVirtualTables is false,
+// then virtual tables are not returned.
 func (md *Metadata) AllDataSourceNames(
 	ctx context.Context,
 	catalog cat.Catalog,
 	fullyQualifiedName func(ds cat.DataSource) (cat.DataSourceName, error),
+	includeVirtualTables bool,
 ) (tables, sequences, views []tree.TableName, _ error) {
 	// Catalog objects can show up multiple times in our lists, so deduplicate
 	// them.
@@ -993,6 +995,17 @@ func (md *Metadata) AllDataSourceNames(
 	}
 	var err error
 	refTables := md.getAllReferencedTables(ctx, catalog)
+	if !includeVirtualTables {
+		// Update refTables in-place to remove all virtual tables.
+		i := 0
+		for j := 0; j < len(refTables); j++ {
+			if t, ok := refTables[j].(cat.Table); !ok || !t.IsVirtualTable() {
+				refTables[i] = refTables[j]
+				i++
+			}
+		}
+		refTables = refTables[:i]
+	}
 	tables, err = getNames(len(refTables), func(i int) cat.DataSource {
 		return refTables[i]
 	})
