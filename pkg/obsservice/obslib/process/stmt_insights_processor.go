@@ -48,7 +48,7 @@ func (p *StmtInsightsProcessor) Process(
 	p.addInsight(stmtInsight)
 	insightsSize, lastExportTs := p.getInsightsInfo()
 
-	if insightsSize >= InsightsBatchMax || lastExportTs > time.Minute {
+	if insightsSize >= InsightsBatchMax || lastExportTs > time.Second*30 {
 		insertStmt, args := p.prepareInsightExport()
 		err := p.exportInsights(ctx, insertStmt, args)
 		if err != nil {
