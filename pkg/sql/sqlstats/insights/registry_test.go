@@ -401,6 +401,7 @@ func TestInsightsConversion(t *testing.T) {
 		Database:             "myDB",
 		EndTime:              time.Date(2023, time.October, 31, 18, 33, 39, 0, time.UTC),
 		ErrorCode:            "myErrorCode",
+		ErrorMsg:             "myErrorMessage",
 		FingerprintID:        12345,
 		FullScan:             true,
 		ID:                   clusterunique.ID{Uint128: uint128.Uint128{Lo: 12, Hi: 987}},
