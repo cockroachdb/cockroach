@@ -337,6 +337,7 @@ func TestApplier(t *testing.T) {
 				// The wrapped string around the context canceled error depends on where
 				// the context cancellation was noticed.
 				actual = regexp.MustCompile(` (aborted .*|txn exec): context canceled`).ReplaceAllString(actual, ` context canceled`)
+				actual = regexp.MustCompile(` aborted in DistSender: context deadline exceeded`).ReplaceAllString(actual, ` context canceled`)
 			} else {
 				// Trim out the txn to avoid nondeterminism.
 				actual = regexp.MustCompile(` txnpb:\(.*\)`).ReplaceAllLiteralString(actual, ` txnpb:<txn>`)

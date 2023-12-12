@@ -214,11 +214,11 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			var db *kv.DB
 			var tr *tracing.Tracer
 			if leaseHolder.NodeID == 1 {
-				db = tc.Servers[1].DB()
-				tr = tc.Servers[1].TracerI().(*tracing.Tracer)
+				db = tc.Servers[1].ApplicationLayer().DB()
+				tr = tc.Servers[1].ApplicationLayer().TracerI().(*tracing.Tracer)
 			} else {
-				db = tc.Servers[0].DB()
-				tr = tc.Servers[0].TracerI().(*tracing.Tracer)
+				db = tc.Servers[0].ApplicationLayer().DB()
+				tr = tc.Servers[0].ApplicationLayer().TracerI().(*tracing.Tracer)
 			}
 
 			txn := db.NewTxn(ctx, "test")
@@ -239,7 +239,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			// Send a commit request. It's going to get blocked after being evaluated,
 			// at which point we're going to cancel the request's ctx. The ctx
 			// cancelation will cause gRPC to interrupt the in-flight request, and the
-			// DistSender to return an ambiguous error. The transaction will be
+			// DistSender to return a context cancelled. The transaction will be
 			// committed, through.
 			commitCtx, cancelCommit := context.WithCancel(ctx)
 			commitCh := make(chan error)
@@ -255,7 +255,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 
 			cancelCommit()
 			commitErr := <-commitCh
-			require.IsType(t, &kvpb.AmbiguousResultError{}, commitErr)
+			require.ErrorContains(t, commitErr, "context canceled")
 
 			// If the test wants the upcoming rollback to find a COMMITTED record,
 			// we'll perform transaction recovery. This will leave the transaction in

@@ -2023,14 +2023,16 @@ func (ds *DistSender) sendPartialBatch(
 		break
 	}
 
-	// Propagate error if either the retry closer or context done
-	// channels were closed.
+	// Propagate error if either the retry closer or context done channels were
+	// closed. This replaces the return error since when the context is closed
+	// the underlying error is unpredictable and might have been retried.
+	if err := ds.deduceRetryEarlyExitError(ctx); err != nil {
+		log.VErrEventf(ctx, 2, "replace error %s with %s", pErr, err)
+		pErr = kvpb.NewError(err)
+	}
+
 	if pErr == nil {
-		if err := ds.deduceRetryEarlyExitError(ctx); err == nil {
-			log.Fatal(ctx, "exited retry loop without an error")
-		} else {
-			pErr = kvpb.NewError(err)
-		}
+		log.Fatal(ctx, "exited retry loop without an error or early exit")
 	}
 
 	return response{pErr: pErr}
@@ -2042,7 +2044,8 @@ func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) error {
 		// Typically happens during shutdown.
 		return &kvpb.NodeUnavailableError{}
 	case <-ctx.Done():
-		// Happens when the client request is canceled.
+		// Happens when the client request is canceled or the deadline is
+		// exceeded. We wrap to have a consistent error to check against.
 		return errors.Wrap(ctx.Err(), "aborted in DistSender")
 	default:
 	}
