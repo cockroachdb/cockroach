@@ -634,6 +634,9 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					return noSnap, errors.AssertionFailedf("unexpected batch entry key kind %d", batchReader.KeyKind())
 				}
 			}
+			if batchReader.Error() != nil {
+				return noSnap, err
+			}
 			timingTag.stop("sst")
 		}
 		if len(req.SharedTables) > 0 && doExcise {
