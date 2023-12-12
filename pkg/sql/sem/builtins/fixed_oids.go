@@ -2506,6 +2506,7 @@ var builtinOidsArray = []string{
 	2535: `last_value(val: refcursor) -> refcursor`,
 	2536: `percentile_disc_impl(arg1: float, arg2: refcursor) -> refcursor`,
 	2537: `percentile_disc_impl(arg1: float[], arg2: refcursor) -> refcursor[]`,
+	2543: `crdb_internal.fips_ready() -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
