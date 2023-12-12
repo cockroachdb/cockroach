@@ -1434,6 +1434,7 @@ func TestReplicateQueueSwapVotersWithNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes a long time or times out under race")
+	skip.UnderDeadlock(t, "takes a long time or times out under deadlock")
 
 	ctx := context.Background()
 	serverArgs := make(map[int]base.TestServerArgs)
