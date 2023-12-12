@@ -677,15 +677,6 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 
 	// Set sql.stats.persisted_rows.max
 	sqlConn.Exec(t, fmt.Sprintf("SET CLUSTER SETTING sql.stats.persisted_rows.max=%d", maxNumPersistedRows))
-	testutils.SucceedsSoon(t, func() error {
-		var appliedSetting int
-		row := sqlConn.QueryRow(t, "SHOW CLUSTER SETTING sql.stats.persisted_rows.max")
-		row.Scan(&appliedSetting)
-		if appliedSetting != maxNumPersistedRows {
-			return errors.Newf("waiting for sql.stats.persisted_rows.max to be applied")
-		}
-		return nil
-	})
 
 	// We need SucceedsSoon here for the follower read timestamp to catch up
 	// enough for this state to be reached.
@@ -708,15 +699,6 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 	// Set table size check interval to .0000001 second. So the next check doesn't
 	// use the cached value.
 	sqlConn.Exec(t, "SET CLUSTER SETTING sql.stats.limit_table_size_check.interval='.0000001s'")
-	testutils.SucceedsSoon(t, func() error {
-		var appliedSetting string
-		row := sqlConn.QueryRow(t, "SHOW CLUSTER SETTING sql.stats.limit_table_size_check.interval")
-		row.Scan(&appliedSetting)
-		if appliedSetting != "00:00:00" {
-			return errors.Newf("waiting for sql.stats.limit_table_size_check.interval to be applied: %s", appliedSetting)
-		}
-		return nil
-	})
 
 	// Begin a transaction.
 	sqlConn.Exec(t, "BEGIN")
@@ -730,7 +712,23 @@ func TestSQLStatsReadLimitSizeOnLockedTable(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		limitReached, err = pss.StmtsLimitSizeReached(ctx)
 		require.NoError(t, err)
-		require.True(t, limitReached, "limitReached should be true. Loop :%d", i)
+		if !limitReached {
+			readStmt := `SELECT crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8, count(*)
+      FROM system.statement_statistics
+      AS OF SYSTEM TIME follower_read_timestamp()
+      GROUP BY crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8`
+
+			sqlConn2 := sqlutils.MakeSQLRunner(conn)
+			rows := sqlConn2.Query(t, readStmt)
+			shard := make([]int64, 8)
+			count := make([]int64, 8)
+			for j := 0; rows.Next(); {
+				err := rows.Scan(&shard[j], &count[j])
+				require.NoError(t, err)
+				j += 1
+			}
+			t.Fatalf("limitReached should be true. loop: %d; shards: %d counts: %d", i, shard, count)
+		}
 	}
 
 	// Close the transaction.
