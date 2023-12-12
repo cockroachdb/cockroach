@@ -51,7 +51,7 @@ import { StmtInsightsReq, TxnInsightsRequest } from "src/api";
 import { selectTimeScale } from "../../store/utils/selectors";
 import { actions as analyticsActions } from "../../store/analytics";
 import { selectIsTenant } from "../../store/uiConfig";
-import { selectCsExportInsights } from "src/store/clusterSettings/clusterSettings.selectors";
+import { selectUseObsService } from "src/store/clusterSettings/clusterSettings.selectors";
 
 const transactionMapStateToProps = (
   state: AppState,
@@ -85,7 +85,7 @@ const statementMapStateToProps = (
   isLoading: selectStmtInsightsLoading(state),
   maxSizeApiReached: selectStmtInsightsMaxApiReached(state),
   isTenant: selectIsTenant(state),
-  csExportInsights: selectCsExportInsights(state),
+  useObsService: selectUseObsService(state),
 });
 
 const TransactionDispatchProps = (

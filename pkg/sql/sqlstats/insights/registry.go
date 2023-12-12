@@ -96,6 +96,9 @@ func (r *lockingRegistry) ObserveTransaction(
 	if !r.enabled() {
 		return
 	}
+	if transaction.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		return
+	}
 	statements, ok := r.statements[sessionID]
 	if !ok {
 		return
