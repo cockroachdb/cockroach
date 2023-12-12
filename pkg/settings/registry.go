@@ -444,7 +444,44 @@ func LookupForReportingByKey(key InternalKey, forSystemTenant bool) (Setting, bo
 		return nil, false
 	}
 	if !s.isReportable() {
-		return &maskedSetting{setting: s}, true
+		return &MaskedSetting{setting: s}, true
+	}
+	return s, true
+}
+
+// LookupForDisplay returns a Setting by key. Used when a setting is being
+// retrieved for display in SHOW commands or crdb_internal tables.
+//
+// For settings that are sensitive, the returned Setting hides the current
+// value (see Setting.String) if canViewSensitive is false.
+func LookupForDisplay(
+	name SettingName, forSystemTenant, canViewSensitive bool,
+) (Setting, bool, NameStatus) {
+	key, ok, nameStatus := NameToKey(name)
+	if !ok {
+		return nil, ok, nameStatus
+	}
+	s, ok := LookupForDisplayByKey(key, forSystemTenant, canViewSensitive)
+	return s, ok, nameStatus
+}
+
+// LookupForDisplayByKey returns a Setting by key. Used when a setting is being
+// retrieved for display in SHOW commands or crdb_internal tables.
+//
+// For settings that are sensitive, the returned Setting hides the current
+// value (see Setting.String) if canViewSensitive is false.
+func LookupForDisplayByKey(
+	key InternalKey, forSystemTenant, canViewSensitive bool,
+) (Setting, bool) {
+	s, ok := registry[key]
+	if !ok {
+		return nil, false
+	}
+	if !forSystemTenant && s.Class() == SystemOnly {
+		return nil, false
+	}
+	if s.isSensitive() && !canViewSensitive {
+		return &MaskedSetting{setting: s}, true
 	}
 	return s, true
 }

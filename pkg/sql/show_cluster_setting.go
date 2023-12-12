@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -160,7 +161,11 @@ func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
 	name := settings.SettingName(strings.ToLower(n.Name))
-	setting, ok, nameStatus := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
+	hasModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
+	if err != nil {
+		return nil, err
+	}
+	setting, ok, nameStatus := settings.LookupForDisplay(name, p.ExecCfg().Codec.ForSystemTenant(), hasModify)
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
@@ -194,14 +199,20 @@ func (p *planner) ShowClusterSetting(
 			if verSetting, ok := setting.(*settings.VersionSetting); ok {
 				encoded, err := p.getCurrentEncodedVersionSettingValue(ctx, verSetting, setting.InternalKey(), name)
 				return true, encoded, err
+			} else if nonMasked, ok := setting.(settings.NonMaskedSetting); ok {
+				return true, nonMasked.Encoded(&p.ExecCfg().Settings.SV), nil
+			} else if masked, ok := setting.(*settings.MaskedSetting); ok {
+				// Masked settings need to be redacted, so we can skip the
+				// encoding/decoding steps.
+				return true, masked.String(&p.ExecCfg().Settings.SV), nil
 			}
-			return true, setting.Encoded(&p.ExecCfg().Settings.SV), nil
+			return false, "", nil
 		},
 	)
 }
 
 func getShowClusterSettingPlanColumns(
-	val settings.NonMaskedSetting, name settings.SettingName,
+	val settings.Setting, name settings.SettingName,
 ) (colinfo.ResultColumns, error) {
 	var dType *types.T
 	switch val.(type) {
@@ -217,6 +228,8 @@ func getShowClusterSettingPlanColumns(
 		dType = types.Interval
 	case *settings.DurationSettingWithExplicitUnit:
 		dType = types.Interval
+	case *settings.MaskedSetting:
+		dType = types.String
 	default:
 		return nil, errors.Errorf("unknown setting type for %s: %s", name, val.Typ())
 	}
@@ -224,7 +237,7 @@ func getShowClusterSettingPlanColumns(
 }
 
 func planShowClusterSetting(
-	val settings.NonMaskedSetting,
+	val settings.Setting,
 	name settings.SettingName,
 	columns colinfo.ResultColumns,
 	getEncodedValue func(ctx context.Context, p *planner) (bool, string, error),
@@ -248,13 +261,6 @@ func planShowClusterSetting(
 						return nil, err
 					}
 					d = tree.NewDInt(tree.DInt(v))
-				case *settings.StringSetting, *settings.EnumSetting,
-					*settings.ByteSizeSetting, *settings.VersionSetting, *settings.ProtobufSetting:
-					v, err := val.DecodeToString(encoded)
-					if err != nil {
-						return nil, err
-					}
-					d = tree.NewDString(v)
 				case *settings.BoolSetting:
 					v, err := s.DecodeValue(encoded)
 					if err != nil {
@@ -279,6 +285,16 @@ func planShowClusterSetting(
 						return nil, err
 					}
 					d = &tree.DInterval{Duration: duration.MakeDuration(v.Nanoseconds(), 0, 0)}
+				case settings.NonMaskedSetting:
+					// This includes StringSetting, EnumSetting, ByteSizeSetting,
+					// VersionSetting, and ProtobufSetting:
+					v, err := s.DecodeToString(encoded)
+					if err != nil {
+						return nil, err
+					}
+					d = tree.NewDString(v)
+				case *settings.MaskedSetting:
+					d = tree.NewDString(encoded)
 				default:
 					return nil, errors.AssertionFailedf("unknown setting type for %s: %s (%T)", name, val.Typ(), val)
 				}
