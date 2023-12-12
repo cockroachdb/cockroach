@@ -36,6 +36,7 @@ import (
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	gtransport "google.golang.org/api/transport/http"
 )
 
 const (
@@ -189,7 +190,22 @@ func makeGCSStorage(
 		opts = append(opts, assumeOpt)
 	}
 
-	g, err := gcs.NewClient(ctx, opts...)
+	baseTransport, err := cloud.MakeTransport(args.Settings)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create http transport")
+	}
+
+	t, err := gtransport.NewTransport(ctx, baseTransport, opts...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create gcs http transport")
+	}
+
+	httpClient, err := cloud.MakeHTTPClientForTransport(t)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to create http client")
+	}
+
+	g, err := gcs.NewClient(ctx, option.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create google cloud client")
 	}
