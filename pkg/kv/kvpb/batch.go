@@ -795,7 +795,7 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 
 // SafeFormat implements redact.SafeFormatter.
 // It gives a brief summary of the contained requests and keys in the batch.
-func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
+func (ba BatchRequest) SafeFormat(s redact.SafePrinter, verb rune) {
 	for count, arg := range ba.Requests {
 		// Limit the strings to provide just a summary. Without this limit
 		// a log message with a BatchRequest can be very long.
@@ -810,41 +810,16 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 		}
 
 		req := arg.GetInner()
-		if et, ok := req.(*EndTxnRequest); ok {
-			h := req.Header()
-			s.Printf("%s(", req.Method())
-			if et.Commit {
-				if et.IsParallelCommit() {
-					s.Printf("parallel commit")
-				} else {
-					s.Printf("commit")
-				}
-			} else {
-				s.Printf("abort")
-			}
-			if et.InternalCommitTrigger != nil {
-				s.Printf(" %s", et.InternalCommitTrigger.Kind())
-			}
-			s.Printf(") [%s]", h.Key)
-		} else if rt, ok := req.(*RecoverTxnRequest); ok {
-			h := req.Header()
-			s.Printf("%s(%s, ", req.Method(), rt.Txn.Short())
-			if rt.ImplicitlyCommitted {
-				s.Printf("commit")
-			} else {
-				s.Printf("abort")
-			}
-			s.Printf(") [%s]", h.Key)
+		if safeFormatterReq, ok := req.(SafeFormatterRequest); ok {
+			safeFormatterReq.SafeFormat(s, verb)
 		} else {
-			h := req.Header()
-			if req.Method() == PushTxn {
-				pushReq := req.(*PushTxnRequest)
-				s.Printf("PushTxn(%s,%s->%s)",
-					pushReq.PushType, pushReq.PusherTxn.Short(), pushReq.PusheeTxn.Short())
-			} else {
-				s.Print(req.Method())
-			}
+			s.Print(req.Method())
+		}
+		h := req.Header()
+		if len(h.EndKey) > 0 {
 			s.Printf(" [%s,%s)", h.Key, h.EndKey)
+		} else {
+			s.Printf(" [%s]", h.Key)
 		}
 	}
 	{

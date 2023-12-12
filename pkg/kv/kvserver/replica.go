@@ -2322,7 +2322,7 @@ func checkIfTxnAborted(
 	var entry roachpb.AbortSpanEntry
 	aborted, err := rec.AbortSpan().Get(ctx, reader, txn.ID, &entry)
 	if err != nil {
-		return kvpb.NewError(kvpb.NewReplicaCorruptionError(
+		return kvpb.NewError(kvpb.MaybeWrapReplicaCorruptionError(ctx,
 			errors.Wrap(err, "could not read from AbortSpan")))
 	}
 	if aborted {
