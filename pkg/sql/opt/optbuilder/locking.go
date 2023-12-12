@@ -388,11 +388,34 @@ func (b *Builder) buildLocking(item *lockingItem, inScope *scope) {
 func (b *Builder) buildLock(lb *lockBuilder, locking opt.Locking, inScope *scope) {
 	md := b.factory.Metadata()
 	tab := md.Table(lb.table)
+	// We need to use a fresh table reference to have control over the exact
+	// column families locked.
+	newTabID := md.DuplicateTable(lb.table, b.factory.RemapCols)
+	// Add remapped columns for the new table reference. We only want to lock the
+	// column families included in the output of the SELECT FOR UPDATE, so we only
+	// add remapped columns from inScope.cols, and not inScope.extraCols.
+	//
+	// In a case like
+	//
+	//   SELECT 1 FROM foo FOR UPDATE
+	//
+	// inScope.cols won't have any columns of foo, and so lockCols will be
+	// empty. In this case we will only lock the first column family.
+	var lockCols opt.ColSet
+	for _, col := range inScope.cols {
+		if md.ColumnMeta(col.id).Table == lb.table {
+			lockCols.Add(newTabID.ColumnID(lb.table.ColumnOrdinal(col.id)))
+		}
+	}
 	private := &memo.LockPrivate{
-		Table:   lb.table,
-		Locking: locking,
-		KeyCols: lb.keyCols,
-		Cols:    inScope.colSetWithExtraCols(),
+		Table:     newTabID,
+		KeySource: lb.table,
+		Locking:   locking,
+		KeyCols:   lb.keyCols,
+		LockCols:  lockCols,
+		// ExtraCols might include some of the primary key columns needed to lock the
+		// row, if they weren't in the output of the SELECT FOR UPDATE.
+		Cols: inScope.colSetWithExtraCols(),
 	}
 	// Validate that all of the PK cols are found within the input scope.
 	scopeCols := private.Cols

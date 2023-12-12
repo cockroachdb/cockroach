@@ -698,6 +698,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *LockExpr:
+		if !f.HasFlags(ExprFmtHideColumns) {
+			f.formatRelColList(e, tp, "lock columns:", t.LockCols.ToList())
+		}
 		f.formatLocking(tp, t.Locking)
 
 	case *WithExpr:
