@@ -103,17 +103,11 @@ func (g *exprsGen) genExprGroupDef(define *lang.DefineExpr) {
 
 	// Generate the type definition.
 	fmt.Fprintf(g.w, "type %s struct {\n", groupStructType)
-	fmt.Fprintf(g.w, "  mem *Memo\n")
 	fmt.Fprintf(g.w, "  rel props.Relational\n")
 	fmt.Fprintf(g.w, "  first %s\n", structType)
 	fmt.Fprintf(g.w, "  best bestProps\n")
 	fmt.Fprintf(g.w, "}\n\n")
 	fmt.Fprintf(g.w, "var _ exprGroup = &%s{}\n\n", groupStructType)
-
-	// Generate the memo method.
-	fmt.Fprintf(g.w, "func (g *%s) memo() *Memo {\n", groupStructType)
-	fmt.Fprintf(g.w, "  return g.mem\n")
-	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the relational method.
 	fmt.Fprintf(g.w, "func (g *%s) relational() *props.Relational {\n", groupStructType)
@@ -337,11 +331,6 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 			fmt.Fprintf(g.w, "}\n\n")
 		}
 	} else {
-		// Generate the Memo method.
-		fmt.Fprintf(g.w, "func (e *%s) Memo() *Memo {\n", opTyp.name)
-		fmt.Fprintf(g.w, "  return e.grp.memo()\n")
-		fmt.Fprintf(g.w, "}\n\n")
-
 		// Generate the Relational method.
 		fmt.Fprintf(g.w, "func (e *%s) Relational() *props.Relational {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  return e.grp.relational()\n")
@@ -436,11 +425,6 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "    return\n")
 	fmt.Fprintf(g.w, "  }\n")
 	fmt.Fprintf(g.w, "  panic(errors.AssertionFailedf(\"child index out of range\"))\n")
-	fmt.Fprintf(g.w, "}\n\n")
-
-	// Generate the Memo method.
-	fmt.Fprintf(g.w, "func (e *%s) Memo() *Memo {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  return e.Input.Memo()\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the Relational method.
@@ -592,7 +576,7 @@ func (g *exprsGen) genMemoizeFuncs() {
 		} else {
 			groupName := fmt.Sprintf("%sGroup", unTitle(string(define.Name)))
 			fmt.Fprintf(g.w, "  const size = int64(unsafe.Sizeof(%s{}))\n", groupName)
-			fmt.Fprintf(g.w, "  grp := &%s{mem: m, first: %s{\n", groupName, opTyp.name)
+			fmt.Fprintf(g.w, "  grp := &%s{first: %s{\n", groupName, opTyp.name)
 		}
 
 		for _, field := range fields {

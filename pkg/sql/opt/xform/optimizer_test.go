@@ -63,16 +63,8 @@ func TestDetachMemo(t *testing.T) {
 		t.Error("after memo did not contain expected operator")
 	}
 
-	if after.RootExpr().(memo.RelExpr).Memo() != after {
-		t.Error("after memo expression does not reference the after memo")
-	}
-
 	if before == o.Memo() {
 		t.Error("detached memo should not be reused")
-	}
-
-	if before.RootExpr().(memo.RelExpr).Memo() != before {
-		t.Error("detached memo expression does not reference the detached memo")
 	}
 
 	if !strings.Contains(before.String(), "variable: c:3 [type=string]") {

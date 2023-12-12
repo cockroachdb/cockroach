@@ -52,9 +52,6 @@ import (
 type RelExpr interface {
 	opt.Expr
 
-	// Memo is the memo which contains this relational expression.
-	Memo() *Memo
-
 	// Relational is the set of logical properties that describe the content and
 	// characteristics of this expression's behavior and results.
 	Relational() *props.Relational

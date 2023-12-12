@@ -111,10 +111,6 @@ func (e *ProjectExpr) SetChild(nth int, child opt.Expr) {
 	panic(errors.AssertionFailedf("child index out of range"))
 }
 
-func (e *ProjectExpr) Memo() *Memo {
-	return e.grp.memo()
-}
-
 func (e *ProjectExpr) Relational() *props.Relational {
 	return e.grp.relational()
 }
@@ -163,17 +159,12 @@ func (e *ProjectExpr) setGroup(member RelExpr) {
 }
 
 type projectGroup struct {
-	mem   *Memo
 	rel   props.Relational
 	first ProjectExpr
 	best  bestProps
 }
 
 var _ exprGroup = &projectGroup{}
-
-func (g *projectGroup) memo() *Memo {
-	return g.mem
-}
 
 func (g *projectGroup) relational() *props.Relational {
 	return &g.rel
@@ -319,10 +310,6 @@ func (e *SortExpr) SetChild(nth int, child opt.Expr) {
 	panic(errors.AssertionFailedf("child index out of range"))
 }
 
-func (e *SortExpr) Memo() *Memo {
-	return e.Input.Memo()
-}
-
 func (e *SortExpr) Relational() *props.Relational {
 	return e.Input.Relational()
 }
@@ -369,7 +356,7 @@ func (m *Memo) MemoizeProject(
 	passthrough opt.ColSet,
 ) RelExpr {
 	const size = int64(unsafe.Sizeof(projectGroup{}))
-	grp := &projectGroup{mem: m, first: ProjectExpr{
+	grp := &projectGroup{first: ProjectExpr{
 		Input:       input,
 		Projections: projections,
 		Passthrough: passthrough,

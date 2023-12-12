@@ -702,7 +702,7 @@ memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +7])
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY -ordinality
 ----
-memo (optimized, ~7KB, required=[presentation: y:2] [ordering: +8])
+memo (optimized, ~6KB, required=[presentation: y:2] [ordering: +8])
  ├── G1: (project G2 G3 y)
  │    ├── [presentation: y:2] [ordering: +8]
  │    │    ├── best: (sort G1)
