@@ -64,6 +64,8 @@ var (
 	tlsClientKey  = flag.String("key", "", "TLS client key for accessing EngFlow")
 
 	extraParams = flag.String("extra", "", "comma-separated list of KEY=VALUE pairs like a=b,c=d")
+
+	githubApiToken = os.Getenv("GITHUB_API_TOKEN")
 )
 
 func getSha() (string, error) {
@@ -75,15 +77,19 @@ func getSha() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func postOptions(sha string) *issues.Options {
+func postOptions(res *testResultWithXml, sha string) *issues.Options {
 	return &issues.Options{
-		Token:  os.Getenv("GITHUB_API_TOKEN"),
+		Token:  githubApiToken,
 		Org:    "cockroachdb",
 		Repo:   "cockroach",
 		SHA:    sha,
 		Branch: *branch,
 		EngFlowOptions: &issues.EngFlowOptions{
+			Attempt:      int(res.attempt),
 			InvocationID: *invocationId,
+			Label:        res.label,
+			Run:          int(res.run),
+			Shard:        int(res.shard),
 			ServerURL:    *serverUrl,
 		},
 		GetBinaryVersion: build.BinaryVersion,
@@ -91,7 +97,8 @@ func postOptions(sha string) *issues.Options {
 
 }
 
-func failurePoster(res *testResultWithXml, opts *issues.Options) githubpost.FailurePoster {
+func failurePoster(res *testResultWithXml, sha string) githubpost.FailurePoster {
+	postOpts := postOptions(res, sha)
 	formatter := func(ctx context.Context, failure githubpost.Failure) (issues.IssueFormatter, issues.PostRequest) {
 		fmter, req := githubpost.DefaultFormatter(ctx, failure)
 		// We don't want an artifacts link: there are none on EngFlow.
@@ -123,7 +130,7 @@ func failurePoster(res *testResultWithXml, opts *issues.Options) githubpost.Fail
 	}
 	return func(ctx context.Context, failure githubpost.Failure) error {
 		fmter, req := formatter(ctx, failure)
-		return issues.Post(ctx, log.Default(), fmter, req, opts)
+		return issues.Post(ctx, log.Default(), fmter, req, postOpts)
 	}
 }
 
@@ -189,7 +196,6 @@ func process() error {
 	if err != nil {
 		return err
 	}
-	postOpts := postOptions(sha)
 	httpClient, err := getHttpClient()
 	if err != nil {
 		return err
@@ -246,7 +252,7 @@ func process() error {
 		}
 	}
 
-	if os.Getenv("GITHUB_API_TOKEN") == "" {
+	if githubApiToken == "" {
 		fmt.Printf("no GITHUB_API_TOKEN; skipping reporting to GitHub")
 		return nil
 	}
@@ -287,7 +293,7 @@ func process() error {
 			}
 			if seenNew {
 				if err := githubpost.PostFromTestXMLWithFailurePoster(
-					ctx, failurePoster(res, postOpts), testXml); err != nil {
+					ctx, failurePoster(res, sha), testXml); err != nil {
 					fmt.Printf("could not post to GitHub: got error %+v", err)
 				}
 			}
