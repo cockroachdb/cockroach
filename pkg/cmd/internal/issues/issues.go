@@ -473,7 +473,9 @@ func (p *poster) buildURL() *url.URL {
 			log.Fatal(err)
 		}
 		base64Target := base64.StdEncoding.EncodeToString([]byte(opts.Label))
-		u.Path = fmt.Sprintf("invocations/default/%s?testReportRun=%d&testReportShard=%d&testReportAttempt=%d#targets-%s", opts.InvocationID, opts.Run, opts.Shard, opts.Attempt, base64Target)
+		u.Path = fmt.Sprintf("invocations/default/%s", opts.InvocationID)
+		u.RawQuery = fmt.Sprintf("testReportRun=%d&testReportShard=%d&testReportAttempt=%d", opts.Run, opts.Shard, opts.Attempt)
+		u.Fragment = fmt.Sprintf("targets-%s", base64Target)
 		return u
 	}
 	return nil
