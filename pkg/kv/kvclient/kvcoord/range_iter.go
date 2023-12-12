@@ -230,7 +230,7 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	}
 
 	// Check for an early exit from the retry loop.
-	if deducedErr := ri.ds.deduceRetryEarlyExitError(ctx); deducedErr != nil {
+	if deducedErr := ri.ds.deduceRetryEarlyExitError(ctx, err); deducedErr != nil {
 		ri.err = deducedErr
 	} else {
 		ri.err = errors.Wrapf(err, "RangeIterator failed to seek to %s", key)

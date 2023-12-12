@@ -520,7 +520,7 @@ func TestTxnWriteReadConflict(t *testing.T) {
 		// Verify the expected blocking behavior.
 		if expBlocking {
 			require.Error(t, err)
-			require.ErrorIs(t, context.DeadlineExceeded, err)
+			require.ErrorIs(t, err, context.DeadlineExceeded)
 		} else {
 			require.NoError(t, err)
 			require.False(t, res.Exists())
