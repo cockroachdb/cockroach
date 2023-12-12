@@ -415,13 +415,9 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// going to bother with a long-running migration.
 		apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
 		if apply {
-			// TODO(pavelkalinnikov): counting bytes may be unreliable because 0 bytes
-			// does not mean 0 files. Make the interface more robust.
-			if rmBytes, _, err := b.r.raftMu.sideloaded.BytesIfTruncatedFromTo(
-				ctx, 0, res.State.TruncatedState.Index,
-			); err != nil {
-				return errors.Wrap(err, "unable to count sideloaded files to remove")
-			} else if rmBytes != 0 {
+			if has, err := b.r.raftMu.sideloaded.HasEntries(ctx, 0, res.State.TruncatedState.Index); err != nil {
+				return errors.Wrap(err, "failed to check if there are sideloaded files to remove")
+			} else if has {
 				b.changeTruncatesSideloadedFiles = true
 			}
 			if apply, err = handleTruncatedStateBelowRaftPreApply(
