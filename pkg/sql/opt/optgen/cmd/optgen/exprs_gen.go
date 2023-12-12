@@ -285,17 +285,6 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 	}
 	fmt.Fprintf(g.w, "}\n\n")
 
-	// Generate the String method.
-	fmt.Fprintf(g.w, "func (e *%s) String() string {\n", opTyp.name)
-	if define.Tags.Contains("Scalar") {
-		fmt.Fprintf(g.w, "  f := makeExprFmtCtxForString(ExprFmtHideQualifications, nil, nil)\n")
-	} else {
-		fmt.Fprintf(g.w, "  f := makeExprFmtCtxForString(ExprFmtHideQualifications, e.Memo(), nil)\n")
-	}
-	fmt.Fprintf(g.w, "  f.FormatExpr(e)\n")
-	fmt.Fprintf(g.w, "  return f.Buffer.String()\n")
-	fmt.Fprintf(g.w, "}\n\n")
-
 	// Generate the SetChild method.
 	fmt.Fprintf(g.w, "func (e *%s) SetChild(nth int, child opt.Expr) {\n", opTyp.name)
 	if len(childFields) > 0 {
@@ -320,6 +309,13 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "}\n\n")
 
 	if define.Tags.Contains("Scalar") {
+		// Generate the String method.
+		fmt.Fprintf(g.w, "func (e *%s) String() string {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  f := makeExprFmtCtxForString(ExprFmtHideQualifications, nil, nil)\n")
+		fmt.Fprintf(g.w, "  f.FormatExpr(e)\n")
+		fmt.Fprintf(g.w, "  return f.Buffer.String()\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
 		// Generate the DataType method.
 		fmt.Fprintf(g.w, "func (e *%s) DataType() *types.T {\n", opTyp.name)
 		if dataType, ok := g.constDataType(define); ok {
@@ -389,7 +385,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		// Generate the setNext method.
 		fmt.Fprintf(g.w, "func (e *%s) setNext(member RelExpr) {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  if e.next != nil {\n")
-		fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"expression already has its next defined: %%s\", e))\n")
+		fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"expression already has its next defined: %%s\", errors.Safe(e.Op())))\n")
 		fmt.Fprintf(g.w, "  }\n")
 		fmt.Fprintf(g.w, "  e.next = member\n")
 		fmt.Fprintf(g.w, "}\n\n")
@@ -397,7 +393,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		// Generate the setGroup method.
 		fmt.Fprintf(g.w, "func (e *%s) setGroup(member RelExpr) {\n", opTyp.name)
 		fmt.Fprintf(g.w, "  if e.grp != nil {\n")
-		fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"expression is already in a group: %%s\", e))\n")
+		fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"expression is already in a group: %%s\", errors.Safe(e.Op())))\n")
 		fmt.Fprintf(g.w, "  }\n")
 		fmt.Fprintf(g.w, "  e.grp = member.group()\n")
 		fmt.Fprintf(g.w, "  LastGroupMember(member).setNext(e)\n")
@@ -431,13 +427,6 @@ func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
 	// Generate the Private method.
 	fmt.Fprintf(g.w, "func (e *%s) Private() interface{} {\n", opTyp.name)
 	fmt.Fprintf(g.w, "  return nil\n")
-	fmt.Fprintf(g.w, "}\n\n")
-
-	// Generate the String method.
-	fmt.Fprintf(g.w, "func (e *%s) String() string {\n", opTyp.name)
-	fmt.Fprintf(g.w, "  f := makeExprFmtCtxForString(ExprFmtHideQualifications, e.Memo(), nil)\n")
-	fmt.Fprintf(g.w, "  f.FormatExpr(e)\n")
-	fmt.Fprintf(g.w, "  return f.Buffer.String()\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the SetChild method.
@@ -721,7 +710,7 @@ func (g *exprsGen) genInternFuncs() {
 		fmt.Fprintf(g.w, "    return in.Intern%s(t)\n", define.Name)
 	}
 	fmt.Fprintf(g.w, "  default:\n")
-	fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"unhandled op: %%s\", e.Op()))\n")
+	fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"unhandled op: %%s\", errors.Safe(e.Op())))\n")
 	fmt.Fprintf(g.w, "  }\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
@@ -819,7 +808,7 @@ func (g *exprsGen) genBuildPropsFunc() {
 		fmt.Fprintf(g.w, "    b.build%sProps(t, rel)\n", define.Name)
 	}
 	fmt.Fprintf(g.w, "  default:\n")
-	fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"unhandled type: %%s\", t.Op()))\n")
+	fmt.Fprintf(g.w, "    panic(errors.AssertionFailedf(\"unhandled type: %%s\", errors.Safe(e.Op())))\n")
 
 	fmt.Fprintf(g.w, "  }\n")
 	fmt.Fprintf(g.w, "}\n\n")
