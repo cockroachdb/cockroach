@@ -152,7 +152,9 @@ type ExprFmtCtx struct {
 	// data from the formatted expression with redaction markers, including spans.
 	RedactableValues bool
 
-	// Memo must contain any expression that is formatted.
+	// Memo must contain any expression that is formatted. It is not used for
+	// scalar expressions. If it is nil for relational expressions, formatting may
+	// result in a nil-pointer panic.
 	Memo *Memo
 
 	// Catalog must be set unless the ExprFmtHideQualifications flag is set.
