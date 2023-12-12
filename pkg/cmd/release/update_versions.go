@@ -128,7 +128,7 @@ func (r prRepo) clone() error {
 }
 
 func (r prRepo) checkout() error {
-	cmd := exec.Command("git", "checkout", "-b", r.prBranch, "origin/"+r.branch)
+	cmd := exec.Command("git", "checkout", "-b", r.prBranch, remoteOrigin+"/"+r.branch)
 	cmd.Dir = r.checkoutDir()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -409,7 +409,7 @@ func generateRepoList(
 			log.Printf("skipping version bump on the %s branch, because %s does not exist on that branch", branch, versionFile)
 			continue
 		}
-		curVersion, err := fileContent(branch, versionFile)
+		curVersion, err := fileContent(remoteOrigin+"/"+branch, versionFile)
 		if err != nil {
 			return []prRepo{}, fmt.Errorf("reading git file content: %w", err)
 		}
