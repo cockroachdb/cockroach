@@ -636,6 +636,128 @@ func TestImmutableBatchArgs(t *testing.T) {
 	}
 }
 
+// TestErrorWithCancellationExit verifies that the DistSender never exits the
+// loop with a retriable error. These errors are not intended to escape the Send
+// and other code may not handle them correctly.
+func TestErrorWithCancellationExit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	retriableErr := kvpb.NewError(
+		&kvpb.NotLeaseHolderError{
+			Replica: testUserRangeDescriptor.InternalReplicas[0],
+		})
+	terminalErr := kvpb.NewErrorf("boom")
+
+	tests := []struct {
+		name           string
+		retriableError *kvpb.Error
+		terminalError  *kvpb.Error
+		// Note that errorFn has side effects when it is called in the test.
+		cancelFn func(ctx context.CancelFunc, stopper *stop.Stopper)
+		// TODO(baptist): This would be nicer if we could check on the error
+		// directly, but its not easy to do that based on the way that context
+		// cancellation returns the error.
+		// TODO(baptist): Currently this doesn't detect if the context is cancelled
+		// prior to entering the loop the first time. Currently Retry.Next always
+		// guarantees to run at least one time due to
+		expectedErr string
+	}{
+		{
+			name:        "no error",
+			expectedErr: "",
+		},
+		{
+			name:           "terminal error",
+			retriableError: retriableErr,
+			terminalError:  terminalErr,
+			expectedErr:    "boom",
+		},
+		{
+			name:           "cancel context",
+			retriableError: retriableErr,
+			cancelFn: func(cancel context.CancelFunc, _ *stop.Stopper) {
+				// Cancel the context the request was started with.
+				cancel()
+			},
+			expectedErr: "context canceled",
+		},
+		{
+			name:           "stop stopper",
+			retriableError: retriableErr,
+			cancelFn: func(_ context.CancelFunc, stopper *stop.Stopper) {
+				// Stop the stopper simulating a shutdown.
+				stopper.Stop(context.Background())
+			},
+			expectedErr: "node unavailable",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			retryCount := atomic.Int64{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+
+			clock := hlc.NewClockForTesting(nil)
+			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+			g := makeGossip(t, stopper, rpcContext)
+			var testFn simpleSendFn = func(_ context.Context, _ *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+				reply := &kvpb.BatchResponse{}
+
+				// Set a response so we don't get an out of bounds err in the non-error case.
+				var union kvpb.ResponseUnion
+				union.MustSetInner(&kvpb.PutResponse{})
+				reply.Responses = []kvpb.ResponseUnion{union}
+
+				// Count the number of times we are running.
+				count := retryCount.Add(1)
+
+				// Return a retriable error twice before running cancellation.
+				reply.Error = tc.retriableError
+				if count == 2 {
+					if tc.cancelFn != nil {
+						tc.cancelFn(cancel, stopper)
+					}
+				}
+
+				// Return retriable a few more times as cancellation may need to propagate.
+				if count > 5 {
+					reply.Error = tc.terminalError
+				}
+				return reply, nil
+			}
+
+			cfg := DistSenderConfig{
+				AmbientCtx: log.MakeTestingAmbientCtxWithNewTracer(),
+				Clock:      clock,
+				NodeDescs:  g,
+				RPCContext: rpcContext,
+				// Retry very quickly to make this test finish fast.
+				RPCRetryOptions: &retry.Options{
+					InitialBackoff: time.Millisecond,
+					MaxBackoff:     time.Millisecond,
+				},
+				TestingKnobs: ClientTestingKnobs{
+					TransportFactory: adaptSimpleTransport(testFn),
+				},
+				RangeDescriptorDB: defaultMockRangeDescriptorDB,
+				NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
+				Settings:          cluster.MakeTestingClusterSettings(),
+			}
+			ds := NewDistSender(cfg)
+			// Start a request that runs through distSender.
+			put := kvpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
+			_, pErr := kv.SendWrapped(ctx, ds, put)
+			if tc.expectedErr == "" {
+				require.Nil(t, pErr)
+			} else {
+				require.NotNil(t, pErr)
+				require.True(t, testutils.IsPError(pErr, tc.expectedErr))
+			}
+		})
+	}
+}
+
 // TestRetryOnNotLeaseHolderError verifies that the DistSender correctly updates
 // the leaseholder in the range cache and retries when receiving a
 // NotLeaseHolderError.
@@ -1736,7 +1858,7 @@ func TestEvictCacheOnError(t *testing.T) {
 			key := roachpb.Key("b")
 			put := kvpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
-			if _, pErr := kv.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !testutils.IsError(pErr.GoError(), ctx.Err().Error()) {
+			if _, pErr := kv.SendWrapped(ctx, ds, put); pErr != nil && !testutils.IsPError(pErr, errString) && !errors.Is(pErr.GoError(), context.Canceled) {
 				t.Errorf("put encountered unexpected error: %s", pErr)
 			}
 			rng := ds.rangeCache.GetCached(ctx, testUserRangeDescriptor.StartKey, false /* inverted */)

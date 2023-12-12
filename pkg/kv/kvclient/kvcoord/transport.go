@@ -199,8 +199,8 @@ func (gt *grpcTransport) sendBatch(
 	// Bail out early if the context is already canceled. (GRPC will
 	// detect this pretty quickly, but the first check of the context
 	// in the local server comes pretty late)
-	if ctx.Err() != nil {
-		return nil, errors.Wrap(ctx.Err(), "aborted before batch send")
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	gt.opts.metrics.SentCount.Inc(1)
