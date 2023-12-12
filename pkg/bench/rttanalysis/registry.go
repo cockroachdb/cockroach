@@ -62,6 +62,7 @@ func (r *Registry) RunExpectations(t *testing.T) {
 	skip.UnderStress(t)
 	skip.UnderRace(t)
 	skip.UnderShort(t)
+	skip.UnderDeadlock(t)
 
 	runBenchmarkExpectationTests(t, r)
 }
