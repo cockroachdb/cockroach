@@ -9,11 +9,7 @@
 // licenses/APL.txt.
 
 import { AppState } from "../reducers";
-import {
-  exportInsights,
-  greaterOrEqualThanVersion,
-  indexUnusedDuration,
-} from "../../util";
+import { greaterOrEqualThanVersion, indexUnusedDuration } from "../../util";
 
 export const selectAutomaticStatsCollectionEnabled = (
   state: AppState,
@@ -53,19 +49,4 @@ export const selectDropUnusedIndexDuration = (state: AppState): string => {
     settings["sql.index_recommendation.drop_unused_duration"]?.value ||
     indexUnusedDuration
   );
-};
-
-export const selectUseObsService = (state: AppState): boolean => {
-  const settings = state.adminUI?.clusterSettings.data?.key_values;
-  if (!settings) {
-    return exportInsights;
-  }
-  if (settings["sql.insights.export.enabled"]) {
-    if (settings["sql.insights.export.enabled"]?.value === "false") {
-      return false;
-    }
-    return true;
-  } else {
-    return exportInsights;
-  }
 };

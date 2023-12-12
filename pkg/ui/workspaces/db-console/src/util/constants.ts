@@ -37,5 +37,4 @@ export const {
   REMOTE_DEBUGGING_ERROR_TEXT,
   idAttr,
   indexUnusedDuration,
-  exportInsights,
 } = util;

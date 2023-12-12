@@ -38,7 +38,6 @@ export const idAttr = "id";
 
 // Default value for cluster settings
 export const indexUnusedDuration = "168h";
-export const exportInsights = false;
 
 export const REMOTE_DEBUGGING_ERROR_TEXT =
   "This information is not available due to the current value of the 'server.remote_debugging.mode' setting.";
