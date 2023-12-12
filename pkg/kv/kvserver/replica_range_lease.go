@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -571,6 +572,13 @@ func (p *pendingLeaseRequest) requestLease(
 	// lease when the range is unavailable results in, essentially, giving
 	// up on the lease and thus worsening the situation.
 	ba.Add(leaseReq)
+	// NB: Setting `Source: kvpb.AdmissionHeader_OTHER` means this request will
+	// bypass AC.
+	ba.AdmissionHeader = kvpb.AdmissionHeader{
+		Priority:   int32(admissionpb.NormalPri),
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     kvpb.AdmissionHeader_OTHER,
+	}
 	_, pErr := p.repl.Send(ctx, ba)
 	return pErr.GoError()
 }
