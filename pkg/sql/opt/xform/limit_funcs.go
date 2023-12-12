@@ -401,7 +401,7 @@ func getPrefixFromOrdering(
 func (c *CustomFuncs) GeneratePartialOrderTopK(
 	grp memo.RelExpr, required *physical.Required, input memo.RelExpr, private *memo.TopKPrivate,
 ) {
-	orders := ordering.DeriveInterestingOrderings(input)
+	orders := ordering.DeriveInterestingOrderings(c.e.mem, input)
 	intraOrd := private.Ordering
 	for _, ord := range orders {
 		newOrd, fullPrefix, found := getPrefixFromOrdering(ord.ToOrdering(), intraOrd, input, func(id opt.ColumnID) bool {

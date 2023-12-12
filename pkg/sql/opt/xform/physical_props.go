@@ -35,12 +35,17 @@ import (
 // method and then pass through that property in the buildChildPhysicalProps
 // method.
 func CanProvidePhysicalProps(
-	ctx context.Context, evalCtx *eval.Context, e memo.RelExpr, required *physical.Required,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	mem *memo.Memo,
+	e memo.RelExpr,
+	required *physical.Required,
 ) bool {
 	// All operators can provide the Presentation and LimitHint properties, so no
 	// need to check for that.
-	canProvideOrdering := e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
-	canProvideDistribution := e.Op() == opt.DistributeOp || distribution.CanProvide(ctx, evalCtx, e, &required.Distribution)
+	canProvideOrdering := e.Op() == opt.SortOp || ordering.CanProvide(mem, e, &required.Ordering)
+	canProvideDistribution := e.Op() == opt.DistributeOp ||
+		distribution.CanProvide(ctx, evalCtx, mem, e, &required.Distribution)
 	return canProvideOrdering && canProvideDistribution
 }
 
@@ -86,7 +91,7 @@ func BuildChildPhysicalProps(
 		childProps.Presentation = parent.(*memo.ExportExpr).Props.Presentation
 	}
 
-	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)
+	childProps.Ordering = ordering.BuildChildRequired(mem, parent, &parentProps.Ordering, nth)
 	childProps.Distribution = distribution.BuildChildRequired(parent, &parentProps.Distribution, nth)
 
 	switch parent.Op() {
@@ -316,7 +321,7 @@ func init() {
 			return physicalDistribution
 		}
 		_, physicalDistribution = distribution.BuildLookupJoinLookupTableDistribution(
-			o.ctx, o.evalCtx, lookupJoin, required, o.MaybeGetBestCostRelation,
+			o.ctx, o.evalCtx, o.mem, lookupJoin, required, o.MaybeGetBestCostRelation,
 		)
 		return physicalDistribution
 	}

@@ -61,7 +61,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	leftCols := leftEq.ToSet()
 	// NOTE: leftCols cannot be mutated after this point because it is used as a
 	// key to cache the restricted orderings in left's logical properties.
-	orders := ordering.DeriveRestrictedInterestingOrderings(left, leftCols).Copy()
+	orders := ordering.DeriveRestrictedInterestingOrderings(c.e.mem, left, leftCols).Copy()
 
 	var mustGenerateMergeJoin bool
 	leftFDs := &left.Relational().FuncDeps
@@ -74,7 +74,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData().ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
-		rightOrders := ordering.DeriveInterestingOrderings(right).Copy()
+		rightOrders := ordering.DeriveInterestingOrderings(c.e.mem, right).Copy()
 		rightOrders.RestrictToCols(rightEq.ToSet(), &right.Relational().FuncDeps)
 		orders = append(orders, rightOrders...)
 
@@ -1896,7 +1896,9 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins(
 func (c *CustomFuncs) LookupsAreLocal(
 	lookupJoinExpr *memo.LookupJoinExpr, required *physical.Required,
 ) bool {
-	_, provided := distribution.BuildLookupJoinLookupTableDistribution(c.e.ctx, c.e.f.EvalContext(), lookupJoinExpr, required, c.e.o.MaybeGetBestCostRelation)
+	_, provided := distribution.BuildLookupJoinLookupTableDistribution(
+		c.e.ctx, c.e.f.EvalContext(), c.e.mem, lookupJoinExpr, required, c.e.o.MaybeGetBestCostRelation,
+	)
 	if provided.Any() || len(provided.Regions) != 1 {
 		return false
 	}

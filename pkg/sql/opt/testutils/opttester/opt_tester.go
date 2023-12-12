@@ -933,7 +933,7 @@ func (ot *OptTester) fillInLazyProps(mem *memo.Memo, e opt.Expr) {
 		norm.DeriveRejectNullCols(mem, rel, intsets.Fast{} /* disabledRules */)
 
 		// Make sure the interesting orderings are calculated.
-		ordering.DeriveInterestingOrderings(rel)
+		ordering.DeriveInterestingOrderings(mem, rel)
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {
