@@ -435,12 +435,25 @@ func (f *featureFlag) enabled(r enthropy) featureState {
 	return featureDisabled
 }
 
+type enumFeatureFlag struct {
+	state string
+}
+
+func (f *enumFeatureFlag) choose(r enthropy, options []string) string {
+	if f.state != "" {
+		return f.state
+	}
+	f.state = options[r.Intn(len(options))]
+	return f.state
+}
+
 // cdcFeatureFlags describes various cdc feature flags.
 // zero value cdcFeatureFlags uses metamorphic settings for features.
 type cdcFeatureFlags struct {
-	MuxRangefeed       featureFlag
-	RangeFeedScheduler featureFlag
-	SchemaLockTables   featureFlag
+	MuxRangefeed         featureFlag
+	RangeFeedScheduler   featureFlag
+	SchemaLockTables     featureFlag
+	DistributionStrategy enumFeatureFlag
 }
 
 func makeDefaultFeatureFlags() cdcFeatureFlags {
@@ -2553,6 +2566,14 @@ func (cfc *changefeedCreator) applySettings() error {
 		); err != nil {
 			return err
 		}
+	}
+
+	rangeDistribution := cfc.flags.DistributionStrategy.choose(cfc.rng,
+		changefeedccl.RangeDistributionStrategy.GetAvailableValues())
+	cfc.logger.Printf("Setting changefeed.default_range_distribution_strategy to %s", rangeDistribution)
+	if _, err := cfc.db.Exec(fmt.Sprintf(
+		"changefeed.default_range_distribution_strategy = '%s'", rangeDistribution)); err != nil {
+		return err
 	}
 	return nil
 }
