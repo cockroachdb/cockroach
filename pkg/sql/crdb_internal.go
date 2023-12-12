@@ -2342,10 +2342,11 @@ CREATE TABLE crdb_internal.cluster_settings (
   key           STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		canViewAll, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
+		hasModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
 		if err != nil {
 			return err
 		}
+		canViewAll := hasModify
 		if !canViewAll {
 			canViewAll, err = p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWCLUSTERSETTING)
 			if err != nil {
@@ -2369,7 +2370,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 			if canViewSqlOnly && !strings.HasPrefix(string(k), "sql.defaults") {
 				continue
 			}
-			setting, _ := settings.LookupForLocalAccessByKey(k, p.ExecCfg().Codec.ForSystemTenant())
+			setting, _ := settings.LookupForDisplayByKey(k, p.ExecCfg().Codec.ForSystemTenant(), hasModify)
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public
 			desc := setting.Description()
