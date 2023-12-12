@@ -457,14 +457,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 		var val int
 		var x float64
 		if err := rows.Scan(&val, &x); err != nil {
-			t.Errorf("row %d scan failed: %s", count, err)
-			continue
+			t.Fatalf("row %d scan failed: %s", count, err)
 		}
 		if count != val {
-			t.Errorf("e = %d, v = %d", count, val)
+			t.Fatalf("wrong index contents: expected %d, found %d", count, val)
 		}
 		if x != 1.4 {
-			t.Errorf("e = %f, v = %f", 1.4, x)
+			t.Fatalf("wrong index contents: expected %f, found %f", 1.4, x)
 		}
 	}
 	if err := rows.Err(); err != nil {
