@@ -1437,18 +1437,6 @@ func (c *clusterImpl) HealthStatus(
 	return results, nil
 }
 
-// assertValidDescriptors fails the test if there exists any descriptors in
-// the crdb_internal.invalid_objects virtual table.
-func (c *clusterImpl) assertValidDescriptors(ctx context.Context, db *gosql.DB, t *testImpl) error {
-	t.L().Printf("checking for invalid descriptors")
-	return timeutil.RunWithTimeout(
-		ctx, "invalid descriptors check", 1*time.Minute,
-		func(ctx context.Context) error {
-			return roachtestutil.CheckInvalidDescriptors(ctx, db)
-		},
-	)
-}
-
 // assertConsistentReplicas fails the test if
 // crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
 // replicas are inconsistent with each other.

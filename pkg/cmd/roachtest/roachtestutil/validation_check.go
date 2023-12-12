@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -70,13 +71,21 @@ func CheckInvalidDescriptors(ctx context.Context, db *gosql.DB) error {
 	// query will take a lease on the database sqlDB is connected to and only run
 	// the query on the given database. The "" prefix prevents this lease
 	// acquisition and allows the query to fetch all descriptors in the cluster.
-	validationContext, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-	rows, err := db.QueryContext(validationContext, `
+	var (
+		rows *gosql.Rows
+		err  error
+	)
+	if err := timeutil.RunWithTimeout(ctx, "descriptor validation", time.Minute, func(ctx context.Context) error {
+		rows, err = db.QueryContext(ctx, `
 SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
-	if err != nil {
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
+
 	invalidIDs, err := sqlutils.RowsToDataDrivenOutput(rows)
 	if err != nil {
 		return err
