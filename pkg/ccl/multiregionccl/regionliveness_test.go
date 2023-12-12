@@ -46,7 +46,13 @@ import (
 func TestRegionLivenessProber(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t)
+	// This test forces the SQL liveness TTL be a small number,
+	// which makes the heartbeats even more critical. Under stress and
+	// race environments this test becomes even more sensitive, if
+	// we can't send heartbeats within 10 seconds.
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	ctx := context.Background()
 
@@ -182,8 +188,13 @@ func TestRegionLivenessProber(t *testing.T) {
 func TestRegionLivenessProberForLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t)
+	// This test forces the SQL liveness TTL be a small number,
+	// which makes the heartbeats even more critical. Under stress and
+	// race environments this test becomes even more sensitive, if
+	// we can't send heartbeats within 10 seconds.
 	skip.UnderStress(t)
+	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	ctx := context.Background()
 
