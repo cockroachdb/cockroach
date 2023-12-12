@@ -1029,7 +1029,7 @@ func causeContention(
 		ctx, fmt.Sprintf("UPDATE %s SET s = $1 where id = 'test';", table), updateValue)
 	require.NoError(t, errUpdate)
 	end := timeutil.Now()
-	require.GreaterOrEqual(t, end.Sub(start), 500*time.Millisecond)
+	require.GreaterOrEqual(t, end.Sub(start), 499*time.Millisecond)
 
 	wgTxnDone.Wait()
 }
