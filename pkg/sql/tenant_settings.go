@@ -177,6 +177,8 @@ func (p *planner) ShowTenantClusterSetting(
 	}
 
 	name := settings.SettingName(strings.ToLower(n.Name))
+	// NB: We use LookupForLocalAccess since the displayed value is computed in
+	// the crdb_internal.decode_cluster_setting builtin function.
 	setting, ok, nameStatus := settings.LookupForLocalAccess(name, p.ExecCfg().Codec.ForSystemTenant())
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
@@ -226,12 +228,13 @@ WITH
   setting AS (
    SELECT $1 AS variable
   )
-SELECT COALESCE(
-   tenantspecific.value,
-   overrideall.value,
-   -- NB: we can't compute the actual value here, see discussion on issue #77935.
-   NULL
-   )
+SELECT crdb_internal.decode_cluster_setting(setting.variable,
+     COALESCE(tenantspecific.value,
+              overrideall.value,
+              -- NB: we can't compute the actual value here, which is the entry in the tenant's settings table.
+              -- See discussion on issue #77935.
+              NULL)
+  ) AS value
 FROM
   setting
   LEFT JOIN tenantspecific
@@ -241,9 +244,9 @@ FROM
 
 			datums, err := p.InternalSQLTxn().QueryRowEx(
 				ctx, "get-tenant-setting-value", p.txn,
-				sessiondata.RootUserSessionDataOverride,
+				sessiondata.NoSessionDataOverride,
 				lookupEncodedTenantSetting,
-				setting.InternalKey(), rec.ID)
+				setting.Name(), rec.ID)
 			if err != nil {
 				return false, "", err
 			}

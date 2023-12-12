@@ -4967,6 +4967,9 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if !evalCtx.Codec.ForSystemTenant() {
+					return nil, pgerror.New(pgcode.InsufficientPrivilege, "only the system tenant can decode cluster settings")
+				}
 				s, ok := tree.AsDString(args[0])
 				if !ok {
 					return nil, errors.AssertionFailedf("expected string value, got %T", args[0])
@@ -4976,17 +4979,29 @@ value if you rely on the HLC for accuracy.`,
 					return nil, errors.AssertionFailedf("expected string value, got %T", args[1])
 				}
 				name := settings.SettingName(strings.ToLower(string(s)))
-				setting, ok, _ := settings.LookupForLocalAccess(name, evalCtx.Codec.ForSystemTenant())
+
+				// To view the per-virtual-cluster overrides for sensitive settings, the
+				// MANAGEVIRTUALCLUSTER privilege is required, since that is the
+				// privilege required to set the override in the first place.
+				hasManage, err := evalCtx.SessionAccessor.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MANAGEVIRTUALCLUSTER)
+				if err != nil {
+					return nil, err
+				}
+				setting, ok, _ := settings.LookupForDisplay(name, evalCtx.Codec.ForSystemTenant(), hasManage)
 				if !ok {
 					return nil, errors.Newf("unknown cluster setting '%s'", name)
 				}
-				repr, err := setting.DecodeToString(string(encoded))
-				if err != nil {
-					return nil, errors.Wrapf(err, "%v", name)
+				repr := "<redacted>"
+				if nonMasked, ok := setting.(settings.NonMaskedSetting); ok {
+					repr, err = nonMasked.DecodeToString(string(encoded))
+					if err != nil {
+						return nil, errors.Wrapf(err, "%v", name)
+					}
 				}
 				return tree.NewDString(repr), nil
 			},
-			Info:       "Decodes the given encoded value for a cluster setting.",
+			Info: "Decodes the given encoded value for a cluster setting. The intended usage is for the system tenant " +
+				"to decode per-tenant settings.",
 			Volatility: volatility.Immutable,
 		},
 	),
