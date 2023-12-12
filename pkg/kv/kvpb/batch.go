@@ -835,6 +835,18 @@ func (ba BatchRequest) SafeFormat(s redact.SafePrinter, _ rune) {
 				s.Printf("abort")
 			}
 			s.Printf(") [%s]", h.Key)
+		} else if sr, ok := req.(*ScanRequest); ok {
+			h := req.Header()
+			s.Printf("%s [%s,%s)", req.Method(), h.Key, h.EndKey)
+			if sr.KeyLockingStrength != lock.None {
+				s.Printf(" [lock: %s %s]", sr.KeyLockingStrength, sr.KeyLockingDurability)
+			}
+		} else if gr, ok := req.(*GetRequest); ok {
+			h := req.Header()
+			s.Printf("%s [%s,%s)", req.Method(), h.Key, h.EndKey)
+			if gr.KeyLockingStrength != lock.None {
+				s.Printf(" [lock: %s %s]", gr.KeyLockingStrength, gr.KeyLockingDurability)
+			}
 		} else {
 			h := req.Header()
 			if req.Method() == PushTxn {
