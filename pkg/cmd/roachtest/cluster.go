@@ -1971,6 +1971,17 @@ func (c *clusterImpl) StartE(
 	return nil
 }
 
+// StartServiceForVirtualClusterE can start either external or shared process
+// virtual clusters. This can be specified in startOpts.RoachprodOpts. Set the
+// `Target` to the required virtual cluster type. Refer to the virtual cluster
+// section in the struct for more information on what fields are available for
+// virtual clusters.
+//
+// With external process virtual clusters an external process will be started on
+// each node specified in the externalNodes parameter.
+//
+// With shared process virtual clusters the required queries will be run on a
+// storage node of the cluster specified in the opts parameter.
 func (c *clusterImpl) StartServiceForVirtualClusterE(
 	ctx context.Context,
 	l *logger.Logger,
