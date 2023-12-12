@@ -438,8 +438,6 @@ type replicationSpec struct {
 
 	clouds registry.CloudSet
 	suites registry.SuiteSet
-	// tags are used to categorize the test.
-	tags map[string]struct{}
 }
 
 type multiRegionSpecs struct {
@@ -1032,7 +1030,6 @@ func c2cRegisterWrapper(
 		Skip:             sp.skip,
 		CompatibleClouds: sp.clouds,
 		Suites:           sp.suites,
-		Tags:             sp.tags,
 		RequiresLicense:  true,
 		Run:              run,
 	})
@@ -1052,7 +1049,7 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 		cutover:                   30 * time.Second,
 		skipNodeDistributionCheck: true,
 		clouds:                    registry.AllExceptAWS,
-		suites:                    registry.Suites("nightly"),
+		suites:                    registry.Suites(registry.Nightly),
 	}
 	rd := makeReplicationDriver(t, c, sp)
 	cleanup := rd.setupC2C(ctx, t, c)
@@ -1086,7 +1083,7 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration: 10 * time.Minute,
 			cutover:            0,
 			clouds:             registry.AllExceptAWS,
-			suites:             registry.Suites("nightly"),
+			suites:             registry.Suites(registry.Nightly),
 		},
 		{
 			name:      "c2c/tpcc/warehouses=1000/duration=60/cutover=30",
@@ -1104,7 +1101,7 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration: 60 * time.Minute,
 			cutover:            30 * time.Minute,
 			clouds:             registry.AllExceptAWS,
-			suites:             registry.Suites("nightly"),
+			suites:             registry.Suites(registry.Nightly),
 		},
 		{
 			name:      "c2c/kv0",
@@ -1123,8 +1120,7 @@ func registerClusterToCluster(r registry.Registry) {
 			cutover:                              5 * time.Minute,
 			sometimesTestFingerprintMismatchCode: true,
 			clouds:                               registry.AllClouds,
-			suites:                               registry.Suites("nightly"),
-			tags:                                 registry.Tags("aws"),
+			suites:                               registry.Suites(registry.Nightly),
 		},
 		{
 			// Initial scan perf test.
@@ -1142,7 +1138,7 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration: 5 * time.Minute,
 			cutover:            0,
 			clouds:             registry.AllExceptAWS,
-			suites:             registry.Suites("nightly"),
+			suites:             registry.Suites(registry.Nightly),
 		},
 		{
 			// Large workload to test our 23.2 perf goals.
@@ -1165,8 +1161,7 @@ func registerClusterToCluster(r registry.Registry) {
 			additionalDuration: 2 * time.Hour,
 			cutover:            0,
 			clouds:             registry.AllClouds,
-			suites:             registry.Suites("weekly"),
-			tags:               registry.Tags("weekly", "aws-weekly"),
+			suites:             registry.Suites(registry.Weekly),
 		},
 		{
 			name:      "c2c/MultiRegion/SameRegions/kv0",
@@ -1192,7 +1187,7 @@ func registerClusterToCluster(r registry.Registry) {
 				workloadNodeZone: "us-west1-b",
 			},
 			clouds: registry.OnlyGCE,
-			suites: registry.Suites("nightly"),
+			suites: registry.Suites(registry.Nightly),
 		},
 		{
 			name:     "c2c/UnitTest",
@@ -1211,7 +1206,7 @@ func registerClusterToCluster(r registry.Registry) {
 			skipNodeDistributionCheck: true,
 			skip:                      "for local ad hoc testing",
 			clouds:                    registry.AllExceptAWS,
-			suites:                    registry.Suites("nightly"),
+			suites:                    registry.Suites(registry.Nightly),
 		},
 		{
 			name:               "c2c/BulkOps/full",
@@ -1233,7 +1228,7 @@ func registerClusterToCluster(r registry.Registry) {
 			// max accepted latency doubles, then there's likely a regression.
 			maxAcceptedLatency: 1 * time.Hour,
 			clouds:             registry.AllExceptAWS,
-			suites:             registry.Suites("nightly"),
+			suites:             registry.Suites(registry.Nightly),
 			skip:               "flakes on 23.2. known limitation",
 		},
 		{
@@ -1254,7 +1249,8 @@ func registerClusterToCluster(r registry.Registry) {
 			// completes before the automatic replanner can run.
 			skipNodeDistributionCheck: true,
 			clouds:                    registry.AllExceptAWS,
-			suites:                    registry.Suites("nightly"),
+			suites:                    registry.Suites(registry.Nightly),
+			skip:                      "used for debugging when the full test fails",
 		},
 	} {
 		sp := sp
@@ -1526,7 +1522,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			expectedNodeDeaths:                   1,
 			sometimesTestFingerprintMismatchCode: true,
 			clouds:                               registry.AllExceptAWS,
-			suites:                               registry.Suites("nightly"),
+			suites:                               registry.Suites(registry.Nightly),
 		}
 
 		c2cRegisterWrapper(r, rsp.replicationSpec,
@@ -1641,7 +1637,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		cutover:            2 * time.Minute,
 		maxAcceptedLatency: 12 * time.Minute,
 		clouds:             registry.AllExceptAWS,
-		suites:             registry.Suites("nightly"),
+		suites:             registry.Suites(registry.Nightly),
 	}
 	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
 		rd := makeReplicationDriver(t, c, sp)

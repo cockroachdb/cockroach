@@ -35,7 +35,6 @@ func registerElasticControlForCDC(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
-		Tags:             registry.Tags(`weekly`),
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(8)),
 		RequiresLicense:  true,
 		Leases:           registry.MetamorphicLeases,

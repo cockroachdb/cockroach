@@ -38,7 +38,6 @@ func registerCDCSessionFiltering(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(3),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
-		Tags:             registry.Tags("default", "aws"),
 		RequiresLicense:  true,
 		Run:              runCDCSessionFiltering,
 	})
