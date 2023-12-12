@@ -43,7 +43,7 @@ type boolAndWindowAgg struct {
 var _ AggregateFunc = &boolAndWindowAgg{}
 
 func (a *boolAndWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]
@@ -151,7 +151,7 @@ type boolOrWindowAgg struct {
 var _ AggregateFunc = &boolOrWindowAgg{}
 
 func (a *boolOrWindowAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	var oldCurAggSize uintptr
 	vec := vecs[inputIdxs[0]]

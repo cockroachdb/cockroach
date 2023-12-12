@@ -47,7 +47,7 @@ type vecComparator interface {
 	set(srcVecIdx, dstVecIdx int, srcValIdx, dstValIdx int)
 
 	// setVec updates the vector at idx.
-	setVec(idx int, vec coldata.Vec)
+	setVec(idx int, vec *coldata.Vec)
 }
 
 type BoolVecComparator struct {
@@ -80,7 +80,7 @@ func (c *BoolVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int) 
 	return cmp
 }
 
-func (c *BoolVecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *BoolVecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.Bool()
 	c.nulls[idx] = vec.Nulls()
 }
@@ -117,7 +117,7 @@ func (c *BytesVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	return cmp
 }
 
-func (c *BytesVecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *BytesVecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.Bytes()
 	c.nulls[idx] = vec.Nulls()
 }
@@ -153,7 +153,7 @@ func (c *DecimalVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 in
 	return cmp
 }
 
-func (c *DecimalVecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *DecimalVecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.Decimal()
 	c.nulls[idx] = vec.Nulls()
 }
@@ -201,7 +201,7 @@ func (c *Int16VecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	return cmp
 }
 
-func (c *Int16VecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *Int16VecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.Int16()
 	c.nulls[idx] = vec.Nulls()
 }
@@ -249,7 +249,7 @@ func (c *Int32VecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	return cmp
 }
 
-func (c *Int32VecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *Int32VecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.Int32()
 	c.nulls[idx] = vec.Nulls()
 }
@@ -297,7 +297,7 @@ func (c *Int64VecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	return cmp
 }
 
-func (c *Int64VecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *Int64VecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.Int64()
 	c.nulls[idx] = vec.Nulls()
 }
@@ -353,7 +353,7 @@ func (c *Float64VecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 in
 	return cmp
 }
 
-func (c *Float64VecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *Float64VecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.Float64()
 	c.nulls[idx] = vec.Nulls()
 }
@@ -397,7 +397,7 @@ func (c *TimestampVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 
 	return cmp
 }
 
-func (c *TimestampVecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *TimestampVecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.Timestamp()
 	c.nulls[idx] = vec.Nulls()
 }
@@ -434,7 +434,7 @@ func (c *IntervalVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 i
 	return cmp
 }
 
-func (c *IntervalVecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *IntervalVecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.Interval()
 	c.nulls[idx] = vec.Nulls()
 }
@@ -477,7 +477,7 @@ func (c *JSONVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int) 
 	return cmp
 }
 
-func (c *JSONVecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *JSONVecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.JSON()
 	c.nulls[idx] = vec.Nulls()
 }
@@ -515,7 +515,7 @@ func (c *DatumVecComparator) compare(vecIdx1, vecIdx2 int, valIdx1, valIdx2 int)
 	return cmp
 }
 
-func (c *DatumVecComparator) setVec(idx int, vec coldata.Vec) {
+func (c *DatumVecComparator) setVec(idx int, vec *coldata.Vec) {
 	c.vecs[idx] = vec.Datum()
 	c.nulls[idx] = vec.Nulls()
 }

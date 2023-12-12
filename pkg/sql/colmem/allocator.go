@@ -50,7 +50,7 @@ func SelVectorSize(capacity int) int64 {
 	return int64(capacity) * memsize.Int
 }
 
-func getVecMemoryFootprint(vec coldata.Vec) int64 {
+func getVecMemoryFootprint(vec *coldata.Vec) int64 {
 	if vec == nil {
 		return 0
 	}
@@ -67,7 +67,7 @@ func getVecMemoryFootprint(vec coldata.Vec) int64 {
 	return EstimateBatchSizeBytes([]*types.T{vec.Type()}, vec.Capacity())
 }
 
-func getVecsMemoryFootprint(vecs []coldata.Vec) int64 {
+func getVecsMemoryFootprint(vecs []*coldata.Vec) int64 {
 	var size int64
 	for _, dest := range vecs {
 		size += getVecMemoryFootprint(dest)
@@ -361,15 +361,15 @@ func (a *Allocator) ResetMaybeReallocateNoMemLimit(
 	return newBatch, reallocated
 }
 
-// NewMemColumn returns a new coldata.Vec of the desired capacity.
+// NewVec returns a new coldata.Vec of the desired capacity.
 // NOTE: consider whether you should be using MaybeAppendColumn,
 // NewMemBatchWith*, or ResetMaybeReallocate methods.
-func (a *Allocator) NewMemColumn(t *types.T, capacity int) coldata.Vec {
+func (a *Allocator) NewVec(t *types.T, capacity int) *coldata.Vec {
 	estimatedMemoryUsage := EstimateBatchSizeBytes([]*types.T{t}, capacity)
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return coldata.NewMemColumn(t, capacity, a.factory)
+	return coldata.NewVec(t, capacity, a.factory)
 }
 
 // MaybeAppendColumn might append a newly allocated coldata.Vec of the given
@@ -419,7 +419,7 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				if err := a.acc.Grow(a.ctx, newEstimatedMemoryUsage-oldMemUsage); err != nil {
 					colexecerror.InternalError(err)
 				}
-				b.ReplaceCol(a.NewMemColumn(t, desiredCapacity), colIdx)
+				b.ReplaceCol(a.NewVec(t, desiredCapacity), colIdx)
 				return
 			}
 			coldata.ResetIfBytesLike(presentVec)
@@ -445,14 +445,14 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 	if err := a.acc.Grow(a.ctx, estimatedMemoryUsage); err != nil {
 		colexecerror.InternalError(err)
 	}
-	b.AppendCol(a.NewMemColumn(t, desiredCapacity))
+	b.AppendCol(a.NewVec(t, desiredCapacity))
 }
 
 // PerformOperation executes 'operation' (that somehow modifies 'destVecs') and
 // updates the memory account accordingly.
 // NOTE: if some columnar vectors are not modified, they should not be included
 // in 'destVecs' to reduce the performance hit of memory accounting.
-func (a *Allocator) PerformOperation(destVecs []coldata.Vec, operation func()) {
+func (a *Allocator) PerformOperation(destVecs []*coldata.Vec, operation func()) {
 	before := getVecsMemoryFootprint(destVecs)
 	// To simplify the accounting, we perform the operation first and then will
 	// update the memory account. The minor "drift" in accounting that is

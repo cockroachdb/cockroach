@@ -37,7 +37,7 @@ var (
 // the HashTable disallows null equality, then if any element in the key is
 // null, there is no match.
 func (ht *HashTable) checkCol(
-	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint32, probeSel []int,
+	probeVec, buildVec *coldata.Vec, keyColIdx int, nToCheck uint32, probeSel []int,
 ) {
 	switch probeVec.CanonicalTypeFamily() {
 	case types.BoolFamily:

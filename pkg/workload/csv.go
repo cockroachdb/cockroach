@@ -134,7 +134,7 @@ func NewCSVRowsReader(t Table, batchStart, batchEnd int) io.Reader {
 	return r
 }
 
-func colDatumToCSVString(col coldata.Vec, rowIdx int) string {
+func colDatumToCSVString(col *coldata.Vec, rowIdx int) string {
 	if col.Nulls().NullAt(rowIdx) {
 		return `NULL`
 	}

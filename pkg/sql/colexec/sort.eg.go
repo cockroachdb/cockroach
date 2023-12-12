@@ -305,7 +305,7 @@ type sortBoolAscWithNullsOp struct {
 }
 
 func (s *sortBoolAscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Bool()
 	s.nulls = col.Nulls()
@@ -392,7 +392,7 @@ type sortBytesAscWithNullsOp struct {
 }
 
 func (s *sortBytesAscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Bytes()
 	s.allocator = allocator
@@ -484,7 +484,7 @@ type sortDecimalAscWithNullsOp struct {
 }
 
 func (s *sortDecimalAscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Decimal()
 	s.nulls = col.Nulls()
@@ -561,7 +561,7 @@ type sortInt16AscWithNullsOp struct {
 }
 
 func (s *sortInt16AscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int16()
 	s.nulls = col.Nulls()
@@ -649,7 +649,7 @@ type sortInt32AscWithNullsOp struct {
 }
 
 func (s *sortInt32AscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int32()
 	s.nulls = col.Nulls()
@@ -737,7 +737,7 @@ type sortInt64AscWithNullsOp struct {
 }
 
 func (s *sortInt64AscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int64()
 	s.nulls = col.Nulls()
@@ -825,7 +825,7 @@ type sortFloat64AscWithNullsOp struct {
 }
 
 func (s *sortFloat64AscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Float64()
 	s.nulls = col.Nulls()
@@ -921,7 +921,7 @@ type sortTimestampAscWithNullsOp struct {
 }
 
 func (s *sortTimestampAscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Timestamp()
 	s.nulls = col.Nulls()
@@ -1005,7 +1005,7 @@ type sortIntervalAscWithNullsOp struct {
 }
 
 func (s *sortIntervalAscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Interval()
 	s.nulls = col.Nulls()
@@ -1082,7 +1082,7 @@ type sortJSONAscWithNullsOp struct {
 }
 
 func (s *sortJSONAscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.JSON()
 	s.nulls = col.Nulls()
@@ -1165,7 +1165,7 @@ type sortDatumAscWithNullsOp struct {
 }
 
 func (s *sortDatumAscWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Datum()
 	s.nulls = col.Nulls()
@@ -1244,7 +1244,7 @@ type sortBoolDescWithNullsOp struct {
 }
 
 func (s *sortBoolDescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Bool()
 	s.nulls = col.Nulls()
@@ -1331,7 +1331,7 @@ type sortBytesDescWithNullsOp struct {
 }
 
 func (s *sortBytesDescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Bytes()
 	s.allocator = allocator
@@ -1423,7 +1423,7 @@ type sortDecimalDescWithNullsOp struct {
 }
 
 func (s *sortDecimalDescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Decimal()
 	s.nulls = col.Nulls()
@@ -1500,7 +1500,7 @@ type sortInt16DescWithNullsOp struct {
 }
 
 func (s *sortInt16DescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int16()
 	s.nulls = col.Nulls()
@@ -1588,7 +1588,7 @@ type sortInt32DescWithNullsOp struct {
 }
 
 func (s *sortInt32DescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int32()
 	s.nulls = col.Nulls()
@@ -1676,7 +1676,7 @@ type sortInt64DescWithNullsOp struct {
 }
 
 func (s *sortInt64DescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int64()
 	s.nulls = col.Nulls()
@@ -1764,7 +1764,7 @@ type sortFloat64DescWithNullsOp struct {
 }
 
 func (s *sortFloat64DescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Float64()
 	s.nulls = col.Nulls()
@@ -1860,7 +1860,7 @@ type sortTimestampDescWithNullsOp struct {
 }
 
 func (s *sortTimestampDescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Timestamp()
 	s.nulls = col.Nulls()
@@ -1944,7 +1944,7 @@ type sortIntervalDescWithNullsOp struct {
 }
 
 func (s *sortIntervalDescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Interval()
 	s.nulls = col.Nulls()
@@ -2021,7 +2021,7 @@ type sortJSONDescWithNullsOp struct {
 }
 
 func (s *sortJSONDescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.JSON()
 	s.nulls = col.Nulls()
@@ -2104,7 +2104,7 @@ type sortDatumDescWithNullsOp struct {
 }
 
 func (s *sortDatumDescWithNullsOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Datum()
 	s.nulls = col.Nulls()
@@ -2183,7 +2183,7 @@ type sortBoolAscOp struct {
 }
 
 func (s *sortBoolAscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Bool()
 	s.nulls = col.Nulls()
@@ -2260,7 +2260,7 @@ type sortBytesAscOp struct {
 }
 
 func (s *sortBytesAscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Bytes()
 	s.allocator = allocator
@@ -2342,7 +2342,7 @@ type sortDecimalAscOp struct {
 }
 
 func (s *sortDecimalAscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Decimal()
 	s.nulls = col.Nulls()
@@ -2409,7 +2409,7 @@ type sortInt16AscOp struct {
 }
 
 func (s *sortInt16AscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int16()
 	s.nulls = col.Nulls()
@@ -2488,7 +2488,7 @@ type sortInt32AscOp struct {
 }
 
 func (s *sortInt32AscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int32()
 	s.nulls = col.Nulls()
@@ -2567,7 +2567,7 @@ type sortInt64AscOp struct {
 }
 
 func (s *sortInt64AscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int64()
 	s.nulls = col.Nulls()
@@ -2646,7 +2646,7 @@ type sortFloat64AscOp struct {
 }
 
 func (s *sortFloat64AscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Float64()
 	s.nulls = col.Nulls()
@@ -2732,7 +2732,7 @@ type sortTimestampAscOp struct {
 }
 
 func (s *sortTimestampAscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Timestamp()
 	s.nulls = col.Nulls()
@@ -2806,7 +2806,7 @@ type sortIntervalAscOp struct {
 }
 
 func (s *sortIntervalAscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Interval()
 	s.nulls = col.Nulls()
@@ -2873,7 +2873,7 @@ type sortJSONAscOp struct {
 }
 
 func (s *sortJSONAscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.JSON()
 	s.nulls = col.Nulls()
@@ -2946,7 +2946,7 @@ type sortDatumAscOp struct {
 }
 
 func (s *sortDatumAscOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Datum()
 	s.nulls = col.Nulls()
@@ -3015,7 +3015,7 @@ type sortBoolDescOp struct {
 }
 
 func (s *sortBoolDescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Bool()
 	s.nulls = col.Nulls()
@@ -3092,7 +3092,7 @@ type sortBytesDescOp struct {
 }
 
 func (s *sortBytesDescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Bytes()
 	s.allocator = allocator
@@ -3174,7 +3174,7 @@ type sortDecimalDescOp struct {
 }
 
 func (s *sortDecimalDescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Decimal()
 	s.nulls = col.Nulls()
@@ -3241,7 +3241,7 @@ type sortInt16DescOp struct {
 }
 
 func (s *sortInt16DescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int16()
 	s.nulls = col.Nulls()
@@ -3320,7 +3320,7 @@ type sortInt32DescOp struct {
 }
 
 func (s *sortInt32DescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int32()
 	s.nulls = col.Nulls()
@@ -3399,7 +3399,7 @@ type sortInt64DescOp struct {
 }
 
 func (s *sortInt64DescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Int64()
 	s.nulls = col.Nulls()
@@ -3478,7 +3478,7 @@ type sortFloat64DescOp struct {
 }
 
 func (s *sortFloat64DescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Float64()
 	s.nulls = col.Nulls()
@@ -3564,7 +3564,7 @@ type sortTimestampDescOp struct {
 }
 
 func (s *sortTimestampDescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Timestamp()
 	s.nulls = col.Nulls()
@@ -3638,7 +3638,7 @@ type sortIntervalDescOp struct {
 }
 
 func (s *sortIntervalDescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Interval()
 	s.nulls = col.Nulls()
@@ -3705,7 +3705,7 @@ type sortJSONDescOp struct {
 }
 
 func (s *sortJSONDescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.JSON()
 	s.nulls = col.Nulls()
@@ -3778,7 +3778,7 @@ type sortDatumDescOp struct {
 }
 
 func (s *sortDatumDescOp) init(
-	ctx context.Context, allocator *colmem.Allocator, col coldata.Vec, order []int,
+	ctx context.Context, allocator *colmem.Allocator, col *coldata.Vec, order []int,
 ) {
 	s.sortCol = col.Datum()
 	s.nulls = col.Nulls()

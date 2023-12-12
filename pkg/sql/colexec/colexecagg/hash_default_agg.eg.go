@@ -44,12 +44,12 @@ type defaultHashAgg struct {
 var _ AggregateFunc = &defaultHashAgg{}
 
 func (a *defaultHashAgg) Compute(
-	vecs []coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
+	vecs []*coldata.Vec, inputIdxs []uint32, startIdx, endIdx int, sel []int,
 ) {
 	// Note that we only need to account for the memory of the output vector
 	// and not for the intermediate results of aggregation since the aggregate
 	// function itself does the latter.
-	a.allocator.PerformOperation([]coldata.Vec{a.vec}, func() {
+	a.allocator.PerformOperation([]*coldata.Vec{a.vec}, func() {
 		{
 			// We don't need to check whether sel is non-nil in case of the
 			// hash aggregator because it always uses non-nil sel to specify

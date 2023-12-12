@@ -58,7 +58,7 @@ type RandomVecArgs struct {
 	// Rand is the provided RNG.
 	Rand *rand.Rand
 	// Vec is the vector to be filled with random values.
-	Vec coldata.Vec
+	Vec *coldata.Vec
 	// N is the number of values to be generated.
 	N int
 	// NullProbability determines the probability of a single value being NULL.
@@ -222,7 +222,7 @@ func RandomVec(args RandomVecArgs) {
 
 // setNull sets ith element in vec to null and might set the actual value (which
 // should be ignored) to some garbage.
-func setNull(rng *rand.Rand, vec coldata.Vec, i int) {
+func setNull(rng *rand.Rand, vec *coldata.Vec, i int) {
 	vec.Nulls().SetNull(i)
 	switch vec.CanonicalTypeFamily() {
 	case types.DecimalFamily:

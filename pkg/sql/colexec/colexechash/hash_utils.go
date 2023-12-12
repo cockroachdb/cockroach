@@ -181,7 +181,7 @@ func (d *TupleHashDistributor) Distribute(b coldata.Batch, hashCols []uint32) []
 	}
 
 	for _, i := range hashCols {
-		rehash64(d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, &d.datumAlloc)
+		rehash(d.buckets, b.ColVec(int(i)), n, b.Selection(), d.cancelChecker, &d.datumAlloc)
 	}
 
 	finalizeHash(d.buckets, n, uint64(len(d.selections)))

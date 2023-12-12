@@ -44,7 +44,7 @@ type aggregatorHelper interface {
 	// start of the new aggregation group (when groups is nil, then all tuples
 	// belong to the same group).
 	// Note: inputLen is assumed to be greater than zero.
-	performAggregation(ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, groups []bool)
+	performAggregation(ctx context.Context, vecs []*coldata.Vec, inputLen int, sel []int, bucket *aggBucket, groups []bool)
 }
 
 // newAggregatorHelper creates a new aggregatorHelper based on the provided
@@ -105,7 +105,7 @@ func (h *defaultAggregatorHelper) makeSeenMaps() []map[string]struct{} {
 }
 
 func (h *defaultAggregatorHelper) performAggregation(
-	_ context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
+	_ context.Context, vecs []*coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
 ) {
 	for fnIdx, fn := range bucket.fns {
 		fn.Compute(vecs, h.spec.Aggregations[fnIdx].ColIdx, 0 /* startIdx */, inputLen, sel)
@@ -118,7 +118,7 @@ func (h *defaultAggregatorHelper) performAggregation(
 type aggregatorHelperBase struct {
 	spec *execinfrapb.AggregatorSpec
 
-	vecs    []coldata.Vec
+	vecs    []*coldata.Vec
 	usesSel bool
 	origSel []int
 	origLen int
@@ -132,7 +132,7 @@ func newAggregatorHelperBase(
 	return b
 }
 
-func (b *aggregatorHelperBase) saveState(vecs []coldata.Vec, origLen int, origSel []int) {
+func (b *aggregatorHelperBase) saveState(vecs []*coldata.Vec, origLen int, origSel []int) {
 	b.vecs = vecs
 	b.origLen = origLen
 	b.usesSel = origSel != nil
@@ -141,7 +141,7 @@ func (b *aggregatorHelperBase) saveState(vecs []coldata.Vec, origLen int, origSe
 	}
 }
 
-func (b *aggregatorHelperBase) restoreState() ([]coldata.Vec, int, []int) {
+func (b *aggregatorHelperBase) restoreState() ([]*coldata.Vec, int, []int) {
 	sel := b.origSel
 	if !b.usesSel {
 		sel = nil
@@ -180,8 +180,8 @@ func newFilteringHashAggHelper(
 // for which filtering column has 'true' value set. It also returns whether
 // state might have been modified.
 func (h *filteringSingleFunctionHashHelper) applyFilter(
-	ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int,
-) (_ []coldata.Vec, _ int, _ []int, maybeModified bool) {
+	ctx context.Context, vecs []*coldata.Vec, inputLen int, sel []int,
+) (_ []*coldata.Vec, _ int, _ []int, maybeModified bool) {
 	if h.filter == nil {
 		return vecs, inputLen, sel, false
 	}
@@ -219,7 +219,7 @@ func (h *filteringHashAggregatorHelper) makeSeenMaps() []map[string]struct{} {
 }
 
 func (h *filteringHashAggregatorHelper) performAggregation(
-	ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
+	ctx context.Context, vecs []*coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
 ) {
 	h.saveState(vecs, inputLen, sel)
 	for fnIdx, fn := range bucket.fns {
@@ -422,7 +422,7 @@ func newFilteringDistinctHashAggregatorHelper(
 //  4. Restore the state to the original state (if it might have been
 //     modified).
 func (h *filteringDistinctHashAggregatorHelper) performAggregation(
-	ctx context.Context, vecs []coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
+	ctx context.Context, vecs []*coldata.Vec, inputLen int, sel []int, bucket *aggBucket, _ []bool,
 ) {
 	h.saveState(vecs, inputLen, sel)
 	h.aggColsConverter.ConvertVecs(vecs, inputLen, sel)
@@ -467,7 +467,7 @@ func newDistinctOrderedAggregatorHelper(
 // DISTINCT aggregation
 func (h *distinctOrderedAggregatorHelper) performAggregation(
 	ctx context.Context,
-	vecs []coldata.Vec,
+	vecs []*coldata.Vec,
 	inputLen int,
 	sel []int,
 	bucket *aggBucket,
@@ -524,7 +524,7 @@ func (o *singleBatchOperator) Next() coldata.Batch {
 	return o.batch
 }
 
-func (o *singleBatchOperator) reset(vecs []coldata.Vec, inputLen int, sel []int) {
+func (o *singleBatchOperator) reset(vecs []*coldata.Vec, inputLen int, sel []int) {
 	o.nexted = false
 	for i, vec := range vecs {
 		o.batch.ReplaceCol(vec, i)

@@ -35,7 +35,7 @@ var (
 // isBufferedGroupFinished checks to see whether or not the buffered group
 // corresponding to the first tuple continues in batch.
 func (o *mergeJoinBase) isBufferedGroupFinished(
-	input *mergeJoinInput, firstTuple []coldata.Vec, batch coldata.Batch, rowIdx int,
+	input *mergeJoinInput, firstTuple []*coldata.Vec, batch coldata.Batch, rowIdx int,
 ) bool {
 	if batch.Length() == 0 {
 		return true

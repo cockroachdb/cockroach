@@ -106,7 +106,7 @@ func (c const_TYPEOp) Next() coldata.Batch {
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.TemplateType()
 	c.allocator.PerformOperation(
-		[]coldata.Vec{vec},
+		[]*coldata.Vec{vec},
 		func() {
 			// Shallow copy col to work around Go issue
 			// https://github.com/golang/go/issues/39756 which prevents bound check

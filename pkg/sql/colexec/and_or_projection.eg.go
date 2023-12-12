@@ -216,7 +216,7 @@ func (o *andProjOp) Next() coldata.Batch {
 	// fully determines the result of the logical operation.
 	var (
 		knownResult                   bool
-		leftVec, rightVec             coldata.Vec
+		leftVec, rightVec             *coldata.Vec
 		leftValIsNull, rightValIsNull bool
 		leftVal, rightVal             bool
 	)
@@ -651,7 +651,7 @@ func (o *andRightNullProjOp) Next() coldata.Batch {
 	// fully determines the result of the logical operation.
 	var (
 		knownResult                   bool
-		leftVec, rightVec             coldata.Vec
+		leftVec, rightVec             *coldata.Vec
 		leftValIsNull, rightValIsNull bool
 		leftVal, rightVal             bool
 	)
@@ -1053,7 +1053,7 @@ func (o *andLeftNullProjOp) Next() coldata.Batch {
 	// fully determines the result of the logical operation.
 	var (
 		knownResult                   bool
-		leftVec, rightVec             coldata.Vec
+		leftVec, rightVec             *coldata.Vec
 		leftValIsNull, rightValIsNull bool
 		leftVal, rightVal             bool
 	)
@@ -1436,7 +1436,7 @@ func (o *orProjOp) Next() coldata.Batch {
 	// fully determines the result of the logical operation.
 	var (
 		knownResult                   bool
-		leftVec, rightVec             coldata.Vec
+		leftVec, rightVec             *coldata.Vec
 		leftValIsNull, rightValIsNull bool
 		leftVal, rightVal             bool
 	)
@@ -1872,7 +1872,7 @@ func (o *orRightNullProjOp) Next() coldata.Batch {
 	// fully determines the result of the logical operation.
 	var (
 		knownResult                   bool
-		leftVec, rightVec             coldata.Vec
+		leftVec, rightVec             *coldata.Vec
 		leftValIsNull, rightValIsNull bool
 		leftVal, rightVal             bool
 	)
@@ -2275,7 +2275,7 @@ func (o *orLeftNullProjOp) Next() coldata.Batch {
 	// fully determines the result of the logical operation.
 	var (
 		knownResult                   bool
-		leftVec, rightVec             coldata.Vec
+		leftVec, rightVec             *coldata.Vec
 		leftValIsNull, rightValIsNull bool
 		leftVal, rightVal             bool
 	)

@@ -46,7 +46,7 @@ func partialIndexAndNullCheck[T []byte | roachpb.Key](
 // encodeKeys is the columnar version of keyside.Encode.
 // Cases taken from decodeTableKeyToCol.
 func encodeKeys[T []byte | roachpb.Key](
-	kys []T, typ *types.T, dir encoding.Direction, vec coldata.Vec, start, end int,
+	kys []T, typ *types.T, dir encoding.Direction, vec *coldata.Vec, start, end int,
 ) error {
 	count := end - start
 	if vec == nil {
@@ -231,7 +231,7 @@ func (b *BatchEncoder) encodeIndexKey(
 			return err
 		}
 		col, ok := b.colMap.Get(k.ColumnID)
-		var vec coldata.Vec
+		var vec *coldata.Vec
 		if ok {
 			vec = b.b.ColVec(col)
 		} else {
