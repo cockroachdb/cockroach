@@ -228,7 +228,7 @@ func (r *BatchReader) rangeKeys() (rangekey.Span, error) {
 // is empty.
 func (r *BatchReader) Next() bool {
 	var ok bool
-	r.kind, r.key, r.value, ok = r.batchReader.Next()
+	r.kind, r.key, r.value, ok, r.err = r.batchReader.Next()
 	return ok
 }
 
