@@ -73,17 +73,7 @@ func runMultiTenantDistSQL(
 	for i := 0; i < numInstances; i++ {
 		node := (i % c.Spec().NodeCount) + 1
 		sqlInstance := i / c.Spec().NodeCount
-		instStartOps := option.DefaultStartOpts()
-		instStartOps.RoachprodOpts.Target = install.StartServiceForVirtualCluster
-		instStartOps.RoachprodOpts.VirtualClusterName = tenantName
-		instStartOps.RoachprodOpts.SQLInstance = sqlInstance
-		// We set the ports to 0 so that ports are assigned dynamically. This is a
-		// temporary workaround until we use dynamic port assignment as the default.
-		// See: https://github.com/cockroachdb/cockroach/issues/111052
-		// TODO(herko): remove this once dynamic port assignment is the default.
-		instStartOps.RoachprodOpts.SQLPort = 0
-		instStartOps.RoachprodOpts.AdminUIPort = 0
-
+		instStartOps := option.DefaultStartVirtualClusterOpts(tenantName, sqlInstance)
 		t.L().Printf("Starting instance %d on node %d", i, node)
 		c.StartServiceForVirtualCluster(ctx, t.L(), c.Node(node), instStartOps, settings, storageNodes)
 		nodes.Add(i + 1)
