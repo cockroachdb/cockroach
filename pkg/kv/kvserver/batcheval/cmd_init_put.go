@@ -33,10 +33,7 @@ func InitPut(
 	args := cArgs.Args.(*kvpb.InitPutRequest)
 	h := cArgs.Header
 
-	if args.FailOnTombstones && cArgs.EvalCtx.EvalKnobs().DisableInitPutFailOnTombstones {
-		args.FailOnTombstones = false
-	}
-
+	failOnTombstones := args.FailOnTombstones && !cArgs.EvalCtx.EvalKnobs().DisableInitPutFailOnTombstones
 	opts := storage.MVCCWriteOptions{
 		Txn:                            h.Txn,
 		LocalTimestamp:                 cArgs.Now,
@@ -50,10 +47,10 @@ func InitPut(
 	var acq roachpb.LockAcquisition
 	if args.Blind {
 		acq, err = storage.MVCCBlindInitPut(
-			ctx, readWriter, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, opts)
+			ctx, readWriter, args.Key, h.Timestamp, args.Value, failOnTombstones, opts)
 	} else {
 		acq, err = storage.MVCCInitPut(
-			ctx, readWriter, args.Key, h.Timestamp, args.Value, args.FailOnTombstones, opts)
+			ctx, readWriter, args.Key, h.Timestamp, args.Value, failOnTombstones, opts)
 	}
 	if err != nil {
 		return result.Result{}, err
