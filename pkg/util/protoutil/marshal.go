@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/gogo/protobuf/proto"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 // Message extends the proto.Message interface with the MarshalTo and Size
@@ -73,4 +74,12 @@ func MarshalToSizedBuffer(pb Message, dest []byte) (int, error) {
 func Unmarshal(data []byte, pb Message) error {
 	pb.Reset()
 	return pb.Unmarshal(data)
+}
+
+func TODOMarshal(pb gproto.Message) ([]byte, error) {
+	return gproto.Marshal(pb)
+}
+
+func TODOUnmarshal(data []byte, pb gproto.Message) error {
+	return gproto.Unmarshal(data, pb)
 }

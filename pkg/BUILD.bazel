@@ -1987,6 +1987,7 @@ GO_TARGETS = [
     "//pkg/sql/plpgsql:plpgsql",
     "//pkg/sql/privilege:privilege",
     "//pkg/sql/privilege:privilege_test",
+    "//pkg/sql/protoreflect/gprototest:gprototest",
     "//pkg/sql/protoreflect/test:test",
     "//pkg/sql/protoreflect:protoreflect",
     "//pkg/sql/protoreflect:protoreflect_test",

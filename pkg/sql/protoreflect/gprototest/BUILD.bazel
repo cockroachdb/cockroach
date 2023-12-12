@@ -1,0 +1,26 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+
+proto_library(
+    name = "gprototest_proto",
+    srcs = ["gprototest.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+)
+
+go_proto_library(
+    name = "gprototest_go_proto",
+    compilers = ["@io_bazel_rules_go//proto:go_proto"],  #keep
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/protoreflect/gprototest",
+    proto = ":gprototest_proto",
+    visibility = ["//visibility:public"],
+)
+
+go_library(
+    name = "gprototest",
+    #    srcs = ["wrap.go"],
+    embed = [":gprototest_go_proto"],  # keep
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/protoreflect/gprototest",
+    visibility = ["//visibility:public"],
+)
