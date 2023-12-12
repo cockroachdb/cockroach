@@ -98,7 +98,7 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 			joinsConsidered++
 		})
 
-	expr, err := ot.optimizeExpr(o, nil)
+	mem, err := ot.optimizeExpr(o, nil)
 	if err != nil {
 		return "", err
 	}
@@ -106,7 +106,7 @@ func (ot *OptTester) ReorderJoins() (string, error) {
 	ot.separator("=")
 	ot.output("Final Plan\n")
 	ot.separator("=")
-	ot.output(ot.FormatExpr(expr))
+	ot.output(ot.FormatExpr(mem, mem.RootExpr()))
 	return ot.builder.String(), err
 }
 

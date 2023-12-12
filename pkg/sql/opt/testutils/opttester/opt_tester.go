@@ -619,7 +619,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		return s
 
 	case "build":
-		e, err := ot.OptBuild()
+		mem, err := ot.OptBuild()
 		if err != nil {
 			if errors.HasAssertionFailure(err) {
 				d.Fatalf(tb, "%+v", err)
@@ -632,11 +632,12 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		e := mem.RootExpr()
+		ot.postProcess(tb, d, mem, e)
+		return ot.FormatExpr(mem, e)
 
 	case "norm":
-		e, err := ot.OptNorm()
+		mem, err := ot.OptNorm()
 		if err != nil {
 			if errors.HasAssertionFailure(err) {
 				d.Fatalf(tb, "%+v", err)
@@ -649,39 +650,45 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		e := mem.RootExpr()
+		ot.postProcess(tb, d, mem, e)
+		return ot.FormatExpr(mem, e)
 
 	case "opt":
-		e, err := ot.Optimize()
+		mem, err := ot.Optimize()
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
-		ot.postProcess(tb, d, e)
+		e := mem.RootExpr()
+		ot.postProcess(tb, d, mem, e)
 		if ot.Flags.RoundFloatsInStringsSigFigs > 0 {
-			return floatcmp.RoundFloatsInString(ot.FormatExpr(e), ot.Flags.RoundFloatsInStringsSigFigs)
+			return floatcmp.RoundFloatsInString(
+				ot.FormatExpr(mem, e), ot.Flags.RoundFloatsInStringsSigFigs,
+			)
 		}
-		return ot.FormatExpr(e)
+		return ot.FormatExpr(mem, e)
 
 	case "assign-placeholders-build", "assign-placeholders-norm", "assign-placeholders-opt":
 		explore := d.Cmd == "assign-placeholders-opt"
 		normalize := explore || d.Cmd == "assign-placeholders-norm"
-		e, err := ot.AssignPlaceholders(ot.Flags.QueryArgs, normalize, explore)
+		mem, err := ot.AssignPlaceholders(ot.Flags.QueryArgs, normalize, explore)
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
-		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		e := mem.RootExpr()
+		ot.postProcess(tb, d, mem, e)
+		return ot.FormatExpr(mem, e)
 
 	case "placeholder-fast-path":
-		e, ok, err := ot.PlaceholderFastPath()
+		mem, ok, err := ot.PlaceholderFastPath()
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
 		if !ok {
 			return "no fast path"
 		}
-		return ot.FormatExpr(e)
+		e := mem.RootExpr()
+		return ot.FormatExpr(mem, e)
 
 	case "build-cascades":
 		o := ot.makeOptimizer()
@@ -689,7 +696,8 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		if err := ot.buildExpr(o.Factory()); err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
-		e := o.Memo().RootExpr()
+		mem := o.Memo()
+		e := mem.RootExpr()
 
 		var buildCascades func(e opt.Expr, tp treeprinter.Node, level int)
 		buildCascades = func(e opt.Expr, tp treeprinter.Node, level int) {
@@ -717,7 +725,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 						d.Fatalf(tb, "error building cascade: %+v", err)
 					}
 					n := tp.Child("cascade")
-					n.Child(strings.TrimRight(ot.FormatExpr(cascade), "\n"))
+					n.Child(strings.TrimRight(ot.FormatExpr(mem, cascade), "\n"))
 					buildCascades(cascade, n, level+1)
 				}
 			}
@@ -727,7 +735,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		tp := treeprinter.New()
 		root := tp.Child("root")
-		root.Child(strings.TrimRight(ot.FormatExpr(e), "\n"))
+		root.Child(strings.TrimRight(ot.FormatExpr(mem, e), "\n"))
 		buildCascades(e, root, 1)
 
 		return tp.String()
@@ -783,31 +791,33 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		return result
 
 	case "expr":
-		e, err := ot.Expr()
+		mem, e, err := ot.Expr()
 		if err != nil {
 			d.Fatalf(tb, "%+v", err)
 		}
-		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		ot.postProcess(tb, d, mem, e)
+		return ot.FormatExpr(mem, e)
 
 	case "exprnorm":
-		e, err := ot.ExprNorm()
+		mem, err := ot.ExprNorm()
 		if err != nil {
 			return fmt.Sprintf("error: %s\n", err)
 		}
-		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		e := mem.RootExpr()
+		ot.postProcess(tb, d, mem, e)
+		return ot.FormatExpr(mem, e)
 
 	case "expropt":
-		e, err := ot.ExprOpt()
+		mem, err := ot.ExprOpt()
 		if err != nil {
 			if len(errors.GetAllDetails(err)) > 0 {
 				return fmt.Sprintf("error: %s\ndetails:\n%s", err, errors.FlattenDetails(err))
 			}
 			return fmt.Sprintf("error: %s\n", err)
 		}
-		ot.postProcess(tb, d, e)
-		return ot.FormatExpr(e)
+		e := mem.RootExpr()
+		ot.postProcess(tb, d, mem, e)
+		return ot.FormatExpr(mem, e)
 
 	case "stats-quality":
 		result, err := ot.StatsQuality(tb, d)
@@ -865,11 +875,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 }
 
 // FormatExpr is a convenience wrapper for memo.FormatExpr.
-func (ot *OptTester) FormatExpr(e opt.Expr) string {
-	var mem *memo.Memo
-	if rel, ok := e.(memo.RelExpr); ok {
-		mem = rel.Memo()
-	}
+func (ot *OptTester) FormatExpr(mem *memo.Memo, e opt.Expr) string {
 	return memo.FormatExpr(
 		ot.ctx, e, ot.Flags.ExprFormat, false /* redactableValues */, mem, ot.catalog,
 	)
@@ -901,12 +907,14 @@ func (ot *OptTester) checkExpectedRules(tb testing.TB, d *datadriven.TestData) {
 	}
 }
 
-func (ot *OptTester) postProcess(tb testing.TB, d *datadriven.TestData, e opt.Expr) {
+func (ot *OptTester) postProcess(
+	tb testing.TB, d *datadriven.TestData, mem *memo.Memo, e opt.Expr,
+) {
 	ot.fillInLazyProps(e)
 
 	if rel, ok := e.(memo.RelExpr); ok {
 		for _, cols := range ot.Flags.ColStats {
-			memo.RequestColStat(ot.ctx, &ot.evalCtx, rel, cols)
+			memo.RequestColStat(ot.ctx, &ot.evalCtx, mem, rel, cols)
 		}
 	}
 	ot.checkExpectedRules(tb, d)
@@ -1189,7 +1197,7 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 // OptBuild constructs an opt expression tree for the SQL query, with no
 // transformations applied to it. The untouched output of the optbuilder is the
 // final expression tree.
-func (ot *OptTester) OptBuild() (opt.Expr, error) {
+func (ot *OptTester) OptBuild() (*memo.Memo, error) {
 	o := ot.makeOptimizer()
 	o.DisableOptimizations()
 	return ot.optimizeExpr(o, nil)
@@ -1198,7 +1206,7 @@ func (ot *OptTester) OptBuild() (opt.Expr, error) {
 // OptNorm constructs an opt expression tree for the SQL query, with all
 // normalization transformations applied to it. The normalized output of the
 // optbuilder is the final expression tree.
-func (ot *OptTester) OptNorm() (opt.Expr, error) {
+func (ot *OptTester) OptNorm() (*memo.Memo, error) {
 	o := ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if !ruleName.IsNormalize() {
@@ -1218,7 +1226,7 @@ func (ot *OptTester) OptNorm() (opt.Expr, error) {
 // Optimize constructs an opt expression tree for the SQL query, with all
 // transformations applied to it. The result is the memo expression tree with
 // the lowest estimated cost.
-func (ot *OptTester) Optimize() (opt.Expr, error) {
+func (ot *OptTester) Optimize() (*memo.Memo, error) {
 	return ot.OptimizeWithTables(nil)
 }
 
@@ -1226,7 +1234,7 @@ func (ot *OptTester) Optimize() (opt.Expr, error) {
 // update the table metadata used for optimization. Optimize constructs an opt
 // expression tree for the SQL query, with all transformations applied to it.
 // The result is the memo expression tree with the lowest estimated cost.
-func (ot *OptTester) OptimizeWithTables(tables map[cat.StableID]cat.Table) (opt.Expr, error) {
+func (ot *OptTester) OptimizeWithTables(tables map[cat.StableID]cat.Table) (*memo.Memo, error) {
 	o := ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		return !ot.Flags.DisableRules.Contains(int(ruleName))
@@ -1241,7 +1249,7 @@ func (ot *OptTester) OptimizeWithTables(tables map[cat.StableID]cat.Table) (opt.
 // The arguments are parsed as SQL expressions.
 func (ot *OptTester) AssignPlaceholders(
 	queryArgs []string, normalize, explore bool,
-) (opt.Expr, error) {
+) (*memo.Memo, error) {
 	maybeDisableRule := func(ruleName opt.RuleName) bool {
 		if !normalize && ruleName.IsNormalize() {
 			return false
@@ -1302,15 +1310,18 @@ func (ot *OptTester) AssignPlaceholders(
 	o.NotifyOnMatchedRule(maybeDisableRule)
 
 	o.Factory().FoldingControl().AllowStableFolds()
-	if err := o.Factory().AssignPlaceholders(prepMemo); err != nil {
+	if err = o.Factory().AssignPlaceholders(prepMemo); err != nil {
 		return nil, err
 	}
-	return o.Optimize()
+	if _, err = o.Optimize(); err != nil {
+		return nil, err
+	}
+	return o.Memo(), nil
 }
 
 // PlaceholderFastPath tests TryPlaceholderFastPath; it should be used on
 // queries with placeholders.
-func (ot *OptTester) PlaceholderFastPath() (_ opt.Expr, ok bool, _ error) {
+func (ot *OptTester) PlaceholderFastPath() (_ *memo.Memo, ok bool, _ error) {
 	o := ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		return !ot.Flags.DisableRules.Contains(int(ruleName))
@@ -1320,7 +1331,11 @@ func (ot *OptTester) PlaceholderFastPath() (_ opt.Expr, ok bool, _ error) {
 	if err != nil {
 		return nil, false, err
 	}
-	return o.TryPlaceholderFastPath()
+	ok, err = o.TryPlaceholderFastPath()
+	if err != nil {
+		return nil, false, err
+	}
+	return o.Memo(), ok, nil
 }
 
 // Memo returns a string that shows the memo data structure that is constructed
@@ -1337,18 +1352,22 @@ func (ot *OptTester) Memo() (string, error) {
 }
 
 // Expr parses the input directly into an expression; see exprgen.Build.
-func (ot *OptTester) Expr() (opt.Expr, error) {
+func (ot *OptTester) Expr() (*memo.Memo, opt.Expr, error) {
 	var f norm.Factory
 	f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
 	ot.f = &f
 	f.DisableOptimizations()
 
-	return exprgen.Build(ot.ctx, ot.catalog, &f, ot.sql)
+	expr, err := exprgen.Build(ot.ctx, ot.catalog, &f, ot.sql)
+	if err != nil {
+		return nil, nil, err
+	}
+	return f.Memo(), expr, nil
 }
 
 // ExprNorm parses the input directly into an expression and runs
 // normalization; see exprgen.Build.
-func (ot *OptTester) ExprNorm() (opt.Expr, error) {
+func (ot *OptTester) ExprNorm() (*memo.Memo, error) {
 	var f norm.Factory
 	f.Init(ot.ctx, &ot.evalCtx, ot.catalog)
 	ot.f = &f
@@ -1368,12 +1387,15 @@ func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 		ot.appliedRules.Add(int(ruleName))
 	})
 
-	return exprgen.Build(ot.ctx, ot.catalog, &f, ot.sql)
+	if _, err := exprgen.Build(ot.ctx, ot.catalog, &f, ot.sql); err != nil {
+		return nil, err
+	}
+	return f.Memo(), nil
 }
 
 // ExprOpt parses the input directly into an expression and runs normalization
 // and exploration; see exprgen.Optimize.
-func (ot *OptTester) ExprOpt() (opt.Expr, error) {
+func (ot *OptTester) ExprOpt() (*memo.Memo, error) {
 	o := ot.makeOptimizer()
 	f := o.Factory()
 
@@ -1389,7 +1411,11 @@ func (ot *OptTester) ExprOpt() (opt.Expr, error) {
 		ot.appliedRules.Add(int(ruleName))
 	})
 
-	return exprgen.Optimize(ot.ctx, ot.catalog, o, ot.sql)
+	if _, err := exprgen.Optimize(ot.ctx, ot.catalog, o, ot.sql); err != nil {
+		return nil, err
+	}
+
+	return o.Memo(), nil
 }
 
 // RuleStats performs the optimization and returns statistics about how many
@@ -1959,10 +1985,11 @@ func (ot *OptTester) StatsQuality(tb testing.TB, d *datadriven.TestData) (string
 		}
 	}
 
-	expr, err := ot.Optimize()
+	mem, err := ot.Optimize()
 	if err != nil {
 		return "", err
 	}
+	expr := mem.RootExpr()
 
 	// Create a table in the test catalog for each relational expression in the
 	// tree. Keep track of the name of each table so that stats can be outputted
@@ -1975,7 +2002,7 @@ func (ot *OptTester) StatsQuality(tb testing.TB, d *datadriven.TestData) (string
 			// GenerateName is called in a pre-order traversal of the query tree.
 			tabName := nameGen.GenerateName(e.Op())
 			names = append(names, tabName)
-			_, err := ot.createTableAs(tree.MakeUnqualifiedTableName(tree.Name(tabName)), r)
+			_, err := ot.createTableAs(mem, tree.MakeUnqualifiedTableName(tree.Name(tabName)), r)
 			if err != nil {
 				return err
 			}
@@ -1997,8 +2024,8 @@ func (ot *OptTester) StatsQuality(tb testing.TB, d *datadriven.TestData) (string
 	}
 
 	buf := bytes.Buffer{}
-	ot.postProcess(tb, d, expr)
-	buf.WriteString(ot.FormatExpr(expr))
+	ot.postProcess(tb, d, mem, expr)
+	buf.WriteString(ot.FormatExpr(mem, expr))
 
 	// Split the previous test output into blocks containing the stats for each
 	// expression. The first element will contain the expression tree itself, so
@@ -2080,7 +2107,9 @@ func (ot *OptTester) saveActualTables() error {
 // of the given relational expression. It also injects the estimated stats
 // for the relational expression into the catalog table. It returns a pointer
 // to the new table.
-func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*testcat.Table, error) {
+func (ot *OptTester) createTableAs(
+	mem *memo.Memo, name tree.TableName, rel memo.RelExpr,
+) (*testcat.Table, error) {
 	catalog, ok := ot.catalog.(*testcat.Catalog)
 	if !ok {
 		return nil, fmt.Errorf("createTableAs can only be used with TestCatalog")
@@ -2096,7 +2125,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 	jsonStats := make([]stats.JSONStatistic, outputCols.Len())
 	i := 0
 	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
-		colMeta := rel.Memo().Metadata().ColumnMeta(col)
+		colMeta := mem.Metadata().ColumnMeta(col)
 		colName := colNameGen.GenerateName(col)
 
 		columns[i].Init(
@@ -2116,7 +2145,7 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 
 		// Make sure we have estimated stats for this column.
 		colSet := opt.MakeColSet(col)
-		memo.RequestColStat(ot.ctx, &ot.evalCtx, rel, colSet)
+		memo.RequestColStat(ot.ctx, &ot.evalCtx, mem, rel, colSet)
 		stat, ok := relProps.Statistics().ColStats.Lookup(colSet)
 		if !ok {
 			return nil, fmt.Errorf("could not find statistic for column %s", colName)
@@ -2211,11 +2240,12 @@ func (ot *OptTester) CheckSize() (string, error) {
 // IndexCandidates is used with the index-candidates option. It finds index
 // candidates for the SQL statement and formats them as a sorted string.
 func (ot *OptTester) IndexCandidates() (string, error) {
-	expr, err := ot.OptNorm()
+	mem, err := ot.OptNorm()
 	if err != nil {
 		return "", err
 	}
-	indexCandidates := indexrec.FindIndexCandidateSet(expr, expr.(memo.RelExpr).Memo().Metadata())
+	expr := mem.RootExpr()
+	indexCandidates := indexrec.FindIndexCandidateSet(expr, mem.Metadata())
 
 	// Build a formatted string to output from the map of indexCandidates.
 	tablesOutput := make([]string, 0, len(indexCandidates))
@@ -2253,25 +2283,29 @@ func (ot *OptTester) IndexCandidates() (string, error) {
 // determines index recommendations for the SQL statement, if they exist, and
 // formats them as a human-readable string.
 func (ot *OptTester) IndexRecommendations() (string, error) {
-	normExpr, err := ot.OptNorm()
+	normMemo, err := ot.OptNorm()
 	if err != nil {
 		return "", err
 	}
-	md := normExpr.(memo.RelExpr).Memo().Metadata()
+	normExpr := normMemo.RootExpr()
+	md := normMemo.Metadata()
 	indexCandidates := indexrec.FindIndexCandidateSet(normExpr, md)
 	_, hypTables := indexrec.BuildOptAndHypTableMaps(ot.catalog, indexCandidates)
 
-	optExpr, err := ot.OptimizeWithTables(hypTables)
+	optMemo, err := ot.OptimizeWithTables(hypTables)
 	if err != nil {
 		return "", err
 	}
-	md = optExpr.(memo.RelExpr).Memo().Metadata()
+	optExpr := optMemo.RootExpr()
+	md = optMemo.Metadata()
 	recs, err := indexrec.FindRecs(ot.ctx, optExpr, md)
 	if err != nil {
 		return "", err
 	}
 	if len(recs) == 0 {
-		return fmt.Sprintf("no index recommendations\n--\noptimal plan:\n%s", ot.FormatExpr(optExpr)), nil
+		return fmt.Sprintf(
+			"no index recommendations\n--\noptimal plan:\n%s", ot.FormatExpr(optMemo, optExpr),
+		), nil
 	}
 
 	var sb strings.Builder
@@ -2292,7 +2326,7 @@ func (ot *OptTester) IndexRecommendations() (string, error) {
 		sb.WriteString(recs[i].SQL)
 		sb.WriteByte('\n')
 	}
-	sb.WriteString(fmt.Sprintf("--\noptimal plan:\n%s", ot.FormatExpr(optExpr)))
+	sb.WriteString(fmt.Sprintf("--\noptimal plan:\n%s", ot.FormatExpr(optMemo, optExpr)))
 	return sb.String(), nil
 }
 
@@ -2331,7 +2365,7 @@ func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 // not nil, allows the caller to update the table metadata before optimizing.
 func (ot *OptTester) optimizeExpr(
 	o *xform.Optimizer, tables map[cat.StableID]cat.Table,
-) (opt.Expr, error) {
+) (*memo.Memo, error) {
 	err := ot.buildExpr(o.Factory())
 	if err != nil {
 		return nil, err
@@ -2339,7 +2373,7 @@ func (ot *OptTester) optimizeExpr(
 	if tables != nil {
 		o.Memo().Metadata().UpdateTableMeta(&ot.evalCtx, tables)
 	}
-	root, err := o.Optimize()
+	_, err = o.Optimize()
 	if err != nil {
 		return nil, err
 	}
@@ -2347,7 +2381,7 @@ func (ot *OptTester) optimizeExpr(
 	if ot.Flags.PerturbCost != 0 {
 		o.RecomputeCost()
 	}
-	return root, nil
+	return o.Memo(), nil
 }
 
 func (ot *OptTester) output(format string, args ...interface{}) {

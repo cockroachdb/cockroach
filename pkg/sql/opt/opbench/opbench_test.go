@@ -269,7 +269,7 @@ func runBench(t *testing.T, spec *opbench.Spec, path string, mode runMode) {
 		// Compute the estimated cost.
 
 		tester := opttester.New(catalog, planText)
-		e, err := tester.Expr()
+		_, e, err := tester.Expr()
 		if err != nil {
 			t.Fatal(err)
 		}

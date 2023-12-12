@@ -471,7 +471,7 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 
 	if f.Memo().HasPlaceholders() {
 		// Try the placeholder fast path.
-		_, ok, err := opc.optimizer.TryPlaceholderFastPath()
+		ok, err := opc.optimizer.TryPlaceholderFastPath()
 		if err != nil {
 			return nil, err
 		}
