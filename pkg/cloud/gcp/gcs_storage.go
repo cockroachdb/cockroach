@@ -174,13 +174,7 @@ func makeGCSStorage(
 		}
 	}
 
-	httpClient, err := cloud.MakeHTTPClient(args.Settings)
-	if err != nil {
-		return nil, err
-	}
-
-	opts := []option.ClientOption{option.WithScopes(scope), option.WithHTTPClient(httpClient)}
-
+	opts := []option.ClientOption{option.WithScopes(scope)}
 	// Once credentials have been obtained via implicit or specified params, we
 	// then check if we should use the credentials directly or whether they should
 	// be used to assume another role.
