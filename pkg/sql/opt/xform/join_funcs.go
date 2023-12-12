@@ -1116,13 +1116,17 @@ func (c *CustomFuncs) constructJoinWithConstants(
 }
 
 // ShouldReorderJoins returns whether the optimizer should attempt to find
-// a better ordering of inner joins. This is the case if the given expression is
-// the first expression of its group, and the join tree rooted at the expression
-// has not previously been reordered. This is to avoid duplicate work. In
-// addition, a join cannot be reordered if it has join hints.
+// a better ordering for a join tree. This is the case if the given expression
+// is the first expression of its group, and the join tree rooted at the
+// expression has not previously been reordered. This is to avoid duplicate
+// work. In addition, a join cannot be reordered if it has join hints.
 func (c *CustomFuncs) ShouldReorderJoins(root memo.RelExpr) bool {
-	// Only match the first expression of a group to avoid duplicate work.
 	if root != root.FirstExpr() {
+		// Only match the first expression of a group to avoid duplicate work.
+		return false
+	}
+	if c.e.evalCtx.SessionData().ReorderJoinsLimit == 0 {
+		// Join reordering has been disabled.
 		return false
 	}
 
