@@ -12,13 +12,16 @@ package instancestorage
 
 import (
 	"context"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/regionliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -97,9 +100,8 @@ var _ instanceCache = &rangeFeedCache{}
 // sql_instances table. newRangeFeedCache will block until the initial scan is
 // complete.
 func newRangeFeedCache(
-	ctx context.Context, rowCodec rowCodec, clock *hlc.Clock, f *rangefeed.Factory,
+	ctx context.Context, rowCodec rowCodec, clock *hlc.Clock, f *rangefeed.Factory, storage *Storage,
 ) (resultFeed instanceCache, err error) {
-	done := make(chan error, 1)
 
 	feed := &rangeFeedCache{}
 	feed.mu.instances = map[base.SQLInstanceID]instancerow{}
@@ -114,64 +116,69 @@ func newRangeFeedCache(
 		}
 		feed.updateInstanceMap(instance, !keyVal.Value.IsPresent())
 	}
-	initialScanDoneFn := func(_ context.Context) {
-		select {
-		case done <- nil:
-			// success reported to the caller
-		default:
-			// something is already in the done channel
-		}
-	}
-	initialScanErrFn := func(_ context.Context, err error) (shouldFail bool) {
-		if grpcutil.IsAuthError(err) ||
-			// This is a hack around the fact that we do not get properly structured
-			// errors out of gRPC. See #56208.
-			strings.Contains(err.Error(), "rpc error: code = Unauthenticated") {
-			shouldFail = true
-			select {
-			case done <- err:
-				// err reported to the caller
-			default:
-				// something is already in the done channel
+	// Instead of relying on the change feed to do the initial scan, which would
+	// be across all regions, we are going to do it ourselves in a region aware
+	// manner. Any regions labeled as unavailable will be skipped in the process.
+	initialScan := func() (hlc.Timestamp, error) {
+		ts := hlc.Timestamp{}
+		livenessProber := regionliveness.NewLivenessProber(storage.db, storage.codec, nil, storage.settings)
+		return ts, storage.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// Determine regions known by the system database and figure out if
+			// any of them are unavailable.
+			regions, err := storage.readRegionsFromSystemDatabase(ctx, txn)
+			if err != nil {
+				return err
 			}
-		}
-		return shouldFail
+			deadRegions, err := livenessProber.QueryUnavailablePhysicalRegions(ctx, txn, true /*filterAvailable*/)
+			if err != nil {
+				return err
+			}
+			for _, region := range regions {
+				// Region is toast, no need for an initial scan.
+				if deadRegions.ContainsPhysicalRepresentation(string(region)) {
+					continue
+				}
+				instanceKey := rowCodec.makeIndexPrefix()
+				instanceKeyWithRegionBytes, err := keyside.Encode(instanceKey, tree.NewDBytes(tree.DBytes(region)), encoding.Ascending)
+				if err != nil {
+					return err
+				}
+				instanceKeyWithRegion := roachpb.Key(instanceKeyWithRegionBytes)
+				rows, err := txn.Scan(ctx, instanceKeyWithRegion, instanceKeyWithRegion.PrefixEnd(), 0)
+				if err != nil {
+					return err
+				}
+				for _, row := range rows {
+					keyVal := kvpb.RangeFeedValue{
+						Key:   row.Key,
+						Value: *row.Value,
+					}
+					updateCacheFn(ctx, &keyVal)
+				}
+			}
+			ts, err = txn.CommitTimestamp()
+			return err
+		})
 	}
-
 	instancesTablePrefix := rowCodec.makeIndexPrefix()
 	instancesTableSpan := roachpb.Span{
 		Key:    instancesTablePrefix,
 		EndKey: instancesTablePrefix.PrefixEnd(),
 	}
-	feed.feed, err = f.RangeFeed(ctx,
-		"sql_instances",
-		[]roachpb.Span{instancesTableSpan},
-		clock.Now(),
-		updateCacheFn,
-		rangefeed.WithSystemTablePriority(),
-		rangefeed.WithInitialScan(initialScanDoneFn),
-		rangefeed.WithOnInitialScanError(initialScanErrFn),
-		rangefeed.WithRowTimestampInInitialScan(true),
-	)
+	initialTS, err := initialScan()
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		// Ensure the feed is cleaned up if there is an error
-		if resultFeed == nil {
-			feed.Close()
-		}
-	}()
 
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case err := <-done:
-		if err != nil {
-			return nil, err
-		}
-		return feed, nil
-	}
+	feed.feed, err = f.RangeFeed(ctx,
+		"sql_instances",
+		[]roachpb.Span{instancesTableSpan},
+		// Start collecting updates to the table after our initial scan.
+		initialTS,
+		updateCacheFn,
+		rangefeed.WithSystemTablePriority(),
+	)
+	return feed, err
 }
 
 func (s *rangeFeedCache) getInstance(instanceID base.SQLInstanceID) (instancerow, bool) {
