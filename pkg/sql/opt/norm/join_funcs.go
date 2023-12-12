@@ -490,7 +490,7 @@ func (c *CustomFuncs) GetEquivGroups(
 func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 	left, right memo.RelExpr, on memo.FiltersExpr,
 ) bool {
-	multiplicity := memo.DeriveJoinMultiplicityFromInputs(left, right, on)
+	multiplicity := memo.DeriveJoinMultiplicityFromInputs(c.mem, left, right, on)
 	return multiplicity.JoinFiltersMatchAllLeftRows()
 }
 
