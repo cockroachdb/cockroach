@@ -387,6 +387,7 @@ func TestTenantCannotSeeNonTenantStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderStressWithIssue(t, 113984)
+	skip.UnderRace(t, "may OOM")
 
 	ctx := context.Background()
 	testCluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
