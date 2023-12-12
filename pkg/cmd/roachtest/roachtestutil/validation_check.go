@@ -16,28 +16,40 @@ import (
 	gosql "database/sql"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// CheckReplicaDivergenceOnDB runs a stats-only consistency check via the
-// provided DB. It ignores transient errors that can result from the
-// implementation of crdb_internal.check_consistency, so a nil result
-// does not prove anything.
+// CheckReplicaDivergenceOnDB runs a consistency check via the provided DB. It
+// ignores transient errors that can result from the implementation of
+// crdb_internal.check_consistency, so a nil result does not prove anything.
+//
+// The consistency check may not get enough time to complete, but will return
+// any inconsistencies that it did find before timing out.
 func CheckReplicaDivergenceOnDB(ctx context.Context, l *logger.Logger, db *gosql.DB) error {
-	// NB: we set a statement_timeout since context cancellation won't work here,
-	// see:
+	// Speed up consistency checks. The test is done, so let's go full throttle.
+	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.consistency_check.max_rate = '1GB'")
+	if err != nil {
+		return err
+	}
+
+	// NB: we set a statement_timeout since context cancellation won't work here.
+	// We've seen the consistency checks hang indefinitely in some cases.
 	// https://github.com/cockroachdb/cockroach/pull/34520
 	//
-	// We've seen the consistency checks hang indefinitely in some cases.
+	// TODO(erikgrinaker): avoid result set buffering. We seem to be receiving
+	// results in batches of 64 rows, regardless of results_buffer_size or the
+	// row size (e.g. with 16 KB ballast per row). Not clear where this buffering
+	// is happening or how to disable it.
+	started := timeutil.Now()
 	rows, err := db.QueryContext(ctx, `
-SET statement_timeout = '5m';
+SET statement_timeout = '20m';
 SELECT t.range_id, t.start_key_pretty, t.status, t.detail
-FROM
-crdb_internal.check_consistency(true, '', '') as t
-WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
+FROM crdb_internal.check_consistency(false, '', '') as t;`)
 	if err != nil {
 		// TODO(tbg): the checks can fail for silly reasons like missing gossiped
 		// descriptors, etc. -- not worth failing the test for. Ideally this would
@@ -46,20 +58,40 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 		return nil
 	}
 	defer rows.Close()
+
+	logEvery := log.Every(time.Minute)
+	logEvery.ShouldLog() // don't immediately log
 	var finalErr error
+	var i int
 	for rows.Next() {
 		var rangeID int32
 		var prettyKey, status, detail string
 		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); scanErr != nil {
 			l.Printf("consistency check failed with %v; ignoring", scanErr)
-			return nil
+			return finalErr // return partial finalErr anyway
 		}
-		finalErr = errors.CombineErrors(finalErr,
-			errors.Newf("r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail))
+		// Only detect replica inconsistencies, and ignore MVCC stats mismatches
+		// since these can happen in rare cases due to lease requests not respecting
+		// latches: https://github.com/cockroachdb/cockroach/issues/93896
+		//
+		// TODO(erikgrinaker): We should take storage checkpoints for inconsistent
+		// ranges as well. This requires support in check_consistency() such that we
+		// take the checkpoints at the same Raft log index across nodes.
+		if status == kvpb.CheckConsistencyResponse_RANGE_INCONSISTENT.String() {
+			finalErr = errors.CombineErrors(finalErr,
+				errors.Newf("r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail))
+		}
+
+		i++
+		if logEvery.ShouldLog() {
+			l.Printf("consistency checked %d ranges (at key %s)", i, prettyKey)
+		}
 	}
+	l.Printf("consistency checked %d ranges in %s", i, timeutil.Since(started).Round(time.Second))
+
 	if err := rows.Err(); err != nil {
 		l.Printf("consistency check failed with %v; ignoring", err)
-		return nil
+		// return partial finalErr anyway
 	}
 	return finalErr
 }
