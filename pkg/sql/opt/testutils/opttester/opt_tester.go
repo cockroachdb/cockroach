@@ -2153,8 +2153,8 @@ func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*test
 
 	relProps := rel.Relational()
 	outputCols := relProps.OutputCols
-	colNameGen := memo.NewColumnNameGenerator(rel)
 	mem := ot.f.Memo()
+	colNameGen := memo.NewColumnNameGenerator(mem, rel)
 
 	// Create each of the columns and their estimated stats for the test catalog
 	// table.

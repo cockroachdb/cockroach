@@ -3790,7 +3790,7 @@ func (b *Builder) applySaveTable(
 	// opttester.
 	outputCols := e.Relational().OutputCols
 	colNames := make([]string, outputCols.Len())
-	colNameGen := memo.NewColumnNameGenerator(e)
+	colNameGen := memo.NewColumnNameGenerator(b.mem, e)
 	for col, ok := outputCols.Next(0); ok; col, ok = outputCols.Next(col + 1) {
 		ord, _ := inputCols.Get(col)
 		colNames[ord] = colNameGen.GenerateName(col)
