@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -122,6 +123,9 @@ func TestHealthCheck(t *testing.T) {
 		}
 		if !reflect.DeepEqual(expAlerts, result.Alerts) {
 			t.Fatalf("expected %+v, got %+v", expAlerts, result.Alerts)
+		}
+		if redact.Sprintf("%s", result.Alerts) != redact.Sprintf("%s", result.Alerts).Redact() {
+			t.Fatalf("expected %+v, got %+v", redact.Sprintf("%s", result.Alerts), redact.Sprintf("%s", result.Alerts).Redact())
 		}
 	}
 }

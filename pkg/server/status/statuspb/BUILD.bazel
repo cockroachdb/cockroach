@@ -29,7 +29,9 @@ go_proto_library(
 
 go_library(
     name = "statuspb",
+    srcs = ["status.go"],
     embed = [":statuspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/status/statuspb",
     visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_redact//:redact"],
 )
