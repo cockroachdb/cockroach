@@ -20,7 +20,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
@@ -384,6 +383,16 @@ func TestPutS3Endpoint(t *testing.T) {
 
 func TestS3DisallowCustomEndpoints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// If environment credentials are not present, we want to skip all S3 tests,
+	// including auth-implicit, even though it is not used in auth-implicit.
+	// Without credentials, it's unclear if we can even communicate with an s3
+	// endpoint.
+	_, err := credentials.NewEnvCredentials().Get()
+	if err != nil {
+		skip.IgnoreLint(t, "No AWS credentials")
+	}
+
 	dest := cloudpb.ExternalStorage{S3Config: &cloudpb.ExternalStorage_S3{Endpoint: "http://do.not.go.there/"}}
 	s3, err := MakeS3Storage(context.Background(),
 		cloud.ExternalStorageContext{
@@ -397,6 +406,16 @@ func TestS3DisallowCustomEndpoints(t *testing.T) {
 
 func TestS3DisallowImplicitCredentials(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	// If environment credentials are not present, we want to skip all S3 tests,
+	// including auth-implicit, even though it is not used in auth-implicit.
+	// Without credentials, it's unclear if we can even communicate with an s3
+	// endpoint.
+	_, err := credentials.NewEnvCredentials().Get()
+	if err != nil {
+		skip.IgnoreLint(t, "No AWS credentials")
+	}
+
 	dest := cloudpb.ExternalStorage{S3Config: &cloudpb.ExternalStorage_S3{Endpoint: "http://do-not-go-there", Auth: cloud.AuthParamImplicit}}
 
 	testSettings := cluster.MakeTestingClusterSettings()
@@ -567,11 +586,15 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 func TestAntagonisticS3Read(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Check if we can create aws session with implicit credentials.
-	_, err := session.NewSession()
+	// If environment credentials are not present, we want to skip all S3 tests,
+	// including auth-implicit, even though it is not used in auth-implicit.
+	// Without credentials, it's unclear if we can even communicate with an s3
+	// endpoint.
+	_, err := credentials.NewEnvCredentials().Get()
 	if err != nil {
 		skip.IgnoreLint(t, "No AWS credentials")
 	}
+
 	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
 		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
@@ -591,7 +614,11 @@ func TestAntagonisticS3Read(t *testing.T) {
 func TestNewClientErrorsOnBucketRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	_, err := session.NewSession()
+	// If environment credentials are not present, we want to skip all S3 tests,
+	// including auth-implicit, even though it is not used in auth-implicit.
+	// Without credentials, it's unclear if we can even communicate with an s3
+	// endpoint.
+	_, err := credentials.NewEnvCredentials().Get()
 	if err != nil {
 		skip.IgnoreLint(t, "No AWS credentials")
 	}
