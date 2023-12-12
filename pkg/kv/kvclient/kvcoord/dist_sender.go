@@ -1930,7 +1930,7 @@ func (ds *DistSender) sendPartialBatch(
 
 		if err != nil {
 			// Set pErr so that, if we don't perform any more retries, the
-			// deduceRetryEarlyExitError() call below the loop is inhibited.
+			// deduceRetryEarlyExitError() call below the loop includes this error.
 			pErr = kvpb.NewError(err)
 			switch {
 			case IsSendError(err):
@@ -2006,27 +2006,31 @@ func (ds *DistSender) sendPartialBatch(
 		break
 	}
 
-	// Propagate error if either the retry closer or context done
-	// channels were closed.
+	// Propagate error if either the retry closer or context done channels were
+	// closed. This replaces the return error since when the context is closed
+	// the underlying error is unpredictable and might have been retried.
+	if err := ds.deduceRetryEarlyExitError(ctx, pErr.GoError()); err != nil {
+		log.VErrEventf(ctx, 2, "replace error %s with %s", pErr, err)
+		pErr = kvpb.NewError(err)
+	}
+
 	if pErr == nil {
-		if err := ds.deduceRetryEarlyExitError(ctx); err == nil {
-			log.Fatal(ctx, "exited retry loop without an error")
-		} else {
-			pErr = kvpb.NewError(err)
-		}
+		log.Fatal(ctx, "exited retry loop without an error or early exit")
 	}
 
 	return response{pErr: pErr}
 }
 
-func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context) error {
+func (ds *DistSender) deduceRetryEarlyExitError(ctx context.Context, err error) error {
+	// We don't need to rewrap Ambiguous errors.
+	if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
+		return nil
+	}
 	select {
 	case <-ds.rpcRetryOptions.Closer:
-		// Typically happens during shutdown.
-		return &kvpb.NodeUnavailableError{}
+		return errors.Wrapf(kvpb.NewAmbiguousResultError(errors.CombineErrors(&kvpb.NodeUnavailableError{}, err)), "aborted in DistSender")
 	case <-ctx.Done():
-		// Happens when the client request is canceled.
-		return errors.Wrap(ctx.Err(), "aborted in DistSender")
+		return errors.Wrapf(kvpb.NewAmbiguousResultError(errors.CombineErrors(ctx.Err(), err)), "aborted in DistSender")
 	default:
 	}
 	return nil
