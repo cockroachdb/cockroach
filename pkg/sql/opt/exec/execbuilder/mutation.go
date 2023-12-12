@@ -1156,21 +1156,21 @@ func (b *Builder) buildLock(lock *memo.LockExpr) (execPlan, error) {
 	// locking-semi-LookupJoin as the enforcer of last resort.
 	switch input := lock.Input.(type) {
 	case *memo.ScanExpr:
-		if input.Table == lock.Table && input.Index == cat.PrimaryIndex {
+		if input.Table == lock.KeySource && input.Index == cat.PrimaryIndex {
 			// Make a shallow copy of the scan to avoid mutating the original.
 			scan := *input
 			scan.Locking = scan.Locking.Max(locking)
 			return b.buildRelational(&scan)
 		}
 	case *memo.IndexJoinExpr:
-		if input.Table == lock.Table {
+		if input.Table == lock.KeySource {
 			// Make a shallow copy of the join to avoid mutating the original.
 			join := *input
 			join.Locking = join.Locking.Max(locking)
 			return b.buildRelational(&join)
 		}
 	case *memo.LookupJoinExpr:
-		if input.Table == lock.Table && input.Index == cat.PrimaryIndex &&
+		if input.Table == lock.KeySource && input.Index == cat.PrimaryIndex &&
 			(input.JoinType == opt.InnerJoinOp || input.JoinType == opt.SemiJoinOp) &&
 			!input.IsFirstJoinInPairedJoiner && !input.IsSecondJoinInPairedJoiner &&
 			// We con't push the locking down if the lookup join has additional on
@@ -1191,7 +1191,7 @@ func (b *Builder) buildLock(lock *memo.LockExpr) (execPlan, error) {
 			Table:                 lock.Table,
 			Index:                 cat.PrimaryIndex,
 			KeyCols:               lock.KeyCols,
-			Cols:                  lock.Cols,
+			Cols:                  lock.LockCols.Union(lock.Cols),
 			LookupColsAreTableKey: true,
 			Locking:               locking,
 		},
