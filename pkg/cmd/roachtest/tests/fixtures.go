@@ -65,7 +65,6 @@ func registerFixtures(r registry.Registry) {
 		Timeout:          30 * time.Minute,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Fixtures),
-		Tags:             registry.Tags("fixtures"),
 		Owner:            registry.OwnerDevInf,
 		Cluster:          r.MakeClusterSpec(4),
 		Run:              runFixtures,
