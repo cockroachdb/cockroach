@@ -56,6 +56,22 @@ func DefaultStartSingleNodeOpts() StartOpts {
 	return startOpts
 }
 
+// DefaultStartVirtualClusterOpts returns StartOpts for starting an external
+// process virtual cluster with the given tenant name and SQL instance.
+func DefaultStartVirtualClusterOpts(tenantName string, sqlInstance int) StartOpts {
+	startOpts := StartOpts{RoachprodOpts: roachprod.DefaultStartOpts()}
+	startOpts.RoachprodOpts.Target = install.StartServiceForVirtualCluster
+	startOpts.RoachprodOpts.VirtualClusterName = tenantName
+	startOpts.RoachprodOpts.SQLInstance = sqlInstance
+	// We set the ports to 0 so that ports are assigned dynamically. This is a
+	// temporary workaround until we use dynamic port assignment as the default.
+	// See: https://github.com/cockroachdb/cockroach/issues/111052
+	// TODO(herko): remove this once dynamic port assignment is the default.
+	startOpts.RoachprodOpts.SQLPort = 0
+	startOpts.RoachprodOpts.AdminUIPort = 0
+	return startOpts
+}
+
 // StopOpts is a type that combines the stop options needed by roachprod and roachtest.
 type StopOpts struct {
 	// TODO(radu): we should use a higher-level abstraction instead of
