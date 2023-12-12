@@ -42,7 +42,6 @@ cockroachdb/cluster-observability:
   label: T-cluster-observability
 cockroachdb/kv:
   aliases:
-    cockroachdb/admission-control: other
     cockroachdb/kv-triage: roachtest
     cockroachdb/kv-prs: other
   triage_column_id: 14242655
@@ -61,6 +60,8 @@ cockroachdb/multiregion:
   triage_column_id: 11926170
   label: T-multiregion
 cockroachdb/storage:
+  aliases:
+    cockroachdb/admission-control: other
   triage_column_id: 6668367
   label: T-storage
 cockroachdb/test-eng:
