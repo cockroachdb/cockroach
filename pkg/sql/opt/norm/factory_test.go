@@ -102,7 +102,7 @@ func TestCopyAndReplace(t *testing.T) {
 		}
 		return o.Factory().CopyAndReplaceDefault(e, replaceFn)
 	}
-	o.Factory().CopyAndReplace(m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
+	o.Factory().CopyAndReplace(m, m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
 
 	if e, err := o.Optimize(); err != nil {
 		t.Fatal(err)
@@ -147,7 +147,7 @@ func TestCopyAndReplaceWithScan(t *testing.T) {
 			replaceFn = func(e opt.Expr) opt.Expr {
 				return o.Factory().CopyAndReplaceDefault(e, replaceFn)
 			}
-			o.Factory().CopyAndReplace(m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
+			o.Factory().CopyAndReplace(m, m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
 
 			if _, err := o.Optimize(); err != nil {
 				t.Fatal(err)
