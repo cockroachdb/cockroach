@@ -1,8 +1,8 @@
 post
 ----
 ----
-searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "storage: kv/splits/nodes=3/quiesce=true failed" label:O-robot label:C-test-failure label:branch-release-0.1 -label:X-noreuse: []
-searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "storage: kv/splits/nodes=3/quiesce=true failed" label:O-robot label:C-test-failure -label:branch-release-0.1: [github.Issue{Number:41, Title:"storage: kv/splits/nodes=3/quiesce=true-similar failed [failure reason]", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.2"}]} github.Issue{Number:40, Title:"storage: kv/splits/nodes=3/quiesce=true failed [failure reason]", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.2"}]}]
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "storage: kv/splits/nodes=3/quiesce=true failed" label:O-robot label:branch-release-0.1 -label:X-noreuse: []
+searchIssue repo:"cockroach" user:"cockroachdb" is:issue is:open in:title sort:created-desc "storage: kv/splits/nodes=3/quiesce=true failed" label:O-robot -label:branch-release-0.1: [github.Issue{Number:41, Title:"storage: kv/splits/nodes=3/quiesce=true-similar failed [failure reason]", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.2"}]} github.Issue{Number:40, Title:"storage: kv/splits/nodes=3/quiesce=true failed [failure reason]", Labels:[github.Label{URL:"fake", Name:"C-test-failure"} github.Label{URL:"fake", Name:"O-robot"} github.Label{URL:"fake", Name:"release-0.2"}]}]
 getBinaryVersion: result v3.3.0
 listMilestones owner=cockroachdb repo=cockroach: result [github.Milestone{Number:2, Title:"3.3"} github.Milestone{Number:1, Title:"3.2"}]
 createIssue owner=cockroachdb repo=cockroach:
