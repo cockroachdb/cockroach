@@ -13,6 +13,7 @@ package issues
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"net/url"
@@ -153,8 +154,10 @@ type TeamCityOptions struct {
 
 // EngFlowOptions configures EngFlow-specific Options.
 type EngFlowOptions struct {
-	ServerURL    string
-	InvocationID string
+	ServerURL           string
+	InvocationID        string
+	Label               string
+	Shard, Run, Attempt int
 }
 
 // Options configures the issue poster.
@@ -464,11 +467,13 @@ func (p *poster) buildURL() *url.URL {
 		u := p.teamcityURL("log", "")
 		return u
 	} else if p.Options.EngFlowOptions != nil {
-		u, err := url.Parse(p.Options.EngFlowOptions.ServerURL)
+		opts := p.Options.EngFlowOptions
+		u, err := url.Parse(opts.ServerURL)
 		if err != nil {
 			log.Fatal(err)
 		}
-		u.Path = fmt.Sprintf("invocation/%s", p.Options.EngFlowOptions.InvocationID)
+		base64Target := base64.StdEncoding.EncodeToString([]byte(opts.Label))
+		u.Path = fmt.Sprintf("invocations/default/%s?testReportRun=%d&testReportShard=%d&testReportAttempt=%d#targets-%s", opts.InvocationID, opts.Run, opts.Shard, opts.Attempt, base64Target)
 		return u
 	}
 	return nil
