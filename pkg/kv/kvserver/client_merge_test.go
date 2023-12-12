@@ -4187,9 +4187,9 @@ func TestStoreRangeMergeDuringShutdown(t *testing.T) {
 	// Send a dummy get request on the RHS to force a lease acquisition. We expect
 	// this to fail, as quiescing stores cannot acquire leases.
 	_, err = store.DB().Get(ctx, key.Next())
-	if exp := "not lease holder"; !testutils.IsError(err, exp) {
-		t.Fatalf("expected %q error, but got %v", exp, err)
-	}
+	// We expect a joined error of both not lease holder and node unavailable.
+	require.ErrorContains(t, err, "not lease holder")
+	require.ErrorContains(t, err, "node unavailable")
 }
 
 func verifyMergedSoon(t *testing.T, store *kvserver.Store, lhsStartKey, rhsStartKey roachpb.RKey) {

@@ -1149,7 +1149,8 @@ func TestNodeLivenessNoRetryOnAmbiguousResultCausedByCancellation(t *testing.T) 
 
 	// Check that Heartbeat() returned an ambiguous error, and take that as proof
 	// that the heartbeat wasn't retried.
-	require.True(t, errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)), "%+v", err)
+	require.ErrorContains(t, err, "result is ambiguous")
+	require.ErrorContains(t, err, context.Canceled.Error())
 }
 
 func verifyNodeIsDecommissioning(t *testing.T, tc *testcluster.TestCluster, nodeID roachpb.NodeID) {
