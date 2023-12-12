@@ -49,6 +49,8 @@ type SideloadStorage interface {
 	Purge(_ context.Context, index kvpb.RaftIndex, term kvpb.RaftTerm) (int64, error)
 	// Clear files that may have been written by this SideloadStorage.
 	Clear(context.Context) error
+	// HasEntries returns whether there is any entry in [from, to).
+	HasEntries(_ context.Context, from, to kvpb.RaftIndex) (bool, error)
 	// TruncateTo removes all files belonging to an index strictly smaller than
 	// the given one. Returns the number of bytes freed, the number of bytes in
 	// files that remain, or an error.

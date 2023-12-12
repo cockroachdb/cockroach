@@ -201,19 +201,19 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 	ctx context.Context, from kvpb.RaftIndex, to kvpb.RaftIndex, doTruncate bool,
 ) (bytesFreed, bytesRetained int64, _ error) {
 	deletedAll := true
-	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, filename string) error {
+	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, filename string) (bool, error) {
 		if index >= to {
 			size, err := ss.fileSize(filename)
 			if err != nil {
-				return err
+				return false, err
 			}
 			bytesRetained += size
 			deletedAll = false
-			return nil
+			return true, nil
 		}
 		if index < from {
 			// TODO(pavelkalinnikov): these files may never be removed. Clean them up.
-			return nil
+			return true, nil
 		}
 		// index is in [from, to)
 		var fileSize int64
@@ -224,10 +224,10 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 			fileSize, err = ss.fileSize(filename)
 		}
 		if err != nil {
-			return err
+			return false, err
 		}
 		bytesFreed += fileSize
-		return nil
+		return true, nil
 	}); err != nil {
 		return 0, 0, err
 	}
@@ -246,6 +246,24 @@ func (ss *DiskSideloadStorage) possiblyTruncateTo(
 	return bytesFreed, bytesRetained, nil
 }
 
+// HasEntries implements SideloadStorage.
+func (ss *DiskSideloadStorage) HasEntries(
+	ctx context.Context, from, to kvpb.RaftIndex,
+) (bool, error) {
+	// Find any file at index in [from, to).
+	found := false
+	if err := ss.forEach(ctx, func(index kvpb.RaftIndex, _ string) (bool, error) {
+		if index >= from && index < to {
+			found = true
+			return false, nil // stop the iteration
+		}
+		return true, nil
+	}); err != nil {
+		return false, err
+	}
+	return found, nil
+}
+
 // BytesIfTruncatedFromTo implements SideloadStorage.
 func (ss *DiskSideloadStorage) BytesIfTruncatedFromTo(
 	ctx context.Context, from kvpb.RaftIndex, to kvpb.RaftIndex,
@@ -253,15 +271,17 @@ func (ss *DiskSideloadStorage) BytesIfTruncatedFromTo(
 	return ss.possiblyTruncateTo(ctx, from, to, false /* doTruncate */)
 }
 
+// forEach runs the given visit function for each file in the sideloaded storage
+// directory. If visit returns false, forEach terminates early and returns nil.
+// If visit returns an error, forEach terminates early and returns an error.
 func (ss *DiskSideloadStorage) forEach(
-	ctx context.Context, visit func(index kvpb.RaftIndex, filename string) error,
+	ctx context.Context, visit func(index kvpb.RaftIndex, filename string) (bool, error),
 ) error {
+	// TODO(pavelkalinnikov): consider making the List method iterative.
 	matches, err := ss.eng.List(ss.dir)
 	if oserror.IsNotExist(err) {
-		// Nothing to do.
-		return nil
-	}
-	if err != nil {
+		return nil // nothing to do
+	} else if err != nil {
 		return err
 	}
 	for _, match := range matches {
@@ -281,8 +301,10 @@ func (ss *DiskSideloadStorage) forEach(
 			log.Infof(ctx, "unexpected file %s in sideloaded directory %s", match, ss.dir)
 			continue
 		}
-		if err := visit(kvpb.RaftIndex(logIdx), match); err != nil {
+		if keepGoing, err := visit(kvpb.RaftIndex(logIdx), match); err != nil {
 			return errors.Wrapf(err, "matching pattern %q on dir %s", match, ss.dir)
+		} else if !keepGoing {
+			return nil
 		}
 	}
 	return nil
@@ -292,10 +314,10 @@ func (ss *DiskSideloadStorage) forEach(
 func (ss *DiskSideloadStorage) String() string {
 	var buf strings.Builder
 	var count int
-	if err := ss.forEach(context.Background(), func(_ kvpb.RaftIndex, filename string) error {
+	if err := ss.forEach(context.Background(), func(_ kvpb.RaftIndex, filename string) (bool, error) {
 		count++
 		_, _ = fmt.Fprintln(&buf, filename)
-		return nil
+		return true, nil
 	}); err != nil {
 		return err.Error()
 	}
