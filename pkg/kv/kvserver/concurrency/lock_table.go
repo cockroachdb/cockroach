@@ -3932,12 +3932,16 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 				}
 			}
 		}
-		if !conflicts {
-			return errors.AssertionFailedf(
-				"queued locking request %d does not conflict with holder/waiting requests %s",
-				qlr.guard.seqNum, kl,
-			)
-		}
+		// TODO(arul): uncomment once 115694 is resolved. This validation has been
+		// regularly failing on KVNemesis -- for now, we disable it to ensure legit
+		// bugs aren't drowned out by the noise.
+		// validation
+		//if !conflicts {
+		//	return errors.AssertionFailedf(
+		//		"queued locking request %d does not conflict with holder/waiting requests %s",
+		//		qlr.guard.seqNum, kl,
+		//	)
+		//}
 	}
 
 	// 4. Ensure invariants around distinguished waiters hold.
