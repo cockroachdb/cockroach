@@ -24,12 +24,14 @@ http_archive(
     strip_prefix = "rules_js-1.26.1",
     url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_js-v1.26.1.tar.gz",
 )
+
 http_archive(
     name = "aspect_rules_ts",
     sha256 = "ace5b609603d9b5b875d56c9c07182357c4ee495030f40dcefb10d443ba8c208",
     strip_prefix = "rules_ts-1.4.0",
     url = "https://storage.googleapis.com/public-bazel-artifacts/js/rules_ts-v1.4.0.tar.gz",
 )
+
 # NOTE: aspect_rules_webpack exists for webpack, but it's incompatible with webpack v4.
 http_archive(
     name = "aspect_rules_jest",
@@ -163,15 +165,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.20.10.darwin-amd64.tar.gz", "9f554a97818568cdcb58b8860ebdc0d25cbe7a6441e7f8fc9612c00330d3f145"),
-        "darwin_arm64": ("go1.20.10.darwin-arm64.tar.gz", "4920629c1e65cf28f4fb8c74d7b2f90a1bb6333df60d2fd7e756a3436209f004"),
-        "freebsd_amd64": ("go1.20.10.freebsd-amd64.tar.gz", "e337b8e645e37f52d04e5f91352b929e05fd74d960b2a1c8e78977e4777c4ffa"),
-        "linux_amd64": ("go1.20.10.linux-amd64.tar.gz", "cb95ca59edf9d15d6e7949395756f78542383b612abced2565ad2349213a36e3"),
-        "linux_arm64": ("go1.20.10.linux-arm64.tar.gz", "5fa30f7c4f39c96d31756d7eab6c560ac129caf0462512c9f1fc2afa00570778"),
-        "windows_amd64": ("go1.20.10.windows-amd64.tar.gz", "d84f04cf636033073c114ac5c51f38d948bf21bb53b3aa9442d362e970f94b32"),
+        "darwin_amd64": ("go1.21.5.darwin-amd64.tar.gz", "6878b009493b8b2e5518b090209f63af478a6bdf889c6db4d3c6b68e43839e8e"),
+        "darwin_arm64": ("go1.21.5.darwin-arm64.tar.gz", "1f3673055f681982bda589bfb23938cb83bef4030efd3516bed0dc3ebd125f41"),
+        "linux_amd64": ("go1.21.5.linux-amd64.tar.gz", "78e55b80d0a5ef27e8e0913321cae31ba9509c05ed79c429e489ae3a25c74885"),
+        "linux_arm64": ("go1.21.5.linux-arm64.tar.gz", "89fe32d10a4a3831154bc740bfbc89405a5a8de0655e0cbe91e5ad952dfd6a52"),
+        "windows_amd64": ("go1.21.5.windows-amd64.tar.gz", "350b40fb129d0eac7eafd5ea2044c6dd1ce8b5a43572f22ef02b53e3d999f28a"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231011-170949/{}"],
-    version = "1.20.10",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231206-175156/{}"],
+    version = "1.21.5",
 )
 
 # To point to a local SDK path, use the following instead. We'll call the
@@ -214,8 +215,6 @@ http_archive(
 
 http_archive(
     name = "aspect_bazel_lib",
-    patch_args = ["-p1"],
-    patches = ["//build/patches:aspect_bazel_lib.patch"],
     sha256 = "0da75299c5a52737b2ac39458398b3f256e41a1a6748e5457ceb3a6225269485",
     strip_prefix = "bazel-lib-1.31.2",
     url = "https://storage.googleapis.com/public-bazel-artifacts/bazel/bazel-lib-v1.31.2.tar.gz",
@@ -228,35 +227,39 @@ toolchain_dependencies()
 
 # Configure nodeJS.
 load("//build:nodejs.bzl", "declare_nodejs_repos")
+
 declare_nodejs_repos()
 
 # NOTE: The version is expected to match up to what version of typescript we
 # use for all packages in pkg/ui.
 # TODO(ricky): We should add a lint check to ensure it does match.
 load("@aspect_rules_ts//ts/private:npm_repositories.bzl", ts_http_archive = "http_archive_version")
+
 ts_http_archive(
     name = "npm_typescript",
     build_file = "@aspect_rules_ts//ts:BUILD.typescript",
-    urls = ["https://storage.googleapis.com/cockroach-npm-deps/typescript/-/typescript-{}.tgz"],
-    version = "5.1.6",
     # v5.1.6 isn't known to rules_ts 1.4.0 (nor to any published rules_ts version as-of 7 Aug 2023).
     integrity = "sha512-zaWCozRZ6DLEWAWFrVDz1H6FVXzUSfTy5FUMWsQlU8Ym5JP9eO4xkTIROFCQvhQf61z6O/G6ugw3SgAnvvm+HA==",
+    urls = ["https://storage.googleapis.com/cockroach-npm-deps/typescript/-/typescript-{}.tgz"],
+    version = "5.1.6",
 )
+
 # NOTE: The version is expected to match up to what version we use in db-console.
 # TODO(ricky): We should add a lint check to ensure it does match.
 load("@aspect_rules_js//npm:repositories.bzl", "npm_import")
+
 npm_import(
     name = "pnpm",
-    integrity = "sha512-W6elL7Nww0a/MCICkzpkbxW6f99TQuX4DuJoDjWp39X08PKDkEpg4cgj3d6EtgYADcdQWl/eM8NdlLJVE3RgpA==",
-    package = "pnpm",
-    url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
-    version = "8.5.1",
     # Declare an @pnpm//:pnpm rule that can be called externally.
     # Copied from https://github.com/aspect-build/rules_js/blob/14724d9b27b2c45f088aa003c091cbe628108170/npm/private/pnpm_repository.bzl#L27-L30
     extra_build_content = "\n".join([
         """load("@aspect_rules_js//js:defs.bzl", "js_binary")""",
         """js_binary(name = "pnpm", entry_point = "package/dist/pnpm.cjs", visibility = ["//visibility:public"])""",
     ]),
+    integrity = "sha512-W6elL7Nww0a/MCICkzpkbxW6f99TQuX4DuJoDjWp39X08PKDkEpg4cgj3d6EtgYADcdQWl/eM8NdlLJVE3RgpA==",
+    package = "pnpm",
+    url = "https://storage.googleapis.com/cockroach-npm-deps/pnpm/-/pnpm-8.5.1.tgz",
+    version = "8.5.1",
 )
 
 load("@aspect_rules_js//js:repositories.bzl", "rules_js_dependencies")
@@ -268,25 +271,26 @@ load("@aspect_rules_js//npm:repositories.bzl", "npm_translate_lock")
 npm_translate_lock(
     name = "npm",
     data = [
-        "//pkg/ui:pnpm-workspace.yaml",
         "//pkg/ui:package.json",
+        "//pkg/ui:pnpm-workspace.yaml",
         "//pkg/ui/patches:topojson@3.0.2.patch",
-        "//pkg/ui/workspaces/db-console/src/js:package.json",
-        "//pkg/ui/workspaces/db-console:package.json",
         "//pkg/ui/workspaces/cluster-ui:package.json",
-        "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
+        "//pkg/ui/workspaces/db-console:package.json",
+        "//pkg/ui/workspaces/db-console/src/js:package.json",
         "//pkg/ui/workspaces/e2e-tests:package.json",
+        "//pkg/ui/workspaces/eslint-plugin-crdb:package.json",
     ],
-    patch_args = {
-        "*": ["-p1"]
-    },
     npmrc = "//pkg/ui:.npmrc.bazel",
+    patch_args = {
+        "*": ["-p1"],
+    },
     pnpm_lock = "//pkg/ui:pnpm-lock.yaml",
     verify_node_modules_ignored = "//:.bazelignore",
 )
-load("@npm//:repositories.bzl", npm_repositories = "npm_repositories")
-npm_repositories()
 
+load("@npm//:repositories.bzl", "npm_repositories")
+
+npm_repositories()
 
 #################################
 # end rules_js dependencies #
@@ -549,22 +553,18 @@ register_toolchains(
     "//build/toolchains:cross_arm64_windows_toolchain",
     "//build/toolchains:cross_arm64_macos_toolchain",
     "//build/toolchains:cross_arm64_macos_arm_toolchain",
-    "//build/toolchains:node_freebsd_toolchain",
     "@copy_directory_toolchains//:darwin_amd64_toolchain",
     "@copy_directory_toolchains//:darwin_arm64_toolchain",
-    "@copy_directory_toolchains//:freebsd_amd64_toolchain",
     "@copy_directory_toolchains//:linux_amd64_toolchain",
     "@copy_directory_toolchains//:linux_arm64_toolchain",
     "@copy_directory_toolchains//:windows_amd64_toolchain",
     "@copy_to_directory_toolchains//:darwin_amd64_toolchain",
     "@copy_to_directory_toolchains//:darwin_arm64_toolchain",
-    "@copy_to_directory_toolchains//:freebsd_amd64_toolchain",
     "@copy_to_directory_toolchains//:linux_amd64_toolchain",
     "@copy_to_directory_toolchains//:linux_arm64_toolchain",
     "@copy_to_directory_toolchains//:windows_amd64_toolchain",
     "@nodejs_toolchains//:darwin_amd64_toolchain",
     "@nodejs_toolchains//:darwin_arm64_toolchain",
-    # NB: The freebsd node toolchain is above as //build/toolchains:node_freebsd_toolchain
     "@nodejs_toolchains//:linux_amd64_toolchain",
     "@nodejs_toolchains//:linux_arm64_toolchain",
     "@nodejs_toolchains//:windows_amd64_toolchain",
@@ -605,6 +605,7 @@ http_archive(
 
 # Cockroach binaries for use by mixed-version logictests.
 load("//pkg/sql/logictest:REPOSITORIES.bzl", "cockroach_binaries_for_testing")
+
 cockroach_binaries_for_testing()
 
 load("//build/bazelutil:repositories.bzl", "distdir_repositories")
@@ -615,8 +616,8 @@ distdir_repositories()
 go_download_sdk(
     name = "go_sdk_fips",
     sdks = {
-        "linux_amd64": ("go1.20.7fips.linux-amd64.tar.gz", "e153224976a6cc17cc24128609ef9eaf9fc94b33744ff00646ba36a6f448a074"),
+        "linux_amd64": ("go1.21.5fips.linux-amd64.tar.gz", "4368ab9cf7c8d75d6d33927917426d587f5be39fb18a87fbe2d59281a8569819"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231011-170949/{}"],
-    version = "1.20.7fips",
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20231206-175156/{}"],
+    version = "1.21.5fips",
 )
