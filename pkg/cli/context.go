@@ -381,6 +381,7 @@ func setZipContextDefaults() {
 	now := timeutil.Now()
 	zipCtx.files.startTimestamp = timestampValue(now.Add(-48 * time.Hour))
 	zipCtx.files.endTimestamp = timestampValue(now.Add(24 * time.Hour))
+	zipCtx.files.fromPastTimestamp = durationValue(-48 * time.Hour)
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.

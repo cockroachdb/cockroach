@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -240,9 +242,11 @@ type ByNameGetter getterBase
 func (g ByNameGetter) Database(
 	ctx context.Context, name string,
 ) (catalog.DatabaseDescriptor, error) {
+	t := timeutil.Now()
 	desc, err := getDescriptorByName(
 		ctx, g.KV(), g.Descriptors(), nil /* db */, nil /* sc */, name, g.flags, catalog.Database,
 	)
+	log.Infof(ctx, "%s [annie] getDescriptorByName", timeutil.Since(t))
 	if err != nil {
 		return nil, err
 	}

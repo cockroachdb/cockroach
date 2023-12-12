@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,6 +56,7 @@ func (b *AuthBehaviors) Authenticate(
 	if found := b.authenticator; found != nil {
 		return found(ctx, systemIdentity, clientConnection, pwRetrieveFn)
 	}
+	log.Info(ctx, "[dne] [Authenticate, not found] shouldn't be here")
 	return errors.New("no Authenticator provided to AuthBehaviors")
 }
 

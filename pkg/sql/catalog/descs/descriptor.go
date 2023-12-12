@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -391,11 +392,15 @@ func getDescriptorByName(
 	flags getterFlags,
 	requestedType catalog.DescriptorType,
 ) (catalog.Descriptor, error) {
+	t := timeutil.Now()
 	mustBeVirtual, vd, err := tc.getVirtualDescriptorByName(sc, name, flags.isMutable, requestedType)
+	log.Infof(ctx, "%s FOR %s getVirtualDescriptorByName (most likely not here)", timeutil.Since(t), name)
 	if mustBeVirtual || vd != nil || err != nil || (db == nil && sc != nil) {
 		return vd, err
 	}
+	t = timeutil.Now()
 	id, err := tc.getNonVirtualDescriptorID(ctx, txn, db, sc, name, flags)
+	log.Infof(ctx, "%s FOR %s getNonVirtualDescriptorID (but we are getting the leased descriptor)?", timeutil.Since(t), name)
 	if err != nil || id == descpb.InvalidID {
 		return nil, err
 	}
@@ -403,7 +408,9 @@ func getDescriptorByName(
 	// must be uncommitted to be visible (among other things).
 	flags.descFilters.withoutCommittedAdding = true
 	var arr [1]catalog.Descriptor
+	t = timeutil.Now()
 	err = getDescriptorsByID(ctx, tc, txn, flags, arr[:], id)
+	log.Infof(ctx, "%s FOR %s getDescriptorsByID", timeutil.Since(t), name)
 	if err == nil {
 		return arr[0], nil
 	}
@@ -503,6 +510,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 
 	// Define the lookup functions for each layer.
 	lookupTemporarySchemaID := func() (continueOrHalt, descpb.ID, error) {
+		log.Infof(ctx, "getting lookupTemporarySchemaID db [%s] desc", name)
 		if !isSchema || !isTemporarySchema(name) {
 			return continueLookups, descpb.InvalidID, nil
 		}
@@ -516,6 +524,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return continueLookups, descpb.InvalidID, nil
 	}
 	lookupSchemaID := func() (continueOrHalt, descpb.ID, error) {
+		log.Infof(ctx, "getting lookupSchemaID db [%s] desc", name)
 		if !isSchema {
 			return continueLookups, descpb.InvalidID, nil
 		}
@@ -537,6 +546,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return haltLookups, descpb.InvalidID, nil
 	}
 	lookupSyntheticID := func() (continueOrHalt, descpb.ID, error) {
+		log.Infof(ctx, "getting lookupSynthetic db [%s] desc", name)
 		if flags.layerFilters.withoutSynthetic {
 			return continueLookups, descpb.InvalidID, nil
 		}
@@ -546,12 +556,14 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return continueLookups, descpb.InvalidID, nil
 	}
 	lookupUncommittedID := func() (continueOrHalt, descpb.ID, error) {
+		log.Infof(ctx, "getting lookupUncommitted db [%s] desc", name)
 		if ud := tc.uncommitted.getUncommittedByName(parentID, parentSchemaID, name); ud != nil {
 			return haltLookups, ud.GetID(), nil
 		}
 		return continueLookups, descpb.InvalidID, nil
 	}
 	lookupStoreCacheID := func() (continueOrHalt, descpb.ID, error) {
+		log.Infof(ctx, "getting store cache db [%s] desc", name)
 		ni := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
 		if tc.isShadowedName(ni) {
 			return continueLookups, descpb.InvalidID, nil
@@ -565,6 +577,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return continueLookups, descpb.InvalidID, nil
 	}
 	lookupLeasedID := func() (continueOrHalt, descpb.ID, error) {
+		log.Infof(ctx, "getting leased db [%s] desc", name)
 		if flags.layerFilters.withoutLeased || lease.TestingTableLeasesAreDisabled() {
 			return continueLookups, descpb.InvalidID, nil
 		}
@@ -583,6 +596,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return haltLookups, ld.GetID(), nil
 	}
 	lookupStoredID := func() (continueOrHalt, descpb.ID, error) {
+		log.Infof(ctx, "getting disc db [%s] desc", name)
 		if flags.layerFilters.withoutStorage {
 			return haltLookups, descpb.InvalidID, nil
 		}
@@ -602,7 +616,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 
 	// Iterate through each layer until an ID is conclusively found or not, or an
 	// error is thrown.
-	for _, fn := range []func() (continueOrHalt, descpb.ID, error){
+	for idx, fn := range []func() (continueOrHalt, descpb.ID, error){
 		lookupTemporarySchemaID,
 		lookupSchemaID,
 		lookupSyntheticID,
@@ -611,7 +625,9 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		lookupLeasedID,
 		lookupStoredID,
 	} {
+		t := timeutil.Now()
 		isDone, id, err := fn()
+		log.Infof(ctx, "%s is how long %d took on db %s", timeutil.Since(t), idx, name)
 		if err != nil {
 			return descpb.InvalidID, err
 		}

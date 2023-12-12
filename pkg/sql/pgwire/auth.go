@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -96,8 +97,10 @@ func (c *conn) handleAuthentication(
 		return nil, authOpt.testingAuthHook(ctx)
 	}
 
+	t := timeutil.Now()
 	// Retrieve the authentication method.
 	tlsState, hbaEntry, authMethod, err := c.findAuthenticationMethod(authOpt)
+	log.Infof(ctx, "%s TIME TAKEN [handleAuth, findAuthMethod]", timeutil.Since(t))
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
 		return nil, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
@@ -105,11 +108,15 @@ func (c *conn) handleAuthentication(
 
 	ac.SetAuthMethod(hbaEntry.Method.String())
 	ac.LogAuthInfof(ctx, "HBA rule: %s", hbaEntry.Input)
+	// TODO (callout): this is where the latency starts to show
 
 	// Populate the AuthMethod with per-connection information so that it
 	// can compose the next layer of behaviors that we're going to apply
 	// to the incoming connection.
+	t = timeutil.Now()
+	log.Infof(ctx, "[handleAuthentication] this should be before we get the auto auth method")
 	behaviors, err := authMethod(ctx, ac, tlsState, execCfg, hbaEntry, authOpt.identMap)
+	log.Infof(ctx, "%s TIME TAKEN [handleAuthentication] after we do the auth method", timeutil.Since(t))
 	connClose = behaviors.ConnClose
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
@@ -118,6 +125,7 @@ func (c *conn) handleAuthentication(
 
 	// Choose the system identity that we'll use below for mapping
 	// externally-provisioned principals to database users.
+	t = timeutil.Now()
 	var systemIdentity username.SQLUsername
 	if found, ok := behaviors.ReplacementIdentity(); ok {
 		systemIdentity = found
@@ -132,14 +140,17 @@ func (c *conn) handleAuthentication(
 		}
 	}
 	c.sessionArgs.SystemIdentity = systemIdentity
+	log.Infof(ctx, "%s TIME TAKEN by choosing system identity", timeutil.Since(t))
 
 	// Delegate to the AuthMethod's MapRole to verify that the
 	// client-provided username matches one of the mappings.
+	t = timeutil.Now()
 	if err := c.checkClientUsernameMatchesMapping(ctx, ac, behaviors.MapRole, systemIdentity); err != nil {
 		log.Warningf(ctx, "unable to map incoming identity %q to any database user: %+v", systemIdentity, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, err)
 		return connClose, c.sendError(ctx, execCfg, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
+	log.Infof(ctx, "%s TIME TAKEN by verification of client-provided username", timeutil.Since(t))
 
 	// Once chooseDbRole() returns, we know that the actual DB username
 	// will be present in c.sessionArgs.User.
@@ -147,6 +158,7 @@ func (c *conn) handleAuthentication(
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
+	t = timeutil.Now()
 	exists, canLoginSQL, _, isSuperuser, defaultSettings, pwRetrievalFn, err :=
 		sql.GetUserSessionInitInfo(
 			ctx,
@@ -154,6 +166,7 @@ func (c *conn) handleAuthentication(
 			dbUser,
 			c.sessionArgs.SessionDefaults["database"],
 		)
+	log.Infof(ctx, "%s TIME taken -> getting user session init info", timeutil.Since(t))
 	if err != nil {
 		log.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
@@ -177,6 +190,8 @@ func (c *conn) handleAuthentication(
 	// At this point, we know that the requested user exists and is
 	// allowed to log in. Now we can delegate to the selected AuthMethod
 	// implementation to complete the authentication.
+	// TODO (callout): this is the "end block" of auth latency
+	log.Infof(ctx, "%d END HERE", timeutil.Now().Nanosecond())
 	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
 		if pErr := (*security.PasswordUserAuthError)(nil); errors.As(err, &pErr) {

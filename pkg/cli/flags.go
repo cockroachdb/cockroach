@@ -704,6 +704,7 @@ func init() {
 		cliflagcfg.StringSliceFlag(f, &zipCtx.files.includePatterns, cliflags.ZipIncludedFiles)
 		cliflagcfg.StringSliceFlag(f, &zipCtx.files.excludePatterns, cliflags.ZipExcludedFiles)
 		cliflagcfg.VarFlag(f, &zipCtx.files.startTimestamp, cliflags.ZipFilesFrom)
+		cliflagcfg.VarFlag(f, &zipCtx.files.fromPastTimestamp, cliflags.ZipFilesFromPast)
 		cliflagcfg.VarFlag(f, &zipCtx.files.endTimestamp, cliflags.ZipFilesUntil)
 	}
 

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/xdg-go/scram"
@@ -471,6 +472,7 @@ func authCertPassword(
 ) (*AuthBehaviors, error) {
 	var fn AuthMethod
 	if len(tlsState.PeerCertificates) == 0 {
+		log.Infof(ctx, "[%d] BEGIN HERE client did not present TLS certificate", timeutil.Now().Nanosecond())
 		c.LogAuthInfof(ctx, "client did not present TLS certificate")
 		if AutoSelectPasswordAuth.Get(&execCfg.Settings.SV) {
 			// We don't call c.LogAuthInfo here; this is done in
@@ -523,6 +525,7 @@ func authAutoSelectPasswordProtocol(
 		pwRetrieveFn PasswordRetrievalFn,
 	) error {
 		// Request information about the password hash.
+		log.Infof(ctx, "[%s] we set the authenticator callback here. we should see a huge difference in time", timeutil.Now())
 		expired, hashedPassword, pwRetrieveErr := pwRetrieveFn(ctx)
 		// Note: we could be checking 'expired' and 'err' here, and exit
 		// early. However, we already have code paths to do just that in
@@ -575,6 +578,7 @@ func authAutoSelectPasswordProtocol(
 		// measure: if the password retrieval fails due to a transient
 		// error, we don't want the fallback to force the client to
 		// transmit a password in clear.
+		log.Infof(ctx, "[%s] END OF SESSION", timeutil.Now())
 		c.LogAuthInfof(ctx, "no crdb-bcrypt credentials found; proceeding with SCRAM-SHA-256")
 		return scramAuthenticator(ctx, systemIdentity, clientConnection, newpwfn, c, execCfg)
 	})

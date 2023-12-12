@@ -1597,6 +1597,28 @@ You can use the 'debug list-files' command to explore how
 this flag is applied.`,
 	}
 
+	ZipFilesFromPast = FlagInfo{
+		Name: "files-from-past",
+		Description: `
+Limit file collection to those files modified after the
+specified time ago, inclusive.
+The time can be expressed as YYYY-MM-DD,
+YYYY-MM-DD HH:MM or YYYY-MM-DD HH:MM:SS and is interpreted
+in the UTC time zone.
+The default value for this flag is 48 hours before now.
+<PRE>
+
+</PRE>
+When customizing this flag to capture a narrow range
+of time, consider adding extra seconds/minutes
+to the range to accommodate clock drift and uncertainties.
+<PRE>
+
+</PRE>
+You can use the 'debug list-files' command to explore how
+this flag is applied.`,
+	}
+
 	ZipFilesUntil = FlagInfo{
 		Name: "files-until",
 		Description: `

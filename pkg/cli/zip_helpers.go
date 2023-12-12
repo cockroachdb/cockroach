@@ -238,10 +238,11 @@ func (r *rangeSelection) items() map[int]struct{} {
 
 // fileSelection is used to define a subset of the files on the command line.
 type fileSelection struct {
-	includePatterns []string
-	excludePatterns []string
-	startTimestamp  timestampValue
-	endTimestamp    timestampValue
+	includePatterns   []string
+	excludePatterns   []string
+	startTimestamp    timestampValue
+	endTimestamp      timestampValue
+	fromPastTimestamp durationValue
 }
 
 // validate checks that all specified patterns are valid.
@@ -294,6 +295,9 @@ func (fs *fileSelection) isIncluded(filename string, ctime, mtime time.Time) boo
 	if mtime.Before(time.Time(fs.startTimestamp)) {
 		return false
 	}
+	//if mtime.Before(timeutil.Now().Add(-1 * time.Duration(fs.fromPastTimestamp))) {
+	//	return false
+	//}
 	// And the selected "until" time must not be before the ctime.
 	// Note: the inverted call is because `Before` uses strict
 	// inequality.
@@ -521,6 +525,9 @@ func (z *zipReporter) result(err error) error {
 //	YYYY-MM-DD HH:MM:SS
 type timestampValue time.Time
 
+// not correct, but trying something
+type durationValue time.Duration
+
 // Type implements the pflag.Value interface.
 func (t *timestampValue) Type() string {
 	return "YYYY-MM-DD [HH:MM[:SS]]"
@@ -546,5 +553,31 @@ func (t *timestampValue) Set(v string) error {
 		return err
 	}
 	*t = timestampValue(tm)
+	return nil
+}
+
+func (t *durationValue) Type() string {
+	return "YYYY-MM-DD [HH:MM[:SS]]"
+}
+
+func (t *durationValue) String() string {
+	return (*time.Duration)(t).String()
+}
+
+func (t *durationValue) Set(v string) error {
+	v = strings.TrimSpace(v)
+	var tm time.Time
+	var err error
+	if len(v) <= len("YYYY-MM-DD") {
+		tm, err = time.ParseInLocation("2006-01-02", v, time.UTC)
+	} else if len(v) <= len("YYYY-MM-DD HH:MM") {
+		tm, err = time.ParseInLocation("2006-01-02 15:04", v, time.UTC)
+	} else {
+		tm, err = time.ParseInLocation("2006-01-02 15:04:05", v, time.UTC)
+	}
+	if err != nil {
+		return err
+	}
+	*t = durationValue(timeutil.Since(tm))
 	return nil
 }

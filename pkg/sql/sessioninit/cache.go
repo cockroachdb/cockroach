@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // CacheEnabledSettingName is the name of the CacheEnabled cluster setting.
@@ -276,12 +277,16 @@ func (a *Cache) GetDefaultSettings(
 	err = db.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
+		t := timeutil.Now()
 		_, dbRoleSettingsTableDesc, err = descs.PrefixAndTable(ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), DatabaseRoleSettingsTableName)
 		if err != nil {
 			return err
 		}
+		log.Infof(ctx, "%s getting the role settings", timeutil.Since(t))
 		databaseID = descpb.ID(0)
+		t = timeutil.Now()
 		if databaseName != "" {
+			// accessing slightly differently
 			dbDesc, err := txn.Descriptors().ByNameWithLeased(txn.KV()).MaybeGet().Database(ctx, databaseName)
 			if err != nil {
 				return err
@@ -292,6 +297,7 @@ func (a *Cache) GetDefaultSettings(
 				databaseID = dbDesc.GetID()
 			}
 		}
+		log.Infof(ctx, "%s db name exists", timeutil.Since(t))
 		return nil
 	})
 	if err != nil {
@@ -302,6 +308,7 @@ func (a *Cache) GetDefaultSettings(
 	// start the `CollectionFactory.Txn()` regardless in order to look up the
 	// database descriptor ID.
 	if !CacheEnabled.Get(&settings.SV) {
+		log.Info(ctx, "IT feels like we don't do this sometimes")
 		settingsEntries, err = readFromSystemTables(
 			ctx,
 			db,
@@ -315,7 +322,9 @@ func (a *Cache) GetDefaultSettings(
 
 	// Check version and maybe clear cache while holding the mutex.
 	var found bool
+	t := timeutil.Now()
 	settingsEntries, found = a.readDefaultSettingsFromCache(ctx, dbRoleSettingsTableVersion, userName, databaseID)
+	log.Infof(ctx, "%s default settings from cache?", timeutil.Since(t))
 
 	if found {
 		return settingsEntries, nil

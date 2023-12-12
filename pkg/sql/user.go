@@ -86,12 +86,15 @@ func GetUserSessionInitInfo(
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	err error,
 ) {
+	t := timeutil.Now()
 	runFn := getUserInfoRunFn(execCfg, user, "get-user-session")
+	log.Infof(ctx, "%s TIME, [getUserInfoRunFn] inside of GetUserSessionInitInfo", timeutil.Since(t))
 
 	if user.IsRootUser() {
 		// As explained above, for root we report that the user exists
 		// immediately, and delay retrieving the password until strictly
 		// necessary.
+		log.Info(ctx, "should not be in here, if user is root user")
 		rootFn := func(ctx context.Context) (expired bool, ret password.PasswordHash, err error) {
 			err = runFn(ctx, func(ctx context.Context) error {
 				authInfo, _, err := retrieveSessionInitInfoWithCache(ctx, execCfg, user, databaseName)
@@ -116,12 +119,16 @@ func GetUserSessionInitInfo(
 	var authInfo sessioninit.AuthInfo
 	var settingsEntries []sessioninit.SettingsCacheEntry
 
+	t = timeutil.Now()
+	var t1 time.Time
 	if err = runFn(ctx, func(ctx context.Context) error {
 		// Other users must reach for system.users no matter what, because
 		// only that contains the truth about whether the user exists.
+		t1 = timeutil.Now()
 		authInfo, settingsEntries, err = retrieveSessionInitInfoWithCache(
 			ctx, execCfg, user, databaseName,
 		)
+		log.Infof(ctx, "%s TT no way it's here, right?", timeutil.Since(t1))
 		if err != nil {
 			return err
 		}
@@ -129,10 +136,13 @@ func GetUserSessionInitInfo(
 		// Find whether the user is an admin and has the NOSQLLOGIN global
 		// privilege. These calls have their own caches, so it's OK to make them
 		// outside of the retrieveSessionInitInfoWithCache call above.
+		t1 = timeutil.Now()
 		return execCfg.InternalDB.DescsTxn(ctx, func(
 			ctx context.Context, txn descs.Txn,
 		) error {
+			t2 := timeutil.Now()
 			memberships, err := MemberOfWithAdminOption(ctx, execCfg, txn, user)
+			log.Infof(ctx, "%s time took for member check", timeutil.Since(t2))
 			if err != nil {
 				return err
 			}
@@ -142,13 +152,16 @@ func GetUserSessionInitInfo(
 			// no need to check the global privilege.
 			canLoginSQL = authInfo.CanLoginSQLRoleOpt
 			if canLoginSQL {
+				t2 = time.Now()
 				privs, err := execCfg.SyntheticPrivilegeCache.Get(
 					ctx, txn, txn.Descriptors(), syntheticprivilege.GlobalPrivilegeObject,
 				)
+				log.Infof(ctx, "%s time to look at synthetic privilege cache", timeutil.Since(t2))
 				if err != nil {
 					return err
 				}
 				// Check the user and its role hierarchy.
+				t2 = time.Now()
 				if privs.CheckPrivilege(user, privilege.NOSQLLOGIN) {
 					canLoginSQL = false
 				} else {
@@ -159,6 +172,7 @@ func GetUserSessionInitInfo(
 						}
 					}
 				}
+				log.Infof(ctx, "%s time to check user and role hierarchy", timeutil.Since(t2))
 			}
 
 			return nil
@@ -168,6 +182,8 @@ func GetUserSessionInitInfo(
 		log.Warningf(ctx, "user membership lookup for %q failed: %v", user, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account memberships")
 	}
+	log.Infof(ctx, "%s TT this is how long it takes for the rest half", timeutil.Since(t1))
+	log.Infof(ctx, "%s actually, this could make sense. if here, probs in checking user and role hierarchy", timeutil.Since(t))
 
 	return authInfo.UserExists,
 		canLoginSQL,
@@ -219,6 +235,7 @@ func retrieveSessionInitInfoWithCache(
 	ctx context.Context, execCfg *ExecutorConfig, userName username.SQLUsername, databaseName string,
 ) (aInfo sessioninit.AuthInfo, settingsEntries []sessioninit.SettingsCacheEntry, err error) {
 	if err = func() (retErr error) {
+		t := timeutil.Now()
 		aInfo, retErr = execCfg.SessionInitCache.GetAuthInfo(
 			ctx,
 			execCfg.Settings,
@@ -226,6 +243,7 @@ func retrieveSessionInitInfoWithCache(
 			userName,
 			retrieveAuthInfo,
 		)
+		log.Infof(ctx, "[%s] IMPORTANT - GetAuthInfo time. most likely not this", timeutil.Since(t))
 		if retErr != nil {
 			return errors.Wrap(retErr, "get auth info error")
 		}
@@ -233,6 +251,7 @@ func retrieveSessionInitInfoWithCache(
 		if userName.IsRootUser() || !aInfo.UserExists {
 			return nil
 		}
+		t = timeutil.Now()
 		settingsEntries, retErr = execCfg.SessionInitCache.GetDefaultSettings(
 			ctx,
 			execCfg.Settings,
@@ -241,6 +260,7 @@ func retrieveSessionInitInfoWithCache(
 			databaseName,
 			retrieveDefaultSettings,
 		)
+		log.Infof(ctx, "[%s] IMPORTANT - GetDefaultSettings time. most likely not this", timeutil.Since(t))
 		return errors.Wrap(retErr, "get default settings error")
 	}(); err != nil {
 		// Failed to retrieve the user account. Report in logs for later investigation.
@@ -253,6 +273,7 @@ func retrieveSessionInitInfoWithCache(
 func retrieveAuthInfo(
 	ctx context.Context, f descs.DB, user username.SQLUsername,
 ) (aInfo sessioninit.AuthInfo, retErr error) {
+	t := timeutil.Now()
 	// Use fully qualified table name to avoid looking up "".system.users.
 	// We use a nil txn as login is not tied to any transaction state, and
 	// we should always look up the latest data.
@@ -337,12 +358,14 @@ func retrieveAuthInfo(
 		}
 	}
 
+	log.Infof(ctx, "%s IMPORTANT retrieveAuthInfo", timeutil.Since(t))
 	return aInfo, err
 }
 
 func retrieveDefaultSettings(
 	ctx context.Context, f descs.DB, user username.SQLUsername, databaseID descpb.ID,
 ) (settingsEntries []sessioninit.SettingsCacheEntry, retErr error) {
+	t := timeutil.Now()
 	// Add an empty slice for all the keys so that something gets cached and
 	// prevents a lookup for the same key from happening later.
 	keys := sessioninit.GenerateSettingsCacheKeys(databaseID, user)
@@ -413,6 +436,7 @@ WHERE
 		}
 	}
 
+	log.Infof(ctx, "%s IMPORTANT retrieveDefaultSettings", timeutil.Since(t))
 	return settingsEntries, err
 }
 
