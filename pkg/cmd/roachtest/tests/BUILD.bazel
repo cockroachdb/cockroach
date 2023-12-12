@@ -160,7 +160,6 @@ go_library(
         "sqlalchemy.go",
         "sqlalchemy_blocklist.go",
         "sqlsmith.go",
-        "sstable_corruption.go",
         "status_server.go",
         "sysbench.go",
         "tlp.go",
