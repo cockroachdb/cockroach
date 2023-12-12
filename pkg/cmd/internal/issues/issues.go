@@ -315,7 +315,7 @@ func buildIssueQueries(
 
 	// Build the sets of labels that must be present on the existing issue, and
 	// which must NOT be present on the existing issue.
-	mustHave := []string{RobotLabel, TestFailureLabel}
+	mustHave := []string{RobotLabel}
 	var mustNotHave []string
 	for _, l := range req.AdoptIssueLabelMatchSet {
 		if labels[l] {
