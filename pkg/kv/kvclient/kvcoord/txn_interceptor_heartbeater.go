@@ -525,6 +525,13 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 		// concurrent requests from failing to notice the transaction was aborted.
 		Poison: true,
 	})
+	// NB: Setting `Source: kvpb.AdmissionHeader_OTHER` means this request will
+	// bypass AC.
+	ba.AdmissionHeader = kvpb.AdmissionHeader{
+		Priority:   txn.AdmissionPriority,
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     kvpb.AdmissionHeader_OTHER,
+	}
 
 	const taskName = "txnHeartbeater: aborting txn"
 	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
