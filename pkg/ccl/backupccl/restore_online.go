@@ -118,7 +118,7 @@ func sendAddRemoteSSTWorker(
 	return func(ctx context.Context) error {
 		var toAdd []execinfrapb.RestoreFileSpec
 		var batchSize int64
-		const targetBatchSize = 384 << 20
+		const targetBatchSize = 440 << 20
 
 		flush := func(splitAt roachpb.Key) error {
 			if len(toAdd) == 0 {
@@ -193,8 +193,8 @@ func sendAddRemoteSSTWorker(
 				// split, then flush so that when we split we are splitting an empty
 				// span rather than one we have added to, since we add with estimated
 				// stats and splitting a span with estimated stats is slow.
-				if batchSize > targetBatchSize {
-					log.Infof(ctx, "flushing %s batch of %d SSTs due to size limit", sz(batchSize), len(toAdd))
+				if batchSize+file.BackupFileEntryCounts.DataSize > targetBatchSize {
+					log.Infof(ctx, "flushing %s batch of %d SSTs due to size limit up to %s in in span %s", sz(batchSize), len(toAdd), file.BackupFileEntrySpan.Key, entry.Span)
 					if err := flush(file.BackupFileEntrySpan.Key); err != nil {
 						return err
 					}
@@ -207,7 +207,7 @@ func sendAddRemoteSSTWorker(
 			// TODO(msbutler): think hard about if this restore span entry is a safe
 			// key to split on. Note that it only is safe with
 			// https://github.com/cockroachdb/cockroach/pull/114464
-			log.Infof(ctx, "flushing %s batch of %d SSTs at end of restore span entry", sz(batchSize), len(toAdd))
+			log.Infof(ctx, "flushing %s batch of %d SSTs at end of restore span entry %s", sz(batchSize), len(toAdd), entry.Span)
 			if err := flush(entry.Span.EndKey); err != nil {
 				return err
 			}
