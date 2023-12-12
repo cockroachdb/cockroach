@@ -509,6 +509,8 @@ func TestExplainRedact(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDeadlock(t, "the test is too slow")
+
 	const numStatements = 10
 
 	ctx := context.Background()
