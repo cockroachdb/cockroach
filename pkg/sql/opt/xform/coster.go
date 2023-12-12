@@ -837,7 +837,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 	// choose a reverse scan over a sort, add the reverse scan cost before we
 	// alter the row count for unbounded scan penalties below. This cost must also
 	// be added before adjusting the row count for the limit hint.
-	if ordering.ScanIsReverse(scan, &required.Ordering) {
+	if ordering.ScanIsReverse(c.mem, scan, &required.Ordering) {
 		if rowCount > 1 {
 			// Need to do binary search to seek to the previous row.
 			perRowCost.C += math.Log2(rowCount) * cpuCostFactor
@@ -1107,7 +1107,7 @@ func (c *coster) computeLookupJoinCost(
 		join.LocalityOptimized,
 	)
 	_, provided := distribution.BuildLookupJoinLookupTableDistribution(
-		c.ctx, c.evalCtx, join, required, c.MaybeGetBestCostRelation)
+		c.ctx, c.evalCtx, c.mem, join, required, c.MaybeGetBestCostRelation)
 	extraCost := c.distributionCost(provided)
 	cost.Add(extraCost)
 	return cost
@@ -1265,7 +1265,7 @@ func (c *coster) computeInvertedJoinCost(
 
 	cost.C += rowsProcessed * perRowCost.C
 
-	provided := distribution.BuildInvertedJoinLookupTableDistribution(c.ctx, c.evalCtx, join)
+	provided := distribution.BuildInvertedJoinLookupTableDistribution(c.ctx, c.evalCtx, c.mem, join)
 	extraCost := c.distributionCost(provided)
 	cost.Add(extraCost)
 	return cost
