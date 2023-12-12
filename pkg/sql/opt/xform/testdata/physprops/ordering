@@ -3010,8 +3010,7 @@ project
       │    │    │    └── filters
       │    │    │         └── tab_171969.col1_3 = tab_171969.tableoid
       │    │    └── filters
-      │    │         ├── tab_171968.col1_3 = tab_171969.col1_3
-      │    │         └── tab_171968.tableoid = tab_171969.col1_3
+      │    │         └── tab_171968.col1_3 = tab_171969.col1_3
       │    └── projections
       │         └── true
       └── filters (true)

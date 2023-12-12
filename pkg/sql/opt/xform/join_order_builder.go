@@ -402,15 +402,14 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 	switch t := rel.(type) {
 	case *memo.InnerJoinExpr, *memo.SemiJoinExpr, *memo.AntiJoinExpr,
 		*memo.LeftJoinExpr, *memo.FullJoinExpr:
-		jb.joinCount++
-
 		flags := t.Private().(*memo.JoinPrivate).Flags
-		if !flags.Empty() || jb.joinCount > int(jb.evalCtx.SessionData().ReorderJoinsLimit) {
+		if !flags.Empty() || jb.joinCount >= int(jb.evalCtx.SessionData().ReorderJoinsLimit) {
 			// If the join has flags or the join limit has been reached, we can't
 			// reorder. Simply treat the join as a base relation.
 			jb.addBaseRelation(t)
 			break
 		}
+		jb.joinCount++
 
 		left := t.Child(0).(memo.RelExpr)
 		right := t.Child(1).(memo.RelExpr)
@@ -464,6 +463,11 @@ func (jb *JoinOrderBuilder) populateGraph(rel memo.RelExpr) (vertexSet, edgeSet)
 // Contains the explicit edges x = a and u = a, and the implicit edge x = u.
 // This implicit edge will be added by ensureClosure.
 func (jb *JoinOrderBuilder) ensureClosure(join memo.RelExpr) {
+	if jb.joinCount <= 1 {
+		// Fast path: closure is already guaranteed for a single join.
+		return
+	}
+
 	// Use the equivalencies of the root join to ensure transitive closure.
 	equivFDs := &join.Relational().FuncDeps
 
