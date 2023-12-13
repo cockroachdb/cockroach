@@ -4745,6 +4745,7 @@ func TestTenantID(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					BeforeSnapshotSSTIngestion: func(
+						_ *kvserver.Replica,
 						snapshot kvserver.IncomingSnapshot,
 						strings []string,
 					) error {
@@ -4824,6 +4825,7 @@ func TestUninitializedMetric(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				BeforeSnapshotSSTIngestion: func(
+					_ *kvserver.Replica,
 					snapshot kvserver.IncomingSnapshot,
 					_ []string,
 				) error {

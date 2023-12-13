@@ -472,6 +472,7 @@ func mergeCheckingTimestampCaches(
 	// snapshotFilter is used to listen for the completion of a Raft snapshot.
 	var snapshotFilter func(kvserver.IncomingSnapshot)
 	beforeSnapshotSSTIngestion := func(
+		_ *kvserver.Replica,
 		inSnap kvserver.IncomingSnapshot,
 		_ []string,
 	) error {
@@ -3724,6 +3725,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	var keyStart, keyA, keyB, keyC, keyD, keyEnd roachpb.Key
 	rangeIds := make(map[string]roachpb.RangeID, 4)
 	beforeSnapshotSSTIngestion := func(
+		_ *kvserver.Replica,
 		inSnap kvserver.IncomingSnapshot,
 		sstNames []string,
 	) error {
