@@ -129,6 +129,12 @@ func findUserChannel(client *slack.Client, email string) (string, error) {
 	return u.ID, nil
 }
 
+func slackClusterExpirationDate(c *Cluster) string {
+	return fmt.Sprintf("<!date^%[1]d^{date_short_pretty} {time}|%[2]s>",
+		c.GCAt().Unix(),
+		c.LifetimeRemaining().Round(time.Second))
+}
+
 func postStatus(
 	l *logger.Logger, client *slack.Client, channel string, dryrun bool, s *status, badVMs vm.List,
 ) {
@@ -173,10 +179,7 @@ func postStatus(
 		var expirations []string
 		for _, c := range clusters {
 			names = append(names, c.Name)
-			expirations = append(expirations,
-				fmt.Sprintf("<!date^%[1]d^{date_short_pretty} {time}|%[2]s>",
-					c.GCAt().Unix(),
-					c.LifetimeRemaining().Round(time.Second)))
+			expirations = append(expirations, slackClusterExpirationDate(c))
 		}
 		return []slack.AttachmentField{
 			{
@@ -235,29 +238,34 @@ func postStatus(
 				Text:  strings.Join(names, "\n"),
 			})
 	}
-	_, _, err := client.PostMessage(
-		channel,
-		slack.MsgOptionUsername("roachprod"),
-		slack.MsgOptionAttachments(attachments...),
-	)
-	if err != nil {
-		l.Printf("%v", err)
-	}
+
+	postMessage(l, client, channel, slack.MsgOptionAttachments(attachments...))
 }
 
 func postError(l *logger.Logger, client *slack.Client, channel string, err error) {
-	l.Printf("%v", err)
+	l.Printf("Posting error to Slack: %v", err)
 	if client == nil || channel == "" {
 		return
 	}
 
-	_, _, err = client.PostMessage(
-		channel,
-		slack.MsgOptionUsername("roachprod"),
-		slack.MsgOptionText(fmt.Sprintf("`%s`", err), false),
+	postMessage(
+		l, client, channel, slack.MsgOptionText(fmt.Sprintf("```\n%s\n```", err), false),
 	)
+}
+
+func postMessage(l *logger.Logger, client *slack.Client, channel string, opts ...slack.MsgOption) {
+	if client == nil || channel == "" {
+		return
+	}
+
+	defaultOpts := []slack.MsgOption{
+		slack.MsgOptionUsername("roachprod"),
+	}
+
+	msgOpts := append(defaultOpts, opts...)
+	_, _, err := client.PostMessage(channel, msgOpts...)
 	if err != nil {
-		l.Printf("%v", err)
+		l.Printf("Error posting to Slack: %v", err)
 	}
 }
 
@@ -282,6 +290,51 @@ func shouldSend(channel string, status *status) (bool, error) {
 	}
 
 	return true, os.WriteFile(hashPath, []byte(newHash), 0644)
+}
+
+// resourceDescription groups together resource descriptions to be
+// used when a resource is deleted by the GC process. It allows custom
+// formatting to be applied in the description used in the Slack
+// message sent by roachprod, while keeping a plain text
+// representation for our logs.
+type resourceDescription struct {
+	Description      string
+	SlackDescription string
+}
+
+// reportDeletedResources will log the resources being deleted and
+// send a message on the roachprod-status Slack channel about it.
+func reportDeletedResources(
+	l *logger.Logger, client *slack.Client, channel, resourceName string, resources []resourceDescription,
+) {
+	if len(resources) > 0 {
+		countMsg := fmt.Sprintf("Destroyed %d %s:", len(resources), resourceName)
+		slackMsg := []string{countMsg}
+		l.Printf("%s", countMsg)
+
+		for _, r := range resources {
+			// Note that we use the unicode "bullet" character here because
+			// the Slack API does not render lists in API messages, despite
+			// supporting a subset of Markdown in the content.
+			//
+			// See: https://api.slack.com/reference/surfaces/formatting#lists
+			slackMsg = append(slackMsg, fmt.Sprintf("• %s", r.SlackDescription))
+			l.Printf("- %s", r.Description)
+		}
+
+		postMessage(l, client, channel, slack.MsgOptionText(strings.Join(slackMsg, "\n"), false))
+	}
+}
+
+// destroyResource is a thin wrapper around a function that actually
+// performs a resource deletion, making it as no-op if `dryrun` is
+// true.
+func destroyResource(dryrun bool, doDestroy func() error) error {
+	if dryrun {
+		return nil
+	}
+
+	return doDestroy()
 }
 
 // GCClusters checks all cluster to see if they should be deleted. It only
@@ -335,24 +388,46 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 	}
 
 	channel, _ := findChannel(client, "roachprod-status", "")
-	if !dryrun {
-		if len(badVMs) > 0 {
-			// Destroy bad VMs.
-			err := vm.FanOut(badVMs, func(p vm.Provider, vms vm.List) error {
+	if len(badVMs) > 0 {
+		// Destroy bad VMs.
+		var deletedVMs []resourceDescription
+		if err := vm.FanOut(badVMs, func(p vm.Provider, vms vm.List) error {
+			err := destroyResource(dryrun, func() error {
 				return p.Delete(l, vms)
 			})
-			if err != nil {
-				postError(l, client, channel, err)
+
+			if err == nil {
+				for _, vm := range vms {
+					deletedVMs = append(deletedVMs, resourceDescription{
+						Description:      vm.Name,
+						SlackDescription: fmt.Sprintf("`%s`", vm.Name),
+					})
+				}
 			}
+
+			return err
+		}); err != nil {
+			postError(l, client, channel, err)
 		}
 
-		// Destroy expired clusters.
-		for _, c := range s.destroy {
-			if err := DestroyCluster(l, c); err != nil {
-				postError(l, client, channel, err)
-			}
+		reportDeletedResources(l, client, channel, "bad VMs", deletedVMs)
+	}
+
+	var destroyedClusters []resourceDescription
+	for _, c := range s.destroy {
+		if err := destroyResource(dryrun, func() error {
+			return DestroyCluster(l, c)
+		}); err == nil {
+			destroyedClusters = append(destroyedClusters, resourceDescription{
+				Description:      fmt.Sprintf("%s (expiration: %s)", c.Name, c.ExpiresAt().String()),
+				SlackDescription: fmt.Sprintf("`%s` (expiration: %s)", c.Name, slackClusterExpirationDate(c)),
+			})
+		} else {
+			postError(l, client, channel, err)
 		}
 	}
+
+	reportDeletedResources(l, client, channel, "clusters", destroyedClusters)
 	return nil
 }
 
@@ -391,17 +466,29 @@ func GCDNS(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 				danglingRecordNames[record.Name] = struct{}{}
 			}
 		}
-		if !dryrun {
-			keys := maps.Keys(danglingRecordNames)
-			if err := p.DeleteRecordsByName(ctx, keys...); err != nil {
-				return err
-			}
-		} else {
-			// Log dangling DNS records that would be deleted in a non-dryrun.
-			for danglingRecordName := range danglingRecordNames {
-				l.Printf("deleting dangling DNS record %s", danglingRecordName)
-			}
+
+		client := makeSlackClient()
+		channel, _ := findChannel(client, "roachprod-status", "")
+		recordNames := maps.Keys(danglingRecordNames)
+		sort.Strings(recordNames)
+
+		if err := destroyResource(dryrun, func() error {
+			return p.DeleteRecordsByName(ctx, recordNames...)
+		}); err != nil {
+			return err
 		}
+
+		deletedRecords := make([]resourceDescription, 0, len(recordNames))
+		for _, name := range recordNames {
+			deletedRecords = append(deletedRecords, resourceDescription{
+				Description: name,
+				// Display record names in backticks so that special characters in
+				// the domain name (such as underscores) are not interpreted as markup.
+				SlackDescription: fmt.Sprintf("`%s`", name),
+			})
+		}
+
+		reportDeletedResources(l, client, channel, "dangling DNS records", deletedRecords)
 	}
 	return nil
 }
