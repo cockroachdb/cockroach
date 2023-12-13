@@ -214,7 +214,7 @@ SELECT enum_last('c'::build)
 ----
 f
 
-statement error pq: enum value \"g\" is not yet public
+statement error  pq: cannot use enum value \"g\": enum value is not yet public
 INSERT INTO new_enum_values VALUES ('g')
 
 statement ok

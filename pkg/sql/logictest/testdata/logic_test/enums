@@ -1733,7 +1733,7 @@ statement ok
 ALTER TYPE greeting ADD VALUE 'salud' AFTER 'hello'
 
 # The insert should fail but with awareness that 'salud' is an enum type.
-statement error pq: enum value "salud" is not yet public
+statement error pq: cannot use enum value \"salud\": enum value is not yet public
 INSERT INTO tab2 VALUES ('salud')
 
 statement ok
