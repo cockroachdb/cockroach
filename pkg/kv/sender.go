@@ -457,6 +457,7 @@ func (f NonTransactionalFactoryFunc) NonTransactionalSender() Sender {
 func SendWrappedWith(
 	ctx context.Context, sender Sender, h kvpb.Header, args kvpb.Request,
 ) (kvpb.Response, *kvpb.Error) {
+
 	return SendWrappedWithAdmission(ctx, sender, h, kvpb.AdmissionHeader{}, args)
 }
 

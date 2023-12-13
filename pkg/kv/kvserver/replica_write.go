@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -221,6 +222,9 @@ func (r *Replica) executeWriteBatch(
 				}
 			}
 			if len(propResult.EncounteredIntents) > 0 {
+				if ba.AdmissionHeader == (kvpb.AdmissionHeader{}) {
+					panic(fmt.Sprintf("empty admission header provided by %+v", ba))
+				}
 				if err := r.store.intentResolver.CleanupIntentsAsync(
 					ctx, ba.AdmissionHeader, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {

@@ -18,7 +18,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/internal/client/requestbatcher"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -801,7 +800,14 @@ func (ir *IntentResolver) gcTxnRecord(
 	// always issued on behalf of the range on which this record resides which is
 	// a strong signal that it is the range which will contain the transaction
 	// record now.
-	_, err := ir.gcBatcher.Send(ctx, rangeID, &gcArgs)
+	//
+	// TODO(aaditya): possibly the problem
+	admissionHeader := kvpb.AdmissionHeader{
+		Priority:   txn.AdmissionPriority,
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     kvpb.AdmissionHeader_ROOT_KV,
+	}
+	_, err := ir.gcBatcher.Send(ctx, rangeID, &gcArgs, admissionHeader)
 	if err != nil {
 		return errors.Wrapf(err, "could not GC completed transaction anchored at %s",
 			roachpb.Key(txn.Key))
@@ -1026,10 +1032,8 @@ func (ir *IntentResolver) resolveIntents(
 	var singleReq [1]kvpb.Request //gcassert:noescape
 	reqs := resolveIntentReqs(intents, opts, singleReq[:])
 	h := opts.AdmissionHeader
-	// We skip the warning for release builds to avoid printing out verbose stack traces.
-	// TODO(aaditya): reconsider this once #112680 is resolved.
-	if !build.IsRelease() && h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
-		log.Warningf(ctx, "empty admission header provided by %s", string(debug.Stack()))
+	if h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
+		log.Fatalf(ctx, "empty admission header provided by %s", string(debug.Stack()))
 	}
 	// Send the requests ...
 	if opts.sendImmediately {

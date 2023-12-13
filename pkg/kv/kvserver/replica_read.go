@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -218,6 +219,11 @@ func (r *Replica) executeReadOnlyBatch(
 		// prohibits any concurrent requests for the same range. See #17760.
 		allowSyncProcessing := ba.ReadConsistency == kvpb.CONSISTENT &&
 			ba.WaitPolicy != lock.WaitPolicy_SkipLocked
+		if ba.AdmissionHeader == (kvpb.AdmissionHeader{}) {
+			// TODO(aaditya): Investigate
+			// Example: empty admission header provided by Scan [/Table/15/1/923724959728762881,/Table/15/1/923724959728762882)
+			panic(fmt.Sprintf("empty admission header provided by %+v", ba.Header))
+		}
 		if err := r.store.intentResolver.CleanupIntentsAsync(
 			ctx,
 			ba.AdmissionHeader,

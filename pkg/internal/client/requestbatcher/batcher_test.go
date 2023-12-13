@@ -69,7 +69,7 @@ type senderGroup struct {
 
 func (g *senderGroup) Send(rangeID roachpb.RangeID, request kvpb.Request) {
 	g.g.Go(func() error {
-		_, err := g.b.Send(context.Background(), rangeID, request)
+		_, err := g.b.Send(context.Background(), rangeID, request, kvpb.AdmissionHeader{})
 		return err
 	})
 }
@@ -300,7 +300,7 @@ func TestSendAfterStopped(t *testing.T) {
 		Stopper: stopper,
 	})
 	stopper.Stop(context.Background())
-	_, err := b.Send(context.Background(), 1, &kvpb.GetRequest{})
+	_, err := b.Send(context.Background(), 1, &kvpb.GetRequest{}, kvpb.AdmissionHeader{})
 	assert.Equal(t, err, stop.ErrUnavailable)
 }
 
@@ -315,7 +315,7 @@ func TestSendAfterCanceled(t *testing.T) {
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := b.Send(ctx, 1, &kvpb.GetRequest{})
+	_, err := b.Send(ctx, 1, &kvpb.GetRequest{}, kvpb.AdmissionHeader{})
 	assert.Equal(t, err, ctx.Err())
 }
 
@@ -332,7 +332,7 @@ func TestStopDuringSend(t *testing.T) {
 	})
 	errChan := make(chan error)
 	go func() {
-		_, err := b.Send(context.Background(), 1, &kvpb.GetRequest{})
+		_, err := b.Send(context.Background(), 1, &kvpb.GetRequest{}, kvpb.AdmissionHeader{})
 		errChan <- err
 	}()
 	// Wait for the request to get sent.
@@ -504,11 +504,11 @@ func TestBatchTimeout(t *testing.T) {
 		var err1, err2 error
 		err1Chan := make(chan error, 1)
 		go func() {
-			_, err1 = b.Send(ctx1, 1, &kvpb.GetRequest{})
+			_, err1 = b.Send(ctx1, 1, &kvpb.GetRequest{}, kvpb.AdmissionHeader{})
 			err1Chan <- err1
 			wg.Done()
 		}()
-		go func() { _, err2 = b.Send(ctx2, 1, &kvpb.GetRequest{}); wg.Done() }()
+		go func() { _, err2 = b.Send(ctx2, 1, &kvpb.GetRequest{}, kvpb.AdmissionHeader{}); wg.Done() }()
 		select {
 		case s := <-sc:
 			assert.Len(t, s.ba.Requests, 2)

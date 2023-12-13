@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -435,6 +436,11 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 	queryResBa.Replica = ba.Replica
 	queryResBa.ClientRangeInfo = ba.ClientRangeInfo
 	queryResBa.ReadConsistency = kvpb.INCONSISTENT
+	queryResBa.AdmissionHeader = kvpb.AdmissionHeader{
+		Priority:   int32(admissionpb.NormalPri),
+		CreateTime: timeutil.Now().UnixNano(),
+		Source:     kvpb.AdmissionHeader_OTHER,
+	}
 	for _, ru := range ba.Requests {
 		span := ru.GetInner().Header().Span()
 		if len(span.EndKey) == 0 {

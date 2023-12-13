@@ -31,6 +31,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage/enginepb",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/container/list",
         "//pkg/util/hlc",
