@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -104,10 +105,14 @@ func registerAlterPK(r registry.Registry) {
 		const duration = 10 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
-
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		if err != nil {
+			t.Fatal(err)
+		}
 		cmd := fmt.Sprintf(
-			"./cockroach workload fixtures import tpcc --warehouses=%d --db=tpcc",
+			"./cockroach workload fixtures import tpcc --warehouses=%d --db=tpcc '%s'",
 			warehouses,
+			pgurl,
 		)
 		if err := c.RunE(ctx, c.Node(roachNodes[0]), cmd); err != nil {
 			t.Fatal(err)

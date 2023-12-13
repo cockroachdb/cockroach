@@ -42,21 +42,29 @@ func runConnectionLatencyTest(
 	err = c.StartE(ctx, t.L(), option.DefaultStartOptsNoBackups(), settings)
 	require.NoError(t, err)
 
+	urlTemplate := func(user string) string {
+		if password {
+			return fmt.Sprintf("postgres://testuser:123@%s:{pgport:1}?sslmode=require&sslrootcert=certs/ca.crt", user)
+		}
+
+		return fmt.Sprintf("postgres://testuser@%s:{pgport:1}?sslcert=certs/client.testuser.crt&sslkey=certs/client.testuser.key&sslrootcert=certs/ca.crt&sslmode=require", user)
+	}
+
 	var passwordFlag string
 	// Only create the user once.
 	t.L().Printf("creating testuser")
 	if password {
-		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs -e "CREATE USER testuser WITH PASSWORD '123' CREATEDB"`)
+		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs --port={pgport:1} -e "CREATE USER testuser WITH PASSWORD '123' CREATEDB"`)
 		require.NoError(t, err)
-		err = c.RunE(ctx, c.Node(1), "./workload init connectionlatency --user testuser --password '123' --secure")
+		err = c.RunE(ctx, c.Node(1), fmt.Sprintf("./workload init connectionlatency --user testuser --password '123' --secure '%s'", urlTemplate("localhost")))
 		require.NoError(t, err)
 		passwordFlag = "--password 123 "
 	} else {
 		// NB: certs for `testuser` are created by `roachprod start --secure`.
-		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs -e "CREATE USER testuser CREATEDB"`)
+		err = c.RunE(ctx, c.Node(1), `./cockroach sql --certs-dir certs --port={pgport:1} -e "CREATE USER testuser CREATEDB"`)
 		require.NoError(t, err)
 		require.NoError(t, err)
-		err = c.RunE(ctx, c.Node(1), "./workload init connectionlatency --user testuser --secure")
+		err = c.RunE(ctx, c.Node(1), fmt.Sprintf("./workload init connectionlatency --user testuser --secure '%s'", urlTemplate("localhost")))
 		require.NoError(t, err)
 	}
 
@@ -66,21 +74,11 @@ func runConnectionLatencyTest(
 		externalIps, err := c.ExternalIP(ctx, t.L(), roachNodes)
 		require.NoError(t, err)
 
-		if password {
-			urlTemplate := "postgres://testuser:123@%s:26257?sslmode=require&sslrootcert=certs/ca.crt"
-			for _, u := range externalIps {
-				url := fmt.Sprintf(urlTemplate, u)
-				urls = append(urls, fmt.Sprintf("'%s'", url))
-			}
-			urlString = strings.Join(urls, " ")
-		} else {
-			urlTemplate := "postgres://testuser@%s:26257?sslcert=certs/client.testuser.crt&sslkey=certs/client.testuser.key&sslrootcert=certs/ca.crt&sslmode=require"
-			for _, u := range externalIps {
-				url := fmt.Sprintf(urlTemplate, u)
-				urls = append(urls, fmt.Sprintf("'%s'", url))
-			}
-			urlString = strings.Join(urls, " ")
+		for _, u := range externalIps {
+			url := urlTemplate(u)
+			urls = append(urls, fmt.Sprintf("'%s'", url))
 		}
+		urlString = strings.Join(urls, " ")
 
 		t.L().Printf("running workload in %q against urls:\n%s", locality, strings.Join(urls, "\n"))
 

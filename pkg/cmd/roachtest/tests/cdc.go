@@ -632,7 +632,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	}
 	tester.logger = changefeedLogger
 
-	startOpts, settings := makeCDCBenchOptions()
+	startOpts, settings := makeCDCBenchOptions(c)
 
 	// With a target_duration of 10s, we won't see slow span logs from changefeeds untils we are > 100s
 	// behind, which is well above the 60s targetSteadyLatency we have in some tests.
