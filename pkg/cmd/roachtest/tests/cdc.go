@@ -26,7 +26,7 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
-	"os/exec"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -154,25 +154,6 @@ type AuthorizationRuleKeys struct {
 	PrimaryConnectionString string `json:"primaryConnectionString"`
 }
 
-func getEventHubConnectionString() (string, error) {
-	// These have all been configured via the Azure Portal.
-	cmdStr := "az eventhubs namespace authorization-rule keys list --resource-group cdc-testing --namespace-name roachtest-cdc --name roachtest"
-	cmdSplit := strings.Split(cmdStr, " ")
-	cmd := exec.Command(cmdSplit[0], cmdSplit[1:]...)
-	output, err := cmd.Output()
-	if err != nil {
-		return "", errors.Wrapf(err, "error running `az eventhubs` command, ensure the Azure CLI is installed and you have logged in via `az login`")
-	}
-
-	var keys AuthorizationRuleKeys
-	err = json.Unmarshal(output, &keys)
-	if err != nil {
-		return "", err
-	}
-
-	return keys.PrimaryConnectionString, nil
-}
-
 func (ct *cdcTester) startCRDBChaos() {
 	chaosStopper := make(chan time.Time)
 	ct.mon.Go(func(ctx context.Context) error {
@@ -269,14 +250,24 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 
 		sinkURI = kafka.sinkURL(ct.ctx)
 	case azureEventHubKafkaSink:
-		connectionString, err := getEventHubConnectionString()
-		if err != nil {
-			ct.t.Fatal(err)
+		kafkaNode := ct.kafkaSinkNode()
+		kafka := kafkaManager{
+			t:     ct.t,
+			c:     ct.cluster,
+			nodes: kafkaNode,
+			mon:   ct.mon,
 		}
-
-		// EventHub does not auto-create the "topic" so we set a fixed topic_name
+		kafka.install(ct.ctx)
+		kafka.start(ct.ctx, "kafka", getAzureEnvVars())
+		if err := kafka.installAzureCli(ct.ctx); err != nil {
+			kafka.t.Fatal(err)
+		}
+		connectionString, err := kafka.getConnectionString(ct.ctx)
+		if err != nil {
+			kafka.t.Fatal(err)
+		}
 		sinkURI = fmt.Sprintf(
-			`kafka://roachtest-cdc.servicebus.windows.net:9093?tls_enabled=true&sasl_enabled=true&sasl_user=$ConnectionString&sasl_password=%s&sasl_mechanism=PLAIN&topic_name=testing`,
+			`kafka://roachtest-cdc.servicebus.windows.net:9093?tls_enabled=true&sasl_enabled=true&sasl_user=$ConnectionString&sasl_password=%s&sasl_mechanism=PLAIN`,
 			url.QueryEscape(connectionString),
 		)
 	default:
@@ -678,6 +669,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	settings.ClusterSettings["changefeed.balance_range_distribution.enable"] = "true"
 
 	settings.Env = append(settings.Env, envVars...)
+	fmt.Printf("EN VARS here %v", settings)
 
 	c.Start(ctx, t.L(), startOpts, settings, tester.crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
@@ -1610,29 +1602,32 @@ func registerCDC(r registry.Registry) {
 			}
 		},
 	})
-r.Add(registry.TestSpec{
-		Name:            "cdc/kafka-azure",
-		Owner:           `cdc`,
-		Skip:            "nightly runs blocked on azure credentials access in CI (#105580)",
-		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64), spec.Zones("us-east1-b")),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-azure",
+		Owner:            `cdc`,
+		CompatibleClouds: registry.AllExceptAWS,
+		Cluster:          r.MakeClusterSpec(2, spec.Arch(vm.ArchAMD64), spec.GCEZones("us-east1-b")),
+		Leases:           registry.MetamorphicLeases,
+		Suites:           registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
-
 			// Just use 1 warehouse and no initial scan since this would involve
 			// cross-cloud traffic which is far more expensive.  The throughput also
 			// can't be too high to not hit the Throughput Unit (TU) limit of 1MBps/TU
 			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
-			ct.newChangefeed(feedArgs{
+			feed := ct.newChangefeed(feedArgs{
 				sinkType: azureEventHubKafkaSink,
 				targets:  allTpccTargets,
 				opts:     map[string]string{"initial_scan": "'no'"},
 			})
-
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      10 * time.Minute,
+			})
 			ct.waitForWorkload()
 		},
+		RequiresLicense: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             "cdc/bank",
@@ -1846,6 +1841,18 @@ export HYDRA_ADMIN_URL=http://localhost:4445
 export DSN=memory
 
 ./hydra serve all --dev
+`
+
+var installAzureCliScript = `
+sudo apt-get update && \
+sudo apt-get install -y ca-certificates curl apt-transport-https lsb-release gnupg && \
+sudo mkdir -p /etc/apt/keyrings && \
+curl -sLS https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor | sudo tee /etc/apt/keyrings/microsoft.gpg > /dev/null && \
+sudo chmod go+r /etc/apt/keyrings/microsoft.gpg && \
+AZ_DIST=$(lsb_release -cs) && \
+echo "deb [arch=\"dpkg --print-architecture\" signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $AZ_DIST main" | sudo tee /etc/apt/sources.list.d/azure-cli.list && \
+sudo apt-get update && \
+sudo apt-get install -y azure-cli
 `
 
 const (
@@ -2156,6 +2163,60 @@ func (k kafkaManager) installJRE(ctx context.Context) error {
 	})
 }
 
+func (k kafkaManager) installAzureCli(ctx context.Context) error {
+	k.t.Status("installing azure cli")
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Minute,
+		MaxBackoff:     5 * time.Minute,
+	}
+	return retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
+		return k.c.RunE(ctx, k.nodes, installAzureCliScript)
+	})
+}
+
+func (k kafkaManager) getConnectionString(ctx context.Context) (string, error) {
+	k.t.Status("getting azure event hub connection string")
+	cmdStr := "echo $AZURE_CLIENT_ID"
+	results, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
+	if err != nil {
+		return "", errors.Wrap(err, "error running $AZURE_CLIENT_ID")
+	}
+	if results.Stdout == "" {
+		return "", errors.Errorf("$AZURE_CLIENT_ID is empty, please set env vars AZURE_CLIENT_ID properly")
+	}
+	k.t.L().Printf("$AZURE_CLIENT_ID is:%s\n", results.Stdout)
+
+	// az login --service-principal -t <Tenant-ID> -u <Client-ID> -p <Client-secret>
+	cmdStr = "az login --service-principal -t $AZURE_TENANT_ID -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET"
+	results, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
+	k.t.L().Printf("az login%s\n", results.Stdout)
+	if err != nil {
+		return "", errors.Wrap(err, "error running az login")
+	}
+
+	cmdStr = "az account set --subscription $AZURE_SUBSCRIPTION_ID"
+	results, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
+	k.t.L().Printf("az account set:%s\n", results.Stdout)
+	if err != nil {
+		return "", errors.Wrap(err, "error running az account set")
+	}
+
+	cmdStr = "az eventhubs namespace authorization-rule keys list --resource-group cdc-testing --namespace-name roachtest-cdc --name roachtest"
+	results, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
+	k.t.L().Printf("az eventhubs connection string:%s\n", results.Stdout)
+	if err != nil {
+		return "", errors.Wrap(err, "error running `az eventhubs` command, ensure the Azure CLI is installed and you have logged in via `az login`")
+	}
+
+	var keys AuthorizationRuleKeys
+	err = json.Unmarshal([]byte(results.Stdout), &keys)
+	if err != nil {
+		return "", errors.Wrap(err, "error unmarshalling az eventhubs keys")
+	}
+
+	return keys.PrimaryConnectionString, nil
+}
+
 func (k kafkaManager) runWithRetry(ctx context.Context, cmd string) {
 	retryOpts := retry.Options{
 		InitialBackoff: 1 * time.Minute,
@@ -2201,6 +2262,14 @@ func (k kafkaManager) configureHydraOauth(ctx context.Context) (string, string) 
 	clientSecret := matches[2]
 
 	return clientID, clientSecret
+}
+
+func getAzureEnvVars() (kafkaEnv string) {
+	kafkaEnv = " AZURE_CLIENT_ID=" + os.Getenv("AZURE_CLIENT_ID")
+	kafkaEnv += " AZURE_CLIENT_SECRET=" + os.Getenv("AZURE_CLIENT_SECRET")
+	kafkaEnv += " AZURE_SUBSCRIPTION_ID=" + os.Getenv("AZURE_SUBSCRIPTION_ID")
+	kafkaEnv += " AZURE_TENANT_ID=" + os.Getenv("AZURE_TENANT_ID")
+	return
 }
 
 func (k kafkaManager) configureOauth(ctx context.Context) (clientcredentials.Config, string) {
@@ -2779,7 +2848,11 @@ func stopFeeds(db *gosql.DB) {
 // the test runner can connect to it. Returns a function to be called
 // at the end of the test for stopping Kafka.
 func setupKafka(
-	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	nodes option.NodeListOption,
+	envVars ...string,
 ) (kafkaManager, func()) {
 	kafka := kafkaManager{
 		t:     t,
@@ -2796,7 +2869,7 @@ func setupKafka(
 			filepath.Join(kafka.configDir(), "server.properties"))
 	}
 
-	kafka.start(ctx, "kafka")
+	kafka.start(ctx, "kafka", envVars)
 	return kafka, func() { kafka.stop(ctx) }
 }
 
