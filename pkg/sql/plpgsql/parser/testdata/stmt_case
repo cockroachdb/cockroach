@@ -133,6 +133,7 @@ BEGIN
 END CASE;
 END
 ----
+decl_stmt: 1
 stmt_block: 1
 stmt_call: 3
 stmt_case: 1
