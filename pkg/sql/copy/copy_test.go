@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -569,7 +570,7 @@ func TestLargeDynamicRows(t *testing.T) {
 	var params base.TestServerArgs
 	var batchNumber int
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		BeforeCopyFromInsert: func() error {
+		BeforeCopyFromInsert: func(*kv.Txn) error {
 			batchNumber++
 			return nil
 		},
