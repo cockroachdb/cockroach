@@ -223,8 +223,12 @@ func ingestWithRetries(
 		if jobs.IsPermanentJobError(err) || errors.Is(err, context.Canceled) {
 			break
 		}
-		status := redact.Sprintf("waiting before retrying error: %s", err)
-		updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError, status)
+		// If we're retrying repeatedly, update the status to reflect the error we
+		// are hitting.
+		if i := r.CurrentAttempt(); i > 5 {
+			status := redact.Sprintf("retrying after error on attempt %d: %s", i, err)
+			updateRunningStatus(ctx, ingestionJob, jobspb.ReplicationError, status)
+		}
 		newReplicatedTime := loadReplicatedTime(ctx, execCtx.ExecCfg().InternalDB, ingestionJob)
 		if lastReplicatedTime.Less(newReplicatedTime) {
 			r.Reset()
