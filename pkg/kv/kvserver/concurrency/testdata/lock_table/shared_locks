@@ -1686,11 +1686,10 @@ num=2
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared] [holder finalized: aborted]
    queued locking requests:
-    active: true req: 83, strength: Shared, txn: none
-    active: true req: 84, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
-    active: true req: 85, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
+    active: false req: 84, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
+    active: false req: 85, strength: Shared, txn: 00000000-0000-0000-0000-000000000003
     active: true req: 86, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000004
-   distinguished req: 83
+   distinguished req: 86
  lock: "b"
   holder: txn: 00000000-0000-0000-0000-000000000003 epoch: 0, iso: Serializable, info: unrepl [(str: Shared seq: 0)]
    queued locking requests:
