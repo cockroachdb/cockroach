@@ -120,7 +120,7 @@ func backupRestoreRoundTrip(
 		}
 		defer testUtils.CloseConnections()
 
-		dbs := []string{"bank", "tpcc"}
+		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		runBackgroundWorkload, err := startBackgroundWorkloads(ctx, t.L(), c, m, testRNG, roachNodes, workloadNode, testUtils, dbs)
 		if err != nil {
 			return err
@@ -224,6 +224,10 @@ func startBackgroundWorkloads(
 	}
 	tpccInit, tpccRun := tpccWorkloadCmd(l, testRNG, numWarehouses, roachNodes)
 	bankInit, bankRun := bankWorkloadCmd(l, testRNG, roachNodes, testUtils.mock)
+	scInit, scRun := schemaChangeWorkloadCmd(l, testRNG, roachNodes, testUtils.mock)
+	if err := prepSchemaChangeWorkload(ctx, workloadNode, testUtils, testRNG); err != nil {
+		return nil, err
+	}
 
 	err := c.RunE(ctx, workloadNode, bankInit.String())
 	if err != nil {
@@ -231,6 +235,10 @@ func startBackgroundWorkloads(
 	}
 
 	err = c.RunE(ctx, workloadNode, tpccInit.String())
+	if err != nil {
+		return nil, err
+	}
+	err = c.RunE(ctx, workloadNode, scInit.String())
 	if err != nil {
 		return nil, err
 	}
@@ -248,6 +256,9 @@ func startBackgroundWorkloads(
 		stopTPCC := workloadWithCancel(m, func(ctx context.Context) error {
 			return c.RunE(ctx, workloadNode, tpccRun.String())
 		})
+		stopSC := workloadWithCancel(m, func(ctx context.Context) error {
+			return c.RunE(ctx, workloadNode, scRun.String())
+		})
 
 		stopSystemWriter := workloadWithCancel(m, func(ctx context.Context) error {
 			// We use a separate RNG for the system table writer to avoid
@@ -261,6 +272,7 @@ func startBackgroundWorkloads(
 		stopBackgroundCommands := func() {
 			stopBank()
 			stopTPCC()
+			stopSC()
 			stopSystemWriter()
 		}
 
