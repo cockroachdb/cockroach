@@ -15,7 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -109,6 +115,57 @@ func TestWaitForWork(t *testing.T) {
 		gossipC <- struct{}{}
 		require.NoError(t, <-errCh)
 		require.Equal(t, []bool{true, false}, b.calls())
+	})
+}
+
+// TestDropRemovesManualSpits tests that the GC job removes manual
+// splits.
+func TestDropRemovesManualSplits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	if s.TenantController().StartedDefaultTestTenant() {
+		tenID := serverutils.TestTenantID()
+		_, err := s.SystemLayer().SQLConn(t).Exec(
+			"ALTER TENANT [$1] GRANT CAPABILITY can_admin_unsplit", tenID.ToUint64())
+		require.NoError(t, err)
+
+		expCaps := map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminUnsplit: "true"}
+		serverutils.WaitForTenantCapabilities(t, s, tenID, expCaps, "admin_unsplit")
+	}
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, "CREATE TABLE t (pk INT PRIMARY KEY)")
+
+	var tableID uint32
+	sqlDB.QueryRow(t, "SELECT 't'::regclass::oid::int").Scan(&tableID)
+
+	getTableRangesWithNonNullExpiration := func() int {
+		var splitRanges int
+		sqlDB.QueryRow(t,
+			"SELECT count(1) FROM crdb_internal.ranges_no_leases WHERE start_pretty LIKE $1 AND split_enforced_until IS NOT NULL",
+			s.ApplicationLayer().Codec().TablePrefix(tableID).String()+"%",
+		).Scan(&splitRanges)
+		return splitRanges
+	}
+
+	sqlDB.Exec(t, "ALTER TABLE t SPLIT AT VALUES (1), (10), (100), (1000)")
+	beforeDropCount := getTableRangesWithNonNullExpiration()
+	require.Equal(t, 4, beforeDropCount, "did not find expected splits during test setup")
+
+	sqlDB.Exec(t, "DROP TABLE t")
+
+	testutils.SucceedsSoon(t, func() error {
+		afterDropCount := getTableRangesWithNonNullExpiration()
+		if afterDropCount > 0 {
+			return errors.Newf("found ranges with non-null expiration")
+		}
+		return nil
 	})
 }
 
