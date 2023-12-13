@@ -37,7 +37,6 @@ func makeElasticControlRowLevelTTL(spec spec.ClusterSpec, expiredRows bool) regi
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
-		Tags:             registry.Tags(`weekly`),
 		Cluster:          spec,
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
