@@ -92,6 +92,11 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator": {
 						"LeaseTransferOutcome": {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl": {
+						"AllocatorAction":   {},
+						"TargetReplicaType": {},
+						"ReplicaStatus":     {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load": {
 						"Dimension": {},
 					},
