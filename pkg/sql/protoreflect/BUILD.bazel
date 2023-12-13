@@ -38,8 +38,8 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/protoreflect/test",
         "//pkg/sql/protoreflect/gprototest",
+        "//pkg/sql/protoreflect/test",
         "//pkg/sql/types",
         "//pkg/util/json",
         "//pkg/util/leaktest",
@@ -49,7 +49,7 @@ go_test(
         "//pkg/util/tracing/tracingpb",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//types",
-        "@org_golang_google_protobuf//proto",
         "@com_github_stretchr_testify//require",
+        "@org_golang_google_protobuf//proto",
     ],
 )
