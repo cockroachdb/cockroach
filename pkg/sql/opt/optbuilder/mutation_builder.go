@@ -800,7 +800,8 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 		mutationCols := mb.mutationColumnIDs()
 
 		for i, n := 0, mb.tab.CheckCount(); i < n; i++ {
-			expr, err := parser.ParseExpr(mb.tab.Check(i).Constraint)
+			check := mb.tab.Check(i)
+			expr, err := parser.ParseExpr(check.Constraint())
 			if err != nil {
 				panic(err)
 			}

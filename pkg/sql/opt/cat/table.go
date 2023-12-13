@@ -182,15 +182,25 @@ type Table interface {
 	IsHypothetical() bool
 }
 
-// CheckConstraint contains the SQL text and the validity status for a check
-// constraint on a table. Check constraints are user-defined restrictions
-// on the content of each row in a table. For example, this check constraint
-// ensures that only values greater than zero can be inserted into the table:
+// CheckConstraint represents a check constraint on a table. Check constraints
+// are user-defined restrictions on the content of each row in a table. For
+// example, this check constraint ensures that only values greater than zero can
+// be inserted into the table:
 //
 //	CREATE TABLE a (a INT CHECK (a > 0))
-type CheckConstraint struct {
-	Constraint string
-	Validated  bool
+type CheckConstraint interface {
+	// Constraint contains the SQL text of this check constraint.
+	Constraint() string
+
+	// Validated returns true if this check constraint has been validated.
+	Validated() bool
+
+	// ColumnCount returns the number of columns in this constraint.
+	ColumnCount() int
+
+	// ColumnOrdinal returns the table column ordinal of the ith column in this
+	// constraint.
+	ColumnOrdinal(i int) int
 }
 
 // TableStatistic is an interface to a table statistic. Each statistic is
