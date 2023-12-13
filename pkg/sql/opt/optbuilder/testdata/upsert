@@ -1815,6 +1815,572 @@ upsert xyz
            ├── CASE WHEN x:12 IS NULL THEN b:7 ELSE y_new:17 END [as=upsert_y:19]
            └── CASE WHEN x:12 IS NULL THEN c:8 ELSE z:14 END [as=upsert_z:20]
 
+# Test multi-column-family checks under read committed. If a check constraint
+# contains multiple column families but only some of them are updated, the
+# query should fail under read committed.
+
+exec-ddl
+CREATE TABLE multi_col_fam_checks (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT UNIQUE,
+  UNIQUE (a, b),
+  UNIQUE (b, c),
+  FAMILY(a),
+  FAMILY(b, d),
+  FAMILY(c),
+  CHECK (b < c)
+)
+----
+
+exec-ddl
+CREATE TABLE multi_col_fam_checks_simple (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  FAMILY(a),
+  FAMILY(b),
+  FAMILY(c),
+  FAMILY(d),
+  CHECK (b < c)
+)
+----
+
+# Both b and c are updated (c is given the default value), so this should
+# succeed.
+build isolation=ReadCommitted
+UPSERT INTO multi_col_fam_checks VALUES (5, 6)
+----
+upsert multi_col_fam_checks
+ ├── arbiter indexes: multi_col_fam_checks_pkey
+ ├── columns: <none>
+ ├── canary column: a:10
+ ├── fetch columns: a:10 b:11 c:12 d:13
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── c_default:9 => c:3
+ │    └── c_default:9 => d:4
+ ├── update-mapping:
+ │    ├── column2:8 => b:2
+ │    ├── c_default:9 => c:3
+ │    └── c_default:9 => d:4
+ ├── check columns: check1:17
+ └── project
+      ├── columns: check1:17 column1:7!null column2:8!null c_default:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_a:16
+      ├── project
+      │    ├── columns: upsert_a:16 column1:7!null column2:8!null c_default:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:7!null column2:8!null c_default:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:7!null column2:8!null c_default:9
+      │    │    │    ├── grouping columns: column1:7!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: c_default:9 column1:7!null column2:8!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:7!null column2:8!null
+      │    │    │    │    │    └── (5, 6)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::INT8 [as=c_default:9]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:8]
+      │    │    │         │    └── column2:8
+      │    │    │         └── first-agg [as=c_default:9]
+      │    │    │              └── c_default:9
+      │    │    ├── scan multi_col_fam_checks
+      │    │    │    ├── columns: a:10!null b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    │    │    └── flags: disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:7 = a:10
+      │    └── projections
+      │         └── CASE WHEN a:10 IS NULL THEN column1:7 ELSE a:10 END [as=upsert_a:16]
+      └── projections
+           └── column2:8 < c_default:9 [as=check1:17]
+
+# Fast upsert case. Both b and c are updated (c is given the default value), so
+# this should succeed.
+build isolation=ReadCommitted
+UPSERT INTO multi_col_fam_checks_simple VALUES (1, 2)
+----
+upsert multi_col_fam_checks_simple
+ ├── columns: <none>
+ ├── upsert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── c_default:9 => c:3
+ │    └── c_default:9 => d:4
+ ├── check columns: check1:10
+ └── project
+      ├── columns: check1:10 column1:7!null column2:8!null c_default:9
+      ├── project
+      │    ├── columns: c_default:9 column1:7!null column2:8!null
+      │    ├── values
+      │    │    ├── columns: column1:7!null column2:8!null
+      │    │    └── (1, 2)
+      │    └── projections
+      │         └── NULL::INT8 [as=c_default:9]
+      └── projections
+           └── column2:8 < c_default:9 [as=check1:10]
+
+# Only b is updated, but c must be read to check the constraint. Should fail
+# under read committed.
+build isolation=ReadCommitted
+UPSERT INTO multi_col_fam_checks (a, b) VALUES (5, 6)
+----
+error (0A000): unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+
+# The same query should succeed under serializable isolation.
+build isolation=Serializable
+UPSERT INTO multi_col_fam_checks (a, b) VALUES (5, 6)
+----
+upsert multi_col_fam_checks
+ ├── arbiter indexes: multi_col_fam_checks_pkey
+ ├── columns: <none>
+ ├── canary column: a:10
+ ├── fetch columns: a:10 b:11 c:12 d:13
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── c_default:9 => c:3
+ │    └── c_default:9 => d:4
+ ├── update-mapping:
+ │    └── column2:8 => b:2
+ ├── check columns: check1:19
+ └── project
+      ├── columns: check1:19 column1:7!null column2:8!null c_default:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_a:16 upsert_c:17 upsert_d:18
+      ├── project
+      │    ├── columns: upsert_a:16 upsert_c:17 upsert_d:18 column1:7!null column2:8!null c_default:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:7!null column2:8!null c_default:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:7!null column2:8!null c_default:9
+      │    │    │    ├── grouping columns: column1:7!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: c_default:9 column1:7!null column2:8!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:7!null column2:8!null
+      │    │    │    │    │    └── (5, 6)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::INT8 [as=c_default:9]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:8]
+      │    │    │         │    └── column2:8
+      │    │    │         └── first-agg [as=c_default:9]
+      │    │    │              └── c_default:9
+      │    │    ├── scan multi_col_fam_checks
+      │    │    │    ├── columns: a:10!null b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    │    │    └── flags: disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:7 = a:10
+      │    └── projections
+      │         ├── CASE WHEN a:10 IS NULL THEN column1:7 ELSE a:10 END [as=upsert_a:16]
+      │         ├── CASE WHEN a:10 IS NULL THEN c_default:9 ELSE c:12 END [as=upsert_c:17]
+      │         └── CASE WHEN a:10 IS NULL THEN c_default:9 ELSE d:13 END [as=upsert_d:18]
+      └── projections
+           └── column2:8 < upsert_c:17 [as=check1:19]
+
+# Neither b nor c is updated, so this should succeed.
+build isolation=ReadCommitted
+UPSERT INTO multi_col_fam_checks (a, d) VALUES (3, 5)
+----
+upsert multi_col_fam_checks
+ ├── arbiter indexes: multi_col_fam_checks_pkey
+ ├── columns: <none>
+ ├── canary column: a:10
+ ├── fetch columns: a:10 b:11 c:12 d:13
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── b_default:9 => b:2
+ │    ├── b_default:9 => c:3
+ │    └── column2:8 => d:4
+ ├── update-mapping:
+ │    └── column2:8 => d:4
+ ├── check columns: check1:19
+ └── project
+      ├── columns: check1:19 column1:7!null column2:8!null b_default:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15 upsert_a:16 upsert_b:17 upsert_c:18
+      ├── project
+      │    ├── columns: upsert_a:16 upsert_b:17 upsert_c:18 column1:7!null column2:8!null b_default:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    ├── left-join (hash)
+      │    │    ├── columns: column1:7!null column2:8!null b_default:9 a:10 b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    │    ├── ensure-upsert-distinct-on
+      │    │    │    ├── columns: column1:7!null column2:8!null b_default:9
+      │    │    │    ├── grouping columns: column1:7!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: b_default:9 column1:7!null column2:8!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:7!null column2:8!null
+      │    │    │    │    │    └── (3, 5)
+      │    │    │    │    └── projections
+      │    │    │    │         └── NULL::INT8 [as=b_default:9]
+      │    │    │    └── aggregations
+      │    │    │         ├── first-agg [as=column2:8]
+      │    │    │         │    └── column2:8
+      │    │    │         └── first-agg [as=b_default:9]
+      │    │    │              └── b_default:9
+      │    │    ├── scan multi_col_fam_checks
+      │    │    │    ├── columns: a:10!null b:11 c:12 d:13 crdb_internal_mvcc_timestamp:14 tableoid:15
+      │    │    │    └── flags: disabled not visible index feature
+      │    │    └── filters
+      │    │         └── column1:7 = a:10
+      │    └── projections
+      │         ├── CASE WHEN a:10 IS NULL THEN column1:7 ELSE a:10 END [as=upsert_a:16]
+      │         ├── CASE WHEN a:10 IS NULL THEN b_default:9 ELSE b:11 END [as=upsert_b:17]
+      │         └── CASE WHEN a:10 IS NULL THEN b_default:9 ELSE c:12 END [as=upsert_c:18]
+      └── projections
+           └── upsert_b:17 < upsert_c:18 [as=check1:19]
+
+# Only b is updated, but c must be read to check the constraint. Should fail
+# under read committed.
+build isolation=ReadCommitted
+INSERT INTO multi_col_fam_checks VALUES (5) ON CONFLICT (a) DO UPDATE SET b = 5
+----
+error (0A000): unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+
+# The same query should succeed under serializable isolation.
+build isolation=Serializable
+INSERT INTO multi_col_fam_checks VALUES (5) ON CONFLICT (a) DO UPDATE SET b = 5
+----
+upsert multi_col_fam_checks
+ ├── arbiter indexes: multi_col_fam_checks_pkey
+ ├── columns: <none>
+ ├── canary column: a:9
+ ├── fetch columns: a:9 b:10 c:11 d:12
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── b_default:8 => b:2
+ │    ├── b_default:8 => c:3
+ │    └── b_default:8 => d:4
+ ├── update-mapping:
+ │    └── upsert_b:17 => b:2
+ ├── check columns: check1:20
+ └── project
+      ├── columns: check1:20 column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null upsert_a:16 upsert_b:17 upsert_c:18 upsert_d:19
+      ├── project
+      │    ├── columns: upsert_a:16 upsert_b:17 upsert_c:18 upsert_d:19 column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null
+      │    ├── project
+      │    │    ├── columns: b_new:15!null column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:7!null b_default:8
+      │    │    │    │    ├── grouping columns: column1:7!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: b_default:8 column1:7!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:7!null
+      │    │    │    │    │    │    └── (5,)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── NULL::INT8 [as=b_default:8]
+      │    │    │    │    └── aggregations
+      │    │    │    │         └── first-agg [as=b_default:8]
+      │    │    │    │              └── b_default:8
+      │    │    │    ├── scan multi_col_fam_checks
+      │    │    │    │    ├── columns: a:9!null b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         └── column1:7 = a:9
+      │    │    └── projections
+      │    │         └── 5 [as=b_new:15]
+      │    └── projections
+      │         ├── CASE WHEN a:9 IS NULL THEN column1:7 ELSE a:9 END [as=upsert_a:16]
+      │         ├── CASE WHEN a:9 IS NULL THEN b_default:8 ELSE b_new:15 END [as=upsert_b:17]
+      │         ├── CASE WHEN a:9 IS NULL THEN b_default:8 ELSE c:11 END [as=upsert_c:18]
+      │         └── CASE WHEN a:9 IS NULL THEN b_default:8 ELSE d:12 END [as=upsert_d:19]
+      └── projections
+           └── upsert_b:17 < upsert_c:18 [as=check1:20]
+
+# Only c is updated, but b is read. Should fail under read committed.
+build isolation=ReadCommitted
+INSERT INTO multi_col_fam_checks SELECT a FROM multi_col_fam_checks WHERE b = 5
+ON CONFLICT (d) DO UPDATE SET c = 3
+----
+error (0A000): unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+
+# The same query should succeed under serializable isolation.
+build isolation=Serializable
+INSERT INTO multi_col_fam_checks SELECT a FROM multi_col_fam_checks WHERE b = 5
+ON CONFLICT (d) DO UPDATE SET c = 3
+----
+upsert multi_col_fam_checks
+ ├── arbiter indexes: multi_col_fam_checks_d_key
+ ├── columns: <none>
+ ├── canary column: a:14
+ ├── fetch columns: a:14 b:15 c:16 d:17
+ ├── insert-mapping:
+ │    ├── a:7 => a:1
+ │    ├── b_default:13 => b:2
+ │    ├── b_default:13 => c:3
+ │    └── b_default:13 => d:4
+ ├── update-mapping:
+ │    └── upsert_c:23 => c:3
+ ├── check columns: check1:25
+ └── project
+      ├── columns: check1:25 a:7!null b_default:13 a:14 b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 tableoid:19 c_new:20!null upsert_a:21 upsert_b:22 upsert_c:23 upsert_d:24
+      ├── project
+      │    ├── columns: upsert_a:21 upsert_b:22 upsert_c:23 upsert_d:24 a:7!null b_default:13 a:14 b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 tableoid:19 c_new:20!null
+      │    ├── project
+      │    │    ├── columns: c_new:20!null a:7!null b_default:13 a:14 b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 tableoid:19
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: a:7!null b_default:13 a:14 b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 tableoid:19
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: a:7!null b_default:13
+      │    │    │    │    ├── grouping columns: b_default:13
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: b_default:13 a:7!null
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: a:7!null
+      │    │    │    │    │    │    └── select
+      │    │    │    │    │    │         ├── columns: a:7!null b:8!null c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    │    │    │         ├── scan multi_col_fam_checks
+      │    │    │    │    │    │         │    └── columns: a:7!null b:8 c:9 d:10 crdb_internal_mvcc_timestamp:11 tableoid:12
+      │    │    │    │    │    │         └── filters
+      │    │    │    │    │    │              └── b:8 = 5
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── NULL::INT8 [as=b_default:13]
+      │    │    │    │    └── aggregations
+      │    │    │    │         └── first-agg [as=a:7]
+      │    │    │    │              └── a:7
+      │    │    │    ├── scan multi_col_fam_checks
+      │    │    │    │    ├── columns: a:14!null b:15 c:16 d:17 crdb_internal_mvcc_timestamp:18 tableoid:19
+      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         └── b_default:13 = d:17
+      │    │    └── projections
+      │    │         └── 3 [as=c_new:20]
+      │    └── projections
+      │         ├── CASE WHEN a:14 IS NULL THEN a:7 ELSE a:14 END [as=upsert_a:21]
+      │         ├── CASE WHEN a:14 IS NULL THEN b_default:13 ELSE b:15 END [as=upsert_b:22]
+      │         ├── CASE WHEN a:14 IS NULL THEN b_default:13 ELSE c_new:20 END [as=upsert_c:23]
+      │         └── CASE WHEN a:14 IS NULL THEN b_default:13 ELSE d:17 END [as=upsert_d:24]
+      └── projections
+           └── upsert_b:22 < upsert_c:23 [as=check1:25]
+
+# Both b and c are updated, so this should succeed.
+build isolation=ReadCommitted
+INSERT INTO multi_col_fam_checks VALUES (1, 2, 3)
+ON CONFLICT (a, b) DO UPDATE SET b = 3, c = 4
+----
+upsert multi_col_fam_checks
+ ├── arbiter indexes: multi_col_fam_checks_a_b_key
+ ├── columns: <none>
+ ├── canary column: a:11
+ ├── fetch columns: a:11 b:12 c:13 d:14
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column3:9 => c:3
+ │    └── d_default:10 => d:4
+ ├── update-mapping:
+ │    ├── upsert_b:20 => b:2
+ │    └── upsert_c:21 => c:3
+ ├── check columns: check1:23
+ └── project
+      ├── columns: check1:23!null column1:7!null column2:8!null column3:9!null d_default:10 a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 b_new:17!null c_new:18!null upsert_a:19 upsert_b:20!null upsert_c:21!null upsert_d:22
+      ├── project
+      │    ├── columns: upsert_a:19 upsert_b:20!null upsert_c:21!null upsert_d:22 column1:7!null column2:8!null column3:9!null d_default:10 a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 b_new:17!null c_new:18!null
+      │    ├── project
+      │    │    ├── columns: b_new:17!null c_new:18!null column1:7!null column2:8!null column3:9!null d_default:10 a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null d_default:10 a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null d_default:10
+      │    │    │    │    ├── grouping columns: column1:7!null column2:8!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: d_default:10 column1:7!null column2:8!null column3:9!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null
+      │    │    │    │    │    │    └── (1, 2, 3)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── NULL::INT8 [as=d_default:10]
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column3:9]
+      │    │    │    │         │    └── column3:9
+      │    │    │    │         └── first-agg [as=d_default:10]
+      │    │    │    │              └── d_default:10
+      │    │    │    ├── scan multi_col_fam_checks
+      │    │    │    │    ├── columns: a:11!null b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         ├── column1:7 = a:11
+      │    │    │         └── column2:8 = b:12
+      │    │    └── projections
+      │    │         ├── 3 [as=b_new:17]
+      │    │         └── 4 [as=c_new:18]
+      │    └── projections
+      │         ├── CASE WHEN a:11 IS NULL THEN column1:7 ELSE a:11 END [as=upsert_a:19]
+      │         ├── CASE WHEN a:11 IS NULL THEN column2:8 ELSE b_new:17 END [as=upsert_b:20]
+      │         ├── CASE WHEN a:11 IS NULL THEN column3:9 ELSE c_new:18 END [as=upsert_c:21]
+      │         └── CASE WHEN a:11 IS NULL THEN d_default:10 ELSE d:14 END [as=upsert_d:22]
+      └── projections
+           └── upsert_b:20 < upsert_c:21 [as=check1:23]
+
+# Both b and c are updated, so this should succeed.
+build isolation=ReadCommitted
+INSERT INTO multi_col_fam_checks (a) VALUES (1)
+ON CONFLICT (a) DO UPDATE SET b = 3, c = 4, d = 5
+----
+upsert multi_col_fam_checks
+ ├── arbiter indexes: multi_col_fam_checks_pkey
+ ├── columns: <none>
+ ├── canary column: a:9
+ ├── fetch columns: a:9 b:10 c:11 d:12
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── b_default:8 => b:2
+ │    ├── b_default:8 => c:3
+ │    └── b_default:8 => d:4
+ ├── update-mapping:
+ │    ├── upsert_b:19 => b:2
+ │    ├── upsert_c:20 => c:3
+ │    └── upsert_d:21 => d:4
+ ├── check columns: check1:22
+ └── project
+      ├── columns: check1:22 column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null c_new:16!null d_new:17!null upsert_a:18 upsert_b:19 upsert_c:20 upsert_d:21
+      ├── project
+      │    ├── columns: upsert_a:18 upsert_b:19 upsert_c:20 upsert_d:21 column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14 b_new:15!null c_new:16!null d_new:17!null
+      │    ├── project
+      │    │    ├── columns: b_new:15!null c_new:16!null d_new:17!null column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:7!null b_default:8
+      │    │    │    │    ├── grouping columns: column1:7!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: b_default:8 column1:7!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:7!null
+      │    │    │    │    │    │    └── (1,)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── NULL::INT8 [as=b_default:8]
+      │    │    │    │    └── aggregations
+      │    │    │    │         └── first-agg [as=b_default:8]
+      │    │    │    │              └── b_default:8
+      │    │    │    ├── scan multi_col_fam_checks
+      │    │    │    │    ├── columns: a:9!null b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         └── column1:7 = a:9
+      │    │    └── projections
+      │    │         ├── 3 [as=b_new:15]
+      │    │         ├── 4 [as=c_new:16]
+      │    │         └── 5 [as=d_new:17]
+      │    └── projections
+      │         ├── CASE WHEN a:9 IS NULL THEN column1:7 ELSE a:9 END [as=upsert_a:18]
+      │         ├── CASE WHEN a:9 IS NULL THEN b_default:8 ELSE b_new:15 END [as=upsert_b:19]
+      │         ├── CASE WHEN a:9 IS NULL THEN b_default:8 ELSE c_new:16 END [as=upsert_c:20]
+      │         └── CASE WHEN a:9 IS NULL THEN b_default:8 ELSE d_new:17 END [as=upsert_d:21]
+      └── projections
+           └── upsert_b:19 < upsert_c:20 [as=check1:22]
+
+# Neither b nor c is updated, so this should succeed.
+build isolation=ReadCommitted
+INSERT INTO multi_col_fam_checks (a, b, c, d) VALUES (1, 2, 3, 4)
+ON CONFLICT (b, c) DO UPDATE SET a = 5
+----
+upsert multi_col_fam_checks
+ ├── arbiter indexes: multi_col_fam_checks_b_c_key
+ ├── columns: <none>
+ ├── canary column: a:11
+ ├── fetch columns: a:11 b:12 c:13 d:14
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── column2:8 => b:2
+ │    ├── column3:9 => c:3
+ │    └── column4:10 => d:4
+ ├── update-mapping:
+ │    └── upsert_a:18 => a:1
+ ├── check columns: check1:22
+ └── project
+      ├── columns: check1:22 column1:7!null column2:8!null column3:9!null column4:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 a_new:17!null upsert_a:18!null upsert_b:19 upsert_c:20 upsert_d:21
+      ├── project
+      │    ├── columns: upsert_a:18!null upsert_b:19 upsert_c:20 upsert_d:21 column1:7!null column2:8!null column3:9!null column4:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16 a_new:17!null
+      │    ├── project
+      │    │    ├── columns: a_new:17!null column1:7!null column2:8!null column3:9!null column4:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null a:11 b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+      │    │    │    │    ├── grouping columns: column2:8!null column3:9!null
+      │    │    │    │    ├── values
+      │    │    │    │    │    ├── columns: column1:7!null column2:8!null column3:9!null column4:10!null
+      │    │    │    │    │    └── (1, 2, 3, 4)
+      │    │    │    │    └── aggregations
+      │    │    │    │         ├── first-agg [as=column1:7]
+      │    │    │    │         │    └── column1:7
+      │    │    │    │         └── first-agg [as=column4:10]
+      │    │    │    │              └── column4:10
+      │    │    │    ├── scan multi_col_fam_checks
+      │    │    │    │    ├── columns: a:11!null b:12 c:13 d:14 crdb_internal_mvcc_timestamp:15 tableoid:16
+      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         ├── column2:8 = b:12
+      │    │    │         └── column3:9 = c:13
+      │    │    └── projections
+      │    │         └── 5 [as=a_new:17]
+      │    └── projections
+      │         ├── CASE WHEN a:11 IS NULL THEN column1:7 ELSE a_new:17 END [as=upsert_a:18]
+      │         ├── CASE WHEN a:11 IS NULL THEN column2:8 ELSE b:12 END [as=upsert_b:19]
+      │         ├── CASE WHEN a:11 IS NULL THEN column3:9 ELSE c:13 END [as=upsert_c:20]
+      │         └── CASE WHEN a:11 IS NULL THEN column4:10 ELSE d:14 END [as=upsert_d:21]
+      └── projections
+           └── upsert_b:19 < upsert_c:20 [as=check1:22]
+
+# Neither b nor c is updated, so this should succeed.
+build isolation=ReadCommitted
+INSERT INTO multi_col_fam_checks (a) VALUES (1)
+ON CONFLICT (a) DO UPDATE SET d = 5
+----
+upsert multi_col_fam_checks
+ ├── arbiter indexes: multi_col_fam_checks_pkey
+ ├── columns: <none>
+ ├── canary column: a:9
+ ├── fetch columns: a:9 b:10 c:11 d:12
+ ├── insert-mapping:
+ │    ├── column1:7 => a:1
+ │    ├── b_default:8 => b:2
+ │    ├── b_default:8 => c:3
+ │    └── b_default:8 => d:4
+ ├── update-mapping:
+ │    └── upsert_d:19 => d:4
+ ├── check columns: check1:20
+ └── project
+      ├── columns: check1:20 column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14 d_new:15!null upsert_a:16 upsert_b:17 upsert_c:18 upsert_d:19
+      ├── project
+      │    ├── columns: upsert_a:16 upsert_b:17 upsert_c:18 upsert_d:19 column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14 d_new:15!null
+      │    ├── project
+      │    │    ├── columns: d_new:15!null column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    ├── left-join (hash)
+      │    │    │    ├── columns: column1:7!null b_default:8 a:9 b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    ├── ensure-upsert-distinct-on
+      │    │    │    │    ├── columns: column1:7!null b_default:8
+      │    │    │    │    ├── grouping columns: column1:7!null
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: b_default:8 column1:7!null
+      │    │    │    │    │    ├── values
+      │    │    │    │    │    │    ├── columns: column1:7!null
+      │    │    │    │    │    │    └── (1,)
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         └── NULL::INT8 [as=b_default:8]
+      │    │    │    │    └── aggregations
+      │    │    │    │         └── first-agg [as=b_default:8]
+      │    │    │    │              └── b_default:8
+      │    │    │    ├── scan multi_col_fam_checks
+      │    │    │    │    ├── columns: a:9!null b:10 c:11 d:12 crdb_internal_mvcc_timestamp:13 tableoid:14
+      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── filters
+      │    │    │         └── column1:7 = a:9
+      │    │    └── projections
+      │    │         └── 5 [as=d_new:15]
+      │    └── projections
+      │         ├── CASE WHEN a:9 IS NULL THEN column1:7 ELSE a:9 END [as=upsert_a:16]
+      │         ├── CASE WHEN a:9 IS NULL THEN b_default:8 ELSE b:10 END [as=upsert_b:17]
+      │         ├── CASE WHEN a:9 IS NULL THEN b_default:8 ELSE c:11 END [as=upsert_c:18]
+      │         └── CASE WHEN a:9 IS NULL THEN b_default:8 ELSE d_new:15 END [as=upsert_d:19]
+      └── projections
+           └── upsert_b:17 < upsert_c:18 [as=check1:20]
+
 # ------------------------------------------------------------------------------
 # Test assignment casts.
 # ------------------------------------------------------------------------------

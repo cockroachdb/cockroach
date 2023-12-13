@@ -1,0 +1,231 @@
+# LogicTest: local
+
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
+
+# Test multi-column-family checks under read committed. If a check constraint
+# contains multiple column families but only some of them are updated, the
+# query should fail under read committed.
+
+statement ok
+CREATE TABLE multi_col_fam_checks (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT UNIQUE,
+  UNIQUE (a, b),
+  UNIQUE (b, c),
+  FAMILY(a),
+  FAMILY(b, d),
+  FAMILY(c),
+  CHECK (b < c)
+)
+
+statement ok
+CREATE TABLE multi_col_fam_checks_simple (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  FAMILY(a),
+  FAMILY(b),
+  FAMILY(c),
+  FAMILY(d),
+  CHECK (b < c)
+)
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Both b and c are updated (c is given the default value), so this should
+# succeed.
+query T
+EXPLAIN UPSERT INTO multi_col_fam_checks VALUES (5, 6)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: multi_col_fam_checks(a, b, c, d)
+│ auto commit
+│ arbiter indexes: multi_col_fam_checks_pkey
+│
+└── • render
+    │
+    └── • cross join (left outer)
+        │
+        ├── • values
+        │     size: 3 columns, 1 row
+        │
+        └── • scan
+              missing stats
+              table: multi_col_fam_checks@multi_col_fam_checks_pkey
+              spans: [/5 - /5]
+              locking strength: for update
+
+# Fast upsert case. Both b and c are updated (c is given the default value), so
+# this should succeed.
+query T
+EXPLAIN UPSERT INTO multi_col_fam_checks_simple VALUES (1, 2)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: multi_col_fam_checks_simple(a, b, c, d)
+│ auto commit
+│
+└── • values
+      size: 4 columns, 1 row
+
+# Only b is updated, but c must be read to check the constraint. Should fail
+# under read committed.
+query error pq: unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+EXPLAIN UPSERT INTO multi_col_fam_checks (a, b) VALUES (5, 6)
+
+# Neither b nor c is updated, so this should succeed.
+query T
+EXPLAIN UPSERT INTO multi_col_fam_checks (a, d) VALUES (3, 5)
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: multi_col_fam_checks(a, b, c, d)
+│ auto commit
+│ arbiter indexes: multi_col_fam_checks_pkey
+│
+└── • render
+    │
+    └── • cross join (left outer)
+        │
+        ├── • values
+        │     size: 3 columns, 1 row
+        │
+        └── • scan
+              missing stats
+              table: multi_col_fam_checks@multi_col_fam_checks_pkey
+              spans: [/3 - /3]
+              locking strength: for update
+
+# Only b is updated, but c must be read to check the constraint. Should fail
+# under read committed.
+query error pq: unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+EXPLAIN INSERT INTO multi_col_fam_checks VALUES (5) ON CONFLICT (a) DO UPDATE SET b = 5
+
+# Only c is updated, but b is read. Should fail under read committed.
+query error pq: unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+EXPLAIN INSERT INTO multi_col_fam_checks SELECT a FROM multi_col_fam_checks WHERE b = 5
+ON CONFLICT (d) DO UPDATE SET c = 3
+
+# Both b and c are updated, so this should succeed.
+query T
+EXPLAIN INSERT INTO multi_col_fam_checks VALUES (1, 2, 3)
+ON CONFLICT (a, b) DO UPDATE SET b = 3, c = 4
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: multi_col_fam_checks(a, b, c, d)
+│ auto commit
+│ arbiter indexes: multi_col_fam_checks_a_b_key
+│
+└── • render
+    │
+    └── • render
+        │
+        └── • cross join (left outer)
+            │
+            ├── • values
+            │     size: 4 columns, 1 row
+            │
+            └── • filter
+                │ filter: b = 2
+                │
+                └── • scan
+                      missing stats
+                      table: multi_col_fam_checks@multi_col_fam_checks_pkey
+                      spans: [/1 - /1]
+
+# Both b and c are updated, so this should succeed.
+query T
+EXPLAIN INSERT INTO multi_col_fam_checks (a) VALUES (1)
+ON CONFLICT (a) DO UPDATE SET b = 3, c = 4, d = 5
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: multi_col_fam_checks(a, b, c, d)
+│ auto commit
+│ arbiter indexes: multi_col_fam_checks_pkey
+│
+└── • render
+    │
+    └── • render
+        │
+        └── • cross join (left outer)
+            │
+            ├── • values
+            │     size: 2 columns, 1 row
+            │
+            └── • scan
+                  missing stats
+                  table: multi_col_fam_checks@multi_col_fam_checks_pkey
+                  spans: [/1 - /1]
+                  locking strength: for update
+
+# Neither b nor c is updated, so this should succeed.
+query T
+EXPLAIN INSERT INTO multi_col_fam_checks (a, b, c, d) VALUES (1, 2, 3, 4)
+ON CONFLICT (b, c) DO UPDATE SET a = 5
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: multi_col_fam_checks(a, b, c, d)
+│ auto commit
+│ arbiter indexes: multi_col_fam_checks_b_c_key
+│
+└── • render
+    │
+    └── • cross join (left outer)
+        │
+        ├── • values
+        │     size: 4 columns, 1 row
+        │
+        └── • index join
+            │ table: multi_col_fam_checks@multi_col_fam_checks_pkey
+            │
+            └── • scan
+                  missing stats
+                  table: multi_col_fam_checks@multi_col_fam_checks_b_c_key
+                  spans: [/2/3 - /2/3]
+
+# Neither b nor c is updated, so this should succeed.
+query T
+EXPLAIN INSERT INTO multi_col_fam_checks (a) VALUES (1)
+ON CONFLICT (a) DO UPDATE SET d = 5
+----
+distribution: local
+vectorized: true
+·
+• upsert
+│ into: multi_col_fam_checks(a, b, c, d)
+│ auto commit
+│ arbiter indexes: multi_col_fam_checks_pkey
+│
+└── • render
+    │
+    └── • cross join (left outer)
+        │
+        ├── • values
+        │     size: 2 columns, 1 row
+        │
+        └── • scan
+              missing stats
+              table: multi_col_fam_checks@multi_col_fam_checks_pkey
+              spans: [/1 - /1]
+              locking strength: for update
