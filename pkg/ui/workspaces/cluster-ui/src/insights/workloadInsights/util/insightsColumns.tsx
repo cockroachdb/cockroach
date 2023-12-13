@@ -38,7 +38,7 @@ export const insightsColumnLabels = {
   databaseName: "Database Name",
   tableName: "Table Name",
   indexName: "Index Name",
-  cpu: "CPU Time",
+  cpu: "SQL CPU Time",
 };
 
 export type InsightsTableColumnKeys = keyof typeof insightsColumnLabels;
@@ -238,7 +238,8 @@ export const insightsTableTitles: InsightsTableTitleType = {
   },
   cpu: (_: InsightExecEnum) => {
     return makeToolTip(
-      <p>{`CPU Time spent executing within the specified time interval.`}</p>,
+      <p>{`SQL CPU Time spent executing within the specified time interval. It 
+      excludes the time spent in the KV level as well as SQL planning time.`}</p>,
       "cpu",
     );
   },
