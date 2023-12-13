@@ -790,7 +790,9 @@ func (db *DB) AddSSTable(
 ) (roachpb.Span, int64, error) {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, noRemoteFile, disallowConflicts, disallowShadowing, disallowShadowingBelow,
-		stats, ingestAsWrites, hlc.Timestamp{} /* sstTimestampToRequestTimestamp */)
+		stats, ingestAsWrites, hlc.Timestamp{}, /* sstTimestampToRequestTimestamp */
+		kvpb.AddSSTableRequest_PrefixReplacement{},
+	)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
 		return roachpb.Span{}, 0, err
@@ -807,9 +809,12 @@ func (db *DB) AddRemoteSSTable(
 	span roachpb.Span,
 	file kvpb.AddSSTableRequest_RemoteFile,
 	stats *enginepb.MVCCStats,
+	prefix kvpb.AddSSTableRequest_PrefixReplacement,
 ) (roachpb.Span, int64, error) {
 	b := &Batch{}
-	b.addSSTable(span.Key, span.EndKey, nil, file, false, false, hlc.Timestamp{}, stats, false, hlc.Timestamp{})
+	b.addSSTable(span.Key, span.EndKey, nil, file, false, false,
+		hlc.Timestamp{}, stats, false, hlc.Timestamp{}, prefix,
+	)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
 		return roachpb.Span{}, 0, err
@@ -841,7 +846,7 @@ func (db *DB) AddSSTableAtBatchTimestamp(
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
 	b.addSSTable(begin, end, data, noRemoteFile,
 		disallowConflicts, disallowShadowing, disallowShadowingBelow,
-		stats, ingestAsWrites, batchTs)
+		stats, ingestAsWrites, batchTs, kvpb.AddSSTableRequest_PrefixReplacement{})
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
 		return hlc.Timestamp{}, roachpb.Span{}, 0, err
