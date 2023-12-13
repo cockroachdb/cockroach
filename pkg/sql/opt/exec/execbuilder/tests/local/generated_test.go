@@ -664,11 +664,25 @@ func TestExecBuild_update_from(
 	runExecBuildLogicTest(t, "update_from")
 }
 
+func TestExecBuild_update_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "update_read_committed")
+}
+
 func TestExecBuild_upsert(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "upsert")
+}
+
+func TestExecBuild_upsert_read_committed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "upsert_read_committed")
 }
 
 func TestExecBuild_values(
