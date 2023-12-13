@@ -43,7 +43,6 @@ func registerOnlineRestore(r registry.Registry) {
 			timeout:                5 * time.Hour,
 			suites:                 registry.Suites(registry.Nightly),
 			restoreUptoIncremental: 1,
-			skip:                   "used for ad hoc experiments",
 		},
 		{
 			// 8TB tpce Online Restore
