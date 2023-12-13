@@ -46,7 +46,6 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 	})
 }
 
-// runSchemaChangeMixedVersions runs through randomized schema change processes in a mixed-version state.
 func runSchemaChangeMixedVersions(
 	ctx context.Context, t test.Test, c cluster.Cluster, maxOps int, concurrency int,
 ) {

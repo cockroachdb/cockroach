@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -70,6 +71,7 @@ func registerElasticIO(r registry.Registry) {
 
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workAndPromNode))
 			startOpts := option.DefaultStartOptsNoBackups()
+			roachtestutil.SetDefaultAdminUIPort(c, startOpts.RoachprodOpts)
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")
 			settings := install.MakeClusterSettings()

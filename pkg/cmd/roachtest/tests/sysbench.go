@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -65,13 +66,15 @@ type sysbenchOptions struct {
 
 func (o *sysbenchOptions) cmd(haproxy bool) string {
 	pghost := "{pghost:1}"
+	pgport := "{pgport:1}"
 	if haproxy {
 		pghost = "127.0.0.1"
+		pgport = "26257"
 	}
 	return fmt.Sprintf(`sysbench \
 		--db-driver=pgsql \
 		--pgsql-host=%s \
-		--pgsql-port=26257 \
+		--pgsql-port=%s \
 		--pgsql-user=root \
 		--pgsql-password= \
 		--pgsql-db=sysbench \
@@ -83,6 +86,7 @@ func (o *sysbenchOptions) cmd(haproxy bool) string {
 		--auto_inc=false \
 		%s`,
 		pghost,
+		pgport,
 		int(o.duration.Seconds()),
 		o.concurrency,
 		o.tables,
@@ -116,7 +120,11 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	m := c.NewMonitor(ctx, roachNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("preparing workload")
-		c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "CREATE DATABASE sysbench"`)
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.Run(ctx, c.Node(1), fmt.Sprintf(`./cockroach sql --insecure --url=%s -e "CREATE DATABASE sysbench"`, pgurl))
 		c.Run(ctx, loadNode, opts.cmd(false /* haproxy */)+" prepare")
 
 		t.Status("running workload")

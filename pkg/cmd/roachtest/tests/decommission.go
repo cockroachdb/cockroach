@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -150,7 +151,12 @@ func runDrainAndDecommission(
 	for i := 1; i <= nodes; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
-	c.Run(ctx, c.Node(pinnedNode), `./cockroach workload init kv --drop --splits 1000`)
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Run(ctx, c.Node(pinnedNode),
+		fmt.Sprintf(`./cockroach workload init kv --drop --splits 1000 '%s'`, pgurl))
 
 	run := func(stmt string) {
 		db := c.Conn(ctx, t.L(), pinnedNode)
@@ -200,7 +206,11 @@ func runDrainAndDecommission(
 		m.Go(func() error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
-				return c.RunE(ctx, c.Node(id), "./cockroach node drain --insecure")
+				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node drain --insecure --url=%s", pgurl))
 			}
 			return drain(id)
 		})
@@ -214,7 +224,11 @@ func runDrainAndDecommission(
 		id := nodes - 3
 		decom := func(id int) error {
 			t.Status(fmt.Sprintf("decommissioning node %d", id))
-			return c.RunE(ctx, c.Node(id), "./cockroach node decommission --self --insecure")
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node decommission --self --insecure --url=%s", pgurl))
 		}
 		return decom(id)
 	})
@@ -260,7 +274,8 @@ func runDecommission(
 
 		c.Start(ctx, t.L(), withDecommissionVMod(startOpts), install.MakeClusterSettings(), c.Node(i))
 	}
-	c.Run(ctx, c.Node(pinnedNode), fmt.Sprintf(`./workload init kv --drop {pgurl:%d}`, pinnedNode))
+	c.Run(ctx, c.Node(pinnedNode),
+		fmt.Sprintf(`./workload init kv --drop {pgurl:%d}`, pinnedNode))
 
 	h := newDecommTestHelper(t, c)
 
@@ -1121,9 +1136,13 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 		m.Go(func(ctx context.Context) error {
 			decom := func(id int) error {
 				t.Status(fmt.Sprintf("decommissioning node %d", id))
+				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
+				if err != nil {
+					t.Fatal(err)
+				}
 				return c.RunE(ctx,
 					c.Node(id),
-					fmt.Sprintf("./cockroach node decommission %d --insecure --checks=skip", id),
+					fmt.Sprintf("./cockroach node decommission %d --insecure --checks=skip --url=%s", id, pgurl),
 				)
 			}
 			return decom(id)
@@ -1461,7 +1480,11 @@ func execCLI(
 	args := []string{"./cockroach"}
 	args = append(args, extraArgs...)
 	args = append(args, "--insecure")
-	args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(runNode))
+	if err != nil {
+		t.Fatal(err)
+	}
+	args = append(args, fmt.Sprintf("--url=%s", pgurl))
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
 	t.L().Printf("%s\n", result.Stdout)
 	return result.Stdout, err
