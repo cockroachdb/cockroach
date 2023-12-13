@@ -109,7 +109,10 @@ type WindowedHistogram interface {
 	// interpolated value at that quantile for the windowed histogram.
 	// Methods implementing this interface should the merge buckets, sums,
 	// and counts of previous and current windows.
-	ValueAtQuantileWindowed(q float64) float64
+	ValueAtQuantileWindowed(q float64, window *prometheusgo.Metric) float64
+	// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
+	// right type for the current histogram window.
+	ToPrometheusMetricWindowed() *prometheusgo.Metric
 }
 
 // GetName returns the metric's name.
@@ -389,7 +392,7 @@ func (h *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 }
 
 // ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
-// right type.
+// right type for the current histogram window.
 func (h *Histogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
 	h.windowed.Lock()
 	defer h.windowed.Unlock()
@@ -457,9 +460,8 @@ func (h *Histogram) MeanWindowed() float64 {
 //     with the quantiles that include the +Inf bucket.
 //  2. Since the prometheus client library ensures buckets are in a strictly
 //     increasing order at creation, we do not sort them.
-func (h *Histogram) ValueAtQuantileWindowed(q float64) float64 {
-	return ValueAtQuantileWindowed(h.ToPrometheusMetricWindowed().Histogram,
-		q)
+func (h *Histogram) ValueAtQuantileWindowed(q float64, window *prometheusgo.Metric) float64 {
+	return ValueAtQuantileWindowed(window.Histogram, q)
 }
 
 var _ PrometheusExportable = (*ManualWindowHistogram)(nil)
@@ -624,6 +626,14 @@ func (mwh *ManualWindowHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return m
 }
 
+// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
+// right type for the current histogram window.
+func (mwh *ManualWindowHistogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
+	mwh.mu.RLock()
+	defer mwh.mu.RUnlock()
+	return mwh.ToPrometheusMetricWindowedLocked()
+}
+
 // ToPrometheusMetricWindowedLocked returns a filled-in prometheus metric of the
 // right type.
 func (mwh *ManualWindowHistogram) ToPrometheusMetricWindowedLocked() *prometheusgo.Metric {
@@ -667,13 +677,10 @@ func (mwh *ManualWindowHistogram) Mean() float64 {
 //
 // This function is very similar to Histogram.ValueAtQuantileWindowed. Thus see
 // Histogram.ValueAtQuantileWindowed for a more in-depth description.
-func (mwh *ManualWindowHistogram) ValueAtQuantileWindowed(q float64) float64 {
-	mwh.mu.RLock()
-	defer mwh.mu.RUnlock()
-	if mwh.mu.cur == nil {
-		return 0
-	}
-	return ValueAtQuantileWindowed(mwh.ToPrometheusMetricWindowedLocked().Histogram, q)
+func (mwh *ManualWindowHistogram) ValueAtQuantileWindowed(
+	q float64, window *prometheusgo.Metric,
+) float64 {
+	return ValueAtQuantileWindowed(window.Histogram, q)
 }
 
 // A Counter holds a single mutable atomic value.

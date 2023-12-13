@@ -630,13 +630,14 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 		fn(name+"-count", float64(count))
 		fn(name+"-sum", sum)
 		// Use windowed stats for avg and quantiles
+		histWindow := mtr.ToPrometheusMetricWindowed()
 		avg := mtr.MeanWindowed()
 		if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 			avg = 0
 		}
 		fn(name+"-avg", avg)
 		for _, pt := range recordHistogramQuantiles {
-			fn(name+pt.suffix, mtr.ValueAtQuantileWindowed(pt.quantile))
+			fn(name+pt.suffix, mtr.ValueAtQuantileWindowed(pt.quantile, histWindow))
 		}
 	case metric.PrometheusExportable:
 		// NB: this branch is intentionally at the bottom since all metrics implement it.
