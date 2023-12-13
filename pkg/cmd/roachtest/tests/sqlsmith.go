@@ -123,10 +123,9 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		t.Status("executing setup")
 		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
 		for _, stmt := range setup {
+			logStmt(stmt)
 			if _, err := conn.Exec(stmt); err != nil {
 				t.Fatalf("error: %s\nstatement: %s", err.Error(), stmt)
-			} else {
-				logStmt(stmt)
 			}
 		}
 
