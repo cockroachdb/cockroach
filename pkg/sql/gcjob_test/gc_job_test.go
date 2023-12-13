@@ -74,16 +74,19 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 	for _, dropItem := range []DropItem{INDEX, TABLE, DATABASE} {
 		for _, ttlTime := range []TTLTime{PAST, SOON, FUTURE} {
-			// NB: The inner body of this loop has been extracted into a function to
-			// ensure defer statements (namely testserver.Stop) is executed at the
-			// end of each loop rather than the end of each test.
-			doTestSchemaChangeGCJob(t, dropItem, ttlTime)
+			t.Run(fmt.Sprintf("dropItem=%d/ttlTime=%d", dropItem, ttlTime), func(t *testing.T) {
+				// NB: The inner body of this loop has been extracted into a function to
+				// ensure defer statements (namely testserver.Stop) is executed at the
+				// end of each loop rather than the end of each test.
+				doTestSchemaChangeGCJob(t, dropItem, ttlTime)
+			})
 		}
 	}
 }
 
 func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 	blockGC := make(chan struct{}, 1)
+	defer close(blockGC)
 	params := base.TestServerArgs{}
 	params.ScanMaxIdleTime = time.Millisecond
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
@@ -227,9 +230,11 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 
 	// Check that the job started.
 	jobIDStr := strconv.Itoa(int(job.ID()))
-	if err := jobutils.VerifyRunningSystemJob(t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR); err != nil {
-		t.Fatal(err)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		return jobutils.VerifyRunningSystemJob(
+			t, sqlDB, 0, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingGC, lookupJR,
+		)
+	})
 
 	if ttlTime != FUTURE {
 		// Check that the job eventually blocks right before performing GC, due to the testing knob.
