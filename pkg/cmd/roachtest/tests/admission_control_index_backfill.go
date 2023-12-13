@@ -46,7 +46,6 @@ func registerIndexBackfill(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.ManualOnly,
-		Tags:             registry.Tags(`manual`),
 		// TODO(aaditya): Revisit this as part of #111614.
 		//Suites:           registry.Suites(registry.Weekly),
 		//Tags:             registry.Tags(`weekly`),

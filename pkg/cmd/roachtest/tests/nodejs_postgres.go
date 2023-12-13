@@ -185,7 +185,6 @@ PGSSLCERT=$HOME/certs/client.%s.crt PGSSLKEY=$HOME/certs/client.%s.key PGSSLROOT
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly, registry.Driver),
-		Tags:             registry.Tags(`default`, `driver`),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNodeJSPostgres(ctx, t, c)
 		},

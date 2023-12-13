@@ -311,7 +311,6 @@ func registerBackupFixtures(r registry.Registry) {
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			CompatibleClouds:  registry.Clouds(bf.scheduledBackupSpecs.cloud),
 			Suites:            bf.suites,
-			Tags:              tagsFromSuiteAndCloud(bf.scheduledBackupSpecs.cloud, bf.suites),
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 

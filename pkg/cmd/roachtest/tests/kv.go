@@ -345,7 +345,6 @@ func registerKV(r registry.Registry) {
 		} else if !opts.weekly && (opts.readPercent == 95 || opts.readPercent == 0) {
 			// All the kv0|95 tests should run on AWS.
 			clouds = registry.AllClouds
-			tags = registry.Tags("aws")
 		} else {
 			clouds = registry.AllExceptAWS
 		}
@@ -366,7 +365,6 @@ func registerKV(r registry.Registry) {
 			},
 			CompatibleClouds:  clouds,
 			Suites:            suites,
-			Tags:              tags,
 			EncryptionSupport: encryption,
 		})
 	}
@@ -964,7 +962,6 @@ func registerKVRestartImpact(r registry.Registry) {
 		// This test is expensive (104vcpu), we run it weekly.
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
-		Tags:             registry.Tags(`weekly`),
 		Owner:            registry.OwnerKV,
 		Cluster:          r.MakeClusterSpec(13, spec.CPU(8)),
 		Leases:           registry.MetamorphicLeases,

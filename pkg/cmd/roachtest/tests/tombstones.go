@@ -37,7 +37,6 @@ func registerPointTombstone(r registry.Registry) {
 		// should be fine to ensure we don't regress.
 		Suites:            registry.Suites(registry.Weekly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
-		Tags:              registry.Tags("weekly"),
 		Timeout:           120 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			startOpts := option.DefaultStartOpts()

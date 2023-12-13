@@ -38,7 +38,6 @@ func registerTLP(r registry.Registry) {
 		Owner:            registry.OwnerSQLQueries,
 		Timeout:          time.Hour * 1,
 		RequiresLicense:  true,
-		Tags:             nil,
 		Cluster:          r.MakeClusterSpec(1),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),

@@ -13,7 +13,6 @@ package registry
 import (
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -35,16 +34,6 @@ type TestFilter struct {
 
 	// OnlyBenchmarks, if set, restricts the set of tests to benchmarks.
 	OnlyBenchmarks bool
-
-	// Multiple `tag:` parameters can be passed for which only one needs to match, but the
-	// value of a single `tag:` parameter can be a comma-separated list of tags which all need
-	// to match.
-	// e.g. `tag:foo,bar` matches tests with tags `foo` and `bar`, and `tag:foo tag:bar` matches
-	// tests with either tag `foo` or tag `bar`.
-	//
-	// This set contains each tag, so the above examples would be represented as `["foo,bar"]` and
-	// `["foo", "bar"]` respectively..
-	Tags map[string]struct{}
 }
 
 // TestFilterOption can be passed to NewTestFilter.
@@ -70,19 +59,8 @@ func OnlyBenchmarks() TestFilterOption {
 }
 
 // NewTestFilter initializes a new filter. The strings are interpreted as
-// regular expressions. As a special case, a `tag:` prefix implies that the
-// remainder of the string filters tests by tag, and not by name.
+// regular expressions (which are joined with |).
 func NewTestFilter(regexps []string, options ...TestFilterOption) (*TestFilter, error) {
-	var name []string
-	tags := make(map[string]struct{})
-	for _, v := range regexps {
-		if strings.HasPrefix(v, "tag:") {
-			tags[strings.TrimPrefix(v, "tag:")] = struct{}{}
-		} else {
-			name = append(name, v)
-		}
-	}
-
 	makeRE := func(strs []string) *regexp.Regexp {
 		switch len(strs) {
 		case 0:
@@ -98,8 +76,7 @@ func NewTestFilter(regexps []string, options ...TestFilterOption) (*TestFilter, 
 	}
 
 	tf := &TestFilter{
-		Name: makeRE(name),
-		Tags: tags,
+		Name: makeRE(regexps),
 	}
 	for _, o := range options {
 		o(tf)
@@ -109,8 +86,8 @@ func NewTestFilter(regexps []string, options ...TestFilterOption) (*TestFilter, 
 	if tf.Cloud != "" && !AllClouds.Contains(tf.Cloud) {
 		return nil, errors.Newf("invalid cloud %q; valid clouds are %s", tf.Cloud, AllClouds)
 	}
-	if s := Suites(allSuites...); tf.Suite != "" && !s.Contains(tf.Suite) {
-		return nil, errors.Newf("invalid suite %q; valid suites are %s", tf.Suite, s)
+	if tf.Suite != "" && !AllSuites.Contains(tf.Suite) {
+		return nil, errors.Newf("invalid suite %q; valid suites are %s", tf.Suite, AllSuites)
 	}
 	if tf.Owner != "" && !tf.Owner.IsValid() {
 		return nil, errors.Newf("invalid owner %q", tf.Owner)
@@ -131,8 +108,6 @@ type MatchFailReason struct {
 	NotPartOfSuite bool
 	// If true, the test is not compatible with the cloud in the filter.
 	CloudNotCompatible bool
-	// If true, the tags don't match those in the filter.
-	TagsMismatch bool
 }
 
 // Matches returns true if the filter matches the test. If the test doesn't
@@ -144,21 +119,6 @@ func (filter *TestFilter) Matches(t *TestSpec) (matches bool, reason MatchFailRe
 	reason.NotPartOfSuite = filter.Suite != "" && !t.Suites.Contains(filter.Suite)
 	reason.CloudNotCompatible = filter.Cloud != "" && !t.CompatibleClouds.Contains(filter.Cloud)
 
-	if len(filter.Tags) > 0 {
-		// Tags will go away soon.
-		matchesTags := func() bool {
-			for tag := range filter.Tags {
-				// If the tag is a single CSV e.g. "foo,bar,baz", we match all the tags
-				if matchesAll(t.Tags, strings.Split(tag, ",")) {
-					return true
-				}
-			}
-			return false
-		}()
-		if !matchesTags {
-			reason.TagsMismatch = true
-		}
-	}
 	// We have a match if all fields are false.
 	return reason == MatchFailReason{}, reason
 }
@@ -184,7 +144,6 @@ func (filter *TestFilter) MatchFailReasonString(r MatchFailReason) string {
 	appendIf(r.OwnerMismatch, "does not have owner %q", filter.Owner)
 	appendIf(r.NotPartOfSuite, "is not part of the %q suite", filter.Suite)
 	appendIf(r.CloudNotCompatible, "is not compatible with %q", filter.Cloud)
-	appendIf(r.TagsMismatch, "does not match tags")
 
 	if len(reasons) <= 2 {
 		// 0 reasons: ""
@@ -385,16 +344,6 @@ func (filter *TestFilter) String() string {
 	appendIf(filter.Cloud != "", "are compatible with cloud %q", filter.Cloud)
 	appendIf(filter.Suite != "", "are part of the %q suite", filter.Suite)
 	appendIf(filter.Owner != "", "have owner %q", filter.Owner)
-
-	if len(filter.Tags) > 0 {
-		var tags []string
-		for tag := range filter.Tags {
-			tags = append(tags, tag)
-		}
-		sort.Strings(tags)
-		tagsStr := strings.Join(tags, " OR ")
-		appendIf(true, "match tag(s) %s", tagsStr)
-	}
 
 	noun := filter.noun()
 	if len(criteria) == 0 {
