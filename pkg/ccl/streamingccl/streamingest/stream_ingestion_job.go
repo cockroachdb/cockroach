@@ -196,11 +196,12 @@ func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
 	if knobs != nil && knobs.DistSQLRetryPolicy != nil {
 		return *knobs.DistSQLRetryPolicy
 	}
-	return retry.Options{
-		InitialBackoff: time.Microsecond,
-		Multiplier:     1,
-		MaxBackoff:     2 * time.Microsecond,
-		MaxRetries:     20}
+
+	// This feature is potentially running over WAN network links / the public
+	// internet, so we want to recover on our own from hiccups that could last a
+	// few seconds or even minutes. Thus we allow a relatively long MaxBackoff and
+	// number of retries that should cause us to retry for a few minutes.
+	return retry.Options{MaxBackoff: 15 * time.Second, MaxRetries: 20} // 205.5s.
 }
 
 func ingestWithRetries(
