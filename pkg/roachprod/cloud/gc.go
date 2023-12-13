@@ -129,6 +129,12 @@ func findUserChannel(client *slack.Client, email string) (string, error) {
 	return u.ID, nil
 }
 
+func slackClusterExpirationDate(c *Cluster) string {
+	return fmt.Sprintf("<!date^%[1]d^{date_short_pretty} {time}|%[2]s>",
+		c.GCAt().Unix(),
+		c.LifetimeRemaining().Round(time.Second))
+}
+
 func postStatus(
 	l *logger.Logger, client *slack.Client, channel string, dryrun bool, s *status, badVMs vm.List,
 ) {
@@ -173,10 +179,7 @@ func postStatus(
 		var expirations []string
 		for _, c := range clusters {
 			names = append(names, c.Name)
-			expirations = append(expirations,
-				fmt.Sprintf("<!date^%[1]d^{date_short_pretty} {time}|%[2]s>",
-					c.GCAt().Unix(),
-					c.LifetimeRemaining().Round(time.Second)))
+			expirations = append(expirations, slackClusterExpirationDate(c))
 		}
 		return []slack.AttachmentField{
 			{
@@ -235,29 +238,34 @@ func postStatus(
 				Text:  strings.Join(names, "\n"),
 			})
 	}
-	_, _, err := client.PostMessage(
-		channel,
-		slack.MsgOptionUsername("roachprod"),
-		slack.MsgOptionAttachments(attachments...),
-	)
-	if err != nil {
-		l.Printf("%v", err)
-	}
+
+	postMessage(l, client, channel, slack.MsgOptionAttachments(attachments...))
 }
 
 func postError(l *logger.Logger, client *slack.Client, channel string, err error) {
-	l.Printf("%v", err)
+	l.Printf("Posting error to Slack: %v", err)
 	if client == nil || channel == "" {
 		return
 	}
 
-	_, _, err = client.PostMessage(
-		channel,
-		slack.MsgOptionUsername("roachprod"),
-		slack.MsgOptionText(fmt.Sprintf("`%s`", err), false),
+	postMessage(
+		l, client, channel, slack.MsgOptionText(fmt.Sprintf("```\n%s\n```", err), false),
 	)
+}
+
+func postMessage(l *logger.Logger, client *slack.Client, channel string, opts ...slack.MsgOption) {
+	if client == nil || channel == "" {
+		return
+	}
+
+	defaultOpts := []slack.MsgOption{
+		slack.MsgOptionUsername("roachprod"),
+	}
+
+	msgOpts := append(defaultOpts, opts...)
+	_, _, err := client.PostMessage(channel, msgOpts...)
 	if err != nil {
-		l.Printf("%v", err)
+		l.Printf("Error posting to Slack: %v", err)
 	}
 }
 
@@ -282,6 +290,23 @@ func shouldSend(channel string, status *status) (bool, error) {
 	}
 
 	return true, os.WriteFile(hashPath, []byte(newHash), 0644)
+}
+
+// reportDeletedResources will log the resources being deleted and
+// send a message on the roachprod-status Slack channel about it.
+func reportDeletedResources(
+	l *logger.Logger, client *slack.Client, channel, resourceName string, resources []string,
+) {
+	if len(resources) > 0 {
+		lines := []string{fmt.Sprintf("Destroyed %d %s:\n", len(resources), resourceName)}
+		for _, r := range resources {
+			lines = append(lines, fmt.Sprintf("* %s", r))
+		}
+
+		msg := strings.Join(lines, "\n")
+		postMessage(l, client, channel, slack.MsgOptionText(msg, false))
+		l.Printf("%s", msg)
+	}
 }
 
 // GCClusters checks all cluster to see if they should be deleted. It only
@@ -335,23 +360,39 @@ func GCClusters(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 	}
 
 	channel, _ := findChannel(client, "roachprod-status", "")
+
 	if !dryrun {
 		if len(badVMs) > 0 {
 			// Destroy bad VMs.
-			err := vm.FanOut(badVMs, func(p vm.Provider, vms vm.List) error {
-				return p.Delete(l, vms)
-			})
-			if err != nil {
+			var deletedVMs []string
+			if err := vm.FanOut(badVMs, func(p vm.Provider, vms vm.List) error {
+				err := p.Delete(l, vms)
+				if err == nil {
+					for _, vm := range vms {
+						deletedVMs = append(deletedVMs, vm.Name)
+					}
+				}
+
+				return err
+			}); err != nil {
+				postError(l, client, channel, err)
+			}
+
+			reportDeletedResources(l, client, channel, "bad VMs", deletedVMs)
+		}
+
+		// Destroy expired clusters.
+		var destroyedClusters []string
+		for _, c := range s.destroy {
+			if err := DestroyCluster(l, c); err == nil {
+				clusterDesc := fmt.Sprintf("%s (expiration: %s)", c.Name, slackClusterExpirationDate(c))
+				destroyedClusters = append(destroyedClusters, clusterDesc)
+			} else {
 				postError(l, client, channel, err)
 			}
 		}
 
-		// Destroy expired clusters.
-		for _, c := range s.destroy {
-			if err := DestroyCluster(l, c); err != nil {
-				postError(l, client, channel, err)
-			}
-		}
+		reportDeletedResources(l, client, channel, "clusters", destroyedClusters)
 	}
 	return nil
 }
@@ -391,17 +432,25 @@ func GCDNS(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 				danglingRecordNames[record.Name] = struct{}{}
 			}
 		}
+
+		client := makeSlackClient()
+		channel, _ := findChannel(client, "roachprod-status", "")
+		recordNames := maps.Keys(danglingRecordNames)
+		sort.Strings(recordNames)
+
 		if !dryrun {
-			keys := maps.Keys(danglingRecordNames)
-			if err := p.DeleteRecordsByName(ctx, keys...); err != nil {
+			if err := p.DeleteRecordsByName(ctx, recordNames...); err != nil {
 				return err
 			}
-		} else {
-			// Log dangling DNS records that would be deleted in a non-dryrun.
-			for danglingRecordName := range danglingRecordNames {
-				l.Printf("deleting dangling DNS record %s", danglingRecordName)
-			}
 		}
+
+		// Display record names in backticks so that special characters in
+		// the domain name (such as underscores) are not interpreted as markup.
+		formattedRecords := make([]string, 0, len(recordNames))
+		for _, name := range recordNames {
+			formattedRecords = append(formattedRecords, fmt.Sprintf("`%s`", name))
+		}
+		reportDeletedResources(l, client, channel, "dangling DNS records", formattedRecords)
 	}
 	return nil
 }
