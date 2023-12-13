@@ -9,6 +9,7 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -16,11 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -31,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -81,7 +85,7 @@ func sendAddRemoteSSTs(
 
 	restoreWorkers := int(onlineRestoreLinkWorkers.Get(&execCtx.ExecCfg().Settings.SV))
 	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, restoreSpanEntriesCh, requestFinishedCh, fromSystemTenant))
+		grp.GoCtx(sendAddRemoteSSTWorker(execCtx, dataToRestore.getRekeys(), dataToRestore.getTenantRekeys(), fromSystemTenant, restoreSpanEntriesCh, requestFinishedCh))
 	}
 
 	if err := grp.Wait(); err != nil {
@@ -108,14 +112,46 @@ func sendAddRemoteSSTs(
 
 func sendAddRemoteSSTWorker(
 	execCtx sql.JobExecContext,
+	tableRekeys []execinfrapb.TableRekey,
+	tenantRekeys []execinfrapb.TenantRekey,
+	fromSystemTenant bool,
 	restoreSpanEntriesCh <-chan execinfrapb.RestoreSpanEntry,
 	requestFinishedCh chan<- struct{},
-	fromSystemTenant bool,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		var toAdd []execinfrapb.RestoreFileSpec
 		var batchSize int64
 		const targetBatchSize = 440 << 20
+
+		// TODO(dt): handle tenants
+		prefixes := prefixRewriter{rewrites: make([]prefixRewrite, 0, len(tableRekeys))}
+		for _, i := range tableRekeys {
+
+			if i.OldID == 0 {
+				continue
+			}
+			var desc descpb.Descriptor
+			if err := protoutil.Unmarshal(i.NewDesc, &desc); err != nil {
+				return err
+			}
+			table, _, _, _, _ := descpb.GetDescriptors(&desc)
+			if table == nil {
+				return errors.AssertionFailedf("expected a table descriptor for old ID %d, got %T", i.OldID, desc.Union)
+			}
+
+			prefixes.rewrites = append(prefixes.rewrites, prefixRewrite{
+				OldPrefix: keys.SystemSQLCodec.TablePrefix(i.OldID),
+				NewPrefix: keys.SystemSQLCodec.TablePrefix(uint32(table.ID)),
+				noop:      i.OldID == uint32(table.ID),
+			})
+		}
+		for _, i := range tenantRekeys {
+			prefixes.rewrites = append(prefixes.rewrites, prefixRewrite{
+				OldPrefix: keys.MakeTenantPrefix(i.OldID),
+				NewPrefix: keys.MakeTenantPrefix(i.NewID),
+				noop:      i.OldID == i.NewID,
+			})
+		}
 
 		flush := func(splitAt roachpb.Key) error {
 			if len(toAdd) == 0 {
@@ -129,7 +165,24 @@ func sendAddRemoteSSTWorker(
 			}
 
 			for _, file := range toAdd {
-				if err := sendRemoteAddSSTable(ctx, execCtx, file, fromSystemTenant); err != nil {
+				rw, found := prefixes.GetRewrite(file.BackupFileEntrySpan.Key)
+				if !found {
+					return errors.AssertionFailedf("file %s starting at %s did not find a prefix rewrite", file.Path, file.BackupFileEntrySpan.Key)
+				}
+				if !bytes.HasPrefix(file.BackupFileEntrySpan.EndKey, rw.OldPrefix) {
+					return errors.AssertionFailedf("file %s has span %s which does not end within prefix %q", file.Path, file.BackupFileEntrySpan, roachpb.Key(rw.OldPrefix))
+				}
+				file.BackupFileEntrySpan.Key = rw.rewriteKey(file.BackupFileEntrySpan.Key)
+				file.BackupFileEntrySpan.EndKey = rw.rewriteKey(file.BackupFileEntrySpan.EndKey)
+
+				rewrite := kvpb.AddSSTableRequest_PrefixReplacement{}
+
+				if !rw.noop {
+					rewrite.From = rw.OldPrefix
+					rewrite.To = rw.NewPrefix
+				}
+
+				if err := sendRemoteAddSSTable(ctx, execCtx, file, rewrite, fromSystemTenant); err != nil {
 					return err
 				}
 			}
@@ -217,6 +270,7 @@ func sendRemoteAddSSTable(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	file execinfrapb.RestoreFileSpec,
+	rewrite kvpb.AddSSTableRequest_PrefixReplacement,
 	fromSystemTenant bool,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "backupccl.sendRemoteAddSSTable")
