@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -56,7 +57,7 @@ func (s *systemStatusServer) DownloadSpan(
 	}
 
 	// Send DownloadSpan request to all stores on all nodes.
-	remoteRequest := serverpb.DownloadSpanRequest{NodeID: "local", Span: req.Span}
+	remoteRequest := serverpb.DownloadSpanRequest{NodeID: "local", Spans: req.Spans}
 	nodeFn := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (*serverpb.DownloadSpanResponse, error) {
 		return status.DownloadSpan(ctx, &remoteRequest)
 	}
@@ -81,7 +82,36 @@ func (s *systemStatusServer) DownloadSpan(
 func (s *systemStatusServer) localDownloadSpan(
 	ctx context.Context, req *serverpb.DownloadSpanRequest,
 ) error {
+
 	return s.stores.VisitStores(func(store *kvserver.Store) error {
-		return store.TODOEngine().Download(ctx, req.Span)
+		spanCh := make(chan roachpb.Span)
+
+		grp := ctxgroup.WithContext(ctx)
+		grp.GoCtx(func(ctx context.Context) error {
+			defer close(spanCh)
+			ctxDone := ctx.Done()
+
+			for _, sp := range req.Spans {
+				select {
+				case spanCh <- sp:
+				case <-ctxDone:
+					return ctx.Err()
+				}
+			}
+			return nil
+		})
+
+		downloader := func(ctx context.Context) error {
+			for sp := range spanCh {
+				if err := store.TODOEngine().Download(ctx, sp); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		for i := 0; i < 4; i++ {
+			grp.GoCtx(downloader)
+		}
+		return grp.Wait()
 	})
 }
