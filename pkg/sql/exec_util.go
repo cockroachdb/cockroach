@@ -1652,7 +1652,7 @@ type ExecutorTestingKnobs struct {
 	UseTransactionalDescIDGenerator bool
 
 	// BeforeCopyFromInsert, if set, will be called during a COPY FROM insert statement.
-	BeforeCopyFromInsert func() error
+	BeforeCopyFromInsert func(txn *kv.Txn) error
 
 	// CopyFromInsertRetry, if set, will be called when a COPY FROM insert statement is retried.
 	CopyFromInsertRetry func() error

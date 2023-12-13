@@ -146,6 +146,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		// for Scale Factor 1, so since we're using Scale Factor 100 some TPCH
 		// queries are expected to return different results - skip those.
 		var queries string
+		var numQueries int
 		for i := 1; i <= tpch.NumQueries; i++ {
 			switch i {
 			case 11, 13, 16, 18, 20:
@@ -155,11 +156,12 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 					queries += ","
 				}
 				queries += strconv.Itoa(i)
+				numQueries++
 			}
 		}
 		// maxOps flag will allow us to exit the workload once all the queries
 		// were run 2 times.
-		maxOps := 2 * len(queries)
+		maxOps := 2 * numQueries
 		cmd := fmt.Sprintf(
 			"./workload run tpch --db=csv --concurrency=1 --queries=%s --max-ops=%d {pgurl%s} "+
 				"--enable-checks=true", queries, maxOps, c.All())

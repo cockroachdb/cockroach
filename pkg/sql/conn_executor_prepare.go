@@ -48,7 +48,7 @@ func (ex *connExecutor) execPrepare(
 		// information about the previous transaction. We expect to execute
 		// this command in NoTxn.
 		if _, ok := parseCmd.AST.(*tree.ShowCommitTimestamp); !ok {
-			return ex.beginImplicitTxn(ctx, parseCmd.AST)
+			return ex.beginImplicitTxn(ctx, parseCmd.AST, ex.QualityOfService())
 		}
 	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
 		if !ex.isAllowedInAbortedTxn(parseCmd.AST) {
@@ -383,7 +383,7 @@ func (ex *connExecutor) execBind(
 		// executing SHOW COMMIT TIMESTAMP as it would destroy the information
 		// about the previously committed transaction.
 		if _, ok := ps.AST.(*tree.ShowCommitTimestamp); !ok {
-			return ex.beginImplicitTxn(ctx, ps.AST)
+			return ex.beginImplicitTxn(ctx, ps.AST, ex.QualityOfService())
 		}
 	} else if _, isAbortedTxn := ex.machine.CurState().(stateAborted); isAbortedTxn {
 		if !ex.isAllowedInAbortedTxn(ps.AST) {
