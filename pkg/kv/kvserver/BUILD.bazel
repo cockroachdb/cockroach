@@ -25,6 +25,7 @@ go_library(
         "queue.go",
         "queue_helpers_testutil.go",
         "raft.go",
+        "raft_apply_asserter.go",
         "raft_log_queue.go",
         "raft_log_truncator.go",
         "raft_snapshot_queue.go",

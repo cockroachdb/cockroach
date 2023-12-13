@@ -96,9 +96,11 @@ func replicaApplyTestingFilters(
 	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; fr.ForcedError != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.ID,
+			Entry:                cmd.Entry.Entry,
 			ReplicatedEvalResult: *cmd.ReplicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
+			ReplicaID:            r.replicaID,
 			ForcedError:          fr.ForcedError,
 		}
 		if fr.ForcedError == nil {

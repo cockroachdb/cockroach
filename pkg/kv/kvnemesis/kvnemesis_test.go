@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -127,6 +128,14 @@ func (cfg kvnemesisTestCfg) testClusterArgs(tr *SeqTracker) base.TestClusterArgs
 		}
 	}
 
+	if cfg.assertRaftApply {
+		asserter := kvserver.NewRaftApplyAsserter()
+		storeKnobs.TestingApplyCalledTwiceFilter = func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+			asserter.Applied(args.CmdID, args.Entry, args.RangeID, args.ReplicaID)
+			return 0, nil
+		}
+	}
+
 	return base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
@@ -224,6 +233,7 @@ type kvnemesisTestCfg struct {
 	// considered truly random, but is random enough for the desired purpose.
 	invalidLeaseAppliedIndexProb float64 // [0,1)
 	injectReproposalErrorProb    float64 // [0,1)
+	assertRaftApply              bool
 }
 
 func TestKVNemesisSingleNode(t *testing.T) {
@@ -237,6 +247,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 		seedOverride:                 0,
 		invalidLeaseAppliedIndexProb: 0.2,
 		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
 	})
 }
 
@@ -251,6 +262,7 @@ func TestKVNemesisSingleNode_ReproposalChaos(t *testing.T) {
 		seedOverride:                 0,
 		invalidLeaseAppliedIndexProb: 0.9,
 		injectReproposalErrorProb:    0.5,
+		assertRaftApply:              true,
 	})
 }
 
@@ -265,6 +277,7 @@ func TestKVNemesisMultiNode(t *testing.T) {
 		seedOverride:                 0,
 		invalidLeaseAppliedIndexProb: 0.2,
 		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
 	})
 }
 
