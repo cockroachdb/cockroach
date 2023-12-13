@@ -115,9 +115,9 @@ var ValueBlocksEnabled = settings.RegisterBoolSetting(
 var UseEFOS = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.experimental.eventually_file_only_snapshots.enabled",
-	"set to true to use eventually-file-only-snapshots even when kv.snapshot_receiver.excise.enabled is false",
+	"set to false to disable eventually-file-only-snapshots (kv.snapshot_receiver.excise.enabled must also be false)",
 	util.ConstantWithMetamorphicTestBool(
-		"storage.experimental.eventually_file_only_snapshots.enabled", false), /* defaultValue */
+		"storage.experimental.eventually_file_only_snapshots.enabled", true), /* defaultValue */
 	settings.WithPublic)
 
 // UseExciseForSnapshots controls whether virtual-sstable-based excises should
@@ -129,9 +129,9 @@ var UseEFOS = settings.RegisterBoolSetting(
 var UseExciseForSnapshots = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.snapshot_receiver.excise.enabled",
-	"set to true to use excises instead of range deletions for KV snapshots",
+	"set to false to disable excises in place of range deletions for KV snapshots",
 	util.ConstantWithMetamorphicTestBool(
-		"kv.snapshot_receiver.excise.enabled", false), /* defaultValue */
+		"kv.snapshot_receiver.excise.enabled", true), /* defaultValue */
 	settings.WithPublic,
 )
 
@@ -144,9 +144,9 @@ var UseExciseForSnapshots = settings.RegisterBoolSetting(
 var IngestSplitEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.ingest_split.enabled",
-	"set to true to use ingest-time splitting to lower write-amplification (experimental)",
+	"set to false to disable ingest-time splitting that lowers write-amplification",
 	util.ConstantWithMetamorphicTestBool(
-		"storage.ingest_split.enabled", false), /* defaultValue */
+		"storage.ingest_split.enabled", true), /* defaultValue */
 	settings.WithPublic,
 )
 
