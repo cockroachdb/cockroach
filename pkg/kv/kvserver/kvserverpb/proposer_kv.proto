@@ -198,6 +198,11 @@ message ReplicatedEvalResult {
     string remote_file_loc = 5;
     string remote_file_path = 6;
     uint64 backing_file_size = 7;
+    message PrefixReplacement {
+      bytes from = 1;
+      bytes to = 2;
+    }
+    PrefixReplacement prefix = 8 [(gogoproto.nullable) = false];
   }
   AddSSTable add_sstable = 17 [(gogoproto.customname) = "AddSSTable"];
 

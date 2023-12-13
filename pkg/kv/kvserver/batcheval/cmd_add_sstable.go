@@ -166,6 +166,7 @@ func EvalAddSSTable(
 					RemoteFilePath:  path,
 					BackingFileSize: args.RemoteFile.BackingFileSize,
 					Span:            roachpb.Span{Key: start.Key, EndKey: end.Key},
+					Prefix:          kvserverpb.ReplicatedEvalResult_AddSSTable_PrefixReplacement(args.PrefixReplacement),
 				},
 				// Since the remote SST could contain keys at any timestamp, consider it
 				// a history mutation.

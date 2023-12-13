@@ -1042,6 +1042,7 @@ func (b *Batch) addSSTable(
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	sstTimestampToRequestTimestamp hlc.Timestamp,
+	prefixReplacement kvpb.AddSSTableRequest_PrefixReplacement,
 ) {
 	begin, err := marshalKey(s)
 	if err != nil {
@@ -1066,6 +1067,7 @@ func (b *Batch) addSSTable(
 		MVCCStats:                      stats,
 		IngestAsWrites:                 ingestAsWrites,
 		SSTTimestampToRequestTimestamp: sstTimestampToRequestTimestamp,
+		PrefixReplacement:              prefixReplacement,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

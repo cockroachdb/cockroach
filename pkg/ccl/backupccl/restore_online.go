@@ -146,7 +146,7 @@ func sendAddRemoteSSTWorker(
 				var err error
 				_, _, err = execCtx.ExecCfg().DB.AddRemoteSSTable(ctx,
 					file.BackupFileEntrySpan, loc,
-					fileStats)
+					fileStats, kvpb.AddSSTableRequest_PrefixReplacement{})
 				if err != nil {
 					return err
 				}
