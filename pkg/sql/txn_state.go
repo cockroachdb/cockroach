@@ -189,6 +189,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	tranCtx transitionCtx,
 	qualityOfService sessiondatapb.QoSLevel,
 	isoLevel isolation.Level,
+	omitInRangefeeds bool,
 ) (txnID uuid.UUID) {
 	// Reset state vars to defaults.
 	ts.sqlTimestamp = sqlTimestamp
@@ -229,6 +230,9 @@ func (ts *txnState) resetForNewSQLTxn(
 		if txn == nil {
 			ts.mu.txn = kv.NewTxnWithSteppingEnabled(ts.Ctx, tranCtx.db, tranCtx.nodeIDOrZero, qualityOfService)
 			ts.mu.txn.SetDebugName(opName)
+			if omitInRangefeeds {
+				ts.mu.txn.SetOmitInRangefeeds()
+			}
 			if err := ts.setPriorityLocked(priority); err != nil {
 				panic(err)
 			}
