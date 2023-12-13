@@ -1368,6 +1368,10 @@ func (ts *testServer) StartSharedProcessTenant(
 		}
 	}
 
+	if err = ts.grantDefaultTenantCapabilities(ctx, tenantID, args.SkipTenantCheck); err != nil {
+		return nil, nil, err
+	}
+
 	// Also mark it for shared-process execution.
 	err = execSQL(
 		"start-tenant-shared-service",
@@ -1408,10 +1412,6 @@ func (ts *testServer) StartSharedProcessTenant(
 		pgL:            sqlServerWrapper.loopbackPgL,
 		httpTestServer: hts,
 		drain:          sqlServerWrapper.drainServer,
-	}
-
-	if err = ts.grantDefaultTenantCapabilities(ctx, tenantID, args.SkipTenantCheck); err != nil {
-		return nil, nil, err
 	}
 
 	sqlDB, err := ts.SQLConnE(serverutils.DBName("cluster:" + string(args.TenantName) + "/" + args.UseDatabase))
