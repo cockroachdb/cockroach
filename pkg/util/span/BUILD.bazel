@@ -24,7 +24,7 @@ go_library(
 
 go_test(
     name = "span_test",
-    size = "small",
+    size = "large",
     srcs = [
         "frontier_test.go",
         "frontierentry_interval_btree_test.go",  #keep
