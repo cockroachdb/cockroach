@@ -79,7 +79,8 @@ type StoreTestingKnobs struct {
 	// Users have to expect the filter to be invoked twice for each command, once
 	// from ephemerealReplicaAppBatch.Stage, and once from replicaAppBatch.Stage;
 	// this has to do with wanting to early-ack successful proposals. The second
-	// call is conditional on the first call succeeding.
+	// call is conditional on the first call succeeding. The field
+	// ApplyFilterArgs.Ephemeral will be true for the initial call.
 	//
 	// Consider using a TestPostApplyFilter instead, and use a
 	// TestingApplyCalledTwiceFilter only to inject forced errors.
@@ -337,7 +338,7 @@ type StoreTestingKnobs struct {
 	BeforeRemovingDemotedLearner func()
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
-	BeforeSnapshotSSTIngestion func(IncomingSnapshot, []string) error
+	BeforeSnapshotSSTIngestion func(*Replica, IncomingSnapshot, []string) error
 	// OnRelocatedOne intercepts the return values of s.relocateOne after they
 	// have successfully been put into effect.
 	OnRelocatedOne func(_ []kvpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget)

@@ -382,8 +382,8 @@ type IncomingSnapshot struct {
 	// Size of the ssts containing these key-value pairs.
 	SSTSize          int64
 	SharedSize       int64
+	RaftAppliedIndex kvpb.RaftIndex // logging only
 	placeholder      *ReplicaPlaceholder
-	raftAppliedIndex kvpb.RaftIndex      // logging only
 	msgAppRespCh     chan raftpb.Message // receives MsgAppResp if/when snap is applied
 	sharedSSTs       []pebble.SharedSSTMeta
 	doExcise         bool
@@ -400,7 +400,7 @@ func (s IncomingSnapshot) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (s IncomingSnapshot) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("snapshot %s from %s at applied index %d",
-		redact.Safe(s.SnapUUID.Short()), s.FromReplica, s.raftAppliedIndex)
+		redact.Safe(s.SnapUUID.Short()), s.FromReplica, s.RaftAppliedIndex)
 }
 
 // snapshot creates an OutgoingSnapshot containing a pebble snapshot for the
@@ -661,7 +661,7 @@ func (r *Replica) applySnapshot(
 
 	// Ingest all SSTs atomically.
 	if fn := r.store.cfg.TestingKnobs.BeforeSnapshotSSTIngestion; fn != nil {
-		if err := fn(inSnap, inSnap.SSTStorageScratch.SSTs()); err != nil {
+		if err := fn(r, inSnap, inSnap.SSTStorageScratch.SSTs()); err != nil {
 			return err
 		}
 	}

@@ -688,7 +688,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 				DataSize:          dataSize,
 				SSTSize:           sstSize,
 				SharedSize:        sharedSize,
-				raftAppliedIndex:  header.State.RaftAppliedIndex,
+				RaftAppliedIndex:  header.State.RaftAppliedIndex,
 				msgAppRespCh:      make(chan raftpb.Message, 1),
 				sharedSSTs:        sharedSSTs,
 				doExcise:          doExcise,
