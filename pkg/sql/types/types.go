@@ -2717,7 +2717,7 @@ func (t *T) EnumGetIdxOfLogical(logical string) (int, error) {
 			// written until all nodes in the cluster are able to decode the
 			// physical representation.
 			if t.TypeMeta.EnumData.IsMemberReadOnly[i] {
-				return 0, errors.Newf("enum value %q is not yet public", logical)
+				return 0, newEnumValueIsNotPublicYetError(logical)
 			}
 			return i, nil
 		}
