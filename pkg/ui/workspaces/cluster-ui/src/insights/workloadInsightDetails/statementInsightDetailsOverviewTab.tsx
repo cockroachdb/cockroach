@@ -123,7 +123,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
               value={Duration(insightDetails?.elapsedTimeMillis * 1e6)}
             />
             <SummaryCardItem
-              label={"CPU Time"}
+              label={"SQL CPU Time"}
               value={Duration(insightDetails?.cpuSQLNanos)}
             />
             <SummaryCardItem

@@ -72,7 +72,7 @@ export function getSortLabel(
     case SqlStatsSortOptions.EXECUTION_COUNT:
       return "Execution Count";
     case SqlStatsSortOptions.CPU_TIME:
-      return "CPU Time";
+      return "SQL CPU Time";
     case SqlStatsSortOptions.P99_STMTS_ONLY:
       return "P99 Latency";
     case SqlStatsSortOptions.CONTENTION_TIME:
