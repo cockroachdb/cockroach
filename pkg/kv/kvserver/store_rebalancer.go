@@ -578,7 +578,7 @@ func (sr *StoreRebalancer) TransferToRebalanceRanges(
 ) bool {
 	if rctx.LessThanMaxThresholds() {
 		log.KvDistribution.Infof(ctx,
-			"load-based lease transfers successfully brought s%d down to %s load, mean=%s, upperThreshold=%s)",
+			"load-based lease transfers successfully brought s%d down to %s load, mean=%s, upperThreshold=%s",
 			rctx.LocalDesc.StoreID, rctx.LocalDesc.Capacity.Load(),
 			rctx.allStoresList.LoadMeans(), rctx.maxThresholds)
 		return false
@@ -657,7 +657,7 @@ func (sr *StoreRebalancer) applyRangeRebalance(
 	descBeforeRebalance, _ := candidateReplica.DescAndSpanConfig()
 	log.KvDistribution.Infof(
 		ctx,
-		"rebalancing r%d (%s load) to better balance load: voters from %v to %v; non-voters from %v to %v",
+		"rebalancing r%d load=%s to better balance load: voters from %v to %v; non-voters from %v to %v",
 		candidateReplica.GetRangeID(),
 		candidateReplica.RangeUsageInfo().Load(),
 		descBeforeRebalance.Replicas().Voters(),
