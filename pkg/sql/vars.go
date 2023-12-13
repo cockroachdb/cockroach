@@ -861,6 +861,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`optimizer_merge_joins_enabled`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`optimizer_merge_joins_enabled`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("optimizer_merge_joins_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetOptimizerMergeJoinsEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OptimizerMergeJoinsEnabled), nil
+		},
+		GlobalDefault: globalTrue,
+	},
+
+	// CockroachDB extension.
 	`locality_optimized_partitioned_index_scan`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`locality_optimized_partitioned_index_scan`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

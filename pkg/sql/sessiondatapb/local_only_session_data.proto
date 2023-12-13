@@ -472,6 +472,10 @@ message LocalOnlySessionData {
   // CopyWritePipeliningEnabled indicates whether the write pipelining is
   // enabled for implicit txns used by COPY.
   bool copy_write_pipelining_enabled = 118;
+  // OptimizerMergeJoinsEnabled, when true, instructs the optimizer to explore
+  // query plans with merge joins. When false, the optimizer does not attempt
+  // to plan merge joins.
+  bool optimizer_merge_joins_enabled = 119;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

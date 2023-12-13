@@ -1862,6 +1862,29 @@ memo (optimized, ~11KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G6: (variable a)
  └── G7: (variable x)
 
+# Do not generate merge joins if optimizer_merge_joins_enabled is false.
+memo set=(optimizer_merge_joins_enabled=false) expect-not=GenerateMergeJoins
+SELECT * FROM abc JOIN xyz ON a=x
+----
+memo (optimized, ~14KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
+ ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,7-9)) (lookup-join G3 G5 abc@ab,keyCols=[7],outCols=(1-3,7-9))
+ │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
+ │         ├── best: (inner-join G3 G2 G4)
+ │         └── cost: 1249.71
+ ├── G2: (scan abc,cols=(1-3)) (scan abc@ab,cols=(1-3)) (scan abc@bc,cols=(1-3))
+ │    └── []
+ │         ├── best: (scan abc,cols=(1-3))
+ │         └── cost: 135.72
+ ├── G3: (scan xyz,cols=(7-9)) (scan xyz@xy,cols=(7-9)) (scan xyz@yz,cols=(7-9))
+ │    └── []
+ │         ├── best: (scan xyz,cols=(7-9))
+ │         └── cost: 1098.72
+ ├── G4: (filters G6)
+ ├── G5: (filters)
+ ├── G6: (eq G7 G8)
+ ├── G7: (variable a)
+ └── G8: (variable x)
+
 opt
 SELECT * FROM abc JOIN xyz ON x=a
 ----

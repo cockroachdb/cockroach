@@ -87,6 +87,7 @@ func TestCopyAndReplace(t *testing.T) {
 	}
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	evalCtx.SessionData().OptimizerMergeJoinsEnabled = true
 
 	var o xform.Optimizer
 	testutils.BuildQuery(t, &o, cat, &evalCtx, "SELECT * FROM cde INNER JOIN ab ON a=c AND d=$1")
