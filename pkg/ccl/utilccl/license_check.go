@@ -43,7 +43,7 @@ var enterpriseLicense = settings.RegisterStringSetting(
 	// Even though string settings are non-reportable by default, we
 	// still mark them explicitly in case a future code change flips the
 	// default.
-	settings.WithReportable(false),
+	settings.WithReportable(true),
 	settings.WithPublic,
 )
 

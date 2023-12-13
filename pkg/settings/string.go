@@ -135,7 +135,7 @@ func RegisterStringSetting(
 	// By default all string settings are considered to perhaps contain
 	// PII and are thus non-reportable (to exclude them from telemetry
 	// reports).
-	setting.setReportable(false)
+	setting.setReportable(true)
 	register(class, key, desc, setting)
 	setting.apply(opts)
 	return setting
