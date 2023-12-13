@@ -648,12 +648,14 @@ func addSSTablePreApply(
 ) bool {
 	if sst.RemoteFilePath != "" {
 		log.Infof(ctx,
-			"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s (size %d) at rewrite ts %s",
+			"EXPERIMENTAL AddSSTABLE EXTERNAL %s (size %d, span %s) from %s (size %d) at rewrite [prefix replace %q -> %q] ts %s",
 			sst.RemoteFilePath,
 			sst.ApproximatePhysicalSize,
 			sst.Span,
 			sst.RemoteFileLoc,
 			sst.BackingFileSize,
+			roachpb.Key(sst.Prefix.From),
+			roachpb.Key(sst.Prefix.To),
 			sst.RemoteRewriteTimestamp,
 		)
 
@@ -669,8 +671,9 @@ func addSSTablePreApply(
 			Size:            sst.ApproximatePhysicalSize,
 			SmallestUserKey: start.Encode(),
 			LargestUserKey:  end.Encode(),
+			ContentPrefix:   sst.Prefix.From,
+			SyntheticPrefix: sst.Prefix.To,
 			SyntheticSuffix: syntheticSuffix,
-			// TODO(dt): pass pebble the backing file size to avoid a stat call.
 
 			// TODO(msbutler): I guess we need to figure out if the backing external
 			// file has point or range keys in the target span.
