@@ -736,7 +736,7 @@ func TestWaitWithRetryableError(t *testing.T) {
 	ctx := context.Background()
 
 	cs := cluster.MakeTestingClusterSettings()
-	// Set the lease duration to zero for instanty expiry.
+	// Set the lease duration to zero for instant expiry.
 	lease.LeaseDuration.Override(ctx, &cs.SV, 0)
 	// Renewal timeout to 0 saying that the lease will get renewed only
 	// after the lease expires when a request requests the descriptor.
@@ -797,7 +797,7 @@ func TestWaitWithRetryableError(t *testing.T) {
 		registry.WaitForJobs(
 			ctx, []jobspb.JobID{id},
 		))
-	if !skip.Stress() {
+	if !skip.Duress() {
 		require.Equalf(t, int64(targetNumberOfRetries), numberOfTimesDetected.Load(), "jobs query did not retry")
 	} else {
 		// For stress be lenient since we are relying on timing for leasing
