@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -279,7 +280,7 @@ func (ex *connExecutor) prepare(
 		} else {
 			f := tree.NewFmtCtx(tree.FmtMarkRedactionNode | tree.FmtSimple)
 			f.FormatNode(stmt.AST)
-			redactableStmt := f.CloseAndGetString()
+			redactableStmt := redact.SafeString(f.CloseAndGetString())
 			log.Warningf(ctx, "could not prepare statement during session migration (%s): %v", redactableStmt, err)
 		}
 	}
