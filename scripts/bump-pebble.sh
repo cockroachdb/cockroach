@@ -63,7 +63,9 @@ popd
 pushd "$PEBBLE_DIR"
 git fetch "$PEBBLE_UPSTREAM_URL" "$PEBBLE_BRANCH"
 NEW_SHA=$(git rev-parse "$UPSTREAM/$PEBBLE_BRANCH")
-COMMITS=$(git log --pretty='format:%h %s' "$OLD_SHA..$NEW_SHA" | grep -v 'Merge pull request')
+COMMITS=$(git log --pretty='format:%h %s' "$OLD_SHA..$NEW_SHA" |
+          grep -v 'Merge pull request' |
+          sed 's#^#https://github.com/cockroachdb/pebble/commit/#')
 echo "$COMMITS"
 popd
 
