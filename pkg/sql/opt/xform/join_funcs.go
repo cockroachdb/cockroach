@@ -39,7 +39,8 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	on memo.FiltersExpr,
 	joinPrivate *memo.JoinPrivate,
 ) {
-	if joinPrivate.Flags.Has(memo.DisallowMergeJoin) {
+	if joinPrivate.Flags.Has(memo.DisallowMergeJoin) ||
+		!c.e.evalCtx.SessionData().OptimizerMergeJoinsEnabled {
 		return
 	}
 
