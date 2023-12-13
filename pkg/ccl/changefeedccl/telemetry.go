@@ -208,12 +208,12 @@ func (r *telemetryMetricsRecorder) recordSizeBasedFlush() {
 	r.inner.recordSizeBasedFlush()
 }
 
-func (r *telemetryMetricsRecorder) recordParallelIOQueueLatency(latency time.Duration) {
-	r.inner.recordParallelIOQueueLatency(latency)
-}
-
 func (r *telemetryMetricsRecorder) recordSinkIOInflightChange(delta int64) {
 	r.inner.recordSinkIOInflightChange(delta)
+}
+
+func (r *telemetryMetricsRecorder) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
+	return r.inner.newParallelIOMetricsRecorder()
 }
 
 // continuousTelemetryInterval determines the interval at which each node emits telemetry events
