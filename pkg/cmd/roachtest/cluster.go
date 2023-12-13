@@ -2702,9 +2702,9 @@ func (c *clusterImpl) DestroyDNS(ctx context.Context, l *logger.Logger) error {
 // test plus enough headroom after the test finishes so that the next test
 // can be selected. If it doesn't, extend it.
 func (c *clusterImpl) MaybeExtendCluster(
-	ctx context.Context, l *logger.Logger, testSpec registry.TestSpec,
+	ctx context.Context, l *logger.Logger, testSpec *registry.TestSpec,
 ) error {
-	timeout := testTimeout(&testSpec)
+	timeout := testTimeout(testSpec)
 	minExp := timeutil.Now().Add(timeout + time.Hour)
 	if c.expiration.Before(minExp) {
 		extend := minExp.Sub(c.expiration)
