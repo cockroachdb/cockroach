@@ -60,111 +60,101 @@ func registerOnlineRestore(r registry.Registry) {
 		},
 	} {
 		for _, runOnline := range []bool{true, false} {
-			for _, runWorkload := range []bool{true, false} {
-				sp := sp
-				runOnline := runOnline
-				runWorkload := runWorkload
+			sp := sp
+			runOnline := runOnline
 
-				if runOnline {
-					sp.namePrefix = "online/"
-				} else {
-					sp.namePrefix = "offline/"
-					sp.skip = "used for ad hoc experiments"
-				}
-				sp.namePrefix = sp.namePrefix + fmt.Sprintf("workload=%t", runWorkload)
-
-				sp.initTestName()
-				r.Add(registry.TestSpec{
-					Name:      sp.testName,
-					Owner:     registry.OwnerDisasterRecovery,
-					Benchmark: true,
-					Cluster:   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
-					Timeout:   sp.timeout,
-					// These tests measure performance. To ensure consistent perf,
-					// disable metamorphic encryption.
-					EncryptionSupport: registry.EncryptionAlwaysDisabled,
-					CompatibleClouds:  registry.Clouds(sp.backup.cloud),
-					Suites:            sp.suites,
-					Skip:              sp.skip,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-
-						testStartTime := timeutil.Now()
-
-						rd := makeRestoreDriver(t, c, sp)
-						rd.prepareCluster(ctx)
-
-						m := c.NewMonitor(ctx, sp.hardware.getCRDBNodes())
-						m.Go(func(ctx context.Context) error {
-							db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
-							if err != nil {
-								return err
-							}
-							defer db.Close()
-							if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
-								return err
-							}
-							if _, err := db.Exec("SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled=true"); err != nil {
-								return err
-							}
-							if _, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false"); err != nil {
-								return err
-							}
-							opts := ""
-							if runOnline {
-								opts = "WITH EXPERIMENTAL DEFERRED COPY"
-							}
-							restoreCmd := rd.restoreCmd("DATABASE tpce", opts)
-							t.L().Printf("Running %s", restoreCmd)
-							if _, err = db.ExecContext(ctx, restoreCmd); err != nil {
-								return err
-							}
-							return nil
-						})
-						m.Wait()
-
-						workloadCtx, workloadCancel := context.WithCancel(ctx)
-						mDownload := c.NewMonitor(workloadCtx, sp.hardware.getCRDBNodes())
-						// TODO(msbutler): add foreground query latency tracker
-
-						mDownload.Go(func(ctx context.Context) error {
-							if !runWorkload {
-								fmt.Printf("roachtest configured to skip running the foreground workload")
-								return nil
-							}
-							err := sp.backup.workload.run(ctx, t, c, sp.hardware)
-							// We expect the workload to return a context cancelled error because
-							// the roachtest driver cancels the monitor's context after the download job completes
-							if err != nil && ctx.Err() == nil {
-								// Implies the workload context was not cancelled and the workload cmd returned a
-								// different error.
-								return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
-							}
-							rd.t.L().Printf("workload successfully finished")
-							return nil
-						})
-						mDownload.Go(func(ctx context.Context) error {
-							defer workloadCancel()
-							if runOnline {
-								return waitForDownloadJob(ctx, c, t.L())
-							}
-							if runWorkload {
-								// If we just completed an offline restore and are running the
-								// workload, run the workload until we're at most 15 minutes
-								// away from timing out.
-								testRuntime := timeutil.Since(testStartTime)
-								workloadDuration := sp.timeout - testRuntime
-								if workloadDuration > time.Minute*15 {
-									workloadDuration = workloadDuration - time.Minute*15
-								}
-								fmt.Printf("let workload run for %.2f minutes", workloadDuration.Minutes())
-								time.Sleep(workloadDuration)
-							}
-							return nil
-						})
-						mDownload.Wait()
-					},
-				})
+			if runOnline {
+				sp.namePrefix = "online"
+			} else {
+				sp.namePrefix = "offline"
+				sp.skip = "used for ad hoc experiments"
 			}
+
+			sp.initTestName()
+			r.Add(registry.TestSpec{
+				Name:      sp.testName,
+				Owner:     registry.OwnerDisasterRecovery,
+				Benchmark: true,
+				Cluster:   sp.hardware.makeClusterSpecs(r, sp.backup.cloud),
+				Timeout:   sp.timeout,
+				// These tests measure performance. To ensure consistent perf,
+				// disable metamorphic encryption.
+				EncryptionSupport: registry.EncryptionAlwaysDisabled,
+				CompatibleClouds:  registry.Clouds(sp.backup.cloud),
+				Suites:            sp.suites,
+				Skip:              sp.skip,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+
+					testStartTime := timeutil.Now()
+
+					rd := makeRestoreDriver(t, c, sp)
+					rd.prepareCluster(ctx)
+
+					m := c.NewMonitor(ctx, sp.hardware.getCRDBNodes())
+					m.Go(func(ctx context.Context) error {
+						db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
+						if err != nil {
+							return err
+						}
+						defer db.Close()
+						if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
+							return err
+						}
+						if _, err := db.Exec("SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled=true"); err != nil {
+							return err
+						}
+						if _, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false"); err != nil {
+							return err
+						}
+						opts := ""
+						if runOnline {
+							opts = "WITH EXPERIMENTAL DEFERRED COPY"
+						}
+						restoreCmd := rd.restoreCmd("DATABASE tpce", opts)
+						t.L().Printf("Running %s", restoreCmd)
+						if _, err = db.ExecContext(ctx, restoreCmd); err != nil {
+							return err
+						}
+						return nil
+					})
+					m.Wait()
+
+					workloadCtx, workloadCancel := context.WithCancel(ctx)
+					mDownload := c.NewMonitor(workloadCtx, sp.hardware.getCRDBNodes())
+					// TODO(msbutler): add foreground query latency tracker
+
+					mDownload.Go(func(ctx context.Context) error {
+						err := sp.backup.workload.run(ctx, t, c, sp.hardware)
+						// We expect the workload to return a context cancelled error because
+						// the roachtest driver cancels the monitor's context after the download job completes
+						if err != nil && ctx.Err() == nil {
+							// Implies the workload context was not cancelled and the workload cmd returned a
+							// different error.
+							return errors.Wrapf(err, `Workload context was not cancelled. Error returned by workload cmd`)
+						}
+						rd.t.L().Printf("workload successfully finished")
+						return nil
+					})
+					mDownload.Go(func(ctx context.Context) error {
+						defer workloadCancel()
+						if runOnline {
+							return waitForDownloadJob(ctx, c, t.L())
+						}
+						// If we just completed an offline restore and are running the
+						// workload, run the workload until we're at most 15 minutes
+						// away from timing out.
+						testRuntime := timeutil.Since(testStartTime)
+						workloadDuration := sp.timeout - testRuntime
+						if workloadDuration > time.Minute*15 {
+							workloadDuration = workloadDuration - time.Minute*15
+						}
+						fmt.Printf("let workload run for %.2f minutes", workloadDuration.Minutes())
+						time.Sleep(workloadDuration)
+						return nil
+					})
+					mDownload.Wait()
+				},
+			})
 		}
 	}
 }
