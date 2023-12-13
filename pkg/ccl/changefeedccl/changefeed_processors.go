@@ -611,19 +611,6 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 		return freq > 0 && timeutil.Since(ca.lastPush) > freq
 	}
 
-	// helper to iterate frontier and return the list of changefeed frontier spans.
-	getFrontierSpans := func() (spans []execinfrapb.ChangefeedMeta_FrontierSpan) {
-		ca.frontier.Entries(func(r roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
-			spans = append(spans,
-				execinfrapb.ChangefeedMeta_FrontierSpan{
-					Span:      r,
-					Timestamp: ts,
-				})
-			return span.ContinueMatch
-		})
-		return spans
-	}
-
 	for ca.State == execinfra.StateRunning {
 		if !ca.changedRowBuf.IsEmpty() {
 			ca.lastPush = timeutil.Now()
@@ -647,14 +634,9 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 		// polling below before the drain actually occurs and starts tearing
 		// things down.
 		if err := ca.checkForNodeDrain(); err != nil {
-			nodeID, _ := ca.FlowCtx.Cfg.NodeID.OptionalNodeID()
-			meta := &execinfrapb.ChangefeedMeta{
-				DrainInfo:  &execinfrapb.ChangefeedMeta_DrainInfo{NodeID: nodeID},
-				Checkpoint: getFrontierSpans(),
+			if shutdownErr := ca.emitShutdownCheckpoint(true /* drain */); shutdownErr != nil {
+				err = errors.CombineErrors(err, shutdownErr)
 			}
-
-			ca.AppendTrailingMeta(execinfrapb.ProducerMetadata{Changefeed: meta})
-			ca.shutdownCheckpointEmitted = true
 			ca.cancel()
 			ca.MoveToDraining(err)
 			break
@@ -683,15 +665,42 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 	}
 
 	if !ca.shutdownCheckpointEmitted {
-		// Aggregator shutdown may be initiated by the coordinator.
-		// Emit an up-to-date frontier information in case coordinator will restart.
-		ca.shutdownCheckpointEmitted = true
-		ca.AppendTrailingMeta(execinfrapb.ProducerMetadata{
-			Changefeed: &execinfrapb.ChangefeedMeta{Checkpoint: getFrontierSpans()},
-		})
+		// Best effort attempt to emit shutdown checkpoint.
+		// Even if this call returns an error, we cannot do anything
+		// with this error (such as ca.MoveToDraining(err)) since the processor
+		// is already in the "StateTrailingMetadata" (and thus panics if you attempt
+		// to MoveToDraining again).
+		_ = ca.emitShutdownCheckpoint(false /* not a node drain */)
 	}
 
 	return nil, ca.DrainHelper()
+}
+
+func (ca *changeAggregator) emitShutdownCheckpoint(isDrain bool) error {
+	// Before emitting shutdown checkpoint, we must flush any buffered events.
+	if err := ca.flushBufferedEvents(); err != nil {
+		return err
+	}
+
+	var meta execinfrapb.ChangefeedMeta
+	if isDrain {
+		nodeID, _ := ca.FlowCtx.Cfg.NodeID.OptionalNodeID()
+		meta.DrainInfo = &execinfrapb.ChangefeedMeta_DrainInfo{NodeID: nodeID}
+	}
+
+	// Build out the list of frontier spans.
+	ca.frontier.Entries(func(r roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+		meta.Checkpoint = append(meta.Checkpoint,
+			execinfrapb.ChangefeedMeta_FrontierSpan{
+				Span:      r,
+				Timestamp: ts,
+			})
+		return span.ContinueMatch
+	})
+
+	ca.AppendTrailingMeta(execinfrapb.ProducerMetadata{Changefeed: &meta})
+	ca.shutdownCheckpointEmitted = true
+	return nil
 }
 
 // tick is the workhorse behind Next(). It retrieves the next event from
