@@ -9123,3 +9123,86 @@ func TestBatchSizeMetric(t *testing.T) {
 	}
 	cdcTest(t, testFn)
 }
+
+// TestParallelIOMetrics tests parallel io metrics.
+func TestParallelIOMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
+
+		// Add delay so queuing occurs, which results in the below metrics being
+		// nonzero.
+		defer testingEnableQueuingDelay()()
+
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `SET CLUSTER SETTING changefeed.new_pubsub_sink_enabled = true`)
+		db.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 1`)
+		db.Exec(t, `
+		  CREATE TABLE foo (a INT PRIMARY KEY);
+		`)
+
+		// Keep writing data to the same key to ensure contention.
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+
+		g := ctxgroup.WithContext(ctx)
+		done := make(chan struct{})
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-done:
+					return nil
+				default:
+					_, err := s.DB.Exec(`UPSERT INTO foo (a)  SELECT * FROM generate_series(1, 10)`)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		})
+		// Set the frequency to 1s. The default frequency at the time of writing is
+		foo, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH pubsub_sink_config=" +
+			"'{\"Flush\": {\"Frequency\": \"100ms\"}}'")
+		require.NoError(t, err)
+
+		testutils.SucceedsSoon(t, func() error {
+			numSamples, sum := metrics.ParallelIOPendingQueueNanos.TotalWindowed()
+			if numSamples <= 0 && sum <= 0.0 {
+				return errors.Newf("waiting for queue nanos: %d %f", numSamples, sum)
+			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
+			pendingKeys := metrics.ParallelIOPendingRows.Value()
+			if pendingKeys <= 0 {
+				return errors.Newf("waiting for pending keys: %d", pendingKeys)
+			}
+			return nil
+		})
+		testutils.SucceedsSoon(t, func() error {
+			for i := 0; i < 50; i++ {
+				inFlightKeys := metrics.ParallelIOInFlightKeys.Value()
+				if inFlightKeys > 0 {
+					return nil
+				}
+			}
+			return errors.New("waiting for in-flight keys")
+		})
+		testutils.SucceedsSoon(t, func() error {
+			numSamples, sum := metrics.ParallelIOResultQueueNanos.TotalWindowed()
+			if numSamples <= 0 && sum <= 0.0 {
+				return errors.Newf("waiting for result queue nanos: %d %f", numSamples, sum)
+			}
+			return nil
+		})
+		close(done)
+		require.NoError(t, g.Wait())
+		require.NoError(t, foo.Close())
+	}
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}
