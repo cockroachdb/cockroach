@@ -3245,6 +3245,10 @@ func (m *sessionDataMutator) SetOptimizerUseNotVisibleIndexes(val bool) {
 	m.data.OptimizerUseNotVisibleIndexes = val
 }
 
+func (m *sessionDataMutator) SetOptimizerMergeJoinsEnabled(val bool) {
+	m.data.OptimizerMergeJoinsEnabled = val
+}
+
 func (m *sessionDataMutator) SetLocalityOptimizedSearch(val bool) {
 	m.data.LocalityOptimizedSearch = val
 }
