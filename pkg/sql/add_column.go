@@ -237,7 +237,7 @@ func checkColumnDoesNotExist(
 			col.GetName())
 	}
 	if col.Public() {
-		return true, sqlerrors.NewColumnAlreadyExistsError(tree.ErrString(&name), tableDesc.GetName())
+		return true, sqlerrors.NewColumnAlreadyExistsInRelationError(tree.ErrString(&name), tableDesc.GetName())
 	}
 	if col.Adding() {
 		return false, pgerror.Newf(pgcode.DuplicateColumn,

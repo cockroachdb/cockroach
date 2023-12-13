@@ -304,6 +304,12 @@ var (
 			run at least one test per prefix.`,
 	})
 
+	UseSpotVM bool
+	_         = registerRunFlag(&UseSpotVM, FlagInfo{
+		Name:  "use-spot",
+		Usage: `Use SpotVM to run tests, If the provider does not support spotVM, it will be ignored`,
+	})
+
 	GlobalSeed int64 = randutil.NewPseudoSeed()
 	_                = registerRunFlag(&GlobalSeed, FlagInfo{
 		Name:  "global-seed",

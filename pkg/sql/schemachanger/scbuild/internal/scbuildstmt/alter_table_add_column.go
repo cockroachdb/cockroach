@@ -70,7 +70,7 @@ func alterTableAddColumn(
 					"column name %q conflicts with a system column name",
 					d.Name))
 			}
-			panic(sqlerrors.NewColumnAlreadyExistsError(string(d.Name), tn.Object()))
+			panic(sqlerrors.NewColumnAlreadyExistsInRelationError(string(d.Name), tn.Object()))
 		}
 	}
 	if d.IsSerial {

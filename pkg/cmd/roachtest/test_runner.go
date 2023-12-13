@@ -653,6 +653,10 @@ func (r *testRunner) runWorker(
 			}
 		}
 
+		if roachtestflags.UseSpotVM {
+			testToRun.spec.Cluster.UseSpotVMs = true
+		}
+
 		// Verify that required native libraries are available.
 		//
 		// TODO(radu): the arch is not guaranteed and another arch can be selected

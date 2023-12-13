@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -6043,7 +6044,15 @@ CREATE TABLE crdb_internal.invalid_objects (
 		if err != nil {
 			return err
 		}
-		version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
+		// Our validation logic is "cluster version aware" in that newly added
+		// validation is silenced if the cluster is in a mixed version state (this
+		// helps ensure tightened validation does not, all of a sudden, start
+		// screaming about existing corruptions and blocking previously running user
+		// workload). However, in such a mixed version state, we still want this
+		// `invalid_objects` vtable to report any corruptions caught by the newly
+		// added validation, so, we supply the "latest" cluster version to the
+		// validation logic.
+		version := clusterversion.ClusterVersion{Version: clusterversion.Latest.Version()}
 
 		addValidationErrorRow := func(ne catalog.NameEntry, validationError error, lCtx tableLookupFn) error {
 			if validationError == nil {
