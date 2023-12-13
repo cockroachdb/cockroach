@@ -27,7 +27,6 @@ if [ "$(git rev-parse --abbrev-ref HEAD)" != "$BRANCH" ]; then
 fi
 
 COCKROACH_DIR="$(go env GOPATH)/src/github.com/cockroachdb/cockroach"
-PEBBLE_DIR="$(go env GOPATH)/src/github.com/cockroachdb/pebble"
 UPSTREAM="upstream"
 
 # Using count since error code is ignored
@@ -60,9 +59,25 @@ popd
 
 # Ensure the local Pebble release branch is up-to-date with upstream,
 # and grab the desired Pebble SHA.
+PEBBLE_DIR=$(mktemp -d)
+trap "rm -rf $PEBBLE_DIR" EXIT
+
+git clone --no-checkout "$PEBBLE_UPSTREAM_URL" "$PEBBLE_DIR"
+
 pushd "$PEBBLE_DIR"
-git fetch "$PEBBLE_UPSTREAM_URL" "$PEBBLE_BRANCH"
-NEW_SHA=$(git rev-parse "$UPSTREAM/$PEBBLE_BRANCH")
+NEW_SHA="${1-}"
+if [ -z "$NEW_SHA" ]; then
+  NEW_SHA=$(git rev-parse "origin/$PEBBLE_BRANCH")
+  echo "Using latest pebble $PEBBLE_BRANCH sha $NEW_SHA."
+else
+  # Verify that the given commit is in the correct pebble branch.
+  if ! git merge-base --is-ancestor $NEW_SHA "origin/$PEBBLE_BRANCH"; then
+    echo "Error: $NEW_SHA is not an ancestor of the pebble branch $PEBBLE_BRANCH" >&2
+    exit 1
+  fi
+  echo "Using provided sha $NEW_SHA."
+fi
+
 COMMITS=$(git log --pretty='format:%h %s' "$OLD_SHA..$NEW_SHA" |
           grep -v 'Merge pull request' |
           sed 's#^#https://github.com/cockroachdb/pebble/commit/#')
