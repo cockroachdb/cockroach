@@ -1023,6 +1023,9 @@ wait
 			go func() {
 				<-monitorCtx.Done()
 				sess.Close()
+				if pc, ok := p.(io.ReadCloser); ok {
+					_ = pc.Close()
+				}
 			}()
 
 			readerWg.Wait()
