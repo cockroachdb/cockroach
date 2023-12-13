@@ -772,7 +772,7 @@ type optTable struct {
 	// checkConstraints is the set of check constraints for this table. It
 	// can be different from desc's constraints because of synthesized
 	// constraints for user defined types.
-	checkConstraints []cat.CheckConstraint
+	checkConstraints []optCheckConstraint
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
@@ -1040,7 +1040,7 @@ func newOptTable(
 	}
 
 	// Synthesize any check constraints for user defined types.
-	var synthesizedChecks []cat.CheckConstraint
+	var synthesizedChecks []optCheckConstraint
 	for i := 0; i < ot.ColumnCount(); i++ {
 		col := ot.Column(i)
 		if col.IsMutation() {
@@ -1057,20 +1057,28 @@ func newOptTable(
 					Left:     &tree.ColumnItem{ColumnName: col.ColName()},
 					Right:    tree.NewDTuple(colType, tree.MakeAllDEnumsInType(colType)...),
 				}
-				synthesizedChecks = append(synthesizedChecks, cat.CheckConstraint{
-					Constraint: tree.Serialize(expr),
-					Validated:  true,
+				synthesizedChecks = append(synthesizedChecks, optCheckConstraint{
+					constraint:  tree.Serialize(expr),
+					validated:   true,
+					columnCount: 1,
+					lookupColumnOrdinal: func(i int) (int, error) {
+						return col.Ordinal(), nil
+					},
 				})
 			}
 		}
 	}
 	// Move all existing and synthesized checks into the opt table.
 	activeChecks := desc.EnforcedCheckConstraints()
-	ot.checkConstraints = make([]cat.CheckConstraint, 0, len(activeChecks)+len(synthesizedChecks))
+	ot.checkConstraints = make([]optCheckConstraint, 0, len(activeChecks)+len(synthesizedChecks))
 	for i := range activeChecks {
-		ot.checkConstraints = append(ot.checkConstraints, cat.CheckConstraint{
-			Constraint: activeChecks[i].GetExpr(),
-			Validated:  activeChecks[i].GetConstraintValidity() == descpb.ConstraintValidity_Validated,
+		ot.checkConstraints = append(ot.checkConstraints, optCheckConstraint{
+			constraint:  activeChecks[i].GetExpr(),
+			validated:   activeChecks[i].GetConstraintValidity() == descpb.ConstraintValidity_Validated,
+			columnCount: len(activeChecks[i].CheckDesc().ColumnIDs),
+			lookupColumnOrdinal: func(j int) (int, error) {
+				return ot.lookupColumnOrdinal(activeChecks[i].CheckDesc().ColumnIDs[j])
+			},
 		})
 	}
 	ot.checkConstraints = append(ot.checkConstraints, synthesizedChecks...)
@@ -1254,7 +1262,7 @@ func (ot *optTable) CheckCount() int {
 
 // Check is part of the cat.Table interface.
 func (ot *optTable) Check(i int) cat.CheckConstraint {
-	return ot.checkConstraints[i]
+	return &ot.checkConstraints[i]
 }
 
 // FamilyCount is part of the cat.Table interface.
@@ -1734,6 +1742,44 @@ func (op *optPartition) Zone() cat.Zone {
 // PartitionByListPrefixes is part of the cat.Partition interface.
 func (op *optPartition) PartitionByListPrefixes() []tree.Datums {
 	return op.datums
+}
+
+// optCheckConstraint implements cat.CheckConstraint. See that interface
+// for more information on the fields.
+type optCheckConstraint struct {
+	constraint  string
+	validated   bool
+	columnCount int
+
+	// lookupColumnOrdinal returns the table column ordinal of the ith column in
+	// this constraint.
+	lookupColumnOrdinal func(i int) (int, error)
+}
+
+var _ cat.CheckConstraint = &optCheckConstraint{}
+
+// Constraint is part of the cat.CheckConstraint interface.
+func (oc *optCheckConstraint) Constraint() string {
+	return oc.constraint
+}
+
+// Validated is part of the cat.CheckConstraint interface.
+func (oc *optCheckConstraint) Validated() bool {
+	return oc.validated
+}
+
+// ColumnCount is part of the cat.CheckConstraint interface.
+func (oc *optCheckConstraint) ColumnCount() int {
+	return oc.columnCount
+}
+
+// ColumnOrdinal is part of the cat.CheckConstraint interface.
+func (oc *optCheckConstraint) ColumnOrdinal(i int) int {
+	ord, err := oc.lookupColumnOrdinal(i)
+	if err != nil {
+		panic(err)
+	}
+	return ord
 }
 
 type optTableStat struct {
@@ -2288,9 +2334,13 @@ func (ot *optVirtualTable) CheckCount() int {
 // Check is part of the cat.Table interface.
 func (ot *optVirtualTable) Check(i int) cat.CheckConstraint {
 	check := ot.desc.EnforcedCheckConstraints()[i]
-	return cat.CheckConstraint{
-		Constraint: check.GetExpr(),
-		Validated:  check.GetConstraintValidity() == descpb.ConstraintValidity_Validated,
+	return &optCheckConstraint{
+		constraint:  check.GetExpr(),
+		validated:   check.GetConstraintValidity() == descpb.ConstraintValidity_Validated,
+		columnCount: len(check.CheckDesc().ColumnIDs),
+		lookupColumnOrdinal: func(j int) (int, error) {
+			return ot.lookupColumnOrdinal(check.CheckDesc().ColumnIDs[j])
+		},
 	}
 }
 
