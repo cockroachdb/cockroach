@@ -74,6 +74,7 @@ go_test(
         "//pkg/ccl/backupccl/backuppb",
         "//pkg/ccl/backupccl/backuptestutils",
         "//pkg/cloud",
+        "//pkg/keys",
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

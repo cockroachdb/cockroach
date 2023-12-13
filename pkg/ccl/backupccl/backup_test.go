@@ -3444,7 +3444,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 	const numAccounts = 10
 	ctx := context.Background()
-	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	const dir = "nodelocal://1/"
 
@@ -3691,10 +3691,6 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	t.Run("backup-create-drop-backup", func(t *testing.T) {
 		var tsBefore string
 		backupPath := "nodelocal://1/create_and_drop"
-		if !tc.ApplicationLayer(0).Codec().ForSystemTenant() {
-			// TODO(adityamaru): Unskip once #115640 is resolved.
-			skip.WithIssue(t, 115640)
-		}
 		sqlDB.Exec(t, "CREATE DATABASE create_and_drop")
 		sqlDB.Exec(t, "CREATE DATABASE create_and_drop_restore")
 		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop INTO $1 WITH revision_history`, backupPath)
@@ -3732,6 +3728,55 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		// Ensure it can be restored.
 		sqlDB.Exec(t, "DROP DATABASE ignore_dropped_table")
 		sqlDB.Exec(t, "RESTORE DATABASE ignore_dropped_table FROM $1", backupPath)
+	})
+}
+
+func TestEmptyBackupsInChain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 10
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestTenantAlwaysEnabled,
+			},
+		})
+	defer cleanupFn()
+	var tsBefore string
+	backupPath := "nodelocal://1/create_and_drop"
+
+	t.Run("empty-full-non-empty-inc", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE create_and_drop")
+		sqlDB.Exec(t, "CREATE DATABASE create_and_drop_restore")
+		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop INTO $1 WITH revision_history`, backupPath)
+		sqlDB.Exec(t, "CREATE TABLE create_and_drop.a (k int, v string)")
+		sqlDB.Exec(t, "INSERT INTO create_and_drop.a VALUES (1, 'foo')")
+		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
+		sqlDB.Exec(t, "DROP TABLE create_and_drop.a")
+		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop INTO LATEST IN $1 WITH revision_history`, backupPath)
+		restoreQuery := fmt.Sprintf(
+			"RESTORE create_and_drop.* FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH into_db='create_and_drop_restore'", tsBefore)
+		sqlDB.Exec(t, restoreQuery, backupPath)
+
+		restoredTableQuery := "SELECT * FROM create_and_drop_restore.a"
+		backedUpTableQuery := fmt.Sprintf("SELECT * FROM create_and_drop.a AS OF SYSTEM TIME %s", tsBefore)
+		sqlDB.CheckQueryResults(t, backedUpTableQuery, sqlDB.QueryStr(t, restoredTableQuery))
+	})
+
+	t.Run("non-empty-full-empty-inc", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE create_and_drop2")
+		sqlDB.Exec(t, "CREATE DATABASE create_and_drop_restore2")
+		sqlDB.Exec(t, "CREATE TABLE create_and_drop2.a (k int, v string)")
+		sqlDB.Exec(t, "INSERT INTO create_and_drop2.a VALUES (1, 'foo')")
+		sqlDB.Exec(t, "DROP TABLE create_and_drop2.a")
+		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop2 INTO $1 WITH revision_history`, backupPath)
+		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&tsBefore)
+		sqlDB.Exec(t, `BACKUP DATABASE create_and_drop2 INTO LATEST IN $1 WITH revision_history`, backupPath)
+		restoreQuery := fmt.Sprintf(
+			"RESTORE create_and_drop2.* FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH into_db='create_and_drop_restore2'", tsBefore)
+		sqlDB.Exec(t, restoreQuery, backupPath)
+		sqlDB.CheckQueryResults(t, `SELECT table_name FROM [SHOW TABLES]`, [][]string{{"bank"}})
 	})
 }
 

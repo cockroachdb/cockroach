@@ -1644,7 +1644,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	defer func() {
 		mem.Shrink(ctx, memSize)
 	}()
-	backupCodec, err := backupinfo.MakeBackupCodec(latestBackupManifest)
+	backupCodec, err := backupinfo.MakeBackupCodec(backupManifests)
 	if err != nil {
 		return err
 	}

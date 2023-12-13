@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -290,5 +292,88 @@ func mustCreateFileIterFactory(
 		it, err := iterFactory.NewFileIter(ctx)
 		require.NoError(t, err)
 		return it
+	}
+}
+
+func TestMakeBackupCodec(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tenID, err := roachpb.MakeTenantID(10)
+	require.NoError(t, err)
+	tenSpan := keys.MakeTenantSpan(tenID)
+	for _, tc := range []struct {
+		name          string
+		manifests     []backuppb.BackupManifest
+		expectedCodec keys.SQLCodec
+	}{
+		{
+			name: "full",
+			manifests: []backuppb.BackupManifest{
+				{Spans: []roachpb.Span{{Key: roachpb.Key("/Table/123")}}},
+			},
+			expectedCodec: keys.SystemSQLCodec,
+		},
+		{
+			name: "full-backup-tenant",
+			manifests: []backuppb.BackupManifest{
+				{Spans: []roachpb.Span{tenSpan}},
+			},
+			expectedCodec: keys.MakeSQLCodec(tenID),
+		},
+		{
+			name: "full-backup-of-tenant",
+			manifests: []backuppb.BackupManifest{
+				{
+					Spans:   []roachpb.Span{tenSpan},
+					Tenants: []mtinfopb.TenantInfoWithUsage{{SQLInfo: mtinfopb.SQLInfo{ID: 10}}},
+				},
+			},
+			expectedCodec: keys.SystemSQLCodec,
+		},
+		{
+			name: "empty-full-backup",
+			manifests: []backuppb.BackupManifest{
+				{Spans: []roachpb.Span{}},
+				{Spans: []roachpb.Span{{Key: roachpb.Key("/Table/123")}}},
+			},
+			expectedCodec: keys.SystemSQLCodec,
+		},
+		{
+			name: "empty-full-backup-tenant",
+			manifests: []backuppb.BackupManifest{
+				{Spans: []roachpb.Span{}},
+				{Spans: []roachpb.Span{tenSpan}},
+			},
+			expectedCodec: keys.MakeSQLCodec(tenID),
+		},
+		{
+			name: "empty-full-backup-of-tenant",
+			manifests: []backuppb.BackupManifest{
+				{
+					Spans:   []roachpb.Span{},
+					Tenants: []mtinfopb.TenantInfoWithUsage{{SQLInfo: mtinfopb.SQLInfo{ID: 10}}},
+				},
+				{
+					Spans:   []roachpb.Span{tenSpan},
+					Tenants: []mtinfopb.TenantInfoWithUsage{{SQLInfo: mtinfopb.SQLInfo{ID: 10}}},
+				},
+			},
+			expectedCodec: keys.SystemSQLCodec,
+		},
+		{
+			name: "all-empty",
+			manifests: []backuppb.BackupManifest{
+				{Spans: []roachpb.Span{{}}},
+				{Spans: []roachpb.Span{{}}},
+				{Spans: []roachpb.Span{{}}},
+			},
+			expectedCodec: keys.SystemSQLCodec,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := backupinfo.MakeBackupCodec(tc.manifests)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedCodec, c)
+		})
 	}
 }

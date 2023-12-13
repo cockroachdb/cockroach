@@ -1557,17 +1557,26 @@ func GetBackupManifests(
 	return manifests, memMu.total, nil
 }
 
-// MakeBackupCodec returns the codec that was used to encode the keys in the backup.
-func MakeBackupCodec(manifest backuppb.BackupManifest) (keys.SQLCodec, error) {
+// MakeBackupCodec returns the codec that was used to encode the keys in the
+// backup. We iterate over all the provided manifests and use the first
+// non-empty manifest to determine the codec. If all manifests are empty we
+// default to the system codec.
+func MakeBackupCodec(manifests []backuppb.BackupManifest) (keys.SQLCodec, error) {
 	backupCodec := keys.SystemSQLCodec
-	if len(manifest.Spans) != 0 && !manifest.HasTenants() {
-		// If there are no tenant targets, then the entire keyspace covered by
-		// Spans must lie in 1 tenant.
-		_, backupTenantID, err := keys.DecodeTenantPrefix(manifest.Spans[0].Key)
-		if err != nil {
-			return backupCodec, err
+	for _, manifest := range manifests {
+		if len(manifest.Spans) == 0 {
+			continue
 		}
-		backupCodec = keys.MakeSQLCodec(backupTenantID)
+
+		if !manifest.HasTenants() {
+			// If there are no tenant targets, then the entire keyspace covered by
+			// Spans must lie in 1 tenant.
+			_, backupTenantID, err := keys.DecodeTenantPrefix(manifest.Spans[0].Key)
+			if err != nil {
+				return backupCodec, err
+			}
+			backupCodec = keys.MakeSQLCodec(backupTenantID)
+		}
 	}
 	return backupCodec, nil
 }
