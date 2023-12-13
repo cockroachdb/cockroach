@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -824,12 +826,62 @@ func (mb *mutationBuilder) addCheckConstraintCols(isUpdate bool) {
 			// expression are being mutated.
 			if !isUpdate || referencedCols.Intersects(mutationCols) {
 				mb.checkColIDs[i] = scopeCol.id
+
+				// TODO(michae2): Under weaker isolation levels we need to use shared
+				// locking to enforce multi-column-family check constraints. Disallow it
+				// for now.
+				//
+				// When do we need the locking? If:
+				// - The check constraint involves a column family that is updated
+				//   (otherwise we don't need to do anything to maintain this constraint)
+				// - And the check constraint involves a column family that is *not*
+				//   updated, but *is* read. In this case we don't have an intent, so
+				//   we need a lock. But we're not currently taking that lock.
+				if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
+					// Find the columns referenced in the check constraint that are being
+					// read and updated.
+					var readColOrds, updateColOrds intsets.Fast
+					for j, n := 0, check.ColumnCount(); j < n; j++ {
+						ord := check.ColumnOrdinal(j)
+						if mb.fetchColIDs[ord] != 0 {
+							readColOrds.Add(ord)
+						}
+						if mb.updateColIDs[ord] != 0 {
+							updateColOrds.Add(ord)
+						}
+					}
+					// If some of the check constraint column families are being updated
+					// but others are only being read, return an error.
+					if updateColOrds.Len() > 0 {
+						readColFamilies := getColumnFamilySet(readColOrds, mb.tab)
+						updateColFamilies := getColumnFamilySet(updateColOrds, mb.tab)
+						if readColFamilies.Difference(updateColFamilies).Len() > 0 {
+							panic(unimplemented.NewWithIssuef(112488,
+								"multi-column-family check constraints are not yet supported under read committed isolation",
+							))
+						}
+					}
+				}
 			}
 		}
 
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
 	}
+}
+
+// getColumnFamilySet gets the set of column families represented in colOrdinals.
+func getColumnFamilySet(colOrdinals intsets.Fast, tab cat.Table) intsets.Fast {
+	families := intsets.Fast{}
+	for i := 0; i < tab.FamilyCount(); i++ {
+		fam := tab.Family(i)
+		for j := 0; j < fam.ColumnCount(); j++ {
+			if colOrdinals.Contains(fam.Column(j).Ordinal) {
+				families.Add(i)
+			}
+		}
+	}
+	return families
 }
 
 // mutationColumnIDs returns the set of all column IDs that will be mutated.
