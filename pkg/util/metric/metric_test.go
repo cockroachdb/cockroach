@@ -281,6 +281,41 @@ func TestManualWindowHistogram(t *testing.T) {
 	require.Equal(t, 17.5, h.ValueAtQuantileWindowed(50))
 	require.Equal(t, 75.0, h.ValueAtQuantileWindowed(80))
 	require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99.99))
+
+	// This section will test that updating the histogram with new values results
+	// in a correctly merged view when quantiles are calculated.
+	prev := pMetric
+	new := &prometheusgo.Metric{}
+	measurements2 := []float64{3, 20, 50}
+	for _, m := range measurements2 {
+		histogram.Observe(m)
+		expSum += m
+	}
+	require.NoError(t, histogram.Write(new))
+	SubtractPrometheusHistograms(new.GetHistogram(), prev.GetHistogram())
+	h.Update(histogram, new.GetHistogram())
+
+	// Adding extra values to cumulative histogram to make sure it is not used in
+	// the expected outcome.
+	histogram.Observe(5)
+	histogram.Observe(5)
+
+	act = *h.ToPrometheusMetricWindowedLocked().GetHistogram()
+	exp = prometheusgo.Histogram{
+		SampleCount: u(len(measurements) + len(measurements2)),
+		SampleSum:   &expSum,
+		Bucket: []*prometheusgo.Bucket{
+			{CumulativeCount: u(1), UpperBound: f(1)},
+			{CumulativeCount: u(4), UpperBound: f(5)},
+			{CumulativeCount: u(5), UpperBound: f(10)},
+			{CumulativeCount: u(8), UpperBound: f(25)},
+			{CumulativeCount: u(12), UpperBound: f(100)},
+		},
+	}
+
+	if !reflect.DeepEqual(act, exp) {
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	}
 }
 
 func TestNewHistogramRotate(t *testing.T) {

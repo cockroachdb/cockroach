@@ -530,6 +530,10 @@ func NewManualWindowHistogram(
 	if err := cum.Write(prev); err != nil {
 		panic(err.Error())
 	}
+	cur := &prometheusgo.Metric{}
+	if err := cum.Write(cur); err != nil {
+		panic(err.Error())
+	}
 
 	meta.MetricType = prometheusgo.MetricType_HISTOGRAM
 	h := &ManualWindowHistogram{
@@ -537,6 +541,7 @@ func NewManualWindowHistogram(
 	}
 	h.mu.rotating = withRotate
 	h.mu.cum = cum
+	h.mu.cur = cur.GetHistogram()
 	h.mu.prev = prev.GetHistogram()
 
 	return h
@@ -563,7 +568,8 @@ type ManualWindowHistogram struct {
 	}
 }
 
-// Update replaces the cumulative and current windowed histograms.
+// Update replaces the cumulative and current windowed histograms. It sets the
+// previous `cur` to `prev`.
 func (mwh *ManualWindowHistogram) Update(cum prometheus.Histogram, cur *prometheusgo.Histogram) {
 	mwh.mu.Lock()
 	defer mwh.mu.Unlock()
@@ -573,6 +579,7 @@ func (mwh *ManualWindowHistogram) Update(cum prometheus.Histogram, cur *promethe
 	}
 
 	mwh.mu.cum = cum
+	mwh.mu.prev = mwh.mu.cur
 	mwh.mu.cur = cur
 }
 
@@ -665,14 +672,11 @@ func (mwh *ManualWindowHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 // ToPrometheusMetricWindowedLocked returns a filled-in prometheus metric of the
 // right type.
 func (mwh *ManualWindowHistogram) ToPrometheusMetricWindowedLocked() *prometheusgo.Metric {
-	cur := &prometheusgo.Metric{}
-	if err := mwh.mu.cum.Write(cur); err != nil {
-		panic(err)
-	}
+	cur := mwh.mu.cur
 	if mwh.mu.prev != nil {
-		MergeWindowedHistogram(cur.Histogram, mwh.mu.prev)
+		MergeWindowedHistogram(cur, mwh.mu.prev)
 	}
-	return cur
+	return &prometheusgo.Metric{Histogram: cur}
 }
 
 // TotalWindowed implements the WindowedHistogram interface.
