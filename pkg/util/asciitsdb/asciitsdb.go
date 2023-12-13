@@ -106,6 +106,7 @@ func (t *TSDB) Scrape(ctx context.Context) {
 			if _, ok := t.mu.points[name]; !ok {
 				return
 			}
+			histWindow := mtr.ToPrometheusMetricWindowed()
 			count, _ := mtr.Total()
 			t.mu.points[name+"-count"] = append(t.mu.points[name+"-count"], float64(count))
 			avg := mtr.MeanWindowed()
@@ -120,7 +121,7 @@ func (t *TSDB) Scrape(ctx context.Context) {
 				{"-p75", 75},
 				{"-p50", 50},
 			} {
-				t.mu.points[name+pt.suffix] = append(t.mu.points[name+pt.suffix], mtr.ValueAtQuantileWindowed(pt.quantile))
+				t.mu.points[name+pt.suffix] = append(t.mu.points[name+pt.suffix], mtr.ValueAtQuantileWindowed(pt.quantile, histWindow))
 			}
 		case metric.PrometheusExportable:
 			// NB: this branch is intentionally at the bottom since all metrics

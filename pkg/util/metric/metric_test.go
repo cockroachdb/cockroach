@@ -149,7 +149,7 @@ func TestHistogram(t *testing.T) {
 	})
 
 	// should return 0 if no observations are made
-	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0, h.ToPrometheusMetricWindowed()))
 
 	// 200 is intentionally set us the first value to verify that the function
 	// does not return NaN or Inf.
@@ -158,8 +158,9 @@ func TestHistogram(t *testing.T) {
 	for i, m := range measurements {
 		h.RecordValue(m)
 		if i == 0 {
-			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
-			require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99))
+			histWindow := h.ToPrometheusMetricWindowed()
+			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0, histWindow))
+			require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99, histWindow))
 		}
 		expSum += float64(m)
 	}
@@ -183,11 +184,12 @@ func TestHistogram(t *testing.T) {
 		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
 	}
 
-	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
-	require.Equal(t, 1.0, h.ValueAtQuantileWindowed(10))
-	require.Equal(t, 17.5, h.ValueAtQuantileWindowed(50))
-	require.Equal(t, 75.0, h.ValueAtQuantileWindowed(80))
-	require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99.99))
+	histWindow := h.ToPrometheusMetricWindowed()
+	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0, histWindow))
+	require.Equal(t, 1.0, h.ValueAtQuantileWindowed(10, histWindow))
+	require.Equal(t, 17.5, h.ValueAtQuantileWindowed(50, histWindow))
+	require.Equal(t, 75.0, h.ValueAtQuantileWindowed(80, histWindow))
+	require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99.99, histWindow))
 
 	// Assert that native histogram schema is not defined
 	require.Nil(t, h.ToPrometheusMetric().Histogram.Schema)
@@ -237,7 +239,7 @@ func TestManualWindowHistogram(t *testing.T) {
 	)
 
 	// should return 0 if no observations are made
-	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
+	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0, h.ToPrometheusMetricWindowed()))
 
 	histogram := prometheus.NewHistogram(prometheus.HistogramOpts{Buckets: buckets})
 	pMetric := &prometheusgo.Metric{}
@@ -276,11 +278,12 @@ func TestManualWindowHistogram(t *testing.T) {
 	require.Panics(t, func() { h.RecordValue(0) })
 	require.Panics(t, func() { _ = h.Rotate() })
 
-	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
-	require.Equal(t, 1.0, h.ValueAtQuantileWindowed(10))
-	require.Equal(t, 17.5, h.ValueAtQuantileWindowed(50))
-	require.Equal(t, 75.0, h.ValueAtQuantileWindowed(80))
-	require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99.99))
+	histWindow := h.ToPrometheusMetricWindowed()
+	require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0, histWindow))
+	require.Equal(t, 1.0, h.ValueAtQuantileWindowed(10, histWindow))
+	require.Equal(t, 17.5, h.ValueAtQuantileWindowed(50, histWindow))
+	require.Equal(t, 75.0, h.ValueAtQuantileWindowed(80, histWindow))
+	require.Equal(t, 100.0, h.ValueAtQuantileWindowed(99.99, histWindow))
 }
 
 func TestNewHistogramRotate(t *testing.T) {
@@ -366,7 +369,7 @@ func TestHistogramWindowed(t *testing.T) {
 		if i == 0 {
 			// If there is no previous window, we should be unable to calculate mean
 			// or quantile without any observations.
-			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(99.99))
+			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(99.99, h.ToPrometheusMetricWindowed()))
 			if !math.IsNaN(h.MeanWindowed()) {
 				t.Fatalf("mean should be undefined with no observations")
 			}
@@ -379,11 +382,12 @@ func TestHistogramWindowed(t *testing.T) {
 			// Because we have 10 observations, we expect quantiles to correspond
 			// to observation indices (e.g., the 8th expected quantile value is equal
 			// to the value interpolated at the 80th percentile).
-			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0))
-			require.Equal(t, expQuantileValues[0], h.ValueAtQuantileWindowed(10))
-			require.Equal(t, expQuantileValues[4], h.ValueAtQuantileWindowed(50))
-			require.Equal(t, expQuantileValues[7], h.ValueAtQuantileWindowed(80))
-			require.Equal(t, expQuantileValues[9], h.ValueAtQuantileWindowed(99.99))
+			histWindow := h.ToPrometheusMetricWindowed()
+			require.Equal(t, 0.0, h.ValueAtQuantileWindowed(0, histWindow))
+			require.Equal(t, expQuantileValues[0], h.ValueAtQuantileWindowed(10, histWindow))
+			require.Equal(t, expQuantileValues[4], h.ValueAtQuantileWindowed(50, histWindow))
+			require.Equal(t, expQuantileValues[7], h.ValueAtQuantileWindowed(80, histWindow))
+			require.Equal(t, expQuantileValues[9], h.ValueAtQuantileWindowed(99.99, histWindow))
 		} else {
 			// The SampleSum and SampleCount values in the current window before any
 			// observations should be equal to those of the previous window, after all
@@ -399,9 +403,10 @@ func TestHistogramWindowed(t *testing.T) {
 				expCount += 1
 				expSum += float64(m)
 			}
-			require.Less(t, expQuantileValues[4], h.ValueAtQuantileWindowed(50))
-			require.Less(t, expQuantileValues[7], h.ValueAtQuantileWindowed(80))
-			require.Equal(t, expQuantileValues[9], h.ValueAtQuantileWindowed(99.99))
+			histWindow := h.ToPrometheusMetricWindowed()
+			require.Less(t, expQuantileValues[4], h.ValueAtQuantileWindowed(50, histWindow))
+			require.Less(t, expQuantileValues[7], h.ValueAtQuantileWindowed(80, histWindow))
+			require.Equal(t, expQuantileValues[9], h.ValueAtQuantileWindowed(99.99, histWindow))
 		}
 
 		// In all cases, the windowed mean should be equal to the expected sum/count

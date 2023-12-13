@@ -231,7 +231,8 @@ func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {
 	}
 }
 
-// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the right type.
+// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
+// right type for the current histogram window.
 func (h *HdrHistogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -246,11 +247,8 @@ func (h *HdrHistogram) GetMetadata() Metadata {
 	return baseMetadata
 }
 
-func (h *HdrHistogram) ValueAtQuantileWindowed(q float64) float64 {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	return ValueAtQuantileWindowed(h.toPrometheusMetricWindowedLocked().Histogram, q)
+func (h *HdrHistogram) ValueAtQuantileWindowed(q float64, window *prometheusgo.Metric) float64 {
+	return ValueAtQuantileWindowed(window.Histogram, q)
 }
 
 func (h *HdrHistogram) Mean() float64 {
