@@ -136,6 +136,12 @@ func (h *runtimeHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return m
 }
 
+// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
+// right type for the current histogram window.
+func (h *runtimeHistogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
+	return h.ToPrometheusMetric()
+}
+
 // GetMetadata is part of the PrometheusExportable interface.
 func (h *runtimeHistogram) GetMetadata() metric.Metadata {
 	return h.Metadata
@@ -156,8 +162,8 @@ func (h *runtimeHistogram) Total() (int64, float64) {
 }
 
 // ValueAtQuantileWindowed implements the WindowedHistogram interface.
-func (h *runtimeHistogram) ValueAtQuantileWindowed(q float64) float64 {
-	return metric.ValueAtQuantileWindowed(h.ToPrometheusMetric().Histogram, q)
+func (h *runtimeHistogram) ValueAtQuantileWindowed(q float64, window *prometheusgo.Metric) float64 {
+	return metric.ValueAtQuantileWindowed(window.Histogram, q)
 }
 
 // MeanWindowed implements the WindowedHistogram interface.
