@@ -696,7 +696,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// spam.
 	c.Run(ctx, c.All(), `mkdir -p logs`)
 
-	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
+	crdbNodes, workloadNode, _ := c.Range(1, c.Spec().NodeCount-1), c.Node(c.Spec().NodeCount), c.Node(c.Spec().NodeCount)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
@@ -704,13 +704,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	)
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)
 
-	kafka, cleanup := setupKafka(ctx, t, c, kafkaNode)
-	defer cleanup()
-
-	t.Status("creating kafka topic")
-	if err := kafka.createTopic(ctx, "bank"); err != nil {
-		t.Fatal(err)
-	}
+	kafka := (*kafkaManager)(nil)
 
 	c.Run(ctx, workloadNode, `./workload init bank {pgurl:1}`)
 	db := c.Conn(ctx, t.L(), 1)
@@ -725,7 +719,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"min_checkpoint_frequency": "'2s'",
 		"diff":                     "",
 	}
-	_, err := newChangefeedCreator(db, t.L(), globalRand, "bank.bank", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
+	_, err := newChangefeedCreator(db, t.L(), globalRand, "bank.bank", "", makeDefaultFeatureFlags()).
 		With(options).
 		Create()
 	if err != nil {
@@ -2567,6 +2561,9 @@ func (cfc *changefeedCreator) applySettings() error {
 			return err
 		}
 	}
+
+	cfc.logger.Printf("%v", changefeedccl.RangeDistributionStrategy)
+	cfc.logger.Printf("%v", changefeedccl.RangeDistributionStrategy.GetAvailableValues())
 
 	rangeDistribution := cfc.flags.DistributionStrategy.choose(cfc.rng,
 		changefeedccl.RangeDistributionStrategy.GetAvailableValues())

@@ -93,6 +93,12 @@ func (e *EnumSetting) GetAvailableValuesAsHint() string {
 // GetAvailableValues returns the possible enum settings as a string
 // slice.
 func (e *EnumSetting) GetAvailableValues() []string {
+	if e == nil {
+		panic("E IS NIL")
+	}
+	if e.enumValues == nil {
+		panic("ENUM IS NIL")
+	}
 	// First stabilize output by sorting by key.
 	valIdxs := make([]int, 0, len(e.enumValues))
 	for i := range e.enumValues {
