@@ -915,7 +915,7 @@ func TestStorePoolString(t *testing.T) {
 		"6 (status=dead): range-count=60 fraction-used=0.60\n"+
 		"7 (status=draining): range-count=70 fraction-used=0.70\n"+
 		"8 (status=suspect): range-count=80 fraction-used=0.80\n"+
-		"9 (status=throttled): range-count=90 fraction-used=0.90 [throttled=1.0s]\n",
+		"9 (status=throttled): range-count=90 fraction-used=0.90 [throttled=1s]\n",
 		sp.String())
 }
 
