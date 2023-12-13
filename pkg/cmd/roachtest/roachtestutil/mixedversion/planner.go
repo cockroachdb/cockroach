@@ -22,13 +22,19 @@ import (
 )
 
 type (
-	// TestPlan is the output of planning a mixed-version test. The list
-	// of `versions` are just for presentation purposes, as the plan is
-	// defined by the sequence of steps that it contains.
+	// TestPlan is the output of planning a mixed-version test.
 	TestPlan struct {
-		versions       []*clusterupgrade.Version
-		startClusterID int // step ID after which the cluster should be ready to receive connections
-		steps          []testStep
+		// initSteps is the sequence of steps to be performed before any
+		// upgrade takes place. This involves starting the cockroach
+		// process in the initial version, starting user-provided
+		// background functions, etc.
+		initSteps []testStep
+		// startClusterID is the step ID after which the cluster should be
+		// ready to receive connections.
+		startClusterID int
+		// upgrades is the list of upgrade plans to be performed during
+		// the run encoded by this plan.
+		upgrades []*upgradePlan
 	}
 
 	// testPlanner wraps the state and the logic involved in generating
@@ -45,6 +51,16 @@ type (
 		prng           *rand.Rand
 		bgChans        []shouldStop
 	}
+
+	// UpgradeStage encodes in what part of an upgrade a test step is in
+	// (i.e., before upgrade, doing initial upgrade, rolling back, etc.)
+	UpgradeStage int
+
+	upgradePlan struct {
+		from           *clusterupgrade.Version
+		to             *clusterupgrade.Version
+		sequentialStep sequentialRunStep
+	}
 )
 
 const (
@@ -54,78 +70,90 @@ const (
 	lastBranchPadding  = "   "
 )
 
+const (
+	// Upgrade stages are defined in the order they happen during test
+	// runs, so that we are able to select, for example, "stages after
+	// rollback" by doing `stage > RollbackUpgrade`.  Note that
+	// `BackgroundStage` is special in the sense that it may continue to
+	// run across stage changes, so doing direct stage comparisons as
+	// mentioned above doesn't make sense for background functions.
+	ClusterSetupStage = UpgradeStage(iota)
+	OnStartupStage
+	BackgroundStage
+	InitUpgradeStage
+	TemporaryUpgradeStage
+	RollbackUpgradeStage
+	LastUpgradeStage
+	RunningUpgradeMigrationsStage
+	AfterUpgradeFinalizedStage
+)
+
 // Plan returns the TestPlan used to upgrade the cluster from the
 // first to the final version in the `versions` field. The test plan
-// roughly translates to the sequence of steps below:
+// roughly translates to the sequence of steps below, annotated with
+// the respective `UpgradeStage` that they run in:
 //
-//  1. start all nodes in the cluster at the initial version, maybe
-//     using fixtures.
-//  2. run startup hooks.
+//  1. ClusterSetupStage: start all nodes in the cluster at the initial version,
+//     maybe using fixtures.
+//  2. OnStartupStage: run startup hooks.
 //  3. for each cluster upgrade:
-//     - set `preserve_downgrade_option`.
-//     - upgrade all nodes to the next cockroach version (running
-//     mixed-version hooks at times determined by the planner).
-//     - maybe downgrade all nodes back to the previous version
-//     (running mixed-version hooks again).
-//     - if a rollback was performed, upgrade all nodes back to the
-//     next version one more time (running mixed-version hooks).
-//     - reset `preserve_downgrade_option`, allowing the cluster
-//     to upgrade. Mixed-version hooks may be executed while
-//     this is happening.
-//     - run after-upgrade hooks.
+//     - InitUpgradeStage: set `preserve_downgrade_option`.
+//     - TemporaryUpgradeStage: upgrade all nodes to the next cockroach version
+//     (running mixed-version hooks at times determined by the planner). This
+//     stage only applies if the planner decides to rollback.
+//     - RollbackUpgradeStage: downgrade all nodes back to the previous
+//     version (running mixed-version hooks again). This stage may not happen.
+//     - LastUpgradeStage: upgrade all nodes to the next version (running
+//     mixed-version hooks). The upgrade will not be rolled back.
+//     - RunningUpgradeMigrationsStage: reset `preserve_downgrade_option`,
+//     allowing the cluster version to advance. Mixed-version hooks may be
+//     executed while this is happening.
+//     - AfterUpgradeFinalizedStage: run after-upgrade hooks.
 func (p *testPlanner) Plan() *TestPlan {
-	var steps []testStep
+	initSteps := append([]testStep{}, p.testSetupSteps()...)
+	initSteps = append(initSteps, p.hooks.BackgroundSteps(p.nextID, p.longRunningContext(), p.bgChans)...)
 
-	steps = append(steps, p.testSetupSteps()...)
-	steps = append(steps, p.hooks.BackgroundSteps(p.nextID, p.longRunningContext(), p.bgChans)...)
-
+	var upgrades []*upgradePlan
 	for prevVersionIdx := 0; prevVersionIdx+1 < len(p.versions); prevVersionIdx++ {
 		fromVersion := p.versions[prevVersionIdx]
 		toVersion := p.versions[prevVersionIdx+1]
 
+		plan := newUpgradePlan(fromVersion, toVersion)
 		p.currentContext.startUpgrade(toVersion)
+		plan.Add(p.initUpgradeSteps())
 
-		upgradeStep := sequentialRunStep{
-			label: fmt.Sprintf("upgrade cluster from %q to %q", fromVersion.String(), toVersion.String()),
-		}
-		addUpgradeSteps := func(ss []testStep) {
-			upgradeStep.steps = append(upgradeStep.steps, ss...)
-		}
-
-		addUpgradeSteps(p.initUpgradeSteps())
-
-		// previous -> next
-		addUpgradeSteps(p.upgradeSteps(fromVersion, toVersion))
 		if p.shouldRollback(toVersion) {
+			// previous -> next
+			plan.Add(p.upgradeSteps(TemporaryUpgradeStage, fromVersion, toVersion))
 			// next -> previous (rollback)
-			addUpgradeSteps(p.downgradeSteps(toVersion, fromVersion))
-
-			// previous -> current
-			addUpgradeSteps(p.upgradeSteps(fromVersion, toVersion))
+			plan.Add(p.downgradeSteps(toVersion, fromVersion))
 		}
+		// previous -> next
+		plan.Add(p.upgradeSteps(LastUpgradeStage, fromVersion, toVersion))
 
-		// finalize
-		addUpgradeSteps(p.finalizeUpgradeSteps(fromVersion, toVersion))
+		// finalize -- i.e., run upgrade migrations.
+		plan.Add(p.finalizeUpgradeSteps(fromVersion, toVersion))
 
-		// wait for upgrade to finalize
-		addUpgradeSteps(p.finalUpgradeSteps(fromVersion, toVersion))
-		steps = append(steps, upgradeStep)
+		// run after upgrade steps, if any,
+		plan.Add(p.afterUpgradeSteps(fromVersion, toVersion))
+		upgrades = append(upgrades, plan)
 	}
 
 	return &TestPlan{
-		versions:       p.versions,
+		initSteps:      initSteps,
 		startClusterID: p.startClusterID,
-		steps:          steps,
+		upgrades:       upgrades,
 	}
 }
 
 func (p *testPlanner) longRunningContext() *Context {
 	return newLongRunningContext(
-		p.versions[0], p.versions[len(p.versions)-1], p.crdbNodes,
+		p.versions[0], p.versions[len(p.versions)-1], p.crdbNodes, p.currentContext.Stage,
 	)
 }
 
 func (p *testPlanner) testSetupSteps() []testStep {
+	p.currentContext.Stage = ClusterSetupStage
 	initialVersion := p.versions[0]
 
 	var steps []testStep
@@ -151,6 +179,7 @@ func (p *testPlanner) testSetupSteps() []testStep {
 		}),
 	)
 
+	p.currentContext.Stage = OnStartupStage
 	return append(
 		steps,
 		p.hooks.StartupSteps(p.nextID, p.longRunningContext())...,
@@ -161,6 +190,7 @@ func (p *testPlanner) testSetupSteps() []testStep {
 // executed before we start changing binaries on nodes in the process
 // of upgrading/downgrading.
 func (p *testPlanner) initUpgradeSteps() []testStep {
+	p.currentContext.Stage = InitUpgradeStage
 	return []testStep{
 		p.newSingleStep(
 			preserveDowngradeOptionStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
@@ -168,30 +198,26 @@ func (p *testPlanner) initUpgradeSteps() []testStep {
 	}
 }
 
-// finalUpgradeSteps are the steps to be run once the nodes have been
-// upgraded/downgraded. It will wait for the cluster version on all
-// nodes to be the same and then run any after-finalization hooks the
-// user may have provided.
-func (p *testPlanner) finalUpgradeSteps(fromVersion, toVersion *clusterupgrade.Version) []testStep {
-	waitForUpgrade := []testStep{
-		p.newSingleStep(
-			waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
-		),
-	}
-
+// afterUpgradeSteps are the steps to be run once the nodes have been
+// upgraded. It will wait for the cluster version on all nodes to be
+// the same and then run any after-finalization hooks the user may
+// have provided.
+func (p *testPlanner) afterUpgradeSteps(fromVersion, toVersion *clusterupgrade.Version) []testStep {
 	p.currentContext.Finalizing = false
-	return append(
-		waitForUpgrade,
-		p.hooks.AfterUpgradeFinalizedSteps(p.nextID, p.currentContext)...,
-	)
+	p.currentContext.Stage = AfterUpgradeFinalizedStage
+	return p.hooks.AfterUpgradeFinalizedSteps(p.nextID, p.currentContext)
 }
 
-func (p *testPlanner) upgradeSteps(from, to *clusterupgrade.Version) []testStep {
+func (p *testPlanner) upgradeSteps(
+	stage UpgradeStage, from, to *clusterupgrade.Version,
+) []testStep {
+	p.currentContext.Stage = stage
 	msg := fmt.Sprintf("upgrade nodes %v from %q to %q", p.crdbNodes, from.String(), to.String())
 	return p.changeVersionSteps(from, to, msg)
 }
 
 func (p *testPlanner) downgradeSteps(from, to *clusterupgrade.Version) []testStep {
+	p.currentContext.Stage = RollbackUpgradeStage
 	msg := fmt.Sprintf("downgrade nodes %v from %q to %q", p.crdbNodes, from.String(), to.String())
 	return p.changeVersionSteps(from, to, msg)
 }
@@ -225,16 +251,27 @@ func (p *testPlanner) changeVersionSteps(
 
 // finalizeUpgradeSteps finalizes the upgrade by resetting the
 // `preserve_downgrade_option` and potentially running mixed-version
-// hooks while the cluster version is changing.
+// hooks while the cluster version is changing. At the end of this
+// process, we wait for all the migrations to finish running.
 func (p *testPlanner) finalizeUpgradeSteps(
 	fromVersion, toVersion *clusterupgrade.Version,
 ) []testStep {
 	p.currentContext.Finalizing = true
-	return append([]testStep{
-		p.newSingleStep(
-			finalizeUpgradeStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
+	p.currentContext.Stage = RunningUpgradeMigrationsStage
+	runMigrations := p.newSingleStep(
+		finalizeUpgradeStep{id: p.nextID(), prng: p.newRNG(), crdbNodes: p.crdbNodes},
+	)
+	mixedVersionStepsDuringMigrations := p.hooks.MixedVersionSteps(p.currentContext, p.nextID)
+	waitForMigrations := p.newSingleStep(
+		waitForStableClusterVersionStep{id: p.nextID(), nodes: p.crdbNodes, timeout: p.options.upgradeTimeout},
+	)
+
+	return append(
+		append(
+			[]testStep{runMigrations}, mixedVersionStepsDuringMigrations...,
 		),
-	}, p.hooks.MixedVersionSteps(p.currentContext, p.nextID)...)
+		waitForMigrations,
+	)
 }
 
 // shouldRollback returns whether the test will attempt a rollback. If
@@ -271,19 +308,61 @@ func (p *testPlanner) newRNG() *rand.Rand {
 	return rngFromRNG(p.prng)
 }
 
+func newUpgradePlan(from, to *clusterupgrade.Version) *upgradePlan {
+	return &upgradePlan{
+		from: from,
+		to:   to,
+		sequentialStep: sequentialRunStep{
+			label: fmt.Sprintf("upgrade cluster from %q to %q", from.String(), to.String()),
+		},
+	}
+}
+
+func (up *upgradePlan) Add(steps []testStep) {
+	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
+}
+
+// Steps returns a list of all steps involved in carrying out the
+// entire test plan (comprised of one or multiple upgrades).
+func (plan *TestPlan) Steps() []testStep {
+	steps := append([]testStep{}, plan.initSteps...)
+	for _, upgrade := range plan.upgrades {
+		steps = append(steps, upgrade.sequentialStep)
+	}
+
+	return steps
+}
+
+// Versions returns the list of versions the cluster goes through in
+// the process of running this mixed-version test.
+func (plan *TestPlan) Versions() []*clusterupgrade.Version {
+	result := []*clusterupgrade.Version{plan.upgrades[0].from}
+	for _, upgrade := range plan.upgrades {
+		result = append(result, upgrade.to)
+	}
+
+	return result
+}
+
 // PrettyPrint displays a tree-like view of the mixed-version test
 // plan, useful when debugging mixed-version test failures. Each step
 // is assigned an ID, making it easy to correlate the step that
 // failed with the point in the test where the failure occurred. See
-// test file for an example of the output of this function.
+// testdata/ for examples of the output of this function.
 func (plan *TestPlan) PrettyPrint() string {
+	return plan.prettyPrintInternal(false /* debug */)
+}
+
+func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 	var out strings.Builder
-	for i, step := range plan.steps {
-		plan.prettyPrintStep(&out, step, treeBranchString(i, len(plan.steps)))
+	allSteps := plan.Steps()
+	for i, step := range allSteps {
+		plan.prettyPrintStep(&out, step, treeBranchString(i, len(allSteps)), debug)
 	}
 
-	formattedVersions := make([]string, 0, len(plan.versions))
-	for _, v := range plan.versions {
+	versions := plan.Versions()
+	formattedVersions := make([]string, 0, len(versions))
+	for _, v := range versions {
 		formattedVersions = append(formattedVersions, fmt.Sprintf("%q", v.String()))
 	}
 
@@ -293,14 +372,16 @@ func (plan *TestPlan) PrettyPrint() string {
 	)
 }
 
-func (plan *TestPlan) prettyPrintStep(out *strings.Builder, step testStep, prefix string) {
+func (plan *TestPlan) prettyPrintStep(
+	out *strings.Builder, step testStep, prefix string, debug bool,
+) {
 	writeNested := func(label string, steps []testStep) {
 		out.WriteString(fmt.Sprintf("%s %s\n", prefix, label))
 		for i, subStep := range steps {
 			nestedPrefix := strings.ReplaceAll(prefix, branchString, nestedBranchString)
 			nestedPrefix = strings.ReplaceAll(nestedPrefix, lastBranchString, lastBranchPadding)
 			subPrefix := fmt.Sprintf("%s%s", nestedPrefix, treeBranchString(i, len(steps)))
-			plan.prettyPrintStep(out, subStep, subPrefix)
+			plan.prettyPrintStep(out, subStep, subPrefix, debug)
 		}
 	}
 
@@ -314,8 +395,15 @@ func (plan *TestPlan) prettyPrintStep(out *strings.Builder, step testStep, prefi
 		if contextStr := strings.Join(extraContext, ", "); contextStr != "" {
 			extras = ", " + contextStr
 		}
+
+		// Include debug information if we are in debug mode.
+		var debugInfo string
+		if debug {
+			debugInfo = fmt.Sprintf(" [stage=%s]", ss.context.Stage)
+		}
+
 		out.WriteString(fmt.Sprintf(
-			"%s %s%s (%d)\n", prefix, ss.impl.Description(), extras, ss.impl.ID(),
+			"%s %s%s (%d)%s\n", prefix, ss.impl.Description(), extras, ss.impl.ID(), debugInfo,
 		))
 	}
 
@@ -338,4 +426,29 @@ func treeBranchString(idx, sliceLen int) string {
 	}
 
 	return branchString
+}
+
+func (u UpgradeStage) String() string {
+	switch u {
+	case ClusterSetupStage:
+		return "cluster-setup"
+	case OnStartupStage:
+		return "on-startup"
+	case BackgroundStage:
+		return "background"
+	case InitUpgradeStage:
+		return "init"
+	case TemporaryUpgradeStage:
+		return "temporary-upgrade"
+	case RollbackUpgradeStage:
+		return "rollback-upgrade"
+	case LastUpgradeStage:
+		return "last-upgrade"
+	case RunningUpgradeMigrationsStage:
+		return "running-upgrade-migrations"
+	case AfterUpgradeFinalizedStage:
+		return "after-upgrade-finished"
+	default:
+		return fmt.Sprintf("invalid upgrade stage (%d)", u)
+	}
 }
