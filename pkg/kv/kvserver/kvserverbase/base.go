@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/redact"
+	"go.etcd.io/raft/v3/raftpb"
 )
 
 // MergeQueueEnabled is a setting that controls whether the merge queue is
@@ -150,8 +151,10 @@ type ProposalFilterArgs struct {
 type ApplyFilterArgs struct {
 	kvserverpb.ReplicatedEvalResult
 	CmdID       CmdIDKey
+	Entry       raftpb.Entry
 	RangeID     roachpb.RangeID
 	StoreID     roachpb.StoreID
+	ReplicaID   roachpb.ReplicaID
 	Req         *kvpb.BatchRequest // only set on the leaseholder
 	ForcedError *kvpb.Error
 }
