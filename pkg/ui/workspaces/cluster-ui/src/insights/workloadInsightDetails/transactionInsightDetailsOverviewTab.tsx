@@ -171,7 +171,7 @@ the maximum number of statements was reached in the console.`;
                       value={Duration(txnDetails.elapsedTimeMillis * 1e6)}
                     />
                     <SummaryCardItem
-                      label="CPU Time"
+                      label="SQL CPU Time"
                       value={Duration(txnDetails.cpuSQLNanos)}
                     />
                     <SummaryCardItem
