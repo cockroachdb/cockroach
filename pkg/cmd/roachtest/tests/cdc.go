@@ -1610,13 +1610,14 @@ func registerCDC(r registry.Registry) {
 			}
 		},
 	})
-r.Add(registry.TestSpec{
-		Name:            "cdc/kafka-azure",
-		Owner:           `cdc`,
-		Skip:            "nightly runs blocked on azure credentials access in CI (#105580)",
-		Cluster:         r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64), spec.Zones("us-east1-b")),
-		Leases:          registry.MetamorphicLeases,
-		RequiresLicense: true,
+	r.Add(registry.TestSpec{
+		Name:             "cdc/kafka-azure",
+		Owner:            `cdc`,
+		CompatibleClouds: registry.AllExceptAWS,
+		Cluster:          r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64), spec.GCEZones("us-east1-b")),
+		Leases:           registry.MetamorphicLeases,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
