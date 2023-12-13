@@ -331,19 +331,40 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	})
 
 	t.Run("udfs", func(t *testing.T) {
-		r.Exec(t, "CREATE FUNCTION add(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a + b';")
-		r.Exec(t, "CREATE FUNCTION subtract(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a - b';")
-		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT add(3, 4);")
+		r.Exec(t, "CREATE FUNCTION add_func(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a + b';")
+		r.Exec(t, "CREATE FUNCTION subtract_func(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a - b';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT add_func(3, 4);")
 		checkBundle(
-			t, fmt.Sprint(rows), "add", func(name, contents string) error {
+			t, fmt.Sprint(rows), "add_func", func(name, contents string) error {
 				if name == "schema.sql" {
-					reg := regexp.MustCompile("add")
+					reg := regexp.MustCompile("add_func")
 					if reg.FindString(contents) == "" {
-						return errors.Errorf("could not find definition for 'add' function in schema.sql")
+						return errors.Errorf("could not find definition for 'add_func' function in schema.sql")
 					}
-					reg = regexp.MustCompile("subtract")
+					reg = regexp.MustCompile("subtract_func")
 					if reg.FindString(contents) != "" {
-						return errors.Errorf("Found irrelevant user defined function 'substract' in schema.sql")
+						return errors.Errorf("Found irrelevant user defined function 'subtract_func' in schema.sql")
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql.html vec-v.txt vec.txt")
+	})
+
+	t.Run("procedures", func(t *testing.T) {
+		r.Exec(t, "CREATE PROCEDURE add_proc(a INT, b INT) LANGUAGE SQL AS 'SELECT a + b';")
+		r.Exec(t, "CREATE PROCEDURE subtract_proc(a INT, b INT) LANGUAGE SQL AS 'SELECT a - b';")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) CALL add_proc(3, 4);")
+		checkBundle(
+			t, fmt.Sprint(rows), "add_proc", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile("add_proc")
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'add_proc' procedure in schema.sql")
+					}
+					reg = regexp.MustCompile("subtract_proc")
+					if reg.FindString(contents) != "" {
+						return errors.Errorf("Found irrelevant procedure 'subtract_proc' in schema.sql")
 					}
 				}
 				return nil

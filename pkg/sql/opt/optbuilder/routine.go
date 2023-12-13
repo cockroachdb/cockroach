@@ -321,6 +321,7 @@ func (b *Builder) buildRoutine(
 				SetReturning:       isSetReturning,
 				CalledOnNullInput:  o.CalledOnNullInput,
 				MultiColDataSource: isMultiColDataSource,
+				RoutineType:        o.Type,
 				Body:               body,
 				BodyProps:          bodyProps,
 				Params:             params,
