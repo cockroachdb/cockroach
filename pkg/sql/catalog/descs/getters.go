@@ -402,34 +402,26 @@ func (g MutableByNameGetter) Type(
 
 func makeGetterBase(txn *kv.Txn, col *Collection, flags getterFlags) getterBase {
 	return getterBase{
-		txn:   &txnWrapper{Txn: txn, Collection: col},
-		flags: flags,
+		txnWrapper: txnWrapper{Txn: txn, Collection: col},
+		flags:      flags,
 	}
 }
 
 type getterBase struct {
-	txn
+	txnWrapper
 	flags getterFlags
 }
 
-type (
-	txn interface {
-		KV() *kv.Txn
-		Descriptors() *Collection
-	}
-	txnWrapper struct {
-		*kv.Txn
-		*Collection
-	}
-)
+type txnWrapper struct {
+	*kv.Txn
+	*Collection
+}
 
-var _ txn = &txnWrapper{}
-
-func (w *txnWrapper) KV() *kv.Txn {
+func (w txnWrapper) KV() *kv.Txn {
 	return w.Txn
 }
 
-func (w *txnWrapper) Descriptors() *Collection {
+func (w txnWrapper) Descriptors() *Collection {
 	return w.Collection
 }
 
