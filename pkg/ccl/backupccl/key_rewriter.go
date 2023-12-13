@@ -29,6 +29,18 @@ type prefixRewrite struct {
 	noop      bool
 }
 
+func (rewrite prefixRewrite) rewriteKey(key []byte) []byte {
+	if len(rewrite.OldPrefix) == len(rewrite.NewPrefix) {
+		copy(key[:len(rewrite.OldPrefix)], rewrite.NewPrefix)
+		return key
+	}
+	// TODO(dan): Special case when key's cap() is enough.
+	newKey := make([]byte, 0, len(rewrite.NewPrefix)+len(key)-len(rewrite.OldPrefix))
+	newKey = append(newKey, rewrite.NewPrefix...)
+	newKey = append(newKey, key[len(rewrite.OldPrefix):]...)
+	return newKey
+}
+
 // prefixRewriter is a matcher for an ordered list of pairs of byte prefix
 // rewrite rules.
 type prefixRewriter struct {
@@ -36,11 +48,9 @@ type prefixRewriter struct {
 	last     int
 }
 
-// rewriteKey modifies key using the first matching rule and returns
-// it. If no rules matched, returns false and the original input key.
-func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
+func (p prefixRewriter) GetRewrite(key []byte) (prefixRewrite, bool) {
 	if len(p.rewrites) < 1 {
-		return key, false
+		return prefixRewrite{}, false
 	}
 
 	found := p.last
@@ -52,24 +62,22 @@ func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 			return bytes.HasPrefix(key, p.rewrites[i].OldPrefix) || bytes.Compare(key, p.rewrites[i].OldPrefix) < 0
 		})
 		if found == len(p.rewrites) || !bytes.HasPrefix(key, p.rewrites[found].OldPrefix) {
-			return key, false
+			return prefixRewrite{}, false
 		}
 	}
 
 	p.last = found
-	rewrite := p.rewrites[found]
-	if rewrite.noop {
-		return key, true
+	return p.rewrites[found], true
+}
+
+// rewriteKey modifies key using the first matching rule and returns
+// it. If no rules matched, returns false and the original input key.
+func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
+	rewrite, found := p.GetRewrite(key)
+	if !found || rewrite.noop {
+		return key, found
 	}
-	if len(rewrite.OldPrefix) == len(rewrite.NewPrefix) {
-		copy(key[:len(rewrite.OldPrefix)], rewrite.NewPrefix)
-		return key, true
-	}
-	// TODO(dan): Special case when key's cap() is enough.
-	newKey := make([]byte, 0, len(rewrite.NewPrefix)+len(key)-len(rewrite.OldPrefix))
-	newKey = append(newKey, rewrite.NewPrefix...)
-	newKey = append(newKey, key[len(rewrite.OldPrefix):]...)
-	return newKey, true
+	return rewrite.rewriteKey(key), true
 }
 
 // KeyRewriter rewrites old table IDs to new table IDs. It is able to descend
