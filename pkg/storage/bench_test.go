@@ -875,9 +875,7 @@ func runMVCCGet(ctx context.Context, b *testing.B, opts mvccBenchData, useBatch 
 	b.StopTimer()
 }
 
-func runMVCCPut(
-	ctx context.Context, b *testing.B, emk engineMaker, valueSize, versions int, useBatch bool,
-) {
+func runMVCCPut(ctx context.Context, b *testing.B, emk engineMaker, valueSize, versions int) {
 	rng, _ := randutil.NewTestRand()
 	value := roachpb.MakeValueFromBytes(randutil.RandBytes(rng, valueSize))
 	keyBuf := append(make([]byte, 0, 64), []byte("key-")...)
@@ -886,11 +884,6 @@ func runMVCCPut(
 	defer eng.Close()
 
 	rw := ReadWriter(eng)
-	if useBatch {
-		batch := eng.NewBatch()
-		defer batch.Close()
-		rw = batch
-	}
 
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
