@@ -55,6 +55,8 @@ func TestStatusAPICombinedTransactions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "probable OOM")
+
 	// Increase the timeout for the http client if under stress.
 	additionalTimeout := 0 * time.Second
 	if skip.Stress() {

@@ -33,6 +33,7 @@ type testFileTemplateConfig struct {
 	Ccl                           bool
 	ForceProductionValues         bool
 	IsMultiRegion                 bool
+	Is3NodeTenant                 bool
 	Package, TestRuleName, RelDir string
 	ConfigIdx                     int
 	TestCount                     int
@@ -176,6 +177,7 @@ func (t *testdir) dump() error {
 		tplCfg.TestCount = testCount
 		tplCfg.CockroachGoTestserverTest = cfg.UseCockroachGoTestserver
 		tplCfg.IsMultiRegion = strings.Contains(cfg.Name, "multiregion")
+		tplCfg.Is3NodeTenant = strings.HasSuffix(cfg.Name, "3node-tenant")
 		// The NumCPU calculation is a guess pulled out of thin air to
 		// allocate the tests which use 3-node clusters 2 vCPUs, and
 		// the ones which use more a bit more.
