@@ -2817,4 +2817,21 @@ SELECT * FROM t114826;
 1
 1
 
+# Regression test for #114678 - cast RAISE format arguments to strings.
+subtest raise_format_arg
+
+statement ok
+CREATE FUNCTION f114678() RETURNS INT LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE '% % %', now(), 1, True; RETURN 0; END $$;
+CREATE PROCEDURE p114678() LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE '% % %', now(), 1, True; END $$;
+
+query T noticetrace
+SELECT f114678();
+----
+NOTICE: 2023-12-14 22:54:49.248958+00 1 true
+
+query T noticetrace
+CALL p114678();
+----
+NOTICE: 2023-12-14 22:54:49.250059+00 1 true
+
 subtest end
