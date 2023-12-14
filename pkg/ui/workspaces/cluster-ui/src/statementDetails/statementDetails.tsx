@@ -665,8 +665,8 @@ export class StatementDetails extends React.Component<
     const cpuTimeseries: AlignedData =
       generateCPUTimeseries(statsPerAggregatedTs);
     const cpuOps: Partial<Options> = {
-      axes: [{}, { label: "CPU Time" }],
-      series: [{}, { label: "CPU Time" }],
+      axes: [{}, { label: "SQL CPU Time" }],
+      series: [{}, { label: "SQL CPU Time" }],
       legend: { show: false },
       width: cardWidth,
     };
@@ -831,7 +831,7 @@ export class StatementDetails extends React.Component<
                   )}
                 />
                 <SummaryCardItem
-                  label="CPU Time"
+                  label="SQL CPU Time"
                   value={formatNumberForDisplay(
                     stats?.exec_stats?.cpu_sql_nanos.mean,
                     Duration,
@@ -909,7 +909,7 @@ export class StatementDetails extends React.Component<
             </Col>
             <Col className="gutter-row" span={12}>
               <BarGraphTimeSeries
-                title={`CPU Time${noSamples}`}
+                title={`SQL CPU Time${noSamples}`}
                 alignedData={cpuTimeseries}
                 uPlotOptions={cpuOps}
                 tooltip={unavailableTooltip}
