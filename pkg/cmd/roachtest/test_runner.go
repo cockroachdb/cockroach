@@ -574,16 +574,11 @@ func (r *testRunner) runWorker(
 			// Try to reuse cluster.
 			testToRun = work.selectTestForCluster(ctx, c.spec, r.cr)
 			if !testToRun.noWork {
-				var err error
 				// We found a test to run on this cluster. Wipe the cluster.
-				if err = c.WipeForReuse(ctx, l, testToRun.spec.Cluster); err == nil {
-					// Extend the lifetime of the cluster if needed.
-					err = c.MaybeExtendCluster(ctx, l, testToRun.spec)
-				}
-				// We do not count reuse attempt error toward clusterCreateErr. If
-				// either the Wipe or Extend failed, then destroy the cluster and attempt
-				// to create a fresh cluster for the selected test.
-				if err != nil {
+				if err := c.WipeForReuse(ctx, l, testToRun.spec.Cluster); err != nil {
+					// We do not count reuse attempt error toward clusterCreateErr. If
+					// either the Wipe or Extend failed, then destroy the cluster and attempt
+					// to create a fresh cluster for the selected test.
 					shout(ctx, l, stdout, "Unable to reuse cluster: %s due to: %s. Will attempt to create a fresh one",
 						c.Name(), err)
 					// We don't release the quota allocation - the new cluster will be
@@ -805,32 +800,20 @@ func (r *testRunner) runWorker(
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
 
-				err = r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL, github)
+				r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL, github)
 			}
 		}
 
-		if err != nil {
-			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
-			// Mark the test as failed if it isn't already.
-			if !t.Failed() {
-				t.Error(err)
-			}
-		} else {
-			msg := "test passed: %s (run %d)"
-			if t.Failed() {
-				msg = "test failed: %s (run %d)"
-			}
-			msg = fmt.Sprintf(msg, t.Name(), testToRun.runNum)
-			l.PrintfCtx(ctx, msg)
+		msg := "test passed: %s (run %d)"
+		if t.Failed() {
+			msg = "test failed: %s (run %d)"
 		}
+		msg = fmt.Sprintf(msg, t.Name(), testToRun.runNum)
+		l.PrintfCtx(ctx, msg)
+
 		testL.Close()
-		if err != nil || t.Failed() {
-			failureMsg := fmt.Sprintf("%s (%d) - ", testToRun.spec.Name, testToRun.runNum)
-			if err != nil {
-				failureMsg += fmt.Sprintf("%+v", err)
-			} else {
-				failureMsg += t.failureMsg()
-			}
+		if t.Failed() {
+			failureMsg := fmt.Sprintf("%s (%d) - %s", testToRun.spec.Name, testToRun.runNum, t.failureMsg())
 			if c != nil {
 				switch clustersOpt.debugMode {
 				case DebugKeepAlways, DebugKeepOnFailure:
@@ -846,10 +829,6 @@ func (r *testRunner) runWorker(
 					c.Destroy(context.Background(), closeLogger, l)
 					c = nil
 				}
-			}
-			if err != nil {
-				// N.B. bail out iff runTest exits exceptionally.
-				return err
 			}
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
@@ -944,8 +923,7 @@ func (r *testRunner) runTest(
 	stdout io.Writer,
 	l *logger.Logger,
 	github *githubIssues,
-) error {
-
+) {
 	testRunID := t.Name()
 	if runCount > 1 {
 		testRunID += fmt.Sprintf("#%d", runNum)
@@ -1077,6 +1055,12 @@ func (r *testRunner) runTest(
 
 	t.start = timeutil.Now()
 
+	// Extend the lifetime of the cluster if needed.
+	if err := c.MaybeExtendCluster(ctx, l, t.spec); err != nil {
+		t.Error(errors.Mark(err, errClusterProvisioningFailed))
+		return
+	}
+
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	t.mu.Lock()
@@ -1168,7 +1152,6 @@ func (r *testRunner) runTest(
 	if err := r.teardownTest(ctx, t, c, timedOut); err != nil {
 		l.Printf("error during test teardown: %v; see test-teardown.log for details", err)
 	}
-	return nil
 }
 
 // The assertions here are executed after each test, and may result in a test failure. Test authors
