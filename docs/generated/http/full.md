@@ -1630,8 +1630,8 @@ Tier represents one level of the locality hierarchy.
 
 `GET /_status/tenant_ranges`
 
-TenantRanges requests internal details about all range replicas within
-the tenant's keyspace.
+TenantRanges requests internal details about all range replicas that exist within
+the tenant's keyspace at the time the request is processed.
 
 Support status: [reserved](#support-status)
 
@@ -7102,11 +7102,3 @@ sets the recording mode of all or some of the spans in a trace.
 
 
 SetTraceRecordingTypeRequest is the response for SetTraceRecordingType.
-
-
-
-
-
-
-
-
