@@ -233,6 +233,7 @@ func (s *Statement) CopyTo(
 	other.RowsWritten = s.RowsWritten
 	other.ServiceLatSeconds = s.LatencyInSeconds
 	other.StartTime = &s.StartTime
+	other.LastErrorRedactable = string(s.ErrorMsg.Redact())
 	var err error
 	other.ID, err = s.ID.MarshalJSON()
 	if err != nil {

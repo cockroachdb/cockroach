@@ -76,7 +76,7 @@ func (p *StmtInsightsProcessor) getInsightsInfo() (int, time.Duration) {
 
 // prepareInsightExport creates the insert and args for the INSERT and clears the insights mutex.
 func (p *StmtInsightsProcessor) prepareInsightExport() (string, []interface{}) {
-	columnCount := 31
+	columnCount := 34
 	var rows []string
 	var args []interface{}
 
@@ -111,6 +111,8 @@ func (p *StmtInsightsProcessor) prepareInsightExport() (string, []interface{}) {
 			stmtInsight.UserPriority,
 			stmtInsight.Database,
 			stmtInsight.PlanGist,
+			stmtInsight.RowsRead,
+			stmtInsight.RowsWritten,
 			stmtInsight.Retries,
 			stmtInsight.AutoRetryReason,
 			stmtInsight.Nodes,
@@ -118,6 +120,7 @@ func (p *StmtInsightsProcessor) prepareInsightExport() (string, []interface{}) {
 			stmtInsight.ImplicitTxn,
 			stmtInsight.CPUSQLNanos,
 			stmtInsight.ErrorCode,
+			stmtInsight.LastErrorRedactable,
 			stmtInsight.Contention,
 			// Details column. This column is null for now, but exists in case there is extra information
 			// we might want to add in the future, this would be the place to easily add without the need for a creation
@@ -130,7 +133,7 @@ func (p *StmtInsightsProcessor) prepareInsightExport() (string, []interface{}) {
 		}
 
 		rows = append(rows, fmt.Sprintf(`($%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, 
-			$%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v)`,
+			$%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v, $%v)`,
 			placeholders...))
 	}
 
@@ -157,6 +160,8 @@ func (p *StmtInsightsProcessor) prepareInsightExport() (string, []interface{}) {
 									 user_priority,
 									 database_name,
 									 plan_gist,
+									 rows_read,
+									 rows_written,
 									 retries,
 									 last_retry_reason,
 									 execution_node_ids,
@@ -164,9 +169,10 @@ func (p *StmtInsightsProcessor) prepareInsightExport() (string, []interface{}) {
 									 implicit_txn,
 									 cpu_sql_nanos,
 									 error_code,
+									 last_error_redactable,
 									 contention_time,
 									 details
-									 ) VALUES %s`, strings.Join(rows, ", "))
+									 ) VALUES %s ON CONFLICT DO NOTHING`, strings.Join(rows, ", "))
 
 	p.mu.lastExportTs = timeutil.Now()
 	p.mu.insights = nil

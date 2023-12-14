@@ -84,6 +84,8 @@ export type StmtInsightsObsServiceResponseRow = {
   user_name: string;
   app_name: string;
   database_name: string;
+  rows_read: number;
+  rows_written: number;
   priority: string;
   retries: number;
   exec_node_ids: number[];
@@ -95,6 +97,7 @@ export type StmtInsightsObsServiceResponseRow = {
   plan_gist: string;
   cpu_sql_nanos: number;
   error_code: string;
+  last_error_redactable: string;
   status: StatementStatus;
 };
 
@@ -129,8 +132,6 @@ last_error_redactable,
 status
 `;
 
-// TODO(maryliag): update columns list once we store values for
-// rows_read, rows_written and last_error_redactable.
 const stmtColumnsObsService = `
 session_id,
 transaction_id,
@@ -145,6 +146,8 @@ full_scan,
 user_name,
 app_name,
 database_name,
+rows_read,
+rows_written,
 user_priority,
 retries,
 execution_node_ids,
@@ -156,6 +159,7 @@ index_recommendations,
 plan_gist,
 cpu_sql_nanos,
 error_code,
+last_error_redactable,
 status
 `;
 
@@ -284,9 +288,6 @@ export function formatStmtInsights(
   let txnFingerprintID;
   let stmtID;
   let stmtFingerprintID;
-  let rowsRead;
-  let rowsWritten;
-  let lastErrorRedactable;
 
   return response.rows.map(
     (row: StmtInsightsResponseRow | StmtInsightsObsServiceResponseRow) => {
@@ -298,19 +299,12 @@ export function formatStmtInsights(
         txnFingerprintID = r.transaction_fingerprint_id;
         stmtID = r.statement_id;
         stmtFingerprintID = r.statement_fingerprint_id;
-        // TODO(maryliag); collect the values for rows read, rows written and last error redactable.
-        rowsRead = 0;
-        rowsWritten = 0;
-        lastErrorRedactable = "";
       } else {
         const r = row as StmtInsightsResponseRow;
         txnID = r.txn_id;
         txnFingerprintID = r.txn_fingerprint_id;
         stmtID = r.stmt_id;
         stmtFingerprintID = r.stmt_fingerprint_id;
-        rowsRead = r.rows_read;
-        rowsWritten = r.rows_written;
-        lastErrorRedactable = r.last_error_redactable;
       }
 
       return {
@@ -331,8 +325,8 @@ export function formatStmtInsights(
         statementExecutionID: stmtID,
         statementFingerprintID: FixFingerprintHexValue(stmtFingerprintID),
         isFullScan: row.full_scan,
-        rowsRead: rowsRead,
-        rowsWritten: rowsWritten,
+        rowsRead: row.rows_read,
+        rowsWritten: row.rows_written,
         // This is the total stmt contention.
         contentionTime: row.contention ? moment.duration(row.contention) : null,
         indexRecommendations: row.index_recommendations,
@@ -344,7 +338,7 @@ export function formatStmtInsights(
         planGist: row.plan_gist,
         cpuSQLNanos: row.cpu_sql_nanos,
         errorCode: row.error_code,
-        errorMsg: lastErrorRedactable,
+        errorMsg: row.last_error_redactable,
         status: row.status,
       } as StmtInsightEvent;
     },
