@@ -594,6 +594,85 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 	log.Infof(ctx, "statistics for %q:\n%s", appName, buf.String())
 }
 
+// PopAllStatementsStats returns all collected statement stats in memory to the caller and clears SQL stats
+// make sure that new arriving stats won't be interfering with existing one.
+func (s *Container) PopAllStatementsStats() []*appstatspb.CollectedStatementStatistics {
+	stats := make([]*appstatspb.CollectedStatementStatistics, 0)
+	var stmts map[stmtKey]*stmtStats
+
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		stmts = s.mu.stmts
+		// Reset stats after they're assigned to local variable.
+		s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
+		s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
+	}()
+
+	if len(stmts) == 0 {
+		return stats
+	}
+
+	for key, stmt := range stmts {
+		var data appstatspb.StatementStatistics
+		var distSQLUsed, vectorized, fullScan bool
+		var database, querySummary string
+
+		func() {
+			stmt.mu.Lock()
+			defer stmt.mu.Unlock()
+			data = stmt.mu.data
+			distSQLUsed = stmt.mu.distSQLUsed
+			vectorized = stmt.mu.vectorized
+			fullScan = stmt.mu.fullScan
+			database = stmt.mu.database
+			querySummary = stmt.mu.querySummary
+		}()
+
+		stats = append(stats, &appstatspb.CollectedStatementStatistics{
+			Key: appstatspb.StatementStatisticsKey{
+				Query:                    key.stmtNoConstants,
+				QuerySummary:             querySummary,
+				DistSQL:                  distSQLUsed,
+				Vec:                      vectorized,
+				ImplicitTxn:              key.implicitTxn,
+				FullScan:                 fullScan,
+				Failed:                   key.failed,
+				App:                      s.appName,
+				Database:                 database,
+				PlanHash:                 key.planHash,
+				TransactionFingerprintID: key.transactionFingerprintID,
+			},
+			ID:    constructStatementFingerprintIDFromStmtKey(key),
+			Stats: data,
+		})
+	}
+	return stats
+}
+
+// PopAllTransactionStats returns all collected transaction stats in memory to the caller and clears SQL stats
+// make sure that new arriving stats won't be interfering with existing one.
+func (t *Container) PopAllTransactionStats() []*appstatspb.CollectedTransactionStatistics {
+	stats := make([]*appstatspb.CollectedTransactionStatistics, 0)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if len(t.mu.txns) == 0 {
+		return stats
+	}
+	for key := range t.mu.txns {
+		txnStats, _, _ := t.getStatsForTxnWithKeyLocked(key, nil /* stmtFingerprintIDs */, false /* createIfNonexistent */)
+		stats = append(stats, &appstatspb.CollectedTransactionStatistics{
+			StatementFingerprintIDs:  txnStats.statementFingerprintIDs,
+			App:                      t.appName,
+			Stats:                    txnStats.mu.data,
+			TransactionFingerprintID: key,
+		})
+	}
+	t.mu.txns = make(map[appstatspb.TransactionFingerprintID]*txnStats, len(t.mu.txns)/2)
+	return stats
+}
+
 // Clear clears the data stored in this Container and prepare the Container
 // for reuse.
 func (s *Container) Clear(ctx context.Context) {

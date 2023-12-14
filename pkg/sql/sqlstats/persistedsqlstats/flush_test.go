@@ -21,13 +21,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -843,6 +847,87 @@ func TestSQLStatsPlanSampling(t *testing.T) {
 	// Ensure that the subsequent execution of the query will not cause logical plan
 	// collection.
 	validateSample("SELECT _", false, true, false)
+}
+
+func TestPersistedSQLStats_Flush(t *testing.T) {
+	// This test aims to validate that stats popped from in-memory atomically and don't cause
+	// conditions when some stats are lost or consumed multiple times.
+	t.Run("concurrently add stats and flush them", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+		defer log.Scope(t).Close(t)
+		ctx := context.Background()
+		var flushedStmtStats int
+		var flushedTxnStats int
+		expectedStatsCount := 100000
+		if skip.Stress() {
+			expectedStatsCount = 1000
+		}
+		appName := "app"
+
+		// We create a server without starting it to control adding new stats and flushing them manually.
+		srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SQLStatsKnobs: &sqlstats.TestingKnobs{
+					ConsumeStmtStatsInterceptor: func(ctx context.Context, stats *appstatspb.CollectedStatementStatistics) error {
+						if stats.Key.App == appName {
+							flushedStmtStats++
+						}
+						return nil
+					},
+					ConsumeTxnStatsInterceptor: func(ctx context.Context, stats *appstatspb.CollectedTransactionStatistics) error {
+						if stats.App == appName {
+							flushedTxnStats++
+						}
+						return nil
+					},
+				},
+			},
+		})
+		defer srv.Stopper().Stop(ctx)
+
+		sqlConn := sqlutils.MakeSQLRunner(conn)
+		sqlConn.Exec(t,
+			"SET CLUSTER SETTING sql.stats.limit_table_size.enabled = 'false'")
+
+		sqlStats := srv.ApplicationLayer().SQLServer().(*sql.Server).GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+		doneCh := make(chan struct{})
+		go func() {
+			for i := 0; i < expectedStatsCount; i++ {
+				randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+				var stmt serverpb.StatementsResponse_CollectedStatementStatistics
+				stmt.Key.KeyData = randomData.Key
+				stmtContainer, _, _ := ssmemstorage.NewTempContainerFromExistingStmtStats([]serverpb.StatementsResponse_CollectedStatementStatistics{stmt})
+				err := sqlStats.AddAppStats(ctx, appName, stmtContainer)
+				require.NoError(t, err)
+
+				var txn serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
+				txn.StatsData = sqlstatstestutil.GetRandomizedCollectedTransactionStatisticsForTest(t)
+				txn.StatsData.TransactionFingerprintID = appstatspb.TransactionFingerprintID(i)
+				txnContainer, _, _ := ssmemstorage.NewTempContainerFromExistingTxnStats([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics{txn})
+				err = sqlStats.AddAppStats(ctx, appName, txnContainer)
+				require.NoError(t, err)
+
+				time.Sleep(2 * time.Nanosecond)
+			}
+			doneCh <- struct{}{}
+		}()
+
+		done := false
+		for !done {
+			select {
+			case <-doneCh:
+				// Flush remaining stats last time.
+				sqlStats.Flush(ctx)
+				done = true
+			default:
+				time.Sleep(5 * time.Nanosecond)
+				sqlStats.Flush(ctx)
+			}
+		}
+
+		require.Equal(t, expectedStatsCount, flushedStmtStats)
+		require.Equal(t, expectedStatsCount, flushedTxnStats)
+	})
 }
 
 type stubTime struct {
