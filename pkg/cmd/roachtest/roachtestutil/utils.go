@@ -42,7 +42,7 @@ func DefaultPGUrl(
 
 // SetDefaultSQLPort sets the SQL port to the default of 26257 if it is
 // a non-local cluster. Local clusters don't support changing the port.
-func SetDefaultSQLPort(c cluster.Cluster, opts install.StartOpts) {
+func SetDefaultSQLPort(c cluster.Cluster, opts *install.StartOpts) {
 	if !c.IsLocal() {
 		opts.SQLPort = config.DefaultSQLPort
 	}
@@ -50,7 +50,7 @@ func SetDefaultSQLPort(c cluster.Cluster, opts install.StartOpts) {
 
 // SetDefaultAdminUIPort sets the AdminUI port to the default of 26258 if it is
 // a non-local cluster. Local clusters don't support changing the port.
-func SetDefaultAdminUIPort(c cluster.Cluster, opts install.StartOpts) {
+func SetDefaultAdminUIPort(c cluster.Cluster, opts *install.StartOpts) {
 	if !c.IsLocal() {
 		opts.AdminUIPort = config.DefaultAdminUIPort
 	}

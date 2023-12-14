@@ -71,8 +71,8 @@ func registerIntentResolutionOverload(r registry.Registry) {
 			startOpts := option.DefaultStartOptsNoBackups()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")
-			roachtestutil.SetDefaultSQLPort(c, startOpts.RoachprodOpts)
-			roachtestutil.SetDefaultAdminUIPort(c, startOpts.RoachprodOpts)
+			roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
+			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
 			settings := install.MakeClusterSettings()
 			c.Start(ctx, t.L(), startOpts, settings, c.Range(1, crdbNodes))
 			setAdmissionControl(ctx, t, c, true)
