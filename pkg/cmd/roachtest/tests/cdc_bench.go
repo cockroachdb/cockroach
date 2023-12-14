@@ -211,7 +211,7 @@ func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSe
 	opts.RoachprodOpts.ScheduleBackups = false
 
 	// Prom helpers assume AdminUIPort is at 26258
-	roachtestutil.SetDefaultAdminUIPort(c, opts.RoachprodOpts)
+	roachtestutil.SetDefaultAdminUIPort(c, &opts.RoachprodOpts)
 
 	// Backpressure writers when rangefeed clients can't keep up. This gives more
 	// reliable results, since we can otherwise randomly hit timeouts and incur

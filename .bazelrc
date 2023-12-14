@@ -120,7 +120,6 @@ build:engflowbase --define=EXECUTOR=remote
 build:engflowbase --disk_cache=
 build:engflowbase --experimental_inmemory_dotd_files
 build:engflowbase --experimental_inmemory_jdeps_files
-build:engflowbase --incompatible_strict_action_env=true
 build:engflowbase --remote_timeout=600
 build:engflowbase --nolegacy_important_outputs
 build:engflowbase --grpc_keepalive_time=30s

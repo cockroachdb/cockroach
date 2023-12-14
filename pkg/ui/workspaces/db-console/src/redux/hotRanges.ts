@@ -49,5 +49,5 @@ export const isLoadingSelector = createSelector(
 export const sortSettingLocalSetting = new LocalSetting(
   "sortSetting/hotRanges",
   localSettingsSelector,
-  { ascending: true, columnTitle: "qps" },
+  { ascending: false, columnTitle: "qps" },
 );

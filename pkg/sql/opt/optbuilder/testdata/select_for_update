@@ -339,6 +339,38 @@ SELECT * FROM [53 AS t] FOR UPDATE OF t2
 ----
 error (42P01): relation "t2" in FOR UPDATE clause not found in FROM clause
 
+# Test outer joins with numeric table references.
+
+build
+SELECT * FROM [53 AS t] LEFT JOIN [54 AS u] ON b = c FOR UPDATE
+----
+error (0A000): FOR UPDATE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM [53 AS t] LEFT JOIN [54 AS u] ON b = c FOR UPDATE of t
+----
+project
+ ├── columns: a:1!null b:2 a:5 c:6
+ └── left-join (hash)
+      ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 u.a:5 c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      ├── scan t
+      │    ├── columns: t.a:1!null b:2 t.crdb_internal_mvcc_timestamp:3 t.tableoid:4
+      │    └── locking: for-update
+      ├── scan u
+      │    └── columns: u.a:5!null c:6 u.crdb_internal_mvcc_timestamp:7 u.tableoid:8
+      └── filters
+           └── b:2 = c:6
+
+build
+SELECT * FROM [53 AS t] LEFT JOIN [54 AS u] ON b = c FOR SHARE of u
+----
+error (0A000): FOR SHARE cannot be applied to the nullable side of an outer join
+
+build
+SELECT * FROM [53 AS t] RIGHT JOIN [54 AS u] ON b = c FOR NO KEY UPDATE
+----
+error (0A000): FOR NO KEY UPDATE cannot be applied to the nullable side of an outer join
+
 # ------------------------------------------------------------------------------
 # Tests with views.
 # ------------------------------------------------------------------------------
