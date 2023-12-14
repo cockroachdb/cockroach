@@ -111,6 +111,15 @@ const (
 	storeStatusDraining
 )
 
+func (ss storeStatus) String() string {
+	if ss < storeStatusDead || ss > storeStatusDraining {
+		panic(fmt.Sprintf("unknown store status: %d", ss))
+	}
+	return [...]string{"",
+		"dead", "unknown", "throttled", "available",
+		"decommissioning", "suspect", "draining"}[ss]
+}
+
 func (sd *StoreDetail) status(
 	now hlc.Timestamp,
 	deadThreshold time.Duration,
@@ -409,7 +418,7 @@ func (sp *StorePool) statusString(nl NodeLivenessFunc) string {
 		fmt.Fprintf(&buf, "%d", id)
 		status := detail.status(now, timeUntilNodeDead, nl, timeAfterNodeSuspect)
 		if status != storeStatusAvailable {
-			fmt.Fprintf(&buf, " (status=%d)", status)
+			fmt.Fprintf(&buf, " (status=%s)", status)
 		}
 		if detail.Desc != nil {
 			fmt.Fprintf(&buf, ": range-count=%d fraction-used=%.2f",
