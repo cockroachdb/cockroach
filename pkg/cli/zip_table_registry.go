@@ -309,8 +309,6 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	},
 	// Ditto, for CREATE TYPE.
 	`"".crdb_internal.create_type_statements`: {
-		// `create_statement` column contains unredacted SQL statement strings
-		// containing customer-supplied enum constants.
 		// `enum_members` column contains customer-supplied enum constants.
 		nonSensitiveCols: NonSensitiveColumns{
 			"database_id",
@@ -318,6 +316,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"schema_name",
 			"descriptor_id",
 			"descriptor_name",
+			"crdb_internal.hide_sql_constants(create_statement) as create_statement",
 		},
 	},
 	"crdb_internal.default_privileges": {
