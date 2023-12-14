@@ -334,7 +334,6 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		n.st,
 		n.value,
 		params.p.EvalContext(),
-		params.extendedEvalCtx.Codec.ForSystemTenant(),
 		params.p.logEvent,
 		params.p.descCollection.ReleaseLeases,
 		params.p.makeUnsafeSettingInterlockInfo(),
@@ -430,7 +429,6 @@ func writeSettingInternal(
 	st *cluster.Settings,
 	value tree.TypedExpr,
 	evalCtx *eval.Context,
-	forSystemTenant bool,
 	logFn func(context.Context, descpb.ID, logpb.EventPayload) error,
 	releaseLeases func(context.Context),
 	interlockInfo unsafeSettingInterlockInfo,
@@ -451,10 +449,7 @@ func writeSettingInternal(
 				return err
 			}
 			reportedValue, expectedEncodedValue, err = writeNonDefaultSettingValue(
-				ctx, hook, db,
-				setting, user, st, value, forSystemTenant,
-				releaseLeases,
-				interlockInfo,
+				ctx, hook, db, setting, user, st, value, releaseLeases, interlockInfo,
 			)
 			if err != nil {
 				return err
@@ -505,7 +500,6 @@ func writeNonDefaultSettingValue(
 	user username.SQLUsername,
 	st *cluster.Settings,
 	value tree.Datum,
-	forSystemTenant bool,
 	releaseLeases func(context.Context),
 	interlockInfo unsafeSettingInterlockInfo,
 ) (reportedValue string, expectedEncodedValue string, err error) {
@@ -522,8 +516,7 @@ func writeNonDefaultSettingValue(
 	verSetting, isSetVersion := setting.(*settings.VersionSetting)
 	if isSetVersion {
 		if err := setVersionSetting(
-			ctx, hook, verSetting, db, user, st, value, encoded,
-			forSystemTenant, releaseLeases,
+			ctx, hook, verSetting, db, user, st, value, encoded, releaseLeases,
 		); err != nil {
 			return reportedValue, expectedEncodedValue, err
 		}
@@ -559,7 +552,6 @@ func setVersionSetting(
 	st *cluster.Settings,
 	value tree.Datum,
 	encoded string,
-	forSystemTenant bool,
 	releaseLeases func(context.Context),
 ) error {
 	// In the special case of the 'version' cluster setting,
@@ -579,23 +571,7 @@ func setVersionSetting(
 		// hasn't run yet, we can't update the version as we don't
 		// have good enough information about the current cluster
 		// version.
-		if forSystemTenant {
-			return errors.New("no persisted cluster version found, please retry later")
-		}
-		// The tenant cluster in 20.2 did not ever initialize this value and
-		// utilized this hard-coded value instead. In 21.1, the builtin
-		// which creates tenants sets up the cluster version state. It also
-		// is set when the version is upgraded.
-		tenantDefaultVersion := clusterversion.ClusterVersion{
-			Version: roachpb.Version{Major: 20, Minor: 2},
-		}
-		// Pretend that the expected value was already there to allow us to
-		// run migrations.
-		prevEncoded, err := protoutil.Marshal(&tenantDefaultVersion)
-		if err != nil {
-			return errors.WithAssertionFailure(err)
-		}
-		prev = tree.NewDString(string(prevEncoded))
+		return errors.New("no persisted cluster version found, please retry later")
 	} else {
 		prev = datums[0]
 	}
