@@ -2079,12 +2079,6 @@ func doRestorePlan(
 		fromDescription = from
 	}
 
-	if restoreStmt.Options.ExperimentalOnline {
-		if err := checkRewritesAreNoops(descriptorRewrites); err != nil {
-			return err
-		}
-	}
-
 	description, err := restoreJobDescription(
 		ctx,
 		p,

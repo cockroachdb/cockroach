@@ -148,7 +148,6 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	defer cleanupFnRestored()
 	rSQLDB.Exec(t, "CREATE DATABASE data")
 	var (
-		fullBackup                = "nodelocal://1/full-backup"
 		fullBackupWithRevs        = "nodelocal://1/full-backup-with-revs"
 		incrementalBackup         = "nodelocal://1/incremental-backup"
 		incrementalBackupWithRevs = "nodelocal://1/incremental-backup-with-revs"
@@ -173,19 +172,13 @@ func TestOnlineRestoreErrors(t *testing.T) {
 		rSQLDB.ExpectErr(t, "incremental backup not supported",
 			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackupWithRevs))
 	})
-	t.Run("descriptor rewrites are unsupported", func(t *testing.T) {
-		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", fullBackup))
-		rSQLDB.Exec(t, "CREATE DATABASE new_data")
-		rSQLDB.ExpectErr(t, "descriptor rewrites not supported",
-			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH into_db=new_data,EXPERIMENTAL DEFERRED COPY", fullBackup))
-	})
+
 	t.Run("external storage locations that don't support early boot are unsupported", func(t *testing.T) {
 		rSQLDB.Exec(t, "CREATE DATABASE bank")
 		rSQLDB.Exec(t, "BACKUP INTO 'userfile:///my_backups'")
 		rSQLDB.ExpectErr(t, "scheme userfile is not accessible during node startup",
 			"RESTORE DATABASE bank FROM LATEST IN 'userfile:///my_backups' WITH EXPERIMENTAL DEFERRED COPY")
 	})
-
 }
 
 func bankOnlineRestore(
@@ -195,6 +188,7 @@ func bankOnlineRestore(
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&preRestoreTs)
 
 	sqlDB.Exec(t, "CREATE DATABASE data")
+	sqlDB.Exec(t, "CREATE TABLE data.baz (id int primary key)")
 	sqlDB.Exec(t, fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage))
 
 	require.Equal(t, checkLinkingProgress(t, sqlDB), float32(1.0))

@@ -316,7 +316,7 @@ func sendRemoteAddSSTable(
 	}
 
 	_, _, err := execCtx.ExecCfg().DB.AddRemoteSSTable(
-		ctx, file.BackupFileEntrySpan, loc, fileStats, kvpb.AddSSTableRequest_PrefixReplacement{}, batchTimestamp)
+		ctx, file.BackupFileEntrySpan, loc, fileStats, rewrite, batchTimestamp)
 	return err
 }
 
