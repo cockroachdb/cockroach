@@ -171,13 +171,6 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		value := roachpb.Value{}
 		value.SetInt(int64(ms.FirstNonSystemDescriptorID()))
 		add(ms.codec.SequenceKey(keys.DescIDSequenceID), value)
-		if ms.codec.ForSystemTenant() {
-			// We need to also set the value of the legacy descriptor ID generator
-			// until clusterversion.V23_1DescIDSequenceForSystemTenant is removed.
-			legacyValue := roachpb.Value{}
-			legacyValue.SetInt(int64(ms.FirstNonSystemDescriptorID()))
-			add(keys.LegacyDescIDGenerator, legacyValue)
-		}
 	}
 	// Generate initial values for the system database's public schema, which
 	// doesn't have a descriptor.
