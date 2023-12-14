@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,15 +39,10 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	enabled := SQLStatsFlushEnabled.Get(&s.cfg.Settings.SV)
 	flushingTooSoon := now.Before(s.lastFlushStarted.Add(minimumFlushInterval))
 
-	// Handle wiping in-memory stats here, we only wipe in-memory stats under 2
-	// circumstances:
-	// 1. flush is enabled, and we are not early aborting the flush due to flushing
-	//    too frequently.
-	// 2. flush is disabled, but we allow discard in-memory stats when disabled.
-	shouldWipeInMemoryStats := enabled && !flushingTooSoon
-	shouldWipeInMemoryStats = shouldWipeInMemoryStats || (!enabled && allowDiscardWhenDisabled)
-
-	if shouldWipeInMemoryStats {
+	// Reset stats is performed individually for statement and transaction stats
+	// within SQLStats.ConsumeStats function. Here, we reset stats only when
+	// sql stats flush is disabled.
+	if !enabled && allowDiscardWhenDisabled {
 		defer func() {
 			if err := s.SQLStats.Reset(ctx); err != nil {
 				log.Warningf(ctx, "fail to reset in-memory SQL Stats: %s", err)
@@ -88,20 +81,29 @@ func (s *PersistedSQLStats) Flush(ctx context.Context) {
 	if limitReached {
 		log.Infof(ctx, "unable to flush fingerprints because table limit was reached.")
 	} else {
-		var wg sync.WaitGroup
-		wg.Add(2)
+		s.SQLStats.ConsumeStats(ctx,
+			func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+				s.doFlush(ctx, func() error {
+					return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
+				}, "failed to flush statement statistics" /* errMsg */)
 
-		go func() {
-			defer wg.Done()
-			s.flushStmtStats(ctx, aggregatedTs)
-		}()
+				return nil
+			},
+			func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
+				s.doFlush(ctx, func() error {
+					return s.doFlushSingleTxnStats(ctx, statistics, aggregatedTs)
+				}, "failed to flush transaction statistics" /* errMsg */)
 
-		go func() {
-			defer wg.Done()
-			s.flushTxnStats(ctx, aggregatedTs)
-		}()
+				return nil
+			})
 
-		wg.Wait()
+		if s.cfg.Knobs != nil && s.cfg.Knobs.OnStmtStatsFlushFinished != nil {
+			s.cfg.Knobs.OnStmtStatsFlushFinished()
+		}
+
+		if s.cfg.Knobs != nil && s.cfg.Knobs.OnTxnStatsFlushFinished != nil {
+			s.cfg.Knobs.OnTxnStatsFlushFinished()
+		}
 	}
 }
 
@@ -151,38 +153,6 @@ func (s *PersistedSQLStats) StmtsLimitSizeReached(ctx context.Context) (bool, er
 	}
 
 	return isSizeLimitReached, nil
-}
-
-func (s *PersistedSQLStats) flushStmtStats(ctx context.Context, aggregatedTs time.Time) {
-	// s.doFlush directly logs errors if they are encountered. Therefore,
-	// no error is returned here.
-	_ = s.SQLStats.IterateStatementStats(ctx, sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
-			s.doFlush(ctx, func() error {
-				return s.doFlushSingleStmtStats(ctx, statistics, aggregatedTs)
-			}, "failed to flush statement statistics" /* errMsg */)
-
-			return nil
-		})
-
-	if s.cfg.Knobs != nil && s.cfg.Knobs.OnStmtStatsFlushFinished != nil {
-		s.cfg.Knobs.OnStmtStatsFlushFinished()
-	}
-}
-
-func (s *PersistedSQLStats) flushTxnStats(ctx context.Context, aggregatedTs time.Time) {
-	_ = s.SQLStats.IterateTransactionStats(ctx, sqlstats.IteratorOptions{},
-		func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
-			s.doFlush(ctx, func() error {
-				return s.doFlushSingleTxnStats(ctx, statistics, aggregatedTs)
-			}, "failed to flush transaction statistics" /* errMsg */)
-
-			return nil
-		})
-
-	if s.cfg.Knobs != nil && s.cfg.Knobs.OnTxnStatsFlushFinished != nil {
-		s.cfg.Knobs.OnTxnStatsFlushFinished()
-	}
 }
 
 func (s *PersistedSQLStats) doFlush(ctx context.Context, workFn func() error, errMsg string) {
