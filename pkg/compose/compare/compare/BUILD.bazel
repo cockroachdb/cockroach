@@ -12,7 +12,10 @@ go_test(
     srcs = ["compare_test.go"],
     embed = [":compare"],
     gotags = ["compose"],
-    tags = ["integration"],
+    tags = [
+        "integration",
+        "no-remote-exec",
+    ],
     visibility = ["//pkg/compose:__subpackages__"],
     deps = [
         "//pkg/cmd/cmpconn",
