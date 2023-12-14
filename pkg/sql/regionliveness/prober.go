@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -218,5 +219,6 @@ func IsQueryTimeoutErr(err error) bool {
 // IsMissingRegionEnumErr determines if a query hit an error because of a missing
 // because of the region enum.
 func IsMissingRegionEnumErr(err error) bool {
-	return pgerror.GetPGCode(err) == pgcode.InvalidTextRepresentation
+	return pgerror.GetPGCode(err) == pgcode.InvalidTextRepresentation ||
+		errors.Is(err, types.EnumValueNotYetPublicError)
 }
