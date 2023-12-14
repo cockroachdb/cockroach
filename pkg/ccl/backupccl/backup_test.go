@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1744,6 +1745,78 @@ func TestRestoreCheckpointing(t *testing.T) {
 	// Ensure that no persisted work was repeated on resume and that all work was persisted.
 	checkPersistedSpanLength(1)
 	require.Equal(t, totalEntries-entriesBeforePause, postResumeCount)
+}
+
+// TestRestoreJobRetryReset tests that the job level retry counter
+// resets after the frontier progresses. To do so, the test does the following:
+// 1. Intercept the restore job before the flow begins and send a retryable error
+// 2. After we send MaxRetries-1, allow the job to complete the flow and send a progress update
+// 3. After progress has been recorded, intercept the restore job again and send retryable errors until the job pauses.
+// 4. Assert that more than max retries have been sent, implying that the retry counter reset after progress was made.
+func TestRestoreJobRetryReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mu := struct {
+		syncutil.Mutex
+		initialScanComplete bool
+		retryCount          int
+	}{}
+	waitForProgress := make(chan struct{})
+
+	maxRetries := 4
+
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		BackupRestore: &sql.BackupRestoreTestingKnobs{
+			RestoreDistSQLRetryPolicy: &retry.Options{
+				InitialBackoff: time.Microsecond,
+				Multiplier:     2,
+				MaxBackoff:     2 * time.Microsecond,
+				MaxRetries:     maxRetries,
+			},
+			RunBeforeRestoreFlow: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				if mu.retryCount >= maxRetries-1 {
+					return nil
+				}
+				mu.retryCount++
+				// Send a retryable error
+				return syscall.ECONNRESET
+			},
+			RunAfterRestoreFlow: func() error {
+				mu.Lock()
+				defer mu.Unlock()
+				// Wait for progress to persist, then continue sending retryable errors
+				<-waitForProgress
+				mu.retryCount++
+				// Send a retryable error
+				return syscall.ECONNRESET
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+	params.ServerArgs = base.TestServerArgs{Knobs: knobs}
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10, InitManualReplication, params)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, localFoo)
+	var restoreJobId jobspb.JobID
+	sqlDB.QueryRow(t, `RESTORE DATABASE DATA FROM LATEST IN $1 with new_db_name=d2, detached`, localFoo).Scan(&restoreJobId)
+	testutils.SucceedsSoon(t, func() error {
+		jobProgress := jobutils.GetJobProgress(t, sqlDB, restoreJobId)
+		if len(jobProgress.GetRestore().Checkpoint) == 0 {
+			return errors.Newf("frontier has not advanced yet")
+		}
+		return nil
+	})
+	close(waitForProgress)
+
+	jobutils.WaitForJobToPause(t, sqlDB, restoreJobId)
+
+	require.Greater(t, mu.retryCount, maxRetries+2)
 }
 
 func createAndWaitForJob(
