@@ -96,11 +96,12 @@ func TestOverrideStorePoolStatusString(t *testing.T) {
 	// Mark node 5 as draining.
 	mnl.SetNodeStatus(5, livenesspb.NodeLivenessStatus_DRAINING)
 
-	require.Equal(t, "1: range-count=0 fraction-used=0.00\n"+
-		"2 (status=1): range-count=0 fraction-used=0.00\n"+
-		"3 (status=5): range-count=0 fraction-used=0.00\n"+
-		"4: range-count=0 fraction-used=0.00\n"+
-		"5 (status=7): range-count=0 fraction-used=0.00\n",
+	require.Equal(t,
+		"1: range-count=0 fraction-used=0.00\n"+
+			"2 (status=dead): range-count=0 fraction-used=0.00\n"+
+			"3 (status=decommissioning): range-count=0 fraction-used=0.00\n"+
+			"4: range-count=0 fraction-used=0.00\n"+
+			"5 (status=draining): range-count=0 fraction-used=0.00\n",
 		sp.String(),
 	)
 }
