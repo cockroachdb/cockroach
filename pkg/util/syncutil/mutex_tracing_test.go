@@ -21,16 +21,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// tracedLocker is a variant of sync.Locker that implements TracedLock instead
-// of Lock.
+// tracedLocker is a variant of sync.Locker that implements TracedLock and
+// TimedLock instead of Lock.
 type tracedLocker interface {
 	TracedLock(context.Context)
+	TimedLock() time.Duration
 	Unlock()
 }
 
 type rTracedLocker RWMutex
 
 func (r *rTracedLocker) TracedLock(ctx context.Context) { (*RWMutex)(r).TracedRLock(ctx) }
+func (r *rTracedLocker) TimedLock() time.Duration       { return (*RWMutex)(r).TimedRLock() }
 func (r *rTracedLocker) Unlock()                        { (*RWMutex)(r).RUnlock() }
 
 func TestTracedLock(t *testing.T) {
@@ -98,6 +100,40 @@ func TestTracedLock(t *testing.T) {
 	}
 }
 
+func TestTimedLock(t *testing.T) {
+	testCases := []struct {
+		name string
+		mu   tracedLocker
+	}{
+		{"Mutex.TimedLock", &Mutex{}},
+		{"RWMutex.TimedLock", &RWMutex{}},
+		{"RWMutex.TimedRLock", (*rTracedLocker)(&RWMutex{})},
+	}
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			for _, fastPath := range []bool{false, true} {
+				if fastPath && DeadlockEnabled {
+					// TryLock is a no-op for deadlock mutexes.
+					continue
+				}
+				t.Run(fmt.Sprintf("fast-path=%t", fastPath), func(t *testing.T) {
+					defer setEnableTracedLockFastPath(fastPath)()
+
+					// NOTE: defer the Unlock to unlock even if the test fails.
+					defer c.mu.Unlock()
+
+					dur := c.mu.TimedLock()
+					if fastPath {
+						require.Zero(t, dur)
+					} else {
+						require.Greater(t, dur, time.Duration(0))
+					}
+				})
+			}
+		})
+	}
+}
+
 // BenchmarkTracedLock benchmarks the performance of TracedLock. It includes
 // subtests for uncontended and contended cases, which dictate whether the
 // function's fast-path is hit. It also includes further subtests for if tracing
@@ -154,6 +190,38 @@ func BenchmarkTracedLock(b *testing.B) {
 				run(b)
 			})
 		})
+	})
+}
+
+// BenchmarkTimedLock benchmarks the performance of TimedLock. It includes
+// subtests for uncontended and contended cases, which dictate whether the
+// function's fast-path is hit.
+//
+// Note that when the fast path is disabled, the benchmark is not measuring the
+// cost of the TryLock call.
+//
+// Results with go1.21.4 on a Mac with an Apple M1 Pro processor:
+//
+// name                      time/op
+// TimedLock/uncontended-10  3.47ns ± 1%
+// TimedLock/contended-10    72.6ns ± 2%
+func BenchmarkTimedLock(b *testing.B) {
+	run := func(b *testing.B) {
+		mus := make([]Mutex, b.N)
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			_ = mus[i].TimedLock()
+		}
+	}
+
+	b.Run("uncontended", func(b *testing.B) {
+		defer setEnableTracedLockFastPath(true)()
+		run(b)
+	})
+
+	b.Run("contended", func(b *testing.B) {
+		defer setEnableTracedLockFastPath(false)()
+		run(b)
 	})
 }
 

@@ -28,6 +28,15 @@ func (rw *RWMutex) TracedLock(ctx context.Context) { tracedLock(ctx, rw) }
 // if the lock acquisition is slow.
 func (rw *RWMutex) TracedRLock(ctx context.Context) { tracedLock(ctx, rw.rTryLocker()) }
 
+// TimedLock is like Lock, but returns the time it took to acquire the lock.
+func (m *Mutex) TimedLock() time.Duration { return timedLock(m) }
+
+// TimedLock is like Lock, but returns the time it took to acquire the lock.
+func (rw *RWMutex) TimedLock() time.Duration { return timedLock(rw) }
+
+// TimedRLock is like RLock, but returns the time it took to acquire the lock.
+func (rw *RWMutex) TimedRLock() time.Duration { return timedLock(rw.rTryLocker()) }
+
 // rTryLocker returns a tryLocker interface that implements the Lock, Unlock,
 // and TryLock methods by calling rw.RLock, rw.RUnlock, and rw.TryRLock,
 // respectively.
@@ -63,6 +72,10 @@ type tryLocker interface {
 // ExpensiveLogEnabled checks. However, we expect that most mutex acquisitions
 // will be uncontended and the TryLock check is cheaper than the expensive log
 // check.
+//
+// NOTE: because of this ordering of fast-path checks, it does not make sense to
+// implement tracedLock using timedLock, though it is conceptually an extension
+// of that functionality.
 func tracedLock(ctx context.Context, l tryLocker) {
 	if enableTracedLockFastPath && l.TryLock() {
 		return // fast-path
@@ -79,8 +92,19 @@ func tracedLock(ctx context.Context, l tryLocker) {
 	}
 }
 
+// timedLock is like l.Lock, but returns the time it took to acquire the lock.
+// Returns 0 if the lock was acquired without blocking.
+func timedLock(l tryLocker) time.Duration {
+	if enableTracedLockFastPath && l.TryLock() {
+		return 0 // fast-path
+	}
+	start := time.Now()
+	l.Lock()
+	return time.Since(start)
+}
+
 // enableTracedLockFastPath is used in tests to disable the fast-path of
-// tracedLock.
+// tracedLock and timedLock.
 var enableTracedLockFastPath = true
 
 // slowLockLogThreshold is the threshold at which a mutex acquisition is
