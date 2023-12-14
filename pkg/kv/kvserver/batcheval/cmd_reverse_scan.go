@@ -35,6 +35,10 @@ func ReverseScan(
 	h := cArgs.Header
 	reply := resp.(*kvpb.ReverseScanResponse)
 
+	if err := maybeDisallowSkipLockedRequest(h, args.KeyLockingStrength); err != nil {
+		return result.Result{}, err
+	}
+
 	var res result.Result
 	var scanRes storage.MVCCScanResult
 	var err error

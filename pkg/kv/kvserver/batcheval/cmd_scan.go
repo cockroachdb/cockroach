@@ -14,11 +14,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -35,6 +37,10 @@ func Scan(
 	args := cArgs.Args.(*kvpb.ScanRequest)
 	h := cArgs.Header
 	reply := resp.(*kvpb.ScanResponse)
+
+	if err := maybeDisallowSkipLockedRequest(h, args.KeyLockingStrength); err != nil {
+		return result.Result{}, err
+	}
 
 	var res result.Result
 	var scanRes storage.MVCCScanResult
@@ -132,4 +138,37 @@ func ScanReadCategory(ah kvpb.AdmissionHeader) storage.ReadCategory {
 		readCategory = storage.ScanBackgroundBatchEvalReadCategory
 	}
 	return readCategory
+}
+
+// maybeDisallowSkipLockedRequest returns an error if the skip locked wait
+// policy is used in conjunction with shared locks.
+//
+// TODO(arul): this won't be needed once
+// https://github.com/cockroachdb/cockroach/issues/110743 is addressed. Until
+// then, we return unimplemented errors.
+func maybeDisallowSkipLockedRequest(h kvpb.Header, str lock.Strength) error {
+	if h.WaitPolicy == lock.WaitPolicy_SkipLocked && str == lock.Shared {
+		return MarkSkipLockedUnsupportedError(errors.UnimplementedError(
+			errors.IssueLink{IssueURL: build.MakeIssueURL(110743)},
+			"usage of shared locks in conjunction with skip locked wait policy is currently unsupported",
+		))
+	}
+	return nil
+}
+
+// SkipLockedUnsupportedError is used to mark errors resulting from unsupported
+// (currently unimplemented) uses of the skip locked wait policy.
+type SkipLockedUnsupportedError struct{}
+
+func (e *SkipLockedUnsupportedError) Error() string {
+	return "unsupported skip locked use error"
+}
+
+// MarkSkipLockedUnsupportedError wraps the given error, if not nil, as a skip
+// locked unsupported error.
+func MarkSkipLockedUnsupportedError(cause error) error {
+	if cause == nil {
+		return nil
+	}
+	return errors.Mark(cause, &SkipLockedUnsupportedError{})
 }
