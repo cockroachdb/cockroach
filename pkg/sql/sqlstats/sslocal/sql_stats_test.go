@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -1547,4 +1548,80 @@ func TestSQLStatsRegions(t *testing.T) {
 			require.Equal(t, tc.expected, actual)
 		})
 	}
+}
+
+// TestSQLStats_ConsumeStats validates that ConsumeStats function pops all statement and transaction stats from the
+// in-memory stats and clears it.
+func TestSQLStats_ConsumeStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Generate dummy stats to populate in-memory stats container.
+	var testStmtData []serverpb.StatementsResponse_CollectedStatementStatistics
+	var testTxnData []serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
+	expectedCountStats := 50
+	for i := 0; i < expectedCountStats; i++ {
+		var stats serverpb.StatementsResponse_CollectedStatementStatistics
+		randomData := sqlstatstestutil.GetRandomizedCollectedStatementStatisticsForTest(t)
+		stats.Key.KeyData = randomData.Key
+		testStmtData = append(testStmtData, stats)
+
+		var txnStats serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics
+		txnStats.StatsData = sqlstatstestutil.GetRandomizedCollectedTransactionStatisticsForTest(t)
+		txnStats.StatsData.TransactionFingerprintID = appstatspb.TransactionFingerprintID(i)
+		testTxnData = append(testTxnData, txnStats)
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	monitor := mon.NewUnlimitedMonitor(
+		context.Background(), "test", mon.MemoryResource,
+		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
+	)
+	insightsProvider := insights.New(st, insights.NewMetrics())
+
+	sqlStats := sslocal.New(
+		st,
+		sqlstats.MaxMemSQLStatsStmtFingerprints,
+		sqlstats.MaxMemSQLStatsTxnFingerprints,
+		nil, /* curMemoryBytesCount */
+		nil, /* maxMemoryBytesHist */
+		insightsProvider.Writer,
+		monitor,
+		nil, /* reportingSink */
+		nil, /* knobs */
+		insightsProvider.LatencyInformation(),
+	)
+
+	stmtContainer, _, _ := ssmemstorage.NewTempContainerFromExistingStmtStats(testStmtData)
+	err := sqlStats.AddAppStats(context.Background(), "app", stmtContainer)
+	require.NoError(t, err)
+
+	txnContainer, _, _ := ssmemstorage.NewTempContainerFromExistingTxnStats(testTxnData)
+	err = sqlStats.AddAppStats(context.Background(), "app", txnContainer)
+	require.NoError(t, err)
+
+	// Validate that ConsumeStats calls functions for every stmt and txn stats respectively.
+	consumedStmtsCount := 0
+	consumedTxnCount := 0
+	sqlStats.ConsumeStats(context.Background(), func(ctx context.Context, statistics *appstatspb.CollectedStatementStatistics) error {
+		consumedStmtsCount++
+		return nil
+	}, func(ctx context.Context, statistics *appstatspb.CollectedTransactionStatistics) error {
+		consumedTxnCount++
+		return nil
+	})
+	require.Equal(t, expectedCountStats, consumedStmtsCount)
+	require.Equal(t, expectedCountStats, consumedTxnCount)
+
+	// Assert that no stats left after ConsumeStats func is executed.
+	err = sqlStats.IterateStatementStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, _ *appstatspb.CollectedStatementStatistics) error {
+		require.Fail(t, "no stats should be available after calling ConsumeStats func")
+		return nil
+	})
+	require.NoError(t, err)
+	err = sqlStats.IterateTransactionStats(context.Background(), sqlstats.IteratorOptions{}, func(ctx context.Context, _ *appstatspb.CollectedTransactionStatistics) error {
+		require.Fail(t, "no stats should be available after calling ConsumeStats func")
+		return nil
+	})
+	require.NoError(t, err)
 }
