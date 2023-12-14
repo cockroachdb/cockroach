@@ -13,6 +13,7 @@ package sslocal
 import (
 	"context"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -138,6 +139,54 @@ func (s *SQLStats) IterateStatementStats(
 	}
 
 	return nil
+}
+
+// ConsumeStats leverages the process of retrieving stats from in-memory storage and then iterating over them
+// calling stmtVisitor and txnVisitor on statement and transaction stats respectively.
+func (s *SQLStats) ConsumeStats(
+	ctx context.Context,
+	stmtVisitor sqlstats.StatementVisitor,
+	txnVisitor sqlstats.TransactionVisitor,
+) {
+	apps := s.getAppNames(false)
+	for _, app := range apps {
+		app := app
+		container := s.GetApplicationStats(app, true).(*ssmemstorage.Container)
+		if err := s.MaybeDumpStatsToLog(ctx, app, container, s.flushTarget); err != nil {
+			log.Warningf(ctx, "failed to dump stats to log, %s", err.Error())
+		}
+		stmtStats := container.PopAllStatementsStats()
+		txnStats := container.PopAllTransactionStats()
+		container.Free(ctx)
+
+		// Iterate over collected stats that have been already cleared from in-memory stats and persist them
+		// the system statement|transaction_statistics tables.
+		// In-memory stats storage is not locked here and it is safe to call stmtVisitor or txnVisitor functions
+		// that might be time consuming operations.
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			for _, stat := range stmtStats {
+				stat := stat
+				if err := stmtVisitor(ctx, stat); err != nil {
+					log.Warningf(ctx, "failed to consume statement statistics, %s", err.Error())
+				}
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			for _, stat := range txnStats {
+				stat := stat
+				if err := txnVisitor(ctx, stat); err != nil {
+					log.Warningf(ctx, "failed to consume transaction statistics, %s", err.Error())
+				}
+			}
+		}()
+		wg.Wait()
+	}
 }
 
 // StmtStatsIterator returns an instance of sslocal.StmtStatsIterator for
