@@ -2305,6 +2305,13 @@ func TestTenantLogic_udf_regressions(
 	runLogicTest(t, "udf_regressions")
 }
 
+func TestTenantLogic_udf_rewrite(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_rewrite")
+}
+
 func TestTenantLogic_udf_schema_change(
 	t *testing.T,
 ) {
@@ -2681,6 +2688,13 @@ func TestTenantLogicCCL_udf_plpgsql(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "udf_plpgsql")
+}
+
+func TestTenantLogicCCL_udf_rewrite(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "udf_rewrite")
 }
 
 func TestTenantLogicCCL_udf_volatility_check(
