@@ -91,7 +91,7 @@ func Get(
 		acq, err := acquireLockOnKey(ctx, readWriter, h.Txn, args.KeyLockingStrength,
 			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
-			return result.Result{}, err
+			return result.Result{}, maybeInterceptDisallowedSkipLockedUsage(h, err)
 		}
 		res.Local.AcquiredLocks = []roachpb.LockAcquisition{acq}
 	}
