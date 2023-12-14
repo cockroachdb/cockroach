@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -511,6 +512,18 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		return
 	}
 
+	dbNames := make(map[string]struct{})
+	schemaNames := make(map[string]struct{})
+	collectDBAndSchemaNames := func(dataSources []tree.TableName) {
+		for _, ds := range dataSources {
+			dbNames[ds.CatalogName.String()] = struct{}{}
+			schemaNames[fmt.Sprintf("%s.%s", ds.CatalogName.String(), ds.SchemaName.String())] = struct{}{}
+		}
+	}
+	collectDBAndSchemaNames(tables)
+	collectDBAndSchemaNames(sequences)
+	collectDBAndSchemaNames(views)
+
 	// Note: we do not shortcut out of this function if there is no table/sequence/view to report:
 	// the bundle analysis tool require schema.sql to always be present, even if it's empty.
 
@@ -522,13 +535,14 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		first = false
 	}
 	blankLine()
-	if err := c.printCreateAllSchemas(&buf); err != nil {
+	c.printCreateAllDatabases(&buf, dbNames)
+	if err := c.printCreateAllSchemas(&buf, schemaNames); err != nil {
 		b.printError(fmt.Sprintf("-- error getting all schemas: %v", err), &buf)
 	}
 	for i := range sequences {
 		blankLine()
 		if err := c.PrintCreateSequence(&buf, &sequences[i]); err != nil {
-			b.printError(fmt.Sprintf("-- error getting schema for sequence %s: %v", sequences[i].String(), err), &buf)
+			b.printError(fmt.Sprintf("-- error getting schema for sequence %s: %v", sequences[i].FQString(), err), &buf)
 		}
 	}
 	// Get all user-defined types. If redaction is a
@@ -564,13 +578,13 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	for i := range tables {
 		blankLine()
 		if err := c.PrintCreateTable(&buf, &tables[i], b.flags.RedactValues); err != nil {
-			b.printError(fmt.Sprintf("-- error getting schema for table %s: %v", tables[i].String(), err), &buf)
+			b.printError(fmt.Sprintf("-- error getting schema for table %s: %v", tables[i].FQString(), err), &buf)
 		}
 	}
 	for i := range views {
 		blankLine()
 		if err := c.PrintCreateView(&buf, &views[i], b.flags.RedactValues); err != nil {
-			b.printError(fmt.Sprintf("-- error getting schema for view %s: %v", views[i].String(), err), &buf)
+			b.printError(fmt.Sprintf("-- error getting schema for view %s: %v", views[i].FQString(), err), &buf)
 		}
 	}
 	if buf.Len() == 0 {
@@ -581,9 +595,9 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		buf.Reset()
 		hideHistograms := b.flags.RedactValues
 		if err := c.PrintTableStats(&buf, &tables[i], hideHistograms); err != nil {
-			b.printError(fmt.Sprintf("-- error getting statistics for table %s: %v", tables[i].String(), err), &buf)
+			b.printError(fmt.Sprintf("-- error getting statistics for table %s: %v", tables[i].FQString(), err), &buf)
 		}
-		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].String()), buf.String())
+		b.z.AddFile(fmt.Sprintf("stats-%s.sql", tables[i].FQString()), buf.String())
 	}
 }
 
@@ -881,8 +895,12 @@ func (c *stmtEnvCollector) PrintCreateTable(
 		formatOption = " WITH REDACT"
 	}
 	createStatement, err := c.query(
-		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s%s]", tn.String(), formatOption),
+		fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s%s]", tn.FQString(), formatOption),
 	)
+	// We need to replace schema.table_name in the create statement with the fully
+	// qualified table name.
+	createStatement = strings.Replace(createStatement,
+		fmt.Sprintf("%s.%s", tn.SchemaName, tn.Table()), tn.FQString(), 1)
 	if err != nil {
 		return err
 	}
@@ -892,7 +910,7 @@ func (c *stmtEnvCollector) PrintCreateTable(
 
 func (c *stmtEnvCollector) PrintCreateSequence(w io.Writer, tn *tree.TableName) error {
 	createStatement, err := c.query(fmt.Sprintf(
-		"SELECT create_statement FROM [SHOW CREATE SEQUENCE %s]", tn.String(),
+		"SELECT create_statement FROM [SHOW CREATE SEQUENCE %s]", tn.FQString(),
 	))
 	if err != nil {
 		return err
@@ -972,7 +990,7 @@ func (c *stmtEnvCollector) PrintCreateView(
 		formatOption = " WITH REDACT"
 	}
 	createStatement, err := c.query(fmt.Sprintf(
-		"SELECT create_statement FROM [SHOW CREATE VIEW %s%s]", tn.String(), formatOption,
+		"SELECT create_statement FROM [SHOW CREATE VIEW %s%s]", tn.FQString(), formatOption,
 	))
 	if err != nil {
 		return err
@@ -981,18 +999,37 @@ func (c *stmtEnvCollector) PrintCreateView(
 	return nil
 }
 
-func (c *stmtEnvCollector) printCreateAllSchemas(w io.Writer) error {
-	createAllSchemas, err := c.queryRows("SHOW CREATE ALL SCHEMAS;")
-	if err != nil {
-		return err
-	}
-	for _, r := range createAllSchemas {
-		if r == "CREATE SCHEMA "+catconstants.PublicSchemaName+";" {
-			// The public schema is always present, so exclude it to ease the
-			// recreation of the bundle.
+func (c *stmtEnvCollector) printCreateAllDatabases(w io.Writer, dbNames map[string]struct{}) {
+	for db := range dbNames {
+		switch db {
+		case catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName, catconstants.SystemDatabaseName:
+			// The default, postgres, and system databases are always present, so
+			// exclude them to ease the recreation of the bundle.
 			continue
 		}
-		fmt.Fprintf(w, "%s\n", r)
+		fmt.Fprintf(w, "CREATE DATABASE %s;\n", db)
+	}
+}
+
+func (c *stmtEnvCollector) printCreateAllSchemas(
+	w io.Writer, schemaNames map[string]struct{},
+) error {
+	for schema := range schemaNames {
+		_, schemaOnly, found := strings.Cut(schema, ".")
+		if !found {
+			return errors.AssertionFailedf("expected schema name to be qualified with DB name")
+		}
+		switch schemaOnly {
+		case catconstants.PublicSchemaName,
+			catconstants.InformationSchemaName,
+			catconstants.CRDBInternalSchemaName,
+			catconstants.PgCatalogName,
+			catconstants.PgExtensionSchemaName:
+			// The public and virtual schemas are always present, so
+			// exclude them to ease the recreation of the bundle.
+			continue
+		}
+		fmt.Fprintf(w, "CREATE SCHEMA %s;\n", schema)
 	}
 	return nil
 }
@@ -1011,18 +1048,13 @@ func (c *stmtEnvCollector) PrintTableStats(
 			 SELECT json_array_elements(statistics)%s AS stat
 			 FROM [SHOW STATISTICS USING JSON FOR TABLE %s]
 		 )`,
-		maybeRemoveHistoBuckets, tn.String(),
+		maybeRemoveHistoBuckets, tn.FQString(),
 	))
 	if err != nil {
 		return err
 	}
 
 	stats = strings.Replace(stats, "'", "''", -1)
-	// Don't display the catalog during the `ALTER TABLE` since the schema file
-	// doesn't specify the catalog for its create table statements.
-	explicitCatalog := tn.ExplicitCatalog
-	tn.ExplicitCatalog = false
-	fmt.Fprintf(w, "ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.String(), stats)
-	tn.ExplicitCatalog = explicitCatalog
+	fmt.Fprintf(w, "ALTER TABLE %s INJECT STATISTICS '%s';\n", tn.FQString(), stats)
 	return nil
 }
