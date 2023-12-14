@@ -5552,6 +5552,9 @@ func TestImportMysql(t *testing.T) {
 func TestImportIntoMysql(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "probable OOM")
+
 	const (
 		nodes = 3
 	)
