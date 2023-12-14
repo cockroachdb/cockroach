@@ -12,6 +12,7 @@ package kvnemesis
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -117,6 +118,10 @@ func exceptSharedLockPromotionError(err error) bool { // true if lock promotion 
 
 func exceptSkipLockedReplayError(err error) bool { // true if skip locked replay error
 	return errors.Is(err, &concurrency.SkipLockedReplayError{})
+}
+
+func exceptSkipLockedUnsupportedError(err error) bool { // true if unsupported use of skip locked error
+	return errors.Is(err, &batcheval.SkipLockedUnsupportedError{})
 }
 
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
