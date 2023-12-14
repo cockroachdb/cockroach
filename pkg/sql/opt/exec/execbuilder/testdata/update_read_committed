@@ -1,0 +1,118 @@
+# LogicTest: local
+
+statement ok
+SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
+
+# Test multi-column-family checks under read committed. If a check constraint
+# contains multiple column families but only some of them are updated, the
+# query should fail under read committed.
+
+statement ok
+CREATE TABLE multi_col_fam_checks (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  FAMILY (a),
+  FAMILY (b, d),
+  FAMILY (c, e),
+  CHECK (a < b),
+  CHECK (c != d)
+)
+
+statement ok
+SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Only a is updated, but b must be read to check the constraint. Should fail
+# under read committed.
+query error pq: unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+EXPLAIN UPDATE multi_col_fam_checks SET a = 5
+
+# Only a is updated, but b is read. Should fail under read committed.
+query error pq: unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+EXPLAIN UPDATE multi_col_fam_checks SET a = 5 WHERE b = 6 AND c = 3
+
+# Both a and b are updated, so this should succeed.
+query T
+EXPLAIN UPDATE multi_col_fam_checks SET a = 5, b = 6
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: multi_col_fam_checks
+│ set: a, b
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: multi_col_fam_checks@multi_col_fam_checks_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+# Both a and b are updated, so this should succeed.
+query T
+EXPLAIN UPDATE multi_col_fam_checks SET a = 5, b = 6, e = 3
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: multi_col_fam_checks
+│ set: a, b, e
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: multi_col_fam_checks@multi_col_fam_checks_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+# Neither a nor b is updated, so this should succeed.
+query T
+EXPLAIN UPDATE multi_col_fam_checks SET e = 3 WHERE a = 5
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: multi_col_fam_checks
+│ set: e
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: multi_col_fam_checks@multi_col_fam_checks_pkey
+          spans: [/5 - /5]
+          locking strength: for update
+
+# Neither a nor b is updated, so this should succeed.
+query T
+EXPLAIN UPDATE multi_col_fam_checks SET e = 3
+----
+distribution: local
+vectorized: true
+·
+• update
+│ table: multi_col_fam_checks
+│ set: e
+│ auto commit
+│
+└── • render
+    │
+    └── • scan
+          missing stats
+          table: multi_col_fam_checks@multi_col_fam_checks_pkey
+          spans: FULL SCAN
+          locking strength: for update
+
+# Test failure due to a different constraint on c and d.
+query error pq: unimplemented: multi-column-family check constraints are not yet supported under read committed isolation
+EXPLAIN UPDATE multi_col_fam_checks SET d = 4, e = 5

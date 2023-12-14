@@ -1245,6 +1245,36 @@ func (p *Partition) SetDatums(datums []tree.Datums) {
 	p.datums = datums
 }
 
+// CheckConstraint implements cat.CheckConstraint. See that interface
+// for more information on the fields.
+type CheckConstraint struct {
+	constraint     string
+	validated      bool
+	columnOrdinals []int
+}
+
+var _ cat.CheckConstraint = &CheckConstraint{}
+
+// Constraint is part of the cat.CheckConstraint interface.
+func (c *CheckConstraint) Constraint() string {
+	return c.constraint
+}
+
+// Validated is part of the cat.CheckConstraint interface.
+func (c *CheckConstraint) Validated() bool {
+	return c.validated
+}
+
+// ColumnCount is part of the cat.CheckConstraint interface.
+func (c *CheckConstraint) ColumnCount() int {
+	return len(c.columnOrdinals)
+}
+
+// ColumnOrdinal is part of the cat.CheckConstraint interface.
+func (c *CheckConstraint) ColumnOrdinal(i int) int {
+	return c.columnOrdinals[i]
+}
+
 // TableStat implements the cat.TableStatistic interface for testing purposes.
 type TableStat struct {
 	js            stats.JSONStatistic
