@@ -424,6 +424,8 @@ func TestAdminAPIDatabaseDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "probable OOM")
+
 	const numServers = 3
 	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
