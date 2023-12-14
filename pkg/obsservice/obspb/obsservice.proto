@@ -89,48 +89,48 @@ message StatementInsightsStatistics {
     HighRetryCount = 4;
   }
 
-  bytes id = 1 [(gogoproto.customname) = "ID"];
-  uint64 fingerprint_id = 2 [(gogoproto.customname) = "FingerprintID"];
-  bytes transaction_id = 3 [(gogoproto.customname) = "TransactionID"];
-  uint64 txn_fingerprint_id = 4 [(gogoproto.customname) = "TxnFingerprintID"];
-  bytes session_id = 5 [(gogoproto.customname) = "SessionID"];
-  string query = 6;
-  Status status = 7;
-  google.protobuf.Timestamp start_time = 8 [(gogoproto.stdtime) = true];
-  google.protobuf.Timestamp end_time = 9 [(gogoproto.stdtime) = true];
-  bool full_scan = 10;
-  bool implicit_txn = 11;
-  string user = 12;
-  string user_priority = 13;
-  string application_name = 14;
-  string database = 15;
-  string plan_gist = 16;
-  int64 rows_read = 17;
-  int64 rows_written = 18;
-  int64 retries = 19;
-  string auto_retry_reason = 20;
+  EventInfo event_info = 1;
+  bytes id = 2 [(gogoproto.customname) = "ID"];
+  uint64 fingerprint_id = 3 [(gogoproto.customname) = "FingerprintID"];
+  bytes transaction_id = 4 [(gogoproto.customname) = "TransactionID"];
+  uint64 txn_fingerprint_id = 5 [(gogoproto.customname) = "TxnFingerprintID"];
+  bytes session_id = 6 [(gogoproto.customname) = "SessionID"];
+  string query = 7;
+  Status status = 8;
+  google.protobuf.Timestamp start_time = 9 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp end_time = 10 [(gogoproto.stdtime) = true];
+  bool full_scan = 11;
+  bool implicit_txn = 12;
+  string user = 13;
+  string user_priority = 14;
+  string application_name = 15;
+  string database = 16;
+  string plan_gist = 17;
+  int64 rows_read = 18;
+  int64 rows_written = 19;
+  int64 retries = 20;
+  string auto_retry_reason = 21;
   // Nodes is the ordered list of nodes ids on which the statement was executed.
-  repeated int64 nodes = 21;
-  google.protobuf.Duration contention = 22 [(gogoproto.stdduration) = true];
-  repeated string index_recommendations = 23;
-  Problem problem = 24;
-  repeated Cause causes = 25;
-  int64 cpu_sql_nanos = 26 [(gogoproto.customname) = "CPUSQLNanos"];
-  string error_code = 27;
+  repeated int64 nodes = 22;
+  google.protobuf.Duration contention = 23 [(gogoproto.stdduration) = true];
+  repeated string index_recommendations = 24;
+  Problem problem = 25;
+  repeated Cause causes = 26;
+  int64 cpu_sql_nanos = 27 [(gogoproto.customname) = "CPUSQLNanos"];
+  string error_code = 28;
+  string last_error_redactable = 29;
   // IdleLatSeconds is the time spent in seconds in an open transaction waiting
   // for the client to send the statement.
-  double idle_lat_seconds = 28;
+  double idle_lat_seconds = 30;
   // ParseLat is the time in seconds to transform the SQL string into an AST.
-  double parse_lat_seconds = 29;
+  double parse_lat_seconds = 31;
   // PlanLatSeconds is the time spent in seconds to transform the AST into a logical query plan.
-  double plan_lat_seconds = 30;
+  double plan_lat_seconds = 32;
   // RunLatSeconds is the time in seconds to run the query and fetch/compute the result rows.
-  double run_lat_seconds = 31;
+  double run_lat_seconds = 33;
   // ServiceLatSeconds is the time in seconds to service the query, from start of parse to end of execute.
-  double service_lat_seconds = 32;
-  repeated ContentionEvent contention_events = 33;
-
-  EventInfo event_info = 34;
+  double service_lat_seconds = 34;
+  repeated ContentionEvent contention_events = 35;
 }
 
 message ContentionEvent {
