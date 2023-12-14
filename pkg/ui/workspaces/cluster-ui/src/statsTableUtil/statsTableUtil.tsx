@@ -31,7 +31,7 @@ export const statisticsColumnLabels = {
   bytesRead: "Bytes Read",
   clientAddress: "Client IP Address",
   contention: "Contention Time",
-  cpu: "CPU Time",
+  cpu: "SQL CPU Time",
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
@@ -650,8 +650,9 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={
           <>
             <p>
-              Average CPU time spent executing within the specified time
-              interval. The gray bar indicates mean CPU time. The blue bar
+              Average SQL CPU time spent executing within the specified time
+              interval. It does not include SQL planning time nor KV execution
+              time. The gray bar indicates mean SQL CPU time. The blue bar
               indicates one standard deviation from the mean.
             </p>
           </>
