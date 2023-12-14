@@ -11,6 +11,7 @@
 package issues
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -43,39 +44,6 @@ func enforceMaxLength(s string) string {
 		return s[:githubIssueBodyMaximumLength]
 	}
 	return s
-}
-
-const (
-	robotLabel          = "O-robot"
-	testFailureLabel    = "C-test-failure"
-	releaseBlockerLabel = "release-blocker"
-)
-
-// Label we expect when checking existing issues. Sometimes users open
-// issues about flakes and don't assign all the labels. We want to at
-// least require the one label to avoid pathological situations in
-// which a test name is so generic that it matches lots of random
-// issues.  Note that we'll only post a comment into an existing label
-// if the labels match 100%, but we also cross-link issues whose
-// labels differ. But we require that they all have searchLabel as a
-// baseline.
-func searchLabel(req PostRequest) string {
-	if req.SkipLabelTestFailure {
-		return robotLabel
-	}
-
-	return testFailureLabel
-}
-
-// issueLabels returns the set of labels attached by default to
-// created issues.
-func issueLabels(req PostRequest) []string {
-	labels := []string{robotLabel}
-	if req.SkipLabelTestFailure {
-		return labels
-	}
-
-	return append(labels, testFailureLabel, releaseBlockerLabel)
 }
 
 // context augments context.Context with a logger.
@@ -314,6 +282,58 @@ func (p *poster) templateData(
 	}
 }
 
+func releaseLabel(branch string) string {
+	return fmt.Sprintf("branch-%s", branch)
+}
+
+func buildIssueQueries(
+	repo string, org string, branch string, title string, req PostRequest,
+) (existingIssueQuery string, relatedIssuesQuery string) {
+	base := fmt.Sprintf(
+		`repo:%q user:%q is:issue is:open in:title sort:created-desc %q`,
+		repo, org, title)
+
+	labelsQuery := func(mustHave, mustNotHave []string) string {
+		var b bytes.Buffer
+		for _, l := range mustHave {
+			fmt.Fprintf(&b, " label:%s", l)
+		}
+		for _, l := range mustNotHave {
+			fmt.Fprintf(&b, " -label:%s", l)
+		}
+		return b.String()
+	}
+
+	// Build a set of labels.
+	labels := make(map[string]bool)
+	for _, l := range req.labels() {
+		labels[l] = true
+	}
+
+	// Build the sets of labels that must be present on the existing issue, and
+	// which must NOT be present on the existing issue.
+	mustHave := []string{RobotLabel}
+	var mustNotHave []string
+	for _, l := range req.AdoptIssueLabelMatchSet {
+		if labels[l] {
+			mustHave = append(mustHave, l)
+		} else {
+			mustNotHave = append(mustNotHave, l)
+		}
+	}
+
+	existingIssueQuery = base + labelsQuery(
+		append(mustHave, releaseLabel(branch)),
+		append(mustNotHave, noReuseLabel),
+	)
+	// The related issues query selects for branches.
+	relatedIssuesQuery = base + labelsQuery(
+		mustHave,
+		append(mustNotHave, releaseLabel(branch)),
+	)
+	return existingIssueQuery, relatedIssuesQuery
+}
+
 func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req PostRequest) error {
 	ctx := &postCtx{Context: origCtx}
 	data := p.templateData(
@@ -329,13 +349,7 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 	// We carry out two searches below, one attempting to find an issue that we
 	// adopt (i.e. add a comment to) and one finding "related issues", i.e. those
 	// that would match if it weren't for their branch label.
-	qBase := fmt.Sprintf(
-		`repo:%q user:%q is:issue is:open in:title label:%q sort:created-desc %q`,
-		p.Repo, p.Org, searchLabel(req), title)
-
-	releaseLabel := fmt.Sprintf("branch-%s", p.Branch)
-	qExisting := qBase + " label:" + releaseLabel + " -label:X-noreuse"
-	qRelated := qBase + " -label:" + releaseLabel
+	qExisting, qRelated := buildIssueQueries(p.Repo, p.Org, p.Branch, title, req)
 
 	rExisting, _, err := p.searchIssues(ctx, qExisting, &github.SearchOptions{
 		ListOptions: github.ListOptions{
@@ -382,8 +396,9 @@ func (p *poster) post(origCtx context.Context, formatter IssueFormatter, req Pos
 
 	body := enforceMaxLength(r.buf.String())
 
-	createLabels := append(issueLabels(req), releaseLabel)
-	createLabels = append(createLabels, req.ExtraLabels...)
+	createLabels := []string{RobotLabel}
+	createLabels = append(createLabels, req.labels()...)
+	createLabels = append(createLabels, releaseLabel(p.Branch))
 	if foundIssue == nil {
 		issueRequest := github.IssueRequest{
 			Title:     &title,
@@ -463,6 +478,16 @@ func (p *poster) teamcityArtifactsURL(artifacts string) *url.URL {
 	return p.teamcityURL("artifacts", artifacts)
 }
 
+const (
+	RobotLabel          = "O-robot"
+	TestFailureLabel    = "C-test-failure"
+	ReleaseBlockerLabel = "release-blocker"
+	noReuseLabel        = "X-noreuse"
+)
+
+// DefaultLabels is the default value for PostRequest.Labels.
+var DefaultLabels = []string{TestFailureLabel, ReleaseBlockerLabel}
+
 // A PostRequest contains the information needed to create an issue about a
 // test failure.
 type PostRequest struct {
@@ -470,8 +495,20 @@ type PostRequest struct {
 	PackageName string
 	// The name of the failing test.
 	TestName string
-	// If set, the C-test-failure label will not be applied.
-	SkipLabelTestFailure bool
+	// Labels that will be set for the issue, in addition to `O-robot` which is
+	// always added. Labels that don't exist will be created as necessary.
+	// If nil, the DefaultLabels value is used.
+	Labels []string
+	// AdoptIssueLabelMatchSet is the set of labels whose presence or absence must
+	// match in order to adopt an issue.
+	//
+	// For each label l in this set: if l is part of Labels, then any adopted
+	// issue must also have this label set; it l is not part of Labels, than any
+	// adopted issue must also NOT have this label set.
+	AdoptIssueLabelMatchSet []string
+	// TopLevelNotes are messages that are printed prominently at the top of the
+	// issue description.
+	TopLevelNotes []string
 	// The test output.
 	Message string
 	// ExtraParams contains the parameters to be included in a failure
@@ -487,14 +524,17 @@ type PostRequest struct {
 	// A help section of the issue, for example with links to documentation or
 	// instructions on how to reproduce the issue.
 	HelpCommand func(*Renderer)
-	// Additional labels that will be added to the issue. They will be created
-	// as necessary (as a side effect of creating an issue with them). An
-	// existing issue may be adopted even if it does not have these labels.
-	ExtraLabels []string
 
 	// ProjectColumnID is the id of the GitHub project column to add the issue to,
 	// or 0 if none.
 	ProjectColumnID int
+}
+
+func (r PostRequest) labels() []string {
+	if r.Labels == nil {
+		return DefaultLabels
+	}
+	return r.Labels
 }
 
 // Logger is an interface that allows callers to plug their own log

@@ -142,6 +142,7 @@ func (g *githubIssues) createPostRequest(
 	firstFailure failure,
 	message string,
 	metamorphicBuild bool,
+	coverageBuild bool,
 ) (issues.PostRequest, error) {
 	var mention []string
 	var projColID int
@@ -175,15 +176,28 @@ func (g *githubIssues) createPostRequest(
 
 	// Issues posted from roachtest are identifiable as such, and they are also release blockers
 	// (this label may be removed by a human upon closer investigation).
+	const infraFlakeLabel = "X-infra-flake"
+	const metamorphicLabel = "B-metamorphic-enabled"
+	const coverageLabel = "B-coverage-enabled"
 	labels := []string{"O-roachtest"}
 	if infraFlake {
-		labels = append(labels, "X-infra-flake")
-	} else if !spec.NonReleaseBlocker {
-		labels = append(labels, "release-blocker")
+		labels = append(labels, infraFlakeLabel)
+	} else {
+		labels = append(labels, issues.TestFailureLabel)
+		if !spec.NonReleaseBlocker {
+			// TODO(radu): remove this check once these build types are stabilized.
+			if !metamorphicBuild && !coverageBuild {
+				labels = append(labels, issues.ReleaseBlockerLabel)
+			}
+		}
+		if metamorphicBuild {
+			labels = append(labels, metamorphicLabel)
+		}
+		if coverageBuild {
+			labels = append(labels, coverageLabel)
+		}
 	}
-	if len(spec.ExtraLabels) > 0 {
-		labels = append(labels, spec.ExtraLabels...)
-	}
+	labels = append(labels, spec.ExtraLabels...)
 
 	teams, err := g.teamLoader()
 	if err != nil {
@@ -212,6 +226,7 @@ func (g *githubIssues) createPostRequest(
 		roachtestPrefix("cpu"):              fmt.Sprintf("%d", spec.Cluster.CPUs),
 		roachtestPrefix("ssd"):              fmt.Sprintf("%d", spec.Cluster.SSDs),
 		roachtestPrefix("metamorphicBuild"): fmt.Sprintf("%t", metamorphicBuild),
+		roachtestPrefix("coverageBuild"):    fmt.Sprintf("%t", coverageBuild),
 	}
 	// Emit CPU architecture only if it was specified; otherwise, it's captured below, assuming cluster was created.
 	if spec.Cluster.Arch != "" {
@@ -239,17 +254,33 @@ func (g *githubIssues) createPostRequest(
 		issueMessage = "The details about this test failure may contain sensitive information; " +
 			"consult the logs for details. WARNING: DO NOT COPY UNREDACTED ARTIFACTS TO THIS ISSUE."
 	}
+	var topLevelNotes []string
+	if coverageBuild {
+		topLevelNotes = append(topLevelNotes,
+			"This is a special code-coverage build. If the same failure was hit in a non-coverage run, "+
+				"there should be a similar issue without the "+coverageLabel+" label. If there isn't one, it is "+
+				"possible that this failure is related to the code coverage infrastructure or overhead.")
+	}
+	if metamorphicBuild {
+		topLevelNotes = append(topLevelNotes,
+			"This build has metamorphic test constants enabled. If the same failure was hit in a "+
+				"non-metamorphic run, there should be a similar issue without the "+metamorphicLabel+" label. If there "+
+				"isn't one, it is possible that this failure is caused by a metamorphic constant.")
+	}
+
 	return issues.PostRequest{
-		MentionOnCreate:      mention,
-		ProjectColumnID:      projColID,
-		PackageName:          "roachtest",
-		TestName:             issueName,
-		Message:              issueMessage,
-		SkipLabelTestFailure: infraFlake, // infra-flakes are not marked as C-test-failure
-		Artifacts:            artifacts,
-		ExtraLabels:          labels,
-		ExtraParams:          clusterParams,
-		HelpCommand:          generateHelpCommand(testName, issueClusterName, roachtestflags.Cloud, start, end),
+		MentionOnCreate: mention,
+		ProjectColumnID: projColID,
+		PackageName:     "roachtest",
+		TestName:        issueName,
+		Labels:          labels,
+		// Keep issues separate unless the if these labels don't match.
+		AdoptIssueLabelMatchSet: []string{infraFlakeLabel, coverageLabel, metamorphicLabel},
+		TopLevelNotes:           topLevelNotes,
+		Message:                 issueMessage,
+		Artifacts:               artifacts,
+		ExtraParams:             clusterParams,
+		HelpCommand:             generateHelpCommand(testName, issueClusterName, roachtestflags.Cloud, start, end),
 	}, nil
 }
 
@@ -269,7 +300,7 @@ func (g *githubIssues) MaybePost(t *testImpl, l *logger.Logger, message string) 
 	default:
 		metamorphicBuild = tests.UsingRuntimeAssertions(t)
 	}
-	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message, metamorphicBuild)
+	postRequest, err := g.createPostRequest(t.Name(), t.start, t.end, t.spec, t.firstFailure(), message, metamorphicBuild, t.goCoverEnabled)
 	if err != nil {
 		return err
 	}
