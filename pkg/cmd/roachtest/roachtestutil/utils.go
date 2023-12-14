@@ -35,12 +35,14 @@ func SystemInterfaceSystemdUnitName() string {
 
 // DefaultPGUrl is a wrapper over ExternalPGUrl that calls it with the arguments
 // that *almost* all roachtests want: single tenant and only a single node.
-// This wrapper will also make fixing #63145 in the future easier as we can
-// add "password authenticated" to the above.
 func DefaultPGUrl(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	node option.NodeListOption,
+	passwordAuth bool,
 ) (string, error) {
-	pgurl, err := c.ExternalPGUrl(ctx, l, node, "", 0, true)
+	pgurl, err := c.ExternalPGUrl(ctx, l, node, "", 0, passwordAuth)
 	if err != nil {
 		return "", err
 	}

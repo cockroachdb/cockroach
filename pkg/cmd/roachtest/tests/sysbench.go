@@ -120,7 +120,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 	m := c.NewMonitor(ctx, roachNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("preparing workload")
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1), true)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -59,7 +59,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			})
 			m.Wait()
 
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
 			if err != nil {
 				t.Fatal(err)
 			}

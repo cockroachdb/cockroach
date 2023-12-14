@@ -335,7 +335,7 @@ func registerBackup(r registry.Registry) {
 			m := c.NewMonitor(ctx)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
-				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1), true)
 				if err != nil {
 					return err
 				}

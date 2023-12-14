@@ -105,7 +105,7 @@ func registerGORM(r registry.Registry) {
 		ignorelistName, ignoredFailures := "gormIgnorelist", gormIgnorelist
 		t.L().Printf("Running cockroach version %s, using blocklist %s, using ignorelist %s", version, blocklistName, ignorelistName)
 
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1), true)
 		if err != nil {
 			t.Fatal(err)
 		}

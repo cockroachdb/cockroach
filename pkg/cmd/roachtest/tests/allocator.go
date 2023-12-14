@@ -48,7 +48,7 @@ func registerAllocator(r registry.Registry) {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -457,7 +457,7 @@ FROM crdb_internal.kv_store_status
 		t.Fatalf("expected 0 mis-replicated ranges, but found %d", n)
 	}
 
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
 	if err != nil {
 		t.Fatal(err)
 	}

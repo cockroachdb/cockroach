@@ -135,7 +135,7 @@ func preloadDataStep(target int) versionStep {
 		// Load data into cluster to ensure we have a large enough number of replicas
 		// to move on decommissioning.
 		c := u.c
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
 		if err != nil {
 			t.Fatal(err)
 		}

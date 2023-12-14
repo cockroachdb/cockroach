@@ -151,7 +151,7 @@ func runDrainAndDecommission(
 	for i := 1; i <= nodes; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
 	if err != nil {
 		t.Fatal(err)
 	}

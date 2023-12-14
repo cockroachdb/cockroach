@@ -401,7 +401,7 @@ func setupDecommissionBench(
 
 		t.Status(fmt.Sprintf("initializing cluster with %d warehouses", benchSpec.warehouses))
 		// Add the connection string here as the port is not decided until c.Start() is called.
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -929,7 +929,7 @@ func runSingleDecommission(
 
 	if drainFirst {
 		h.t.Status(fmt.Sprintf("draining node%d", target))
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, h.t.L(), c.Node(target))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, h.t.L(), c.Node(target), false)
 		if err != nil {
 			t.Fatal(err)
 		}

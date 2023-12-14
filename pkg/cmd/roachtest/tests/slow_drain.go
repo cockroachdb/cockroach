@@ -119,7 +119,7 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		m.Go(func(ctx context.Context) error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
-				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id))
+				pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(id), false)
 				if err != nil {
 					t.Fatal(err)
 				}

@@ -105,7 +105,7 @@ func registerAlterPK(r registry.Registry) {
 		const duration = 10 * time.Minute
 
 		roachNodes, loadNode := setupTest(ctx, t, c)
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(1), false)
 		if err != nil {
 			t.Fatal(err)
 		}

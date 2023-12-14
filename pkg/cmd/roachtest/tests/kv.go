@@ -555,7 +555,7 @@ func registerKVGracefulDraining(r registry.Registry) {
 			// Initialize the database with a lot of ranges so that there are
 			// definitely a large number of leases on the node that we shut down
 			// before it starts draining.
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
 			if err != nil {
 				t.Fatal(err)
 			}

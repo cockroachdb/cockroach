@@ -127,7 +127,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 
 	m.Go(func(ctx context.Context) error {
 		t.Status(fmt.Sprintf("start draining node %d", nodeToDrain))
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDrain))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDrain), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -260,7 +260,7 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 	m := c.NewMonitor(ctx, c.Node(nodeToDrain))
 	m.Go(func(ctx context.Context) error {
 		t.Status(fmt.Sprintf("draining node %d", nodeToDrain))
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDrain))
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(nodeToDrain), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -341,7 +341,7 @@ func runClusterNotAtQuorum(ctx context.Context, t test.Test, c cluster.Cluster) 
 	c.Stop(ctx, t.L(), stopOpts, c.Node(2))
 
 	t.Status("start draining node 3")
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(3))
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(3), false)
 	if err != nil {
 		t.Fatal(err)
 	}

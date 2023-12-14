@@ -37,7 +37,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	// We don't really need tpcc, we just need a good amount of traffic and a good
 	// amount of data.
 	t.Status("importing tpcc fixture")
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func runRestart(ctx context.Context, t test.Test, c cluster.Cluster, downDuratio
 	                 SELECT count(*) FROM tpcc.order_line;
 	                 SET TRACING = OFF;
 	                 SHOW TRACE FOR SESSION;`
-	pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), restartNode)
+	pgurl, err = roachtestutil.DefaultPGUrl(ctx, c, t.L(), restartNode, true)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -123,7 +123,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("failed to up-replicate cluster: %s", err)
 	}
 
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1))
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
 	if err != nil {
 		t.Fatal(err)
 	}

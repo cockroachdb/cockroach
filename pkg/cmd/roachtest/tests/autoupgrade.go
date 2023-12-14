@@ -74,7 +74,7 @@ func registerAutoUpgrade(r registry.Registry) {
 
 		decommissionAndStop := func(node int) error {
 			t.WorkerStatus("decommission")
-			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(node))
+			pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Node(node), false)
 			if err != nil {
 				return err
 			}
