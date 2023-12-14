@@ -66,19 +66,19 @@ COMMIT;
 
 # SKIP LOCKED reads do not block.
 
-query III rowsort
+statement error usage of replicated locks in conjunction with skip locked wait policy is currently unsupported
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM abc FOR UPDATE SKIP LOCKED;
-COMMIT;
-----
-3  30  300
 
-query III rowsort
+statement ok
+ROLLBACK;
+
+statement error usage of replicated locks in conjunction with skip locked wait policy is currently unsupported
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM bcd FOR UPDATE SKIP LOCKED;
-COMMIT;
-----
-20  200  2000
+
+statement ok
+ROLLBACK
 
 # Shared reads block on exclusive locks but not on shared locks.
 
@@ -238,19 +238,19 @@ SELECT * FROM bcd WHERE b = 7 FOR UPDATE
 
 user root
 
-query III rowsort
+statement error usage of replicated locks in conjunction with skip locked wait policy is currently unsupported
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM abc WHERE a > 4 FOR UPDATE SKIP LOCKED;
-COMMIT;
-----
-6  1  7
 
-query III rowsort
+statement ok
+ROLLBACK
+
+statement error usage of replicated locks in conjunction with skip locked wait policy is currently unsupported
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM bcd WHERE b < 8 FOR UPDATE SKIP LOCKED;
-COMMIT;
-----
-6  1  5
+
+statement ok
+ROLLBACK
 
 query III async,rowsort q10
 BEGIN ISOLATION LEVEL READ COMMITTED;
@@ -327,19 +327,19 @@ SELECT * FROM bcd WHERE b = 7 FOR UPDATE
 
 user root
 
-query III rowsort
+statement error usage of replicated locks in conjunction with skip locked wait policy is currently unsupported
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM abc WHERE a > 4 FOR UPDATE SKIP LOCKED;
-COMMIT;
-----
-6  1  7
 
-query III rowsort
+statement ok
+ROLLBACK
+
+statement error usage of replicated locks in conjunction with skip locked wait policy is currently unsupported
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM bcd WHERE b < 8 FOR UPDATE SKIP LOCKED;
-COMMIT;
-----
-6  1  5
+
+statement ok
+ROLLBACK;
 
 query III async,rowsort q12
 BEGIN ISOLATION LEVEL READ COMMITTED;
