@@ -18,6 +18,7 @@ export function getEventDescription(e: clusterUiApi.EventColumns): string {
   const info: EventInfo = e.info ? JSON.parse(e.info) : {};
   let privs = "";
   let comment = "";
+  let withID = info.MutationID ? ` with ID ${info.MutationID}` : "";
 
   switch (e.eventType) {
     case eventTypes.CREATE_DATABASE:
@@ -69,13 +70,13 @@ export function getEventDescription(e: clusterUiApi.EventColumns): string {
     case eventTypes.TRUNCATE_TABLE:
       return `Table Truncated: User ${info.User} truncated table ${info.TableName}`;
     case eventTypes.ALTER_TABLE:
-      return `Schema Change: User ${info.User} began a schema change to alter table ${info.TableName} with ID ${info.MutationID}`;
+      return `Schema Change: User ${info.User} began a schema change to alter table ${info.TableName}${withID}`;
     case eventTypes.CREATE_INDEX:
-      return `Schema Change: User ${info.User} began a schema change to create an index ${info.IndexName} on table ${info.TableName} with ID ${info.MutationID}`;
+      return `Schema Change: User ${info.User} began a schema change to create an index ${info.IndexName} on table ${info.TableName}${withID}`;
     case eventTypes.DROP_INDEX:
-      return `Schema Change: User ${info.User} began a schema change to drop index ${info.IndexName} on table ${info.TableName} with ID ${info.MutationID}`;
+      return `Schema Change: User ${info.User} began a schema change to drop index ${info.IndexName} on table ${info.TableName}${withID}`;
     case eventTypes.ALTER_INDEX:
-      return `Schema Change: User ${info.User} began a schema change to alter index ${info.IndexName} on table ${info.TableName} with ID ${info.MutationID}`;
+      return `Schema Change: User ${info.User} began a schema change to alter index ${info.IndexName} on table ${info.TableName}${withID}`;
     case eventTypes.CREATE_VIEW:
       return `View Created: User ${info.User} created view ${info.ViewName}`;
     case eventTypes.DROP_VIEW:
@@ -97,11 +98,11 @@ export function getEventDescription(e: clusterUiApi.EventColumns): string {
     case eventTypes.DROP_SEQUENCE:
       return `Sequence Dropped: User ${info.User} dropped sequence ${info.SequenceName}`;
     case eventTypes.REVERSE_SCHEMA_CHANGE:
-      return `Schema Change Reversed: Schema change on descriptor ${info.DescriptorID} with ID ${info.MutationID} was reversed.`;
+      return `Schema Change Reversed: Schema change on descriptor ${info.DescriptorID}${withID} was reversed.`;
     case eventTypes.FINISH_SCHEMA_CHANGE:
-      return `Schema Change Completed: Schema change on descriptor ${info.DescriptorID} with ID ${info.MutationID} was completed.`;
+      return `Schema Change Completed: Schema change on descriptor ${info.DescriptorID}${withID} was completed.`;
     case eventTypes.FINISH_SCHEMA_CHANGE_ROLLBACK:
-      return `Schema Change Rollback Completed: Rollback of schema change on descriptor ${info.DescriptorID} with ID ${info.MutationID} was completed.`;
+      return `Schema Change Rollback Completed: Rollback of schema change on descriptor ${info.DescriptorID}${withID} was completed.`;
     case eventTypes.NODE_JOIN:
       return `Node Joined: Node ${info.NodeID} joined the cluster`;
     case eventTypes.NODE_DECOMMISSIONING:
