@@ -2068,7 +2068,7 @@ func doRestorePlan(
 		fromDescription = from
 	}
 
-	if restoreStmt.Options.ExperimentalOnline {
+	if restoreStmt.Options.ExperimentalOnline && !onlinePrefixRewriting.Get(&p.ExecCfg().Settings.SV) {
 		if err := checkRewritesAreNoops(descriptorRewrites); err != nil {
 			return err
 		}

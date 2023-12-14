@@ -73,7 +73,6 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	defer cleanupFnRestored()
 	rSQLDB.Exec(t, "CREATE DATABASE data")
 	var (
-		fullBackup                = "nodelocal://1/full-backup"
 		fullBackupWithRevs        = "nodelocal://1/full-backup-with-revs"
 		incrementalBackup         = "nodelocal://1/incremental-backup"
 		incrementalBackupWithRevs = "nodelocal://1/incremental-backup-with-revs"
@@ -95,18 +94,13 @@ func TestOnlineRestoreErrors(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN '%s' WITH revision_history", incrementalBackupWithRevs))
 		rSQLDB.ExpectErr(t, "incremental backup not supported", fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackupWithRevs))
 	})
-	t.Run("descriptor rewrites are unsupported", func(t *testing.T) {
-		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", fullBackup))
-		rSQLDB.Exec(t, "CREATE DATABASE new_data")
-		rSQLDB.ExpectErr(t, "descriptor rewrites not supported", fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH into_db=new_data,EXPERIMENTAL DEFERRED COPY", fullBackup))
-	})
-
 }
 
 func bankOnlineRestore(
 	t *testing.T, sqlDB *sqlutils.SQLRunner, numAccounts int, externalStorage string,
 ) {
 	sqlDB.Exec(t, "CREATE DATABASE data")
+	sqlDB.Exec(t, "CREATE TABLE data.baz (id int primary key)")
 	sqlDB.Exec(t, fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", externalStorage))
 
 	require.Equal(t, checkLinkingProgress(t, sqlDB), float32(1.0))
