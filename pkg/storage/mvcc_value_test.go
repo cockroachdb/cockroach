@@ -180,27 +180,32 @@ func TestDecodeMVCCValueErrors(t *testing.T) {
 	}
 }
 
-var mvccValueBenchmarkConfigs = struct {
-	headers map[string]enginepb.MVCCValueHeader
-	values  map[string]roachpb.Value
-}{
-	headers: map[string]enginepb.MVCCValueHeader{
+func mvccValueBenchmarkConfigs() (
+	headers map[string]enginepb.MVCCValueHeader,
+	values map[string]roachpb.Value,
+) {
+	headers = map[string]enginepb.MVCCValueHeader{
 		"empty":                  {},
 		"local walltime":         {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545}},
 		"local walltime+logical": {LocalTimestamp: hlc.ClockTimestamp{WallTime: 1643550788737652545, Logical: 4096}},
-	},
-	values: map[string]roachpb.Value{
+	}
+	if testing.Short() {
+		// Reduce the number of configurations in short mode.
+		delete(headers, "local walltime")
+	}
+	values = map[string]roachpb.Value{
 		"tombstone": {},
 		"short":     roachpb.MakeValueFromString("foo"),
 		"long":      roachpb.MakeValueFromBytes(bytes.Repeat([]byte{1}, 4096)),
-	},
+	}
+	return headers, values
 }
 
 func BenchmarkEncodeMVCCValue(b *testing.B) {
 	DisableMetamorphicSimpleValueEncoding(b)
-	cfg := mvccValueBenchmarkConfigs
-	for hDesc, h := range cfg.headers {
-		for vDesc, v := range cfg.values {
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
 			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
 			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
 			b.Run(name, func(b *testing.B) {
@@ -217,9 +222,9 @@ func BenchmarkEncodeMVCCValue(b *testing.B) {
 }
 
 func BenchmarkDecodeMVCCValue(b *testing.B) {
-	cfg := mvccValueBenchmarkConfigs
-	for hDesc, h := range cfg.headers {
-		for vDesc, v := range cfg.values {
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
 			for _, inline := range []bool{false, true} {
 				name := fmt.Sprintf("header=%s/value=%s/inline=%t", hDesc, vDesc, inline)
 				mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
@@ -250,9 +255,9 @@ func BenchmarkDecodeMVCCValue(b *testing.B) {
 }
 
 func BenchmarkMVCCValueIsTombstone(b *testing.B) {
-	cfg := mvccValueBenchmarkConfigs
-	for hDesc, h := range cfg.headers {
-		for vDesc, v := range cfg.values {
+	headers, values := mvccValueBenchmarkConfigs()
+	for hDesc, h := range headers {
+		for vDesc, v := range values {
 			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
 			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
 			buf, err := EncodeMVCCValue(mvccValue)

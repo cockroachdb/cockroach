@@ -347,6 +347,11 @@ func BenchmarkEncodeMVCCKey(b *testing.B) {
 		"walltime+logical": {WallTime: 1643550788737652545, Logical: 4096},
 		"all":              {WallTime: 1643550788737652545, Logical: 4096, Synthetic: true},
 	}
+	if testing.Short() {
+		// Reduce the number of configurations under -short.
+		delete(keys, "empty")
+		delete(timestamps, "walltime")
+	}
 	buf := make([]byte, 0, 65536)
 	for keyDesc, key := range keys {
 		for tsDesc, ts := range timestamps {
@@ -374,6 +379,11 @@ func BenchmarkDecodeMVCCKey(b *testing.B) {
 		"walltime":         {WallTime: 1643550788737652545},
 		"walltime+logical": {WallTime: 1643550788737652545, Logical: 4096},
 		"all":              {WallTime: 1643550788737652545, Logical: 4096, Synthetic: true},
+	}
+	if testing.Short() {
+		// Reduce the number of configurations under -short.
+		delete(keys, "empty")
+		delete(timestamps, "walltime")
 	}
 	var mvccKey MVCCKey
 	var err error
@@ -959,27 +969,51 @@ func BenchmarkMVCCRangeKeyStack_Clone(b *testing.B) {
 		return stack
 	}
 
+	type testCase struct {
+		keySize     int
+		numVersions int
+		withValues  int
+	}
+	var testCases []testCase
+
 	for _, keySize := range []int{16} {
-		b.Run(fmt.Sprintf("keySize=%d", keySize), func(b *testing.B) {
-			for _, numVersions := range []int{1, 3, 10, 100} {
-				b.Run(fmt.Sprintf("numVersions=%d", numVersions), func(b *testing.B) {
-					for _, withValues := range []int{0, 1} {
-						b.Run(fmt.Sprintf("withValues=%d", withValues), func(b *testing.B) {
-							stack := makeStack(keySize, numVersions, withValues)
-							b.Run("Clone", func(b *testing.B) {
-								for i := 0; i < b.N; i++ {
-									mvccRangeKeyStackClone = stack.Clone()
-								}
-							})
-							b.Run("CloneInto", func(b *testing.B) {
-								for i := 0; i < b.N; i++ {
-									stack.CloneInto(&mvccRangeKeyStackClone)
-								}
-							})
-						})
-					}
+		for _, numVersions := range []int{1, 3, 10, 100} {
+			for _, withValues := range []int{0, 1} {
+				testCases = append(testCases, testCase{
+					keySize:     keySize,
+					numVersions: numVersions,
+					withValues:  withValues,
 				})
 			}
+		}
+	}
+
+	if testing.Short() {
+		// Choose a few configurations for the short version.
+		testCases = []testCase{
+			{keySize: 16, numVersions: 1, withValues: 0},
+			{keySize: 16, numVersions: 3, withValues: 1},
+			{keySize: 16, numVersions: 100, withValues: 1},
+		}
+	}
+
+	for _, tc := range testCases {
+		name := fmt.Sprintf(
+			"keySize=%d/numVersions=%d/withValues=%d",
+			tc.keySize, tc.numVersions, tc.withValues,
+		)
+		b.Run(name, func(b *testing.B) {
+			stack := makeStack(tc.keySize, tc.numVersions, tc.withValues)
+			b.Run("Clone", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					mvccRangeKeyStackClone = stack.Clone()
+				}
+			})
+			b.Run("CloneInto", func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					stack.CloneInto(&mvccRangeKeyStackClone)
+				}
+			})
 		})
 	}
 }
