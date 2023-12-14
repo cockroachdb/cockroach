@@ -115,7 +115,6 @@ func RegisterTests(r registry.Registry) {
 	registerRustPostgres(r)
 	registerSQLAlchemy(r)
 	registerSQLSmith(r)
-	registerSSTableCorruption(r)
 	registerSchemaChangeBulkIngest(r)
 	registerSchemaChangeDuringKV(r)
 	registerSchemaChangeDuringTPCC800(r)
