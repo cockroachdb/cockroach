@@ -47,6 +47,13 @@ var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	settings.PositiveInt,
 )
 
+var onlinePrefixRewriting = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"backup.restore.online_prefix_rewriting.enabled",
+	"enable prefix rewriting during online restore",
+	true,
+)
+
 // sendAddRemoteSSTs is a stubbed out, very simplisitic version of restore used
 // to test out ingesting "remote" SSTs. It will be replaced with a real distsql
 // plan and processors in the future.
