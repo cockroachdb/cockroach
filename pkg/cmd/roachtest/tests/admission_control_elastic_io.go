@@ -71,7 +71,7 @@ func registerElasticIO(r registry.Registry) {
 
 			c.Put(ctx, t.DeprecatedWorkload(), "./workload", c.Node(workAndPromNode))
 			startOpts := option.DefaultStartOptsNoBackups()
-			roachtestutil.SetDefaultAdminUIPort(c, startOpts.RoachprodOpts)
+			roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=io_load_listener=2")
 			settings := install.MakeClusterSettings()
