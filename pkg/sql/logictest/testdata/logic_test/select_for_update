@@ -628,3 +628,51 @@ SELECT * FROM t94290 WHERE b = 2 FOR UPDATE;
 
 statement ok
 RESET statement_timeout;
+
+# Ensure when SKIP LOCKED is used in conjunction with replicated locks we return
+# appropriate errors.
+
+statement ok
+DROP TABLE IF EXISTS t;
+CREATE TABLE t(a INT PRIMARY KEY);
+INSERT INTO t VALUES(1);
+GRANT ALL ON t TO testuser;
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser;
+
+user testuser
+
+statement ok
+SET enable_durable_locking_for_serializable = true;
+
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t WHERE a = 1 FOR UPDATE;
+----
+1
+
+user root
+
+skipif config local-mixed-23.1
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty  lock_strength  durability  isolation_level  granted  contended
+
+skipif config local-mixed-23.1
+statement error replicated locks are incompatible with the skip locked wait policy
+SELECT * FROM t FOR UPDATE SKIP LOCKED
+
+# Ensure the replicated lock isn't pulled into the in-memory lock table, even
+# after the skip locked statement has run.
+skipif config local-mixed-23.1
+query TTTTTTTBB colnames,retry,rowsort
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks
+----
+database_name  schema_name  table_name  lock_key_pretty   lock_strength  durability    isolation_level  granted  contended
+
+user testuser
+
+statement ok
+COMMIT
