@@ -67,29 +67,22 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
 // CheckInvalidDescriptors returns an error if there exists any descriptors in
 // the crdb_internal.invalid_objects virtual table.
 func CheckInvalidDescriptors(ctx context.Context, db *gosql.DB) error {
-	// Because crdb_internal.invalid_objects is a virtual table, by default, the
-	// query will take a lease on the database sqlDB is connected to and only run
-	// the query on the given database. The "" prefix prevents this lease
-	// acquisition and allows the query to fetch all descriptors in the cluster.
-	var (
-		rows *gosql.Rows
-		err  error
-	)
+	var invalidIDs string
 	if err := timeutil.RunWithTimeout(ctx, "descriptor validation", time.Minute, func(ctx context.Context) error {
-		rows, err = db.QueryContext(ctx, `
-SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
+		// Because crdb_internal.invalid_objects is a virtual table, by default, the
+		// query will take a lease on the database sqlDB is connected to and only run
+		// the query on the given database. The "" prefix prevents this lease
+		// acquisition and allows the query to fetch all descriptors in the cluster.
+		rows, err := db.QueryContext(ctx, `SELECT id, obj_name, error FROM "".crdb_internal.invalid_objects`)
 		if err != nil {
 			return err
 		}
-		return nil
+		invalidIDs, err = sqlutils.RowsToDataDrivenOutput(rows)
+		return err
 	}); err != nil {
 		return err
 	}
 
-	invalidIDs, err := sqlutils.RowsToDataDrivenOutput(rows)
-	if err != nil {
-		return err
-	}
 	if invalidIDs != "" {
 		return errors.Errorf("the following descriptor ids are invalid\n%v", invalidIDs)
 	}
