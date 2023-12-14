@@ -220,7 +220,7 @@ func startDistIngestion(
 		msg := redact.Sprintf("creating %d initial splits based on the source cluster's topology",
 			countNumOfSplitsAndScatters())
 		updateRunningStatus(ctx, ingestionJob, jobspb.CreatingInitialSplits, msg)
-		if err := createInitialSplits(ctx, codec, splitter, planner.initialTopology, details.DestinationTenantID); err != nil {
+		if err := createInitialSplits(ctx, codec, splitter, planner.initialTopology, len(planner.initialDestinationNodes), details.DestinationTenantID); err != nil {
 			return err
 		}
 	} else {
@@ -242,6 +242,15 @@ func startDistIngestion(
 		execCtx.ExecCfg().JobRegistry.MetricsStruct().StreamIngest.(*Metrics).ReplanCount.Inc(1)
 	}
 	return err
+}
+
+func sortSpans(partitions []streamclient.PartitionInfo) roachpb.Spans {
+	spansToSort := make(roachpb.Spans, 0)
+	for i := range partitions {
+		spansToSort = append(spansToSort, partitions[i].Spans...)
+	}
+	sort.Sort(spansToSort)
+	return spansToSort
 }
 
 // TODO(ssd): This is a duplicative with the split_and_scatter processor in
@@ -288,7 +297,8 @@ func (s *dbSplitAndScatter) now() hlc.Timestamp {
 }
 
 // createInitialSplits creates splits based on the given toplogy from the
-// source.
+// source. Parallelize splits by first sorting all the partition spans, and then
+// sending an equal number of contiguous spans to split workers.
 //
 // The idea here is to use the information from the source cluster about
 // the distribution of the data to produce split points to help prevent
@@ -299,6 +309,7 @@ func createInitialSplits(
 	codec keys.SQLCodec,
 	splitter splitAndScatterer,
 	topology streamclient.Topology,
+	destNodeCount int,
 	destTenantID roachpb.TenantID,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "streamingest.createInitialSplits")
@@ -314,8 +325,29 @@ func createInitialSplits(
 	if err != nil {
 		return err
 	}
-	for _, partition := range topology.Partitions {
-		for _, span := range partition.Spans {
+
+	grp := ctxgroup.WithContext(ctx)
+	sortedSpans := sortSpans(topology.Partitions)
+	splitWorkers := destNodeCount
+	spansPerWorker := len(sortedSpans) / splitWorkers
+	for i := 0; i < splitWorkers; i++ {
+		startIdx := i * spansPerWorker
+		endIdx := (i + 1) * spansPerWorker
+		workerSpans := sortedSpans[startIdx:endIdx]
+		if i == splitWorkers-1 {
+			// The last worker handles the remainder spans
+			workerSpans = sortedSpans[startIdx:]
+		}
+		grp.GoCtx(splitAndScatterWorker(workerSpans, rekeyer, splitter))
+	}
+	return grp.Wait()
+}
+
+func splitAndScatterWorker(
+	spans []roachpb.Span, rekeyer *backupccl.KeyRewriter, splitter splitAndScatterer,
+) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		for _, span := range spans {
 			startKey := span.Key.Clone()
 			splitKey, _, err := rekeyer.RewriteKey(startKey, 0 /* walltimeForImportElision */)
 			if err != nil {
@@ -348,8 +380,8 @@ func createInitialSplits(
 			}
 
 		}
+		return nil
 	}
-	return nil
 }
 
 var splitAndScatterSitckyBitDuration = time.Hour
@@ -408,8 +440,9 @@ type replicationFlowPlanner struct {
 
 	initialPlanCtx *sql.PlanningCtx
 
-	initialStreamAddresses []string
-	initialTopology        streamclient.Topology
+	initialStreamAddresses  []string
+	initialTopology         streamclient.Topology
+	initialDestinationNodes []base.SQLInstanceID
 
 	srcTenantID roachpb.TenantID
 }
@@ -442,16 +475,18 @@ func (p *replicationFlowPlanner) constructPlanGenerator(
 		if err != nil {
 			return nil, nil, err
 		}
-		if !p.createdInitialPlan() {
-			p.initialTopology = topology
-			p.initialStreamAddresses = topology.StreamAddresses()
-		}
 
 		p.srcTenantID = topology.SourceTenantID
 
 		planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanning(ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg())
 		if err != nil {
 			return nil, nil, err
+		}
+		if !p.createdInitialPlan() {
+			p.initialTopology = topology
+			p.initialStreamAddresses = topology.StreamAddresses()
+			p.initialDestinationNodes = sqlInstanceIDs
+
 		}
 		destNodeLocalities, err := getDestNodeLocalities(ctx, dsp, sqlInstanceIDs)
 		if err != nil {
