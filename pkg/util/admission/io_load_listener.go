@@ -446,12 +446,17 @@ func cumLSMWriteAndIngestedBytes(
 	return writeAndIngestedBytes, ingestedBytes
 }
 
+func replaceFlushThroughputBytesBySSTableWriteThroughput(m *pebble.Metrics) {
+	m.Flush.WriteThroughput.Bytes = int64(m.Levels[0].BytesFlushed)
+}
+
 // pebbleMetricsTicks is called every adjustmentInterval seconds, and decides
 // the token allocations until the next call. Returns true iff the system is
 // loaded.
 func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMetrics) bool {
 	ctx = logtags.AddTag(ctx, "s", io.storeID)
 	m := metrics.Metrics
+	replaceFlushThroughputBytesBySSTableWriteThroughput(m)
 	if !io.statsInitialized {
 		io.statsInitialized = true
 		sas := io.kvRequester.getStoreAdmissionStats()
@@ -606,6 +611,10 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	cumDiskBW := io.ioLoadListenerState.diskBW
 	wt := metrics.Flush.WriteThroughput
 	wt.Subtract(io.cumFlushWriteThroughput)
+	if wt.Bytes < 0 {
+		// Ignore wrong stats. Can happen in tests.
+		wt.Bytes = 0
+	}
 	cumCompactionStats := computeCumStoreCompactionStats(metrics.Metrics)
 
 	res := io.adjustTokensInner(ctx, io.ioLoadListenerState,
@@ -858,10 +867,14 @@ func (io *ioLoadListener) adjustTokensInner(
 	const maxFlushUtilTargetFraction = 1.5
 	flushUtilTargetFraction := prev.flushUtilTargetFraction
 	if flushUtilTargetFraction == 0 {
-		// Initialization: use the maximum configured fraction.
+		// Initialization: use the init configured fraction.
 		flushUtilTargetFraction = minFlushUtilTargetFraction
-		if flushUtilTargetFraction < maxFlushUtilTargetFraction {
-			flushUtilTargetFraction = maxFlushUtilTargetFraction
+		// 1.0 is a high enough value -- we've observed write stalls at ~0.65 when
+		// running kv0. Which is why we don't use maxFlushUtilTargetFraction as
+		// the initial value.
+		const initFlushUtilTargetFraction = 1.0
+		if flushUtilTargetFraction < initFlushUtilTargetFraction {
+			flushUtilTargetFraction = initFlushUtilTargetFraction
 		}
 	} else if flushUtilTargetFraction < minFlushUtilTargetFraction {
 		// The min can be changed in a running system, so we bump up to conform to
@@ -872,7 +885,7 @@ func (io *ioLoadListener) adjustTokensInner(
 	// doLogFlush becomes true if something interesting is done here.
 	doLogFlush := false
 	smoothedNumFlushTokens := prev.smoothedNumFlushTokens
-	const flushUtilIgnoreThreshold = 0.05
+	const flushUtilIgnoreThreshold = 0.1
 	if intFlushUtilization > flushUtilIgnoreThreshold {
 		if smoothedNumFlushTokens == 0 {
 			// Initialization.
@@ -1028,6 +1041,12 @@ func (io *ioLoadListener) adjustTokensInner(
 	tokenKind := compactionTokenKind
 	if totalNumByteTokens > numFlushTokens {
 		totalNumByteTokens = numFlushTokens
+		// Reduce the flush tokens for elastic traffic, since write stalls can be
+		// dangerous. 0.8 was chosen somewhat arbitrarily.
+		numElasticFlushTokens := int64(0.8 * float64(numFlushTokens))
+		if numElasticFlushTokens < totalNumElasticByteTokens {
+			totalNumElasticByteTokens = numElasticFlushTokens
+		}
 		tokenKind = flushTokenKind
 	}
 	if totalNumElasticByteTokens > totalNumByteTokens {
@@ -1121,8 +1140,8 @@ func (res adjustTokensResult) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Printf("compacted %s [≈%s], ", ib(res.aux.intL0CompactedBytes), ib(res.smoothedIntL0CompactedBytes))
 	// The tokens computed for flush, based on observed flush throughput and
 	// utilization.
-	p.Printf("flushed %s [≈%s]; ", ib(int64(res.aux.intFlushTokens)),
-		ib(int64(res.smoothedNumFlushTokens)))
+	p.Printf("flushed %s [≈%s] (mult %.2f); ", ib(int64(res.aux.intFlushTokens)),
+		ib(int64(res.smoothedNumFlushTokens)), res.flushUtilTargetFraction)
 	p.Printf("admitting ")
 	if n, m := res.ioLoadListenerState.totalNumByteTokens,
 		res.ioLoadListenerState.totalNumElasticByteTokens; n < unlimitedTokens {
