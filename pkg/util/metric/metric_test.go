@@ -318,6 +318,68 @@ func TestManualWindowHistogram(t *testing.T) {
 	}
 }
 
+func TestManualWindowHistogramTicker(t *testing.T) {
+	now := time.UnixMicro(1699565116)
+	defer TestingSetNow(func() time.Time {
+		return now
+	})()
+
+	buckets := []float64{
+		0.25,
+		0.5,
+		1.0,
+		2.0,
+	}
+
+	h := NewManualWindowHistogram(
+		Metadata{},
+		buckets,
+		false, /* withRotate */
+	)
+
+	phistogram := prometheus.NewHistogram(prometheus.HistogramOpts{Buckets: buckets})
+	pMetric := &prometheusgo.Metric{}
+
+	recordValue := func() {
+		phistogram.Observe(1)
+		wHistogram := prometheus.NewHistogram(prometheus.HistogramOpts{Buckets: buckets})
+		wHistogram.Observe(1)
+		require.NoError(t, wHistogram.Write(pMetric))
+		h.Update(phistogram, pMetric.Histogram)
+	}
+
+	// Test 0 case, sum and count should be 0.
+	h.Inspect(func(interface{}) {})
+	wCount, wSum := h.TotalWindowed()
+	require.Equal(t, float64(0), wSum)
+	require.Equal(t, int64(0), wCount)
+
+	// Record a value.
+	h.Inspect(func(interface{}) {})
+	recordValue()
+	wCount, wSum = h.TotalWindowed()
+	require.Equal(t, float64(1), wSum)
+	require.Equal(t, int64(1), wCount)
+
+	// Add 30 seconds, the previous value will rotate but the merged window should
+	// still have the previous value.
+	now = now.Add(30 * time.Second)
+	h.Inspect(func(interface{}) {})
+	recordValue()
+	wCount, wSum = h.TotalWindowed()
+	require.Equal(t, float64(2), wSum)
+	require.Equal(t, int64(2), wCount)
+
+	// Add another 30 seconds, the prev window should have reset, and the new
+	// value is now in the prev window, expect 1.
+	now = now.Add(30 * time.Second)
+	h.Inspect(func(interface{}) {})
+	wCount, wSum = h.TotalWindowed()
+	require.Equal(t, float64(1), wSum)
+	require.Equal(t, int64(1), wCount)
+
+}
+
 func TestNewHistogramRotate(t *testing.T) {
 	now := time.UnixMicro(1699565116)
 	defer TestingSetNow(func() time.Time {
