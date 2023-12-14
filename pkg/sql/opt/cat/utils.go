@@ -82,7 +82,7 @@ func FormatTable(cat Catalog, tab Table, tp treeprinter.Node, redactableValues b
 	}
 
 	for i := 0; i < tab.CheckCount(); i++ {
-		child.Childf("CHECK (%s)", MaybeMarkRedactable(tab.Check(i).Constraint, redactableValues))
+		child.Childf("CHECK (%s)", MaybeMarkRedactable(tab.Check(i).Constraint(), redactableValues))
 	}
 
 	for i := 0; i < tab.DeletableIndexCount(); i++ {

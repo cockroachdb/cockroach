@@ -349,10 +349,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.CheckConstraintTableDef:
-			tab.Checks = append(tab.Checks, cat.CheckConstraint{
-				Constraint: serializeTableDefExpr(def.Expr),
-				Validated:  validatedCheckConstraint(def),
-			})
+			tab.addCheckConstraint(def)
 		}
 	}
 
@@ -684,6 +681,35 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	}
 	tab.outboundFKs = append(tab.outboundFKs, fk)
 	targetTable.inboundFKs = append(targetTable.inboundFKs, fk)
+}
+
+func (tt *Table) addCheckConstraint(check *tree.CheckConstraintTableDef) {
+	var columnOrdinals []int
+	visitFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok {
+				colID := tt.FindOrdinal(string(c.ColumnName))
+				columnOrdinals = append(columnOrdinals, colID)
+			}
+			return false, v, nil
+		}
+		return true, expr, nil
+	}
+
+	// Collect the columns referenced by the check expr.
+	if _, err := tree.SimpleVisit(check.Expr, visitFn); err != nil {
+		panic(fmt.Sprintf("failed to find columns in check expr %s", check.Expr.String()))
+	}
+
+	tt.Checks = append(tt.Checks, &CheckConstraint{
+		constraint:     serializeTableDefExpr(check.Expr),
+		validated:      validatedCheckConstraint(check),
+		columnOrdinals: columnOrdinals,
+	})
 }
 
 func (tt *Table) addUniqueConstraint(
