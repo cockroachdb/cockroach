@@ -1573,10 +1573,6 @@ func (s *SQLServer) preStart(
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
 
-	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.execCfg.Settings)
-	ieMon.StartNoReserved(ctx, s.pgServer.SQLServer.GetBytesMonitor())
-	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
-
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
 		return err
 	}
