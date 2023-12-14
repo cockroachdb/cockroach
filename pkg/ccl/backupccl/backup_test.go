@@ -8875,6 +8875,8 @@ func TestBackupWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 113125)
+
 	skip.UnderStressRace(t, "test is too slow to run under race")
 
 	allowResponse := make(chan struct{})
