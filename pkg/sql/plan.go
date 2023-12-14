@@ -596,9 +596,6 @@ const (
 	// engine.
 	planFlagVectorized
 
-	// planFlagTenant is set if the plan is executed on behalf of a tenant.
-	planFlagTenant
-
 	// planFlagContainsFullTableScan is set if the plan involves an unconstrained
 	// scan on (the primary key of) a table. This could be an unconstrained scan
 	// of any cardinality.
