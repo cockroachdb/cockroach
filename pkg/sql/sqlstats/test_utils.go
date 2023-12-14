@@ -58,6 +58,15 @@ type TestingKnobs struct {
 	// SkipZoneConfigBootstrap used for backup tests where we want to skip
 	// the Zone Config TTL setup.
 	SkipZoneConfigBootstrap bool
+
+	// ConsumeStmtStatsInterceptor intercepts consumed stmt stats
+	ConsumeStmtStatsInterceptor StatementVisitor
+
+	// ConsumeTxnStatsInterceptor intercepts consumed transaction stats
+	ConsumeTxnStatsInterceptor TransactionVisitor
+
+	// OnBeforeReset is invoked right before reset SQLStats from in-memory cache
+	OnBeforeReset func()
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
