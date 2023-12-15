@@ -2435,9 +2435,11 @@ func (kl *keyLocks) scanAndMaybeEnqueue(g *lockTableGuardImpl, notify bool) (wai
 	}
 
 	kl.claimBeforeProceeding(g)
-	// Inform any active waiters that (may) need to be made aware that this
-	// request acquired a claim.
-	kl.informActiveWaiters()
+	// Now that this request has acquired a claim, requests actively waiting
+	// behind this request may be able to proceed by establishing a joint claim if
+	// they are compatible. recomputeWaitQueues will also inform active waiters
+	// that may need to be made aware that this request has acquired a claim.
+	kl.recomputeWaitQueues(g.lt.settings)
 	return false /* wait */, nil
 }
 
@@ -3376,6 +3378,9 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 	// (which are the only ones that exist at the time of writing).
 	var strongestMode lock.Mode
 	// Go through the list of lock holders.
+	// TODO(arul): We should annotate each of the holders to reflect if the lock
+	// belongs to a finalized transaction or not. If it does, we should exclude
+	// it when computing strongestLockMode.
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
 		mode := e.Value.getLockMode()
 		if strongestMode.Weaker(mode) {
