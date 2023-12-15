@@ -87,6 +87,7 @@ var clusterVersionKeys = map[string]clusterversion.Key{
 
 type sqlDBKey struct {
 	name string
+	vc   string
 	user string
 }
 
@@ -236,14 +237,36 @@ func (d *datadrivenTestState) getIODir(t *testing.T, name string) string {
 }
 
 func (d *datadrivenTestState) getSQLDB(t *testing.T, name string, user string) *gosql.DB {
-	key := sqlDBKey{name, user}
+	return d.getSQLDBForVC(t, name, "default", user)
+}
+
+func (d *datadrivenTestState) getSQLDBForVC(
+	t *testing.T, name string, vc string, user string,
+) *gosql.DB {
+	key := sqlDBKey{name, vc, user}
 	if db, ok := d.sqlDBs[key]; ok {
 		return db
 	}
+
+	opts := []serverutils.SQLConnOption{
+		serverutils.CertsDirPrefix("TestBackupRestoreDataDriven"),
+		serverutils.User(user),
+	}
+
 	s := d.firstNode[name].ApplicationLayer()
-	pgURL, cleanup := s.PGUrl(
-		t, serverutils.CertsDirPrefix("TestBackupRestoreDataDriven"), serverutils.User(user),
-	)
+	switch vc {
+	case "default":
+		// Nothing to do.
+	case "system":
+		// We use the system layer since in the case of
+		// external SQL server's the application layer can't
+		// route to the system tenant.
+		s = d.firstNode[name].SystemLayer()
+	default:
+		opts = append(opts, serverutils.DBName("cluster:"+vc))
+	}
+
+	pgURL, cleanup := s.PGUrl(t, opts...)
 	d.cleanupFns = append(d.cleanupFns, cleanup)
 
 	base, err := pq.NewConnector(pgURL.String())
@@ -583,6 +606,7 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 
 		case "exec-sql":
 			cluster := lastCreatedCluster
+			vc := "default"
 			user := "root"
 			if d.HasArg("cluster") {
 				d.ScanArgs(t, "cluster", &cluster)
@@ -590,10 +614,14 @@ func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
 			if d.HasArg("user") {
 				d.ScanArgs(t, "user", &user)
 			}
+			if d.HasArg("vc") {
+				d.ScanArgs(t, "vc", &vc)
+			}
+
 			ds.noticeBuffer = nil
 			checkForClusterSetting(t, d.Input, ds.clusters[cluster].NumServers())
 			d.Input = strings.ReplaceAll(d.Input, "http://COCKROACH_TEST_HTTP_server/", httpAddr)
-			_, err := ds.getSQLDB(t, cluster, user).Exec(d.Input)
+			_, err := ds.getSQLDBForVC(t, cluster, vc, user).Exec(d.Input)
 			ret := ds.noticeBuffer
 
 			if d.HasArg("ignore-notice") {
