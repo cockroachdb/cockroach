@@ -18,7 +18,10 @@ go_test(
     embed = [":compose"],
     exec_properties = {"Pool": "large"},
     gotags = ["compose"],
-    tags = ["integration"],
+    tags = [
+        "integration",
+        "no-remote-exec",
+    ],
     deps = [
         "//pkg/build/bazel",
         "//pkg/util/envutil",

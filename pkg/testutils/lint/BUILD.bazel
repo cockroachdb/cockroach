@@ -25,7 +25,10 @@ go_test(
     embed = [":lint"],
     embedsrcs = ["gcassert_paths.txt"],
     gotags = ["lint"],
-    tags = ["integration"],
+    tags = [
+        "integration",
+        "no-remote-exec",
+    ],
     visibility = ["//build/bazelutil:__subpackages__"],
     deps = [
         "//pkg/build/bazel",
