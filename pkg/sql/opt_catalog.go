@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1701,7 +1701,7 @@ func (oi *optIndex) ImplicitPartitioningColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
-func (oi *optIndex) GeoConfig() geoindex.Config {
+func (oi *optIndex) GeoConfig() geopb.Config {
 	return oi.idx.IndexDesc().GeoConfig
 }
 
@@ -2605,8 +2605,8 @@ func (oi *optVirtualIndex) ImplicitPartitioningColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
-func (oi *optVirtualIndex) GeoConfig() geoindex.Config {
-	return geoindex.Config{}
+func (oi *optVirtualIndex) GeoConfig() geopb.Config {
+	return geopb.Config{}
 }
 
 // Version is part of the cat.Index interface.

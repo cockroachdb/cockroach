@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -51,7 +52,7 @@ func TestS2GeometryIndexBasic(t *testing.T) {
 			d.ScanArgs(t, "miny", &minY)
 			d.ScanArgs(t, "maxx", &maxX)
 			d.ScanArgs(t, "maxy", &maxY)
-			index = NewS2GeometryIndex(S2GeometryConfig{
+			index = NewS2GeometryIndex(geopb.S2GeometryConfig{
 				MinX:     float64(minX),
 				MinY:     float64(minY),
 				MaxX:     float64(maxX),

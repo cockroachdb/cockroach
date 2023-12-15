@@ -7965,14 +7965,14 @@ func makeSTDWithinBuiltin(exclusivity geo.FnExclusivity) builtinDefinition {
 }
 
 func applyGeoindexConfigStorageParams(
-	ctx context.Context, evalCtx *eval.Context, cfg geoindex.Config, params string,
-) (geoindex.Config, error) {
+	ctx context.Context, evalCtx *eval.Context, cfg geopb.Config, params string,
+) (geopb.Config, error) {
 	indexDesc := &descpb.IndexDescriptor{GeoConfig: cfg}
 	stmt, err := parser.ParseOne(
 		fmt.Sprintf("CREATE INDEX t_idx ON t USING GIST(geom) WITH (%s)", params),
 	)
 	if err != nil {
-		return geoindex.Config{}, errors.Newf("invalid storage parameters specified: %s", params)
+		return geopb.Config{}, errors.Newf("invalid storage parameters specified: %s", params)
 	}
 	semaCtx := tree.MakeSemaContext()
 	if err := storageparam.Set(
@@ -7982,7 +7982,7 @@ func applyGeoindexConfigStorageParams(
 		stmt.AST.(*tree.CreateIndex).StorageParams,
 		&indexstorageparam.Setter{IndexDesc: indexDesc},
 	); err != nil {
-		return geoindex.Config{}, err
+		return geopb.Config{}, err
 	}
 	return indexDesc.GeoConfig, nil
 }

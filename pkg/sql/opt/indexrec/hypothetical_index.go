@@ -12,6 +12,7 @@ package indexrec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -214,7 +215,7 @@ func (hi *hypotheticalIndex) ImplicitPartitioningColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
-func (hi *hypotheticalIndex) GeoConfig() geoindex.Config {
+func (hi *hypotheticalIndex) GeoConfig() geopb.Config {
 	if hi.IsInverted() {
 		srcCol := hi.tab.Column(hi.InvertedColumn().InvertedSourceColumnOrdinal())
 		switch srcCol.DatumType().Family() {
@@ -224,7 +225,7 @@ func (hi *hypotheticalIndex) GeoConfig() geoindex.Config {
 			return *geoindex.DefaultGeographyIndexConfig()
 		}
 	}
-	return geoindex.Config{}
+	return geopb.Config{}
 }
 
 // Version is part of the cat.Index interface.

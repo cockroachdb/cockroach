@@ -688,8 +688,8 @@ func (b *stringBuilderWithWrap) doWrap() {
 }
 
 // DefaultS2Config returns the default S2Config to initialize.
-func DefaultS2Config() *S2Config {
-	return &S2Config{
+func DefaultS2Config() *geopb.S2Config {
+	return &geopb.S2Config{
 		MinLevel: 0,
 		MaxLevel: 30,
 		LevelMod: 1,
