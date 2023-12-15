@@ -55,8 +55,7 @@ type Dependencies interface {
 	// of checking whether CCL features are enabled.
 	ClusterID() uuid.UUID
 
-	// Codec returns the current session data, as in execCfg.
-	// So far this is used only to build a eval.Context.
+	// Codec returns the current SQL codec.
 	Codec() keys.SQLCodec
 
 	// Statements returns the statements behind this schema change.
