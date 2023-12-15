@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq"
 )
 
 var _ error = (*Error)(nil)
@@ -40,12 +39,11 @@ func FullError(err error) string {
 	if err == nil {
 		panic("FullError should not be called with nil input")
 	}
-	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
-		errString = formatMsgHintDetail("pq", pqErr.Message, pqErr.Hint, pqErr.Detail)
-	} else {
-		pg := Flatten(err)
-		errString = formatMsgHintDetail(pg.Severity, err.Error(), pg.Hint, pg.Detail)
+	if formatted, ok := fullErrorFromPQ(err); ok {
+		return formatted
 	}
+	pg := Flatten(err)
+	errString = formatMsgHintDetail(pg.Severity, err.Error(), pg.Hint, pg.Detail)
 	return errString
 }
 

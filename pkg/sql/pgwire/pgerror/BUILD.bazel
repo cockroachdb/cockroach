@@ -10,6 +10,8 @@ go_library(
         "flatten.go",
         "internal_errors.go",
         "pgcode.go",
+        "pq.go",
+        "pq_wasm.go",
         "severity.go",
         "with_candidate_code.go",
         "wrap.go",
@@ -23,8 +25,45 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//proto",
-        "@com_github_lib_pq//:pq",
-    ],
+    ] + select({
+        "@io_bazel_rules_go//go/platform:386": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:amd64": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:arm": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:arm64": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:mips": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:mips64": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:mips64le": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:mipsle": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:ppc64": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:ppc64le": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:riscv64": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "@io_bazel_rules_go//go/platform:s390x": [
+            "@com_github_lib_pq//:pq",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 go_test(
