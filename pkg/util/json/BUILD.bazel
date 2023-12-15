@@ -19,8 +19,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/json",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo",
-        "//pkg/geo/geopb",
         "//pkg/keysbase",
         "//pkg/sql/inverted",
         "//pkg/sql/pgwire/pgcode",
