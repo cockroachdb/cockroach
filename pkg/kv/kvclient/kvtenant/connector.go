@@ -686,7 +686,7 @@ func (c *connector) getRangeDescs(
 			continue
 		}
 		stream, err := client.GetRangeDescriptors(streamCtx, &kvpb.GetRangeDescriptorsRequest{
-			Span: span,
+			Span: span, BatchSize: int64(pageSize),
 		})
 		if err != nil {
 			// TODO(arul): We probably don't want to treat all errors here as "soft".
