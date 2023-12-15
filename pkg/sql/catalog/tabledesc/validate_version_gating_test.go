@@ -116,7 +116,7 @@ func TestIndexDoesNotStorePrimaryKeyColumnMixedVersion(t *testing.T) {
 	// Assert cluster version upgrade is blocked.
 	require.Equal(t, [][]string{{"1000023.1"}}, tdb.QueryStr(t, "SHOW CLUSTER SETTING version;"))
 	_, err := sqlDB.Exec(`SET CLUSTER SETTING version = $1`, clusterversion.Latest.String())
-	require.Equal(t, `pq: internal error: verifying precondition for version 1000023.1-upgrading-to-1000023.2-step-002: "".crdb_internal.invalid_objects is not empty`, err.Error())
+	require.ErrorContains(t, err, `verifying precondition for version 1000023.1-upgrading-to-1000023.2-step-002: "".crdb_internal.invalid_objects is not empty`)
 }
 
 // mustInsertDescToDB decode a table descriptor from a hex-encoded string and insert
