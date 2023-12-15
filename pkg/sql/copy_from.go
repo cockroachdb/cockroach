@@ -1078,6 +1078,10 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 
 // insertRowsInternal transforms the buffered rows into an insertNode and executes it.
 func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (retErr error) {
+	numRows := c.currentBatchSize()
+	if numRows == 0 {
+		return nil
+	}
 	cleanup := c.p.preparePlannerForCopy(ctx, &c.txnOpt, finalBatch, c.implicitTxn)
 	defer func() {
 		retErr = cleanup(ctx, retErr)
@@ -1086,10 +1090,6 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 		if err := c.p.ExecCfg().TestingKnobs.BeforeCopyFromInsert(c.txnOpt.txn); err != nil {
 			return err
 		}
-	}
-	numRows := c.currentBatchSize()
-	if numRows == 0 {
-		return nil
 	}
 	// TODO(cucaroach): Investigate caching memo/plan/etc so that we don't
 	// rebuild everything for every batch.
