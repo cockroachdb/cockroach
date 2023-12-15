@@ -242,8 +242,10 @@
         "exclude_files": {
             "pkg/.*\\.eg\\.go$": "generated code",
             "cockroach/pkg/roachprod/logger/log\\.go$": "format argument is not a constant expression",
-            "cockroach/pkg/util/log/channels\\.go$": "format argument is not a constant expression",
-            "pkg/util/log/log_channels_generated\\.go$": "format argument is not a constant expression"
+            "pkg/util/log/channels\\.go$": "format argument is not a constant expression",
+            "pkg/util/log/log\\.go$": "format argument is not a constant expression",
+            "pkg/util/log/log_channels_generated\\.go$": "format argument is not a constant expression",
+            "pkg/util/log/logbase/log_base\\.go$": "format argument is not a constant expression"
         },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code",

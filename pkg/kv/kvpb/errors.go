@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -432,7 +432,7 @@ func (e *Error) checkTxnStatusValid() {
 		return
 	}
 	if txn.Status.IsFinalized() {
-		log.Fatalf(context.TODO(), "transaction unexpectedly finalized in (%T): %v", err, e)
+		logbase.Fatalf(context.TODO(), "transaction unexpectedly finalized in (%T): %v", err, e)
 	}
 }
 
@@ -658,7 +658,7 @@ func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ris ...roac
 	for _, ri := range ris {
 		if !ri.Lease.Empty() {
 			if _, ok := ri.Desc.GetReplicaDescriptorByID(ri.Lease.Replica.ReplicaID); !ok {
-				log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", ri.Lease, ri.Desc)
+				logbase.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", ri.Lease, ri.Desc)
 			}
 		}
 		e.Ranges = append(e.Ranges, ri)
@@ -1559,10 +1559,10 @@ func NewRefreshFailedError(
 		o.apply(&options)
 	}
 	if reason == RefreshFailedError_REASON_INTENT && options.conflictingTxn == nil {
-		log.Fatal(ctx, "conflictingTxn should be set if refresh failed with REASON_INTENT")
+		logbase.Fatalf(ctx, "conflictingTxn should be set if refresh failed with REASON_INTENT")
 	}
 	if reason != RefreshFailedError_REASON_INTENT && options.conflictingTxn != nil {
-		log.Fatal(ctx, "conflictingTxn should not be set if refresh failed without REASON_INTENT")
+		logbase.Fatalf(ctx, "conflictingTxn should not be set if refresh failed without REASON_INTENT")
 	}
 	return &RefreshFailedError{
 		Reason:         reason,

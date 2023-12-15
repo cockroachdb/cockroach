@@ -13,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/syncutil",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/log/logbase",
         "@com_github_sasha_s_go_deadlock//:go-deadlock",  # keep
     ],
 )
@@ -29,5 +30,8 @@ go_test(
         "mutex_tracing_test.go",
     ],
     embed = [":syncutil"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/util/log/logbase",
+        "@com_github_stretchr_testify//require",
+    ],
 )
