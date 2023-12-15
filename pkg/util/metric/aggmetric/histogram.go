@@ -127,8 +127,8 @@ func (a *AggHistogram) TotalWindowed() (int64, float64) {
 }
 
 // Total is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) Total() (int64, float64) {
-	return a.h.Total()
+func (a *AggHistogram) Total(hist *prometheusgo.Metric) (int64, float64) {
+	return a.h.Total(hist)
 }
 
 // MeanWindowed is part of the metric.WindowedHistogram interface

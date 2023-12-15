@@ -101,7 +101,7 @@ func (h *HdrHistogram) RecordValue(v int64) {
 }
 
 // Total returns the (cumulative) number of samples and sum of samples.
-func (h *HdrHistogram) Total() (int64, float64) {
+func (h *HdrHistogram) Total(_ *prometheusgo.Metric) (int64, float64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	totalSum := float64(h.mu.cumulative.TotalCount()) * h.mu.cumulative.Mean()

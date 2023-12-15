@@ -97,13 +97,16 @@ type PrometheusIterable interface {
 type WindowedHistogram interface {
 	// TotalWindowed returns the number of samples and their sum (respectively)
 	// in the current window.
+	// TODO(abarganier): Take in histogram window as a parameter.
 	TotalWindowed() (int64, float64)
-	// Total returns the number of samples and their sum (respectively) in the
-	// cumulative histogram.
-	Total() (int64, float64)
+	// Total returns the number of samples and their sum (respectively). Generally,
+	// this should be done against a cumulative histogram.
+	Total(hist *prometheusgo.Metric) (int64, float64)
 	// MeanWindowed returns the average of the samples in the current window.
+	// TODO(abarganier): Take in histogram window as a parameter.
 	MeanWindowed() float64
 	// Mean returns the average of the sample in the cumulative histogram.
+	// TODO(abarganier): Take in cumulative histogram as a parameter.
 	Mean() float64
 	// ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
 	// interpolated value at that quantile for the windowed histogram.
@@ -371,7 +374,7 @@ type IHistogram interface {
 	tick.Periodic
 
 	RecordValue(n int64)
-	Total() (int64, float64)
+	Total(hist *prometheusgo.Metric) (int64, float64)
 	Mean() float64
 }
 
@@ -465,8 +468,8 @@ func (h *Histogram) Inspect(f func(interface{})) {
 }
 
 // Total returns the (cumulative) number of samples and the sum of all samples.
-func (h *Histogram) Total() (int64, float64) {
-	pHist := h.ToPrometheusMetric().Histogram
+func (h *Histogram) Total(hist *prometheusgo.Metric) (int64, float64) {
+	pHist := hist.Histogram
 	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
 }
 
@@ -694,8 +697,8 @@ func (mwh *ManualWindowHistogram) TotalWindowed() (int64, float64) {
 }
 
 // Total implements the WindowedHistogram interface.
-func (mwh *ManualWindowHistogram) Total() (int64, float64) {
-	h := mwh.ToPrometheusMetric().Histogram
+func (mwh *ManualWindowHistogram) Total(hist *prometheusgo.Metric) (int64, float64) {
+	h := hist.Histogram
 	return int64(h.GetSampleCount()), h.GetSampleSum()
 }
 
