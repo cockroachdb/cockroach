@@ -333,7 +333,7 @@ func runBackupProcessor(
 			remainingSpan := fullSpan
 
 			if rangeSizedSpans {
-				rdi, err := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).RangeDescIteratorFactory.NewIterator(ctx, fullSpan)
+				rdi, err := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).RangeDescIteratorFactory.NewLazyIterator(ctx, fullSpan)
 				if err != nil {
 					return err
 				}
@@ -346,6 +346,9 @@ func runBackupProcessor(
 					}
 					requestSpans = append(requestSpans, spanAndTime{span: subspan, start: start, end: end})
 					remainingSpan.Key = subspan.EndKey
+				}
+				if err := rdi.Error(); err != nil {
+					return err
 				}
 			}
 
