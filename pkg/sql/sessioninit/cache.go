@@ -291,6 +291,7 @@ func (a *Cache) GetDefaultSettings(
 			// If dbDesc is nil, the database name was not valid, but that should
 			// not cause a login-preventing error.
 			if dbDesc != nil {
+				log.Sessions.Infof(ctx, "provided database, %s, does not exist", databaseName)
 				databaseID = dbDesc.GetID()
 			}
 		}
