@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.geo.geoindex;
-option go_package = "github.com/cockroachdb/cockroach/pkg/geo/geoindex";
+package cockroach.geo.geopb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/geo/geopb";
 
 import "gogoproto/gogo.proto";
 

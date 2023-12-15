@@ -16,7 +16,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb";
 import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
 import "sql/catalog/catenumpb/index.proto";
-import "geo/geoindex/config.proto";
+import "geo/geopb/config.proto";
 
 // IndexFetchSpec contains the subset of information (from TableDescriptor and
 // IndexDescriptor) that is necessary to decode KVs into SQL keys and values.
@@ -89,7 +89,7 @@ message IndexFetchSpec {
   optional bool is_unique_index = 7 [(gogoproto.nullable) = false];
 
   // GeoConfig is used if we are fetching an inverted geospatial index.
-  optional geo.geoindex.Config geo_config = 16 [(gogoproto.nullable) = false];
+  optional geo.geopb.Config geo_config = 16 [(gogoproto.nullable) = false];
 
   // EncodingType represents what sort of k/v encoding is used to store the
   // table data.

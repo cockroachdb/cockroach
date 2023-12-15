@@ -18,7 +18,7 @@ import "sql/sem/semenumpb/constraint.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
-import "geo/geoindex/config.proto";
+import "geo/geopb/config.proto";
 
 option (gogoproto.equal_all) = true;
 
@@ -255,7 +255,7 @@ message Index {
   uint32 source_index_id = 21 [(gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
   uint32 temporary_index_id = 22 [(gogoproto.customname) = "TemporaryIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 
-  cockroach.geo.geoindex.Config geo_config = 24 [(gogoproto.nullable) = true];
+  cockroach.geo.geopb.Config geo_config = 24 [(gogoproto.nullable) = true];
 
   // IsNotVisible specifies whether this index is not visible.
   // NOTE: THIS FIELD IS DEPRECATED in favor of invisibility.

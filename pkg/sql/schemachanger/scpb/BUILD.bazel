@@ -36,7 +36,7 @@ go_proto_library(
     proto = ":scpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/sem/catid",  # keep
@@ -55,7 +55,7 @@ proto_library(
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo/geoindex:geoindex_proto",
+        "//pkg/geo/geopb:geopb_proto",
         "//pkg/sql/catalog/catenumpb:catenumpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
         "//pkg/sql/sem/semenumpb:semenumpb_proto",

@@ -22,7 +22,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",

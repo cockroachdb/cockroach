@@ -13,7 +13,7 @@ package evalcatalog
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -74,14 +74,14 @@ func getIndexGeoConfig(
 	txn *kv.Txn,
 	tableID catid.DescID,
 	indexID catid.IndexID,
-) (geoindex.Config, error) {
+) (geopb.Config, error) {
 	tableDesc, err := dc.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, tableID)
 	if err != nil {
-		return geoindex.Config{}, err
+		return geopb.Config{}, err
 	}
 	index, err := catalog.MustFindIndexByID(tableDesc, indexID)
 	if err != nil {
-		return geoindex.Config{}, err
+		return geopb.Config{}, err
 	}
 	return index.GetGeoConfig(), nil
 }
