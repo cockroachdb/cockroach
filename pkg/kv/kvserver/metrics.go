@@ -781,6 +781,18 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaStorageSingleDelInvariantViolationCount = metric.Metadata{
+		Name:        "storage.single-delete.invariant-violation",
+		Help:        "Number of SingleDelete invariant violations",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaStorageSingleDelIneffectualCount = metric.Metadata{
+		Name:        "storage.single-delete.ineffectual",
+		Help:        "Number of SingleDeletes that were ineffectual",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaSharedStorageBytesWritten = metric.Metadata{
 		Name:        "storage.shared-storage.write",
 		Help:        "Bytes written to external storage",
@@ -2408,6 +2420,8 @@ type StoreMetrics struct {
 	RdbLevelScore                     [7]*metric.GaugeFloat64 // idx = level
 	RdbWriteStalls                    *metric.Gauge
 	RdbWriteStallNanos                *metric.Gauge
+	SingleDelInvariantViolations      *metric.Gauge
+	SingleDelIneffectualCount         *metric.Gauge
 	SharedStorageBytesRead            *metric.Gauge
 	SharedStorageBytesWritten         *metric.Gauge
 	SecondaryCacheSize                *metric.Gauge
@@ -3089,6 +3103,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		IterExternalSteps:                 metric.NewGauge(metaIterExternalSteps),
 		IterInternalSeeks:                 metric.NewGauge(metaIterInternalSeeks),
 		IterInternalSteps:                 metric.NewGauge(metaIterInternalSteps),
+		SingleDelInvariantViolations:      metric.NewGauge(metaStorageSingleDelInvariantViolationCount),
+		SingleDelIneffectualCount:         metric.NewGauge(metaStorageSingleDelIneffectualCount),
 		SharedStorageBytesRead:            metric.NewGauge(metaSharedStorageBytesRead),
 		SharedStorageBytesWritten:         metric.NewGauge(metaSharedStorageBytesWritten),
 		SecondaryCacheSize:                metric.NewGauge(metaSecondaryCacheSize),
@@ -3488,6 +3504,8 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.StorageCompactionsPinnedKeys.Update(int64(m.Snapshots.PinnedKeys))
 	sm.StorageCompactionsPinnedBytes.Update(int64(m.Snapshots.PinnedSize))
 	sm.StorageCompactionsDuration.Update(int64(m.Compact.Duration))
+	sm.SingleDelInvariantViolations.Update(m.SingleDelInvariantViolationCount)
+	sm.SingleDelIneffectualCount.Update(m.SingleDelIneffectualCount)
 	sm.SharedStorageBytesRead.Update(m.SharedStorageReadBytes)
 	sm.SharedStorageBytesWritten.Update(m.SharedStorageWriteBytes)
 	sm.SecondaryCacheSize.Update(m.SecondaryCacheMetrics.Size)
