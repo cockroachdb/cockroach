@@ -3403,6 +3403,10 @@ func (m *sessionDataMutator) SetCopyQualityOfService(val sessiondatapb.QoSLevel)
 	m.data.CopyTxnQualityOfService = val.Validate()
 }
 
+func (m *sessionDataMutator) SetCopyWritePipeliningEnabled(val bool) {
+	m.data.CopyWritePipeliningEnabled = val
+}
+
 func (m *sessionDataMutator) SetOptSplitScanLimit(val int32) {
 	m.data.OptSplitScanLimit = val
 }

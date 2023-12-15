@@ -5485,6 +5485,7 @@ client_min_messages                                        notice
 copy_from_atomic_enabled                                   on
 copy_from_retries_enabled                                  on
 copy_transaction_quality_of_service                        background
+copy_write_pipelining_enabled                              off
 cost_scans_with_default_col_size                           off
 database                                                   test
 datestyle                                                  ISO, MDY
