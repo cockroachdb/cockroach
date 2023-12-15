@@ -207,7 +207,19 @@ func (i *impl) Scan(
 // NewIterator implements the IteratorFactory interface.
 func (i *impl) NewIterator(ctx context.Context, span roachpb.Span) (Iterator, error) {
 	var rangeDescriptors []roachpb.RangeDescriptor
-	err := i.Scan(ctx, 0 /* pageSize */, func() {
+	// We need to set a non-zero page size here since otherwise Scan will read all
+	// of the span between our span start and MetaMax into a slice when it calls
+	// txn.Scan, even if it later filters to only some small subset that intersect
+	// our span. This can be problem if NewIterator is called on many small spans,
+	// as each call re-reads the entire suffix of Meta1/2.
+	//
+	// A value of 128 is likely to still mean we will scan many more descs than a
+	// small span needs, but is a tradeoff for keeping the number of underlying
+	// trips to meta1/2 reasonable for a huge (say 10k range) span, though such
+	// callers would be better off with Scan anyway as this method buffers all of
+	// the descs eagerly.
+	const pageSize = 128
+	err := i.Scan(ctx, pageSize, func() {
 		rangeDescriptors = rangeDescriptors[:0] // retryable
 	}, span, func(descriptors ...roachpb.RangeDescriptor) error {
 		rangeDescriptors = append(rangeDescriptors, descriptors...)
