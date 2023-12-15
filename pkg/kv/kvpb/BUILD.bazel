@@ -159,5 +159,8 @@ batch_gen(
 
 disallowed_imports_test(
     "kvpb",
+    [
+        "//pkg/geo",
+    ],
     disallow_cdeps = True,
 )
