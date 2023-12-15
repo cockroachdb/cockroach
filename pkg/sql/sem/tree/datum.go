@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
@@ -3494,6 +3495,11 @@ func (d *DGeography) Size() uintptr {
 	return d.Geography.SpatialObjectRef().MemSize()
 }
 
+// ToJSON converts the DGeography to JSON.
+func (d *DGeography) ToJSON() (json.JSON, error) {
+	return spatialObjectToJSON(d.Geography.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
+}
+
 // DGeometry is the Geometry Datum.
 type DGeometry struct {
 	geo.Geometry
@@ -3614,6 +3620,11 @@ func (d *DGeometry) Format(ctx *FmtCtx) {
 // Size implements the Datum interface.
 func (d *DGeometry) Size() uintptr {
 	return d.Geometry.SpatialObjectRef().MemSize()
+}
+
+// ToJSON converts the DGeometry to JSON.
+func (d *DGeometry) ToJSON() (json.JSON, error) {
+	return spatialObjectToJSON(d.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
 }
 
 type DPGLSN struct {
@@ -4032,9 +4043,9 @@ func AsJSON(
 			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
 		), nil
 	case *DGeometry:
-		return json.FromSpatialObject(t.Geometry.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
+		return t.ToJSON()
 	case *DGeography:
-		return json.FromSpatialObject(t.Geography.SpatialObject(), geo.DefaultGeoJSONDecimalDigits)
+		return t.ToJSON()
 	case *DVoid:
 		return json.FromString(AsStringWithFlags(t, fmtRawStrings)), nil
 	default:
@@ -4044,6 +4055,14 @@ func AsJSON(
 
 		return nil, errors.AssertionFailedf("unexpected type %T for AsJSON", d)
 	}
+}
+
+func spatialObjectToJSON(so geopb.SpatialObject, numDecimalDigits int) (json.JSON, error) {
+	j, err := geo.SpatialObjectToGeoJSON(so, numDecimalDigits, geo.SpatialObjectToGeoJSONFlagZero)
+	if err != nil {
+		return nil, err
+	}
+	return json.ParseJSON(string(j))
 }
 
 // formatTime formats time with specified layout.
