@@ -33,6 +33,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/hlc",
-        "//pkg/util/log",
+        "//pkg/util/log/logbase",
     ],
 )

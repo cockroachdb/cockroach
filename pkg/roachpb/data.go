@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -1051,7 +1051,7 @@ func (t Transaction) Clone() *Transaction {
 // AssertInitialized crashes if the transaction is not initialized.
 func (t *Transaction) AssertInitialized(ctx context.Context) {
 	if t.ID == (uuid.UUID{}) || t.WriteTimestamp.IsEmpty() {
-		log.Fatalf(ctx, "uninitialized txn: %s", *t)
+		logbase.Fatalf(ctx, "uninitialized txn: %s", *t)
 	}
 }
 
@@ -1247,7 +1247,7 @@ func (t *Transaction) Update(o *Transaction) {
 		*t = *o
 		return
 	} else if t.ID != o.ID {
-		log.Fatalf(ctx, "updating txn %s with different txn %s", t.String(), o.String())
+		logbase.Fatalf(ctx, "updating txn %s with different txn %s", t.String(), o.String())
 		return
 	}
 	if len(t.Key) == 0 {
@@ -1262,7 +1262,7 @@ func (t *Transaction) Update(o *Transaction) {
 		if !t.Status.IsFinalized() {
 			t.Status = o.Status
 		} else if t.Status == COMMITTED {
-			log.Warningf(ctx, "updating COMMITTED txn %s with txn at later epoch %s", t.String(), o.String())
+			logbase.Warningf(ctx, "updating COMMITTED txn %s with txn at later epoch %s", t.String(), o.String())
 		}
 		// Replace all epoch-scoped state.
 		t.Epoch = o.Epoch
@@ -1283,7 +1283,7 @@ func (t *Transaction) Update(o *Transaction) {
 			}
 		case ABORTED:
 			if o.Status == COMMITTED {
-				log.Warningf(ctx, "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
+				logbase.Warningf(ctx, "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
 			}
 		case COMMITTED:
 			// Nothing to do.
@@ -1328,7 +1328,7 @@ func (t *Transaction) Update(o *Transaction) {
 			// aborted.
 			t.Status = ABORTED
 		case COMMITTED:
-			log.Warningf(ctx, "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
+			logbase.Warningf(ctx, "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
 		}
 	}
 

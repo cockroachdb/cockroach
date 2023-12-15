@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logbase"
 )
 
 // FromTimestamp constructs a read summary from the provided timestamp, treating
@@ -55,7 +55,7 @@ func (c *ReadSummary) AssertNoRegression(ctx context.Context, o ReadSummary) {
 
 func (c *Segment) assertNoRegression(ctx context.Context, o Segment, name string) {
 	if c.LowWater.Less(o.LowWater) {
-		log.Fatalf(ctx, "read summary regression in %s segment, was %s, now %s",
+		logbase.Fatalf(ctx, "read summary regression in %s segment, was %s, now %s",
 			name, o.LowWater, c.LowWater)
 	}
 }
