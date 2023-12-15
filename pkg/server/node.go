@@ -2569,7 +2569,8 @@ func (n *Node) SpanConfigConformance(
 func (n *Node) GetRangeDescriptors(
 	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
-	iter, err := n.execCfg.RangeDescIteratorFactory.NewIterator(stream.Context(), args.Span)
+
+	iter, err := n.execCfg.RangeDescIteratorFactory.NewLazyIterator(stream.Context(), args.Span, int(args.BatchSize))
 	if err != nil {
 		return err
 	}
@@ -2577,9 +2578,19 @@ func (n *Node) GetRangeDescriptors(
 	var rangeDescriptors []roachpb.RangeDescriptor
 	for iter.Valid() {
 		rangeDescriptors = append(rangeDescriptors, iter.CurRangeDescriptor())
+		if args.BatchSize > 0 && len(rangeDescriptors) >= int(args.BatchSize) {
+			if err := stream.Send(&kvpb.GetRangeDescriptorsResponse{
+				RangeDescriptors: rangeDescriptors,
+			}); err != nil {
+				return err
+			}
+			rangeDescriptors = make([]roachpb.RangeDescriptor, 0, len(rangeDescriptors))
+		}
 		iter.Next()
 	}
-
+	if err := iter.Error(); err != nil {
+		return err
+	}
 	return stream.Send(&kvpb.GetRangeDescriptorsResponse{
 		RangeDescriptors: rangeDescriptors,
 	})
