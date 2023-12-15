@@ -80,7 +80,16 @@ type LazyIterator interface {
 type IteratorFactory interface {
 	// NewIterator constructs an iterator to iterate over range descriptors for
 	// ranges that overlap with the supplied span.
+	// NB: While this looks like an iterator rather than batch API, note that the
+	// constructor fetches the entirety of the result set and the returned iter is
+	// merely iterating over that buffered result set, so this is actually better
+	// treated as if it is a batch API, eg GetAllRangeDescs(span). Callers should
+	// generally avoid this API and prefer NewLazyIterator which fetches as during
+	// iteration instead. This eager version will be removed once all callers have
+	// been extended to expect/check for errors during iteration.
 	NewIterator(ctx context.Context, span roachpb.Span) (Iterator, error)
+	// NewLazyIterator constructs an iterator to iterate over range descriptors
+	// for ranges that overlap with the supplied span.
 	NewLazyIterator(ctx context.Context, span roachpb.Span, pageSize int) (LazyIterator, error)
 }
 

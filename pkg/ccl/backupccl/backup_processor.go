@@ -333,7 +333,8 @@ func runBackupProcessor(
 			remainingSpan := fullSpan
 
 			if rangeSizedSpans {
-				rdi, err := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).RangeDescIteratorFactory.NewLazyIterator(ctx, fullSpan)
+				const pageSize = 100
+				rdi, err := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig).RangeDescIteratorFactory.NewLazyIterator(ctx, fullSpan, pageSize)
 				if err != nil {
 					return err
 				}
