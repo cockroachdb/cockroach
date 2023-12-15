@@ -228,9 +228,9 @@ func TestAggHistogramRotate(t *testing.T) {
 		require.Zero(t, child1Sum)
 		require.Zero(t, child2Sum)
 		// But cumulative histogram has history (if i > 0).
-		parentCount, _ := h.Total()
-		child1Count, _ := child1.h.Total()
-		child2Count, _ := child2.h.Total()
+		parentCount, _ := h.Total(h.ToPrometheusMetric())
+		child1Count, _ := child1.h.Total(child1.h.ToPrometheusMetric())
+		child2Count, _ := child2.h.Total(child2.h.ToPrometheusMetric())
 		require.EqualValues(t, i, child1Count)
 		require.EqualValues(t, i, child2Count)
 		// The children aggregate into the parent.
