@@ -1634,7 +1634,7 @@ Tier represents one level of the locality hierarchy.
 `GET /_status/tenant_ranges`
 
 TenantRanges requests internal details about all range replicas within
-the tenant's keyspace.
+the tenant's keyspace at the time the request is processed.
 
 Support status: [reserved](#support-status)
 
