@@ -23,7 +23,7 @@ import "sql/catalog/catpb/privilege.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
-import "geo/geoindex/config.proto";
+import "geo/geopb/config.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/metadata.proto";
 
@@ -446,7 +446,7 @@ message IndexDescriptor {
 
   // GeoConfig, if it's not the zero value, describes configuration for
   // this geospatial inverted index.
-  optional geo.geoindex.Config geo_config = 22 [(gogoproto.nullable) = false];
+  optional geo.geopb.Config geo_config = 22 [(gogoproto.nullable) = false];
 
   // Predicate, if it's not empty, indicates that the index is a partial index
   // with Predicate as the expression. If Predicate is empty, the index is not

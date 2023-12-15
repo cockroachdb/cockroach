@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/geo",
         "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/geo/geos",
         "@com_github_golang_geo//s2",
     ],

@@ -5,6 +5,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "geopb",
     srcs = [
+        "config.go",
         "geopb.go",
         "types.go",
     ],
@@ -15,7 +16,10 @@ go_library(
 
 proto_library(
     name = "geopb_proto",
-    srcs = ["geopb.proto"],
+    srcs = [
+        "config.proto",
+        "geopb.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
