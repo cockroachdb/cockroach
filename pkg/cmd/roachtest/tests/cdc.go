@@ -1622,8 +1622,14 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
-
-			fmt.Println()
+			kafkaNode := ct.kafkaSinkNode()
+			kafka, cleanup := setupKafka(ctx, t, c, kafkaNode)
+			defer cleanup()
+			fmt.Println("before installAzureCli")
+			if err := kafka.installAzureCli(ctx); err != nil {
+				kafka.t.Fatal(err)
+			}
+			fmt.Println("after installAzureCli")
 
 			// Just use 1 warehouse and no initial scan since this would involve
 			// cross-cloud traffic which is far more expensive.  The throughput also
@@ -2157,6 +2163,23 @@ func (k kafkaManager) installJRE(ctx context.Context) error {
 			return err
 		}
 		return k.c.RunE(ctx, k.nodes, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install openssl default-jre maven 2>&1 > logs/apt-get-install.log`)
+	})
+}
+
+func (k kafkaManager) installAzureCli(ctx context.Context) error {
+	fmt.Println("installAzureCli called HERE")
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Minute,
+		MaxBackoff:     5 * time.Minute,
+	}
+	return retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
+		if err := k.c.RunE(ctx, k.nodes, `echo "deb https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/azure-cli.list`); err != nil {
+			return err
+		}
+		if err := k.c.RunE(ctx, k.nodes, `sudo apt-get -q update 2>&1 >> logs/apt-get-update.log`); err != nil {
+			return err
+		}
+		return k.c.RunE(ctx, k.nodes, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install azure-cli 2>&1 >> logs/apt-get-install.log`)
 	})
 }
 
