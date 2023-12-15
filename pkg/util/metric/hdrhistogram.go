@@ -101,11 +101,8 @@ func (h *HdrHistogram) RecordValue(v int64) {
 }
 
 // Total returns the (cumulative) number of samples and sum of samples.
-func (h *HdrHistogram) Total(_ *prometheusgo.Metric) (int64, float64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	totalSum := float64(h.mu.cumulative.TotalCount()) * h.mu.cumulative.Mean()
-	return h.mu.cumulative.TotalCount(), totalSum
+func (h *HdrHistogram) Total(hist *prometheusgo.Metric) (int64, float64) {
+	return int64(hist.Histogram.GetSampleCount()), hist.Histogram.GetSampleSum()
 }
 
 // Min returns the minimum.
@@ -187,15 +184,6 @@ func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return &prometheusgo.Metric{
 		Histogram: hist,
 	}
-}
-
-// TotalWindowed implements the WindowedHistogram interface.
-func (h *HdrHistogram) TotalWindowed() (int64, float64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	hist := h.mu.sliding.Merge()
-	totalSum := float64(hist.TotalCount()) * hist.Mean()
-	return hist.TotalCount(), totalSum
 }
 
 func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {

@@ -150,12 +150,6 @@ func (h *runtimeHistogram) GetMetadata() metric.Metadata {
 // Inspect is part of the Iterable interface.
 func (h *runtimeHistogram) Inspect(f func(interface{})) { f(h) }
 
-// TotalWindowed implements the WindowedHistogram interface.
-func (h *runtimeHistogram) TotalWindowed() (int64, float64) {
-	// TODO(abarganier): take in windowed histogram as a parameter.
-	return int64(h.ToPrometheusMetricWindowed().Histogram.GetSampleCount()), h.ToPrometheusMetricWindowed().Histogram.GetSampleSum()
-}
-
 // Total implements the WindowedHistogram interface.
 func (h *runtimeHistogram) Total(hist *prometheusgo.Metric) (int64, float64) {
 	pHist := hist.Histogram
