@@ -300,7 +300,7 @@ func TestNewHistogramRotate(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		// Windowed histogram is initially empty.
 		h.Inspect(func(interface{}) {}) // triggers ticking
-		_, sum := h.TotalWindowed()
+		_, sum := h.Total(h.ToPrometheusMetricWindowed())
 		require.Zero(t, sum)
 		// But cumulative histogram has history (if i > 0).
 		cumulative := h.ToPrometheusMetric()
@@ -310,7 +310,7 @@ func TestNewHistogramRotate(t *testing.T) {
 		{
 			h.RecordValue(12345)
 			f := float64(12345) + sum
-			_, wSum := h.TotalWindowed()
+			_, wSum := h.Total(h.ToPrometheusMetricWindowed())
 			require.Equal(t, wSum, f)
 		}
 		// Tick. This rotates the histogram.
