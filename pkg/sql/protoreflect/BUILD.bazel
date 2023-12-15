@@ -28,7 +28,7 @@ go_test(
     ],
     embed = [":protoreflect"],
     deps = [
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/sql/catalog/catenumpb",

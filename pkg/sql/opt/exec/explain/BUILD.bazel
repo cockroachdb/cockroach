@@ -16,7 +16,7 @@ go_library(
     visibility = ["//visibility:public"],
     # Pin the dependencies used in auto-generated code.
     deps = [
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/roachpb",
         "//pkg/sql/appstatspb",

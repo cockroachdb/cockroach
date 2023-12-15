@@ -987,7 +987,7 @@ func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error
 // EncodeGeoInvertedIndexTableKeys is the equivalent of EncodeInvertedIndexTableKeys
 // for Geography and Geometry.
 func EncodeGeoInvertedIndexTableKeys(
-	val tree.Datum, inKey []byte, indexGeoConfig geoindex.Config,
+	val tree.Datum, inKey []byte, indexGeoConfig geopb.Config,
 ) (key [][]byte, err error) {
 	if val == tree.DNull {
 		return nil, nil

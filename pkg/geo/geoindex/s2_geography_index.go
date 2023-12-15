@@ -36,7 +36,7 @@ var _ GeographyIndex = (*s2GeographyIndex)(nil)
 // since deletes could miss some index entries. Currently, reads could use a
 // different configuration, but that is subject to change if we manage to
 // strengthen the covering invariants (see the todo in covers() in index.go).
-func NewS2GeographyIndex(cfg S2GeographyConfig) GeographyIndex {
+func NewS2GeographyIndex(cfg geopb.S2GeographyConfig) GeographyIndex {
 	// TODO(sumeer): Sanity check cfg.
 	return &s2GeographyIndex{
 		rc: &s2.RegionCoverer{
@@ -49,9 +49,9 @@ func NewS2GeographyIndex(cfg S2GeographyConfig) GeographyIndex {
 }
 
 // DefaultGeographyIndexConfig returns a default config for a geography index.
-func DefaultGeographyIndexConfig() *Config {
-	return &Config{
-		S2Geography: &S2GeographyConfig{S2Config: DefaultS2Config()},
+func DefaultGeographyIndexConfig() *geopb.Config {
+	return &geopb.Config{
+		S2Geography: &geopb.S2GeographyConfig{S2Config: DefaultS2Config()},
 	}
 }
 

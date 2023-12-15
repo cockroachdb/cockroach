@@ -16,7 +16,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb";
 import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
 import "sql/catalog/catenumpb/index.proto";
-import "geo/geoindex/config.proto";
+import "geo/geopb/config.proto";
 
 // IndexFetchSpec contains the subset of information (from TableDescriptor and
 // IndexDescriptor) that is necessary to decode KVs into SQL keys and values.

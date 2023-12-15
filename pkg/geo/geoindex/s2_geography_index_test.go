@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogfn"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
@@ -38,7 +39,7 @@ func TestS2GeographyIndexBasic(t *testing.T) {
 		switch d.Cmd {
 		case "init":
 			cfg := s2Config(t, d)
-			index = NewS2GeographyIndex(S2GeographyConfig{S2Config: &cfg})
+			index = NewS2GeographyIndex(geopb.S2GeographyConfig{S2Config: &cfg})
 			return ""
 		case "geometry":
 			g, err := geo.ParseGeography(d.Input)
