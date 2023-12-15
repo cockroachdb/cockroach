@@ -3798,9 +3798,6 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		}
 	case txnStart:
 		ex.recordTransactionStart(advInfo.txnEvent.txnID)
-		// Start of the transaction, so no statements were executed earlier.
-		// Bump the txn counter for logging.
-		ex.extraTxnState.txnCounter.Add(1)
 
 		// Session is considered active when executing a transaction.
 		ex.totalActiveTimeStopWatch.Start()
