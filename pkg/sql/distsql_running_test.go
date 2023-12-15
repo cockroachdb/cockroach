@@ -183,7 +183,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		// the root txn meta to leaf txns. Local flows can start in aborted txns
 		// because they just use the root txn.
 		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, nil,
-			DistributionTypeSystemTenantOnly)
+			DistributionTypeAlways)
 		planCtx.stmtType = recv.stmtType
 
 		execCfg.DistSQLPlanner.PlanAndRun(
