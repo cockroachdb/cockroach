@@ -3427,7 +3427,7 @@ Support status: [reserved](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.DownloadSpanRequest-string) |  |  | [reserved](#support-status) |
-| span | [cockroach.roachpb.Span](#cockroach.server.serverpb.DownloadSpanRequest-cockroach.roachpb.Span) |  |  | [reserved](#support-status) |
+| spans | [cockroach.roachpb.Span](#cockroach.server.serverpb.DownloadSpanRequest-cockroach.roachpb.Span) | repeated |  | [reserved](#support-status) |
 
 
 
