@@ -601,7 +601,7 @@ message EngineStatsResponse {
 
 message DownloadSpanRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
-  roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  repeated roachpb.Span spans = 2 [(gogoproto.nullable) = false];
 }
 
 message DownloadSpanResponse {

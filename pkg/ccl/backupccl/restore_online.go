@@ -43,14 +43,6 @@ var onlineRestoreLinkWorkers = settings.RegisterByteSizeSetting(
 	settings.PositiveInt,
 )
 
-var onlineRestoreDownloadWorkers = settings.RegisterByteSizeSetting(
-	settings.ApplicationLevel,
-	"backup.restore.online_download_worker_count",
-	"workers to use for online restore download phase",
-	1,
-	settings.PositiveInt,
-)
-
 // sendAddRemoteSSTs is a stubbed out, very simplisitic version of restore used
 // to test out ingesting "remote" SSTs. It will be replaced with a real distsql
 // plan and processors in the future.
@@ -303,22 +295,22 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 }
 
 func (r *restoreResumer) sendDownloadWorker(
-	execCtx sql.JobExecContext, downloadSpansCh chan roachpb.Span,
+	execCtx sql.JobExecContext, downloadSpansCh chan roachpb.Spans,
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		ctx, tsp := tracing.ChildSpan(ctx, "backupccl.sendDownloadWorker")
 		defer tsp.Finish()
 		for sp := range downloadSpansCh {
-			log.VInfof(ctx, 1, "sending download request for span %s", sp)
+			log.VInfof(ctx, 1, "sending download request for %d spans", len(sp))
 			var resp *serverpb.DownloadSpanResponse
 			var err error
 			if resp, err = execCtx.ExecCfg().TenantStatusServer.DownloadSpan(ctx, &serverpb.DownloadSpanRequest{
-				Span: sp,
+				Spans: sp,
 			}); err != nil {
 				return err
 			}
 			if len(resp.ErrorsByNodeID) > 0 {
-				return errors.Newf("failed to download span %s on all nodes: %v", sp, resp.ErrorsByNodeID)
+				return errors.Newf("failed to download spans on all nodes: %v", resp.ErrorsByNodeID)
 			}
 		}
 		return nil
@@ -389,20 +381,12 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 	details := r.job.Details().(jobspb.RestoreDetails)
 
 	grp := ctxgroup.WithContext(ctx)
-	downloadSpansCh := make(chan roachpb.Span, len(details.DownloadSpans))
-	grp.GoCtx(func(ctx context.Context) error {
-		defer close(downloadSpansCh)
-		for _, span := range details.DownloadSpans {
-			downloadSpansCh <- span
-		}
-		return nil
-	})
+	downloadSpansCh := make(chan roachpb.Spans, 1)
 
-	restoreWorkers := int(onlineRestoreDownloadWorkers.Get(&execCtx.ExecCfg().Settings.SV))
-	for i := 0; i < restoreWorkers; i++ {
-		grp.GoCtx(r.sendDownloadWorker(execCtx, downloadSpansCh))
-	}
+	downloadSpansCh <- details.DownloadSpans
+	close(downloadSpansCh)
 
+	grp.GoCtx(r.sendDownloadWorker(execCtx, downloadSpansCh))
 	grp.GoCtx(func(ctx context.Context) error {
 		return r.waitForDownloadToComplete(ctx, execCtx, details)
 	})
