@@ -96,10 +96,6 @@ type PrometheusIterable interface {
 // and values at specific quantiles from "windowed" histograms and record that
 // data directly. These windows could be arbitrary and overlapping.
 type WindowedHistogram interface {
-	// TotalWindowed returns the number of samples and their sum (respectively)
-	// in the current window.
-	// TODO(abarganier): Take in histogram window as a parameter.
-	TotalWindowed() (int64, float64)
 	// Total returns the number of samples and their sum (respectively). Generally,
 	// this should be done against a cumulative histogram.
 	Total(hist *prometheusgo.Metric) (int64, float64)
@@ -435,12 +431,6 @@ func (h *Histogram) Total(hist *prometheusgo.Metric) (int64, float64) {
 	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
 }
 
-// TotalWindowed implements the WindowedHistogram interface.
-func (h *Histogram) TotalWindowed() (int64, float64) {
-	pHist := h.ToPrometheusMetricWindowed().Histogram
-	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
-}
-
 // Mean returns the (cumulative) mean of samples.
 func (h *Histogram) Mean(hist *prometheusgo.Metric) float64 {
 	return hist.Histogram.GetSampleSum() / float64(hist.Histogram.GetSampleCount())
@@ -641,14 +631,6 @@ func (mwh *ManualWindowHistogram) ToPrometheusMetricWindowedLocked() *prometheus
 		MergeWindowedHistogram(cur.Histogram, mwh.mu.prev)
 	}
 	return cur
-}
-
-// TotalWindowed implements the WindowedHistogram interface.
-func (mwh *ManualWindowHistogram) TotalWindowed() (int64, float64) {
-	mwh.mu.RLock()
-	defer mwh.mu.RUnlock()
-	pHist := mwh.ToPrometheusMetricWindowedLocked().Histogram
-	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
 }
 
 // Total implements the WindowedHistogram interface.
