@@ -217,5 +217,5 @@ func (f *fileUploadMachine) writeFile(ctx context.Context, finalBatch bool) erro
 		return err
 	}
 	f.c.insertedRows += f.c.rows.Len()
-	return f.c.rows.UnsafeReset(ctx)
+	return f.c.resetRows(ctx)
 }

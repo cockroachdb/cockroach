@@ -570,7 +570,7 @@ func TestLargeDynamicRows(t *testing.T) {
 	var params base.TestServerArgs
 	var batchNumber int
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		BeforeCopyFromInsert: func(*kv.Txn) error {
+		CopyFromInsertBeforeBatch: func(*kv.Txn) error {
 			batchNumber++
 			return nil
 		},
