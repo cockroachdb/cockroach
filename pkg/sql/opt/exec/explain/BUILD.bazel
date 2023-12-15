@@ -67,7 +67,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/catalog/colinfo",
-        "//pkg/sql/execinfra",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/exec",
         "//pkg/sql/opt/memo",
