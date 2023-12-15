@@ -153,6 +153,7 @@ func TestIteratorEmptyLog(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
 	for _, hi := range []kvpb.RaftIndex{0, 1} {
 		it, err := NewIterator(rangeID, eng, IterOptions{Hi: hi})
 		require.NoError(t, err)
