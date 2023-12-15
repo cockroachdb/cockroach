@@ -692,10 +692,7 @@ func (c *connector) NewIterator(
 			e, err := stream.Recv()
 			if err != nil {
 				if err == io.EOF {
-					return &rangeDescIterator{
-						rangeDescs: rangeDescriptors,
-						curIdx:     0,
-					}, nil
+					return rangedesc.NewSliceIterator(rangeDescriptors), nil
 				}
 				log.Warningf(ctx, "error consuming GetRangeDescriptors RPC: %v", err)
 				if grpcutil.IsAuthError(err) {

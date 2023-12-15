@@ -229,10 +229,11 @@ func (i *impl) NewIterator(ctx context.Context, span roachpb.Span) (Iterator, er
 		return nil, err
 	}
 
-	return &iterator{
-		rangeDescs: rangeDescriptors,
-		curIdx:     0,
-	}, nil
+	return NewSliceIterator(rangeDescriptors), nil
+}
+
+func NewSliceIterator(descs []roachpb.RangeDescriptor) Iterator {
+	return &iterator{rangeDescs: descs}
 }
 
 // iterator is a concrete (private) implementation of the Iterator interface.
