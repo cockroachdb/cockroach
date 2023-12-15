@@ -35,3 +35,19 @@ var PublicSchemaCreatePrivilegeEnabled = settings.RegisterBoolSetting(
 		"schema when it is created",
 	true,
 	settings.WithPublic)
+
+// RestrictAccessToSystemInterface restricts access to certain SQL
+// features from the system tenant/interface. This restriction exists
+// to prevent the following UX surprise:
+//
+//   - end-user desires to achieve a certain outcome in a virtual cluster;
+//   - however, they mess up their connection string and connect to the
+//     system tenant instead;
+//   - without this setting, the resulting SQL would succeed in the
+//     system tenant and the user would not realize they were not
+//     connected to the right place.
+var RestrictAccessToSystemInterface = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"sql.restrict_system_interface.enabled",
+	"if enabled, certain statements produce errors or warnings when run from the system interface to encourage use of a virtual cluster",
+	false)
