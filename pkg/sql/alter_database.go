@@ -561,7 +561,6 @@ func (p *planner) checkCanDropSystemDatabaseRegion(ctx context.Context, region t
 // - either be part of an admin role.
 // - or be an owner of the table.
 // - or have the CREATE privilege on the table.
-// privilege on the table descriptor.
 //
 // For the system database, the conditions are more stringent. The user must
 // be the node user, and this must be a secondary tenant.
