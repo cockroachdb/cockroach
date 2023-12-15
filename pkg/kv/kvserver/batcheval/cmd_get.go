@@ -33,6 +33,10 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*kvpb.GetResponse)
 
+	if err := maybeDisallowSkipLockedRequest(h, args.KeyLockingStrength); err != nil {
+		return result.Result{}, err
+	}
+
 	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, h.Timestamp, storage.MVCCGetOptions{
 		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
