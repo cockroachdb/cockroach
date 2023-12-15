@@ -53,4 +53,5 @@ var EnableSerializationConflictEvents = settings.RegisterBoolSetting(
 	"sql.contention.record_serialization_conflicts.enabled",
 	"enables recording 40001 errors with conflicting txn meta as SERIALIZATION_CONFLICT"+
 		"contention events into crdb_internal.transaction_contention_events",
-	false)
+	true,
+	settings.WithPublic)
