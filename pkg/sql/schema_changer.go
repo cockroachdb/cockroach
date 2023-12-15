@@ -3097,11 +3097,9 @@ func DeleteTableDescAndZoneConfig(
 		if err := col.DeleteDescToBatch(ctx, kvTrace, tableDesc.GetID(), b); err != nil {
 			return err
 		}
-		if codec := execCfg.Codec; codec.ForSystemTenant() {
-			// Delete the zone config entry for this table, if necessary.
-			zoneKeyPrefix := config.MakeZoneKeyPrefix(codec, tableDesc.GetID())
-			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-		}
+		// Delete the zone config entry for this table.
+		zoneKeyPrefix := config.MakeZoneKeyPrefix(execCfg.Codec, tableDesc.GetID())
+		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		return txn.KV().Run(ctx, b)
 	})
 }
