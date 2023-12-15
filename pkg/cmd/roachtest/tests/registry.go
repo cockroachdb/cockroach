@@ -31,6 +31,7 @@ func RegisterTests(r registry.Registry) {
 	registerCDC(r)
 	registerCDCBench(r)
 	registerCDCMixedVersions(r)
+	registerCDCSessionFiltering(r)
 	registerExportParquet(r)
 	registerCancel(r)
 	registerChangeReplicasMixedVersion(r)
