@@ -27,14 +27,11 @@ import (
 func registerOnlineRestore(r registry.Registry) {
 	// This driver creates a variety of roachtests to benchmark online restore
 	// performance with the prefix
-	// restore/{online,offline}/workload={true,false}/<workload/scale>). For each
+	// restore/{online,offline}/<workload/scale>). For each
 	// online restore roachtest (prefix restore/online/*), the driver creates a
 	// corresponding roachtest that runs a conventional restore over the same
 	// cluster topology and workload in order to measure post restore query
-	// latency relative to online restore (prefix restore/control/*). Further, the
-	// driver creates an additional roachtest variant where
-	// `/workload={true,false}` determines if the driver will run a foreground
-	// workload after the restore completes.
+	// latency relative to online restore (prefix restore/control/*).
 	for _, sp := range []restoreSpecs{
 		{
 			// 400GB tpce Online Restore
@@ -47,7 +44,7 @@ func registerOnlineRestore(r registry.Registry) {
 		{
 			// 8TB tpce Online Restore
 			hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 2000,
-				ebsThroughput: 250 /* MB/s */}),
+				ebsThroughput: 250 /* MB/s */, workloadNode: true}),
 			backup: makeRestoringBackupSpecs(backupSpecs{
 				nonRevisionHistory: true,
 				version:            "v23.1.11",
