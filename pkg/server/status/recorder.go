@@ -678,11 +678,19 @@ type registryRecorder struct {
 	timestampNanos int64
 }
 
+// extractValue extracts the metric value(s) for the given metric and passes it, along with the metric name, to the
+// provided callback function.
 func extractValue(name string, mtr interface{}, fn func(string, float64)) error {
 	switch mtr := mtr.(type) {
 	case metric.WindowedHistogram:
-		// Use cumulative stats here
-		count, sum := mtr.Total()
+		// Use cumulative stats here. Count and Sum must be calculated against the cumulative histogram.
+		promExportable, ok := mtr.(metric.PrometheusExportable)
+		if !ok {
+			return errors.Newf(`extractValue called on histogram metric %q that does not implement the
+				PrometheusExportable interface. All histogram metrics are expected to implement this interface`, name)
+		}
+		histCumulative := promExportable.ToPrometheusMetric()
+		count, sum := mtr.Total(histCumulative)
 		fn(name+"-count", float64(count))
 		fn(name+"-sum", sum)
 		// Use windowed stats for avg and quantiles

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
 )
@@ -106,9 +107,17 @@ func (t *TSDB) Scrape(ctx context.Context) {
 			if _, ok := t.mu.points[name]; !ok {
 				return
 			}
-			histWindow := mtr.ToPrometheusMetricWindowed()
-			count, _ := mtr.Total()
+			// Use cumulative stats here. Count must be calculated against the cumulative histogram.
+			promExportable, ok := mtr.(metric.PrometheusExportable)
+			if !ok {
+				panic(errors.AssertionFailedf(`extractValue called on histogram metric %q that does not implement the
+				PrometheusExportable interface. All histogram metrics are expected to implement this interface`, name))
+			}
+			histCumulative := promExportable.ToPrometheusMetric()
+			count, _ := mtr.Total(histCumulative)
 			t.mu.points[name+"-count"] = append(t.mu.points[name+"-count"], float64(count))
+			// Use windowed stats for avg and quantiles
+			histWindow := mtr.ToPrometheusMetricWindowed()
 			avg := mtr.MeanWindowed()
 			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 				avg = 0

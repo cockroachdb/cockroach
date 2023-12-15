@@ -303,7 +303,8 @@ func TestNewHistogramRotate(t *testing.T) {
 		_, sum := h.TotalWindowed()
 		require.Zero(t, sum)
 		// But cumulative histogram has history (if i > 0).
-		count, _ := h.Total()
+		cumulative := h.ToPrometheusMetric()
+		count, _ := h.Total(cumulative)
 		require.EqualValues(t, i, count)
 		// Add a measurement and verify it's there.
 		{
