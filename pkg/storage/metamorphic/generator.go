@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
 )
@@ -61,6 +62,21 @@ func (e *engineConfig) create(path string, fs vfs.FS) (storage.Engine, error) {
 	pebbleConfig.Opts.Cache = pebble.NewCache(1 << 20)
 	defer pebbleConfig.Opts.Cache.Unref()
 
+	pebbleConfig.Opts.Experimental.IneffectualSingleDeleteCallback = func(userKey []byte) {
+		// TODO(sumeer): figure out what is causing these callbacks.
+		if false {
+			ek, ok := storage.DecodeEngineKey(userKey)
+			if !ok {
+				log.Fatalf(context.Background(), "unable to decode %s", roachpb.Key(userKey).String())
+			}
+			ltk, err := ek.ToLockTableKey()
+			if err != nil {
+				log.Fatalf(context.Background(), "%s", err.Error())
+			}
+			log.Fatalf(context.Background(), "Ineffectual SingleDel on k=%s str=%s txn=%s",
+				ltk.Key.String(), ltk.Strength.String(), ltk.TxnUUID.String())
+		}
+	}
 	return storage.NewPebble(context.Background(), pebbleConfig)
 }
 
@@ -303,7 +319,7 @@ func (m *metaTestRunner) generateAndRun(n int) {
 	for i := range m.ops {
 		opRun := &m.ops[i]
 		output := opRun.op.run(m.ctx)
-		m.printOp(opRun.name, opRun.args, output)
+		m.printOp(i, opRun.name, opRun.args, output)
 	}
 }
 
@@ -407,7 +423,7 @@ func (m *metaTestRunner) parseFileAndRun(f io.Reader) {
 	for i := range m.ops {
 		op := &m.ops[i]
 		actualOutput := op.op.run(m.ctx)
-		m.printOp(op.name, op.args, actualOutput)
+		actualOutput = m.printOp(i, op.name, op.args, actualOutput)
 		if strings.Compare(strings.TrimSpace(op.expectedOutput), strings.TrimSpace(actualOutput)) != 0 {
 			// Error messages can sometimes mismatch. If both outputs contain "error",
 			// consider this a pass.
@@ -482,7 +498,9 @@ func (m *metaTestRunner) resolveAndAddOp(op *opGenerator, fixedArgs ...string) {
 }
 
 // Print passed-in operation, arguments and output string to output file.
-func (m *metaTestRunner) printOp(opName string, argStrings []string, output string) {
+func (m *metaTestRunner) printOp(
+	index int, opName string, argStrings []string, output string,
+) string {
 	fmt.Fprintf(m.w, "%s(", opName)
 	for i, arg := range argStrings {
 		if i > 0 {
@@ -490,7 +508,9 @@ func (m *metaTestRunner) printOp(opName string, argStrings []string, output stri
 		}
 		fmt.Fprintf(m.w, "%s", arg)
 	}
+	output = fmt.Sprintf("%s // #%d", output, index)
 	fmt.Fprintf(m.w, ") -> %s\n", output)
+	return output
 }
 
 // printComment prints a comment line into the output file. Supports single-line

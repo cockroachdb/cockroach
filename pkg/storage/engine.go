@@ -1189,6 +1189,13 @@ type Metrics struct {
 	// DiskStallCount counts the number of times Pebble observes slow writes
 	// on disk lasting longer than MaxSyncDuration (`storage.max_sync_duration`).
 	DiskStallCount int64
+	// SingleDelInvariantViolationCount counts the number of times a
+	// SingleDelete was found to violate the invariant that it should only be
+	// used when there is at most one older Set for it to delete.
+	SingleDelInvariantViolationCount int64
+	// SingleDelIneffectualCount counts the number of times a SingleDelete was
+	// ineffectual, i.e., it was elided without deleting anything.
+	SingleDelIneffectualCount int64
 	// SharedStorageWriteBytes counts the number of bytes written to shared storage.
 	SharedStorageWriteBytes int64
 	// SharedStorageReadBytes counts the number of bytes read from shared storage.
