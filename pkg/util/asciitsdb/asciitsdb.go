@@ -118,7 +118,7 @@ func (t *TSDB) Scrape(ctx context.Context) {
 			t.mu.points[name+"-count"] = append(t.mu.points[name+"-count"], float64(count))
 			// Use windowed stats for avg and quantiles
 			histWindow := mtr.ToPrometheusMetricWindowed()
-			avg := mtr.MeanWindowed()
+			avg := mtr.Mean(histWindow)
 			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 				avg = 0
 			}
