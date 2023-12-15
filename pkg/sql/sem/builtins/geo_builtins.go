@@ -7805,7 +7805,7 @@ func stAsGeoJSONFromTuple(
 			if g, ok := d.(*tree.DGeometry); ok {
 				foundGeoColumn = true
 				var err error
-				geometry, err = json.FromSpatialObject(g.SpatialObject(), numDecimalDigits)
+				geometry, err = g.ToJSON()
 				if err != nil {
 					return nil, err
 				}
@@ -7814,7 +7814,7 @@ func stAsGeoJSONFromTuple(
 			if g, ok := d.(*tree.DGeography); ok {
 				foundGeoColumn = true
 				var err error
-				geometry, err = json.FromSpatialObject(g.SpatialObject(), numDecimalDigits)
+				geometry, err = g.ToJSON()
 				if err != nil {
 					return nil, err
 				}
