@@ -66,7 +66,7 @@ func registerClearRange(r registry.Registry) {
 func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
 	t.Status("restoring fixture")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
+	pgurlCertPassword, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 		// NB: on a 10 node cluster, this should take well below 3h.
 		tBegin := timeutil.Now()
 		c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank",
-			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank", pgurl)
+			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank", pgurlCertPassword)
 		t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
 		return nil
 	})
@@ -101,13 +101,17 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	t.Status(`restoring tiny table`)
 	defer t.WorkerStatus()
 
+	pgurlPassword, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
 	// Use a 120s connect timeout to work around the fact that the server will
 	// declare itself ready before it's actually 100% ready. See:
 	// https://github.com/cockroachdb/cockroach/issues/34897#issuecomment-465089057
 	c.Run(ctx, c.Node(1), fmt.Sprintf(
-		`COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --url=%s -e "DROP DATABASE IF EXISTS tinybank"`, pgurl))
+		`COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --url='%s' -e "DROP DATABASE IF EXISTS tinybank"`, pgurlPassword))
 	c.Run(ctx, c.Node(1), "./cockroach", "workload", "fixtures", "import", "bank", "--db=tinybank",
-		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1", pgurl)
+		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1", pgurlCertPassword)
 
 	t.Status()
 
@@ -139,7 +143,7 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 	}()
 
 	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, c.Node(1), `./cockroach workload init kv`, pgurl)
+		c.Run(ctx, c.Node(1), `./cockroach workload init kv`, pgurlCertPassword)
 		c.Run(ctx, c.All(), fmt.Sprintf(`./cockroach workload run kv --concurrency=32 --duration=1h --tolerate-errors {pgurl%s}`, c.All()))
 		return nil
 	})

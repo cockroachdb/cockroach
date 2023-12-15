@@ -915,10 +915,10 @@ func Get(ctx context.Context, l *logger.Logger, clusterName, src, dest string) e
 
 type PGURLOptions struct {
 	Secure             bool
-	PasswordAuth       bool
 	External           bool
 	VirtualClusterName string
 	SQLInstance        int
+	Auth               install.PGAuthMode
 }
 
 // PgURL generates pgurls for the nodes in a cluster.
@@ -957,7 +957,7 @@ func PgURL(
 		if ip == "" {
 			return nil, errors.Errorf("empty ip: %v", ips)
 		}
-		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode, opts.PasswordAuth))
+		urls = append(urls, c.NodeURL(ip, desc.Port, opts.VirtualClusterName, desc.ServiceMode, opts.Auth))
 	}
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)

@@ -14,6 +14,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/roachtestutil",
         "//pkg/cmd/roachtest/test",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",

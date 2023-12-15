@@ -93,7 +93,7 @@ func registerJasyncSQL(r registry.Registry) {
 		_ = c.RunE(
 			ctx,
 			node,
-			`cd /mnt/data1/jasync-sql && PGUSER=root PGHOST=localhost PGPORT={pgport:1} PGDATABASE=defaultdb ./gradlew :postgresql-async:test`,
+			`cd /mnt/data1/jasync-sql && PGUSER=roach PGPASSWORD=system PGSSLMODE=allow PGHOST=localhost PGPORT={pgport:1} PGDATABASE=defaultdb ./gradlew :postgresql-async:test`,
 		)
 
 		_ = c.RunE(ctx, node, `mkdir -p ~/logs/report/jasyncsql-results`)

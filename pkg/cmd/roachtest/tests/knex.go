@@ -12,11 +12,13 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -51,13 +53,16 @@ func registerKnex(r registry.Registry) {
 		err = alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0])
 		require.NoError(t, err)
 
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), node, install.AuthPassword)
+		require.NoError(t, err)
+
 		err = repeatRunE(
 			ctx,
 			t,
 			c,
 			node,
 			"create sql database",
-			`./cockroach sql -e "CREATE DATABASE test"`,
+			fmt.Sprintf(`./cockroach sql --url=%s -e "CREATE DATABASE test"`, pgurl),
 		)
 		require.NoError(t, err)
 
@@ -126,7 +131,7 @@ echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.co
 			ctx,
 			t.L(),
 			node,
-			`cd /mnt/data1/knex/ && DB='cockroachdb' npm test`,
+			`cd /mnt/data1/knex/ && POSTGRES_USER='roach' POSTGRES_PASSWORD='system' POSTGRES_SSL=true DB='cockroachdb' npm test`,
 		)
 		rawResultsStr := result.Stdout + result.Stderr
 		t.L().Printf("Test Results: %s", rawResultsStr)

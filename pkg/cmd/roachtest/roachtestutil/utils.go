@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -40,9 +41,10 @@ func DefaultPGUrl(
 	c cluster.Cluster,
 	l *logger.Logger,
 	node option.NodeListOption,
-	passwordAuth bool,
+	auth install.PGAuthMode,
 ) (string, error) {
-	pgurl, err := c.ExternalPGUrl(ctx, l, node, "", 0, passwordAuth)
+	opts := roachprod.PGURLOptions{Auth: auth}
+	pgurl, err := c.ExternalPGUrl(ctx, l, node, opts)
 	if err != nil {
 		return "", err
 	}
@@ -84,18 +86,27 @@ func GetSessionCookie(
 		}
 	}
 	if sessionCookie == "" {
-		return "", fmt.Errorf("failed to find session cookie in `login` output")
+		return "", fmt.Errorf("roachtestutils.GetSessionCookie: failed to find session cookie in `login` output")
 	}
 
 	return sessionCookie, nil
 }
 
 func GetSessionID(
-	ctx context.Context, c cluster.Cluster, l *logger.Logger, node option.NodeListOption,
+	ctx context.Context, c cluster.Cluster, l *logger.Logger, nodes option.NodeListOption,
 ) (string, error) {
-	cookie, err := GetSessionCookie(ctx, c, l, node)
+	var err error
+	var cookie string
+	// The session ID should be the same for all nodes so stop after we successfully
+	// get it from one node.
+	for _, node := range nodes {
+		cookie, err = GetSessionCookie(ctx, c, l, c.Node(node))
+		if err == nil {
+			break
+		}
+	}
 	if err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "roachtestutils.GetSessionID")
 	}
 	sessionID := strings.Split(cookie, ";")[0]
 	return sessionID, nil
@@ -107,10 +118,10 @@ func DefaultHttpClientWithSessionCookie(
 	ctx context.Context,
 	c cluster.Cluster,
 	l *logger.Logger,
-	node option.NodeListOption,
+	nodes option.NodeListOption,
 	cookieUrl string,
 ) (http.Client, error) {
-	sessionID, err := GetSessionID(ctx, c, l, node)
+	sessionID, err := GetSessionID(ctx, c, l, nodes)
 	if err != nil {
 		return http.Client{}, err
 	}

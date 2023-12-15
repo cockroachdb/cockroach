@@ -151,7 +151,7 @@ func runDrainAndDecommission(
 	for i := 1; i <= nodes; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(i))
 	}
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func runDrainAndDecommission(
 		m.Go(func() error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
-				return c.RunE(ctx, c.Node(id), "./cockroach node drain --certs-dir=certs --port={pgport:1}")
+				return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node drain --certs-dir=certs --port={pgport:%d}", id))
 			}
 			return drain(id)
 		})
@@ -220,7 +220,7 @@ func runDrainAndDecommission(
 		id := nodes - 3
 		decom := func(id int) error {
 			t.Status(fmt.Sprintf("decommissioning node %d", id))
-			return c.RunE(ctx, c.Node(id), "./cockroach node decommission --self --certs-dir=certs --port={pgport:1}")
+			return c.RunE(ctx, c.Node(id), fmt.Sprintf("./cockroach node decommission --self --certs-dir=certs --port={pgport:%d}", id))
 		}
 		return decom(id)
 	})
@@ -883,7 +883,7 @@ func runDecommissionRandomized(ctx context.Context, t test.Test, c cluster.Clust
 			t.L().Printf("wiping n%d and adding it back to the cluster as a new node\n", targetNode)
 
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(targetNode))
-			c.Wipe(ctx, false /*preserveCerts */, c.Node(targetNode))
+			c.Wipe(ctx, true /*preserveCerts */, c.Node(targetNode))
 
 			joinNode := h.getRandNode()
 			internalAddrs, err := c.InternalAddr(ctx, t.L(), c.Node(joinNode))
@@ -1130,7 +1130,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 				t.Status(fmt.Sprintf("decommissioning node %d", id))
 				return c.RunE(ctx,
 					c.Node(id),
-					fmt.Sprintf("./cockroach node decommission %d --checks=skip --certs-dir=certs --port={pgport:1}", id),
+					fmt.Sprintf("./cockroach node decommission %d --checks=skip --certs-dir=certs --port={pgport:%d}", id, id),
 				)
 			}
 			return decom(id)
@@ -1467,7 +1467,7 @@ func execCLI(
 ) (string, error) {
 	args := []string{"./cockroach"}
 	args = append(args, extraArgs...)
-	args = append(args, "--port={pgport:1}")
+	args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
 	args = append(args, "--certs-dir=certs")
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(runNode), args...)
 	t.L().Printf("%s\n", result.Stdout)

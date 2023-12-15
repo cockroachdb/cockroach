@@ -43,9 +43,9 @@ var (
 	hibernateOpts = hibernateOptions{
 		testName: "hibernate",
 		testDir:  "hibernate-core",
-		buildCmd: `cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb ` +
+		buildCmd: `cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb -Puser=roach -Ppassword=system ` +
 			`--tests org.hibernate.orm.test.jdbc.util.BasicFormatterTest.*`,
-		testCmd: "cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb",
+		testCmd: "cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroachdb -Puser=roach -Ppassword=system",
 		listWithName: listWithName{
 			blocklistName:  "hibernateBlockList",
 			blocklist:      hibernateBlockList,

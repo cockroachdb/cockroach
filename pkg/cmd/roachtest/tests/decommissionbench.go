@@ -401,7 +401,7 @@ func setupDecommissionBench(
 
 		t.Status(fmt.Sprintf("initializing cluster with %d warehouses", benchSpec.warehouses))
 		// Add the connection string here as the port is not decided until c.Start() is called.
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -929,11 +929,11 @@ func runSingleDecommission(
 
 	if drainFirst {
 		h.t.Status(fmt.Sprintf("draining node%d", target))
-		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, h.t.L(), c.Node(target), false)
+		pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, h.t.L(), c.Node(target), install.AuthCertPassword)
 		if err != nil {
 			t.Fatal(err)
 		}
-		cmd := fmt.Sprintf("./cockroach node drain --url=%s --self", pgurl)
+		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=certs --url=%s --self", pgurl)
 		if err := h.c.RunE(ctx, h.c.Node(target), cmd); err != nil {
 			return err
 		}

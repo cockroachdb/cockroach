@@ -123,7 +123,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("failed to up-replicate cluster: %s", err)
 	}
 
-	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), false)
+	pgurl, err := roachtestutil.DefaultPGUrl(ctx, c, t.L(), c.Nodes(1), install.AuthCertPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 	m.Go(func(ctx context.Context) error {
 		cmd := roachtestutil.NewCommand("./cockroach workload init kv").
 			Flag("cycle-length", 20000).
-			Arg("%s", pgurl).
+			Arg("'%s'", pgurl).
 			String()
 		c.Run(ctx, c.Node(1), cmd)
 
@@ -151,7 +151,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 				Flag("min-block-bytes", 2048).
 				Flag("read-percent", 0).
 				Flag("max-rate", 1800).
-				Arg("{pgurl%s}", c.Node(1)).
+				Arg("%s", pgurl).
 				String()
 			err := c.RunE(wlCtx, c.Node(1), cmd)
 			wlFailure <- err
@@ -642,7 +642,7 @@ func sendBatchRequest(
 	}
 	cmd := roachtestutil.NewCommand("./cockroach debug send-kv-batch").
 		Arg(requestFileName).
-		Option("insecure").
+		Flag("certs-dir", "certs").
 		Flag("host", fmt.Sprintf("localhost:{pgport:%d}", node)).
 		String()
 	res, err := c.RunWithDetailsSingleNode(

@@ -16,7 +16,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-	"net/http"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -666,8 +666,12 @@ func verifySQLLatency(
 			SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 		}},
 	}
+	client, err := roachtestutil.DefaultHttpClientWithSessionCookie(ctx, c, t.L(), c.All(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var response tspb.TimeSeriesQueryResponse
-	if err := httputil.PostJSON(http.Client{}, url, &request, &response); err != nil {
+	if err := httputil.PostJSON(client, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}
 	perTenSeconds := response.Results[0].Datapoints
@@ -736,9 +740,12 @@ func verifyHighFollowerReadRatios(
 			Derivative: tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
 		})
 	}
-
+	client, err := roachtestutil.DefaultHttpClientWithSessionCookie(ctx, c, t.L(), c.All(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var response tspb.TimeSeriesQueryResponse
-	if err := httputil.PostProtobuf(ctx, http.Client{}, url, &request, &response); err != nil {
+	if err := httputil.PostProtobuf(ctx, client, url, &request, &response); err != nil {
 		t.Fatal(err)
 	}
 
@@ -825,7 +832,11 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 				return err
 			}
 			url := "http://" + adminUIAddrs[0] + "/_status/vars"
-			resp, err := httputil.Get(ctx, url)
+			client, err := roachtestutil.DefaultHttpClientWithSessionCookie(ctx, c, t.L(), c.All(), url)
+			if err != nil {
+				return err
+			}
+			resp, err := client.Get(url)
 			if err != nil {
 				return err
 			}
