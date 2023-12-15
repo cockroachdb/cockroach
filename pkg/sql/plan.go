@@ -624,6 +624,10 @@ const (
 	// planFlagContainsNonDefaultLocking is set if the plan has a node with
 	// non-default key locking strength.
 	planFlagContainsNonDefaultLocking
+
+	// planFlagSessionMigration is set if the plan is being created during
+	// a session migration.
+	planFlagSessionMigration
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
