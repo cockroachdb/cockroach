@@ -36,6 +36,7 @@ go_library(
         "cancel.go",
         "cdc.go",
         "cdc_bench.go",
+        "cdc_filtering.go",
         "cdc_stats.go",
         "chaos.go",
         "clearrange.go",
