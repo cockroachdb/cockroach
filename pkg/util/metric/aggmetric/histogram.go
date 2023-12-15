@@ -121,11 +121,6 @@ func (a *AggHistogram) Inspect(f func(interface{})) {
 	f(a)
 }
 
-// TotalWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) TotalWindowed() (int64, float64) {
-	return a.h.TotalWindowed()
-}
-
 // Total is part of the metric.WindowedHistogram interface
 func (a *AggHistogram) Total(hist *prometheusgo.Metric) (int64, float64) {
 	return a.h.Total(hist)
