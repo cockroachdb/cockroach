@@ -146,7 +146,7 @@ func (r *Replica) SendWithWriteBytes(
 	r.recordBatchRequestLoad(ctx, ba)
 
 	// If the internal Raft group is quiesced, wake it and the leader.
-	r.maybeUnquiesce(true /* wakeLeader */, true /* mayCampaign */)
+	r.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
 
 	isReadOnly := ba.IsReadOnly()
 	if err := r.checkBatchRequest(ba, isReadOnly); err != nil {

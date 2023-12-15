@@ -545,7 +545,8 @@ func (r *Replica) GetQueueLastProcessed(ctx context.Context, queue string) (hlc.
 }
 
 func (r *Replica) MaybeUnquiesce() bool {
-	return r.maybeUnquiesce(true /* wakeLeader */, true /* mayCampaign */)
+	ctx := context.Background()
+	return r.maybeUnquiesce(ctx, true /* wakeLeader */, true /* mayCampaign */)
 }
 
 // MaybeUnquiesceAndPropose will unquiesce the range and submit a noop proposal.

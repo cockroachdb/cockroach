@@ -68,6 +68,25 @@ type StoreTestingKnobs struct {
 	// reproposed due to ticks.
 	TestingProposalSubmitFilter func(*ProposalData) (drop bool, err error)
 
+	// TestingAfterRaftLogSync is invoked after completion of a synced write to
+	// Raft log for the given replica, before the corresponding message is sent
+	// back to Raft and these entries can next be applied to the state machine.
+	//
+	// If async log writes are enabled, this callback blocks async log write
+	// responses flow for the entire store, until it returns. This effectively
+	// blocks (most of) the command application flow. Some sync log writes may
+	// fall through because they use a different flow. Note that this callback
+	// does not block the entire raft flow, commands are still being committed.
+	//
+	// If async log writes are disabled, blocks this replica's entire raft
+	// processing while also holding raftMu for the replica. May block raft
+	// processing for other replicas in the same raft scheduler shard, so must be
+	// used with caution.
+	//
+	// TODO(pavelkalinnikov): have a more stable and less nuanced way of blocking
+	// the commands application flow for the entire store.
+	TestingAfterRaftLogSync func(storage.FullReplicaID)
+
 	// TestingApplyCalledTwiceFilter is called before applying the results of a command on
 	// each replica assuming the command was cleared for application (i.e. no
 	// forced error occurred; the supplied AppliedFilterArgs will have a nil
@@ -99,6 +118,13 @@ type StoreTestingKnobs struct {
 	// with a forced error. That is, the "command" will apply as a
 	// no-op write, and the ForcedError field will be set.
 	TestingPostApplyFilter kvserverbase.ReplicaApplyFilter
+
+	// TestingPostApplySideEffectsFilter is called after a command is applied to
+	// state machine, and its side effects are applied to memory. Called on each
+	// replica that applies the command.
+	//
+	// NB: not all fields are passed in to this callback, see the implementation.
+	TestingPostApplySideEffectsFilter kvserverbase.ReplicaApplyFilter
 
 	// TestingResponseErrorEvent is called when an error is returned applying
 	// a command.
@@ -287,6 +313,11 @@ type StoreTestingKnobs struct {
 	// EnableUnconditionalRefreshesInRaftReady will always set the refresh reason
 	// in handleRaftReady to refreshReasonNewLeaderOrConfigChange.
 	EnableUnconditionalRefreshesInRaftReady bool
+	// DisableSyncLogWriteToss forces raft log appends to always be asynchronous
+	// when possible, if configured so by the cluster settings. If false, some
+	// asynchronous log writes can be randomly made synchronous in tests. Should
+	// be set to true by tests that require or test asynchronous log writes.
+	DisableSyncLogWriteToss bool
 
 	// SendSnapshot is run after receiving a DelegateRaftSnapshot request but
 	// before any throttling or sending logic.
