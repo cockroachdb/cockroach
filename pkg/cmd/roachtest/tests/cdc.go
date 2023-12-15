@@ -2172,8 +2172,17 @@ func (k kafkaManager) installAzureCli(ctx context.Context) error {
 		InitialBackoff: 1 * time.Minute,
 		MaxBackoff:     5 * time.Minute,
 	}
+	//apt-get update -y
+	//apt-get install -y lsb-release
+	//
+	//curl -sL https://packages.microsoft.com/keys/microsoft.asc |
+	//apt-key --keyring /usr/share/keyrings/microsoft.gpg  add -
+	//
+	//	AZ_REPO=$(lsb_release -cs)
+	//echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" |
+	//	tee /etc/apt/sources.list.d/azure-cli.list
 	return retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
-		if err := k.c.RunE(ctx, k.nodes, `echo "deb https://packages.microsoft.com/repos/azure-cli/ $(lsb_release -cs) main" > /etc/apt/sources.list.d/azure-cli.list`); err != nil {
+		if err := k.c.RunE(ctx, k.nodes, `echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" | sudo tee /etc/apt/sources.list.d/azure-cli.list`); err != nil {
 			return err
 		}
 		if err := k.c.RunE(ctx, k.nodes, `sudo apt-get -q update 2>&1 >> logs/apt-get-update.log`); err != nil {
