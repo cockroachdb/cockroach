@@ -829,3 +829,24 @@ func BenchmarkEventf_WithVerboseTraceSpan(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkExpensiveLogEnabled measures the overhead of checking whether
+// expensive logging is enabled.
+//
+// Results with go1.21.4 on a Mac with an Apple M1 Pro processor:
+//
+// name                    time/op
+// ExpensiveLogEnabled-10  13.5ns ± 1%
+func BenchmarkExpensiveLogEnabled(b *testing.B) {
+	ctx := context.Background()
+	// Add a few values to the context, to make sure ctx.Value is not
+	// unrealistically cheap.
+	for i := 0; i < 10; i++ {
+		type key int // avoid lint warning
+		ctx = context.WithValue(ctx, key(i), i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = ExpensiveLogEnabled(ctx, 2)
+	}
+}

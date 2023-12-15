@@ -740,6 +740,7 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 // down. Those instances should be rare, however, and we expect the newly live
 // node to eventually unquiesce the range.
 func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
+	ctx := context.TODO()
 	s.updateLivenessMap()
 
 	s.mu.replicasByRangeID.Range(func(r *Replica) {
@@ -748,7 +749,7 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		lagging := r.mu.laggingFollowersOnQuiesce
 		r.mu.RUnlock()
 		if quiescent && lagging.MemberStale(l) {
-			r.maybeUnquiesce(false /* wakeLeader */, false /* mayCampaign */) // already leader
+			r.maybeUnquiesce(ctx, false /* wakeLeader */, false /* mayCampaign */) // already leader
 		}
 	})
 }

@@ -190,12 +190,20 @@ func (mu *ReplicaMutex) Lock() {
 	(*syncutil.RWMutex)(mu).Lock()
 }
 
+func (mu *ReplicaMutex) TracedLock(ctx context.Context) {
+	(*syncutil.RWMutex)(mu).TracedLock(ctx)
+}
+
 func (mu *ReplicaMutex) Unlock() {
 	(*syncutil.RWMutex)(mu).Unlock()
 }
 
 func (mu *ReplicaMutex) RLock() {
 	(*syncutil.RWMutex)(mu).RLock()
+}
+
+func (mu *ReplicaMutex) TracedRLock(ctx context.Context) {
+	(*syncutil.RWMutex)(mu).TracedRLock(ctx)
 }
 
 func (mu *ReplicaMutex) AssertHeld() {

@@ -883,6 +883,7 @@ func TestLint(t *testing.T) {
 			"*.go",
 			":!acceptance/compose/gss/psql/gss_test.go",
 			":!**/embedded.go",
+			":!util/syncutil/mutex_tracing.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
 			":!cmd/roachtest/tests/gorm_helpers.go",
@@ -2474,6 +2475,7 @@ func TestLint(t *testing.T) {
 			// instead of ...interface{}.
 			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepth\(\): format argument is not a constant expression`),
 			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepthInternal\(\): format argument is not a constant expression`),
+			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: untypedVEventfDepth\(\): format argument is not a constant expression`),
 			// roachprod/logger is not collecting redactable logs so we don't care
 			// about printf hygiene there as much.
 			stream.GrepNot(`pkg/roachprod/logger/log\.go:.*format argument is not a constant expression`),
