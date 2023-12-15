@@ -251,15 +251,6 @@ func (h *HdrHistogram) ValueAtQuantileWindowed(q float64, window *prometheusgo.M
 	return ValueAtQuantileWindowed(window.Histogram, q)
 }
 
-func (h *HdrHistogram) Mean() float64 {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.mu.cumulative.Mean()
-}
-
-func (h *HdrHistogram) MeanWindowed() float64 {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	hist := h.mu.sliding.Merge()
-	return hist.Mean()
+func (h *HdrHistogram) Mean(hist *prometheusgo.Metric) float64 {
+	return hist.Histogram.GetSampleSum() / float64(hist.Histogram.GetSampleCount())
 }
