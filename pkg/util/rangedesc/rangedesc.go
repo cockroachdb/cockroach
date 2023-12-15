@@ -206,18 +206,27 @@ func (i *impl) Scan(
 
 // NewIterator implements the IteratorFactory interface.
 func (i *impl) NewIterator(ctx context.Context, span roachpb.Span) (Iterator, error) {
+	rangeDescriptors, err := i.getPage(ctx, span, 0)
+	return NewSliceIterator(rangeDescriptors), err
+}
+
+func (i *impl) getPage(
+	ctx context.Context, span roachpb.Span, pageSize int,
+) ([]roachpb.RangeDescriptor, error) {
 	var rangeDescriptors []roachpb.RangeDescriptor
-	err := i.Scan(ctx, 0 /* pageSize */, func() {
+	err := iterutil.Map(i.Scan(ctx, pageSize, func() {
 		rangeDescriptors = rangeDescriptors[:0] // retryable
 	}, span, func(descriptors ...roachpb.RangeDescriptor) error {
 		rangeDescriptors = append(rangeDescriptors, descriptors...)
+		if len(rangeDescriptors) >= pageSize {
+			return iterutil.StopIteration()
+		}
 		return nil
-	})
+	}))
 	if err != nil {
 		return nil, err
 	}
-
-	return NewSliceIterator(rangeDescriptors), nil
+	return rangeDescriptors, nil
 }
 
 func NewSliceIterator(descs []roachpb.RangeDescriptor) Iterator {

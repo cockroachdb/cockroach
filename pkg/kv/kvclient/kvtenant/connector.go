@@ -673,14 +673,24 @@ func (c *connector) FirstRange() (*roachpb.RangeDescriptor, error) {
 func (c *connector) NewIterator(
 	ctx context.Context, span roachpb.Span,
 ) (rangedesc.Iterator, error) {
+	rangeDescriptors, err := c.getRangeDescs(ctx, span, 0)
+	return rangedesc.NewSliceIterator(rangeDescriptors), err
+}
+
+func (c *connector) getRangeDescs(
+	ctx context.Context, span roachpb.Span, pageSize int,
+) ([]roachpb.RangeDescriptor, error) {
 	var rangeDescriptors []roachpb.RangeDescriptor
+
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	for ctx.Err() == nil {
 		rangeDescriptors = rangeDescriptors[:0] // clear out.
 		client, err := c.getClient(ctx)
 		if err != nil {
 			continue
 		}
-		stream, err := client.GetRangeDescriptors(ctx, &kvpb.GetRangeDescriptorsRequest{
+		stream, err := client.GetRangeDescriptors(streamCtx, &kvpb.GetRangeDescriptorsRequest{
 			Span: span,
 		})
 		if err != nil {
@@ -697,7 +707,7 @@ func (c *connector) NewIterator(
 			e, err := stream.Recv()
 			if err != nil {
 				if err == io.EOF {
-					return rangedesc.NewSliceIterator(rangeDescriptors), nil
+					return rangeDescriptors, nil
 				}
 				log.Warningf(ctx, "error consuming GetRangeDescriptors RPC: %v", err)
 				if grpcutil.IsAuthError(err) {
@@ -709,6 +719,13 @@ func (c *connector) NewIterator(
 				break
 			}
 			rangeDescriptors = append(rangeDescriptors, e.RangeDescriptors...)
+			if pageSize != 0 && len(rangeDescriptors) >= pageSize {
+				if err := stream.CloseSend(); err != nil {
+					return nil, err
+				}
+				cancel()
+				return rangeDescriptors, nil
+			}
 		}
 	}
 	return nil, errors.Wrap(ctx.Err(), "new iterator")
