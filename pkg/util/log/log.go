@@ -13,6 +13,7 @@ package log
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -20,6 +21,11 @@ import (
 
 func init() {
 	errors.SetWarningFn(Warningf)
+	logbase.VEventfDepth = untypedVEventfDepth
+	logbase.ExpensiveLogEnabled = untypedExpensiveLogEnabled
+	logbase.Fatalf = Fatalf
+	logbase.Warningf = Warningf
+	logbase.Infof = Infof
 }
 
 // Severity aliases a type.
@@ -65,4 +71,19 @@ func ExpensiveLogEnabled(ctx context.Context, level Level) bool {
 		return true
 	}
 	return false
+}
+
+// untypedExpensiveLogEnabled is like ExpensiveLogEnabled, but takes an untyped
+// level argument.
+func untypedExpensiveLogEnabled(ctx context.Context, level int32) bool {
+	return ExpensiveLogEnabled(ctx, Level(level))
+}
+
+// untypedVEventfDepth is like VEventfDepth, but takes an untyped level argument.
+//
+//nolint:fmtsafe
+func untypedVEventfDepth(
+	ctx context.Context, depth int, level int32, format string, args ...interface{},
+) {
+	VEventfDepth(ctx, depth+1, Level(level), format, args...)
 }
