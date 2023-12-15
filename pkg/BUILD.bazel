@@ -189,6 +189,7 @@ ALL_TESTS = [
     "//pkg/jobs/jobsprofiler:jobsprofiler_test",
     "//pkg/jobs/jobsprotectedts:jobsprotectedts_test",
     "//pkg/jobs:jobs_test",
+    "//pkg/keys:keys_disallowed_imports_test",
     "//pkg/keys:keys_test",
     "//pkg/keyvisualizer/spanstatsconsumer:spanstatsconsumer_test",
     "//pkg/kv/bulk/bulkpb:bulkpb_test",
