@@ -1881,10 +1881,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		panic(err)
 	}
 
-	if !planner.ExecCfg().Codec.ForSystemTenant() {
-		planner.curPlan.flags.Set(planFlagTenant)
-	}
-
 	switch distributePlan {
 	case physicalplan.FullyDistributedPlan:
 		planner.curPlan.flags.Set(planFlagFullyDistributed)
