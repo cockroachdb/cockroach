@@ -678,6 +678,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	settings.ClusterSettings["changefeed.balance_range_distribution.enable"] = "true"
 
 	settings.Env = append(settings.Env, envVars...)
+	fmt.Printf("EN VARS here %v", settings)
 
 	c.Start(ctx, t.L(), startOpts, settings, tester.crdbNodes)
 	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
@@ -1621,6 +1622,8 @@ func registerCDC(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
+
+			fmt.Println()
 
 			// Just use 1 warehouse and no initial scan since this would involve
 			// cross-cloud traffic which is far more expensive.  The throughput also
