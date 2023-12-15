@@ -152,12 +152,13 @@ func (h *runtimeHistogram) Inspect(f func(interface{})) { f(h) }
 
 // TotalWindowed implements the WindowedHistogram interface.
 func (h *runtimeHistogram) TotalWindowed() (int64, float64) {
-	return h.Total()
+	// TODO(abarganier): take in windowed histogram as a parameter.
+	return int64(h.ToPrometheusMetricWindowed().Histogram.GetSampleCount()), h.ToPrometheusMetricWindowed().Histogram.GetSampleSum()
 }
 
 // Total implements the WindowedHistogram interface.
-func (h *runtimeHistogram) Total() (int64, float64) {
-	pHist := h.ToPrometheusMetric().Histogram
+func (h *runtimeHistogram) Total(hist *prometheusgo.Metric) (int64, float64) {
+	pHist := hist.Histogram
 	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
 }
 
