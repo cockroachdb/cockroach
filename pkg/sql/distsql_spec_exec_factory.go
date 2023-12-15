@@ -75,7 +75,7 @@ func newDistSQLSpecExecFactory(
 	}
 	distribute := DistributionType(DistributionTypeNone)
 	if e.planningMode != distSQLLocalOnlyPlanning {
-		distribute = DistributionTypeSystemTenantOnly
+		distribute = DistributionTypeAlways
 	}
 	evalCtx := p.ExtendedEvalContext()
 	e.planCtx = e.dsp.NewPlanningCtx(ctx, evalCtx, e.planner, e.planner.txn, distribute)

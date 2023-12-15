@@ -33,7 +33,7 @@ func PlanAndRunCTAS(
 ) {
 	distribute := DistributionType(DistributionTypeNone)
 	if !isLocal {
-		distribute = DistributionTypeSystemTenantOnly
+		distribute = DistributionTypeAlways
 	}
 	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext(), planner,
 		txn, distribute)

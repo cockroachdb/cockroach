@@ -1198,7 +1198,7 @@ func TestPartitionSpans(t *testing.T) {
 			}
 			planCtx := dsp.NewPlanningCtxWithOracle(ctx, &extendedEvalContext{
 				Context: *evalCtx,
-			}, nil, nil, DistributionTypeSystemTenantOnly, physicalplan.DefaultReplicaChooser, locFilter)
+			}, nil, nil, DistributionTypeAlways, physicalplan.DefaultReplicaChooser, locFilter)
 			planCtx.spanPartitionState.testingOverrideRandomSelection = tc.partitionState.testingOverrideRandomSelection
 			var spans []roachpb.Span
 			for _, s := range tc.spans {
@@ -1515,7 +1515,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	ctx := context.Background()
 	planCtx := dsp.NewPlanningCtx(ctx, &extendedEvalContext{
 		Context: eval.Context{Codec: keys.SystemSQLCodec},
-	}, nil, nil, DistributionTypeSystemTenantOnly)
+	}, nil, nil, DistributionTypeAlways)
 	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span})
 	if err != nil {
 		t.Fatal(err)

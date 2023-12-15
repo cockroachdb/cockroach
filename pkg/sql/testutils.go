@@ -153,7 +153,7 @@ func (dsp *DistSQLPlanner) Exec(
 
 	distributionType := DistributionType(DistributionTypeNone)
 	if distribute {
-		distributionType = DistributionTypeSystemTenantOnly
+		distributionType = DistributionTypeAlways
 	}
 	evalCtx := p.ExtendedEvalContext()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
