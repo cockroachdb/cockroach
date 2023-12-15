@@ -639,7 +639,7 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 		fn(name+"-sum", sum)
 		// Use windowed stats for avg and quantiles
 		histWindow := mtr.ToPrometheusMetricWindowed()
-		avg := mtr.MeanWindowed()
+		avg := mtr.Mean(histWindow)
 		if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 			avg = 0
 		}
