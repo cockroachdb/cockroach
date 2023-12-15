@@ -167,14 +167,9 @@ func (h *runtimeHistogram) ValueAtQuantileWindowed(q float64, window *prometheus
 	return metric.ValueAtQuantileWindowed(window.Histogram, q)
 }
 
-// MeanWindowed implements the WindowedHistogram interface.
-func (h *runtimeHistogram) MeanWindowed() float64 {
-	return h.Mean()
-}
-
 // Mean implements the WindowedHistogram interface.
-func (h *runtimeHistogram) Mean() float64 {
-	pHist := h.ToPrometheusMetric().Histogram
+func (h *runtimeHistogram) Mean(hist *prometheusgo.Metric) float64 {
+	pHist := hist.Histogram
 	return pHist.GetSampleSum() / float64(pHist.GetSampleCount())
 }
 

@@ -131,14 +131,9 @@ func (a *AggHistogram) Total(hist *prometheusgo.Metric) (int64, float64) {
 	return a.h.Total(hist)
 }
 
-// MeanWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) MeanWindowed() float64 {
-	return a.h.MeanWindowed()
-}
-
 // Mean is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) Mean() float64 {
-	return a.h.Mean()
+func (a *AggHistogram) Mean(hist *prometheusgo.Metric) float64 {
+	return a.h.Mean(hist)
 }
 
 // ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
