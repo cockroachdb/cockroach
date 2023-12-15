@@ -267,25 +267,27 @@ CREATE DATABASE t;
 func TestDropDatabaseDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParams()
+	params, _ := createTestServerParamsAllowTenants()
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
 	ctx := context.Background()
+	s := srv.ApplicationLayer()
 
-	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
+	systemDB := srv.SystemLayer().SQLConn(t)
+	_, err := systemDB.Exec(`SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
 	require.NoError(t, err)
 
 	// Refresh protected timestamp cache immediately to make MVCC GC queue to
 	// process GC immediately.
-	_, err = sqlDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
+	_, err = systemDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
 	require.NoError(t, err)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
 	// TTL into the system with AddImmediateGCZoneConfig.
-	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, systemDB)()
 
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
@@ -299,16 +301,16 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatal(err)
 	}
 
-	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	tb2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
+	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv")
+	tb2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv2")
 	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		dbDesc, err = col.ByID(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
 
-	tableSpan := tbDesc.TableSpan(keys.SystemSQLCodec)
-	table2Span := tb2Desc.TableSpan(keys.SystemSQLCodec)
+	tableSpan := tbDesc.TableSpan(s.Codec())
+	table2Span := tb2Desc.TableSpan(s.Codec())
 	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
 	tests.CheckKeyCount(t, kvDB, table2Span, 6)
 
@@ -325,8 +327,8 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatal(err)
 	}
 
-	tests.CheckKeyCountIncludingTombstoned(t, s, tableSpan, 6)
-	tests.CheckKeyCountIncludingTombstoned(t, s, table2Span, 6)
+	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), tableSpan, 6)
+	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), table2Span, 6)
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0,
@@ -351,8 +353,8 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	})
 
 	// Table 1 data is deleted.
-	tests.CheckKeyCountIncludingTombstoned(t, s, tableSpan, 0)
-	tests.CheckKeyCountIncludingTombstoned(t, s, table2Span, 6)
+	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), tableSpan, 0)
+	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), table2Span, 6)
 
 	def := zonepb.DefaultZoneConfig()
 	if err := zoneExists(sqlDB, &def, dbDesc.GetID()); err != nil {
@@ -385,7 +387,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	})
 
 	// Table 2 data is deleted.
-	tests.CheckKeyCountIncludingTombstoned(t, s, table2Span, 0)
+	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), table2Span, 0)
 
 	testutils.SucceedsSoon(t, func() error {
 		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{

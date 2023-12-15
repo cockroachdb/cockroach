@@ -37,7 +37,7 @@ func CheckKeyCount(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) {
 // those whose tombstones are marked but not GC'ed yet) in the provided span
 // matches the expected number.
 func CheckKeyCountIncludingTombstoned(
-	t *testing.T, s serverutils.TestServerInterface, span roachpb.Span, expectedNum int,
+	t *testing.T, s serverutils.StorageLayerInterface, span roachpb.Span, expectedNum int,
 ) {
 	t.Helper()
 	if err := CheckKeyCountIncludingTombstonedE(t, s, span, expectedNum); err != nil {
@@ -58,7 +58,7 @@ func CheckKeyCountE(t *testing.T, kvDB *kv.DB, span roachpb.Span, numKeys int) e
 }
 
 func CheckKeyCountIncludingTombstonedE(
-	t *testing.T, s serverutils.TestServerInterface, tableSpan roachpb.Span, expectedNum int,
+	t *testing.T, s serverutils.StorageLayerInterface, tableSpan roachpb.Span, expectedNum int,
 ) error {
 	// Check key count including tombstoned ones.
 	engines := s.Engines()
