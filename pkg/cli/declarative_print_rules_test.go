@@ -32,7 +32,8 @@ func TestDeclarativeRules(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		version := clusterversion.TestingBinaryVersion
+		// Get the previous version.
+		version := clusterversion.VCurrent_Start
 		versionString := strings.Split(version.String(), "-")[0]
 		opOut, err := c.RunWithCapture(fmt.Sprintf("debug declarative-print-rules %s op", versionString))
 		if err != nil {
@@ -49,7 +50,7 @@ func TestDeclarativeRules(t *testing.T) {
 			// for testing purposes. This can change from build to build, and
 			// need changes for every version bump.
 			return strings.Replace(invalidOut,
-				" "+clusterversion.ByKey(clusterversion.V23_2).String()+"\n",
+				" "+clusterversion.ByKey(clusterversion.BinaryVersionKey).String()+"\n",
 				" latest\n",
 				-1)
 		})

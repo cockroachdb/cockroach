@@ -505,6 +505,9 @@ const (
 	// {statement|transaction}_execution_insights system tables.
 	V23_2_AddSystemExecInsightsTable
 
+	// V23_2 is CockroachDB v23.2. It's used for all v23.2.x patch releases.
+	V23_2
+
 	// *************************************************
 	// Step (1) Add new versions here.
 	// Do not add new versions to a patch release.
@@ -847,6 +850,10 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_2_AddSystemExecInsightsTable,
 		Version: roachpb.Version{Major: 23, Minor: 1, Internal: 32},
 	},
+	{
+		Key:     V23_2,
+		Version: roachpb.Version{Major: 23, Minor: 2, Internal: 0},
+	},
 
 	// *************************************************
 	// Step (2): Add new versions here.
@@ -868,7 +875,7 @@ const (
 	// finalVersion should be set on a release branch to the minted final cluster
 	// version key, e.g. to V22_2 on the release-22.2 branch once it is minted.
 	// Setting it has the effect of ensuring no versions are subsequently added.
-	finalVersion = invalidVersionKey
+	finalVersion = V23_2
 )
 
 var allowUpgradeToDev = envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false)
@@ -914,14 +921,6 @@ var versionsSingleton = func() keyedVersions {
 	}
 	return rawVersionsSingleton
 }()
-
-// V23_2 is a placeholder that will eventually be replaced by the actual 23.2
-// version Key, but in the meantime it points to the latest Key. The placeholder
-// is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 23.2 and has completed all associated migrations; most
-// version gates can use this instead of defining their own version key if all
-// simply need to check is that the cluster has upgraded to 23.2.
-var V23_2 = versionsSingleton[len(versionsSingleton)-1].Key
 
 const (
 	BinaryMinSupportedVersionKey = V23_1
