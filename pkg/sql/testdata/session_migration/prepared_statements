@@ -38,6 +38,11 @@ wire_prepare s5
 SELECT a, b FROM t2 AS OF SYSTEM TIME '-2us'
 ----
 
+# Regression test for transferring statements with AOST and placeholders.
+wire_prepare s6
+SELECT a, b FROM t2 AS OF SYSTEM TIME '-2us' WHERE b > $1
+----
+
 wire_prepare s_empty
 ;
 ----
@@ -113,6 +118,10 @@ SELECT pg_sleep(0.1)
 true
 
 wire_query s5
+----
+1 cat
+
+wire_query s6 0
 ----
 1 cat
 
