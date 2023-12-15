@@ -3599,6 +3599,9 @@ service Internal {
 message GetRangeDescriptorsRequest {
   // Span over which to request range descriptors.
   Span span = 1 [(gogoproto.nullable) = false];
+  // BatchSize if set non-zero streams batches incrementally (which may not be
+  // consistent).
+  int64 batch_size = 2;
 }
 
 // GetRangeDescriptorsResponse lists out the requested range descriptors.
