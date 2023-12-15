@@ -731,6 +731,13 @@ func (c *connector) getRangeDescs(
 	return nil, errors.Wrap(ctx.Err(), "new iterator")
 }
 
+// NewLazyIterator implements the IteratorFactory interface.
+func (i *connector) NewLazyIterator(
+	ctx context.Context, span roachpb.Span, pageSize int,
+) (rangedesc.LazyIterator, error) {
+	return rangedesc.NewPaginatedIter(ctx, span, pageSize, i.getRangeDescs)
+}
+
 // TokenBucket implements the kvtenant.TokenBucketProvider interface.
 func (c *connector) TokenBucket(
 	ctx context.Context, in *kvpb.TokenBucketRequest,

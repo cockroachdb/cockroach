@@ -209,10 +209,17 @@ func TestIterator(t *testing.T) {
 
 			iter, err := iteratorFactory.NewIterator(ctx, keys.EverythingSpan)
 			require.NoError(t, err)
+
+			lazy, err := iteratorFactory.NewLazyIterator(ctx, keys.EverythingSpan, 2)
+			require.NoError(t, err)
+
 			var descs []roachpb.RangeDescriptor
 			for iter.Valid() {
+				require.True(t, lazy.Valid())
+				require.Equal(t, iter.CurRangeDescriptor(), lazy.CurRangeDescriptor())
 				descs = append(descs, iter.CurRangeDescriptor())
 				iter.Next()
+				lazy.Next()
 			}
 			if len(descs) != numRanges {
 				t.Fatalf("expected to find %d ranges, found %d", numRanges, len(descs))
