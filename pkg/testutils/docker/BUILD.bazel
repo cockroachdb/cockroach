@@ -9,7 +9,10 @@ go_test(
         "//pkg/testutils/docker/docker-fsnotify",
     ],
     gotags = ["docker"],
-    tags = ["integration"],
+    tags = [
+        "integration",
+        "no-remote-exec",
+    ],
     deps = [
         "//pkg/util/ctxlog",
         "//pkg/util/log",

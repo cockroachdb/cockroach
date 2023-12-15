@@ -4,7 +4,6 @@ go_library(
     name = "corpus",
     srcs = ["corpus.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus",
-    tags = ["integration"],
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/schemachanger/scop",
