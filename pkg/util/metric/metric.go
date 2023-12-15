@@ -70,6 +70,7 @@ type PrometheusExportable interface {
 	// for the given metric. It does not fill in labels.
 	// The implementation must return thread-safe data to the caller, i.e.
 	// usually a copy of internal state.
+	// NB: For histogram metrics, ToPrometheusMetric should return the cumulative histogram.
 	ToPrometheusMetric() *prometheusgo.Metric
 }
 
@@ -102,12 +103,11 @@ type WindowedHistogram interface {
 	// Total returns the number of samples and their sum (respectively). Generally,
 	// this should be done against a cumulative histogram.
 	Total(hist *prometheusgo.Metric) (int64, float64)
-	// MeanWindowed returns the average of the samples in the current window.
-	// TODO(abarganier): Take in histogram window as a parameter.
-	MeanWindowed() float64
-	// Mean returns the average of the sample in the cumulative histogram.
-	// TODO(abarganier): Take in cumulative histogram as a parameter.
-	Mean() float64
+	// Mean returns the average of the sample in the provided histogram.
+	// A cumulative histogram or a histogram window can both be provided,
+	// depending on the use case. (Generally, we want to calculate the mean
+	// against the current window when using a WindowedHistogram).
+	Mean(hist *prometheusgo.Metric) float64
 	// ValueAtQuantileWindowed takes a quantile value [0,100] and returns the
 	// interpolated value at that quantile for the windowed histogram.
 	// Methods implementing this interface should the merge buckets, sums,
@@ -375,7 +375,7 @@ type IHistogram interface {
 
 	RecordValue(n int64)
 	Total(hist *prometheusgo.Metric) (int64, float64)
-	Mean() float64
+	Mean(hist *prometheusgo.Metric) float64
 }
 
 var _ IHistogram = &Histogram{}
@@ -480,15 +480,8 @@ func (h *Histogram) TotalWindowed() (int64, float64) {
 }
 
 // Mean returns the (cumulative) mean of samples.
-func (h *Histogram) Mean() float64 {
-	pm := h.ToPrometheusMetric()
-	return pm.Histogram.GetSampleSum() / float64(pm.Histogram.GetSampleCount())
-}
-
-// MeanWindowed implements the WindowedHistogram interface.
-func (h *Histogram) MeanWindowed() float64 {
-	pHist := h.ToPrometheusMetricWindowed().Histogram
-	return pHist.GetSampleSum() / float64(pHist.GetSampleCount())
+func (h *Histogram) Mean(hist *prometheusgo.Metric) float64 {
+	return hist.Histogram.GetSampleSum() / float64(hist.Histogram.GetSampleCount())
 }
 
 // ValueAtQuantileWindowed implements the WindowedHistogram interface.
@@ -702,16 +695,8 @@ func (mwh *ManualWindowHistogram) Total(hist *prometheusgo.Metric) (int64, float
 	return int64(h.GetSampleCount()), h.GetSampleSum()
 }
 
-func (mwh *ManualWindowHistogram) MeanWindowed() float64 {
-	mwh.mu.RLock()
-	defer mwh.mu.RUnlock()
-	pHist := mwh.ToPrometheusMetricWindowedLocked().Histogram
-	return pHist.GetSampleSum() / float64(pHist.GetSampleCount())
-}
-
-func (mwh *ManualWindowHistogram) Mean() float64 {
-	h := mwh.ToPrometheusMetric().Histogram
-	return h.GetSampleSum() / float64(h.GetSampleCount())
+func (mwh *ManualWindowHistogram) Mean(hist *prometheusgo.Metric) float64 {
+	return hist.Histogram.GetSampleSum() / float64(hist.Histogram.GetSampleCount())
 }
 
 // ValueAtQuantileWindowed implements the WindowedHistogram interface.
