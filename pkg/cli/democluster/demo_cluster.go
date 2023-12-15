@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -462,7 +463,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			}
 
 			for _, s := range []string{
-				string(sql.RestrictAccessToSystemInterface.Name()),
+				string(sqlclustersettings.RestrictAccessToSystemInterface.Name()),
 				string(sql.TipUserAboutSystemInterface.Name()),
 			} {
 				if _, err := ie.Exec(ctx, "restrict-system-interface", nil, fmt.Sprintf(`SET CLUSTER SETTING %s = true`, s)); err != nil {
