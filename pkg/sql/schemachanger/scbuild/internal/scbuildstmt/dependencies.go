@@ -13,6 +13,7 @@ package scbuildstmt
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -55,6 +56,9 @@ type BuildCtx interface {
 	// WithNewSourceElementID wraps BuilderStateWithNewSourceElementID in a
 	// BuildCtx return type.
 	WithNewSourceElementID() BuildCtx
+
+	// Codec returns the codec for the current tenant.
+	Codec() keys.SQLCodec
 }
 
 // ClusterAndSessionInfo provides general cluster and session info.
