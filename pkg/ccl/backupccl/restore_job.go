@@ -2638,14 +2638,17 @@ func (r *restoreResumer) dropDescriptors(
 		// then waits for the MVCC GC process to clear the data before removing any
 		// descriptors. To ensure that this happens quickly, we install a zone
 		// configuration for every table that we are going to drop with a small GC TTL.
-		//
-		// NB: We can't set GC TTLs for non-system tenants currently.
-		if codec.ForSystemTenant() {
+		canSetGCTTL := codec.ForSystemTenant() ||
+			(sql.SecondaryTenantZoneConfigsEnabled.Get(&r.execCfg.Settings.SV) &&
+				sql.SecondaryTenantsAllZoneConfigsEnabled.Get(&r.execCfg.Settings.SV))
+		if canSetGCTTL {
 			if err := setGCTTLForDroppingTable(
 				ctx, txn, descsCol, tableToDrop,
 			); err != nil {
 				return errors.Wrapf(err, "setting low GC TTL for table %q", tableToDrop.GetName())
 			}
+		} else {
+			log.Infof(ctx, "cannot lower GC TTL for table %q", tableToDrop.GetName())
 		}
 
 		// In the legacy GC job, setting DropTime ensures a table uses RangeClear
