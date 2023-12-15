@@ -103,6 +103,16 @@ func incrementArgs(key roachpb.Key, inc int64) *kvpb.IncrementRequest {
 	}
 }
 
+// delRangeArgs returns a DeleteRangeRequest for the specified span.
+func delRangeArgs(
+	key roachpb.Key, endKey roachpb.Key, useRangeTombstone bool,
+) *kvpb.DeleteRangeRequest {
+	return &kvpb.DeleteRangeRequest{
+		RequestHeader:     kvpb.RequestHeader{Key: key, EndKey: endKey},
+		UseRangeTombstone: useRangeTombstone,
+	}
+}
+
 func truncateLogArgs(index kvpb.RaftIndex, rangeID roachpb.RangeID) *kvpb.TruncateLogRequest {
 	return &kvpb.TruncateLogRequest{
 		Index:   index,

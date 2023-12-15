@@ -167,6 +167,7 @@ func evaluateBatch(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
+	omitInRangefeeds bool, // only relevant for transactional writes
 ) (_ *kvpb.BatchResponse, _ result.Result, retErr *kvpb.Error) {
 	defer func() {
 		// Ensure that errors don't carry the WriteTooOld flag set. The client
@@ -302,7 +303,7 @@ func evaluateBatch(
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
-			ctx, readWriter, rec, ms, ss, baHeader, args, reply, g, st, ui, evalPath,
+			ctx, readWriter, rec, ms, ss, baHeader, args, reply, g, st, ui, evalPath, omitInRangefeeds,
 		)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
@@ -460,6 +461,7 @@ func evaluateCommand(
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
+	omitInRangefeeds bool,
 ) (result.Result, error) {
 	var err error
 	var pd result.Result
@@ -479,6 +481,7 @@ func evaluateCommand(
 			Concurrency:           g,
 			Uncertainty:           ui,
 			DontInterleaveIntents: evalPath == readOnlyWithoutInterleavedIntents,
+			OmitInRangefeeds:      omitInRangefeeds,
 		}
 
 		if cmd.EvalRW != nil {
