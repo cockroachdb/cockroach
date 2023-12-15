@@ -2402,6 +2402,7 @@ GO_TARGETS = [
     "//pkg/util/log/eventpb:eventpb_test",
     "//pkg/util/log/gen:gen",
     "//pkg/util/log/gen:gen_library",
+    "//pkg/util/log/logbase:logbase",
     "//pkg/util/log/logconfig:gen",
     "//pkg/util/log/logconfig:logconfig",
     "//pkg/util/log/logconfig:logconfig_test",

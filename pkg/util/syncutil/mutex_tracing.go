@@ -14,6 +14,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log/logbase"
 )
 
 // TracedLock is like Lock, but logs a trace event using the provided context if
@@ -81,14 +83,14 @@ func tracedLock(ctx context.Context, l tryLocker) {
 		return // fast-path
 	}
 	const vLevel = 3
-	if !LogExpensiveLogEnabled(ctx, vLevel) {
+	if !logbase.ExpensiveLogEnabled(ctx, vLevel) {
 		l.Lock()
 		return
 	}
 	start := time.Now()
 	l.Lock()
 	if dur := time.Since(start); dur >= slowLockLogThreshold {
-		LogVEventfDepth(ctx, 2 /* depth */, vLevel, "slow mutex acquisition took %s", dur)
+		logbase.VEventfDepth(ctx, 2 /* depth */, vLevel, "slow mutex acquisition took %s", dur)
 	}
 }
 
@@ -111,15 +113,3 @@ var enableTracedLockFastPath = true
 // considered slow enough to log. It is a variable and not constant so that it
 // can be changed in tests.
 var slowLockLogThreshold = 500 * time.Microsecond
-
-// LogExpensiveLogEnabled is injected from pkg/util/log to avoid an import
-// cycle. This also allows it to be mocked out in tests.
-//
-// See log.ExpensiveLogEnabled for more details.
-var LogExpensiveLogEnabled = func(ctx context.Context, level int32) bool { return false }
-
-// LogVEventfDepth is injected from pkg/util/log to avoid an import
-// cycle. This also allows it to be mocked out in tests.
-//
-// See log.LogVEventfDepth for more details.
-var LogVEventfDepth = func(ctx context.Context, depth int, level int32, format string, args ...interface{}) {}

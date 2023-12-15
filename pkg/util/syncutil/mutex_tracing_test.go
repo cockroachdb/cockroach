@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log/logbase"
 	"github.com/stretchr/testify/require"
 )
 
@@ -234,13 +235,13 @@ func setSlowLockLogThreshold(dur time.Duration) func() {
 }
 
 func setExpensiveLogEnabled(b bool) func() {
-	return setGlobal(&LogExpensiveLogEnabled, func(ctx context.Context, level int32) bool { return b })
+	return setGlobal(&logbase.ExpensiveLogEnabled, func(ctx context.Context, level int32) bool { return b })
 }
 
 func setLogVEventfDepth(
 	f func(ctx context.Context, depth int, level int32, format string, args ...interface{}),
 ) func() {
-	return setGlobal(&LogVEventfDepth, f)
+	return setGlobal(&logbase.VEventfDepth, f)
 }
 
 func setGlobal[T any](g *T, v T) (cleanup func()) {
