@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -124,24 +123,14 @@ func TestMaxDiskSpillUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testClusterArgs := base.TestClusterArgs{
-		ReplicationMode: base.ReplicationAuto,
-	}
-	distSQLKnobs := &execinfra.TestingKnobs{}
-	distSQLKnobs.ForceDiskSpill = true
-	testClusterArgs.ServerArgs.Knobs.DistSQL = distSQLKnobs
-	tc := testcluster.StartTestCluster(t, 1, testClusterArgs)
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
-	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, "CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS g(i)")
 
-	_, err := conn.ExecContext(ctx, `
-CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS g(i)
-`)
-	assert.NoError(t, err)
 	maxDiskUsageRE := regexp.MustCompile(`max sql temp disk usage: (\d+)`)
-
 	queryMatchRE := func(query string, re *regexp.Regexp) bool {
 		rows, err := conn.QueryContext(ctx, query)
 		assert.NoError(t, err)
@@ -155,7 +144,8 @@ CREATE TABLE t (a PRIMARY KEY, b) AS SELECT i, i FROM generate_series(1, 10) AS 
 		return false
 	}
 
-	// We are expecting disk spilling to show up because we enabled ForceDiskSpill
+	// Use very low workmem limit so that the disk spilling happens.
+	sqlDB.Exec(t, "SET distsql_workmem = '2B';")
 	// knob above.
 	assert.True(t, queryMatchRE(`EXPLAIN ANALYZE (VERBOSE, DISTSQL) select * from t join t AS x on t.b=x.a`, maxDiskUsageRE), "didn't find max sql temp disk usage: in explain")
 	assert.False(t, queryMatchRE(`EXPLAIN ANALYZE (VERBOSE, DISTSQL) select * from t `, maxDiskUsageRE), "found unexpected max sql temp disk usage: in explain")
@@ -173,15 +163,8 @@ func TestCPUTimeEndToEnd(t *testing.T) {
 		return
 	}
 
-	testClusterArgs := base.TestClusterArgs{
-		ReplicationMode: base.ReplicationAuto,
-	}
-	distSQLKnobs := &execinfra.TestingKnobs{}
-	distSQLKnobs.ForceDiskSpill = true
-	testClusterArgs.ServerArgs.Knobs.DistSQL = distSQLKnobs
 	const numNodes = 3
-
-	tc := testcluster.StartTestCluster(t, numNodes, testClusterArgs)
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{})
 	ctx := context.Background()
 	defer tc.Stopper().Stop(ctx)
 
