@@ -206,8 +206,15 @@ func (i *impl) Scan(
 
 // NewIterator implements the IteratorFactory interface.
 func (i *impl) NewIterator(ctx context.Context, span roachpb.Span) (Iterator, error) {
-	var rangeDescriptors []roachpb.RangeDescriptor
-	// We need to set a non-zero page size here since otherwise Scan will read all
+	rangeDescriptors, err := i.getPage(ctx, span, 0)
+	return NewSliceIterator(rangeDescriptors), err
+}
+
+func (i *impl) getPage(
+	ctx context.Context, span roachpb.Span, pageSize int,
+) ([]roachpb.RangeDescriptor, error) {
+	fetchPageSize := pageSize
+	// We need a non-zero fetch page size here since otherwise Scan will read all
 	// of the span between our span start and MetaMax into a slice when it calls
 	// txn.Scan, even if it later filters to only some small subset that intersect
 	// our span. This can be problem if NewIterator is called on many small spans,
@@ -218,18 +225,24 @@ func (i *impl) NewIterator(ctx context.Context, span roachpb.Span) (Iterator, er
 	// trips to meta1/2 reasonable for a huge (say 10k range) span, though such
 	// callers would be better off with Scan anyway as this method buffers all of
 	// the descs eagerly.
-	const pageSize = 128
-	err := i.Scan(ctx, pageSize, func() {
+	if fetchPageSize == 0 {
+		fetchPageSize = 128
+	}
+
+	var rangeDescriptors []roachpb.RangeDescriptor
+	err := iterutil.Map(i.Scan(ctx, fetchPageSize, func() {
 		rangeDescriptors = rangeDescriptors[:0] // retryable
 	}, span, func(descriptors ...roachpb.RangeDescriptor) error {
 		rangeDescriptors = append(rangeDescriptors, descriptors...)
+		if pageSize != 0 && len(rangeDescriptors) >= pageSize {
+			return iterutil.StopIteration()
+		}
 		return nil
-	})
+	}))
 	if err != nil {
 		return nil, err
 	}
-
-	return NewSliceIterator(rangeDescriptors), nil
+	return rangeDescriptors, nil
 }
 
 func NewSliceIterator(descs []roachpb.RangeDescriptor) Iterator {
