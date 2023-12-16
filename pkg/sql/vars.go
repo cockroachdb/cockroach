@@ -2292,6 +2292,33 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`copy_num_retries_per_batch`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`copy_num_retries_per_batch`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			if b <= 0 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"copy_num_retries_per_batch must be a positive value: %d", b)
+			}
+			if b > math.MaxInt32 {
+				return pgerror.Newf(pgcode.InvalidParameterValue,
+					"cannot set copy_num_retries_per_batch to a value greater than %d: %d", math.MaxInt32, b)
+			}
+			m.SetCopyNumRetriesPerBatch(int32(b))
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return strconv.FormatInt(int64(evalCtx.SessionData().CopyNumRetriesPerBatch), 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return "5"
+		},
+	},
+
+	// CockroachDB extension.
 	`opt_split_scan_limit`: {
 		GetStringVal: makeIntGetStringValFn(`opt_split_scan_limit`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
