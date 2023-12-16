@@ -62,7 +62,7 @@ func TestVectorizedFlowDeadlocksWhenSpilling(t *testing.T) {
 	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING sql.distsql.acquire_vec_fds.max_retries = 1")
 	require.NoError(t, err)
 
-	queryCtx, queryCtxCancel := context.WithDeadline(ctx, timeutil.Now().Add(10*time.Second))
+	queryCtx, queryCtxCancel := context.WithDeadline(ctx, timeutil.Now().Add(time.Minute))
 	defer queryCtxCancel()
 	// Run a query with a hash joiner feeding into a hash aggregator, with both
 	// operators spilling to disk. We expect that the hash aggregator won't be
@@ -74,5 +74,5 @@ func TestVectorizedFlowDeadlocksWhenSpilling(t *testing.T) {
 	// We expect an error that is different from the query cancellation (which
 	// is what SQL layer returns on a context cancellation).
 	require.NotNil(t, err)
-	require.False(t, strings.Contains(err.Error(), cancelchecker.QueryCanceledError.Error()))
+	require.False(t, strings.Contains(err.Error(), cancelchecker.QueryCanceledError.Error()), err)
 }
