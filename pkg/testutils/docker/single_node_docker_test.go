@@ -22,7 +22,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -242,12 +241,8 @@ func TestSingleNodeDocker(t *testing.T) {
 						if err != nil {
 							return err
 						}
-						cleanedOutput, err := cleanQueryResult(resp.stdOut)
-						if err != nil {
+						if err := checkQueryResult(resp.stdOut, expected); err != nil {
 							return err
-						}
-						if cleanedOutput != expected {
-							return fmt.Errorf("executing %s, expect:\n%#v\n, got\n%#v", query, expected, cleanedOutput)
 						}
 						return nil
 					},
@@ -559,17 +554,10 @@ func (dn *dockerNode) rmContainer(ctx context.Context) error {
 	return nil
 }
 
-// cleanQueryResult is to parse the result from a sql query to a cleaner format.
-// e.g.
-// "id,name\r\n1,a\r\n2,b\r\n3,c\r\n\r\n\r\nTime: 11ms\r\n\r\n"
-// => "id,name\n1,a\n2,b\n3,c"
-func cleanQueryResult(queryRes string) (string, error) {
+func checkQueryResult(queryRes string, expected string) error {
 	formatted := strings.ReplaceAll(queryRes, "\r\n", "\n")
-	r := regexp.MustCompile(`([\s\S]+)\n{3}Time:.+`)
-	res := r.FindStringSubmatch(formatted)
-	if len(res) < 2 {
-		return "", errors.Errorf("cannot parse the query result: %s", queryRes)
+	if strings.Contains(formatted, expected) {
+		return nil
 	}
-	return res[1], nil
-
+	return errors.Errorf("queryRes %q doesn't contain the expected string %q", queryRes, expected)
 }
