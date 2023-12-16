@@ -3413,6 +3413,10 @@ func (m *sessionDataMutator) SetCopyWritePipeliningEnabled(val bool) {
 	m.data.CopyWritePipeliningEnabled = val
 }
 
+func (m *sessionDataMutator) SetCopyNumRetriesPerBatch(val int32) {
+	m.data.CopyNumRetriesPerBatch = val
+}
+
 func (m *sessionDataMutator) SetOptSplitScanLimit(val int32) {
 	m.data.OptSplitScanLimit = val
 }
