@@ -472,6 +472,9 @@ message LocalOnlySessionData {
   // CopyWritePipeliningEnabled indicates whether the write pipelining is
   // enabled for implicit txns used by COPY.
   bool copy_write_pipelining_enabled = 118;
+  // CopyNumRetriesPerBatch determines the number of times a single batch of
+  // rows can be retried for non-atomic COPY.
+  int32 copy_num_retries_per_batch = 119;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

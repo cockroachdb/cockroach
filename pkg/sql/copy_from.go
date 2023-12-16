@@ -1091,7 +1091,13 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 	var err error
 
 	rOpts := base.DefaultRetryOptions()
-	rOpts.MaxRetries = 5
+	rOpts.MaxRetries = int(c.p.SessionData().CopyNumRetriesPerBatch)
+	if rOpts.MaxRetries == 0 {
+		// MaxRetries == 0 means infinite number of attempts, and although
+		// CopyNumRetriesPerBatch should always be a positive number, let's be
+		// careful here.
+		rOpts.MaxRetries = 1
+	}
 	r := retry.StartWithCtx(ctx, rOpts)
 	for r.Next() {
 		if err = c.insertRowsInternal(ctx, finalBatch); err == nil {
