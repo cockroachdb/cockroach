@@ -146,6 +146,7 @@ func TestCreatePostRequest(t *testing.T) {
 		expectedReleaseBlocker  bool
 		expectedSkipTestFailure bool
 		expectedParams          map[string]string
+		message                 string
 	}{
 		// 1.
 		{
@@ -279,6 +280,24 @@ func TestCreatePostRequest(t *testing.T) {
 				"coverageBuild":    "true",
 			}),
 		},
+		// 10. Verify preemption failure are routed to test-eng and marked as infra-flake,
+		// even if underlying error is handled error otherwise.
+		{
+			nonReleaseBlocker: true,
+			failure:           createFailure(gce.ErrDNSOperation),
+			expectedPost:      true,
+			expectedLabels:    []string{"T-testeng", "X-infra-flake"},
+			message:           errmsgFailedDueToVmPreemption + " additional error messages",
+		},
+		// 11. Verify preemption failure are routed to test-eng and marked as infra-flake, irrespective of the underlying
+		// error.
+		{
+			nonReleaseBlocker: true,
+			failure:           createFailure(errors.New("random")),
+			expectedPost:      true,
+			expectedLabels:    []string{"T-testeng", "X-infra-flake"},
+			message:           errmsgFailedDueToVmPreemption + " additional error messages",
+		},
 	}
 
 	reg := makeTestRegistry()
@@ -327,10 +346,10 @@ func TestCreatePostRequest(t *testing.T) {
 
 			if c.loadTeamsFailed {
 				// Assert that if TEAMS.yaml cannot be loaded then function errors.
-				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild, c.coverageBuild)
+				_, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, c.message, c.metamorphicBuild, c.coverageBuild)
 				assert.Error(t, err, "Expected an error in createPostRequest when loading teams fails, but got nil")
 			} else {
-				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, "message", c.metamorphicBuild, c.coverageBuild)
+				req, err := github.createPostRequest("github_test", ti.start, ti.end, testSpec, c.failure, c.message, c.metamorphicBuild, c.coverageBuild)
 				assert.NoError(t, err, "Expected no error in createPostRequest")
 
 				r := &issues.Renderer{}
@@ -352,8 +371,11 @@ func TestCreatePostRequest(t *testing.T) {
 				expectedTeam := "@cockroachdb/unowned"
 				expectedName := "github_test"
 				expectedMessagePrefix := ""
-
-				if errors.Is(c.failure.squashedErr, gce.ErrDNSOperation) {
+				if strings.Contains(c.message, errmsgFailedDueToVmPreemption) {
+					expectedTeam = "@cockroachdb/test-eng"
+					expectedName = "vm_preemption"
+					expectedMessagePrefix = "test github_test failed due to "
+				} else if errors.Is(c.failure.squashedErr, gce.ErrDNSOperation) {
 					expectedTeam = "@cockroachdb/test-eng"
 					expectedName = "dns_problem"
 					expectedMessagePrefix = "test github_test failed due to "

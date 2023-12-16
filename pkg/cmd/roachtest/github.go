@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
@@ -155,6 +156,11 @@ func (g *githubIssues) createPostRequest(
 	var infraFlake bool
 	// Overrides to shield eng teams from potential flakes
 	switch {
+	case strings.Contains(message, errmsgFailedDueToVmPreemption):
+		issueOwner = registry.OwnerTestEng
+		issueName = "vm_preemption"
+		messagePrefix = fmt.Sprintf("test %s failed due to ", testName)
+		infraFlake = true
 	case failureContainsError(firstFailure, errClusterProvisioningFailed):
 		issueOwner = registry.OwnerTestEng
 		issueName = "cluster_creation"

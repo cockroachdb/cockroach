@@ -64,6 +64,9 @@ var (
 	// reference error for any failures during post test assertions
 	errDuringPostAssertions = fmt.Errorf("error during post test assertions")
 
+	// reference error for any failures due to VM preemption. The string is used in runTest function.
+	errmsgFailedDueToVmPreemption = "VMs preempted during the test run"
+
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
 	// https://grafana.testeng.crdb.io/prometheus/config
