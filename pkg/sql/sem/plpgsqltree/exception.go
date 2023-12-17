@@ -10,11 +10,7 @@
 
 package plpgsqltree
 
-import (
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 type Exception struct {
 	StatementImpl
@@ -36,14 +32,15 @@ func (s *Exception) Format(ctx *tree.FmtCtx) {
 			ctx.WriteString(" OR ")
 		}
 		if cond.SqlErrState != "" {
-			ctx.WriteString(fmt.Sprintf("SQLSTATE '%s'", cond.SqlErrState))
+			ctx.WriteString("SQLSTATE ")
+			formatStringQuotes(ctx, cond.SqlErrState)
 		} else {
-			ctx.WriteString(cond.SqlErrName)
+			formatString(ctx, cond.SqlErrName)
 		}
 	}
 	ctx.WriteString(" THEN\n")
 	for _, stmt := range s.Action {
-		stmt.Format(ctx)
+		ctx.FormatNode(stmt)
 	}
 }
 

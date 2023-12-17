@@ -16,7 +16,7 @@ BEGIN
 END
 ----
 DECLARE
-var1 CONSTANT INT8 collation_name NOT NULL := 30;
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
 BEGIN
 END
 
@@ -27,7 +27,7 @@ BEGIN
 END
 ----
 DECLARE
-var1 CONSTANT INT8 collation_name NOT NULL := 30;
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
 BEGIN
 END
 

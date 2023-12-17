@@ -47,6 +47,7 @@ END
 DECLARE
 BEGIN
 x := 10;
+<<labeled>>
 WHILE x > 0 LOOP
 x := x - 1;
 END LOOP labeled;
