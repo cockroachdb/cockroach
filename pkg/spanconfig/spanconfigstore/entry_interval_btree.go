@@ -99,42 +99,38 @@ func upperBound(c *entry) keyBound {
 	return keyBound{key: c.Key(), inc: true}
 }
 
-type leafNode struct {
-	ref   int32
-	count int16
-	leaf  bool
-	max   keyBound
-	items [maxItems]*entry
-}
-
 type node struct {
-	leafNode
-	children [maxItems + 1]*node
+	ref      int32
+	count    int16
+	leaf     bool
+	max      keyBound
+	items    [maxItems]*entry
+	children *childrenArray
 }
 
-//go:nocheckptr casts a ptr to a smaller struct to a ptr to a larger struct.
-func leafToNode(ln *leafNode) *node {
-	return (*node)(unsafe.Pointer(ln))
-}
+type childrenArray = [maxItems + 1]*node
 
-func nodeToLeaf(n *node) *leafNode {
-	return (*leafNode)(unsafe.Pointer(n))
+type interiorNode struct {
+	node
+	children childrenArray
 }
 
 var leafPool = sync.Pool{
-	New: func() interface{} {
-		return new(leafNode)
-	},
-}
-
-var nodePool = sync.Pool{
 	New: func() interface{} {
 		return new(node)
 	},
 }
 
+var nodePool = sync.Pool{
+	New: func() interface{} {
+		n := new(interiorNode)
+		n.node.children = &n.children
+		return &n.node
+	},
+}
+
 func newLeafNode() *node {
-	n := leafToNode(leafPool.Get().(*leafNode))
+	n := leafPool.Get().(*node)
 	n.leaf = true
 	n.ref = 1
 	return n
@@ -186,9 +182,8 @@ func (n *node) decRef(recursive bool) {
 	}
 	// Clear and release node into memory pool.
 	if n.leaf {
-		ln := nodeToLeaf(n)
-		*ln = leafNode{}
-		leafPool.Put(ln)
+		*n = node{}
+		leafPool.Put(n)
 	} else {
 		// Release child references first, if requested.
 		if recursive {
@@ -196,8 +191,10 @@ func (n *node) decRef(recursive bool) {
 				n.children[i].decRef(true /* recursive */)
 			}
 		}
-		*n = node{}
-		nodePool.Put(n)
+		in := (*interiorNode)(unsafe.Pointer(n))
+		*in = interiorNode{}
+		in.node.children = &in.children
+		nodePool.Put(&in.node)
 	}
 }
 
@@ -216,7 +213,7 @@ func (n *node) clone() *node {
 	c.items = n.items
 	if !c.leaf {
 		// Copy children and increase each refcount.
-		c.children = n.children
+		*c.children = *n.children
 		for i := int16(0); i <= c.count; i++ {
 			c.children[i].incRef()
 		}
