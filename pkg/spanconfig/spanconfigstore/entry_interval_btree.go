@@ -100,10 +100,16 @@ func upperBound(c *entry) keyBound {
 }
 
 type node struct {
-	ref      int32
-	count    int16
-	leaf     bool
-	max      keyBound
+	ref   int32
+	count int16
+	leaf  bool
+
+	// These fields form a keyBound, but by inlining them into node we can avoid
+	// the extra word that would be needed to pad out maxInc if it were part of
+	// its own struct.
+	maxInc bool
+	maxKey []byte
+
 	items    [maxItems]*entry
 	children *childrenArray
 }
@@ -168,6 +174,20 @@ func mut(n **node) *node {
 	return *n
 }
 
+// max returns the maximum keyBound in the subtree rooted at this node.
+func (n *node) max() keyBound {
+	return keyBound{
+		key: n.maxKey,
+		inc: n.maxInc,
+	}
+}
+
+// setMax sets the maximum keyBound for the subtree rooted at this node.
+func (n *node) setMax(k keyBound) {
+	n.maxKey = k.key
+	n.maxInc = k.inc
+}
+
 // incRef acquires a reference to the node.
 func (n *node) incRef() {
 	atomic.AddInt32(&n.ref, 1)
@@ -209,7 +229,8 @@ func (n *node) clone() *node {
 	// NB: copy field-by-field without touching n.ref to avoid
 	// triggering the race detector and looking like a data race.
 	c.count = n.count
-	c.max = n.max
+	c.maxKey = n.maxKey
+	c.maxInc = n.maxInc
 	c.items = n.items
 	if !c.leaf {
 		// Copy children and increase each refcount.
@@ -361,12 +382,14 @@ func (n *node) split(i int) (*entry, *node) {
 	}
 	n.count = int16(i)
 
-	next.max = next.findUpperBound()
-	if n.max.compare(next.max) != 0 && n.max.compare(upperBound(out)) != 0 {
+	nextMax := next.findUpperBound()
+	next.setMax(nextMax)
+	nMax := n.max()
+	if nMax.compare(nextMax) != 0 && nMax.compare(upperBound(out)) != 0 {
 		// If upper bound wasn't from new node or item
 		// at index i, it must still be from old node.
 	} else {
-		n.max = n.findUpperBound()
+		n.setMax(n.findUpperBound())
 	}
 	return out, next
 }
@@ -597,7 +620,7 @@ func (n *node) findUpperBound() keyBound {
 	}
 	if !n.leaf {
 		for i := int16(0); i <= n.count; i++ {
-			up := n.children[i].max
+			up := n.children[i].max()
 			if max.compare(up) < 0 {
 				max = up
 			}
@@ -612,12 +635,12 @@ func (n *node) findUpperBound() keyBound {
 func (n *node) adjustUpperBoundOnInsertion(item *entry, child *node) bool {
 	up := upperBound(item)
 	if child != nil {
-		if up.compare(child.max) < 0 {
-			up = child.max
+		if childMax := child.max(); up.compare(childMax) < 0 {
+			up = childMax
 		}
 	}
-	if n.max.compare(up) < 0 {
-		n.max = up
+	if n.max().compare(up) < 0 {
+		n.setMax(up)
 		return true
 	}
 	return false
@@ -629,14 +652,15 @@ func (n *node) adjustUpperBoundOnInsertion(item *entry, child *node) bool {
 func (n *node) adjustUpperBoundOnRemoval(item *entry, child *node) bool {
 	up := upperBound(item)
 	if child != nil {
-		if up.compare(child.max) < 0 {
-			up = child.max
+		if childMax := child.max(); up.compare(childMax) < 0 {
+			up = childMax
 		}
 	}
-	if n.max.compare(up) == 0 {
+	if n.max().compare(up) == 0 {
 		// up was previous upper bound of n.
-		n.max = n.findUpperBound()
-		return n.max.compare(up) != 0
+		max := n.findUpperBound()
+		n.setMax(max)
+		return max.compare(up) != 0
 	}
 	return false
 }
@@ -723,7 +747,7 @@ func (t *btree) Set(item *entry) {
 		newRoot.items[0] = splitLa
 		newRoot.children[0] = t.root
 		newRoot.children[1] = splitNode
-		newRoot.max = newRoot.findUpperBound()
+		newRoot.setMax(newRoot.findUpperBound())
 		t.root = newRoot
 	}
 	if replaced, _ := mut(&t.root).insert(item); !replaced {
@@ -1103,7 +1127,7 @@ func (i *iterator) findNextOverlap(item *entry) {
 			i.ascend()
 		} else if !i.n.leaf {
 			// Iterate down tree.
-			if i.o.constrMinReached || i.n.children[i.pos].max.contains(item) {
+			if i.o.constrMinReached || i.n.children[i.pos].max().contains(item) {
 				par := i.n
 				pos := i.pos
 				i.descend(par, pos)
