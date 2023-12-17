@@ -2,7 +2,9 @@
 
 # NOTE: After a new release has been cut, update this to the appropriate
 # Cockroach branch name (i.e. release-23.2, etc.), and corresponding Pebble
-# branch name (e.g. crl-release-23.2, etc.).
+# branch name (e.g. crl-release-23.2, etc.). Also update pebble nightly scripts
+# in build/teamcity/cockroach/nightlies to use `@crl-release-xy.z` instead of
+# `@master`.
 BRANCH=master
 PEBBLE_BRANCH=master
 
