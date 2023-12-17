@@ -77,19 +77,19 @@ func (s *Block) Format(ctx *tree.FmtCtx) {
 	if s.Decls != nil {
 		ctx.WriteString("DECLARE\n")
 		for _, dec := range s.Decls {
-			dec.Format(ctx)
+			ctx.FormatNode(dec)
 		}
 	}
 	// TODO(drewk): Make sure the child statement is pretty printed correctly
 	// with indents.
 	ctx.WriteString("BEGIN\n")
 	for _, childStmt := range s.Body {
-		childStmt.Format(ctx)
+		ctx.FormatNode(childStmt)
 	}
 	if s.Exceptions != nil {
 		ctx.WriteString("EXCEPTION\n")
 		for _, e := range s.Exceptions {
-			e.Format(ctx)
+			ctx.FormatNode(&e)
 		}
 	}
 	ctx.WriteString("END\n")
@@ -155,16 +155,18 @@ func (s *Declaration) Format(ctx *tree.FmtCtx) {
 	if s.Constant {
 		ctx.WriteString(" CONSTANT")
 	}
-	ctx.WriteString(fmt.Sprintf(" %s", s.Typ.SQLString()))
+	ctx.WriteString(" ")
+	ctx.FormatTypeReference(s.Typ)
 	if s.Collate != "" {
-		ctx.WriteString(fmt.Sprintf(" %s", s.Collate))
+		ctx.WriteString(" COLLATE ")
+		ctx.FormatNameP(&s.Collate)
 	}
 	if s.NotNull {
 		ctx.WriteString(" NOT NULL")
 	}
 	if s.Expr != nil {
 		ctx.WriteString(" := ")
-		s.Expr.Format(ctx)
+		ctx.FormatNode(s.Expr)
 	}
 	ctx.WriteString(";\n")
 }
@@ -199,7 +201,7 @@ func (s *CursorDeclaration) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString(" NO SCROLL")
 	}
 	ctx.WriteString(" CURSOR FOR ")
-	s.Query.Format(ctx)
+	ctx.FormatNode(s.Query)
 	ctx.WriteString(";\n")
 }
 
@@ -229,7 +231,10 @@ func (s *Assignment) PlpgSQLStatementTag() string {
 }
 
 func (s *Assignment) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString(fmt.Sprintf("%s := %s;\n", s.Var, s.Value))
+	ctx.FormatNode(&s.Var)
+	ctx.WriteString(" := ")
+	ctx.FormatNode(s.Value)
+	ctx.WriteString(";\n")
 }
 
 func (s *Assignment) WalkStmt(visitor StatementVisitor) (newStmt Statement, changed bool) {
@@ -260,22 +265,22 @@ func (s *If) CopyNode() *If {
 
 func (s *If) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("IF ")
-	s.Condition.Format(ctx)
+	ctx.FormatNode(s.Condition)
 	ctx.WriteString(" THEN\n")
 	for _, stmt := range s.ThenBody {
 		// TODO(drewk): Pretty Print with spaces, not tabs.
 		ctx.WriteString("\t")
-		stmt.Format(ctx)
+		ctx.FormatNode(stmt)
 	}
 	for _, elsifStmt := range s.ElseIfList {
-		elsifStmt.Format(ctx)
+		ctx.FormatNode(&elsifStmt)
 	}
 	for i, elseStmt := range s.ElseBody {
 		if i == 0 {
 			ctx.WriteString("ELSE\n")
 		}
 		ctx.WriteString("\t")
-		elseStmt.Format(ctx)
+		ctx.FormatNode(elseStmt)
 	}
 	ctx.WriteString("END IF;\n")
 }
@@ -337,11 +342,11 @@ func (s *ElseIf) CopyNode() *ElseIf {
 
 func (s *ElseIf) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("ELSIF ")
-	s.Condition.Format(ctx)
+	ctx.FormatNode(s.Condition)
 	ctx.WriteString(" THEN\n")
 	for _, stmt := range s.Stmts {
 		ctx.WriteString("\t")
-		stmt.Format(ctx)
+		ctx.FormatNode(stmt)
 	}
 }
 
@@ -397,13 +402,13 @@ func (s *Case) Format(ctx *tree.FmtCtx) {
 	}
 	ctx.WriteString("\n")
 	for _, when := range s.CaseWhenList {
-		when.Format(ctx)
+		ctx.FormatNode(when)
 	}
 	if s.HaveElse {
 		ctx.WriteString("ELSE\n")
 		for _, stmt := range s.ElseStmts {
 			ctx.WriteString("  ")
-			stmt.Format(ctx)
+			ctx.FormatNode(stmt)
 		}
 	}
 	ctx.WriteString("END CASE\n")
@@ -459,7 +464,7 @@ func (s *CaseWhen) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("WHEN %s THEN\n", s.Expr))
 	for i, stmt := range s.Stmts {
 		ctx.WriteString("  ")
-		stmt.Format(ctx)
+		ctx.FormatNode(stmt)
 		if i != len(s.Stmts)-1 {
 			ctx.WriteString("\n")
 		}
@@ -504,13 +509,19 @@ func (s *Loop) PlpgSQLStatementTag() string {
 }
 
 func (s *Loop) Format(ctx *tree.FmtCtx) {
+	if s.Label != "" {
+		ctx.WriteString("<<")
+		ctx.FormatNameP(&s.Label)
+		ctx.WriteString(">>\n")
+	}
 	ctx.WriteString("LOOP\n")
 	for _, stmt := range s.Body {
-		stmt.Format(ctx)
+		ctx.FormatNode(stmt)
 	}
 	ctx.WriteString("END LOOP")
 	if s.Label != "" {
-		ctx.WriteString(fmt.Sprintf(" %s", s.Label))
+		ctx.WriteString(" ")
+		ctx.FormatNameP(&s.Label)
 	}
 	ctx.WriteString(";\n")
 }
@@ -545,15 +556,21 @@ func (s *While) CopyNode() *While {
 }
 
 func (s *While) Format(ctx *tree.FmtCtx) {
+	if s.Label != "" {
+		ctx.WriteString("<<")
+		ctx.FormatNameP(&s.Label)
+		ctx.WriteString(">>\n")
+	}
 	ctx.WriteString("WHILE ")
-	s.Condition.Format(ctx)
+	ctx.FormatNode(s.Condition)
 	ctx.WriteString(" LOOP\n")
 	for _, stmt := range s.Body {
-		stmt.Format(ctx)
+		ctx.FormatNode(stmt)
 	}
 	ctx.WriteString("END LOOP")
 	if s.Label != "" {
-		ctx.WriteString(fmt.Sprintf(" %s", s.Label))
+		ctx.WriteString(" ")
+		ctx.FormatNameP(&s.Label)
 	}
 	ctx.WriteString(";\n")
 }
@@ -704,11 +721,12 @@ func (s *Exit) CopyNode() *Exit {
 func (s *Exit) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("EXIT")
 	if s.Label != "" {
-		ctx.WriteString(fmt.Sprintf(" %s", s.Label))
+		ctx.WriteString(" ")
+		ctx.FormatNameP(&s.Label)
 	}
 	if s.Condition != nil {
 		ctx.WriteString(" WHEN ")
-		s.Condition.Format(ctx)
+		ctx.FormatNode(s.Condition)
 	}
 	ctx.WriteString(";\n")
 
@@ -738,11 +756,12 @@ func (s *Continue) CopyNode() *Continue {
 func (s *Continue) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("CONTINUE")
 	if s.Label != "" {
-		ctx.WriteString(fmt.Sprintf(" %s", s.Label))
+		ctx.WriteString(" ")
+		ctx.FormatNameP(&s.Label)
 	}
 	if s.Condition != nil {
 		ctx.WriteString(" WHEN ")
-		s.Condition.Format(ctx)
+		ctx.FormatNode(s.Condition)
 	}
 	ctx.WriteString(";\n")
 }
@@ -771,9 +790,9 @@ func (s *Return) CopyNode() *Return {
 func (s *Return) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("RETURN ")
 	if s.Expr == nil {
-		s.RetVar.Format(ctx)
+		ctx.FormatNode(&s.RetVar)
 	} else {
-		s.Expr.Format(ctx)
+		ctx.FormatNode(s.Expr)
 	}
 	ctx.WriteString(";\n")
 }
@@ -847,16 +866,19 @@ func (s *Raise) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString(s.LogLevel)
 	}
 	if s.Code != "" {
-		ctx.WriteString(fmt.Sprintf(" SQLSTATE '%s'", s.Code))
+		ctx.WriteString(" SQLSTATE ")
+		formatStringQuotes(ctx, s.Code)
 	}
 	if s.CodeName != "" {
-		ctx.WriteString(fmt.Sprintf(" %s", s.CodeName))
+		ctx.WriteString(" ")
+		formatString(ctx, s.CodeName)
 	}
 	if s.Message != "" {
-		ctx.WriteString(fmt.Sprintf(" '%s'", s.Message))
+		ctx.WriteString(" ")
+		formatStringQuotes(ctx, s.Message)
 		for i := range s.Params {
 			ctx.WriteString(", ")
-			s.Params[i].Format(ctx)
+			ctx.FormatNode(s.Params[i])
 		}
 	}
 	for i := range s.Options {
@@ -865,7 +887,7 @@ func (s *Raise) Format(ctx *tree.FmtCtx) {
 		} else {
 			ctx.WriteString(",\n")
 		}
-		s.Options[i].Format(ctx)
+		ctx.FormatNode(&s.Options[i])
 	}
 	ctx.WriteString(";\n")
 }
@@ -877,7 +899,7 @@ type RaiseOption struct {
 
 func (s *RaiseOption) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("%s = ", strings.ToUpper(s.OptType)))
-	s.Expr.Format(ctx)
+	ctx.FormatNode(s.Expr)
 }
 
 func (s *Raise) PlpgSQLStatementTag() string {
@@ -930,7 +952,7 @@ func (s *Execute) CopyNode() *Execute {
 }
 
 func (s *Execute) Format(ctx *tree.FmtCtx) {
-	s.SqlStmt.Format(ctx)
+	ctx.FormatNode(s.SqlStmt)
 	if s.Target != nil {
 		ctx.WriteString(" INTO ")
 		if s.Strict {
@@ -940,7 +962,7 @@ func (s *Execute) Format(ctx *tree.FmtCtx) {
 			if i > 0 {
 				ctx.WriteString(", ")
 			}
-			s.Target[i].Format(ctx)
+			ctx.FormatNode(&s.Target[i])
 		}
 	}
 	ctx.WriteString(";\n")
@@ -1058,7 +1080,7 @@ func (s *GetDiagnostics) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString("GET DIAGNOSTICS ")
 	}
 	for idx, i := range s.DiagItems {
-		i.Format(ctx)
+		ctx.FormatNode(i)
 		if idx != len(s.DiagItems)-1 {
 			ctx.WriteString(" ")
 		}
@@ -1103,7 +1125,7 @@ func (s *Open) CopyNode() *Open {
 
 func (s *Open) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("OPEN ")
-	s.CurVar.Format(ctx)
+	ctx.FormatNode(&s.CurVar)
 	switch s.Scroll {
 	case tree.Scroll:
 		ctx.WriteString(" SCROLL")
@@ -1112,7 +1134,7 @@ func (s *Open) Format(ctx *tree.FmtCtx) {
 	}
 	if s.Query != nil {
 		ctx.WriteString(" FOR ")
-		s.Query.Format(ctx)
+		ctx.FormatNode(s.Query)
 	}
 	ctx.WriteString(";\n")
 }
@@ -1150,14 +1172,14 @@ func (s *Fetch) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString(" ")
 	}
 	ctx.WriteString("FROM ")
-	s.Cursor.Name.Format(ctx)
+	ctx.FormatName(string(s.Cursor.Name))
 	if s.Target != nil {
 		ctx.WriteString(" INTO ")
 		for i := range s.Target {
 			if i > 0 {
 				ctx.WriteString(", ")
 			}
-			s.Target[i].Format(ctx)
+			ctx.FormatNode(&s.Target[i])
 		}
 	}
 	ctx.WriteString(";\n")
@@ -1183,7 +1205,7 @@ type Close struct {
 
 func (s *Close) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("CLOSE ")
-	s.CurVar.Format(ctx)
+	ctx.FormatNode(&s.CurVar)
 	ctx.WriteString(";\n")
 }
 
@@ -1238,7 +1260,7 @@ type Null struct {
 }
 
 func (s *Null) Format(ctx *tree.FmtCtx) {
-	ctx.WriteString("NULL\n")
+	ctx.WriteString("NULL;\n")
 }
 
 func (s *Null) PlpgSQLStatementTag() string {
@@ -1248,4 +1270,22 @@ func (s *Null) PlpgSQLStatementTag() string {
 func (s *Null) WalkStmt(visitor StatementVisitor) (newStmt Statement, changed bool) {
 	newStmt, changed = visitor.Visit(s)
 	return newStmt, changed
+}
+
+// formatString is a helper function that prints "_" if FmtHideConstants is set,
+// and otherwise prints the given string.
+func formatString(ctx *tree.FmtCtx, str string) {
+	if ctx.HasFlags(tree.FmtHideConstants) {
+		ctx.WriteString("_")
+	} else {
+		ctx.WriteString(str)
+	}
+}
+
+// formatStringQuotes is similar to formatString, but surrounds the output with
+// single quotes.
+func formatStringQuotes(ctx *tree.FmtCtx, str string) {
+	ctx.WriteString("'")
+	formatString(ctx, str)
+	ctx.WriteString("'")
 }
