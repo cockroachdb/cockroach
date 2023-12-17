@@ -273,7 +273,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStressRace(t, "TODO(ssd) test times outs under race")
+	skip.UnderDuress(t, "TODO(ssd) test times outs under race")
 
 	// protects mergeNotification, writesPopulated
 	var mu syncutil.Mutex
