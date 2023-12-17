@@ -32,6 +32,7 @@ END
 DECLARE
 BEGIN
 x := 1;
+<<mathing>>
 LOOP
 EXIT WHEN x = 10;
 x := x + 1;
