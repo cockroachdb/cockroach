@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -101,19 +103,89 @@ func (s *systemStatusServer) localDownloadSpan(
 			return nil
 		})
 
+		const downloadWaiters = 8
+		downloadersDone := make(chan struct{}, downloadWaiters)
+
 		downloader := func(ctx context.Context) error {
 			for sp := range spanCh {
 				if err := store.TODOEngine().Download(ctx, sp); err != nil {
 					return err
 				}
 			}
+			downloadersDone <- struct{}{}
 			return nil
 		}
 
-		const downloadWaiters = 8
 		for i := 0; i < downloadWaiters; i++ {
 			grp.GoCtx(downloader)
 		}
+
+		grp.GoCtx(func(ctx context.Context) (retErr error) {
+			var added int64
+			// Remove any additional concurrency we've added when we exit.
+			defer func() {
+				if added != 0 {
+					if _, err := store.TODOEngine().AdjustCompactionConcurrency(-added); err != nil {
+						retErr = err
+					}
+				}
+			}()
+
+			const maxAddedConcurrency, lowCPU, highCPU, initialIncrease = 16, 0.7, 0.8, 2
+
+			// Begin by bumping up the concurrency by 2, then start watching the CPU
+			// usage and adjusting up or down if it is below 70% or above 80%, until
+			// the download callers all exit.
+			_, err := store.TODOEngine().AdjustCompactionConcurrency(initialIncrease)
+			if err != nil {
+				return err
+			}
+			added += initialIncrease
+
+			t := time.NewTicker(time.Second * 15)
+			defer t.Stop()
+			ctxDone := ctx.Done()
+
+			var waitersExited int
+			for {
+				select {
+				case <-ctxDone:
+					return ctx.Err()
+				case <-downloadersDone:
+					waitersExited++
+					// Return and stop managing added concurrency if the workers are done.
+					if waitersExited >= downloadWaiters {
+						return nil
+					}
+				case <-t.C:
+					cpu := s.sqlServer.cfg.RuntimeStatSampler.GetCPUCombinedPercentNorm()
+					if cpu > highCPU && added > 0 {
+						// If CPU is high and we have added any additional concurrency, we
+						// should reduce our added concurrency to make sure CPU is available
+						// for the execution of foreground traffic.
+						adjusted, err := store.TODOEngine().AdjustCompactionConcurrency(-1)
+						if err != nil {
+							return err
+						}
+						added--
+						log.Infof(ctx, "decreasing additional compaction concurrency to %d (%d total) due cpu usage %.0f%% > %.0f%%", added, adjusted, cpu*100, highCPU*100)
+					} else if cpu < lowCPU {
+						// If CPU is low, we should use it to do additional downloading.
+						if added < maxAddedConcurrency {
+							adjusted, err := store.TODOEngine().AdjustCompactionConcurrency(1)
+							if err != nil {
+								return err
+							}
+							added++
+							log.Infof(ctx, "increasing additional compaction concurrency to %d (%d total) due cpu usage %.0f%% < %.0f%%", added, adjusted, cpu*100, lowCPU*100)
+						} else {
+							log.Infof(ctx, "additional compaction concurrency already increased by maximum of %d; CPU %.0f%% < %.0f%%", added, cpu*100, lowCPU*100)
+						}
+					}
+				}
+			}
+		})
+
 		return grp.Wait()
 	})
 }
