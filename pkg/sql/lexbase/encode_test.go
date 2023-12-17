@@ -117,6 +117,28 @@ func testEncodeString(t *testing.T, input []byte, encode func(*bytes.Buffer, str
 	return stmt
 }
 
+func TestEncodeSQLStringWithNoDoubleEscapeQuotes(t *testing.T) {
+	testCases := []struct {
+		input  string
+		output string
+	}{
+		// (GH issue #107518)
+		{`\"`, `e'\"'`},
+		{`{"a": "b\u0099c"}`, `e'{"a": "b\\u0099c"}'`},
+		{`{\"a\": \"b\u0099c\"}`, `e'{\"a\": \"b\\u0099c\"}'`},
+	}
+
+	for _, tc := range testCases {
+		var buf bytes.Buffer
+		lexbase.EncodeSQLStringWithFlags(&buf, tc.input, lexbase.EncNoDoubleEscapeQuotes)
+		out := buf.String()
+
+		if out != tc.output {
+			t.Errorf("`%s`: expected `%s`, got `%s`", tc.input, tc.output, out)
+		}
+	}
+}
+
 func BenchmarkEncodeSQLString(b *testing.B) {
 	str := strings.Repeat("foo", 10000)
 	for i := 0; i < b.N; i++ {
