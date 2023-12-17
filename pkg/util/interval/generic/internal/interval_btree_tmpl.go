@@ -19,7 +19,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 // nilT is a nil instance of the Template type.
@@ -100,42 +99,37 @@ func upperBound(c T) keyBound {
 	return keyBound{key: c.Key(), inc: true}
 }
 
-type leafNode struct {
-	ref   int32
-	count int16
-	leaf  bool
-	max   keyBound
-	items [maxItems]T
-}
-
 type node struct {
-	leafNode
-	children [maxItems + 1]*node
+	ref      int32
+	count    int16
+	leaf     bool
+	max      keyBound
+	items    [maxItems]T
+	children *childrenArray
 }
 
-//go:nocheckptr casts a ptr to a smaller struct to a ptr to a larger struct.
-func leafToNode(ln *leafNode) *node {
-	return (*node)(unsafe.Pointer(ln))
-}
-
-func nodeToLeaf(n *node) *leafNode {
-	return (*leafNode)(unsafe.Pointer(n))
-}
+type childrenArray = [maxItems + 1]*node
 
 var leafPool = sync.Pool{
-	New: func() interface{} {
-		return new(leafNode)
-	},
-}
-
-var nodePool = sync.Pool{
 	New: func() interface{} {
 		return new(node)
 	},
 }
 
+var nodePool = sync.Pool{
+	New: func() interface{} {
+		type interiorNode struct {
+			node
+			children childrenArray
+		}
+		n := new(interiorNode)
+		n.node.children = &n.children
+		return &n.node
+	},
+}
+
 func newLeafNode() *node {
-	n := leafToNode(leafPool.Get().(*leafNode))
+	n := leafPool.Get().(*node)
 	n.leaf = true
 	n.ref = 1
 	return n
@@ -187,9 +181,8 @@ func (n *node) decRef(recursive bool) {
 	}
 	// Clear and release node into memory pool.
 	if n.leaf {
-		ln := nodeToLeaf(n)
-		*ln = leafNode{}
-		leafPool.Put(ln)
+		*n = node{}
+		leafPool.Put(n)
 	} else {
 		// Release child references first, if requested.
 		if recursive {
@@ -197,7 +190,8 @@ func (n *node) decRef(recursive bool) {
 				n.children[i].decRef(true /* recursive */)
 			}
 		}
-		*n = node{}
+		*n = node{children: n.children}
+		*n.children = childrenArray{}
 		nodePool.Put(n)
 	}
 }
@@ -217,7 +211,7 @@ func (n *node) clone() *node {
 	c.items = n.items
 	if !c.leaf {
 		// Copy children and increase each refcount.
-		c.children = n.children
+		*c.children = *n.children
 		for i := int16(0); i <= c.count; i++ {
 			c.children[i].incRef()
 		}
