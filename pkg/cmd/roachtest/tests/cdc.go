@@ -26,6 +26,7 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -1618,7 +1619,6 @@ func registerCDC(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4, spec.Arch(vm.ArchAMD64), spec.GCEZones("us-east1-b")),
 		Leases:           registry.MetamorphicLeases,
 		Suites:           registry.Suites(registry.Nightly),
-		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1631,18 +1631,33 @@ func registerCDC(r registry.Registry) {
 			}
 			fmt.Println("after installAzureCli")
 
+			kafkaEnv := " AZURE_CLIENT_ID=" + os.Getenv("AZURE_CLIENT_ID")
+			kafkaEnv += " AZURE_CLIENT_SECRET=" + os.Getenv("AZURE_CLIENT_SECRET")
+			kafkaEnv += " AZURE_SUBSCRIPTION_ID=" + os.Getenv("AZURE_SUBSCRIPTION_ID")
+			kafkaEnv += " AZURE_TENANT_ID=" + os.Getenv("AZURE_TENANT_ID")
+			kafka.start(ctx, "kafka", kafkaEnv)
+			kafka.getHelper(ctx)
+
 			// Just use 1 warehouse and no initial scan since this would involve
 			// cross-cloud traffic which is far more expensive.  The throughput also
 			// can't be too high to not hit the Throughput Unit (TU) limit of 1MBps/TU
-			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
-			ct.newChangefeed(feedArgs{
+			//ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
+			//ct.newChangefeed(feedArgs{
+			//	sinkType: azureEventHubKafkaSink,
+			//	targets:  allTpccTargets,
+			//	opts:     map[string]string{"initial_scan": "'no'"},
+			//})
+			//
+			//ct.waitForWorkload()
+			feed := ct.newChangefeed(feedArgs{
 				sinkType: azureEventHubKafkaSink,
 				targets:  allTpccTargets,
-				opts:     map[string]string{"initial_scan": "'no'"},
+				opts:     map[string]string{"initial_scan": "'only'"},
 			})
 
-			ct.waitForWorkload()
+			feed.waitForCompletion()
 		},
+		RequiresLicense: true,
 	})
 	r.Add(registry.TestSpec{
 		Name:             "cdc/bank",
@@ -1856,6 +1871,18 @@ export HYDRA_ADMIN_URL=http://localhost:4445
 export DSN=memory
 
 ./hydra serve all --dev
+`
+
+var installAzureCliScript = `
+sudo apt-get update && \
+sudo apt-get install -y ca-certificates curl apt-transport-https lsb-release gnupg && \
+sudo mkdir -p /etc/apt/keyrings && \
+curl -sLS https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor | sudo tee /etc/apt/keyrings/microsoft.gpg > /dev/null && \
+sudo chmod go+r /etc/apt/keyrings/microsoft.gpg && \
+AZ_DIST=$(lsb_release -cs) && \
+echo "deb [arch=\"dpkg --print-architecture\" signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $AZ_DIST main" | sudo tee /etc/apt/sources.list.d/azure-cli.list && \
+sudo apt-get update && \
+sudo apt-get install -y azure-cli
 `
 
 const (
@@ -2177,19 +2204,20 @@ func (k kafkaManager) installAzureCli(ctx context.Context) error {
 	//
 	//curl -sL https://packages.microsoft.com/keys/microsoft.asc |
 	//apt-key --keyring /usr/share/keyrings/microsoft.gpg  add -
-	//
+	//≈
 	//	AZ_REPO=$(lsb_release -cs)
 	//echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" |
 	//	tee /etc/apt/sources.list.d/azure-cli.list
 	return retry.WithMaxAttempts(ctx, retryOpts, 3, func() error {
-		if err := k.c.RunE(ctx, k.nodes, `echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ $AZ_REPO main" | sudo tee /etc/apt/sources.list.d/azure-cli.list`); err != nil {
-			return err
-		}
-		if err := k.c.RunE(ctx, k.nodes, `sudo apt-get -q update 2>&1 >> logs/apt-get-update.log`); err != nil {
-			return err
-		}
-		return k.c.RunE(ctx, k.nodes, `sudo DEBIAN_FRONTEND=noninteractive apt-get -yq --no-install-recommends install azure-cli 2>&1 >> logs/apt-get-install.log`)
+		return k.c.RunE(ctx, k.nodes, installAzureCliScript)
 	})
+}
+
+func (k kafkaManager) getHelper(ctx context.Context) {
+	cmdStr := "az eventhubs namespace authorization-rule keys list --resource-group cdc-testing --namespace-name roachtest-cdc --name roachtest"
+	results, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
+	k.t.L().Printf("output:%s\n%s\n", results.Stdout, results.Stderr)
+	k.t.L().Printf("err%s\n", err)
 }
 
 func (k kafkaManager) runWithRetry(ctx context.Context, cmd string) {
