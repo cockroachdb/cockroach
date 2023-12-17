@@ -124,14 +124,14 @@ func (t *btree) isUpperBoundCorrect(tt *testing.T) {
 }
 
 func (n *node) isUpperBoundCorrect(t *testing.T) {
-	require.Equal(t, 0, n.findUpperBound().compare(n.max))
+	require.Equal(t, 0, n.findUpperBound().compare(n.max()))
 	for i := int16(1); i < n.count; i++ {
-		require.LessOrEqual(t, upperBound(n.items[i]).compare(n.max), 0)
+		require.LessOrEqual(t, upperBound(n.items[i]).compare(n.max()), 0)
 	}
 	if !n.leaf {
 		for i := int16(0); i <= n.count; i++ {
 			child := n.children[i]
-			require.LessOrEqual(t, child.max.compare(n.max), 0)
+			require.LessOrEqual(t, child.max().compare(n.max()), 0)
 		}
 	}
 	n.recurse(func(child *node, _ int16) {
