@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
@@ -142,10 +143,6 @@ func UploadCockroach(
 	return uploadBinaryVersion(ctx, t, l, "cockroach", c, nodes, v)
 }
 
-// minWorkloadBinaryVersion is the minimum version for which we have
-// `workload` binaries available.
-var minWorkloadBinaryVersion = MustParseVersion("v22.2.0")
-
 // UploadWorkload stages the workload binary in the nodes.
 // Convenience function, see `uploadBinaryVersion` for more details.
 // The boolean return value indicates whether a workload binary was
@@ -159,7 +156,19 @@ func UploadWorkload(
 	nodes option.NodeListOption,
 	v *Version,
 ) (string, bool, error) {
-	if !v.AtLeast(minWorkloadBinaryVersion) {
+	// minWorkloadBinaryVersion is the minimum version for which we have
+	// `workload` binaries available.
+	var minWorkloadBinaryVersion *Version
+	switch c.Architecture() {
+	case vm.ArchARM64:
+		minWorkloadBinaryVersion = MustParseVersion("v23.2.0")
+	default:
+		minWorkloadBinaryVersion = MustParseVersion("v22.2.0")
+	}
+
+	// If we are uploading the `current` version, skip version checking,
+	// as the binary used is the one passed via command line flags.
+	if !v.IsCurrent() && !v.AtLeast(minWorkloadBinaryVersion) {
 		return "", false, nil
 	}
 

@@ -13,6 +13,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
         "//pkg/util/retry",
         "//pkg/util/version",
         "@com_github_cockroachdb_errors//:errors",
