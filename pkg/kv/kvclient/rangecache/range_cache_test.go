@@ -114,17 +114,18 @@ func (db *testDescriptorDB) getDescriptors(
 	return rs, preRs, nil
 }
 
-func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
-	rs, _, err := db.getDescriptors(roachpb.RKeyMin, false /* useReverseScan */)
-	if err != nil {
-		return nil, err
-	}
-	return &rs[0], nil
-}
-
 func (db *testDescriptorDB) RangeLookup(
 	ctx context.Context, key roachpb.RKey, _ RangeLookupConsistency, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+	// Special case the FirstRange.
+	if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
+		rs, _, err := db.getDescriptors(roachpb.RKeyMin, false /* useReverseScan */)
+		if err != nil {
+			return nil, nil, err
+		}
+		return rs, nil, nil
+	}
+
 	// Notify the test of the lookup, if the test wants notifications.
 	if ch, ok := db.listeners[key.String()]; ok {
 		close(ch)

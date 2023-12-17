@@ -119,11 +119,6 @@ type RangeDescriptorDB interface {
 		consistency RangeLookupConsistency,
 		useReverseScan bool,
 	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error)
-
-	// FirstRange returns the descriptor for the first Range. This is the
-	// Range containing all meta1 entries.
-	// TODO(nvanbenschoten): pull this detail in DistSender.
-	FirstRange() (*roachpb.RangeDescriptor, error)
 }
 
 // RangeCache is used to retrieve range descriptors for
@@ -1026,17 +1021,6 @@ func (rc *RangeCache) performRangeLookup(
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// Tag inner operations.
 	ctx = logtags.AddTag(ctx, "range-lookup", key)
-
-	// In this case, the requested key is stored in the cluster's first
-	// range. Return the first range, which is always gossiped and not
-	// queried from the datastore.
-	if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
-		desc, err := rc.db.FirstRange()
-		if err != nil {
-			return nil, nil, err
-		}
-		return []roachpb.RangeDescriptor{*desc}, nil, nil
-	}
 
 	return rc.db.RangeLookup(ctx, key, consistency, useReverseScan)
 }
