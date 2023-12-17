@@ -933,15 +933,15 @@ func (p *Pebble) SetCompactionConcurrency(n uint64) uint64 {
 // AdjustCompactionConcurrency adjusts the compaction concurrency up or down by
 // the passed delta, down to a minimum of 1. Attempts to reduce it below 1 will
 // return an error.
-func (p *Pebble) AdjustCompactionConcurrency(delta int64) (uint64, error) {
+func (p *Pebble) AdjustCompactionConcurrency(delta int64) uint64 {
 	for {
 		current := atomic.LoadUint64(&p.atomic.compactionConcurrency)
 		adjusted := int64(current) + delta
 		if adjusted < 1 {
-			return 0, fmt.Errorf("compaction concurrency cannot be less than 1")
+			adjusted = 1
 		}
 		if atomic.CompareAndSwapUint64(&p.atomic.compactionConcurrency, current, uint64(adjusted)) {
-			return uint64(adjusted), nil
+			return uint64(adjusted)
 		}
 	}
 }

@@ -1088,7 +1088,7 @@ type Engine interface {
 
 	// AdjustCompactionConcurrency is used to adjust the engine's compaction
 	// concurrency.
-	AdjustCompactionConcurrency(delta int64) (uint64, error)
+	AdjustCompactionConcurrency(delta int64) uint64
 
 	// SetStoreID informs the engine of the store ID, once it is known.
 	// Used to show the store ID in logs and to initialize the shared object
