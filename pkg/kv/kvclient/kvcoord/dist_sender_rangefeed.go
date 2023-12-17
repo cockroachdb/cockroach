@@ -756,15 +756,11 @@ func (a *activeRangeFeed) acquireCatchupScanQuota(
 func newTransportForRange(
 	ctx context.Context, desc *roachpb.RangeDescriptor, ds *DistSender,
 ) (Transport, error) {
-	var latencyFn LatencyFunc
-	if ds.rpcContext != nil {
-		latencyFn = ds.rpcContext.RemoteClocks.Latency
-	}
 	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, nil, AllExtantReplicas)
 	if err != nil {
 		return nil, err
 	}
-	replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, latencyFn, ds.locality)
+	replicas.OptimizeReplicaOrder(ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
 	opts := SendOptions{class: connectionClass(&ds.st.SV)}
 	return ds.transportFactory(opts, ds.nodeDialer, replicas)
 }
