@@ -146,6 +146,12 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt.InMixedVersion(
 		"test schema change step",
 		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+			// TODO: re-enable once #116586 is addressed.
+			if h.Context.Finalizing {
+				l.Printf("schemachange workload has been flaking when run during upgrades; skipping")
+				return nil
+			}
+
 			randomNode := h.RandomNode(rng, c.All())
 			// The schemachange workload is designed to work up to one
 			// version back. Therefore, we upload a compatible `workload`
