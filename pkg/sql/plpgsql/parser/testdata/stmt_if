@@ -14,7 +14,7 @@ END
 DECLARE
 BEGIN
 IF johnnygyro THEN
-	NULL
+	NULL;
 	diego := 1 + 2;
 ELSIF hihotpants THEN
 	diego := 7 + 7;
