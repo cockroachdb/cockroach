@@ -811,6 +811,18 @@ func (ds *DistSender) RangeDescriptorCache() *rangecache.RangeCache {
 func (ds *DistSender) RangeLookup(
 	ctx context.Context, key roachpb.RKey, rc rangecache.RangeLookupConsistency, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+
+	// In this case, the requested key is stored in the cluster's first
+	// range. Return the first range, which is always gossiped and not
+	// queried from the datastore.
+	if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
+		desc, err := ds.FirstRange()
+		if err != nil {
+			return nil, nil, err
+		}
+		return []roachpb.RangeDescriptor{*desc}, nil, nil
+	}
+
 	ds.metrics.RangeLookups.Inc(1)
 	switch rc {
 	case kvpb.INCONSISTENT, kvpb.READ_UNCOMMITTED:

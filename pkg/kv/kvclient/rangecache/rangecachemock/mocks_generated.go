@@ -36,21 +36,6 @@ func (m *MockRangeDescriptorDB) EXPECT() *MockRangeDescriptorDBMockRecorder {
 	return m.recorder
 }
 
-// FirstRange mocks base method.
-func (m *MockRangeDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FirstRange")
-	ret0, _ := ret[0].(*roachpb.RangeDescriptor)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// FirstRange indicates an expected call of FirstRange.
-func (mr *MockRangeDescriptorDBMockRecorder) FirstRange() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FirstRange", reflect.TypeOf((*MockRangeDescriptorDB)(nil).FirstRange))
-}
-
 // RangeLookup mocks base method.
 func (m *MockRangeDescriptorDB) RangeLookup(arg0 context.Context, arg1 roachpb.RKey, arg2 kvpb.ReadConsistencyType, arg3 bool) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	m.ctrl.T.Helper()
