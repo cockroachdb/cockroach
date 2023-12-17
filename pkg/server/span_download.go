@@ -109,7 +109,9 @@ func (s *systemStatusServer) localDownloadSpan(
 			}
 			return nil
 		}
-		for i := 0; i < 4; i++ {
+
+		const downloadWaiters = 8
+		for i := 0; i < downloadWaiters; i++ {
 			grp.GoCtx(downloader)
 		}
 		return grp.Wait()
