@@ -252,11 +252,12 @@ func createTestStoreWithoutStart(
 	rangeProv := &dummyFirstRangeProvider{}
 	var storeSender struct{ kv.Sender }
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-		AmbientCtx:         cfg.AmbientCtx,
-		Settings:           cfg.Settings,
-		Clock:              cfg.Clock,
-		NodeDescs:          mockNodeStore{desc: nodeDesc},
-		RPCContext:         rpcContext,
+		AmbientCtx: cfg.AmbientCtx,
+		Settings:   cfg.Settings,
+		Clock:      cfg.Clock,
+		NodeDescs:  mockNodeStore{desc: nodeDesc},
+
+		Stopper:            stopper,
 		RPCRetryOptions:    &retry.Options{},
 		NodeDialer:         cfg.NodeDialer,
 		FirstRangeProvider: rangeProv,
