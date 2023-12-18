@@ -159,6 +159,22 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	util.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
 
+var SingleDeleteCrashOnInvariantViolation = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"storage.single_delete.crash_on_invariant_violation.enabled",
+	"set to true to crash if the single delete invariant is violated",
+	true,
+	settings.WithPublic,
+)
+
+var SingleDeleteCrashOnIneffectual = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"storage.single_delete.crash_on_ineffectual.enabled",
+	"set to true to crash if the single delete was ineffectual",
+	true,
+	settings.WithPublic,
+)
+
 // ShouldUseEFOS returns true if either of the UseEFOS or UseExciseForSnapshots
 // cluster settings are enabled, and EventuallyFileOnlySnapshots must be used
 // to guarantee snapshot-like semantics.
@@ -819,14 +835,16 @@ type Pebble struct {
 
 	// Stats updated by pebble.EventListener invocations, and returned in
 	// GetMetrics. Updated and retrieved atomically.
-	writeStallCount      int64
-	writeStallDuration   time.Duration
-	writeStallStartNanos int64
-	diskSlowCount        int64
-	diskStallCount       int64
-	sharedBytesRead      int64
-	sharedBytesWritten   int64
-	iterStats            struct {
+	writeStallCount                  int64
+	writeStallDuration               time.Duration
+	writeStallStartNanos             int64
+	diskSlowCount                    int64
+	diskStallCount                   int64
+	singleDelInvariantViolationCount int64
+	singleDelIneffectualCount        int64
+	sharedBytesRead                  int64
+	sharedBytesWritten               int64
+	iterStats                        struct {
 		syncutil.Mutex
 		AggregatedIteratorStats
 	}
@@ -1176,6 +1194,27 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 				panic(errors.AssertionFailedf("during Engine.Close there remain %d files open by client code; all files must be closed before closing the Engine", openFiles))
 			}
 		})
+	}
+
+	opts.Experimental.SingleDeleteInvariantViolationCallback = func(userKey []byte) {
+		logFunc := log.Errorf
+		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.Settings.SV) {
+			logFunc = log.Fatalf
+		}
+		logFunc(logCtx, "SingleDel invariant violation on key %s", roachpb.Key(userKey))
+		atomic.AddInt64(&p.singleDelInvariantViolationCount, 1)
+	}
+	// TODO(sumeer): remove this nil check once the metamorphic test is fixed,
+	// and does not need to override.
+	if opts.Experimental.IneffectualSingleDeleteCallback == nil {
+		opts.Experimental.IneffectualSingleDeleteCallback = func(userKey []byte) {
+			logFunc := log.Errorf
+			if SingleDeleteCrashOnIneffectual.Get(&cfg.Settings.SV) {
+				logFunc = log.Fatalf
+			}
+			logFunc(logCtx, "Ineffectual SingleDel on key %s", roachpb.Key(userKey))
+			atomic.AddInt64(&p.singleDelIneffectualCount, 1)
+		}
 	}
 
 	// MaxConcurrentCompactions can be set by multiple sources, but all the
@@ -1978,13 +2017,15 @@ func (p *Pebble) Flush() error {
 // GetMetrics implements the Engine interface.
 func (p *Pebble) GetMetrics() Metrics {
 	m := Metrics{
-		Metrics:                 p.db.Metrics(),
-		WriteStallCount:         atomic.LoadInt64(&p.writeStallCount),
-		WriteStallDuration:      time.Duration(atomic.LoadInt64((*int64)(&p.writeStallDuration))),
-		DiskSlowCount:           atomic.LoadInt64(&p.diskSlowCount),
-		DiskStallCount:          atomic.LoadInt64(&p.diskStallCount),
-		SharedStorageReadBytes:  atomic.LoadInt64(&p.sharedBytesRead),
-		SharedStorageWriteBytes: atomic.LoadInt64(&p.sharedBytesWritten),
+		Metrics:                          p.db.Metrics(),
+		WriteStallCount:                  atomic.LoadInt64(&p.writeStallCount),
+		WriteStallDuration:               time.Duration(atomic.LoadInt64((*int64)(&p.writeStallDuration))),
+		DiskSlowCount:                    atomic.LoadInt64(&p.diskSlowCount),
+		DiskStallCount:                   atomic.LoadInt64(&p.diskStallCount),
+		SingleDelInvariantViolationCount: atomic.LoadInt64(&p.singleDelInvariantViolationCount),
+		SingleDelIneffectualCount:        atomic.LoadInt64(&p.singleDelIneffectualCount),
+		SharedStorageReadBytes:           atomic.LoadInt64(&p.sharedBytesRead),
+		SharedStorageWriteBytes:          atomic.LoadInt64(&p.sharedBytesWritten),
 	}
 	p.iterStats.Lock()
 	m.Iterator = p.iterStats.AggregatedIteratorStats
