@@ -173,6 +173,16 @@ func UnderNonTestBuild(t SkippableTest) {
 
 // UnderDuress skips the test if we are running under any of the
 // conditions we have observed as producing slow builds.
+func UnderDuress(t SkippableTest, args ...interface{}) {
+	t.Helper()
+	if Duress() {
+		skipReason := fmt.Sprintf("duress (current config %s)", testConfig())
+		maybeSkip(t, skipReason, args...)
+	}
+}
+
+// UnderDuressWithIssue skips the test if we are running under any of the
+// conditions we have observed as producing slow builds.
 func UnderDuressWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {
 	t.Helper()
 	if Duress() {
