@@ -36,3 +36,64 @@ END IF;
 END LOOP;
 RETURN res;
 END
+ -- normalized!
+DECLARE
+i INT8;
+n INT8 := (array_length((arr), (1)));
+res INT8[] := ((ARRAY[])::INT8[]);
+BEGIN
+i := (0);
+LOOP
+IF ((i) = (idx)) THEN
+	res := ((res) || (val));
+ELSE
+	res := ((res) || ((arr)[((i) + (1))]));
+END IF;
+i := ((i) + (1));
+IF ((i) >= (n)) THEN
+	EXIT;
+END IF;
+END LOOP;
+RETURN (res);
+END
+ -- fully parenthesized
+DECLARE
+i INT8;
+n INT8 := array_length(arr, _);
+res INT8[] := ARRAY[]::INT8[];
+BEGIN
+i := _;
+LOOP
+IF i = idx THEN
+	res := res || val;
+ELSE
+	res := res || arr[i + _];
+END IF;
+i := i + _;
+IF i >= n THEN
+	EXIT;
+END IF;
+END LOOP;
+RETURN res;
+END
+ -- literals removed
+DECLARE
+i INT8;
+n INT8 := _(_, 1);
+res INT8[] := ARRAY[]::INT8[];
+BEGIN
+_ := 0;
+LOOP
+IF _ = _ THEN
+	_ := _ || _;
+ELSE
+	_ := _ || _[_ + 1];
+END IF;
+_ := _ + 1;
+IF _ >= _ THEN
+	EXIT;
+END IF;
+END LOOP;
+RETURN _;
+END
+ -- identifiers removed
