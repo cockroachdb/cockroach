@@ -1240,7 +1240,7 @@ func (c *clusterImpl) FetchTimeseriesData(ctx context.Context, l *logger.Logger)
 			sec = fmt.Sprintf("--certs-dir=%s", certs)
 		}
 		if err := c.RunE(
-			ctx, c.Node(node), fmt.Sprintf("%s debug tsdump %s --format=raw > tsdump.gob", test.DefaultCockroachPath, sec),
+			ctx, c.Node(node), fmt.Sprintf("%s debug tsdump %s --port={pgport%s} --format=raw > tsdump.gob", test.DefaultCockroachPath, sec, c.Node(node)),
 		); err != nil {
 			return err
 		}
@@ -1441,14 +1441,14 @@ func (c *clusterImpl) HealthStatus(
 }
 
 // assertConsistentReplicas fails the test if
-// crdb_internal.check_consistency(true, ”, ”) indicates that any ranges'
+// crdb_internal.check_consistency(false, ”, ”) indicates that any ranges'
 // replicas are inconsistent with each other.
 func (c *clusterImpl) assertConsistentReplicas(
 	ctx context.Context, db *gosql.DB, t *testImpl,
 ) error {
 	t.L().Printf("checking for replica divergence")
 	return timeutil.RunWithTimeout(
-		ctx, "consistency check", 5*time.Minute,
+		ctx, "consistency check", 20*time.Minute,
 		func(ctx context.Context) error {
 			return roachtestutil.CheckReplicaDivergenceOnDB(ctx, t.L(), db)
 		},

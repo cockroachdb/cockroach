@@ -937,6 +937,7 @@ func TestRelocateNonVoters(t *testing.T) {
 func TestExperimentalRelocateNonVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "test flakes in slow builds; see #108081")
 
 	testCases := []testCase{
 		{

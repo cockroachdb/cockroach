@@ -203,3 +203,19 @@ var DeclarativeSchemaChangerCounter = telemetry.GetCounterOnce("sql.schema.schem
 // LegacySchemaChangerCounter is incremented whenever the legacy schema changer
 // is used.
 var LegacySchemaChangerCounter = telemetry.GetCounterOnce("sql.schema.schema_changer_mode.legacy")
+
+// MixedDDLDMLTransactionSuccessCounter is incremented whenever an explicit
+// transaction that has both DDL and DML statements succeeds.
+var MixedDDLDMLTransactionSuccessCounter = telemetry.GetCounterOnce("sql.schema.transaction.mixed_ddl_dml.success")
+
+// MixedDDLDMLTransactionFailureCounter is incremented whenever an explicit
+// transaction that has both DDL and DML statements fails.
+var MixedDDLDMLTransactionFailureCounter = telemetry.GetCounterOnce("sql.schema.transaction.mixed_ddl_dml.failure")
+
+// DDLOnlyTransactionSuccessCounter is incremented whenever an explicit
+// transaction that has only DDL statements succeeds.
+var DDLOnlyTransactionSuccessCounter = telemetry.GetCounterOnce("sql.schema.transaction.ddl_only.success")
+
+// DDLOnlyTransactionFailureCounter is incremented whenever an explicit
+// transaction that has only DDL statements fails.
+var DDLOnlyTransactionFailureCounter = telemetry.GetCounterOnce("sql.schema.transaction.ddl_only.failure")
