@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,17 +24,32 @@ func TestIncrementCounter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	l := newLogMetricsRegistry()
+
+	metrics := map[log.Metric]*metric.Counter{
+		log.FluentSinkConnectionAttempt: l.metricsStruct.FluentSinkConnAttempts,
+		log.FluentSinkConnectionError:   l.metricsStruct.FluentSinkConnErrors,
+		log.FluentSinkWriteAttempt:      l.metricsStruct.FluentSinkWriteAttempts,
+		log.FluentSinkWriteError:        l.metricsStruct.FluentSinkWriteErrors,
+		log.BufferedSinkMessagesDropped: l.metricsStruct.BufferedSinkMessagesDropped,
+		log.LogMessageCount:             l.metricsStruct.LogMessageCount,
+	}
 	func() {
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		require.Zero(t, l.metricsStruct.FluentSinkConnErrors.Count())
+		for _, m := range metrics {
+			require.Zero(t, m.Count())
+		}
 	}()
-	l.IncrementCounter(log.FluentSinkConnectionError, 1)
-	l.IncrementCounter(log.FluentSinkConnectionError, 2)
+	for m := range metrics {
+		l.IncrementCounter(m, 1)
+		l.IncrementCounter(m, 2)
+	}
 	func() {
 		l.mu.Lock()
 		defer l.mu.Unlock()
-		require.Equal(t, int64(3), l.metricsStruct.FluentSinkConnErrors.Count())
+		for _, m := range metrics {
+			require.Equal(t, int64(3), m.Count())
+		}
 	}()
 }
 
