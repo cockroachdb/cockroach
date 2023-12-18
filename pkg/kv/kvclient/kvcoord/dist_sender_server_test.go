@@ -4245,7 +4245,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		require.Equal(t, exp.expClientRefreshFailure, metrics.ClientRefreshFail.Count() != 0, "TxnMetrics.ClientRefreshFail")
 		require.Equal(t, exp.expClientAutoRetryAfterRefresh, metrics.ClientRefreshAutoRetries.Count() != 0, "TxnMetrics.ClientRefreshAutoRetries")
 		require.Equal(t, exp.expServerRefresh, metrics.ServerRefreshSuccess.Count() != 0, "TxnMetrics.ServerRefreshSuccess")
-		_, restartsSum := metrics.Restarts.Total()
+		_, restartsSum := metrics.Restarts.CumulativeSnapshot().Total()
 		require.Equal(t, exp.expClientRestart, restartsSum != 0, "TxnMetrics.Restarts")
 		require.Equal(t, exp.expOnePhaseCommit, metrics.Commits1PC.Count() != 0, "TxnMetrics.Commits1PC")
 		require.Equal(t, exp.expParallelCommitAutoRetry, metrics.ParallelCommitAutoRetries.Count() != 0, "TxnMetrics.ParallelCommitAutoRetries")

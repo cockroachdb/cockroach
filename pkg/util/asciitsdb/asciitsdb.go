@@ -108,17 +108,16 @@ func (t *TSDB) Scrape(ctx context.Context) {
 				return
 			}
 			// Use cumulative stats here. Count must be calculated against the cumulative histogram.
-			promExportable, ok := mtr.(metric.PrometheusExportable)
+			cumulative, ok := mtr.(metric.CumulativeHistogram)
 			if !ok {
 				panic(errors.AssertionFailedf(`extractValue called on histogram metric %q that does not implement the
-				PrometheusExportable interface. All histogram metrics are expected to implement this interface`, name))
+				CumulativeHistogram interface. All histogram metrics are expected to implement this interface`, name))
 			}
-			histCumulative := promExportable.ToPrometheusMetric()
-			count, _ := mtr.Total(histCumulative)
+			count, _ := cumulative.CumulativeSnapshot().Total()
 			t.mu.points[name+"-count"] = append(t.mu.points[name+"-count"], float64(count))
 			// Use windowed stats for avg and quantiles
-			histWindow := mtr.ToPrometheusMetricWindowed()
-			avg := mtr.Mean(histWindow)
+			windowedSnapshot := mtr.WindowedSnapshot()
+			avg := windowedSnapshot.Mean()
 			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 				avg = 0
 			}
@@ -130,7 +129,7 @@ func (t *TSDB) Scrape(ctx context.Context) {
 				{"-p75", 75},
 				{"-p50", 50},
 			} {
-				t.mu.points[name+pt.suffix] = append(t.mu.points[name+pt.suffix], mtr.ValueAtQuantileWindowed(pt.quantile, histWindow))
+				t.mu.points[name+pt.suffix] = append(t.mu.points[name+pt.suffix], windowedSnapshot.ValueAtQuantile(pt.quantile))
 			}
 		case metric.PrometheusExportable:
 			// NB: this branch is intentionally at the bottom since all metrics

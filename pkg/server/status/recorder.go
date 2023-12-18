@@ -684,24 +684,23 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 	switch mtr := mtr.(type) {
 	case metric.WindowedHistogram:
 		// Use cumulative stats here. Count and Sum must be calculated against the cumulative histogram.
-		promExportable, ok := mtr.(metric.PrometheusExportable)
+		cumulative, ok := mtr.(metric.CumulativeHistogram)
 		if !ok {
 			return errors.Newf(`extractValue called on histogram metric %q that does not implement the
-				PrometheusExportable interface. All histogram metrics are expected to implement this interface`, name)
+				CumulativeHistogram interface. All histogram metrics are expected to implement this interface`, name)
 		}
-		histCumulative := promExportable.ToPrometheusMetric()
-		count, sum := mtr.Total(histCumulative)
+		count, sum := cumulative.CumulativeSnapshot().Total()
 		fn(name+"-count", float64(count))
 		fn(name+"-sum", sum)
 		// Use windowed stats for avg and quantiles
-		histWindow := mtr.ToPrometheusMetricWindowed()
-		avg := mtr.Mean(histWindow)
+		windowedSnapshot := mtr.WindowedSnapshot()
+		avg := windowedSnapshot.Mean()
 		if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 			avg = 0
 		}
 		fn(name+"-avg", avg)
 		for _, pt := range metric.RecordHistogramQuantiles {
-			fn(name+pt.Suffix, mtr.ValueAtQuantileWindowed(pt.Quantile, histWindow))
+			fn(name+pt.Suffix, windowedSnapshot.ValueAtQuantile(pt.Quantile))
 		}
 	case metric.PrometheusExportable:
 		// NB: this branch is intentionally at the bottom since all metrics implement it.
