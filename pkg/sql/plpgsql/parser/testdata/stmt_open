@@ -8,6 +8,22 @@ DECLARE
 BEGIN
 OPEN curs1;
 END
+ -- normalized!
+DECLARE
+BEGIN
+OPEN curs1;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+OPEN curs1;
+END
+ -- literals removed
+DECLARE
+BEGIN
+OPEN _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -19,6 +35,22 @@ DECLARE
 BEGIN
 OPEN curs1 FOR SELECT * FROM foo WHERE key = mykey;
 END
+ -- normalized!
+DECLARE
+BEGIN
+OPEN curs1 FOR SELECT (*) FROM foo WHERE ((key) = (mykey));
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+OPEN curs1 FOR SELECT * FROM foo WHERE key = mykey;
+END
+ -- literals removed
+DECLARE
+BEGIN
+OPEN _ FOR SELECT * FROM _ WHERE _ = _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -30,6 +62,22 @@ DECLARE
 BEGIN
 OPEN curs1 SCROLL FOR SELECT * FROM foo WHERE key = mykey;
 END
+ -- normalized!
+DECLARE
+BEGIN
+OPEN curs1 SCROLL FOR SELECT (*) FROM foo WHERE ((key) = (mykey));
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+OPEN curs1 SCROLL FOR SELECT * FROM foo WHERE key = mykey;
+END
+ -- literals removed
+DECLARE
+BEGIN
+OPEN _ SCROLL FOR SELECT * FROM _ WHERE _ = _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -41,19 +89,58 @@ DECLARE
 BEGIN
 OPEN curs1 NO SCROLL FOR SELECT * FROM foo WHERE key = mykey;
 END
+ -- normalized!
+DECLARE
+BEGIN
+OPEN curs1 NO SCROLL FOR SELECT (*) FROM foo WHERE ((key) = (mykey));
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+OPEN curs1 NO SCROLL FOR SELECT * FROM foo WHERE key = mykey;
+END
+ -- literals removed
+DECLARE
+BEGIN
+OPEN _ NO SCROLL FOR SELECT * FROM _ WHERE _ = _;
+END
+ -- identifiers removed
 
-parse
+error
 DECLARE
 BEGIN
 OPEN curs2 SCROLL FOR EXECUTE SELECT $1, $2 FROM foo WHERE key = mykey USING hello, jojo;
 END
 ----
+----
 at or near "execute": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+OPEN curs2 SCROLL FOR EXECUTE SELECT $1, $2 FROM foo WHERE key = mykey USING hello, jojo;
+                      ^
+HINT: You have attempted to use a feature that is not yet implemented.
 
-parse
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
 DECLARE
 BEGIN
 OPEN curs1 FOR;
 END
 ----
 at or near "for": syntax error: missing SQL statement
+DETAIL: source SQL:
+DECLARE
+BEGIN
+OPEN curs1 FOR;
+           ^

@@ -8,6 +8,22 @@ DECLARE
 var1 INT8 := 30;
 BEGIN
 END
+ -- normalized!
+DECLARE
+var1 INT8 := (30);
+BEGIN
+END
+ -- fully parenthesized
+DECLARE
+var1 INT8 := _;
+BEGIN
+END
+ -- literals removed
+DECLARE
+var1 INT8 := 30;
+BEGIN
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -19,6 +35,22 @@ DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
 BEGIN
 END
+ -- normalized!
+DECLARE
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := (30);
+BEGIN
+END
+ -- fully parenthesized
+DECLARE
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := _;
+BEGIN
+END
+ -- literals removed
+DECLARE
+var1 CONSTANT INT8 COLLATE _ NOT NULL := 30;
+BEGIN
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -30,15 +62,49 @@ DECLARE
 var1 CONSTANT INT8 COLLATE collation_name NOT NULL := 30;
 BEGIN
 END
+ -- normalized!
+DECLARE
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := (30);
+BEGIN
+END
+ -- fully parenthesized
+DECLARE
+var1 CONSTANT INT8 COLLATE collation_name NOT NULL := _;
+BEGIN
+END
+ -- literals removed
+DECLARE
+var1 CONSTANT INT8 COLLATE _ NOT NULL := 30;
+BEGIN
+END
+ -- identifiers removed
 
-parse
+error
 DECLARE
   var1 integer := 30;
   var2 ALIAS FOR quantity;
 BEGIN
 END
 ----
+----
 at or near ";": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+  var1 integer := 30;
+  var2 ALIAS FOR quantity;
+                         ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
 
 parse
 DECLARE
@@ -50,28 +116,79 @@ DECLARE
 var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
 BEGIN
 END
+ -- normalized!
+DECLARE
+var1 CURSOR FOR SELECT (*) FROM t1 WHERE ((id) = (arg1));
+BEGIN
+END
+ -- fully parenthesized
+DECLARE
+var1 CURSOR FOR SELECT * FROM t1 WHERE id = arg1;
+BEGIN
+END
+ -- literals removed
+DECLARE
+var1 CURSOR FOR SELECT * FROM _ WHERE _ = _;
+BEGIN
+END
+ -- identifiers removed
 
-parse
+error
 DECLARE
   var1 NO SCROLL CURSOR (arg1 INTEGER) FOR SELECT * FROM t1 WHERE id = arg1;
 BEGIN
 END
 ----
+----
 at or near "(": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+  var1 NO SCROLL CURSOR (arg1 INTEGER) FOR SELECT * FROM t1 WHERE id = arg1;
+                        ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
 
 # Correctly handle parsing errors for variable types.
-parse
+error
 DECLARE
   var1 one.two.three.four;
 BEGIN
 END
 ----
 at or near "four": at or near ".": syntax error
+DETAIL: source SQL:
+SET ROW (1::one.two.three.four)
+                         ^
+--
+source SQL:
+DECLARE
+  var1 one.two.three.four;
+                     ^
+HINT: try \h SET SESSION
 
-parse
+error
 DECLARE
   var1 one.two.three.four := 0;
 BEGIN
 END
 ----
 at or near "four": at or near ".": syntax error
+DETAIL: source SQL:
+SET ROW (1::one.two.three.four )
+                         ^
+--
+source SQL:
+DECLARE
+  var1 one.two.three.four := 0;
+                     ^
+HINT: try \h SET SESSION
