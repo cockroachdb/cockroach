@@ -1048,6 +1048,9 @@ message Session {
   // The session's total active time.
   google.protobuf.Duration total_active_time = 18 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
+
+  // The Postgres backend PID of the session.
+  uint32 pg_backend_pid = 19 [ (gogoproto.customname) = "PGBackendPID" ];
 }
 
 // An error wrapper object for ListSessionsResponse.
