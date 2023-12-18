@@ -16,6 +16,34 @@ EXIT WHEN x = 10;
 x := x + 1;
 END LOOP;
 END
+ -- normalized!
+DECLARE
+BEGIN
+x := (1);
+LOOP
+EXIT WHEN ((x) = (10));
+x := ((x) + (1));
+END LOOP;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+LOOP
+EXIT WHEN x = _;
+x := x + _;
+END LOOP;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 1;
+LOOP
+EXIT WHEN _ = 10;
+_ := _ + 1;
+END LOOP;
+END
+ -- identifiers removed
 
 
 parse
@@ -38,3 +66,34 @@ EXIT WHEN x = 10;
 x := x + 1;
 END LOOP mathing;
 END
+ -- normalized!
+DECLARE
+BEGIN
+x := (1);
+<<mathing>>
+LOOP
+EXIT WHEN ((x) = (10));
+x := ((x) + (1));
+END LOOP mathing;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+<<mathing>>
+LOOP
+EXIT WHEN x = _;
+x := x + _;
+END LOOP mathing;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 1;
+<<_>>
+LOOP
+EXIT WHEN _ = 10;
+_ := _ + 1;
+END LOOP _;
+END
+ -- identifiers removed

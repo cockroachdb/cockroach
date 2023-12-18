@@ -1,15 +1,51 @@
-parse
+error
 DECLARE
 BEGIN
   PERFORM 1+1;
 END
 ----
+----
 at or near ";": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  PERFORM 1+1;
+             ^
+HINT: You have attempted to use a feature that is not yet implemented.
 
-parse
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
+
+error
 DECLARE
 BEGIN
   PERFORM SELECT * FROM generate_series(1,10,1) AS y_(y);
 END
 ----
+----
 at or near ";": syntax error: unimplemented: this syntax
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  PERFORM SELECT * FROM generate_series(1,10,1) AS y_(y);
+                                                        ^
+HINT: You have attempted to use a feature that is not yet implemented.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+----
+----
