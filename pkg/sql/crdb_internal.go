@@ -2809,7 +2809,8 @@ CREATE TABLE crdb_internal.%s (
   alloc_bytes        INT,            -- the number of bytes allocated by the session
   max_alloc_bytes    INT,            -- the high water mark of bytes allocated by the session
   status             STRING,         -- the status of the session (open, closed)
-  session_end        TIMESTAMPTZ     -- the time when the session was closed
+  session_end        TIMESTAMPTZ,    -- the time when the session was closed
+  pg_backend_pid     INT             -- the numerical ID attached to the session which is used to mimic a Postgres backend PID
 )
 `
 
@@ -2910,6 +2911,7 @@ func populateSessionsTable(
 			tree.NewDInt(tree.DInt(session.MaxAllocBytes)),
 			tree.NewDString(session.Status.String()),
 			endTSDatum,
+			tree.NewDInt(tree.DInt(session.PGBackendPID)),
 		); err != nil {
 			return err
 		}
@@ -2935,7 +2937,8 @@ func populateSessionsTable(
 				tree.DNull,                             // alloc_bytes
 				tree.DNull,                             // max_alloc_bytes
 				tree.DNull,                             // status
-				tree.DNull,                             // session end
+				tree.DNull,                             // session_end
+				tree.DNull,                             // pg_backend_pid
 			); err != nil {
 				return err
 			}
