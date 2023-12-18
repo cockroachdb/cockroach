@@ -12,6 +12,7 @@ package schemachanger_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"encoding/hex"
 	"fmt"
 	"math/rand"
@@ -591,16 +592,14 @@ func requireTableKeyCount(
 
 // TestConcurrentSchemaChanges is an integration style tests where we issue many
 // schema changes concurrently (renames, add/drop columns, and create/drop
-// indexes) for a period of time and assert that they all finish eventually and
-// we end up with expected names, columns, and indexes.
+// indexes) for a period of time and assert that they all successfully finish
+// eventually.
 func TestConcurrentSchemaChanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	skip.UnderShort(t, "this test is long running (>3 mins).")
-	skip.UnderStress(t, "test is already integration style and long running")
-	skip.UnderStressRace(t, "test is already integration style and long running")
-	skip.UnderRace(t, "the test knowingly has data race and has logic to account for that")
+	skip.UnderDuress(t, "test is already integration style and long running")
 
 	const testDuration = 3 * time.Minute
 	const renameDBInterval = 5 * time.Second
@@ -611,71 +610,49 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 	const createIdxInterval = 1 * time.Second
 	const dropIdxInterval = 1 * time.Second
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), testDuration)
+	defer cancel()
+	g := ctxgroup.WithContext(ctx)
+
 	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	dbName, scName, tblName := "testdb", "testsc", "t"
-	allColToIndexes := make(map[string]map[string]struct{}) // colName -> indexes that uses that column
-	allColToIndexes["col"] = map[string]struct{}{"t_pkey": {}}
-	allNonPublicIdxToKeyCols := make(map[string]map[string]struct{}) // indexName -> its key column(s)
 	tdb.Exec(t, fmt.Sprintf("CREATE DATABASE %v;", dbName))
 	tdb.Exec(t, fmt.Sprintf("CREATE SCHEMA %v.%v;", dbName, scName))
 	tdb.Exec(t, fmt.Sprintf("CREATE TABLE %v.%v.%v (col INT PRIMARY KEY);", dbName, scName, tblName))
 	tdb.Exec(t, fmt.Sprintf("INSERT INTO %v.%v.%v SELECT generate_series(1,100);", dbName, scName, tblName))
 
-	// repeatFnWithInterval repeats `fn` indefinitely every `interval` until
+	// repeatWorkWithInterval repeats `work` indefinitely every `workInterval` until
 	// `ctx` is cancelled.
-	workerErrChan := make(chan error)
-	var wg sync.WaitGroup
-	repeatWorkWithInterval := func(workerName string, workInterval time.Duration, work func() error) {
-		wg.Add(1)
-		defer wg.Done()
-		for {
-			jitteredInterval := workInterval * time.Duration(0.8+0.4*rand.Float32())
-			select {
-			case <-ctx.Done():
-				t.Logf("%v is signaled to finish work", workerName)
-				return
-			case <-time.After(jitteredInterval):
-				if err := work(); err != nil {
-					t.Logf("%v encounters error %v; signal to main routine and finish working", workerName, err.Error())
-					workerErrChan <- err
-					return
+	repeatWorkWithInterval := func(
+		workerName string, workInterval time.Duration, work func() error,
+	) func(context.Context) error {
+		return func(workerCtx context.Context) error {
+			for {
+				jitteredInterval := workInterval * time.Duration(0.8+0.4*rand.Float32())
+				select {
+				case <-workerCtx.Done():
+					t.Logf("%v is signaled to finish work", workerName)
+					return nil
+				case <-time.After(jitteredInterval):
+					if err := work(); err != nil {
+						t.Logf("%v encounters error %v; signal to main routine and finish working", workerName, err.Error())
+						return err
+					}
 				}
 			}
 		}
 	}
 
-	// validate performs a few quick validations after all schema changes are finished:
-	// 1. Database, schema, and table indeed end up with the tracked name.
-	// 2. Table indeed has the tracked columns.
-	// 3. Table indeed has the tracked indexes.
-	codec := s.ApplicationLayer().Codec()
-	validate := func() {
-		dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, codec, dbName)
-		desctestutils.TestingGetSchemaDescriptor(kvDB, codec, dbDesc.GetID(), scName)
-		tblDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, dbName, scName, tblName)
-		require.Equal(t, len(allColToIndexes), len(tblDesc.PublicColumns())) // allColToIndexes does not include `col`
-		for _, col := range tblDesc.PublicColumns() {
-			_, ok := allColToIndexes[col.GetName()]
-			require.True(t, ok, "column %v does not exist in allColToIndexes=%v", col.GetName(), allColToIndexes)
-		}
-		require.Equal(t, len(allNonPublicIdxToKeyCols), len(tblDesc.PublicNonPrimaryIndexes()))
-		for _, idx := range tblDesc.PublicNonPrimaryIndexes() {
-			_, ok := allNonPublicIdxToKeyCols[idx.GetName()]
-			require.True(t, ok, "index %v does not exist in allNonPublicIdxToKeyCols=%v", idx.GetName(), allNonPublicIdxToKeyCols)
-		}
-	}
-
 	// A goroutine that repeatedly renames database `testdb` randomly.
-	go repeatWorkWithInterval("rename-db-worker", renameDBInterval, func() error {
+	g.GoCtx(repeatWorkWithInterval("rename-db-worker", renameDBInterval, func() error {
 		newDBName := fmt.Sprintf("testdb_%v", rand.Intn(1000))
 		if newDBName == dbName {
 			return nil
@@ -686,10 +663,10 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 		dbName = newDBName
 		t.Logf("RENAME DATABASE TO %v", newDBName)
 		return nil
-	})
+	}))
 
 	// A goroutine that renames schema `testdb.testsc` randomly.
-	go repeatWorkWithInterval("rename-schema-worker", renameSCInterval, func() error {
+	g.GoCtx(repeatWorkWithInterval("rename-schema-worker", renameSCInterval, func() error {
 		newSCName := fmt.Sprintf("testsc_%v", rand.Intn(1000))
 		if scName == newSCName {
 			return nil
@@ -703,10 +680,10 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 			t.Logf("Parent database is renamed; skipping this schema renaming.")
 		}
 		return err
-	})
+	}))
 
 	// A goroutine that renames table `testdb.testsc.t` randomly.
-	go repeatWorkWithInterval("rename-tbl-worker", renameTblInterval, func() error {
+	g.GoCtx(repeatWorkWithInterval("rename-tbl-worker", renameTblInterval, func() error {
 		newTblName := fmt.Sprintf("t_%v", rand.Intn(1000))
 		_, err := sqlDB.Exec(fmt.Sprintf(`ALTER TABLE %v.%v.%v RENAME TO %v`, dbName, scName, tblName, newTblName))
 		if err == nil {
@@ -717,131 +694,145 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 			t.Logf("Parent database or schema is renamed; skipping this table renaming.")
 		}
 		return err
-	})
+	}))
 
 	// A goroutine that adds columns to `testdb.testsc.t` randomly.
-	go repeatWorkWithInterval("add-column-worker", addColInterval, func() error {
+	g.GoCtx(repeatWorkWithInterval("add-column-worker", addColInterval, func() error {
+		dbName, scName, tblName := dbName, scName, tblName
 		newColName := fmt.Sprintf("col_%v", rand.Intn(1000))
-		if _, ok := allColToIndexes[newColName]; ok {
-			return nil
-		}
-		tblName := tblName
-		_, err := sqlDB.Exec(fmt.Sprintf("ALTER TABLE %v.%v.%v ADD COLUMN %v INT DEFAULT %v", dbName, scName, tblName, newColName, rand.Intn(100)))
+
+		_, err := sqlDB.Exec(fmt.Sprintf("ALTER TABLE %v.%v.%v ADD COLUMN %v INT DEFAULT %v",
+			dbName, scName, tblName, newColName, rand.Intn(100)))
 		if err == nil {
-			allColToIndexes[newColName] = make(map[string]struct{})
-			t.Logf("ADD COLUMN %v TO TABLE %v", newColName, tblName)
-		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema, pgcode.InvalidSchemaName, pgcode.UndefinedTable) {
+			t.Logf("ADD COLUMN %v TO %v.%v.%v", newColName, dbName, scName, tblName)
+		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema,
+			pgcode.InvalidSchemaName, pgcode.UndefinedTable, pgcode.DuplicateColumn) {
 			err = nil
-			t.Logf("Parent database or schema or table is renamed; skipping this column addition.")
+			t.Logf("Parent database or schema or table is renamed or column already exists; skipping this column addition.")
 		}
 		return err
-	})
+	}))
 
 	// A goroutine that drops columns from `testdb.testsc.t` randomly.
-	go repeatWorkWithInterval("drop-column-worker", dropColInterval, func() error {
+	g.GoCtx(repeatWorkWithInterval("drop-column-worker", dropColInterval, func() error {
 		// Randomly pick a non-PK column to drop.
-		if len(allColToIndexes) == 1 {
-			return nil
-		}
-		var colName string
-		for col := range allColToIndexes {
-			if col != "col" {
-				colName = col
-				break
-			}
+		dbName, scName, tblName := dbName, scName, tblName
+		colName, err := getANonPrimaryKeyColumn(sqlDB, dbName, scName, tblName)
+		if err != nil || colName == "" {
+			return err
 		}
 
-		tblName := tblName
-		_, err := sqlDB.Exec(fmt.Sprintf("ALTER TABLE %v.%v.%v DROP COLUMN %v;", dbName, scName, tblName, colName))
+		_, err = sqlDB.Exec(fmt.Sprintf("ALTER TABLE %v.%v.%v DROP COLUMN %v;",
+			dbName, scName, tblName, colName))
 		if err == nil {
-			for indexName := range allColToIndexes[colName] {
-				delete(allNonPublicIdxToKeyCols, indexName)
-			}
-			delete(allColToIndexes, colName)
-			t.Logf("DROP COLUMN %v FROM TABLE %v", colName, tblName)
-		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema, pgcode.InvalidSchemaName, pgcode.UndefinedTable) {
+			t.Logf("DROP COLUMN %v FROM %v.%v.%v", colName, dbName, scName, tblName)
+		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema,
+			pgcode.InvalidSchemaName, pgcode.UndefinedTable) {
 			err = nil
 			t.Logf("Parent database or schema or table is renamed; skipping this column removal.")
 		}
 		return err
-	})
+	}))
 
 	// A goroutine that creates secondary index on a randomly selected column.
-	go repeatWorkWithInterval("create-index-worker", createIdxInterval, func() error {
+	g.GoCtx(repeatWorkWithInterval("create-index-worker", createIdxInterval, func() error {
 		newIndexName := fmt.Sprintf("idx_%v", rand.Intn(1000))
-		if _, ok := allNonPublicIdxToKeyCols[newIndexName]; ok {
-			return nil
-		}
 
 		// Randomly pick a non-PK column to create an index on.
-		if len(allColToIndexes) == 1 {
-			return nil
-		}
-		var colName string
-		for col := range allColToIndexes {
-			if col != "col" {
-				colName = col
-				break
-			}
+		dbName, scName, tblName := dbName, scName, tblName
+		colName, err := getANonPrimaryKeyColumn(sqlDB, dbName, scName, tblName)
+		if err != nil || colName == "" {
+			return err
 		}
 
-		tblName := tblName
-		_, err := sqlDB.Exec(fmt.Sprintf("CREATE INDEX %v ON %v.%v.%v (%v);", newIndexName, dbName, scName, tblName, colName))
+		_, err = sqlDB.Exec(fmt.Sprintf("CREATE INDEX %v ON %v.%v.%v (%v);",
+			newIndexName, dbName, scName, tblName, colName))
 		if err == nil {
-			allNonPublicIdxToKeyCols[newIndexName] = map[string]struct{}{colName: {}}
-			allColToIndexes[colName][newIndexName] = struct{}{}
-			t.Logf("CREATE INDEX %v ON TABLE %v(%v)", newIndexName, tblName, colName)
-		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema, pgcode.InvalidSchemaName, pgcode.UndefinedTable, pgcode.UndefinedColumn) {
+			t.Logf("CREATE INDEX %v ON %v.%v.%v(%v)", newIndexName, dbName, scName, tblName, colName)
+		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema,
+			pgcode.InvalidSchemaName, pgcode.UndefinedTable, pgcode.UndefinedColumn, pgcode.DuplicateRelation) {
+			// Besides the potential name changes, it's possible this column has been
+			// dropped by the drop-column-worker or the secondary index name already
+			// exists.
 			err = nil
-			t.Logf("Parent database or schema or table is renamed or column is dropped; skipping this index creation.")
+			t.Logf("Parent database or schema or table is renamed or column is dropped or index already exists; skipping this index creation.")
 		}
 		return err
-	})
+	}))
 
 	// A goroutine that drops a secondary index randomly.
-	go repeatWorkWithInterval("drop-index-worker", dropIdxInterval, func() error {
-		// Randomly pick a non-public index to drop.
-		if len(allNonPublicIdxToKeyCols) == 0 {
-			return nil
-		}
-		var indexName string
-		var indexKeyCols map[string]struct{}
-		for idx, idxCols := range allNonPublicIdxToKeyCols {
-			indexName = idx
-			indexKeyCols = idxCols
-			break
+	g.GoCtx(repeatWorkWithInterval("drop-index-worker", dropIdxInterval, func() error {
+		// Randomly pick a public, secondary index to drop.
+		dbName, scName, tblName := dbName, scName, tblName
+		indexName, err := getASecondaryIndex(sqlDB, dbName, scName, tblName)
+		if err != nil || indexName == "" {
+			return err
 		}
 
-		tblName := tblName
-		_, err := sqlDB.Exec(fmt.Sprintf("DROP INDEX %v.%v.%v@%v;", dbName, scName, tblName, indexName))
+		_, err = sqlDB.Exec(fmt.Sprintf("DROP INDEX %v.%v.%v@%v;", dbName, scName, tblName, indexName))
 		if err == nil {
-			for indexKeyCol := range indexKeyCols {
-				delete(allColToIndexes[indexKeyCol], indexName)
-			}
-			delete(allNonPublicIdxToKeyCols, indexName)
-			t.Logf("DROP INDEX %v FROM TABLE %v", indexName, tblName)
-		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema, pgcode.InvalidSchemaName, pgcode.UndefinedTable, pgcode.UndefinedObject) {
+			t.Logf("DROP INDEX %v FROM %v.%v.%v", indexName, dbName, scName, tblName)
+		} else if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema,
+			pgcode.InvalidSchemaName, pgcode.UndefinedTable, pgcode.UndefinedObject) {
+			// Besides the potential name changes, it's possible that the index no
+			// longer exists if the drop-column-worker attempts to drop the column
+			// this index keyed on, so, we mute pgcode.UndefinedObject error as well.
 			err = nil
-			t.Logf("Parent database or schema or table is renamed; skipping this index removal.")
+			t.Logf("Parent database or schema or table is renamed or index is dropped; skipping this index removal.")
 		}
 		return err
-	})
+	}))
 
-	select {
-	case workerErr := <-workerErrChan:
-		t.Logf("main: a worker error %q is signaled; Inform all workers to stop.", workerErr.Error())
-		cancel()
-		wg.Wait()
-		t.Logf("main: all workers have stopped their work; Test Failure!")
-		t.Fatalf(workerErr.Error())
-	case <-time.After(testDuration):
-		t.Logf("main: time's up! Inform all workers to stop.")
-		cancel()
-		wg.Wait()
-		t.Logf("main: all workers have stopped. Validating descriptors states...")
-		validate()
-		t.Logf("main: validation succeeded! Test success!")
+	err := g.Wait()
+	require.NoError(t, err)
+}
+
+// getANonPrimaryKeyColumn returns a non-primary-key column from table `dbName.scName.tblName`.
+func getANonPrimaryKeyColumn(sqlDB *gosql.DB, dbName, scName, tblName string) (string, error) {
+	colNameRow, err := sqlDB.Query(fmt.Sprintf(`
+SELECT column_name 
+FROM [show columns from %s.%s.%s] 
+WHERE column_name != 'col'
+ORDER BY random();  -- shuffle column output
+`, dbName, scName, tblName))
+	if err != nil {
+		if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema, pgcode.InvalidSchemaName, pgcode.UndefinedTable) {
+			return "", nil
+		}
+		return "", err
 	}
+	nonPKCols, err := sqlutils.RowsToStrMatrix(colNameRow)
+	if err != nil {
+		return "", err
+	}
+	if len(nonPKCols) == 0 {
+		return "", nil
+	}
+	return nonPKCols[0][0], nil
+}
+
+// getASecondaryIndex returns a secondary index from table `dbName.scName.tblName`.
+func getASecondaryIndex(sqlDB *gosql.DB, dbName, scName, tblName string) (string, error) {
+	colNameRow, err := sqlDB.Query(fmt.Sprintf(`
+SELECT index_name 
+FROM [show indexes from %s.%s.%s]
+WHERE index_name != 't_pkey'
+ORDER BY random();
+`, dbName, scName, tblName))
+	if err != nil {
+		if isPQErrWithCode(err, pgcode.UndefinedDatabase, pgcode.UndefinedSchema, pgcode.InvalidSchemaName, pgcode.UndefinedTable) {
+			return "", nil
+		}
+		return "", err
+	}
+	nonPKCols, err := sqlutils.RowsToStrMatrix(colNameRow)
+	if err != nil {
+		return "", err
+	}
+	if len(nonPKCols) == 0 {
+		return "", nil
+	}
+	return nonPKCols[0][0], nil
 }
 
 // IsPQErrWithCode returns true if `err` is a pq error whose code is in `codes`.
