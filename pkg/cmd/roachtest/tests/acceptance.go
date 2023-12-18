@@ -12,11 +12,14 @@ package tests
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/errors"
 )
 
 func registerAcceptance(r registry.Registry) {
@@ -25,9 +28,11 @@ func registerAcceptance(r registry.Registry) {
 		fn                func(ctx context.Context, t test.Test, c cluster.Cluster)
 		skip              string
 		numNodes          int
+		nodeRegions       []string
 		timeout           time.Duration
 		encryptionSupport registry.EncryptionSupport
 		defaultLeases     bool
+		requiresLicense   bool
 	}{
 		registry.OwnerKV: {
 			{name: "decommission-self", fn: runDecommissionSelf},
@@ -52,6 +57,15 @@ func registerAcceptance(r registry.Registry) {
 			{
 				name: "multitenant",
 				fn:   runAcceptanceMultitenant,
+			},
+			{
+				name:     "multitenant-multiregion",
+				fn:       runAcceptanceMultitenantMultiRegion,
+				numNodes: 9,
+				nodeRegions: []string{"us-west1-b", "us-west1-b", "us-west1-b",
+					"us-west1-b", "us-west1-b", "us-west1-b",
+					"us-east1-b", "us-east1-b", "us-east1-b"},
+				requiresLicense: true,
 			},
 		},
 		registry.OwnerObsInf: {
@@ -99,27 +113,38 @@ func registerAcceptance(r registry.Registry) {
 				numNodes = tc.numNodes
 			}
 
-			spec := registry.TestSpec{
+			var extraOptions []spec.Option
+			if tc.nodeRegions != nil {
+				// Sanity: Ensure the region counts are sane.
+				if len(tc.nodeRegions) != numNodes {
+					panic(errors.AssertionFailedf("region list doesn't match number of nodes"))
+				}
+				extraOptions = append(extraOptions, spec.Geo())
+				extraOptions = append(extraOptions, spec.GCEZones(strings.Join(tc.nodeRegions, ",")))
+			}
+
+			testSpec := registry.TestSpec{
 				Name:              "acceptance/" + tc.name,
 				Owner:             owner,
-				Cluster:           r.MakeClusterSpec(numNodes),
+				Cluster:           r.MakeClusterSpec(numNodes, extraOptions...),
 				Skip:              tc.skip,
 				EncryptionSupport: tc.encryptionSupport,
 				Timeout:           10 * time.Minute,
 				CompatibleClouds:  registry.AllExceptAWS,
 				Suites:            registry.Suites(registry.Nightly, registry.Quick),
+				RequiresLicense:   tc.requiresLicense,
 			}
 
 			if tc.timeout != 0 {
-				spec.Timeout = tc.timeout
+				testSpec.Timeout = tc.timeout
 			}
 			if !tc.defaultLeases {
-				spec.Leases = registry.MetamorphicLeases
+				testSpec.Leases = registry.MetamorphicLeases
 			}
-			spec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			testSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				tc.fn(ctx, t, c)
 			}
-			r.Add(spec)
+			r.Add(testSpec)
 		}
 	}
 }
