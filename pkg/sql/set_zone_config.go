@@ -1102,10 +1102,10 @@ func validateZoneAttrsAndLocalitiesForSystemTenant(
 	return nil
 }
 
-// secondaryTenantsAllZoneConfigsEnabled is an extension of
+// SecondaryTenantsAllZoneConfigsEnabled is an extension of
 // SecondaryTenantZoneConfigsEnabled that allows virtual clusters to modify all
 // type of constraints in zone configs (i.e. not only zones and regions).
-var secondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
+var SecondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
 	settings.SystemVisible,
 	"sql.virtual_cluster.feature_access.zone_configs_unrestricted.enabled",
 	"enable unrestricted usage of ALTER CONFIGURE ZONE in virtual clusters",
@@ -1114,7 +1114,7 @@ var secondaryTenantsAllZoneConfigsEnabled = settings.RegisterBoolSetting(
 
 // validateZoneLocalitiesForSecondaryTenants performs constraint/lease
 // preferences validation for secondary tenants. Only newly added constraints
-// are validated. Unless secondaryTenantsAllZoneConfigsEnabled is set to 'true',
+// are validated. Unless SecondaryTenantsAllZoneConfigsEnabled is set to 'true',
 // secondary tenants are only allowed to reference locality attributes as they
 // only have access to region information via the serverpb.TenantStatusServer.
 // In that case they're only allowed to reference the "region" and "zone" tiers.
@@ -1184,7 +1184,7 @@ func validateZoneLocalitiesForSecondaryTenants(
 			}
 		default:
 			if err := requireSystemTenantOrClusterSetting(
-				codec, settings, secondaryTenantsAllZoneConfigsEnabled,
+				codec, settings, SecondaryTenantsAllZoneConfigsEnabled,
 			); err != nil {
 				return err
 			}

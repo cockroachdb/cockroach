@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -60,22 +61,6 @@ func maybeAddSystemInterfaceHint(
 	return errors.WithHintf(err, "Connect to the system interface and %s from there.", operation)
 }
 
-// RestrictAccessToSystemInterface restricts access to certain SQL
-// features from the system tenant/interface. This restriction exists
-// to prevent the following UX surprise:
-//
-//   - end-user desires to achieve a certain outcome in a virtual cluster;
-//   - however, they mess up their connection string and connect to the
-//     system tenant instead;
-//   - without this setting, the resulting SQL would succeed in the
-//     system tenant and the user would not realize they were not
-//     connected to the right place.
-var RestrictAccessToSystemInterface = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"sql.restrict_system_interface.enabled",
-	"if enabled, certain statements produce errors or warnings when run from the system interface to encourage use of a virtual cluster",
-	false)
-
 // shouldRestrictAccessToSystemInterface decides whether to restrict
 // access to certain SQL features from the system tenant/interface.
 // This restriction exists to prevent UX surprise. See the docstring
@@ -85,12 +70,12 @@ func (p *planner) shouldRestrictAccessToSystemInterface(
 ) error {
 	if p.ExecCfg().Codec.ForSystemTenant() &&
 		!p.EvalContext().SessionData().Internal && // We only restrict access for external SQL sessions.
-		RestrictAccessToSystemInterface.Get(&p.ExecCfg().Settings.SV) {
+		sqlclustersettings.RestrictAccessToSystemInterface.Get(&p.ExecCfg().Settings.SV) {
 		return errors.WithHintf(
 			pgerror.Newf(pgcode.InsufficientPrivilege, "blocked %s from the system interface", operation),
 			"Access blocked via %s to prevent likely user errors.\n"+
 				"Try %s from a virtual cluster instead.",
-			RestrictAccessToSystemInterface.Name(),
+			sqlclustersettings.RestrictAccessToSystemInterface.Name(),
 			alternateAction)
 	}
 	return nil
