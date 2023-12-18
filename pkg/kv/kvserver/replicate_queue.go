@@ -939,6 +939,7 @@ func (rq *replicateQueue) processOneChange(
 // preProcessCheck checks the lease  and destroy status of the replica. This is
 // done to ensure that the replica has a valid lease, correct lease type and is
 // not destroyed.
+// TODO(baptist): Remove this check. It is redundant with Queue.replicaCanBeProcessed
 func (rq *replicateQueue) preProcessCheck(ctx context.Context, repl *Replica) error {
 	// Check lease and destroy status here. The queue does this higher up already, but
 	// adminScatter (and potential other future callers) also call this method and don't
