@@ -77,6 +77,12 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(upd.Table, privilege.UPDATE)
 
+	if tab.IsVirtualTable() {
+		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot update view \"%s\"", tab.Name(),
+		))
+	}
+
 	if refColumns != nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"cannot specify a list of column IDs with UPDATE"))

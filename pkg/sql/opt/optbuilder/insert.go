@@ -184,6 +184,12 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(ins.Table, privilege.INSERT)
 
+	if tab.IsVirtualTable() {
+		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot insert into view \"%s\"", tab.Name(),
+		))
+	}
+
 	// It is possible to insert into specific columns using table reference
 	// syntax:
 	// INSERT INTO [<table_id>(<col1_id>,<col2_id>) AS <alias>] ...

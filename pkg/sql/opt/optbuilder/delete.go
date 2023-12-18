@@ -63,6 +63,12 @@ func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope
 	// Find which table we're working on, check the permissions.
 	tab, depName, alias, refColumns := b.resolveTableForMutation(del.Table, privilege.DELETE)
 
+	if tab.IsVirtualTable() {
+		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+			"cannot delete from view \"%s\"", tab.Name(),
+		))
+	}
+
 	if refColumns != nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"cannot specify a list of column IDs with DELETE"))
