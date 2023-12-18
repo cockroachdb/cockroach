@@ -68,7 +68,7 @@ CREATE TABLE statement_execution_insights (
      contention_time,
      details
      )
-);
+) WITH (ttl_expiration_expression = 'timestamp + INTERVAL ''7 days''');
 
 -- +goose Down
 DROP TABLE statement_execution_insights;
