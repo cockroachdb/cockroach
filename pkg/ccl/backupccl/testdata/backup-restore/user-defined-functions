@@ -11,6 +11,7 @@ CREATE TYPE sc1.enum1 AS ENUM('Good');
 CREATE SEQUENCE sc1.sq1;
 CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
   SELECT a FROM sc1.tbl1;
+  SELECT 'Good'::sc1.enum1;
   SELECT nextval('sc1.sq1');
 $$;
 CREATE SCHEMA sc2;
@@ -65,6 +66,7 @@ CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 $$
 
@@ -100,6 +102,7 @@ CREATE FUNCTION sc1.f1(IN a db1_new.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1_new.sc1.tbl1;
+	SELECT 'Good':::db1_new.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 $$
 
@@ -160,6 +163,7 @@ CREATE TYPE sc1.enum1 AS ENUM('Good');
 CREATE SEQUENCE sc1.sq1;
 CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE SQL AS $$
   SELECT a FROM sc1.tbl1;
+  SELECT 'Good'::sc1.enum1;
   SELECT nextval('sc1.sq1');
 $$;
 CREATE SCHEMA sc2;
@@ -219,6 +223,7 @@ CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 $$
 
@@ -255,6 +260,7 @@ CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	LANGUAGE SQL
 	AS $$
 	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 $$
 
