@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1053,28 +1052,27 @@ func TestDropIndexHandlesRetriableErrors(t *testing.T) {
 	ctx := context.Background()
 	rf := newDynamicRequestFilter()
 	dropIndexPlanningDoneCh := make(chan struct{})
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					TestingRequestFilter: rf.filter,
-				},
-				SQLExecutor: &sql.ExecutorTestingKnobs{
-					BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
-						if strings.Contains(stmt, "DROP INDEX") {
-							// Force release all cached descriptors to force a kv fetch with
-							// the table ID so that we can guarantee the DynamicRequestFilter
-							// would see such relevant request and inject the error we want at
-							// the right time.
-							descriptors.ReleaseAll(ctx)
-							close(dropIndexPlanningDoneCh)
-						}
-					},
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: rf.filter,
+			},
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
+					if strings.Contains(stmt, "DROP INDEX") {
+						// Force release all cached descriptors to force a kv
+						// fetch with the table ID so that we can guarantee the
+						// DynamicRequestFilter would see such relevant request
+						// and inject the error we want at the right time.
+						descriptors.ReleaseAll(ctx)
+						close(dropIndexPlanningDoneCh)
+					}
 				},
 			},
 		},
 	})
-	defer tc.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// What we want to do is have a transaction which does the planning work to
 	// drop an index. Then we want to expose the execution of the DROP INDEX to
@@ -1082,7 +1080,7 @@ func TestDropIndexHandlesRetriableErrors(t *testing.T) {
 	// injecting a ReadWithinUncertainty error underneath the DROP INDEX
 	// after planning has concluded.
 
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	tdb := sqlutils.MakeSQLRunner(conn)
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX j_idx (j))")
 
 	var tableID uint32
@@ -1095,8 +1093,8 @@ WHERE
     name = $1 AND database_name = current_database();`,
 		"foo").Scan(&tableID)
 
-	codec := tc.ApplicationLayer(0).Codec()
-	txn, err := tc.ServerConn(0).Begin()
+	codec := s.Codec()
+	txn, err := conn.Begin()
 	require.NoError(t, err)
 	// Let's find out our transaction ID for our transaction by running a query.
 	// We'll also use this query to install a refresh span over the table data.

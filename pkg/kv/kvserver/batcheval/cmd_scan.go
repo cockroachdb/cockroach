@@ -123,7 +123,7 @@ func Scan(
 			ctx, readWriter, h.Txn, args.KeyLockingStrength, args.KeyLockingDurability,
 			args.ScanFormat, &scanRes, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
-			return result.Result{}, err
+			return result.Result{}, maybeInterceptDisallowedSkipLockedUsage(h, err)
 		}
 		res.Local.AcquiredLocks = acquiredLocks
 	}
@@ -138,6 +138,23 @@ func ScanReadCategory(ah kvpb.AdmissionHeader) storage.ReadCategory {
 		readCategory = storage.ScanBackgroundBatchEvalReadCategory
 	}
 	return readCategory
+}
+
+// maybeInterceptDisallowedSkipLockedUsage checks if read evaluation for a skip
+// locked request encountered a replicated lock by checking the supplier error
+// type. It transforms the error into an unimplemented error if that's the case;
+// otherwise, the error is passed through.
+//
+// TODO(arul): this won't be needed once
+// https://github.com/cockroachdb/cockroach/issues/115057 is addressed.
+func maybeInterceptDisallowedSkipLockedUsage(h kvpb.Header, err error) error {
+	if h.WaitPolicy == lock.WaitPolicy_SkipLocked && errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
+		return MarkSkipLockedUnsupportedError(errors.UnimplementedError(
+			errors.IssueLink{IssueURL: build.MakeIssueURL(115057)},
+			"usage of replicated locks in conjunction with skip locked wait policy is currently unsupported",
+		))
+	}
+	return err
 }
 
 // maybeDisallowSkipLockedRequest returns an error if the skip locked wait

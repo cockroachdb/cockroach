@@ -57,17 +57,16 @@ func TestInsightsIntegration(t *testing.T) {
 	const appName = "TestInsightsIntegration"
 	const appNameToIgnore = "TestInsightsIntegrationIgnore"
 
-	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	// Start the server. (One node is sufficient; the outliers system is
+	// currently in-memory only.)
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ServerConn(0)
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	sv := &srv.ApplicationLayer().ClusterSettings().SV
 
 	// Enable detection by setting a latencyThreshold > 0.
 	latencyThreshold := 250 * time.Millisecond
-	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+	insights.LatencyThreshold.Override(ctx, sv, latencyThreshold)
 
 	_, err := conn.ExecContext(ctx, "SET SESSION application_name=$1", appNameToIgnore)
 	require.NoError(t, err)
@@ -210,26 +209,27 @@ func TestFailedInsights(t *testing.T) {
 	const appName = "TestFailedInsights"
 	re := regexp.MustCompile(",?SlowExecution,?")
 
-	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	// Start the server. (One node is sufficient; the outliers system is
+	// currently in-memory only.)
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-	rootConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	sv := &s.ClusterSettings().SV
+	rootConn := sqlutils.MakeSQLRunner(conn)
 
 	// Enable detection by setting a latencyThreshold > 0.
 	latencyThreshold := 100 * time.Millisecond
-	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+	insights.LatencyThreshold.Override(ctx, sv, latencyThreshold)
 
 	rootConn.Exec(t, fmt.Sprintf("CREATE USER %s WITH VIEWACTIVITYREDACTED", "testuser"))
 	rootConn.Exec(t, "SET SESSION application_name=$1", appName)
 
 	testutils.RunTrueAndFalse(t, "with_redaction", func(t *testing.T, testRedacted bool) {
 		rootConn.Exec(t, `select crdb_internal.reset_sql_stats()`)
-		conn := tc.ApplicationLayer(0).SQLConn(t)
+		conn := s.SQLConn(t)
 		if testRedacted {
-			conn = tc.ApplicationLayer(0).SQLConn(t, serverutils.User("testuser"))
+			conn = s.SQLConn(t, serverutils.User("testuser"))
 		}
 
 		_, err := conn.Exec("SET SESSION application_name=$1", appName)
@@ -421,7 +421,8 @@ func TestTransactionInsightsFailOnCommit(t *testing.T) {
 	ctx := context.Background()
 	conflictingTxns := make([]txnInConflict, 0, 4)
 
-	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
+	// Start the server. (One node is sufficient; the outliers system is
+	// currently in-memory only.)
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -568,15 +569,13 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 	const appName = "TestInsightsPriorityIntegration"
 
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ServerConn(0)
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	sv := &srv.ApplicationLayer().ClusterSettings().SV
 
 	// Enable detection by setting a latencyThreshold > 0.
 	latencyThreshold := 50 * time.Millisecond
-	insights.LatencyThreshold.Override(ctx, &settings.SV, latencyThreshold)
+	insights.LatencyThreshold.Override(ctx, sv, latencyThreshold)
 
 	_, err := conn.ExecContext(ctx, "SET SESSION application_name=$1", appName)
 	require.NoError(t, err)
@@ -886,13 +885,9 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 	skip.UnderStressRace(t, "expensive tests")
 
 	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
-	tc := testcluster.StartTestCluster(t, 1, args)
-	defer tc.Stopper().Stop(ctx)
-
-	ts := tc.ApplicationLayer(0)
-	sqlConn := tc.ServerConn(0)
+	srv, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
 
 	// Enable detection by setting a latencyThreshold > 0.
 	latencyThreshold := 30 * time.Millisecond
