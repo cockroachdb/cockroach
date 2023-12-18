@@ -101,7 +101,6 @@ func upperBound(c *keyLocks) keyBound {
 type node struct {
 	ref   int32
 	count int16
-	leaf  bool
 
 	// These fields form a keyBound, but by inlining them into node we can avoid
 	// the extra word that would be needed to pad out maxInc if it were part of
@@ -109,7 +108,10 @@ type node struct {
 	maxInc bool
 	maxKey []byte
 
-	items    [maxItems]*keyLocks
+	items [maxItems]*keyLocks
+
+	// The children array pointer is only populated for interior nodes; it is nil
+	// for leaf nodes.
 	children *childrenArray
 }
 
@@ -135,7 +137,6 @@ var nodePool = sync.Pool{
 
 func newLeafNode() *node {
 	n := leafPool.Get().(*node)
-	n.leaf = true
 	n.ref = 1
 	return n
 }
@@ -172,6 +173,11 @@ func mut(n **node) *node {
 	return *n
 }
 
+// leaf returns true if this is a leaf node.
+func (n *node) leaf() bool {
+	return n.children == nil
+}
+
 // max returns the maximum keyBound in the subtree rooted at this node.
 func (n *node) max() keyBound {
 	return keyBound{
@@ -199,7 +205,7 @@ func (n *node) decRef(recursive bool) {
 		return
 	}
 	// Clear and release node into memory pool.
-	if n.leaf {
+	if n.leaf() {
 		*n = node{}
 		leafPool.Put(n)
 	} else {
@@ -218,7 +224,7 @@ func (n *node) decRef(recursive bool) {
 // clone creates a clone of the receiver with a single reference count.
 func (n *node) clone() *node {
 	var c *node
-	if n.leaf {
+	if n.leaf() {
 		c = newLeafNode()
 	} else {
 		c = newNode()
@@ -229,7 +235,7 @@ func (n *node) clone() *node {
 	c.maxKey = n.maxKey
 	c.maxInc = n.maxInc
 	c.items = n.items
-	if !c.leaf {
+	if !c.leaf() {
 		// Copy children and increase each refcount.
 		*c.children = *n.children
 		for i := int16(0); i <= c.count; i++ {
@@ -242,12 +248,12 @@ func (n *node) clone() *node {
 func (n *node) insertAt(index int, item *keyLocks, nd *node) {
 	if index < int(n.count) {
 		copy(n.items[index+1:n.count+1], n.items[index:n.count])
-		if !n.leaf {
+		if !n.leaf() {
 			copy(n.children[index+2:n.count+2], n.children[index+1:n.count+1])
 		}
 	}
 	n.items[index] = item
-	if !n.leaf {
+	if !n.leaf() {
 		n.children[index+1] = nd
 	}
 	n.count++
@@ -255,14 +261,14 @@ func (n *node) insertAt(index int, item *keyLocks, nd *node) {
 
 func (n *node) pushBack(item *keyLocks, nd *node) {
 	n.items[n.count] = item
-	if !n.leaf {
+	if !n.leaf() {
 		n.children[n.count+1] = nd
 	}
 	n.count++
 }
 
 func (n *node) pushFront(item *keyLocks, nd *node) {
-	if !n.leaf {
+	if !n.leaf() {
 		copy(n.children[1:n.count+2], n.children[:n.count+1])
 		n.children[0] = nd
 	}
@@ -275,7 +281,7 @@ func (n *node) pushFront(item *keyLocks, nd *node) {
 // back.
 func (n *node) removeAt(index int) (*keyLocks, *node) {
 	var child *node
-	if !n.leaf {
+	if !n.leaf() {
 		child = n.children[index+1]
 		copy(n.children[index+1:n.count], n.children[index+2:n.count+1])
 		n.children[n.count] = nil
@@ -292,7 +298,7 @@ func (n *node) popBack() (*keyLocks, *node) {
 	n.count--
 	out := n.items[n.count]
 	n.items[n.count] = nilT
-	if n.leaf {
+	if n.leaf() {
 		return out, nil
 	}
 	child := n.children[n.count+1]
@@ -304,7 +310,7 @@ func (n *node) popBack() (*keyLocks, *node) {
 func (n *node) popFront() (*keyLocks, *node) {
 	n.count--
 	var child *node
-	if !n.leaf {
+	if !n.leaf() {
 		child = n.children[0]
 		copy(n.children[:n.count+1], n.children[1:n.count+2])
 		n.children[n.count+1] = nil
@@ -361,7 +367,7 @@ func (n *node) find(item *keyLocks) (index int, found bool) {
 func (n *node) split(i int) (*keyLocks, *node) {
 	out := n.items[i]
 	var next *node
-	if n.leaf {
+	if n.leaf() {
 		next = newLeafNode()
 	} else {
 		next = newNode()
@@ -371,7 +377,7 @@ func (n *node) split(i int) (*keyLocks, *node) {
 	for j := int16(i); j < n.count; j++ {
 		n.items[j] = nilT
 	}
-	if !n.leaf {
+	if !n.leaf() {
 		copy(next.children[:], n.children[i+1:n.count+1])
 		for j := int16(i + 1); j <= n.count; j++ {
 			n.children[j] = nil
@@ -401,7 +407,7 @@ func (n *node) insert(item *keyLocks) (replaced, newBound bool) {
 		n.items[i] = item
 		return true, false
 	}
-	if n.leaf {
+	if n.leaf() {
 		n.insertAt(i, item, nil)
 		return false, n.adjustUpperBoundOnInsertion(item, nil)
 	}
@@ -429,7 +435,7 @@ func (n *node) insert(item *keyLocks) (replaced, newBound bool) {
 // removeMax removes and returns the maximum item from the subtree rooted at
 // this node.
 func (n *node) removeMax() *keyLocks {
-	if n.leaf {
+	if n.leaf() {
 		n.count--
 		out := n.items[n.count]
 		n.items[n.count] = nilT
@@ -454,7 +460,7 @@ func (n *node) removeMax() *keyLocks {
 // the node's upper bound changes.
 func (n *node) remove(item *keyLocks) (out *keyLocks, newBound bool) {
 	i, found := n.find(item)
-	if n.leaf {
+	if n.leaf() {
 		if found {
 			out, _ = n.removeAt(i)
 			return out, n.adjustUpperBoundOnRemoval(out, nil)
@@ -595,7 +601,7 @@ func (n *node) rebalanceOrMerge(i int) {
 		mergeLa, mergeChild := n.removeAt(i)
 		child.items[child.count] = mergeLa
 		copy(child.items[child.count+1:], mergeChild.items[:mergeChild.count])
-		if !child.leaf {
+		if !child.leaf() {
 			copy(child.children[child.count+1:], mergeChild.children[:mergeChild.count+1])
 		}
 		child.count += mergeChild.count + 1
@@ -615,7 +621,7 @@ func (n *node) findUpperBound() keyBound {
 			max = up
 		}
 	}
-	if !n.leaf {
+	if !n.leaf() {
 		for i := int16(0); i <= n.count; i++ {
 			up := n.children[i].max()
 			if max.compare(up) < 0 {
@@ -723,7 +729,7 @@ func (t *btree) Delete(item *keyLocks) {
 	}
 	if t.root.count == 0 {
 		old := t.root
-		if t.root.leaf {
+		if t.root.leaf() {
 			t.root = nil
 		} else {
 			t.root = t.root.children[0]
@@ -766,7 +772,7 @@ func (t *btree) Height() int {
 	}
 	h := 1
 	n := t.root
-	for !n.leaf {
+	for !n.leaf() {
 		n = n.children[0]
 		h++
 	}
@@ -790,7 +796,7 @@ func (t *btree) String() string {
 }
 
 func (n *node) writeString(b *strings.Builder) {
-	if n.leaf {
+	if n.leaf() {
 		for i := int16(0); i < n.count; i++ {
 			if i != 0 {
 				b.WriteString(",")
@@ -907,7 +913,7 @@ func (i *iterator) SeekGE(item *keyLocks) {
 		if found {
 			return
 		}
-		if i.n.leaf {
+		if i.n.leaf() {
 			if i.pos == i.n.count {
 				i.Next()
 			}
@@ -926,7 +932,7 @@ func (i *iterator) SeekLT(item *keyLocks) {
 	for {
 		pos, found := i.n.find(item)
 		i.pos = int16(pos)
-		if found || i.n.leaf {
+		if found || i.n.leaf() {
 			i.Prev()
 			return
 		}
@@ -940,7 +946,7 @@ func (i *iterator) First() {
 	if i.n == nil {
 		return
 	}
-	for !i.n.leaf {
+	for !i.n.leaf() {
 		i.descend(i.n, 0)
 	}
 	i.pos = 0
@@ -952,7 +958,7 @@ func (i *iterator) Last() {
 	if i.n == nil {
 		return
 	}
-	for !i.n.leaf {
+	for !i.n.leaf() {
 		i.descend(i.n, i.n.count)
 	}
 	i.pos = i.n.count - 1
@@ -965,7 +971,7 @@ func (i *iterator) Next() {
 		return
 	}
 
-	if i.n.leaf {
+	if i.n.leaf() {
 		i.pos++
 		if i.pos < i.n.count {
 			return
@@ -977,7 +983,7 @@ func (i *iterator) Next() {
 	}
 
 	i.descend(i.n, i.pos+1)
-	for !i.n.leaf {
+	for !i.n.leaf() {
 		i.descend(i.n, 0)
 	}
 	i.pos = 0
@@ -990,7 +996,7 @@ func (i *iterator) Prev() {
 		return
 	}
 
-	if i.n.leaf {
+	if i.n.leaf() {
 		i.pos--
 		if i.pos >= 0 {
 			return
@@ -1003,7 +1009,7 @@ func (i *iterator) Prev() {
 	}
 
 	i.descend(i.n, i.pos)
-	for !i.n.leaf {
+	for !i.n.leaf() {
 		i.descend(i.n, i.n.count)
 	}
 	i.pos = i.n.count - 1
@@ -1122,7 +1128,7 @@ func (i *iterator) findNextOverlap(item *keyLocks) {
 		if i.pos > i.n.count {
 			// Iterate up tree.
 			i.ascend()
-		} else if !i.n.leaf {
+		} else if !i.n.leaf() {
 			// Iterate down tree.
 			if i.o.constrMinReached || i.n.children[i.pos].max().contains(item) {
 				par := i.n
