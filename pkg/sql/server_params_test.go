@@ -18,17 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 )
 
-// createTestServerParams creates a set of params suitable for SQL tests. It
+// createTestServerParamsAllowTenants creates a set of params suitable for SQL tests. It
 // enables some EndTxn sanity checking and installs a flexible
 // TestingEvalFilter.
-// TODO(andrei): this function is not used consistently by SQL tests. Figure out
-// if the EndTxn checks are important.
-func createTestServerParams() (base.TestServerArgs, *tests.CommandFilters) {
+// TODO(andrei): this function is not used consistently by SQL tests.
+func createTestServerParamsAllowTenants() (base.TestServerArgs, *tests.CommandFilters) {
 	var cmdFilters tests.CommandFilters
 	params := base.TestServerArgs{}
 	// Disable the default test tenant as limits to the number of spans in a
 	// secondary tenant cause this test to fail. Tracked with #76378.
-	params.DefaultTestTenant = base.TODOTestTenantDisabled
 	params.Knobs.SQLStatsKnobs = sqlstats.CreateTestingKnobs()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
 		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
@@ -36,4 +34,17 @@ func createTestServerParams() (base.TestServerArgs, *tests.CommandFilters) {
 		},
 	}
 	return params, &cmdFilters
+}
+
+// createTestServerParams creates a set of params suitable for SQL
+// tests with randomized tenant testing disabled. New tests should
+// prefer createTestServerParamsAllowTenants(). See
+// createTestServerParamsAllowTenants for additional details.
+//
+// TODO(ssd): Rename this and createTestServerParamsAllowTenants once
+// disabling tenant testing is less common than enabling it.
+func createTestServerParams() (base.TestServerArgs, *tests.CommandFilters) {
+	params, cmdFilters := createTestServerParamsAllowTenants()
+	params.DefaultTestTenant = base.TODOTestTenantDisabled
+	return params, cmdFilters
 }
