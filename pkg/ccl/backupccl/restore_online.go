@@ -268,7 +268,9 @@ func (r *restoreResumer) maybeCalculateTotalDownloadSpans(
 
 	for _, span := range details.DownloadSpans {
 		resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
-			Spans: []roachpb.Span{span},
+			NodeID:        "0", // Fan out to all nodes.
+			Spans:         []roachpb.Span{span},
+			SkipMvccStats: true,
 		})
 		if err != nil {
 			return 0, err
@@ -345,6 +347,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		var remaining uint64
 		for _, span := range details.DownloadSpans {
 			resp, err := execCtx.ExecCfg().TenantStatusServer.SpanStats(ctx, &roachpb.SpanStatsRequest{
+				NodeID:        "0", // Fan out to all nodes.
 				Spans:         []roachpb.Span{span},
 				SkipMvccStats: true,
 			})
