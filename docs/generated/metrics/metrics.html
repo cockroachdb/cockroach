@@ -675,6 +675,8 @@
 <tr><td>STORAGE</td><td>storage.secondary-cache.write-back-failures</td><td>The number of times writing a cache block to the secondary cache failed</td><td>Num failures</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>storage.shared-storage.read</td><td>Bytes read from shared storage</td><td>Bytes</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>storage.shared-storage.write</td><td>Bytes written to external storage</td><td>Bytes</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>STORAGE</td><td>storage.single-delete.ineffectual</td><td>Number of SingleDeletes that were ineffectual</td><td>Events</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
+<tr><td>STORAGE</td><td>storage.single-delete.invariant-violation</td><td>Number of SingleDelete invariant violations</td><td>Events</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>storage.wal.bytes_in</td><td>The number of logical bytes the storage engine has written to the WAL</td><td>Events</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>storage.wal.bytes_written</td><td>The number of bytes the storage engine has written to the WAL</td><td>Events</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>STORAGE</td><td>storage.wal.fsync.latency</td><td>The write ahead log fsync latency</td><td>Fsync Latency</td><td>HISTOGRAM</td><td>NANOSECONDS</td><td>AVG</td><td>NONE</td></tr>
