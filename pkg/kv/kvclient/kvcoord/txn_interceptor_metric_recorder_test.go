@@ -58,9 +58,9 @@ func TestTxnMetricRecorder(t *testing.T) {
 		assert.Equal(t, int64(m.rollbacksFailed), tm.metrics.RollbacksFailed.Count(), "TxnMetrics.RollbacksFailed")
 		// NOTE: histograms don't retain full precision, so we don't check the exact
 		// value. We just check whether the value is non-zero.
-		_, sum := tm.metrics.Durations.Total()
+		_, sum := tm.metrics.Durations.CumulativeSnapshot().Total()
 		assert.Equal(t, m.duration != 0, sum != 0, "TxnMetrics.Durations")
-		_, sum = tm.metrics.Restarts.Total()
+		_, sum = tm.metrics.Restarts.CumulativeSnapshot().Total()
 		assert.Equal(t, m.restarts != 0, sum != 0, "TxnMetrics.Restarts")
 	}
 
