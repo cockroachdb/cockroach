@@ -6,8 +6,9 @@ exec-sql
 CREATE DATABASE db1;
 USE db1;
 CREATE SCHEMA sc1;
+CREATE TYPE sc1.enum1 AS ENUM('Good');
 CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
-CREATE VIEW sc1.v1 AS SELECT a FROM sc1.tbl1;
+CREATE VIEW sc1.v1 AS SELECT a, 'Good'::sc1.enum1 FROM sc1.tbl1;
 ----
 
 exec-sql
@@ -17,26 +18,36 @@ INSERT INTO sc1.tbl1 VALUES (123);
 query-sql
 SELECT * FROM sc1.v1;
 ----
-123
+123 Good
 
 query-sql
 SHOW CREATE VIEW sc1.v1;
 ----
 sc1.v1 CREATE VIEW sc1.v1 (
-	a
-) AS SELECT a FROM db1.sc1.tbl1
+	a,
+	enum1
+) AS SELECT a, 'Good':::db1.sc1.enum1 FROM db1.sc1.tbl1
 
 exec-sql
 BACKUP DATABASE db1 INTO 'nodelocal://1/test/'
 ----
 
 exec-sql
+DROP DATABASE db1
+----
+
+exec-sql
 RESTORE DATABASE db1 FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name = db1_new
+----
+
+exec-sql
+USE db1_new
 ----
 
 query-sql
 SHOW CREATE VIEW db1_new.sc1.v1;
 ----
 db1_new.sc1.v1 CREATE VIEW sc1.v1 (
-	a
-) AS SELECT a FROM db1_new.sc1.tbl1
+	a,
+	enum1
+) AS SELECT a, 'Good':::db1_new.sc1.enum1 FROM db1_new.sc1.tbl1

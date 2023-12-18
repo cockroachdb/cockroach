@@ -12,8 +12,10 @@ CREATE SEQUENCE sc1.sq1;
 CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE PLpgSQL AS $$
   DECLARE
     x INT := 0;
+    foobar sc1.enum1;
   BEGIN
     SELECT a FROM sc1.tbl1;
+    SELECT 'Good'::sc1.enum1;
     RETURN nextval('sc1.sq1');
   END
 $$;
@@ -78,8 +80,10 @@ CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8 := 0;
+	foobar db1.sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::db1.sc1.enum1;
 	RETURN nextval('sc1.sq1'::REGCLASS);
 	END
 
@@ -121,8 +125,10 @@ CREATE FUNCTION sc1.f1(IN a db1_new.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8 := 0;
+	foobar db1_new.sc1.enum1;
 	BEGIN
 	SELECT a FROM db1_new.sc1.tbl1;
+	SELECT 'Good':::db1_new.sc1.enum1;
 	RETURN nextval('sc1.sq1'::REGCLASS);
 	END
 
@@ -188,8 +194,10 @@ CREATE SEQUENCE sc1.sq1;
 CREATE FUNCTION sc1.f1(a sc1.enum1) RETURNS INT LANGUAGE PLpgSQL AS $$
   DECLARE
     x INT;
+    foobar sc1.enum1;
   BEGIN
     SELECT a FROM sc1.tbl1;
+    SELECT 'Good'::sc1.enum1;
     SELECT nextval('sc1.sq1') INTO x;
     RETURN x;
   END
@@ -257,8 +265,10 @@ CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8;
+	foobar db1.sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS) INTO x;
 	RETURN x;
 	END
@@ -302,8 +312,10 @@ CREATE FUNCTION sc1.f1(IN a db1.sc1.enum1)
 	AS $$
 	DECLARE
 	x INT8;
+	foobar db1.sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS) INTO x;
 	RETURN x;
 	END
