@@ -9,6 +9,8 @@
 package transform
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -25,7 +27,7 @@ func (t *StmtInsightTransformer) Transform(
 	if err := protoutil.Unmarshal(event.LogRecord.Body.GetBytesValue(), &insight); err != nil {
 		return nil, err
 	}
-	insight.EventInfo = GetEventInfo(event, string(insight.ID))
+	insight.EventInfo = GetEventInfo(event, strings.Trim(string(insight.ID), "\""))
 
 	return &insight, nil
 }

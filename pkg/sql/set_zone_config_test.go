@@ -150,7 +150,7 @@ func TestValidateZoneAttrsAndLocalitiesForSecondaryTenants(t *testing.T) {
 	}
 
 	for _, anyConstraintAllowed := range []bool{false, true} {
-		secondaryTenantsAllZoneConfigsEnabled.Override(ctx, &settings.SV, anyConstraintAllowed)
+		SecondaryTenantsAllZoneConfigsEnabled.Override(ctx, &settings.SV, anyConstraintAllowed)
 		for _, tc := range testCases {
 			var zone zonepb.ZoneConfig
 			err := yaml.UnmarshalStrict([]byte(tc.cfg), &zone)
