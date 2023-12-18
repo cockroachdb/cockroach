@@ -115,7 +115,7 @@ DROP DATABASE db1 CASCADE
   {columnId: 3, name: val, tableId: 110}
 - [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 110, type: {family: IntFamily, oid: 20, width: 64}}
-- [[ColumnDefaultExpression:{DescID: 110, ColumnID: 3, ReferencedSequenceIDs: [107]}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 110, ColumnID: 3, ReferencedSequenceIDs: [107], Expr: nextval(107:::REGCLASS)}, ABSENT], PUBLIC]
   {columnId: 3, expr: 'nextval(107:::REGCLASS)', tableId: 110, usesSequenceIds: [107]}
 - [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 110}
@@ -195,7 +195,7 @@ DROP DATABASE db1 CASCADE
   {columnId: 3, name: val, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, elementCreationMetadata: {in231OrLater: true}, isNullable: true, tableId: 109, type: {family: IntFamily, oid: 20, width: 64}}
-- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [108]}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [108], Expr: nextval(108:::REGCLASS)}, ABSENT], PUBLIC]
   {columnId: 3, expr: 'nextval(108:::REGCLASS)', tableId: 109, usesSequenceIds: [108]}
 - [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 109}

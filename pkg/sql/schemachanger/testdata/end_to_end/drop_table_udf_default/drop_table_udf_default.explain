@@ -23,7 +23,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 105 (t-), Name: "b", ColumnID: 2 (b-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
- │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (f)]}
+ │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), Expr: [FUNCTION 100104](), ReferencedFunctionIDs: [104 (f)]}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 105 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
@@ -85,7 +85,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 105 (t-), Name: "b", ColumnID: 2 (b-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
- │    │    │    ├── ABSENT  → PUBLIC ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (f)]}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), Expr: [FUNCTION 100104](), ReferencedFunctionIDs: [104 (f)]}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 105 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
@@ -114,7 +114,7 @@ Schema change plan for DROP TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 105 (t-), ColumnID: 2 (b-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 105 (t-), Name: "b", ColumnID: 2 (b-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (b-)}
- │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), ReferencedFunctionIDs: [104 (f)]}
+ │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 105 (t-), ColumnID: 2 (b-), Expr: [FUNCTION 100104](), ReferencedFunctionIDs: [104 (f)]}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 105 (t-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 105 (t-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 105 (t-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}

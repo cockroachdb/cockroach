@@ -56,7 +56,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │    │    ├── PUBLIC      → ABSENT  IndexColumn:{DescID: 105 (sq1-), ColumnID: 1 (value-), IndexID: 1 (primary-)}
       │    │    ├── DELETE_ONLY → ABSENT  Column:{DescID: 104 (t), ColumnID: 2 (j-)}
       │    │    ├── PUBLIC      → ABSENT  ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-)}
-      │    │    ├── PUBLIC      → ABSENT  ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j-), ReferencedSequenceIDs: [105 (sq1-)]}
+      │    │    ├── PUBLIC      → ABSENT  ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 2 (j-), ReferencedSequenceIDs: [105 (sq1-)], Expr: nextval(105:::REGCLASS)}
       │    │    ├── DELETE_ONLY → ABSENT  PrimaryIndex:{DescID: 104 (t), IndexID: 2 (t_pkey-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey+)}
       │    │    ├── PUBLIC      → ABSENT  IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey-)}
       │    │    ├── DELETE_ONLY → ABSENT  TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey+)}

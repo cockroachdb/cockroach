@@ -178,7 +178,7 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
            ├── 5 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT           Column:{DescID: 106 (test), ColumnID: 3 (pi-)}
            │    ├── PUBLIC      → ABSENT           ColumnType:{DescID: 106 (test), ColumnFamilyID: 0 (primary), ColumnID: 3 (pi-)}
-           │    ├── PUBLIC      → ABSENT           ColumnDefaultExpression:{DescID: 106 (test), ColumnID: 3 (pi-)}
+           │    ├── PUBLIC      → ABSENT           ColumnDefaultExpression:{DescID: 106 (test), ColumnID: 3 (pi-), Expr: 3.14:::DECIMAL}
            │    ├── DELETE_ONLY → ABSENT           PrimaryIndex:{DescID: 106 (test), IndexID: 4 (test_pkey-), ConstraintID: 5}
            │    └── PUBLIC      → ABSENT           IndexData:{DescID: 106 (test), IndexID: 4 (test_pkey-)}
            └── 7 Mutation operations

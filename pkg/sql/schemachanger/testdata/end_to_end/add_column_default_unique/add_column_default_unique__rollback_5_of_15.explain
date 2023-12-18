@@ -33,7 +33,7 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            ├── 7 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 2 (j-)}
            │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (j-)}
-           │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (j-)}
+           │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (j-), Expr: CAST(date_part('year':::STRING, now():::TIMESTAMPTZ) AS INT8)}
            │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 4 (tbl_pkey-), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1 (tbl_pkey+)}
            │    ├── PUBLIC      → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 4 (tbl_pkey-)}
            │    ├── DELETE_ONLY → ABSENT TemporaryIndex:{DescID: 106 (tbl), IndexID: 5, ConstraintID: 5, SourceIndexID: 1 (tbl_pkey+)}

@@ -15,7 +15,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 4 (p+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "p", ColumnID: 4 (p+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (p+)}
- │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p+), Expr: 30:::INT8}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 4 (p+), IndexID: 8 (t_pkey+)}
  │         ├── 17 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey~), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey-)}
@@ -74,7 +74,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │    │    │    ├── DELETE_ONLY   → ABSENT Column:{DescID: 104 (t), ColumnID: 4 (p+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 104 (t), Name: "p", ColumnID: 4 (p+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (p+)}
- │    │    │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p+)}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p+), Expr: 30:::INT8}
  │    │    │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 4 (p+), IndexID: 8 (t_pkey+)}
  │    │    ├── 17 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey~), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey-)}
@@ -108,7 +108,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
  │         │    ├── ABSENT → DELETE_ONLY   Column:{DescID: 104 (t), ColumnID: 4 (p+)}
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 104 (t), Name: "p", ColumnID: 4 (p+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 4 (p+)}
- │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p+)}
+ │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 4 (p+), Expr: 30:::INT8}
  │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 104 (t), ColumnID: 4 (p+), IndexID: 8 (t_pkey+)}
  │         ├── 17 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 104 (t), IndexID: 4 (t_pkey~), ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 1 (t_pkey-)}
