@@ -1086,6 +1086,10 @@ type Engine interface {
 	// concurrency. It returns the previous compaction concurrency.
 	SetCompactionConcurrency(n uint64) uint64
 
+	// AdjustCompactionConcurrency adjusts the compaction concurrency up or down by
+	// the passed delta, down to a minimum of 1.
+	AdjustCompactionConcurrency(delta int64) uint64
+
 	// SetStoreID informs the engine of the store ID, once it is known.
 	// Used to show the store ID in logs and to initialize the shared object
 	// creator ID (if shared object storage is configured).
