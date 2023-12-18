@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -265,7 +265,7 @@ func (w index) CollectCompositeColumnIDs() catalog.TableColSet {
 }
 
 // GetGeoConfig returns the geo config in the index descriptor.
-func (w index) GetGeoConfig() geoindex.Config {
+func (w index) GetGeoConfig() geopb.Config {
 	return w.desc.GeoConfig
 }
 

@@ -4,7 +4,6 @@ genrule(
         "//pkg/build:build_proto",
         "//pkg/clusterversion:clusterversion_proto",
         "//pkg/config/zonepb:zonepb_proto",
-        "//pkg/geo/geoindex:geoindex_proto",
         "//pkg/geo/geopb:geopb_proto",
         "//pkg/gossip:gossip_proto",
         "//pkg/jobs/jobspb:jobspb_proto",

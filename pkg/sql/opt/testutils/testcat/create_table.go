@@ -20,7 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -925,13 +925,13 @@ func (tt *Table) addIndexWithVersion(
 			switch tt.Columns[col.InvertedSourceColumnOrdinal()].DatumType().Family() {
 			case types.GeometryFamily:
 				// Don't use the default config because it creates a huge number of spans.
-				idx.geoConfig = geoindex.Config{
-					S2Geometry: &geoindex.S2GeometryConfig{
+				idx.geoConfig = geopb.Config{
+					S2Geometry: &geopb.S2GeometryConfig{
 						MinX: -5,
 						MaxX: 5,
 						MinY: -5,
 						MaxY: 5,
-						S2Config: &geoindex.S2Config{
+						S2Config: &geopb.S2Config{
 							MinLevel: 0,
 							MaxLevel: 2,
 							LevelMod: 1,
@@ -942,8 +942,8 @@ func (tt *Table) addIndexWithVersion(
 
 			case types.GeographyFamily:
 				// Don't use the default config because it creates a huge number of spans.
-				idx.geoConfig = geoindex.Config{
-					S2Geography: &geoindex.S2GeographyConfig{S2Config: &geoindex.S2Config{
+				idx.geoConfig = geopb.Config{
+					S2Geography: &geopb.S2GeographyConfig{S2Config: &geopb.S2Config{
 						MinLevel: 0,
 						MaxLevel: 2,
 						LevelMod: 1,

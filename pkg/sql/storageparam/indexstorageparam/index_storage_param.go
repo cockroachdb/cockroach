@@ -15,7 +15,7 @@ package indexstorageparam
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -34,8 +34,8 @@ type Setter struct {
 
 var _ storageparam.Setter = (*Setter)(nil)
 
-func getS2ConfigFromIndex(indexDesc *descpb.IndexDescriptor) *geoindex.S2Config {
-	var s2Config *geoindex.S2Config
+func getS2ConfigFromIndex(indexDesc *descpb.IndexDescriptor) *geopb.S2Config {
+	var s2Config *geopb.S2Config
 	if indexDesc.GeoConfig.S2Geometry != nil {
 		s2Config = indexDesc.GeoConfig.S2Geometry.S2Config
 	}

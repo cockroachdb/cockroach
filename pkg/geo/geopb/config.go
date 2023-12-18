@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package geoindex
+package geopb
 
 // IsEmpty returns whether the config contains a geospatial index
 // configuration.

@@ -18,7 +18,7 @@ import "sql/sem/semenumpb/constraint.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
-import "geo/geoindex/config.proto";
+import "geo/geopb/config.proto";
 
 option (gogoproto.equal_all) = true;
 

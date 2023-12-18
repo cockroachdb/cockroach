@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/paramparse",
         "//pkg/sql/pgwire/pgcode",
