@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -168,7 +169,7 @@ func redactElement(element scpb.Element) error {
 			return redactExpr(&e.ComputeExpr.Expr)
 		}
 	case *scpb.FunctionBody:
-		return redactFunctionBodyStr(&e.Body)
+		return redactFunctionBodyStr(e.Lang.Lang, &e.Body)
 	}
 	return nil
 }
@@ -217,7 +218,7 @@ func redactFunctionDescriptor(desc *descpb.FunctionDescriptor) (errs []error) {
 		}
 	}
 
-	if err := redactFunctionBodyStr(&desc.FunctionBody); err != nil {
+	if err := redactFunctionBodyStr(desc.Lang, &desc.FunctionBody); err != nil {
 		return []error{err}
 	}
 	if scs := desc.DeclarativeSchemaChangerState; scs != nil {
@@ -233,19 +234,29 @@ func redactFunctionDescriptor(desc *descpb.FunctionDescriptor) (errs []error) {
 	return nil
 }
 
-func redactFunctionBodyStr(body *string) error {
-	stmts, err := parser.Parse(*body)
-	if err != nil {
-		return err
-	}
-
+func redactFunctionBodyStr(lang catpb.Function_Language, body *string) error {
 	fmtCtx := tree.NewFmtCtx(tree.FmtHideConstants)
-	for i, stmt := range stmts {
-		if i > 0 {
-			fmtCtx.WriteString(" ")
+	switch lang {
+	case catpb.Function_SQL:
+		stmts, err := parser.Parse(*body)
+		if err != nil {
+			return err
+		}
+		for i, stmt := range stmts {
+			if i > 0 {
+				fmtCtx.WriteString(" ")
+			}
+			fmtCtx.FormatNode(stmt.AST)
+			fmtCtx.WriteString(";")
+		}
+	case catpb.Function_PLPGSQL:
+		stmt, err := plpgsqlparser.Parse(*body)
+		if err != nil {
+			return err
 		}
 		fmtCtx.FormatNode(stmt.AST)
-		fmtCtx.WriteString(";")
+	default:
+		return errors.AssertionFailedf("unexpected function language %s", lang)
 	}
 	*body = fmtCtx.String()
 	return nil
