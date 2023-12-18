@@ -221,16 +221,16 @@ func TestAggHistogramRotate(t *testing.T) {
 		// Windowed histogram is initially empty.
 		h.Inspect(func(interface{}) {}) // triggers ticking
 		// Verify new histogram windows have a 0 sum.
-		_, parentSum := h.Total(h.ToPrometheusMetricWindowed())
-		_, child1Sum := child1.h.Total(child1.h.ToPrometheusMetricWindowed())
-		_, child2Sum := child2.h.Total(child2.h.ToPrometheusMetricWindowed())
+		_, parentSum := h.WindowedSnapshot().Total()
+		_, child1Sum := child1.h.WindowedSnapshot().Total()
+		_, child2Sum := child2.h.WindowedSnapshot().Total()
 		require.Zero(t, parentSum)
 		require.Zero(t, child1Sum)
 		require.Zero(t, child2Sum)
 		// But cumulative histogram has history (if i > 0).
-		parentCount, _ := h.Total(h.ToPrometheusMetric())
-		child1Count, _ := child1.h.Total(child1.h.ToPrometheusMetric())
-		child2Count, _ := child2.h.Total(child2.h.ToPrometheusMetric())
+		parentCount, _ := h.CumulativeSnapshot().Total()
+		child1Count, _ := child1.h.CumulativeSnapshot().Total()
+		child2Count, _ := child2.h.CumulativeSnapshot().Total()
 		require.EqualValues(t, i, child1Count)
 		require.EqualValues(t, i, child2Count)
 		// The children aggregate into the parent.
@@ -245,9 +245,9 @@ func TestAggHistogramRotate(t *testing.T) {
 			child2SumExp := float64(child2RecVal) + child2Sum
 			// The children should aggregate to the parent.
 			parentSumExp := float64(child1RecVal) + float64(child2RecVal) + parentSum
-			_, parentWindowSum := h.Total(h.ToPrometheusMetricWindowed())
-			_, child1WindowSum := child1.h.Total(child1.h.ToPrometheusMetricWindowed())
-			_, child2WindowSum := child2.h.Total(child2.h.ToPrometheusMetricWindowed())
+			_, parentWindowSum := h.WindowedSnapshot().Total()
+			_, child1WindowSum := child1.h.WindowedSnapshot().Total()
+			_, child2WindowSum := child2.h.WindowedSnapshot().Total()
 			require.Equal(t, parentSumExp, parentWindowSum)
 			require.Equal(t, child1SumExp, child1WindowSum)
 			require.Equal(t, child2SumExp, child2WindowSum)

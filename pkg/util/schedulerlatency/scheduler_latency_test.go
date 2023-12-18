@@ -87,12 +87,13 @@ func TestSchedulerLatencySampler(t *testing.T) {
 		var err error
 		reg.Each(func(name string, mtr interface{}) {
 			wh := mtr.(metric.WindowedHistogram)
-			avg := wh.MeanWindowed()
+			windowSnapshot := wh.WindowedSnapshot()
+			avg := windowSnapshot.Mean()
 			if math.IsNaN(avg) || math.IsInf(avg, +1) || math.IsInf(avg, -1) {
 				avg = 0
 			}
 
-			if wh.ValueAtQuantileWindowed(99, wh.ToPrometheusMetricWindowed()) == 0 || avg == 0 {
+			if windowSnapshot.ValueAtQuantile(99) == 0 || avg == 0 {
 				err = fmt.Errorf("expected non-zero p99 scheduling latency metrics")
 			}
 		})
@@ -184,13 +185,13 @@ func TestComputeSchedulerPercentileAgainstPrometheus(t *testing.T) {
 			}
 		}
 
-		histWindow := promhist.ToPrometheusMetricWindowed()
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(100, histWindow), percentile(&hist, 1.00), 1) // pmax
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(0, histWindow), percentile(&hist, 0.00), 1)   // pmin
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(50, histWindow), percentile(&hist, 0.50), 1)  // p50
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(75, histWindow), percentile(&hist, 0.75), 1)  // p75
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(90, histWindow), percentile(&hist, 0.90), 1)  // p90
-		require.InDelta(t, promhist.ValueAtQuantileWindowed(99, histWindow), percentile(&hist, 0.99), 1)  // p99
+		histWindow := promhist.WindowedSnapshot()
+		require.InDelta(t, histWindow.ValueAtQuantile(100), percentile(&hist, 1.00), 1) // pmax
+		require.InDelta(t, histWindow.ValueAtQuantile(0), percentile(&hist, 0.00), 1)   // pmin
+		require.InDelta(t, histWindow.ValueAtQuantile(50), percentile(&hist, 0.50), 1)  // p50
+		require.InDelta(t, histWindow.ValueAtQuantile(75), percentile(&hist, 0.75), 1)  // p75
+		require.InDelta(t, histWindow.ValueAtQuantile(90), percentile(&hist, 0.90), 1)  // p90
+		require.InDelta(t, histWindow.ValueAtQuantile(99), percentile(&hist, 0.99), 1)  // p99
 	}
 }
 

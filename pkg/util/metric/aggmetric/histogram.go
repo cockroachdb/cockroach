@@ -65,6 +65,7 @@ var _ metric.Iterable = (*AggHistogram)(nil)
 var _ metric.PrometheusIterable = (*AggHistogram)(nil)
 var _ metric.PrometheusExportable = (*AggHistogram)(nil)
 var _ metric.WindowedHistogram = (*AggHistogram)(nil)
+var _ metric.CumulativeHistogram = (*AggHistogram)(nil)
 
 // NewHistogram constructs a new AggHistogram.
 func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHistogram {
@@ -121,25 +122,14 @@ func (a *AggHistogram) Inspect(f func(interface{})) {
 	f(a)
 }
 
-// Total is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) Total(hist *prometheusgo.Metric) (int64, float64) {
-	return a.h.Total(hist)
+// CumulativeSnapshot is part of the metric.CumulativeHistogram interface.
+func (a *AggHistogram) CumulativeSnapshot() metric.HistogramSnapshot {
+	return a.h.CumulativeSnapshot()
 }
 
-// Mean is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) Mean(hist *prometheusgo.Metric) float64 {
-	return a.h.Mean(hist)
-}
-
-// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
-// right type for the current histogram window.
-func (a *AggHistogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
-	return a.h.ToPrometheusMetricWindowed()
-}
-
-// ValueAtQuantileWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) ValueAtQuantileWindowed(q float64, window *prometheusgo.Metric) float64 {
-	return a.h.ValueAtQuantileWindowed(q, window)
+// WindowedSnapshot is part of the metric.WindowedHistogram interface.
+func (a *AggHistogram) WindowedSnapshot() metric.HistogramSnapshot {
+	return a.h.WindowedSnapshot()
 }
 
 // GetType is part of the metric.PrometheusExportable interface.

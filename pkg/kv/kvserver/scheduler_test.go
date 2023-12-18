@@ -266,7 +266,7 @@ func TestSchedulerLoop(t *testing.T) {
 		return nil
 	})
 
-	count, _ := m.RaftSchedulerLatency.Total()
+	count, _ := m.RaftSchedulerLatency.CumulativeSnapshot().Total()
 	require.Equal(t, int64(3), count)
 }
 
