@@ -21,7 +21,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/docs",
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/roachpb",
@@ -88,7 +88,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/keys",

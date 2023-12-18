@@ -20,7 +20,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/config/zonepb",
-        "//pkg/geo/geoindex",
+        "//pkg/geo/geopb",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/sql/catalog/descpb",

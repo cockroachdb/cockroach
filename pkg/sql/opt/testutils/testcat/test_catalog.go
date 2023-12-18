@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1078,7 +1078,7 @@ type Index struct {
 
 	// geoConfig is the geospatial index configuration, if this is a geospatial
 	// inverted index.
-	geoConfig geoindex.Config
+	geoConfig geopb.Config
 
 	// version is the index descriptor version of the index.
 	version descpb.IndexDescriptorVersion
@@ -1192,7 +1192,7 @@ func (ti *Index) ImplicitPartitioningColumnCount() int {
 }
 
 // GeoConfig is part of the cat.Index interface.
-func (ti *Index) GeoConfig() geoindex.Config {
+func (ti *Index) GeoConfig() geopb.Config {
 	return ti.geoConfig
 }
 

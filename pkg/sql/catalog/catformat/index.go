@@ -16,6 +16,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -263,7 +264,7 @@ func formatStorageConfigs(
 ) error {
 	numCustomSettings := 0
 	if index.GeoConfig.S2Geometry != nil || index.GeoConfig.S2Geography != nil {
-		var s2Config *geoindex.S2Config
+		var s2Config *geopb.S2Config
 
 		if index.GeoConfig.S2Geometry != nil {
 			s2Config = index.GeoConfig.S2Geometry.S2Config
