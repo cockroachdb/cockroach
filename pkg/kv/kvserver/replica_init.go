@@ -148,7 +148,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 				QuotaAlloc: p.quotaAlloc,
 				CmdID:      p.idKey,
 				SeedID:     seedID,
-				Req:        *p.Request,
+				Req:        p.Request,
 			})
 		}
 	}

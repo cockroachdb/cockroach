@@ -148,7 +148,7 @@ type ProposalFilterArgs struct {
 	QuotaAlloc *quotapool.IntAlloc
 	CmdID      CmdIDKey
 	SeedID     CmdIDKey
-	Req        kvpb.BatchRequest
+	Req        *kvpb.BatchRequest
 }
 
 // ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
