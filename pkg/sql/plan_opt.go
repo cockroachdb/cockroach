@@ -55,11 +55,16 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 //   - Types
 //   - AnonymizedStr
 //   - Memo (for reuse during exec, if appropriate).
-func (p *planner) prepareUsingOptimizer(ctx context.Context) (planFlags, error) {
+func (p *planner) prepareUsingOptimizer(
+	ctx context.Context, origin PreparedStatementOrigin,
+) (planFlags, error) {
 	stmt := &p.stmt
 
 	opc := &p.optPlanningCtx
 	opc.reset(ctx)
+	if origin == PreparedStatementOriginSessionMigration {
+		opc.flags.Set(planFlagSessionMigration)
+	}
 
 	switch t := stmt.AST.(type) {
 	case *tree.AlterIndex, *tree.AlterIndexVisible, *tree.AlterTable, *tree.AlterSequence,
@@ -431,6 +436,9 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 	f := opc.optimizer.Factory()
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
 	bld.KeepPlaceholders = true
+	if opc.flags.IsSet(planFlagSessionMigration) {
+		bld.SkipAOST = true
+	}
 	if err := bld.Build(); err != nil {
 		return nil, err
 	}
