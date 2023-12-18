@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/redact"
 )
 
 // RangeUsageInfo contains usage information (sizes and traffic) needed by the
@@ -62,4 +64,22 @@ func (r RangeUsageInfo) TransferImpact() load.Load {
 	// accounting to account for follower reads if able.
 	dims[load.CPU] = r.RequestCPUNanosPerSecond
 	return dims
+}
+
+func (r RangeUsageInfo) String() string {
+	return redact.StringWithoutMarkers(r)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r RangeUsageInfo) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[batches/s=%.1f request_cpu/s=%v raft_cpu/s=%v write(keys)/s=%.1f "+
+		"write(bytes)/s=%v read(keys)/s=%.1f read(bytes)/s=%v]",
+		r.QueriesPerSecond,
+		humanizeutil.Duration(time.Duration(r.RequestCPUNanosPerSecond)),
+		humanizeutil.Duration(time.Duration(r.RaftCPUNanosPerSecond)),
+		r.WritesPerSecond,
+		humanizeutil.IBytes(int64(r.WriteBytesPerSecond)),
+		r.ReadsPerSecond,
+		humanizeutil.IBytes(int64(r.ReadBytesPerSecond)),
+	)
 }
