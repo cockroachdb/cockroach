@@ -2015,7 +2015,7 @@ var builtinOidsArray = []string{
 	2042: `to_char(interval: interval, format: string) -> string`,
 	2043: `crdb_internal.create_tenant(name: string) -> int`,
 	2044: `crdb_internal.start_replication_stream(tenant_name: string) -> bytes`,
-	2045: `pg_blocking_pids() -> int[]`,
+	2045: `pg_blocking_pids(blocked_pid: int4) -> int[]`,
 	2046: `crdb_internal.fingerprint(span: bytes[], start_time: timestamptz, all_revisions: bool) -> int`,
 	2047: `tsquerysend(tsquery: tsquery) -> bytes`,
 	2048: `tsvectorsend(tsvector: tsvector) -> bytes`,
@@ -2538,6 +2538,7 @@ var builtinOidsArray = []string{
 	2570: `array_position(array: refcursor[], elem: refcursor, start: int) -> int`,
 	2571: `bit_count(val: bytes) -> int`,
 	2572: `bit_count(val: varbit) -> int`,
+	2573: `pg_isolation_test_session_is_blocked(blocked_pid: int4, interesting_pids: int[]) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
