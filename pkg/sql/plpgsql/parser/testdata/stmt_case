@@ -1,4 +1,4 @@
-parse
+feature-count
 DECLARE
 BEGIN
 CASE hello
@@ -6,18 +6,11 @@ WHEN world THEN
 END CASE;
 END
 ----
-----
-DECLARE
-BEGIN
-CASE hello
+stmt_block: 1
+stmt_case: 1
+stmt_when: 1
 
-WHEN world  THEN
-END CASE
-END
-----
-----
-
-parse
+feature-count
 DECLARE
 BEGIN
 CASE order_cnt
@@ -25,18 +18,11 @@ WHEN 1, 2, 3 THEN
 END CASE;
 END
 ----
-----
-DECLARE
-BEGIN
-CASE order_cnt
+stmt_block: 1
+stmt_case: 1
+stmt_when: 1
 
-WHEN 1, 2, 3  THEN
-END CASE
-END
-----
-----
-
-parse
+feature-count
 DECLARE
 BEGIN
 CASE order_cnt
@@ -45,19 +31,11 @@ WHEN 5 THEN
 END CASE;
 END
 ----
-----
-DECLARE
-BEGIN
-CASE order_cnt
+stmt_block: 1
+stmt_case: 1
+stmt_when: 2
 
-WHEN 1, 2, 3  THEN
-WHEN 5  THEN
-END CASE
-END
-----
-----
-
-parse
+feature-count
 DECLARE
 BEGIN
 CASE
@@ -65,14 +43,11 @@ WHEN true THEN
 END CASE;
 END
 ----
-DECLARE
-BEGIN
-CASE
-WHEN true  THEN
-END CASE
-END
+stmt_block: 1
+stmt_case: 1
+stmt_when: 1
 
-parse
+feature-count
 DECLARE
   order_cnt integer := 10;
 BEGIN
@@ -82,16 +57,12 @@ WHEN order_cnt > 100 THEN
 END CASE;
 END
 ----
-DECLARE
-order_cnt INT8 := 10;
-BEGIN
-CASE
-WHEN order_cnt BETWEEN 0 AND 100  THEN
-WHEN order_cnt > 100  THEN
-END CASE
-END
+decl_stmt: 1
+stmt_block: 1
+stmt_case: 1
+stmt_when: 2
 
-parse
+feature-count
 DECLARE
   order_cnt integer := 10;
 BEGIN
@@ -105,18 +76,11 @@ BEGIN
 END CASE;
 END
 ----
-DECLARE
-order_cnt INT8 := 10;
-BEGIN
-CASE
-WHEN order_cnt BETWEEN 0 AND 100  THEN
-  CALL a function/procedure
-WHEN order_cnt > 100  THEN
-  CALL a function/procedure
-ELSE
-  CALL a function/procedure
-END CASE
-END
+decl_stmt: 1
+stmt_block: 1
+stmt_call: 3
+stmt_case: 1
+stmt_when: 2
 
 
 feature-count

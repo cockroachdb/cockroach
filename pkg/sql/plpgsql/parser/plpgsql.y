@@ -952,8 +952,10 @@ opt_case_else:
 
 stmt_loop: opt_loop_label LOOP loop_body opt_label ';'
   {
-    // TODO(drewk): does the second usage of the label actually
-    // do anything?
+    loopLabel, loopEndLabel := $1, $4
+    if err := checkLoopLabels(loopLabel, loopEndLabel); err != nil {
+      return setErr(plpgsqllex, err)
+    }
     $$.val = &plpgsqltree.Loop{
       Label: $1,
       Body: $3.statements(),
@@ -963,8 +965,10 @@ stmt_loop: opt_loop_label LOOP loop_body opt_label ';'
 
 stmt_while: opt_loop_label WHILE expr_until_loop LOOP loop_body opt_label ';'
   {
-    // TODO(drewk): does the second usage of the label actually
-    // do anything?
+    loopLabel, loopEndLabel := $1, $6
+    if err := checkLoopLabels(loopLabel, loopEndLabel); err != nil {
+      return setErr(plpgsqllex, err)
+    }
     cond, err := plpgsqllex.(*lexer).ParseExpr($3)
     if err != nil {
       return setErr(plpgsqllex, err)
@@ -1500,6 +1504,9 @@ opt_label:
     $$ = ""
   }
 | any_identifier
+  {
+    $$ = $1
+  }
 ;
 
 opt_exitcond: ';'
