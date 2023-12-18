@@ -141,6 +141,7 @@ func processInboundStreamHelper(
 			if err != nil {
 				if err != io.EOF {
 					// Communication error.
+					log.VEventf(ctx, 2, "Inbox communication error: %v", err)
 					err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "inbox communication error")
 					sendErrToConsumer(err)
 					errChan <- err
@@ -152,6 +153,7 @@ func processInboundStreamHelper(
 				return
 			}
 
+			log.VEvent(ctx, 2, "Inbox received message")
 			if res := processProducerMessage(
 				ctx, f, stream, dst, &sd, &draining, msg,
 			); res.err != nil || res.consumerClosed {

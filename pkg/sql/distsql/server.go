@@ -713,11 +713,13 @@ func (ds *ServerImpl) flowStreamInt(
 		if err == io.EOF {
 			return errors.AssertionFailedf("missing header message")
 		}
+		log.VEventf(ctx, 2, "FlowStream (server) error while receiving header: %v", err)
 		return err
 	}
 	if msg.Header == nil {
 		return errors.AssertionFailedf("no header in first message")
 	}
+	log.VEvent(ctx, 2, "FlowStream (server) received header")
 	flowID := msg.Header.FlowID
 	streamID := msg.Header.StreamID
 	if log.V(1) {
