@@ -30,6 +30,7 @@ type rangeFeedConfig struct {
 	Frontier      hlc.Timestamp
 	Spans         []kvcoord.SpanTimePair
 	WithDiff      bool
+	WithFiltering bool
 	RangeObserver func(fn kvcoord.ForEachRangeFn)
 	Knobs         TestingKnobs
 	UseMux        bool
@@ -81,6 +82,9 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	}
 	if cfg.WithDiff {
 		rfOpts = append(rfOpts, kvcoord.WithDiff())
+	}
+	if cfg.WithFiltering {
+		rfOpts = append(rfOpts, kvcoord.WithFiltering())
 	}
 	if cfg.RangeObserver != nil {
 		rfOpts = append(rfOpts, kvcoord.WithRangeObserver(cfg.RangeObserver))

@@ -135,7 +135,7 @@ type outputEventFn func(e *kvpb.RangeFeedEvent) error
 // keys a@6, a@4, and b@2, the emitted order is [a-f)@3,[a-f)@5,a@4,a@6,b@2 because
 // the start key "a" is ordered before all of the timestamped point keys.
 func (i *CatchUpIterator) CatchUpScan(
-	ctx context.Context, outputFn outputEventFn, withDiff bool,
+	ctx context.Context, outputFn outputEventFn, withDiff bool, withFiltering bool,
 ) error {
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
@@ -315,20 +315,30 @@ func (i *CatchUpIterator) CatchUpScan(
 			if withDiff {
 				// Update the last version with its previous value (this version).
 				if l := len(reorderBuf) - 1; l >= 0 {
-					if reorderBuf[l].Val.PrevValue.IsPresent() {
-						return errors.AssertionFailedf("unexpected previous value %s for key %s",
-							reorderBuf[l].Val.PrevValue, key)
-					}
-					// However, don't emit a value if an MVCC range tombstone existed
-					// between this value and the next one. The RangeKeysIgnoringTime()
-					// call is cheap, no need for caching.
-					rangeKeys := i.RangeKeysIgnoringTime()
-					if rangeKeys.IsEmpty() || !rangeKeys.HasBetween(ts, reorderBuf[l].Val.Value.Timestamp) {
-						// TODO(sumeer): find out if it is deliberate that we are not populating
-						// PrevValue.Timestamp.
-						reorderBuf[l].Val.PrevValue.RawBytes = val
+					// The previous value may have already been set by an event with
+					// OmitInRangefeeds = true (and withFiltering = true). That event
+					// is not in reorderBuf because we want to filter it out of the
+					// rangefeed, but we still want to keep it as a previous value.
+					if !reorderBuf[l].Val.PrevValue.IsPresent() {
+						// However, don't emit a value if an MVCC range tombstone existed
+						// between this value and the next one. The RangeKeysIgnoringTime()
+						// call is cheap, no need for caching.
+						rangeKeys := i.RangeKeysIgnoringTime()
+						if rangeKeys.IsEmpty() || !rangeKeys.HasBetween(ts, reorderBuf[l].Val.Value.Timestamp) {
+							// TODO(sumeer): find out if it is deliberate that we are not populating
+							// PrevValue.Timestamp.
+							reorderBuf[l].Val.PrevValue.RawBytes = val
+						}
 					}
 				}
+			}
+
+			// If this value has the flag to omit from rangefeeds, and if the consumer
+			// has opted into filtering, move to the next version for this the key
+			// (which may or may not have OmitInRangefeeds = true).
+			if mvccVal.OmitInRangefeeds && withFiltering {
+				i.Next()
+				continue
 			}
 
 			if !ignore {
