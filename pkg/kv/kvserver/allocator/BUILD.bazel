@@ -13,6 +13,8 @@ go_library(
         "//pkg/kv/kvserver/constraint",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/util/humanizeutil",
+        "@com_github_cockroachdb_redact//:redact",
         "@io_etcd_go_raft_v3//:raft",
     ],
 )
