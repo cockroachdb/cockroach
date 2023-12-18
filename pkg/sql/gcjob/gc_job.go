@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -166,8 +167,15 @@ func deleteTableData(
 	return nil
 }
 
-// unsplitRangesInSpan unsplits any manually splits ranges within a span.
-func unsplitRangesInSpan(ctx context.Context, kvDB *kv.DB, span roachpb.Span) error {
+// unsplitRangesInSpan unsplits any manually split ranges within a span.
+func unsplitRangesInSpan(
+	ctx context.Context, execCfg *sql.ExecutorConfig, span roachpb.Span,
+) error {
+	if !execCfg.Codec.ForSystemTenant() {
+		return unsplitRangesInSpanForSecondaryTenant(ctx, execCfg, span)
+	}
+
+	kvDB := execCfg.DB
 	ranges, err := kvclient.ScanMetaKVs(ctx, kvDB.NewTxn(ctx, "unsplit-ranges-in-span"), span)
 	if err != nil {
 		return err
@@ -196,22 +204,86 @@ func unsplitRangesInSpan(ctx context.Context, kvDB *kv.DB, span roachpb.Span) er
 	return nil
 }
 
+// unsplitRangesInSpanForSecondaryTenant unsplits any manually split
+// ranges within a span using an implementation that is appropriate
+// for a secondary tenant.
+//
+// When operating in a secondary tenant, unsplitting is not guaranteed
+// because:
+//
+//   - The tenant may no longer be allowed to unsplit.
+//
+//   - We use the range cache to look up range start keys and our
+//     range cache may be out of date.
+func unsplitRangesInSpanForSecondaryTenant(
+	ctx context.Context, execCfg *sql.ExecutorConfig, span roachpb.Span,
+) error {
+	rangeStartKeysToUnsplit, err := rangeStartKeysForSpanSecondaryTenant(ctx, execCfg, span)
+	if err != nil {
+		return err
+	}
+
+	for _, key := range rangeStartKeysToUnsplit {
+		if err := execCfg.DB.AdminUnsplit(ctx, key); err != nil {
+			// Swallow "key is not the start of a range" errors because it would mean
+			// that the sticky bit was removed and merged concurrently. DROP TABLE
+			// should not fail because of this.
+			if strings.Contains(err.Error(), "is not the start of a range") {
+				continue
+			}
+			// If we are in a secondary tenant and get an auth
+			// error, the likely case is that we don't have
+			// permission to AdminUnsplit.
+			//
+			// TODO(ssd): We've opted to log a warning and move on,
+			// but this means in some cases the user may be left
+			// with empty, unmergable ranges.
+			if !execCfg.Codec.ForSystemTenant() && grpcutil.IsAuthError(err) {
+				log.Warningf(ctx, "failed to unsplit range at %s: %s", key, err)
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func rangeStartKeysForSpanSecondaryTenant(
+	ctx context.Context, execCfg *sql.ExecutorConfig, span roachpb.Span,
+) ([]roachpb.Key, error) {
+	ret := []roachpb.Key{}
+	rangeDescIterator, err := execCfg.RangeDescIteratorFactory.NewIterator(ctx, execCfg.Codec.TenantSpan())
+	if err != nil {
+		return nil, err
+	}
+
+	for rangeDescIterator.Valid() {
+		rangeDesc := rangeDescIterator.CurRangeDescriptor()
+		rangeDescIterator.Next()
+
+		if !span.ContainsKey(rangeDesc.StartKey.AsRawKey()) {
+			continue
+		}
+		if rangeDesc.StickyBit.IsEmpty() {
+			continue
+		}
+		ret = append(ret, rangeDesc.StartKey.AsRawKey())
+	}
+	return ret, nil
+}
+
 func unsplitRangesForTables(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	droppedTables []jobspb.SchemaChangeGCDetails_DroppedID,
 ) error {
-	if !execCfg.Codec.ForSystemTenant() {
-		return nil
-	}
-
 	for _, droppedTable := range droppedTables {
 		startKey := execCfg.Codec.TablePrefix(uint32(droppedTable.ID))
 		span := roachpb.Span{
 			Key:    startKey,
 			EndKey: startKey.PrefixEnd(),
 		}
-		if err := unsplitRangesInSpan(ctx, execCfg.DB, span); err != nil {
+		if err := unsplitRangesInSpan(ctx, execCfg, span); err != nil {
 			return err
 		}
 	}
@@ -226,10 +298,6 @@ func unsplitRangesForIndexes(
 	indexes []jobspb.SchemaChangeGCDetails_DroppedIndex,
 	parentTableID descpb.ID,
 ) error {
-	if !execCfg.Codec.ForSystemTenant() {
-		return nil
-	}
-
 	for _, idx := range indexes {
 		startKey := execCfg.Codec.IndexPrefix(uint32(parentTableID), uint32(idx.IndexID))
 		idxSpan := roachpb.Span{
@@ -237,7 +305,7 @@ func unsplitRangesForIndexes(
 			EndKey: startKey.PrefixEnd(),
 		}
 
-		if err := unsplitRangesInSpan(ctx, execCfg.DB, idxSpan); err != nil {
+		if err := unsplitRangesInSpan(ctx, execCfg, idxSpan); err != nil {
 			return err
 		}
 	}
