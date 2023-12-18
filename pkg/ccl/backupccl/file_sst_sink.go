@@ -125,13 +125,8 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 		log.Warningf(ctx, "failed to close write in fileSSTSink: % #v", pretty.Formatter(err))
 		return errors.Wrap(err, "writing SST")
 	}
-	wroteSize := s.sst.Meta.Size
 	s.outName = ""
 	s.out = nil
-
-	for i := range s.flushedFiles {
-		s.flushedFiles[i].BackingFileSize = wroteSize
-	}
 
 	progDetails := backuppb.BackupManifest_Progress{
 		RevStartTime:   s.flushedRevStart,
@@ -233,6 +228,7 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 		s.flushedFiles[l].StartTime.EqOrdering(resp.metadata.StartTime) {
 		s.flushedFiles[l].Span.EndKey = span.EndKey
 		s.flushedFiles[l].EntryCounts.Add(resp.metadata.EntryCounts)
+		s.flushedFiles[l].BackingFileSize += resp.metadata.BackingFileSize
 		s.stats.spanGrows++
 	} else {
 		f := resp.metadata
