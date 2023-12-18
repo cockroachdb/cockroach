@@ -746,11 +746,11 @@ build set=optimizer_use_lock_op_for_serializable=true
 SELECT (SELECT a FROM t FOR UPDATE)
 ----
 project
- ├── columns: a:5
+ ├── columns: a:9
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=a:5]
+      └── subquery [as=a:9]
            └── max1-row
                 ├── columns: t.a:1!null
                 └── lock t
@@ -792,11 +792,11 @@ build set=optimizer_use_lock_op_for_serializable=true
 SELECT (SELECT a FROM t FOR UPDATE OF t)
 ----
 project
- ├── columns: a:5
+ ├── columns: a:9
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=a:5]
+      └── subquery [as=a:9]
            └── max1-row
                 ├── columns: t.a:1!null
                 └── lock t
@@ -860,11 +860,11 @@ build set=optimizer_use_lock_op_for_serializable=true
 SELECT (SELECT a FROM t FOR UPDATE) AS r
 ----
 project
- ├── columns: r:5
+ ├── columns: r:9
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=r:5]
+      └── subquery [as=r:9]
            └── max1-row
                 ├── columns: a:1!null
                 └── lock t
@@ -906,11 +906,11 @@ build set=optimizer_use_lock_op_for_serializable=true
 SELECT (SELECT a FROM t FOR UPDATE OF t) AS r
 ----
 project
- ├── columns: r:5
+ ├── columns: r:9
  ├── values
  │    └── ()
  └── projections
-      └── subquery [as=r:5]
+      └── subquery [as=r:9]
            └── max1-row
                 ├── columns: a:1!null
                 └── lock t
@@ -1312,7 +1312,7 @@ build set=optimizer_use_lock_op_for_serializable=true
 SELECT * FROM [SELECT a FROM t FOR UPDATE]
 ----
 with &1
- ├── columns: a:5!null
+ ├── columns: a:9!null
  ├── lock t
  │    ├── columns: t.a:1!null
  │    ├── locking: for-update
@@ -1321,9 +1321,9 @@ with &1
  │         └── scan t
  │              └── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
  └── with-scan &1
-      ├── columns: a:5!null
+      ├── columns: a:9!null
       └── mapping:
-           └──  t.a:1 => a:5
+           └──  t.a:1 => a:9
 
 build
 WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
@@ -1344,7 +1344,7 @@ build set=optimizer_use_lock_op_for_serializable=true
 WITH cte AS (SELECT a FROM t FOR UPDATE) SELECT * FROM cte
 ----
 with &1 (cte)
- ├── columns: a:5!null
+ ├── columns: a:9!null
  ├── lock t
  │    ├── columns: t.a:1!null
  │    ├── locking: for-update
@@ -1353,9 +1353,9 @@ with &1 (cte)
  │         └── scan t
  │              └── columns: t.a:1!null b:2 crdb_internal_mvcc_timestamp:3 tableoid:4
  └── with-scan &1 (cte)
-      ├── columns: a:5!null
+      ├── columns: a:9!null
       └── mapping:
-           └──  t.a:1 => a:5
+           └──  t.a:1 => a:9
 
 # ------------------------------------------------------------------------------
 # Tests with joins.
