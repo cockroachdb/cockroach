@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -296,11 +296,10 @@ func TestSelectQueryBuilder(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := context.Background()
-			testCluster := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-			defer testCluster.Stopper().Stop(ctx)
+			srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+			defer srv.Stopper().Stop(ctx)
 
-			testServer := testCluster.Server(0)
-			ie := testServer.InternalExecutor().(*sql.InternalExecutor)
+			ie := srv.ApplicationLayer().InternalExecutor().(*sql.InternalExecutor)
 
 			// Generate PKColNames.
 			pkColDirs := tc.pkColDirs
@@ -422,13 +421,12 @@ func TestDeleteQueryBuilder(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			ctx := context.Background()
+			srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+			defer srv.Stopper().Stop(ctx)
+			s := srv.ApplicationLayer()
 
-			testCluster := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-			defer testCluster.Stopper().Stop(ctx)
-
-			testServer := testCluster.Server(0)
-			ie := testServer.InternalExecutor().(*sql.InternalExecutor)
-			db := testServer.InternalDB().(*sql.InternalDB)
+			ie := s.InternalExecutor().(*sql.InternalExecutor)
+			db := s.InternalDB().(*sql.InternalDB)
 
 			// Generate PKColNames.
 			numPKCols := tc.numPKCols

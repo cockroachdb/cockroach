@@ -301,9 +301,8 @@ func TestDeleteFailedJob(t *testing.T) {
 
 	ctx := context.Background()
 	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: serverArgs})
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.ApplicationLayer(0).SQLConn(t)
+	s, conn, _ := serverutils.StartServer(t, serverArgs)
+	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
@@ -515,9 +514,9 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
 

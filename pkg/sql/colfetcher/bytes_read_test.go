@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -29,12 +29,9 @@ func TestBytesRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testClusterArgs := base.TestClusterArgs{ReplicationMode: base.ReplicationAuto}
-	tc := testcluster.StartTestCluster(t, 1, testClusterArgs)
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
-
-	conn := tc.Conns[0]
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
 
 	// Create the table with disabled automatic table stats collection. The
 	// stats collection is disabled so that the ColBatchScan would read the

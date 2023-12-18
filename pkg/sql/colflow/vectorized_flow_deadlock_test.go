@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -47,10 +47,9 @@ func TestVectorizedFlowDeadlocksWhenSpilling(t *testing.T) {
 			VecFDsToAcquire: vecFDsLimit,
 		}},
 	}
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: serverArgs})
 	ctx := context.Background()
-	defer tc.Stopper().Stop(ctx)
-	conn := tc.Conns[0]
+	s, conn, _ := serverutils.StartServer(t, serverArgs)
+	defer s.Stopper().Stop(ctx)
 
 	_, err := conn.ExecContext(ctx, "CREATE TABLE t (a, b) AS SELECT i, i FROM generate_series(1, 10000) AS g(i)")
 	require.NoError(t, err)
