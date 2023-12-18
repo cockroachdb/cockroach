@@ -90,6 +90,8 @@ const (
 	// ReferencedFunctionIDs corresponds to a slice of function descriptor IDs
 	// referenced by an element.
 	ReferencedFunctionIDs
+	// Expr corresponds to the string representation of a SQL expression for an element.
+	Expr
 
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
@@ -255,6 +257,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.ColumnDefaultExpression)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
+		rel.EntityAttr(Expr, "Expr"),
 		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
 		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
 		rel.EntityAttr(ReferencedFunctionIDs, "UsesFunctionIDs"),

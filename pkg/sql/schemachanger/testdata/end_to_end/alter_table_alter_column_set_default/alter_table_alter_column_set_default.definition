@@ -1,0 +1,22 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+ALTER TABLE t ALTER COLUMN j SET DEFAULT 2;
+----
+
+# Ensure that inserts with no values will succeed.
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES ($stageKey);
+DELETE FROM t WHERE i = $stageKey;
+INSERT INTO t VALUES ($stageKey);
+UPDATE t SET j = j + 1;
+----
+
+# One row is expected to be added after each stage.
+stage-query phase=PostCommitPhase stage=:
+SELECT count(*)=$successfulStageCount FROM t;
+----
+true
+
+test
+ALTER TABLE t ALTER COLUMN j SET DEFAULT 42;
+----
