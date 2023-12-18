@@ -1453,11 +1453,11 @@ func TestBaseQueueChangeReplicaID(t *testing.T) {
 	bq.mu.Unlock()
 	require.Equal(t, 0, testQueue.getProcessed())
 	bq.maybeAdd(ctx, r, tc.store.Clock().NowAsClockTimestamp())
-	bq.DrainQueue(tc.store.Stopper())
+	bq.DrainQueue(ctx, tc.store.Stopper())
 	require.Equal(t, 1, testQueue.getProcessed())
 	bq.maybeAdd(ctx, r, tc.store.Clock().NowAsClockTimestamp())
 	r.replicaID = 2
-	bq.DrainQueue(tc.store.Stopper())
+	bq.DrainQueue(ctx, tc.store.Stopper())
 	require.Equal(t, 1, testQueue.getProcessed())
 	require.Equal(t, 0, bq.Length())
 	require.Equal(t, 0, bq.PurgatoryLength())

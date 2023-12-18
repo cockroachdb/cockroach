@@ -39,7 +39,7 @@ func forceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) error {
 		return true
 	})
 
-	q.DrainQueue(s.stopper)
+	q.DrainQueue(ctx, s.stopper)
 	return nil
 }
 

@@ -191,6 +191,6 @@ func (fr *fakeReplica) redirectOnOrAcquireLease(
 	// baseQueue only checks that the returned error is nil.
 	return kvserverpb.LeaseStatus{}, nil
 }
-func (fr *fakeReplica) LeaseStatusAt(context.Context, hlc.ClockTimestamp) kvserverpb.LeaseStatus {
+func (fr *fakeReplica) CurrentLeaseStatus(context.Context) kvserverpb.LeaseStatus {
 	return kvserverpb.LeaseStatus{}
 }
