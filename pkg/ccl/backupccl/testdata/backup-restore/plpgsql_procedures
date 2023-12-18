@@ -10,8 +10,11 @@ CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
 CREATE TYPE sc1.enum1 AS ENUM('Good');
 CREATE SEQUENCE sc1.sq1;
 CREATE PROCEDURE sc1.p1(a sc1.enum1) LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foobar sc1.enum1;
   BEGIN
     SELECT a FROM sc1.tbl1;
+    SELECT 'Good'::sc1.enum1;
     SELECT nextval('sc1.sq1');
   END
 $$;
@@ -62,8 +65,11 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
+	DECLARE
+	foobar db1.sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 	END
 
@@ -103,8 +109,11 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 CREATE PROCEDURE sc1.p1(IN a db1_new.sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
+	DECLARE
+	foobar db1_new.sc1.enum1;
 	BEGIN
 	SELECT a FROM db1_new.sc1.tbl1;
+	SELECT 'Good':::db1_new.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 	END
 
@@ -179,8 +188,11 @@ CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
 CREATE TYPE sc1.enum1 AS ENUM('Good');
 CREATE SEQUENCE sc1.sq1;
 CREATE PROCEDURE sc1.p1(a sc1.enum1) LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foobar sc1.enum1;
   BEGIN
     SELECT a FROM sc1.tbl1;
+    SELECT 'Good'::sc1.enum1;
     SELECT nextval('sc1.sq1');
   END
 $$;
@@ -236,8 +248,11 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
+	DECLARE
+	foobar db1.sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 	END
 
@@ -278,8 +293,11 @@ SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
 	LANGUAGE plpgsql
 	AS $$
+	DECLARE
+	foobar db1.sc1.enum1;
 	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
+	SELECT 'Good':::db1.sc1.enum1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
 	END
 
