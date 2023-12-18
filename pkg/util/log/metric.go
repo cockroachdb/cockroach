@@ -42,13 +42,19 @@ type LogMetrics interface {
 type Metric int
 
 const (
-	FluentSinkConnectionError Metric = iota
+	FluentSinkConnectionAttempt Metric = iota
+	FluentSinkConnectionError   Metric = iota
+	FluentSinkWriteAttempt      Metric = iota
+	FluentSinkWriteError        Metric = iota
 	BufferedSinkMessagesDropped
 	LogMessageCount
 )
 
 var Metrics = []Metric{
+	FluentSinkConnectionAttempt,
 	FluentSinkConnectionError,
+	FluentSinkWriteAttempt,
+	FluentSinkWriteError,
 	BufferedSinkMessagesDropped,
 	LogMessageCount,
 }

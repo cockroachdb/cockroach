@@ -20,10 +20,31 @@ import (
 
 var (
 	// logMetricsReg is a singleton instance of the LogMetricsRegistry.
-	logMetricsReg        = newLogMetricsRegistry()
+	logMetricsReg          = newLogMetricsRegistry()
+	FluentSinkConnAttempts = metric.Metadata{
+		Name:        "log.fluent.sink.conn.attempts",
+		Help:        "Number of connection attempts experienced by fluent-server logging sinks",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
 	FluentSinkConnErrors = metric.Metadata{
 		Name:        "log.fluent.sink.conn.errors",
 		Help:        "Number of connection errors experienced by fluent-server logging sinks",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	FluentSinkWriteAttempts = metric.Metadata{
+		Name:        "log.fluent.sink.write.attempts",
+		Help:        "Number of write attempts experienced by fluent-server logging sinks",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	FluentSinkWriteErrors = metric.Metadata{
+		Name:        "log.fluent.sink.write.errors",
+		Help:        "Number of write errors experienced by fluent-server logging sinks",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
