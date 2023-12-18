@@ -380,6 +380,9 @@ define LockPrivate {
     # the table is locked.
     Table TableID
 
+    # KeySource identifies the source of the key columns.
+    KeySource TableID
+
     # Locking represents the row-level locking mode to use when locking the
     # primary index.
     Locking Locking
@@ -389,7 +392,14 @@ define LockPrivate {
     # primary key columns of the table.
     KeyCols ColList
 
+    # LockCols is the set of columns to lock. LockCols determines which column
+    # families will be locked. None of the LockCols are included in the output
+    # of the lock operation. If LockCols is empty we will only lock the first
+    # column family.
+    LockCols ColSet
+
     # Cols is the set of columns from the input expression returned by the Lock
-    # operator. Cols contains all of the KeyCols.
+    # operator, which are passed through. Cols contains all of the KeyCols and
+    # none of the LockCols.
     Cols ColSet
 }

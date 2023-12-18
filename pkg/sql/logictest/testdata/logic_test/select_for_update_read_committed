@@ -391,3 +391,135 @@ user root
 awaitquery q12
 
 awaitquery q13
+
+subtest lock_column_family
+
+# Check that we lock all column families.
+
+statement ok
+CREATE TABLE abcde (a INT NOT NULL PRIMARY KEY, b INT NOT NULL, c INT NOT NULL, d INT NOT NULL, e INT NOT NULL, FAMILY (a, b), FAMILY (c), FAMILY (d), FAMILY (e))
+
+statement ok
+GRANT ALL on abcde TO testuser
+
+statement ok
+INSERT INTO abcde VALUES (5, 6, 7, 8, 9)
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Only read one column family in the initial scan, but lock all of them.
+query I rowsort
+SELECT e FROM abcde WHERE a = 5 FOR UPDATE
+----
+9
+
+user root
+
+# Reading from the same column family should block on the lock.
+query I async,rowsort q14
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT e FROM abcde WHERE a = 5 FOR UPDATE;
+COMMIT;
+----
+19
+
+user testuser
+
+query I rowsort
+SELECT e FROM abcde WHERE a = 5 FOR UPDATE
+----
+9
+
+statement ok
+UPDATE abcde SET e = e + 10 WHERE a = 5
+
+statement ok
+COMMIT
+
+user root
+
+awaitquery q14
+
+# Now try again, but test that a different column family is also locked.
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Only read one column family in the initial scan, but lock all of them.
+query I rowsort
+SELECT e FROM abcde WHERE a = 5 FOR UPDATE
+----
+19
+
+user root
+
+# Reading from a different column family should also block.
+query I async,rowsort q15
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT d FROM abcde WHERE a = 5 FOR UPDATE;
+COMMIT;
+----
+18
+
+user testuser
+
+query I rowsort
+SELECT d FROM abcde WHERE a = 5 FOR UPDATE
+----
+8
+
+statement ok
+UPDATE abcde SET d = d + 10 WHERE a = 5
+
+statement ok
+COMMIT
+
+user root
+
+awaitquery q15
+
+# Now try again with a conflicting update instead of a conflicting SFU.
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Only read one column family in the initial scan, but lock all of them.
+query I rowsort
+SELECT e FROM abcde WHERE a = 5 FOR UPDATE
+----
+19
+
+user root
+
+# Updating a different column family should block.
+query I async,rowsort q16
+BEGIN ISOLATION LEVEL READ COMMITTED;
+UPDATE abcde SET c = c + 10 WHERE a = 5 RETURNING c;
+COMMIT;
+----
+27
+
+user testuser
+
+# Should see previous value because we still hold the lock.
+query I rowsort
+SELECT c FROM abcde WHERE a = 5 FOR UPDATE
+----
+7
+
+statement ok
+UPDATE abcde SET c = c + 10 WHERE a = 5
+
+statement ok
+COMMIT
+
+user root
+
+awaitquery q16
