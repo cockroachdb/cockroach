@@ -40,6 +40,7 @@ type runtimeHistogram struct {
 var _ metric.Iterable = &runtimeHistogram{}
 var _ metric.PrometheusExportable = &runtimeHistogram{}
 var _ metric.WindowedHistogram = (*runtimeHistogram)(nil)
+var _ metric.CumulativeHistogram = (*runtimeHistogram)(nil)
 
 // newRuntimeHistogram creates a histogram with the given metadata configured
 // with the given buckets. The buckets must be a strict subset of what this
@@ -136,10 +137,19 @@ func (h *runtimeHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return m
 }
 
-// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the
-// right type for the current histogram window.
-func (h *runtimeHistogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
-	return h.ToPrometheusMetric()
+// CumulativeSnapshot is part of the metric.CumulativeHistogram interface.
+func (h *runtimeHistogram) CumulativeSnapshot() metric.HistogramSnapshot {
+	return metric.MakeHistogramSnapshot(h.ToPrometheusMetric().Histogram)
+}
+
+// WindowedSnapshot is part of the metric.WindowedHistogram interface.
+// TODO(#116690): runtimeHistogram isn't windowed, so why does it implement
+// the WindowedHistogram interface? My best guess is because it was
+// the path of least resistance to get the metric exposed in /_status/vars.
+// It should either be truly windowed, should not implement the interface,
+// or should be deleted in favor of metric.Histogram.
+func (h *runtimeHistogram) WindowedSnapshot() metric.HistogramSnapshot {
+	return metric.MakeHistogramSnapshot(h.ToPrometheusMetric().Histogram)
 }
 
 // GetMetadata is part of the PrometheusExportable interface.
@@ -149,23 +159,6 @@ func (h *runtimeHistogram) GetMetadata() metric.Metadata {
 
 // Inspect is part of the Iterable interface.
 func (h *runtimeHistogram) Inspect(f func(interface{})) { f(h) }
-
-// Total implements the WindowedHistogram interface.
-func (h *runtimeHistogram) Total(hist *prometheusgo.Metric) (int64, float64) {
-	pHist := hist.Histogram
-	return int64(pHist.GetSampleCount()), pHist.GetSampleSum()
-}
-
-// ValueAtQuantileWindowed implements the WindowedHistogram interface.
-func (h *runtimeHistogram) ValueAtQuantileWindowed(q float64, window *prometheusgo.Metric) float64 {
-	return metric.ValueAtQuantileWindowed(window.Histogram, q)
-}
-
-// Mean implements the WindowedHistogram interface.
-func (h *runtimeHistogram) Mean(hist *prometheusgo.Metric) float64 {
-	pHist := hist.Histogram
-	return pHist.GetSampleSum() / float64(pHist.GetSampleCount())
-}
 
 // reBucketExpAndTrim takes a list of bucket boundaries (lower bound inclusive)
 // and down samples the buckets to those a multiple of base apart. The end

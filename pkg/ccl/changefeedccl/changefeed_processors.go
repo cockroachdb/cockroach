@@ -1088,8 +1088,7 @@ func (j *jobState) checkpointCompleted(ctx context.Context, checkpointDuration t
 
 	j.metrics.CheckpointHistNanos.RecordValue(checkpointDuration.Nanoseconds())
 	j.lastProgressUpdate = j.ts.Now()
-	j.checkpointDuration = time.Duration(j.metrics.CheckpointHistNanos.Mean(
-		j.metrics.CheckpointHistNanos.ToPrometheusMetric()))
+	j.checkpointDuration = time.Duration(j.metrics.CheckpointHistNanos.CumulativeSnapshot().Mean())
 	j.progressUpdatesSkipped = false
 }
 
