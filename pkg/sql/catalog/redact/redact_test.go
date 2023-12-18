@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
@@ -27,6 +28,7 @@ import (
 )
 
 func TestRedactQueries(t *testing.T) {
+	defer ccl.TestingEnableEnterprise()()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -39,11 +41,23 @@ func TestRedactQueries(t *testing.T) {
 	tdb.Exec(t, "CREATE VIEW view AS SELECT k, v FROM kv WHERE v <> 'constant literal'")
 	tdb.Exec(t, "CREATE TABLE ctas AS SELECT k, v FROM kv WHERE v <> 'constant literal'")
 	tdb.Exec(t, `
-CREATE FUNCTION f1() RETURNS INT 
-LANGUAGE SQL 
-AS $$ 
+CREATE FUNCTION f1() RETURNS INT
+LANGUAGE SQL
+AS $$
 SELECT k FROM kv WHERE v != 'foo';
 SELECT k FROM kv WHERE v = 'bar';
+$$`)
+	tdb.Exec(t, `
+CREATE FUNCTION f2() RETURNS INT
+LANGUAGE PLpgSQL
+AS $$
+DECLARE
+x INT := 0;
+y TEXT := 'bar';
+BEGIN
+SELECT k FROM kv WHERE v != 'foo';
+RETURN x + 3;
+END
 $$`)
 
 	t.Run("view", func(t *testing.T) {
@@ -64,10 +78,24 @@ $$`)
 		require.Equal(t, `SELECT k, v FROM defaultdb.public.kv WHERE v != '_'`, mut.CreateQuery)
 	})
 
-	t.Run("create function", func(t *testing.T) {
+	t.Run("create function sql", func(t *testing.T) {
 		fn := desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "defaultdb", "public", "f1")
 		mut := funcdesc.NewBuilder(fn.FuncDesc()).BuildCreatedMutableFunction()
 		require.Empty(t, redact.Redact(mut.DescriptorProto()))
 		require.Equal(t, `SELECT k FROM defaultdb.public.kv WHERE v != '_'; SELECT k FROM defaultdb.public.kv WHERE v = '_';`, mut.FunctionBody)
+	})
+
+	t.Run("create function plpgsql", func(t *testing.T) {
+		fn := desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "defaultdb", "public", "f2")
+		mut := funcdesc.NewBuilder(fn.FuncDesc()).BuildCreatedMutableFunction()
+		require.Empty(t, redact.Redact(mut.DescriptorProto()))
+		require.Equal(t, `DECLARE
+x INT8 := _;
+y STRING := '_';
+BEGIN
+SELECT k FROM defaultdb.public.kv WHERE v != '_';
+RETURN x + _;
+END
+`, mut.FunctionBody)
 	})
 }
