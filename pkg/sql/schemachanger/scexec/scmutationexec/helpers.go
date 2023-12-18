@@ -254,6 +254,7 @@ func updateColumnExprSequenceUsage(d *descpb.ColumnDescriptor) error {
 		ids.ForEach(all.Add)
 	}
 	d.UsesSequenceIds = all.Ordered()
+	d.OwnsSequenceIds = all.Ordered()
 	return nil
 }
 
@@ -269,7 +270,7 @@ func updateColumnExprFunctionsUsage(d *descpb.ColumnDescriptor) error {
 		}
 		ids.ForEach(all.Add)
 	}
-	d.UsesSequenceIds = all.Ordered()
+	d.UsesFunctionIds = all.Ordered()
 	return nil
 }
 

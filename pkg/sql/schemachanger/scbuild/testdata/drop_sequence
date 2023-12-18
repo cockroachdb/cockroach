@@ -44,19 +44,19 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   {childObjectId: 104, schemaId: 101}
 - [[TableData:{DescID: 104, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, tableId: 104}
-- [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, ReferencedSequenceIDs: [104], Expr: nextval(104:::REGCLASS)}, ABSENT], PUBLIC]
   {columnId: 2, expr: 'nextval(104:::REGCLASS)', tableId: 105, usesSequenceIds: [104]}
 - [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 105}
 - [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 105}
-- [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2, ReferencedSequenceIDs: [104], Expr: nextval(104:::REGCLASS)}, ABSENT], PUBLIC]
   {columnId: 2, expr: 'nextval(104:::REGCLASS)', tableId: 106, usesSequenceIds: [104]}
 - [[IndexData:{DescID: 106, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 106}
 - [[TableData:{DescID: 106, ReferencedDescID: 100}, PUBLIC], PUBLIC]
   {databaseId: 100, tableId: 106}
-- [[ColumnDefaultExpression:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnID: 2, ReferencedSequenceIDs: [104]}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 109, ReferencedTypeIDs: [107 108], ColumnID: 2, ReferencedSequenceIDs: [104], Expr: CAST(chr(nextval(104:::REGCLASS)) AS @100107)}, ABSENT], PUBLIC]
   {columnId: 2, expr: 'CAST(chr(nextval(104:::REGCLASS)) AS @100107)', tableId: 109, usesSequenceIds: [104], usesTypeIds: [107, 108]}
 - [[IndexData:{DescID: 109, IndexID: 1}, PUBLIC], PUBLIC]
   {indexId: 1, tableId: 109}

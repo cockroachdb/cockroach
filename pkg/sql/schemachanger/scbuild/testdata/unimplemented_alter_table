@@ -41,10 +41,6 @@ ALTER TABLE defaultdb.foo EXPERIMENTAL_AUDIT SET READ WRITE
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ALTER COLUMN i SET DEFAULT 42
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo ALTER COLUMN i DROP DEFAULT
 ----
 

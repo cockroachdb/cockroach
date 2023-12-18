@@ -26,7 +26,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
- │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-), Expr: unique_rowid()}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
@@ -90,7 +90,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
- │    │    │    ├── ABSENT    → PUBLIC ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-), Expr: unique_rowid()}
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
@@ -120,7 +120,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
- │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
+ │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-), Expr: unique_rowid()}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
