@@ -50,6 +50,7 @@ type tenantNode struct {
 	binary string // the binary last passed to start()
 	errCh  chan error
 	node   int
+	region string
 }
 
 type createTenantOptions struct {
@@ -58,8 +59,17 @@ type createTenantOptions struct {
 
 	// Set this to add additional environment variables to the tenant.
 	envVars []string
+
+	// Set this to specify the region for the tenant.
+	region string
 }
 type createTenantOpt func(*createTenantOptions)
+
+func createTenantRegion(region string) createTenantOpt {
+	return func(c *createTenantOptions) {
+		c.region = region
+	}
+}
 
 func createTenantNodeInternal(
 	ctx context.Context,
@@ -88,6 +98,7 @@ func createTenantNodeInternal(
 		node:       node,
 		sqlPort:    sqlPort,
 		envVars:    append(config.DefaultEnvVars(), createOptions.envVars...),
+		region:     createOptions.region,
 	}
 	if certs {
 		tn.createTenantCert(ctx, t, c, createOptions.certNodes)
@@ -176,6 +187,9 @@ func (tn *tenantNode) start(ctx context.Context, t test.Test, c cluster.Cluster,
 	extraArgs := []string{
 		"--log=\"file-defaults: {dir: '" + tn.logDir() + "', exit-on-error: false}\"",
 		"--store=" + tn.storeDir()}
+	if len(tn.region) > 0 {
+		extraArgs = append(extraArgs, "--locality="+tn.region)
+	}
 
 	internalIPs, err := c.InternalIP(ctx, t.L(), c.Node(tn.node))
 	randomSeed := rand.Int63()
