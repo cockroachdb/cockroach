@@ -11,17 +11,14 @@
 package parser_test
 
 import (
-	"bytes"
 	"fmt"
 	"go/constant"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,8 +34,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var issueLinkRE = regexp.MustCompile("https://go.crdb.dev/issue-v/([0-9]+)/.*")
-
 // TestParseDataDriven verifies that we can parse the supplied SQL and regenerate the SQL
 // string from the syntax tree.
 func TestParseDatadriven(t *testing.T) {
@@ -46,67 +41,10 @@ func TestParseDatadriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "parse":
-				// Check parse.
-				stmts, err := parser.Parse(d.Input)
-				if err != nil {
-					d.Fatalf(t, "unexpected parse error: %v", err)
-				}
-
-				// Check pretty-print roundtrip via the sqlfmt logic.
-				sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
-
-				ref := stmts.String()
-				note := ""
-				if ref != d.Input {
-					note = " -- normalized!"
-				}
-
-				// Check roundtrip and formatting with flags.
-				var buf bytes.Buffer
-				fmt.Fprintf(&buf, "%s%s\n", ref, note)
-				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAlwaysGroupExprs), "-- fully parenthesized")
-				constantsHidden := stmts.StringWithFlags(tree.FmtHideConstants)
-				fmt.Fprintln(&buf, constantsHidden, "-- literals removed")
-
-				// As of this writing, the SQL statement stats proceed as follows:
-				// first the literals are removed from statement to form a stat key,
-				// then the stat key is re-parsed, to undergo the anonymization stage.
-				// We also want to check the re-parsing is fine.
-				reparsedStmts, err := parser.Parse(constantsHidden)
-				if err != nil {
-					d.Fatalf(t, "unexpected error when reparsing without literals: %+v", err)
-				} else {
-					reparsedStmtsS := reparsedStmts.String()
-					if reparsedStmtsS != constantsHidden {
-						d.Fatalf(t,
-							"mismatched AST when reparsing without literals:\noriginal: %s\nexpected: %s\nactual:   %s",
-							d.Input, constantsHidden, reparsedStmtsS,
-						)
-					}
-				}
-
-				fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtAnonymize), "-- identifiers removed")
-				if strings.Contains(ref, tree.PasswordSubstitution) {
-					fmt.Fprintln(&buf, stmts.StringWithFlags(tree.FmtShowPasswords), "-- passwords exposed")
-				}
-
-				return buf.String()
-
+				return sqlutils.VerifyParseFormat(t, d.Input, false /* plpgsql */)
 			case "error":
 				_, err := parser.Parse(d.Input)
-				if err == nil {
-					return ""
-				}
-				pgerr := pgerror.Flatten(err)
-				msg := pgerr.Message
-				if pgerr.Detail != "" {
-					msg += "\nDETAIL: " + pgerr.Detail
-				}
-				if pgerr.Hint != "" {
-					msg += "\nHINT: " + pgerr.Hint
-				}
-				msg = issueLinkRE.ReplaceAllString(msg, "https://go.crdb.dev/issue-v/$1/")
-				return msg
+				return sqlutils.VerifyParseError(err)
 			}
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)
 			return ""

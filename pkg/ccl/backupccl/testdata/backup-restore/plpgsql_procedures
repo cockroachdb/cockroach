@@ -1,4 +1,4 @@
-# Test backing up and restoring a database with procedures.
+# Test backing up and restoring a database with PL/pgSQL procedures.
 new-cluster name=s
 ----
 
@@ -9,14 +9,18 @@ CREATE SCHEMA sc1;
 CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
 CREATE TYPE sc1.enum1 AS ENUM('Good');
 CREATE SEQUENCE sc1.sq1;
-CREATE PROCEDURE sc1.p1(a sc1.enum1) LANGUAGE SQL AS $$
-  SELECT a FROM sc1.tbl1;
-  SELECT nextval('sc1.sq1');
+CREATE PROCEDURE sc1.p1(a sc1.enum1) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT a FROM sc1.tbl1;
+    SELECT nextval('sc1.sq1');
+  END
 $$;
 CREATE SCHEMA sc2;
 CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
-CREATE PROCEDURE sc2.p2(i INT) LANGUAGE SQL AS $$
-  INSERT INTO sc2.tbl2 VALUES (i)
+CREATE PROCEDURE sc2.p2(i INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO sc2.tbl2 VALUES (i);
+  END
 $$;
 ----
 
@@ -58,12 +62,18 @@ db1 sc2 p2 function false
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
+----
 CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
-	LANGUAGE SQL
+	LANGUAGE plpgsql
 	AS $$
+	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
+	END
+
 $$
+----
+----
 
 exec-sql
 CALL sc1.p1('Good'::sc1.enum1)
@@ -86,19 +96,25 @@ exec-sql
 USE db1_new
 ----
 
-# Make sure ids in the signature and body are rewritten.
+# Make sure ids in signature and body are rewritten.
 # 1. argument type id is rewritten so that type name is deserialized correctly.
 # 2. db name in qualified name is rewritten.
 # 3. sequence id is rewritten so that sequence name is deserialized correctly.
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
+----
 CREATE PROCEDURE sc1.p1(IN a db1_new.sc1.enum1)
-	LANGUAGE SQL
+	LANGUAGE plpgsql
 	AS $$
+	BEGIN
 	SELECT a FROM db1_new.sc1.tbl1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
+	END
+
 $$
+----
+----
 
 # Make sure procedure signature is rewritten in schema descriptor so that
 # procedure can be resolved and executed.
@@ -166,14 +182,18 @@ CREATE SCHEMA sc1;
 CREATE TABLE sc1.tbl1(a INT PRIMARY KEY);
 CREATE TYPE sc1.enum1 AS ENUM('Good');
 CREATE SEQUENCE sc1.sq1;
-CREATE PROCEDURE sc1.p1(a sc1.enum1) LANGUAGE SQL AS $$
-  SELECT a FROM sc1.tbl1;
-  SELECT nextval('sc1.sq1');
+CREATE PROCEDURE sc1.p1(a sc1.enum1) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT a FROM sc1.tbl1;
+    SELECT nextval('sc1.sq1');
+  END
 $$;
 CREATE SCHEMA sc2;
 CREATE TABLE sc2.tbl2(a INT PRIMARY KEY);
-CREATE PROCEDURE sc2.p2(i INT) LANGUAGE SQL AS $$
-  INSERT INTO sc2.tbl2 VALUES (i)
+CREATE PROCEDURE sc2.p2(i INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO sc2.tbl2 VALUES (i);
+  END
 $$;
 ----
 
@@ -220,12 +240,18 @@ db1 sc2 p2 function true
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
+----
 CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
-	LANGUAGE SQL
+	LANGUAGE plpgsql
 	AS $$
+	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
+	END
+
 $$
+----
+----
 
 query-sql
 CALL sc1.p1('Good'::sc1.enum1)
@@ -256,12 +282,18 @@ USE db1
 query-sql
 SELECT create_statement FROM [SHOW CREATE PROCEDURE sc1.p1]
 ----
+----
 CREATE PROCEDURE sc1.p1(IN a db1.sc1.enum1)
-	LANGUAGE SQL
+	LANGUAGE plpgsql
 	AS $$
+	BEGIN
 	SELECT a FROM db1.sc1.tbl1;
 	SELECT nextval('sc1.sq1'::REGCLASS);
+	END
+
 $$
+----
+----
 
 # Make sure procedure signature is rewritten in schema descriptor so that
 # procedure can be resolved and executed.
@@ -315,7 +347,7 @@ exec-sql cluster=s3
 CREATE DATABASE db1;
 CREATE SCHEMA sc1;
 CREATE TABLE sc1.t(a INT PRIMARY KEY);
-CREATE PROCEDURE sc1.p() LANGUAGE SQL AS $$ SELECT 1 $$;
+CREATE PROCEDURE sc1.p() LANGUAGE PLpgSQL AS $$ BEGIN SELECT 1; END $$;
 ----
 
 # Make sure the original schema has procedure signatures

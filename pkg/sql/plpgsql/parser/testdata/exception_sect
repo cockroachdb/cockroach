@@ -5,7 +5,6 @@ BEGIN
   RETURN x;
 EXCEPTION
   WHEN division_by_zero THEN
-      ASSERT 0 == 0, 'error message';
       RETURN 0;
 END;
 ----
@@ -15,9 +14,36 @@ x := 1;
 RETURN x;
 EXCEPTION
 WHEN division_by_zero THEN
-ASSERT
 RETURN 0;
 END
+ -- normalized!
+DECLARE
+BEGIN
+x := (1);
+RETURN (x);
+EXCEPTION
+WHEN division_by_zero THEN
+RETURN (0);
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+RETURN x;
+EXCEPTION
+WHEN _ THEN
+RETURN _;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 1;
+RETURN _;
+EXCEPTION
+WHEN division_by_zero THEN
+RETURN 0;
+END
+ -- identifiers removed
 
 
 
@@ -41,6 +67,37 @@ WHEN SQLSTATE '22012' THEN
 x := 22012;
 RETURN x;
 END
+ -- normalized!
+DECLARE
+BEGIN
+x := (10);
+RETURN (x);
+EXCEPTION
+WHEN SQLSTATE '22012' THEN
+x := (22012);
+RETURN (x);
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+RETURN x;
+EXCEPTION
+WHEN SQLSTATE '_' THEN
+x := _;
+RETURN x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 10;
+RETURN _;
+EXCEPTION
+WHEN SQLSTATE '22012' THEN
+_ := 22012;
+RETURN _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -62,6 +119,37 @@ WHEN SQLSTATE '22012' OR SQLSTATE '22005' THEN
 x := 100;
 RETURN x;
 END
+ -- normalized!
+DECLARE
+BEGIN
+x := (10);
+RETURN (x);
+EXCEPTION
+WHEN SQLSTATE '22012' OR SQLSTATE '22005' THEN
+x := (100);
+RETURN (x);
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+RETURN x;
+EXCEPTION
+WHEN SQLSTATE '_' OR SQLSTATE '_' THEN
+x := _;
+RETURN x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 10;
+RETURN _;
+EXCEPTION
+WHEN SQLSTATE '22012' OR SQLSTATE '22005' THEN
+_ := 100;
+RETURN _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -83,6 +171,37 @@ WHEN SQLSTATE '22012' OR SQLSTATE '22005' OR feature_not_supported THEN
 x := 100;
 RETURN x;
 END
+ -- normalized!
+DECLARE
+BEGIN
+x := (10);
+RETURN (x);
+EXCEPTION
+WHEN SQLSTATE '22012' OR SQLSTATE '22005' OR feature_not_supported THEN
+x := (100);
+RETURN (x);
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+RETURN x;
+EXCEPTION
+WHEN SQLSTATE '_' OR SQLSTATE '_' OR _ THEN
+x := _;
+RETURN x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 10;
+RETURN _;
+EXCEPTION
+WHEN SQLSTATE '22012' OR SQLSTATE '22005' OR feature_not_supported THEN
+_ := 100;
+RETURN _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -110,6 +229,46 @@ WHEN feature_not_supported THEN
 x := 12345;
 RETURN x;
 END
+ -- normalized!
+DECLARE
+BEGIN
+x := (10);
+RETURN (x);
+EXCEPTION
+WHEN SQLSTATE '22012' THEN
+x := (22012);
+RETURN (x);
+WHEN feature_not_supported THEN
+x := (12345);
+RETURN (x);
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+RETURN x;
+EXCEPTION
+WHEN SQLSTATE '_' THEN
+x := _;
+RETURN x;
+WHEN _ THEN
+x := _;
+RETURN x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 10;
+RETURN _;
+EXCEPTION
+WHEN SQLSTATE '22012' THEN
+_ := 22012;
+RETURN _;
+WHEN feature_not_supported THEN
+_ := 12345;
+RETURN _;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -137,3 +296,43 @@ WHEN feature_not_supported OR SQLSTATE '22005' THEN
 x := 12345;
 RETURN x;
 END
+ -- normalized!
+DECLARE
+BEGIN
+x := (10);
+RETURN (x);
+EXCEPTION
+WHEN SQLSTATE '22012' THEN
+x := (22012);
+RETURN (x);
+WHEN feature_not_supported OR SQLSTATE '22005' THEN
+x := (12345);
+RETURN (x);
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+RETURN x;
+EXCEPTION
+WHEN SQLSTATE '_' THEN
+x := _;
+RETURN x;
+WHEN _ OR SQLSTATE '_' THEN
+x := _;
+RETURN x;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 10;
+RETURN _;
+EXCEPTION
+WHEN SQLSTATE '22012' THEN
+_ := 22012;
+RETURN _;
+WHEN feature_not_supported OR SQLSTATE '22005' THEN
+_ := 12345;
+RETURN _;
+END
+ -- identifiers removed

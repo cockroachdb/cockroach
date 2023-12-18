@@ -10,6 +10,25 @@ BEGIN
 johnny := NULL;
 gyro := 7 + 7;
 END
+ -- normalized!
+DECLARE
+BEGIN
+johnny := (NULL);
+gyro := ((7) + (7));
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+johnny := _;
+gyro := _ + _;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := NULL;
+_ := 7 + 7;
+END
+ -- identifiers removed
 
 parse
 DECLARE
@@ -21,62 +40,115 @@ DECLARE
 BEGIN
 a := NULL;
 END
+ -- normalized!
+DECLARE
+BEGIN
+a := (NULL);
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+a := _;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := NULL;
+END
+ -- identifiers removed
 
-parse
+error
 DECLARE
 BEGIN
   a :=;
 END
 ----
 at or near ":": syntax error: missing expression
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  a :=;
+    ^
 
-parse
+error
 DECLARE
 BEGIN
 johnny := (NULL;
 END
 ----
 at or near "EOF": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+johnny := (NULL;
+END
+   ^
 
-parse
+error
 DECLARE
 BEGIN
 johnny := NULL);
 END
 ----
 at or near "null": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+johnny := NULL);
+          ^
 
-parse
+error
 DECLARE
 BEGIN
 johnny := (1 + (2);
 END
 ----
 at or near "EOF": syntax error: mismatched parentheses
+DETAIL: source SQL:
+DECLARE
+BEGIN
+johnny := (1 + (2);
+END
+   ^
 
-parse
+error
 DECLARE
 BEGIN
   a := 1, 'string';
 END
 ----
 at or near ";": syntax error: query returned 2 columns
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  a := 1, 'string';
+                  ^
 
-parse
+error
 DECLARE
 BEGIN
   a := 1, (2, 3, 4, 5);
 END
 ----
 at or near ";": syntax error: query returned 2 columns
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  a := 1, (2, 3, 4, 5);
+                      ^
 
-parse
+error
 DECLARE
 BEGIN
   a := 1, (2, 3, 4, 5), 'abcd', true, ((1));
 END
 ----
 at or near ";": syntax error: query returned 5 columns
+DETAIL: source SQL:
+DECLARE
+BEGIN
+  a := 1, (2, 3, 4, 5), 'abcd', true, ((1));
+                                           ^
 
 feature-count
 DECLARE

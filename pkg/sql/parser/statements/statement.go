@@ -95,3 +95,11 @@ func (stmt PLpgStatement) StringWithFlags(flags tree.FmtFlags) string {
 	stmt.AST.Format(ctx)
 	return ctx.CloseAndGetString()
 }
+
+type ParsedStmts interface {
+	String() string
+	StringWithFlags(flags tree.FmtFlags) string
+}
+
+var _ ParsedStmts = Statements{}
+var _ ParsedStmts = PLpgStatement{}

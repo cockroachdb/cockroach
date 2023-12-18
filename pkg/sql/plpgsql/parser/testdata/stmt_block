@@ -6,3 +6,16 @@ END
 DECLARE
 BEGIN
 END
+ -- normalized!
+DECLARE
+BEGIN
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+END
+ -- literals removed
+DECLARE
+BEGIN
+END
+ -- identifiers removed
