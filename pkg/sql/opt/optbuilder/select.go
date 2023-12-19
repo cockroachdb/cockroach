@@ -825,7 +825,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	numChecks := tab.CheckCount()
 	chkIdx := 0
 	for ; chkIdx < numChecks; chkIdx++ {
-		if tab.Check(chkIdx).Validated {
+		if tab.Check(chkIdx).Validated() {
 			break
 		}
 	}
@@ -852,10 +852,10 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 		checkConstraint := tab.Check(chkIdx)
 
 		// Only add validated check constraints to the table's metadata.
-		if !checkConstraint.Validated {
+		if !checkConstraint.Validated() {
 			continue
 		}
-		expr, err := parser.ParseExpr(checkConstraint.Constraint)
+		expr, err := parser.ParseExpr(checkConstraint.Constraint())
 		if err != nil {
 			panic(err)
 		}
