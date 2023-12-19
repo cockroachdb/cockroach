@@ -24,7 +24,9 @@ func makeTS(walltime int64, logical int32) Timestamp {
 }
 
 func makeSynTS(walltime int64, logical int32) Timestamp {
-	return makeTS(walltime, logical).WithSynthetic(true)
+	ts := makeTS(walltime, logical)
+	ts.Synthetic = true
+	return ts
 }
 
 func TestCompare(t *testing.T) {
