@@ -549,7 +549,6 @@ type feedTestOptions struct {
 	externalIODir                string
 	allowedSinkTypes             []string
 	disabledSinkTypes            []string
-	disableSyntheticTimestamps   bool
 	settings                     *cluster.Settings
 }
 
@@ -569,12 +568,6 @@ var feedTestNoExternalConnection = func(opts *feedTestOptions) { opts.forceNoExt
 // tests randomly choose between the root user connection or a test user connection where the test user
 // has privileges to create changefeeds on tables in the default database `d` only.
 var feedTestUseRootUserConnection = func(opts *feedTestOptions) { opts.forceRootUserConnection = true }
-
-// feedTestNoForcedSyntheticTimestamps is a feedTestOption that will prevent
-// the test from randomly forcing timestamps to be synthetic and offset five seconds into the future from
-// what they would otherwise be. It doesn't prevent synthetic timestamps but they're otherwise unlikely to
-// occur in tests.
-var feedTestNoForcedSyntheticTimestamps = func(opts *feedTestOptions) { opts.disableSyntheticTimestamps = true }
 
 var feedTestForceSink = func(sinkType string) feedTestOption {
 	return feedTestRestrictSinks(sinkType)
@@ -630,30 +623,6 @@ func makeOptions(opts ...feedTestOption) feedTestOptions {
 	options := newTestOptions()
 	for _, o := range opts {
 		o(&options)
-	}
-	if !options.disableSyntheticTimestamps && rand.Intn(2) == 0 {
-		// Offset all timestamps a random (but consistent per test) amount into the
-		// future to ensure we can handle that. Always chooses an integer number of
-		// seconds for easier debugging and so that 0 is a possibility.
-		offset := int64(rand.Intn(6)) * time.Second.Nanoseconds()
-		// TODO(#105053): Remove this line
-		_ = offset
-		oldKnobsFn := options.knobsFn
-		options.knobsFn = func(knobs *base.TestingKnobs) {
-			if oldKnobsFn != nil {
-				oldKnobsFn(knobs)
-			}
-			knobs.DistSQL.(*execinfra.TestingKnobs).
-				Changefeed.(*TestingKnobs).FeedKnobs.ModifyTimestamps = func(t *hlc.Timestamp) {
-				// NOTE(ricky): This line of code should be uncommented.
-				// It used to be just t.Add(offset, 0), but t.Add() has no side
-				// effects so this was a no-op. *t = t.Add(offset, 0) is correct,
-				// but causes test failures.
-				// TODO(#105053): Uncomment and fix test failures
-				//*t = t.Add(offset, 0)
-				t.Synthetic = true
-			}
-		}
 	}
 	return options
 }
