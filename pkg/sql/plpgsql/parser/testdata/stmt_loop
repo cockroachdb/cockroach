@@ -16,6 +16,34 @@ EXIT WHEN x = 10;
 x := x + 1;
 END LOOP;
 END
+ -- normalized!
+DECLARE
+BEGIN
+x := (1);
+LOOP
+EXIT WHEN ((x) = (10));
+x := ((x) + (1));
+END LOOP;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+LOOP
+EXIT WHEN x = _;
+x := x + _;
+END LOOP;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 1;
+LOOP
+EXIT WHEN _ = 10;
+_ := _ + 1;
+END LOOP;
+END
+ -- identifiers removed
 
 
 parse
@@ -32,8 +60,139 @@ END
 DECLARE
 BEGIN
 x := 1;
+<<mathing>>
 LOOP
 EXIT WHEN x = 10;
 x := x + 1;
 END LOOP mathing;
 END
+ -- normalized!
+DECLARE
+BEGIN
+x := (1);
+<<mathing>>
+LOOP
+EXIT WHEN ((x) = (10));
+x := ((x) + (1));
+END LOOP mathing;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+<<mathing>>
+LOOP
+EXIT WHEN x = _;
+x := x + _;
+END LOOP mathing;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 1;
+<<_>>
+LOOP
+EXIT WHEN _ = 10;
+_ := _ + 1;
+END LOOP _;
+END
+ -- identifiers removed
+
+# The end label can be omitted.
+parse
+DECLARE
+BEGIN
+x := 1;
+<<mathing>>
+LOOP
+  EXIT WHEN x = 10;
+  x := x + 1;
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+x := 1;
+<<mathing>>
+LOOP
+EXIT WHEN x = 10;
+x := x + 1;
+END LOOP mathing;
+END
+ -- normalized!
+DECLARE
+BEGIN
+x := (1);
+<<mathing>>
+LOOP
+EXIT WHEN ((x) = (10));
+x := ((x) + (1));
+END LOOP mathing;
+END
+ -- fully parenthesized
+DECLARE
+BEGIN
+x := _;
+<<mathing>>
+LOOP
+EXIT WHEN x = _;
+x := x + _;
+END LOOP mathing;
+END
+ -- literals removed
+DECLARE
+BEGIN
+_ := 1;
+<<_>>
+LOOP
+EXIT WHEN _ = 10;
+_ := _ + 1;
+END LOOP _;
+END
+ -- identifiers removed
+
+# The start and end labels must be the same.
+error
+DECLARE
+BEGIN
+x := 1;
+<<mathing>>
+LOOP
+  EXIT WHEN x = 10;
+  x := x + 1;
+END LOOP different_label;
+END
+----
+at or near ";": syntax error: end label "different_label" differs from block's label "mathing"
+DETAIL: source SQL:
+DECLARE
+BEGIN
+x := 1;
+<<mathing>>
+LOOP
+  EXIT WHEN x = 10;
+  x := x + 1;
+END LOOP different_label;
+                        ^
+
+# The start label must exist if the end label exists.
+error
+DECLARE
+BEGIN
+x := 1;
+LOOP
+  EXIT WHEN x = 10;
+  x := x + 1;
+END LOOP nonempty_label;
+END
+----
+at or near ";": syntax error: end label "nonempty_label" specified for unlabeled block
+DETAIL: source SQL:
+DECLARE
+BEGIN
+x := 1;
+LOOP
+  EXIT WHEN x = 10;
+  x := x + 1;
+END LOOP nonempty_label;
+                       ^

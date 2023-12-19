@@ -66,6 +66,7 @@ go_test(
         ":plpgparser",
         "//pkg/sql/sem/plpgsqltree/utils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/sqlutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
     ],
 )
