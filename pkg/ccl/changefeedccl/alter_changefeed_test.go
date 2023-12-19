@@ -1451,7 +1451,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		}
 	}
 
-	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection, feedTestNoForcedSyntheticTimestamps)
+	cdcTestWithSystem(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
 }
 
 func TestAlterChangefeedInitialScan(t *testing.T) {

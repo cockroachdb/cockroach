@@ -261,13 +261,13 @@ func (e *jsonEncoder) initRawEnvelope() error {
 		}
 
 		if e.updatedField {
-			if err := metaBuilder.Set("updated", json.FromString(timestampToString(evCtx.updated))); err != nil {
+			if err := metaBuilder.Set("updated", json.FromString(evCtx.updated.AsOfSystemTime())); err != nil {
 				return nil, err
 			}
 		}
 
 		if e.mvccTimestampField {
-			if err := metaBuilder.Set("mvcc_timestamp", json.FromString(timestampToString(evCtx.mvcc))); err != nil {
+			if err := metaBuilder.Set("mvcc_timestamp", json.FromString(evCtx.mvcc.AsOfSystemTime())); err != nil {
 				return nil, err
 			}
 		}
@@ -355,13 +355,13 @@ func (e *jsonEncoder) initWrappedEnvelope() error {
 		}
 
 		if e.updatedField {
-			if err := b.Set("updated", json.FromString(timestampToString(evCtx.updated))); err != nil {
+			if err := b.Set("updated", json.FromString(evCtx.updated.AsOfSystemTime())); err != nil {
 				return nil, err
 			}
 		}
 
 		if e.mvccTimestampField {
-			if err := b.Set("mvcc_timestamp", json.FromString(timestampToString(evCtx.mvcc))); err != nil {
+			if err := b.Set("mvcc_timestamp", json.FromString(evCtx.mvcc.AsOfSystemTime())); err != nil {
 				return nil, err
 			}
 		}
