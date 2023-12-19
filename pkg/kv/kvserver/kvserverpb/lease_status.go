@@ -60,10 +60,5 @@ func (st LeaseStatus) Expiration() hlc.Timestamp {
 // Until a new lease is acquired, all writes will be pushed into this last
 // nanosecond of the lease.
 func (st LeaseStatus) ClosedTimestampUpperBound() hlc.Timestamp {
-	// HACK(andrei): We declare the lease expiration to be synthetic by fiat,
-	// because it frequently is synthetic even though currently it's not marked
-	// as such. See the TODO in Timestamp.Add() about the work remaining to
-	// properly mark these timestamps as synthetic. We need to make sure it's
-	// synthetic here so that the results of Backwards() can be synthetic.
-	return st.Expiration().WithSynthetic(true).WallPrev()
+	return st.Expiration().WallPrev()
 }
