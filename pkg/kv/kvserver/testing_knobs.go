@@ -98,7 +98,8 @@ type StoreTestingKnobs struct {
 	// Users have to expect the filter to be invoked twice for each command, once
 	// from ephemerealReplicaAppBatch.Stage, and once from replicaAppBatch.Stage;
 	// this has to do with wanting to early-ack successful proposals. The second
-	// call is conditional on the first call succeeding.
+	// call is conditional on the first call succeeding. The field
+	// ApplyFilterArgs.Ephemeral will be true for the initial call.
 	//
 	// Consider using a TestPostApplyFilter instead, and use a
 	// TestingApplyCalledTwiceFilter only to inject forced errors.
