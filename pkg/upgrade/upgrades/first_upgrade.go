@@ -97,6 +97,16 @@ func upgradeDescriptors(
 	})
 }
 
+var firstUpgradePreconditionUsesAOST = true
+
+// TestingSetFirstUpgradePreconditionAOST allows tests to disable withAOST trick in upgrade
+// precondition check, which otherwise can produce false negative.
+func TestingSetFirstUpgradePreconditionAOST(enabled bool) func() {
+	old := firstUpgradePreconditionUsesAOST
+	firstUpgradePreconditionUsesAOST = enabled
+	return func() { firstUpgradePreconditionUsesAOST = old }
+}
+
 // FirstUpgradeFromReleasePrecondition is the precondition check for upgrading
 // from any supported major release.
 //
@@ -118,7 +128,7 @@ func FirstUpgradeFromReleasePrecondition(
 	// a diagnostic query. If no corruptions were found back then, we assume that
 	// there are no corruptions now. Otherwise, we retry and do everything
 	// without an AOST clause henceforth.
-	withAOST := true
+	withAOST := firstUpgradePreconditionUsesAOST
 	diagnose := func(tbl string) (hasRows bool, err error) {
 		q := fmt.Sprintf("SELECT count(*) FROM \"\".crdb_internal.%s", tbl)
 		if withAOST {
