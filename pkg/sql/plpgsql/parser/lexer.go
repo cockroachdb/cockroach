@@ -489,3 +489,13 @@ func (l *lexer) ParseExpr(sqlStr string) (plpgsqltree.Expr, error) {
 	}
 	return exprs[0], nil
 }
+
+func checkLoopLabels(start, end string) error {
+	if start == "" && end != "" {
+		return errors.Newf("end label \"%s\" specified for unlabeled block", end)
+	}
+	if end != "" && start != end {
+		return errors.Newf("end label \"%s\" differs from block's label \"%s\"", end, start)
+	}
+	return nil
+}

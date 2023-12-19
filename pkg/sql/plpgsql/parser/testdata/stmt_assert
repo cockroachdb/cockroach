@@ -1,12 +1,9 @@
-parse
+feature-count
 DECLARE
 BEGIN
   ASSERT 1 > 2;
   ASSERT 1 > 2, 'error message' ;
 END
 ----
-DECLARE
-BEGIN
-ASSERT
-ASSERT
-END
+stmt_assert: 2
+stmt_block: 1

@@ -9,6 +9,7 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
+        "//pkg/sql/plpgsql/parser:plpgparser",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",
@@ -25,6 +26,7 @@ go_test(
     deps = [
         ":redact",
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

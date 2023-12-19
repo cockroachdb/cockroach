@@ -1,54 +1,44 @@
-parse
+feature-count
 DECLARE
 BEGIN
   EXECUTE 'any command';
 END
 ----
-DECLARE
-BEGIN
-EXECUTE a dynamic command
-END
+stmt_block: 1
+stmt_dyn_exec: 1
 
-parse
+feature-count
 DECLARE
 BEGIN
   EXECUTE 'any command' INTO x1;
 END
 ----
-DECLARE
-BEGIN
-EXECUTE a dynamic command WITH INTO
-END
+stmt_block: 1
+stmt_dyn_exec: 1
 
-parse
+feature-count
 DECLARE
 BEGIN
   EXECUTE 'any command' INTO STRICT x1;
 END
 ----
-DECLARE
-BEGIN
-EXECUTE a dynamic command WITH INTO STRICT
-END
+stmt_block: 1
+stmt_dyn_exec: 1
 
-parse
+feature-count
 DECLARE
 BEGIN
   EXECUTE 'any command' INTO x1 USING x2;
 END
 ----
-DECLARE
-BEGIN
-EXECUTE a dynamic command WITH INTO WITH USING
-END
+stmt_block: 1
+stmt_dyn_exec: 1
 
-parse
+feature-count
 DECLARE
 BEGIN
   EXECUTE 'any command' INTO x1, x2 USING y1, y2;
 END
 ----
-DECLARE
-BEGIN
-EXECUTE a dynamic command WITH INTO WITH USING
-END
+stmt_block: 1
+stmt_dyn_exec: 1
