@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"math/rand"
 	"os"
 	"reflect"
 	"sort"
@@ -708,4 +709,35 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	wg.Wait()
 	recorder.mu.RUnlock()
+}
+
+func BenchmarkExtractValueAllocs(b *testing.B) {
+	// Create a dummy histogram.
+	h := metric.NewHistogram(metric.HistogramOptions{
+		Mode: metric.HistogramModePrometheus,
+		Metadata: metric.Metadata{
+			Name: "benchmark.histogram",
+		},
+		Duration:     10 * time.Second,
+		BucketConfig: metric.IOLatencyBuckets,
+	})
+	genValues := func() {
+		for i := 0; i < 100000; i++ {
+			value := rand.Intn(10e9 /* 10s */)
+			h.RecordValue(int64(value))
+		}
+	}
+	// Fill in the histogram with 100k dummy values, ranging from [0s, 10s), tick, and then do it again.
+	// This ensures we have filled-in histograms for both the previous & current window.
+	genValues()
+	h.Tick()
+	genValues()
+
+	// Run a benchmark and report allocations.
+	for n := 0; n < b.N; n++ {
+		if err := extractValue(h.GetName(), h, func(string, float64) {}); err != nil {
+			b.Error(err)
+		}
+	}
+	b.ReportAllocs()
 }
