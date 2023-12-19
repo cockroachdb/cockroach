@@ -1288,7 +1288,7 @@ func (c *SyncedCluster) upsertVirtualClusterMetadata(
 
 		var tenants []tenantRow
 		if err := json.Unmarshal([]byte(existsOut), &tenants); err != nil {
-			return -1, fmt.Errorf("failed to unmarshal system.tenants output: %w", err)
+			return -1, fmt.Errorf("failed to unmarshal system.tenants output: %w\n%s", err, existsOut)
 		}
 
 		if len(tenants) == 0 {
