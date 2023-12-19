@@ -246,12 +246,6 @@ func (t Timestamp) Add(wallTime int64, logical int32) Timestamp {
 	return s
 }
 
-// WithSynthetic returns a timestamp with the Synthetic flag set to val.
-func (t Timestamp) WithSynthetic(val bool) Timestamp {
-	t.Synthetic = val
-	return t
-}
-
 // Clone return a new timestamp that has the same contents as the receiver.
 func (t Timestamp) Clone() *Timestamp {
 	return &t
