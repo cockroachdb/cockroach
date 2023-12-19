@@ -3602,16 +3602,16 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Detect splits and merges over the global read ranges. Assert that the split
-	// and merge transactions commit with synthetic timestamps, and that the
+	// and merge transactions commit with pushed write timestamps, and that the
 	// commit-wait sleep for these transactions is performed before running their
 	// commit triggers instead of run on the kv client. For details on why this is
 	// necessary, see maybeCommitWaitBeforeCommitTrigger.
 	var clock atomic.Value
-	var splitsWithSyntheticTS, mergesWithSyntheticTS int64
+	var splits, merges int64
 	respFilter := func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
 		if req, ok := ba.GetArg(kvpb.EndTxn); ok {
 			endTxn := req.(*kvpb.EndTxnRequest)
-			if br.Txn.Status == roachpb.COMMITTED && br.Txn.WriteTimestamp.Synthetic {
+			if br.Txn.Status == roachpb.COMMITTED && br.Txn.MinTimestamp.Less(br.Txn.WriteTimestamp) {
 				if ct := endTxn.InternalCommitTrigger; ct != nil {
 					// The server-side commit-wait sleep should ensure that the commit
 					// triggers are only run after the commit timestamp is below present
@@ -3621,9 +3621,9 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 
 					switch {
 					case ct.SplitTrigger != nil:
-						atomic.AddInt64(&splitsWithSyntheticTS, 1)
+						atomic.AddInt64(&splits, 1)
 					case ct.MergeTrigger != nil:
-						atomic.AddInt64(&mergesWithSyntheticTS, 1)
+						atomic.AddInt64(&merges, 1)
 					}
 				}
 			}
@@ -3685,8 +3685,8 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 		if splitCount != store.Metrics().CommitWaitsBeforeCommitTrigger.Count() {
 			return errors.Errorf("commit wait count is %d", store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
 		}
-		if splitCount != atomic.LoadInt64(&splitsWithSyntheticTS) {
-			return errors.Errorf("num splits is %d", atomic.LoadInt64(&splitsWithSyntheticTS))
+		if splitCount != atomic.LoadInt64(&splits) {
+			return errors.Errorf("num splits is %d", atomic.LoadInt64(&splits))
 		}
 		return nil
 	})
@@ -3703,7 +3703,7 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	require.Nil(t, pErr)
 	splitCount++
 	require.Equal(t, splitCount, store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
-	require.Equal(t, splitCount, atomic.LoadInt64(&splitsWithSyntheticTS))
+	require.Equal(t, splitCount, atomic.LoadInt64(&splits))
 
 	repl := store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, splitKey, repl.Desc().StartKey.AsRawKey())
@@ -3713,7 +3713,7 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
 	require.Nil(t, pErr)
 	require.Equal(t, splitCount+1, store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
-	require.Equal(t, int64(1), atomic.LoadInt64(&mergesWithSyntheticTS))
+	require.Equal(t, int64(1), atomic.LoadInt64(&merges))
 
 	repl = store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, descKey, repl.Desc().StartKey.AsRawKey())
