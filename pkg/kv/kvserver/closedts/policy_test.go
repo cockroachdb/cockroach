@@ -55,8 +55,7 @@ func TestTargetForPolicy(t *testing.T) {
 			expClosedTSTarget: now.
 				Add((maxClockOffset +
 					millis(275) /* sideTransportPropTime */ +
-					millis(25) /* bufferTime */).Nanoseconds(), 0).
-				WithSynthetic(true),
+					millis(25) /* bufferTime */).Nanoseconds(), 0),
 		},
 		{
 			sideTransportCloseInterval: millis(50),
@@ -64,14 +63,13 @@ func TestTargetForPolicy(t *testing.T) {
 			expClosedTSTarget: now.
 				Add((maxClockOffset +
 					millis(245) /* raftTransportPropTime */ +
-					millis(25) /* bufferTime */).Nanoseconds(), 0).
-				WithSynthetic(true),
+					millis(25) /* bufferTime */).Nanoseconds(), 0),
 		},
 		{
 			leadTargetOverride:         millis(1234),
 			sideTransportCloseInterval: millis(200),
 			rangePolicy:                roachpb.LEAD_FOR_GLOBAL_READS,
-			expClosedTSTarget:          now.Add(millis(1234).Nanoseconds(), 0).WithSynthetic(true),
+			expClosedTSTarget:          now.Add(millis(1234).Nanoseconds(), 0),
 		},
 	} {
 		t.Run("", func(t *testing.T) {
