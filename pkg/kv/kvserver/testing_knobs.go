@@ -370,6 +370,9 @@ type StoreTestingKnobs struct {
 	// BeforeSnapshotSSTIngestion is run just before the SSTs are ingested when
 	// applying a snapshot.
 	BeforeSnapshotSSTIngestion func(IncomingSnapshot, []string) error
+	// AfterSnapshotApplication is run after a snapshot is applied, before
+	// releasing the replica mutex.
+	AfterSnapshotApplication func(roachpb.ReplicaDescriptor, kvserverpb.ReplicaState, IncomingSnapshot)
 	// OnRelocatedOne intercepts the return values of s.relocateOne after they
 	// have successfully been put into effect.
 	OnRelocatedOne func(_ []kvpb.ReplicationChange, leaseTarget *roachpb.ReplicationTarget)
