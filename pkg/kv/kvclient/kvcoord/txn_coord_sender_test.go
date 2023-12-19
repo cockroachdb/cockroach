@@ -733,8 +733,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 func testTxnCoordSenderTxnUpdatedOnError(t *testing.T, isoLevel isolation.Level) {
 	ctx := context.Background()
 	origTS := makeTS(123, 0)
-	plus10 := origTS.Add(10, 10).WithSynthetic(false)
-	plus20 := origTS.Add(20, 0).WithSynthetic(false)
+	plus10 := origTS.Add(10, 10)
+	plus20 := origTS.Add(20, 0)
 	testCases := []struct {
 		// The test's name.
 		name                  string
@@ -1526,9 +1526,7 @@ func TestTxnCommitWait(t *testing.T) {
 				// transaction is read-write, it will need to bump its write
 				// timestamp above the other value.
 				if futureTime {
-					ts := txn.TestingCloneTxn().WriteTimestamp.
-						Add(futureOffset.Nanoseconds(), 0).
-						WithSynthetic(true)
+					ts := txn.TestingCloneTxn().WriteTimestamp.Add(futureOffset.Nanoseconds(), 0)
 					h := kvpb.Header{Timestamp: ts}
 					put := kvpb.NewPut(key, roachpb.Value{})
 					if _, pErr := kv.SendWrappedWith(ctx, s.DB.NonTransactionalSender(), h, put); pErr != nil {

@@ -120,10 +120,10 @@ func TestReplicaClockUpdates(t *testing.T) {
 			clock.Pause()
 		}
 		// Pick a timestamp in the future of all nodes by less than the
-		// MaxOffset. Set the synthetic flag according to the test case.
-		reqTS := clocks[0].Now().Add(clocks[0].MaxOffset().Nanoseconds()/2, 0).WithSynthetic(synthetic)
+		// MaxOffset.
+		reqTS := clocks[0].Now().Add(clocks[0].MaxOffset().Nanoseconds()/2, 0)
 		h := kvpb.Header{Timestamp: reqTS}
-		if !reqTS.Synthetic {
+		if !synthetic {
 			h.Now = hlc.ClockTimestamp(reqTS)
 		}
 
@@ -1922,17 +1922,14 @@ func TestLeaseExpirationBelowFutureTimeRequest(t *testing.T) {
 		now := l.tc.Servers[1].Clock().Now()
 
 		// Construct a future-time request timestamp past the current lease's
-		// expiration. Remember to set the synthetic bit so that it is not used
-		// to update the store's clock. See Replica.checkRequestTimeRLocked for
-		// the exact determination of whether a request timestamp is too far in
-		// the future or not.
+		// expiration. See Replica.checkRequestTimeRLocked for the determination
+		// of whether a request timestamp is too far in the future or not.
 		leaseRenewal := l.tc.Servers[1].RaftConfig().RangeLeaseRenewalDuration()
 		leaseRenewalMinusStasis := leaseRenewal - l.tc.Servers[1].Clock().MaxOffset()
 		reqTime := now.Add(leaseRenewalMinusStasis.Nanoseconds()-10, 0)
 		if tooFarInFuture {
 			reqTime = reqTime.Add(20, 0)
 		}
-		reqTime = reqTime.WithSynthetic(true)
 
 		// Issue a get with the request timestamp.
 		args := getArgs(l.leftKey)
@@ -2834,7 +2831,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		// Determine when to read.
 		readTS := tc.Servers[0].Clock().Now()
 		if futureRead {
-			readTS = readTS.Add(500*time.Millisecond.Nanoseconds(), 0).WithSynthetic(true)
+			readTS = readTS.Add(500*time.Millisecond.Nanoseconds(), 0)
 		}
 
 		// Read the key at readTS.
@@ -2911,7 +2908,6 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		require.Nil(t, pErr)
 		require.NotEqual(t, readTS, br.Timestamp)
 		require.True(t, readTS.Less(br.Timestamp))
-		require.Equal(t, readTS.Synthetic, br.Timestamp.Synthetic)
 	})
 }
 
