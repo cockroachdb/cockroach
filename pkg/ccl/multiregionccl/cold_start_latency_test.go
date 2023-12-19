@@ -46,8 +46,7 @@ import (
 func TestColdStartLatency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "too slow")
-	skip.UnderStress(t, "too slow")
+	skip.UnderDuress(t, "too slow")
 
 	// We'll need to make some per-node args to assign the different
 	// KV nodes to different regions and AZs. We'll want to do it to
