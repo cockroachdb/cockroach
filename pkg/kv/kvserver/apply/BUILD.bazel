@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "apply",
     srcs = [
+        "asserter.go",
         "cmd.go",
         "doc.go",
         "task.go",
@@ -11,6 +12,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/util/hlc",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@io_etcd_go_raft_v3//raftpb",
     ],
