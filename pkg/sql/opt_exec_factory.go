@@ -1791,9 +1791,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	var sb span.Builder
 	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
 
-	splitter := span.MakeSplitterForDelete(
-		tabDesc, tabDesc.GetPrimaryIndex(), needed, true, /* forDelete */
-	)
+	splitter := span.MakeSplitterForDelete(tabDesc, tabDesc.GetPrimaryIndex(), needed)
 	spans, err := sb.SpansFromConstraint(indexConstraint, splitter)
 	if err != nil {
 		return nil, err
