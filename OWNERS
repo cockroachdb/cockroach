@@ -7,6 +7,6 @@ approvers:
   - ptabor          # Piotr Tabor <piotr.tabor@gmail.com>
   - spzala          # Sahdev Zala <spzala@us.ibm.com>
 reviewers:
-  - pavelkalinnikov # Pavel Kalinnikov <pavel@cockroachlabs.com>
+  - pav-kv          # Pavel Kalinnikov <pavel@cockroachlabs.com>
 emeritus_approvers:
   - tbg             # Tobias Grieger <tobias.b.grieger@gmail.com>
