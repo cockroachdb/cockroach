@@ -932,24 +932,26 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 // tracing span of the Streamer's user. Some time has been spent to figure it
 // out but led to no success. This should be cleaned up.
 func (w *workerCoordinator) logStatistics(ctx context.Context) {
-	avgResponseSize, _ := w.getAvgResponseSize()
-	log.VEventf(
-		ctx, 1,
-		"enqueueCalls=%d enqueuedRequests=%d enqueuedSingleRangeRequests=%d kvPairsRead=%d "+
-			"batchRequestsIssued=%d resumeBatchRequests=%d resumeSingleRangeRequests=%d "+
-			"numSpilledResults=%d emptyBatchResponses=%d droppedBatchResponses=%d avgResponseSize=%s",
-		w.s.enqueueCalls,
-		w.s.enqueuedRequests,
-		w.s.enqueuedSingleRangeRequests,
-		atomic.LoadInt64(w.s.atomics.kvPairsRead),
-		atomic.LoadInt64(w.s.atomics.batchRequestsIssued),
-		atomic.LoadInt64(&w.s.atomics.resumeBatchRequests),
-		atomic.LoadInt64(&w.s.atomics.resumeSingleRangeRequests),
-		w.s.results.numSpilledResults(),
-		atomic.LoadInt64(&w.s.atomics.emptyBatchResponses),
-		atomic.LoadInt64(&w.s.atomics.droppedBatchResponses),
-		humanizeutil.IBytes(avgResponseSize),
-	)
+	if log.ExpensiveLogEnabled(ctx, 1) {
+		avgResponseSize, _ := w.getAvgResponseSize()
+		log.Eventf(
+			ctx,
+			"enqueueCalls=%d enqueuedRequests=%d enqueuedSingleRangeRequests=%d kvPairsRead=%d "+
+				"batchRequestsIssued=%d resumeBatchRequests=%d resumeSingleRangeRequests=%d "+
+				"numSpilledResults=%d emptyBatchResponses=%d droppedBatchResponses=%d avgResponseSize=%s",
+			w.s.enqueueCalls,
+			w.s.enqueuedRequests,
+			w.s.enqueuedSingleRangeRequests,
+			atomic.LoadInt64(w.s.atomics.kvPairsRead),
+			atomic.LoadInt64(w.s.atomics.batchRequestsIssued),
+			atomic.LoadInt64(&w.s.atomics.resumeBatchRequests),
+			atomic.LoadInt64(&w.s.atomics.resumeSingleRangeRequests),
+			w.s.results.numSpilledResults(),
+			atomic.LoadInt64(&w.s.atomics.emptyBatchResponses),
+			atomic.LoadInt64(&w.s.atomics.droppedBatchResponses),
+			humanizeutil.IBytes(avgResponseSize),
+		)
+	}
 }
 
 // waitForRequests blocks until there is at least one request to be served.
