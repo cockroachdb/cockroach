@@ -81,11 +81,6 @@ type Tracker interface {
 	// The returned timestamp might be smaller than the lowest timestamp ever
 	// inserted into the set. Implementations are allowed to round timestamps
 	// down.
-	//
-	// Synthetic timestamps: The Tracker doesn't necessarily track synthetic /
-	// physical timestamps precisely; the only guarantee implementations need to
-	// make is that, if no synthethic timestamp is inserted into the tracked set
-	// for a while, eventually the LowerBound value will not be synthetic.
 	LowerBound(context.Context) hlc.Timestamp
 
 	// Count returns the current size of the tracked set.
