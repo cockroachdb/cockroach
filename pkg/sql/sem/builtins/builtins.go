@@ -7941,7 +7941,7 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 				nodeID := int32(tree.MustBeDInt(args[0]))
 				storeID := int32(tree.MustBeDInt(args[1]))
 				compactionConcurrency := tree.MustBeDInt(args[2])
-				if compactionConcurrency <= 0 {
+				if compactionConcurrency < 0 {
 					return nil, errors.AssertionFailedf("compaction_concurrency must be > 0")
 				}
 				if err = evalCtx.SetCompactionConcurrency(
