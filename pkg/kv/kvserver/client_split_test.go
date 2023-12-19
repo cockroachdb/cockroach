@@ -3602,28 +3602,32 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Detect splits and merges over the global read ranges. Assert that the split
-	// and merge transactions commit with synthetic timestamps, and that the
+	// and merge transactions commit with pushed write timestamps, and that the
 	// commit-wait sleep for these transactions is performed before running their
 	// commit triggers instead of run on the kv client. For details on why this is
 	// necessary, see maybeCommitWaitBeforeCommitTrigger.
-	var clock atomic.Value
-	var splitsWithSyntheticTS, mergesWithSyntheticTS int64
+	var clockPtr atomic.Pointer[hlc.Clock]
+	var splits, merges int64
 	respFilter := func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
+		clock := clockPtr.Load()
+		if clock == nil {
+			return nil
+		}
 		if req, ok := ba.GetArg(kvpb.EndTxn); ok {
 			endTxn := req.(*kvpb.EndTxnRequest)
-			if br.Txn.Status == roachpb.COMMITTED && br.Txn.WriteTimestamp.Synthetic {
+			if br.Txn.Status == roachpb.COMMITTED && br.Txn.MinTimestamp.Less(br.Txn.WriteTimestamp) {
 				if ct := endTxn.InternalCommitTrigger; ct != nil {
 					// The server-side commit-wait sleep should ensure that the commit
 					// triggers are only run after the commit timestamp is below present
 					// time.
-					now := clock.Load().(*hlc.Clock).Now()
+					now := clock.Now()
 					require.True(t, br.Txn.WriteTimestamp.Less(now))
 
 					switch {
 					case ct.SplitTrigger != nil:
-						atomic.AddInt64(&splitsWithSyntheticTS, 1)
+						atomic.AddInt64(&splits, 1)
 					case ct.MergeTrigger != nil:
-						atomic.AddInt64(&mergesWithSyntheticTS, 1)
+						atomic.AddInt64(&merges, 1)
 					}
 				}
 			}
@@ -3655,7 +3659,6 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '20ms'`)
-	clock.Store(s.Clock())
 	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	config.TestingSetupZoneConfigHook(s.Stopper())
@@ -3666,6 +3669,10 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	splitArgs := adminSplitArgs(descKey)
 	_, pErr := kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
+
+	// Set the clock to the store's clock, which also serves to engage the
+	// response filter.
+	clockPtr.Store(s.Clock())
 
 	// Perform a write to the system config span being watched by
 	// the SystemConfigProvider.
@@ -3685,8 +3692,8 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 		if splitCount != store.Metrics().CommitWaitsBeforeCommitTrigger.Count() {
 			return errors.Errorf("commit wait count is %d", store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
 		}
-		if splitCount != atomic.LoadInt64(&splitsWithSyntheticTS) {
-			return errors.Errorf("num splits is %d", atomic.LoadInt64(&splitsWithSyntheticTS))
+		if splitCount != atomic.LoadInt64(&splits) {
+			return errors.Errorf("num splits is %d", atomic.LoadInt64(&splits))
 		}
 		return nil
 	})
@@ -3703,7 +3710,7 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	require.Nil(t, pErr)
 	splitCount++
 	require.Equal(t, splitCount, store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
-	require.Equal(t, splitCount, atomic.LoadInt64(&splitsWithSyntheticTS))
+	require.Equal(t, splitCount, atomic.LoadInt64(&splits))
 
 	repl := store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, splitKey, repl.Desc().StartKey.AsRawKey())
@@ -3713,7 +3720,7 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), mergeArgs)
 	require.Nil(t, pErr)
 	require.Equal(t, splitCount+1, store.Metrics().CommitWaitsBeforeCommitTrigger.Count())
-	require.Equal(t, int64(1), atomic.LoadInt64(&mergesWithSyntheticTS))
+	require.Equal(t, int64(1), atomic.LoadInt64(&merges))
 
 	repl = store.LookupReplica(roachpb.RKey(splitKey))
 	require.Equal(t, descKey, repl.Desc().StartKey.AsRawKey())

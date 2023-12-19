@@ -924,8 +924,7 @@ func TestProposalBufferClosedTimestamp(t *testing.T) {
 	nowMinusTwiceClosedLag := nowTS.Add(-2*closedts.TargetDuration.Get(&st.SV).Nanoseconds(), 0)
 	nowPlusGlobalReadLead := nowTS.Add((maxOffset +
 		275*time.Millisecond /* sideTransportPropTime */ +
-		25*time.Millisecond /* bufferTime */).Nanoseconds(), 0).
-		WithSynthetic(true)
+		25*time.Millisecond /* bufferTime */).Nanoseconds(), 0)
 	expiredLeaseTimestamp := nowTS.Add(-1000, 0)
 	someClosedTS := nowTS.Add(-2000, 0)
 
