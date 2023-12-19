@@ -260,8 +260,6 @@ func DatumToHLC(
 			} else if (usage == AsOf && iv.Duration.Compare(duration.Duration{}) > 0) {
 				convErr = errors.Errorf("interval value %v too large, AS OF interval must be <= -%v", d, time.Microsecond)
 			} else if (usage == Split && iv.Duration.Compare(duration.Duration{}) < 0) {
-				// Do we need to consider if the timestamp is synthetic (see
-				// hlc.Timestamp.Synthetic), as for AS OF stmt?
 				convErr = errors.Errorf("interval value %v too small, SPLIT AT interval must be >= %v", d, time.Microsecond)
 			}
 			ts.WallTime = duration.Add(stmtTimestamp, iv.Duration).UnixNano()

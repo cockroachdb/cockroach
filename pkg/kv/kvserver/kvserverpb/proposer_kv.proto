@@ -218,8 +218,8 @@ message ReplicatedEvalResult {
   // 1. it can transfer a higher-resolution snapshot of the reads on the range
   //    through a lease transfer, to make the lease transfers less disruptive to
   //    writes because the timestamp cache won't be bumped as high.
-  // 2. it can transfer information about reads with synthetic timestamps, which
-  //    are not otherwise captured by the new lease's start time.
+  // 2. it can transfer information about reads with future-time timestamps,
+  //    which are not otherwise captured by the new lease's start time.
   //
   // When a ReadSummary is set in a ReplicatedEvalResult, there is always also a
   // write to the RangePriorReadSummaryKey in the RaftCommand.WriteBatch. The
