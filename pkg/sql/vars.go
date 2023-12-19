@@ -3114,6 +3114,23 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`disable_changefeed_replication`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`disable_changefeed_replication`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`disable_changefeed_replication`, s)
+			if err != nil {
+				return err
+			}
+			m.SetDisableChangefeedReplication(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().DisableChangefeedReplication), nil
+		},
+		GlobalDefault: globalFalse,
+	},
+
+	// CockroachDB extension.
 	`distsql_plan_gateway_bias`: {
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return strconv.FormatInt(evalCtx.SessionData().DistsqlPlanGatewayBias, 10), nil
