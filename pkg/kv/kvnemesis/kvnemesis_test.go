@@ -110,6 +110,10 @@ func (cfg kvnemesisTestCfg) testClusterArgs(tr *SeqTracker) base.TestClusterArgs
 			if !ok {
 				return 0
 			}
+			// Lease requests never assign a LAI.
+			if pd.Request.IsSingleRequestLeaseRequest() {
+				return 0
+			}
 
 			mu.Lock()
 			defer mu.Unlock()
