@@ -196,9 +196,8 @@ func TestMVCCAndEngineKeyEncodeDecode(t *testing.T) {
 func TestMVCCAndEngineKeyDecodeSyntheticTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	key := MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}
-	keyNoSynthetic := key
-	keyNoSynthetic.Timestamp.Synthetic = false
+	// key := MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45, Synthetic: true}}
+	keyNoSynthetic := MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 99, Logical: 45}}
 
 	// encodedStr was computed from key using a previous version of the code that
 	// that included synthetic timestamps in the MVCC key encoding.
@@ -320,7 +319,6 @@ var interestingEngineKeys = [][]byte{
 	EncodeMVCCKey(MVCCKey{Key: roachpb.Key("bar")}),
 	EncodeMVCCKey(MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 1643550788737652545}}),
 	EncodeMVCCKey(MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 1643550788737652545, Logical: 1}}),
-	EncodeMVCCKey(MVCCKey{Key: roachpb.Key("bar"), Timestamp: hlc.Timestamp{WallTime: 1643550788737652545, Logical: 1, Synthetic: true}}),
 	encodeLockTableKey(LockTableKey{
 		Key:      roachpb.Key("foo"),
 		Strength: lock.Exclusive,
@@ -449,7 +447,6 @@ func randomMVCCKey(r *rand.Rand) MVCCKey {
 	if r.Intn(2) == 1 {
 		k.Timestamp.Logical = r.Int31()
 	}
-	k.Timestamp.Synthetic = r.Intn(5) == 1
 	return k
 }
 
