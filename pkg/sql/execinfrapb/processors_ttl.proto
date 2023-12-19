@@ -95,4 +95,8 @@ message TTLSpec {
 
   // SelectRateLimit controls how many records can be selected per second.
   optional int64 select_rate_limit = 14 [(gogoproto.nullable) = false];
+
+  // DisableChangefeedReplication controls whether the deletes performed
+  // should not be replicated via changefeed.
+  optional bool disable_changefeed_replication = 15 [(gogoproto.nullable) = false];
 }
