@@ -374,11 +374,57 @@ define Lock {
     _ LockPrivate
 }
 
+# LockPrivate contains the state describing a lock operation. For example,
+# consider the following SELECT FOR UPDATE statement under read committed
+# isolation:
+#
+#   CREATE TABLE ab (a INT NOT NULL PRIMARY KEY, b INT);
+#
+#   SELECT x.a, y.b
+#   FROM ab AS x
+#   JOIN ab AS y ON y.a = x.b
+#   WHERE x.a = 5
+#   FOR UPDATE OF x;
+#
+# After optbuild the plan will look like:
+#
+#   lock ab [as=x]
+#    ├── columns: a:1 b:6
+#    ├── locking: for-update,durability-guaranteed
+#    ├── volatile, mutations
+#    └── project
+#         ├── columns: x.a:1 y.b:6
+#         └── inner-join (lookup ab [as=y])
+#              ├── columns: x.a:1 x.b:2 y.a:5 y.b:6
+#              ├── key columns: [2] = [5]
+#              ├── lookup columns are key
+#              ├── scan ab [as=x]
+#              │    ├── columns: x.a:1 x.b:2
+#              │    ├── constraint: /1: [/5 - /5]
+#              │    └── prune: (2)
+#              └── filters (true)
+#
+# In this case the LockPrivate will look like:
+#
+#   {
+#     Table:     a fresh table ID for ab (separate from x and y),
+#     KeySource: the table ID of x,
+#     Locking:   {Strength: FOR UPDATE, Durability: GUARANTEED},
+#     KeyCols:   [a:1 of x],
+#     LockCols:  {a and b of the new Table},
+#     Cols:      {a:1 of x and b:6 of y},
+#   }
+#
+# Many of these fields are needed to produce the locking LookupJoin in execbuild
+# that is the current implementation of locking.
 [Private]
 define LockPrivate {
     # Table identifies the table to lock. Currently only the primary index of
     # the table is locked.
     Table TableID
+
+    # KeySource identifies the source of the key columns.
+    KeySource TableID
 
     # Locking represents the row-level locking mode to use when locking the
     # primary index.
@@ -389,7 +435,14 @@ define LockPrivate {
     # primary key columns of the table.
     KeyCols ColList
 
+    # LockCols is the set of columns to lock. LockCols determines which column
+    # families will be locked. None of the LockCols are included in the output
+    # of the lock operation. If LockCols is empty we will only lock the first
+    # column family.
+    LockCols ColSet
+
     # Cols is the set of columns from the input expression returned by the Lock
-    # operator. Cols contains all of the KeyCols.
+    # operator, which are passed through. Cols contains all of the KeyCols and
+    # none of the LockCols.
     Cols ColSet
 }
