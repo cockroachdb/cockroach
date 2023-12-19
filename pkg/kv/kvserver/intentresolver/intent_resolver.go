@@ -442,10 +442,6 @@ func (ir *IntentResolver) MaybePushTransactions(
 		return nil, b.MustPErr()
 	}
 
-	// TODO(nvanbenschoten): if we succeed because the transaction has already
-	// been pushed _past_ where we were pushing, we need to set the synthetic
-	// bit. This is part of #36431.
-
 	br := b.RawResponse()
 	pushedTxns := make(map[uuid.UUID]*roachpb.Transaction, len(br.Responses))
 	for _, resp := range br.Responses {

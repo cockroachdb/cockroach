@@ -966,9 +966,6 @@ func MakeTransaction(
 	omitInRangefeeds bool,
 ) Transaction {
 	u := uuid.FastMakeV4()
-	// TODO(nvanbenschoten): technically, gul should be a synthetic timestamp.
-	// Make this change in v21.2 when all nodes in a cluster are guaranteed to
-	// be aware of synthetic timestamps by addressing the TODO in Timestamp.Add.
 	gul := now.Add(maxOffsetNs, 0)
 
 	return Transaction{
