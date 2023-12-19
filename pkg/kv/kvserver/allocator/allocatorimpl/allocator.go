@@ -2508,6 +2508,12 @@ func (a *Allocator) ShouldTransferLease(
 	if a.leaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing) {
 		return true
 	}
+
+	if a.leaseholderShouldMoveDueToIOOverload(
+		ctx, storePool, existing, leaseRepl.StoreID(), a.IOOverloadOptions()) {
+		return true
+	}
+
 	existing = a.ValidLeaseTargets(
 		ctx,
 		storePool,
