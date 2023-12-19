@@ -753,40 +753,42 @@ func maybeGetDatabaseForIDs(
 	t *testing.T, tdb *sqlutils.SQLRunner, ids catalog.DescriptorIDSet,
 ) (dbName string, exists bool) {
 	const q = `
-SELECT
-	name
-FROM
-	system.namespace
-WHERE
-	id
-	IN (
-			SELECT
-				DISTINCT
-				COALESCE(
-					d->'database'->>'id',
-					d->'schema'->>'parentId',
-					d->'type'->>'parentId',
-					d->'function'->>'parentId',
-					d->'table'->>'parentId'
-				)::INT8
-			FROM
-				(
-					SELECT
-						crdb_internal.pb_to_json('desc', descriptor) AS d
-					FROM
-						system.descriptor
-					WHERE
-						id IN (SELECT * FROM ROWS FROM (unnest($1::INT8[])))
-				)
-		)
-`
-	err := tdb.DB.QueryRowContext(context.Background(), q, pq.Array(ids.Ordered())).Scan(&dbName)
-	if errors.Is(err, gosql.ErrNoRows) {
+	SELECT
+		name
+	FROM
+		system.namespace
+	WHERE
+		id
+		IN (
+				SELECT
+					DISTINCT
+					COALESCE(
+						d->'database'->>'id',
+						d->'schema'->>'parentId',
+						d->'type'->>'parentId',
+						d->'function'->>'parentId',
+						d->'table'->>'parentId'
+					)::INT8
+				FROM
+					(
+						SELECT
+							crdb_internal.pb_to_json('desc', descriptor) AS d
+						FROM
+							system.descriptor
+						WHERE
+							id IN (SELECT * FROM ROWS FROM (unnest($1::INT8[])))
+					)
+			)
+	`
+	results := tdb.QueryStr(t, q, pq.Array(ids.Ordered()))
+	if len(results) > 1 {
+		skip.IgnoreLintf(t, "requires all schema changes to happen within one database;"+
+			" get %v: %v", len(results), results)
+	}
+	if len(results) == 0 {
 		return "", false
 	}
-
-	require.NoError(t, err)
-	return dbName, true
+	return results[0][0], true
 }
 
 // withPostCommitPlanAfterSchemaChange
