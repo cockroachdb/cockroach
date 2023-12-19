@@ -90,6 +90,24 @@ func (e *EnumSetting) GetAvailableValuesAsHint() string {
 	return "Available values: " + strings.Join(vals, ", ")
 }
 
+// GetAvailableValues returns the possible enum settings as a string
+// slice.
+func (e *EnumSetting) GetAvailableValues() []string {
+	// First stabilize output by sorting by key.
+	valIdxs := make([]int, 0, len(e.enumValues))
+	for i := range e.enumValues {
+		valIdxs = append(valIdxs, int(i))
+	}
+	sort.Ints(valIdxs)
+
+	// Now use those indices
+	vals := make([]string, 0, len(e.enumValues))
+	for _, enumIdx := range valIdxs {
+		vals = append(vals, e.enumValues[int64(enumIdx)])
+	}
+	return vals
+}
+
 func (e *EnumSetting) set(ctx context.Context, sv *Values, k int64) error {
 	if _, ok := e.enumValues[k]; !ok {
 		return errors.Errorf("unrecognized value %d", k)
