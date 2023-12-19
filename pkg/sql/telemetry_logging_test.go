@@ -1605,6 +1605,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 	}
 
 	require.NotEmpty(t, entries)
+	var expectedTxnCounter uint32 = 3
 
 	// Attempt to find all expected logs.
 	for i, expected := range expectedQueries {
@@ -1613,7 +1614,8 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 			if strings.Contains(e.Message, expected) {
 				var sq eventpb.SampledQuery
 				require.NoError(t, json.Unmarshal([]byte(e.Message), &sq))
-				require.Equal(t, uint32(i+1), sq.StmtPosInTxn, "%s", entries)
+				require.Equalf(t, uint32(i+1), sq.StmtPosInTxn, "stmt=%s entries: %s", expected, entries)
+				require.Equalf(t, expectedTxnCounter, sq.TxnCounter, "stmt=%s entries: %s", expected, entries)
 				found = true
 				break
 			}
