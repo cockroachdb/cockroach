@@ -36,7 +36,7 @@ chmod a+w bin/roachtest
 # against the tip of the 'master' branch. We do this by `go get`ting the
 # latest version of the module, and then running `mirror` to update `DEPS.bzl`
 # accordingly.
-bazel run @go_sdk//:bin/go get github.com/cockroachdb/pebble@latest
+bazel run @go_sdk//:bin/go get github.com/cockroachdb/pebble@master
 NEW_DEPS_BZL_CONTENT=$(bazel run //pkg/cmd/mirror/go:mirror)
 echo "$NEW_DEPS_BZL_CONTENT" > DEPS.bzl
 bazel build @com_github_cockroachdb_pebble//cmd/pebble --config ci -c opt
