@@ -97,7 +97,7 @@ func TestRuntimeHistogram(t *testing.T) {
 
 			case "print":
 				var buf strings.Builder
-				count, sum := rh.Total()
+				count, sum := rh.CumulativeSnapshot().Total()
 				buf.WriteString(fmt.Sprintf("count=%d sum=%0.2f\n", count, sum))
 				hist := rh.ToPrometheusMetric().GetHistogram()
 				require.NotNil(t, hist)

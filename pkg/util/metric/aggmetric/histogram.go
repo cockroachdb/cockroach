@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
-	io_prometheus_client "github.com/prometheus/client_model/go"
+	prometheusgo "github.com/prometheus/client_model/go"
 )
 
 var now = timeutil.Now
@@ -65,6 +65,7 @@ var _ metric.Iterable = (*AggHistogram)(nil)
 var _ metric.PrometheusIterable = (*AggHistogram)(nil)
 var _ metric.PrometheusExportable = (*AggHistogram)(nil)
 var _ metric.WindowedHistogram = (*AggHistogram)(nil)
+var _ metric.CumulativeHistogram = (*AggHistogram)(nil)
 
 // NewHistogram constructs a new AggHistogram.
 func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHistogram {
@@ -121,43 +122,28 @@ func (a *AggHistogram) Inspect(f func(interface{})) {
 	f(a)
 }
 
-// TotalWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) TotalWindowed() (int64, float64) {
-	return a.h.TotalWindowed()
+// CumulativeSnapshot is part of the metric.CumulativeHistogram interface.
+func (a *AggHistogram) CumulativeSnapshot() metric.HistogramSnapshot {
+	return a.h.CumulativeSnapshot()
 }
 
-// Total is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) Total() (int64, float64) {
-	return a.h.Total()
-}
-
-// MeanWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) MeanWindowed() float64 {
-	return a.h.MeanWindowed()
-}
-
-// Mean is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) Mean() float64 {
-	return a.h.Mean()
-}
-
-// ValueAtQuantileWindowed is part of the metric.WindowedHistogram interface
-func (a *AggHistogram) ValueAtQuantileWindowed(q float64) float64 {
-	return a.h.ValueAtQuantileWindowed(q)
+// WindowedSnapshot is part of the metric.WindowedHistogram interface.
+func (a *AggHistogram) WindowedSnapshot() metric.HistogramSnapshot {
+	return a.h.WindowedSnapshot()
 }
 
 // GetType is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) GetType() *io_prometheus_client.MetricType {
+func (a *AggHistogram) GetType() *prometheusgo.MetricType {
 	return a.h.GetType()
 }
 
 // GetLabels is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) GetLabels() []*io_prometheus_client.LabelPair {
+func (a *AggHistogram) GetLabels() []*prometheusgo.LabelPair {
 	return a.h.GetLabels()
 }
 
 // ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) ToPrometheusMetric() *io_prometheus_client.Metric {
+func (a *AggHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return a.h.ToPrometheusMetric()
 }
 
@@ -184,7 +170,7 @@ type Histogram struct {
 }
 
 // ToPrometheusMetric constructs a prometheus metric for this Histogram.
-func (g *Histogram) ToPrometheusMetric() *io_prometheus_client.Metric {
+func (g *Histogram) ToPrometheusMetric() *prometheusgo.Metric {
 	return g.h.ToPrometheusMetric()
 }
 

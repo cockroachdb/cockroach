@@ -141,6 +141,11 @@ func TestIOLoadListener(t *testing.T) {
 					d.ScanArgs(t, "flush-bytes", &flushBytes)
 					d.ScanArgs(t, "flush-work-sec", &flushWorkSec)
 					d.ScanArgs(t, "flush-idle-sec", &flushIdleSec)
+				} else {
+					// Make flush utilization low, but keep peak throughput sane by
+					// setting flushWorkSec > 0.
+					flushWorkSec = 1
+					flushIdleSec = 100
 				}
 				if d.HasArg("base-level") {
 					var baseLevel int

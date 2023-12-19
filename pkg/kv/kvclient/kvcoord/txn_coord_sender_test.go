@@ -1201,8 +1201,8 @@ func checkTxnMetricsOnce(
 	name string,
 	commits, commits1PC, commitReadOnly, aborts, restarts int64,
 ) error {
-	durationCounts, _ := metrics.Durations.Total()
-	restartsCounts, _ := metrics.Restarts.Total()
+	durationCounts, _ := metrics.Durations.CumulativeSnapshot().Total()
+	restartsCounts, _ := metrics.Restarts.CumulativeSnapshot().Total()
 	testcases := []struct {
 		name string
 		a, e int64
@@ -1441,7 +1441,7 @@ func TestTxnDurations(t *testing.T) {
 	// introducing spurious errors or being overly lax.
 	//
 	// TODO(cdo): look into cause of variance.
-	count, _ := hist.Total()
+	count, _ := hist.CumulativeSnapshot().Total()
 	if a, e := count, int64(puts); a != e {
 		t.Fatalf("durations %d != expected %d", a, e)
 	}

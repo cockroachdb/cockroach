@@ -9024,7 +9024,7 @@ func TestBatchSizeMetric(t *testing.T) {
 		  INSERT INTO foo (key) VALUES (1), (2), (3);
 		`)
 
-		numSamples, sum := batchSizeHist.TotalWindowed()
+		numSamples, sum := batchSizeHist.WindowedSnapshot().Total()
 		require.Equal(t, int64(0), numSamples)
 		require.Equal(t, 0.0, sum)
 
@@ -9032,7 +9032,7 @@ func TestBatchSizeMetric(t *testing.T) {
 		require.NoError(t, err)
 
 		testutils.SucceedsSoon(t, func() error {
-			numSamples, sum = batchSizeHist.TotalWindowed()
+			numSamples, sum = batchSizeHist.WindowedSnapshot().Total()
 			if numSamples <= 0 && sum <= 0.0 {
 				return errors.Newf("waiting for metric %d %d", numSamples, sum)
 			}
@@ -9090,7 +9090,7 @@ func TestParallelIOMetrics(t *testing.T) {
 		require.NoError(t, err)
 
 		testutils.SucceedsSoon(t, func() error {
-			numSamples, sum := metrics.ParallelIOPendingQueueNanos.TotalWindowed()
+			numSamples, sum := metrics.ParallelIOPendingQueueNanos.WindowedSnapshot().Total()
 			if numSamples <= 0 && sum <= 0.0 {
 				return errors.Newf("waiting for queue nanos: %d %f", numSamples, sum)
 			}
@@ -9113,7 +9113,7 @@ func TestParallelIOMetrics(t *testing.T) {
 			return errors.New("waiting for in-flight keys")
 		})
 		testutils.SucceedsSoon(t, func() error {
-			numSamples, sum := metrics.ParallelIOResultQueueNanos.TotalWindowed()
+			numSamples, sum := metrics.ParallelIOResultQueueNanos.WindowedSnapshot().Total()
 			if numSamples <= 0 && sum <= 0.0 {
 				return errors.Newf("waiting for result queue nanos: %d %f", numSamples, sum)
 			}
