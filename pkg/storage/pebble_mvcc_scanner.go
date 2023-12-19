@@ -549,8 +549,8 @@ func (p *pebbleMVCCScanner) init(
 	p.uncertainty = ui
 	// We must check uncertainty even if p.ts >= local_uncertainty_limit
 	// because the local uncertainty limit cannot be applied to values with
-	// synthetic timestamps. We are only able to skip uncertainty checks if
-	// p.ts >= global_uncertainty_limit.
+	// future-time timestamps with earlier local timestamps. We are only able
+	// to skip uncertainty checks if p.ts >= global_uncertainty_limit.
 	p.checkUncertainty = p.ts.Less(p.uncertainty.GlobalLimit)
 }
 
@@ -1394,9 +1394,9 @@ func (p *pebbleMVCCScanner) seekVersion(
 			// is set to the transaction's global uncertainty limit, so we are
 			// seeking based on the worst-case uncertainty, but values with a
 			// time in the range (uncertainty.LocalLimit, uncertainty.GlobalLimit]
-			// are only uncertain if their timestamps are synthetic. Meanwhile,
-			// any value with a time in the range (ts, uncertainty.LocalLimit]
-			// is uncertain.
+			// are only uncertain if they have an earlier local timestamp that is
+			// before uncertainty.LocalLimit. Meanwhile, any value with a time in
+			// the range (ts, uncertainty.LocalLimit] is uncertain.
 			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
 			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp, localTS), false

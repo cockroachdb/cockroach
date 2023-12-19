@@ -2300,8 +2300,8 @@ message SubsumeResponse {
   //    through a range merge, to make the merge less disruptive to writes on
   //    the post-merge range because the timestamp cache won't be bumped as
   //    high.
-  // 2. it can transfer information about reads with synthetic timestamps, which
-  //    are not otherwise captured by the FreezeStart clock timestamp.
+  // 2. it can transfer information about reads with future-time timestamps,
+  //    which are not otherwise captured by the FreezeStart clock timestamp.
   kv.kvserver.readsummary.ReadSummary read_summary = 7;
 }
 
