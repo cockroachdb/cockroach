@@ -22,11 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -198,6 +201,10 @@ func getSink(
 	}
 
 	opts := changefeedbase.MakeStatementOptions(feedCfg.Opts)
+
+	if opts.ExactlyOnceExport() && !sinkSupportsExactlyOnceExport(u.Scheme) {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "exactly once export unsupported for %s sink", u.Scheme)
+	}
 
 	// check that options are compatible with the given sink
 	validateOptionsAndMakeSink := func(sinkSpecificOpts map[string]struct{}, makeSink func() (Sink, error)) (Sink, error) {
@@ -906,4 +913,28 @@ func shouldFlushBatch(bytes int, messages int, config sinkBatchConfig) bool {
 func sinkSupportsConcurrentEmits(sink EventSink) bool {
 	_, ok := sink.(*batchingSink)
 	return ok
+}
+
+// tryConfigureExactlyOnceSemantics configures exactly once semantics if the
+// sink supports those.
+func tryConfigureExactlyOnceSemantics(
+	ctx context.Context, sink EventSink, partitionID int32, flushGen flushGenerationOracle,
+) error {
+	switch s := sink.(type) {
+	case *cloudStorageSink:
+		// Sanity check to make sure the cloud storage sink is sane to use with
+		// exactly once semantics.
+		switch p := s.es.Conf().Provider; p {
+		case cloudpb.ExternalStorageProvider_azure, cloudpb.ExternalStorageProvider_gs,
+			cloudpb.ExternalStorageProvider_s3, cloudpb.ExternalStorageProvider_nodelocal:
+		default:
+			return pgerror.Newf(pgcode.InvalidParameterValue, "exactly once export unsupported for %s sink", p)
+		}
+
+		return s.configureExactlyOnceSemantics(ctx, partitionID, flushGen)
+	case *safeSink:
+		return tryConfigureExactlyOnceSemantics(ctx, s.wrapped, partitionID, flushGen)
+	default:
+		return errors.AssertionFailedf("sink %T does not support exactly once semantics", sink)
+	}
 }
