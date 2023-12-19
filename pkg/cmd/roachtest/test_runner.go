@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -651,6 +652,11 @@ func (r *testRunner) runWorker(
 			}
 		}
 
+		//  TODO(babusrithar): remove this once we see enough data in nightly runs. This is a temp logic to test spot VMs.
+		if roachtestflags.Cloud == spec.GCE && testToRun.spec.Benchmark && rand.Float64() <= 0.5 {
+			testToRun.spec.Cluster.UseSpotVMs = true
+		}
+
 		if roachtestflags.UseSpotVM {
 			testToRun.spec.Cluster.UseSpotVMs = true
 		}
@@ -997,7 +1003,7 @@ func (r *testRunner) runTest(
 				failureMsg := t.failureMsg()
 				preemptedVMNames := getPreemptedVMNames(ctx, c, l)
 				if preemptedVMNames != "" {
-					failureMsg = fmt.Sprintf("VMs preempted during the test run : %s\n%s", preemptedVMNames, failureMsg)
+					failureMsg = fmt.Sprintf("VMs preempted during the test run : %s\n\n**Other Failure**\n%s", preemptedVMNames, failureMsg)
 					// Adding this error allows the GitHub issue poster to detect this is an infrastructure flake and
 					// post the issue accordingly.
 					t.addFailure(0, "", errVMPreemption)
