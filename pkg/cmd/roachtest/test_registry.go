@@ -111,11 +111,7 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	// weekly tag.
 	const maxTimeout = 18 * time.Hour
 	if spec.Timeout > maxTimeout {
-		var weekly bool
-		if _, ok := spec.Tags["weekly"]; ok {
-			weekly = true
-		}
-		if !weekly {
+		if !spec.Suites.Contains(registry.Weekly) {
 			return fmt.Errorf(
 				"%s: timeout %s exceeds the maximum allowed of %s", spec.Name, spec.Timeout, maxTimeout,
 			)
