@@ -51,7 +51,6 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "the test is very memory-intensive and is likely to OOM under stress")
-	skip.UnderRace(t, "likely to OOM due to increased memory pressure under race")
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -66,6 +65,19 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 		DiskMonitor: testDiskMonitor,
 	}
 	rng, _ := randutil.NewTestRand()
+
+	// Ensure that coldata-batch-size is in [MinBatchSize, 1024] range. If the
+	// batch size becomes too large, then the test will use multiple GBs of RAM
+	// which might lead to OOMs in some environments.
+	const maxBatchSize = 1024
+	if oldBatchSize := coldata.BatchSize(); oldBatchSize > maxBatchSize {
+		defer func() {
+			require.NoError(t, coldata.SetBatchSizeForTests(oldBatchSize))
+		}()
+		newBatchSize := colexectestutils.MinBatchSize + rng.Intn(maxBatchSize-colexectestutils.MinBatchSize+1)
+		require.NoError(t, coldata.SetBatchSizeForTests(newBatchSize))
+		t.Logf("coldata-batch-size overridden to %d", newBatchSize)
+	}
 
 	// Use the Bytes type because we can control the size of values with it
 	// easily.
