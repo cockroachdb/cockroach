@@ -30,15 +30,5 @@ message LegacyTimestamp {
   // skew)/(minimal ns between events) and nearly impossible to
   // overflow.
   optional int32 logical = 2 [(gogoproto.nullable) = false];
-  // Indicates that the Timestamp did not come from an HLC clock somewhere
-  // in the system and, therefore, does not have the ability to update a
-  // peer's HLC clock. If set to true, the "synthetic timestamp" may be
-  // arbitrarily disconnected from real time.
-  //
-  // See the commentary on Timestamp.synthetic for more information.
-  //
-  // The field is nullable so that it is not serialized when set to false.
-  // This ensures that the timestamp encoding does not change across nodes
-  // that are and are not aware of this field.
-  optional bool synthetic = 3;
+  reserved 3;
 }
