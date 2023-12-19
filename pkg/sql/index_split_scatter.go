@@ -127,7 +127,10 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpansForPartitioning(
 		// If there are partitioning prefixes, pre-split each of them.
 		for _, partPrefix := range partitionKeyPrefixes {
 			for _, shard := range splitAtShards {
-				splitKey := encoding.EncodeVarintAscending(partPrefix, shard)
+				// Ensure that we don't reuse memory that came from the
+				// descriptor.
+				keyPrefix := partPrefix[:len(partPrefix):len(partPrefix)]
+				splitKey := encoding.EncodeVarintAscending(keyPrefix, shard)
 				if err := splitAndScatter(ctx, is.db, splitKey, expirationTime); err != nil {
 					return err
 				}
