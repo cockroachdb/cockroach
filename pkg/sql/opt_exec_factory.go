@@ -194,7 +194,12 @@ func generateScanSpans(
 	if params.InvertedConstraint != nil {
 		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	}
-	splitter := span.MakeSplitter(tabDesc, index, params.NeededCols)
+	var splitter span.Splitter
+	if params.Locking.IsLocking() {
+		splitter = span.MakeSplitterForSideEffect(tabDesc, index, params.NeededCols)
+	} else {
+		splitter = span.MakeSplitter(tabDesc, index, params.NeededCols)
+	}
 	return sb.SpansFromConstraint(params.IndexConstraint, splitter)
 }
 
@@ -1791,9 +1796,7 @@ func (ef *execFactory) ConstructDeleteRange(
 	var sb span.Builder
 	sb.Init(ef.planner.EvalContext(), ef.planner.ExecCfg().Codec, tabDesc, tabDesc.GetPrimaryIndex())
 
-	splitter := span.MakeSplitterForDelete(
-		tabDesc, tabDesc.GetPrimaryIndex(), needed, true, /* forDelete */
-	)
+	splitter := span.MakeSplitterForDelete(tabDesc, tabDesc.GetPrimaryIndex(), needed)
 	spans, err := sb.SpansFromConstraint(indexConstraint, splitter)
 	if err != nil {
 		return nil, err

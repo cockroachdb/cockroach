@@ -3028,7 +3028,12 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 		return nil, err
 	}
 
-	splitter := span.MakeSplitter(n.table.desc, index, fetchOrdinals)
+	var splitter span.Splitter
+	if joinReaderSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+		splitter = span.MakeSplitterForSideEffect(n.table.desc, index, fetchOrdinals)
+	} else {
+		splitter = span.MakeSplitter(n.table.desc, index, fetchOrdinals)
+	}
 	joinReaderSpec.SplitFamilyIDs = splitter.FamilyIDs()
 
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(fetchColIDs))
@@ -3113,7 +3118,12 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		return nil, err
 	}
 
-	splitter := span.MakeSplitter(n.table.desc, n.table.index, fetchOrdinals)
+	var splitter span.Splitter
+	if joinReaderSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE {
+		splitter = span.MakeSplitterForSideEffect(n.table.desc, n.table.index, fetchOrdinals)
+	} else {
+		splitter = span.MakeSplitter(n.table.desc, n.table.index, fetchOrdinals)
+	}
 	joinReaderSpec.SplitFamilyIDs = splitter.FamilyIDs()
 
 	joinReaderSpec.LookupColumns = make([]uint32, len(n.eqCols))
