@@ -20,9 +20,8 @@ import (
 var maxRaftCommandFooterSize = (&RaftCommandFooter{
 	MaxLeaseIndex: math.MaxUint64,
 	ClosedTimestamp: hlc.Timestamp{
-		WallTime:  math.MaxInt64,
-		Logical:   math.MaxInt32,
-		Synthetic: true,
+		WallTime: math.MaxInt64,
+		Logical:  math.MaxInt32,
 	},
 }).Size()
 

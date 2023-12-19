@@ -23,42 +23,10 @@ message Timestamp {
 
   // Holds a wall time, typically a unix epoch time expressed in
   // nanoseconds.
-  //
-  // It is not safe to mutate this field directly. Instead, use one of the
-  // methods on Timestamp, which ensure that the synthetic flag is updated
-  // appropriately.
   int64 wall_time = 1;
   // The logical component captures causality for events whose wall times
   // are equal. It is effectively bounded by (maximum clock skew)/(minimal
   // ns between events) and nearly impossible to overflow.
-  //
-  // It is not safe to mutate this field directly. Instead, use one of the
-  // methods on Timestamp, which ensure that the synthetic flag is updated
-  // appropriately.
   int32 logical = 2;
-  // Indicates that the Timestamp did not come from an HLC clock somewhere
-  // in the system and, therefore, does not have the ability to update a
-  // peer's HLC clock. If set to true, the "synthetic timestamp" may be
-  // arbitrarily disconnected from real time.
-  //
-  // The flag serves as the dynamically typed version of a ClockTimestamp
-  // (but inverted). Only Timestamps with this flag set to false can be
-  // downcast to a ClockTimestamp successfully (see
-  // DeprecatedTryToClockTimestamp).
-  //
-  // Synthetic timestamps with this flag set to true are central to
-  // non-blocking transactions, which write "into the future". Setting the
-  // flag to true is also used to disconnect some committed MVCC versions
-  // from observed timestamps by indicating that those versions were moved
-  // from the timestamp at which they were originally written. Committed
-  // MVCC versions with synthetic timestamps require observing the full
-  // uncertainty interval, whereas readings off the leaseholders's clock
-  // can tighten the uncertainty interval that is applied to MVCC versions
-  // with clock timestamp.
-  //
-  // This flag does not affect the sort order of Timestamps. However, it
-  // is considered when performing structural equality checks (e.g. using
-  // the == operator). Consider use of the EqOrdering method when testing
-  // for equality.
-  bool synthetic = 3;
+  reserved 3;
 }

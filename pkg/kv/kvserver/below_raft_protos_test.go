@@ -43,10 +43,6 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 		func(r *rand.Rand) protoutil.Message {
 			m := enginepb.NewPopulatedMVCCMetadata(r, false)
 			m.Txn = nil                 // never populated below Raft
-			m.Timestamp.Synthetic = nil // never populated below Raft
-			if m.MergeTimestamp != nil {
-				m.MergeTimestamp.Synthetic = nil // never populated below Raft
-			}
 			m.TxnDidNotUpdateMeta = nil // never populated below Raft
 			return m
 		},
@@ -85,11 +81,7 @@ func TestBelowRaftProtosDontChange(t *testing.T) {
 			return roachpb.NewPopulatedInternalTimeSeriesData(r, false)
 		},
 		func(r *rand.Rand) protoutil.Message {
-			m := enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
-			if m.MergeTimestamp != nil {
-				m.MergeTimestamp.Synthetic = nil // never populated below Raft
-			}
-			return m
+			return enginepb.NewPopulatedMVCCMetadataSubsetForMergeSerialization(r, false)
 		},
 		func(r *rand.Rand) protoutil.Message {
 			return kvserverpb.NewPopulatedRaftReplicaID(r, false)
