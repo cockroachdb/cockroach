@@ -35,6 +35,10 @@ func ReverseScan(
 	h := cArgs.Header
 	reply := resp.(*kvpb.ReverseScanResponse)
 
+	if err := maybeDisallowSkipLockedRequest(h, args.KeyLockingStrength); err != nil {
+		return result.Result{}, err
+	}
+
 	var res result.Result
 	var scanRes storage.MVCCScanResult
 	var err error
@@ -114,7 +118,7 @@ func ReverseScan(
 			ctx, readWriter, h.Txn, args.KeyLockingStrength, args.KeyLockingDurability,
 			args.ScanFormat, &scanRes, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
 		if err != nil {
-			return result.Result{}, err
+			return result.Result{}, maybeInterceptDisallowedSkipLockedUsage(h, err)
 		}
 		res.Local.AcquiredLocks = acquiredLocks
 	}
