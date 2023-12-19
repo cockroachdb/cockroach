@@ -158,8 +158,7 @@ var inOrderResultsBufferSpillTypeSchema = []*types.T{
 	//	Timestamp hlc.Timestamp
 	//	  WallTime int64
 	//	  Logical int32
-	//	  Synthetic bool
-	types.Bytes, types.Int, types.Int, types.Bool,
+	types.Bytes, types.Int, types.Int,
 	// ScanResp:
 	//  BatchResponses [][]byte
 	types.BytesArray,
@@ -172,7 +171,6 @@ const (
 	getRawBytesIdx
 	getTSWallTimeIdx
 	getTSLogicalIdx
-	getTSSyntheticIdx
 	scanBatchResponsesIdx
 )
 
@@ -186,13 +184,11 @@ func serialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.DatumAl
 		row[getRawBytesIdx] = rowenc.EncDatum{Datum: alloc.NewDBytes(tree.DBytes(v.RawBytes))}
 		row[getTSWallTimeIdx] = rowenc.EncDatum{Datum: alloc.NewDInt(tree.DInt(v.Timestamp.WallTime))}
 		row[getTSLogicalIdx] = rowenc.EncDatum{Datum: alloc.NewDInt(tree.DInt(v.Timestamp.Logical))}
-		row[getTSSyntheticIdx] = rowenc.EncDatum{Datum: tree.MakeDBool(tree.DBool(v.Timestamp.Synthetic))}
 		row[scanBatchResponsesIdx] = rowenc.EncDatum{Datum: tree.DNull}
 	} else {
 		row[getRawBytesIdx] = rowenc.EncDatum{Datum: tree.DNull}
 		row[getTSWallTimeIdx] = rowenc.EncDatum{Datum: tree.DNull}
 		row[getTSLogicalIdx] = rowenc.EncDatum{Datum: tree.DNull}
-		row[getTSSyntheticIdx] = rowenc.EncDatum{Datum: tree.DNull}
 		if r.GetResp != nil {
 			// We have an empty Get response.
 			row[scanBatchResponsesIdx] = rowenc.EncDatum{Datum: tree.DNull}
@@ -229,9 +225,8 @@ func deserialize(r *kvstreamer.Result, row rowenc.EncDatumRow, alloc *tree.Datum
 			r.GetResp.Value = &roachpb.Value{
 				RawBytes: []byte(tree.MustBeDBytes(row[getRawBytesIdx].Datum)),
 				Timestamp: hlc.Timestamp{
-					WallTime:  int64(tree.MustBeDInt(row[getTSWallTimeIdx].Datum)),
-					Logical:   int32(tree.MustBeDInt(row[getTSLogicalIdx].Datum)),
-					Synthetic: bool(tree.MustBeDBool(row[getTSSyntheticIdx].Datum)),
+					WallTime: int64(tree.MustBeDInt(row[getTSWallTimeIdx].Datum)),
+					Logical:  int32(tree.MustBeDInt(row[getTSLogicalIdx].Datum)),
 				},
 			}
 		}
