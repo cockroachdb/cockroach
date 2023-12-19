@@ -76,8 +76,8 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	txn0 := newTransaction("txn0", key, 1, clock)
 	// Txn1 is in the pending state but is expired.
 	txn1 := newTransaction("txn1", key, 1, clock)
-	txn1.ReadTimestamp.WallTime -= int64(100 * time.Second)
-	txn1.LastHeartbeat = txn1.ReadTimestamp
+	txn1.MinTimestamp.WallTime -= int64(100 * time.Second)
+	txn1.LastHeartbeat = txn1.MinTimestamp
 	// Txn2 is in the staging state and is not old enough to have expired so the
 	// code ought to send nothing.
 	txn2 := newTransaction("txn2", key, 1, clock)
@@ -85,8 +85,8 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	// Txn3 is in the staging state but is expired.
 	txn3 := newTransaction("txn3", key, 1, clock)
 	txn3.Status = roachpb.STAGING
-	txn3.ReadTimestamp.WallTime -= int64(100 * time.Second)
-	txn3.LastHeartbeat = txn3.ReadTimestamp
+	txn3.MinTimestamp.WallTime -= int64(100 * time.Second)
+	txn3.LastHeartbeat = txn3.MinTimestamp
 	// Txn4 is in the committed state.
 	txn4 := newTransaction("txn4", key, 1, clock)
 	txn4.Status = roachpb.COMMITTED
