@@ -71,6 +71,11 @@ type Builder struct {
 	// This is used when re-preparing invalidated queries.
 	KeepPlaceholders bool
 
+	// SkipAOST is a control knob: if set, optbuilder will not attempt to
+	// validate AS OF SYSTEM TIME clauses. This is used when re-preparing
+	// a statement during session migration.
+	SkipAOST bool
+
 	// -- Results --
 	//
 	// These fields are set during the building process and can be used after

@@ -331,7 +331,7 @@ func (ex *connExecutor) populatePrepared(
 	// However, we must be able to handle every type of statement below because
 	// the Postgres extended protocol requires running statements via the prepare
 	// and execute paths.
-	flags, err := p.prepareUsingOptimizer(ctx)
+	flags, err := p.prepareUsingOptimizer(ctx, origin)
 	if err != nil {
 		log.VEventf(ctx, 1, "optimizer prepare failed: %v", err)
 		return 0, err
