@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -3785,8 +3784,12 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (*opS
 		opStmt.expectedExecErrors.add(pgcode.DuplicateSchema)
 	}
 
-	// TODO(jayshrivastava): Support authorization
-	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, tree.MakeRoleSpecWithRoleName(username.RootUserName().Normalized()))
+	// TODO(sql-foundations): CREATE SCHEMA AUTHORIZATION is not currently
+	// support in the DSC. Either add support and re-enable it here or gate the
+	// AUTHORIZATION aspect by checking if the DSC is enabled or not. Previously,
+	// `username.RootUserName().Normalized()` was used for
+	// MakeRoleSpecWithRoleName.
+	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, tree.MakeRoleSpecWithRoleName(""))
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
 }
