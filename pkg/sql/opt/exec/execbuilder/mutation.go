@@ -1147,39 +1147,43 @@ func (b *Builder) buildLock(lock *memo.LockExpr) (execPlan, error) {
 	}
 
 	// In some simple cases we can push the locking down into the input operation
-	// instead of adding what would be a redundant lookup join.
+	// instead of adding what would be a redundant lookup join. We only apply
+	// these optimizations for single-column-family tables.
 	//
 	// TODO(michae2): To optimize more complex cases, such as a Project on top of
 	// a Scan, or multiple Lock ops, etc, we need to do something similar to
 	// ordering. That is, make locking a physical property required by Lock, and
 	// make various operators provide the physical property, with a
 	// locking-semi-LookupJoin as the enforcer of last resort.
-	switch input := lock.Input.(type) {
-	case *memo.ScanExpr:
-		if input.Table == lock.Table && input.Index == cat.PrimaryIndex {
-			// Make a shallow copy of the scan to avoid mutating the original.
-			scan := *input
-			scan.Locking = scan.Locking.Max(locking)
-			return b.buildRelational(&scan)
-		}
-	case *memo.IndexJoinExpr:
-		if input.Table == lock.Table {
-			// Make a shallow copy of the join to avoid mutating the original.
-			join := *input
-			join.Locking = join.Locking.Max(locking)
-			return b.buildRelational(&join)
-		}
-	case *memo.LookupJoinExpr:
-		if input.Table == lock.Table && input.Index == cat.PrimaryIndex &&
-			(input.JoinType == opt.InnerJoinOp || input.JoinType == opt.SemiJoinOp) &&
-			!input.IsFirstJoinInPairedJoiner && !input.IsSecondJoinInPairedJoiner &&
-			// We con't push the locking down if the lookup join has additional on
-			// predicates that will filter out rows after the join.
-			len(input.On) == 0 {
-			// Make a shallow copy of the join to avoid mutating the original.
-			join := *input
-			join.Locking = join.Locking.Max(locking)
-			return b.buildRelational(&join)
+	tab := b.mem.Metadata().Table(lock.Table)
+	if tab.FamilyCount() == 1 {
+		switch input := lock.Input.(type) {
+		case *memo.ScanExpr:
+			if input.Table == lock.KeySource && input.Index == cat.PrimaryIndex {
+				// Make a shallow copy of the scan to avoid mutating the original.
+				scan := *input
+				scan.Locking = scan.Locking.Max(locking)
+				return b.buildRelational(&scan)
+			}
+		case *memo.IndexJoinExpr:
+			if input.Table == lock.KeySource {
+				// Make a shallow copy of the join to avoid mutating the original.
+				join := *input
+				join.Locking = join.Locking.Max(locking)
+				return b.buildRelational(&join)
+			}
+		case *memo.LookupJoinExpr:
+			if input.Table == lock.KeySource && input.Index == cat.PrimaryIndex &&
+				(input.JoinType == opt.InnerJoinOp || input.JoinType == opt.SemiJoinOp) &&
+				!input.IsFirstJoinInPairedJoiner && !input.IsSecondJoinInPairedJoiner &&
+				// We con't push the locking down if the lookup join has additional on
+				// predicates that will filter out rows after the join.
+				len(input.On) == 0 {
+				// Make a shallow copy of the join to avoid mutating the original.
+				join := *input
+				join.Locking = join.Locking.Max(locking)
+				return b.buildRelational(&join)
+			}
 		}
 	}
 
@@ -1191,7 +1195,7 @@ func (b *Builder) buildLock(lock *memo.LockExpr) (execPlan, error) {
 			Table:                 lock.Table,
 			Index:                 cat.PrimaryIndex,
 			KeyCols:               lock.KeyCols,
-			Cols:                  lock.Cols,
+			Cols:                  lock.LockCols.Union(lock.Cols),
 			LookupColsAreTableKey: true,
 			Locking:               locking,
 		},

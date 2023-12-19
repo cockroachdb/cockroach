@@ -391,3 +391,178 @@ user root
 awaitquery q12
 
 awaitquery q13
+
+subtest lock_column_family
+
+# Check that we lock all column families.
+
+statement ok
+CREATE TABLE abcde (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  d INT NULL,
+  e INT NOT NULL,
+  PRIMARY KEY (a, b),
+  FAMILY (a),
+  FAMILY (b),
+  FAMILY (c),
+  FAMILY (d),
+  FAMILY (e)
+)
+
+statement ok
+GRANT ALL on abcde TO testuser
+
+statement ok
+INSERT INTO abcde VALUES (5, 6, 7, 8, 9)
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Only read one column family in the initial scan, but lock all of them.
+query I rowsort
+SELECT e FROM abcde WHERE a = 5 AND b = 6 FOR UPDATE
+----
+9
+
+user root
+
+# Updating the same column family should block and then retry.
+query I async,rowsort q14
+BEGIN ISOLATION LEVEL READ COMMITTED;
+UPDATE abcde SET e = e + 10 WHERE a = 5 AND b = 6 RETURNING e;
+COMMIT;
+----
+29
+
+# Updating a different column family should also block.
+query I async,rowsort q15
+BEGIN ISOLATION LEVEL READ COMMITTED;
+UPDATE abcde SET c = c + 10 WHERE a = 5 AND b = 6 RETURNING c;
+COMMIT;
+----
+17
+
+user testuser
+
+query II rowsort
+SELECT c, e FROM abcde WHERE a = 5 AND b = 6
+----
+7  9
+
+statement ok
+UPDATE abcde SET e = e + 10 WHERE a = 5 AND b = 6
+
+statement ok
+COMMIT
+
+user root
+
+awaitquery q14
+
+awaitquery q15
+
+# Now try again, but lock a nullable column. Again, we should be locking all
+# column families.
+
+statement ok
+INSERT INTO abcde VALUES (45, 46, 47, NULL, 49)
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+# Only read one nullable column in the initial scan, which requires also reading
+# the first column family, but lock all of them.
+query I rowsort
+SELECT d FROM abcde WHERE a = 45 AND b = 46 FOR UPDATE
+----
+NULL
+
+user root
+
+# Locked-reading from the same column family should block on the lock.
+query I async,rowsort q16
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT d FROM abcde WHERE a = 45 AND b = 46 FOR UPDATE;
+COMMIT;
+----
+68
+
+# Locked-reading from a different column family should also block.
+query I async,rowsort q17
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT c FROM abcde WHERE a = 45 AND b = 46 FOR UPDATE;
+INSERT INTO abcde VALUES (45, 66, 67, 68, 69);
+COMMIT;
+----
+47
+
+user testuser
+
+query I rowsort
+SELECT d FROM abcde WHERE a = 45
+----
+NULL
+
+statement ok
+UPDATE abcde SET d = 68 WHERE a = 45 AND b = 46
+
+statement ok
+COMMIT
+
+user root
+
+awaitquery q16
+
+awaitquery q17
+
+# Now try again, but lock one of the PK columns. Again, we should be locking all
+# column families.
+
+statement ok
+INSERT INTO abcde VALUES (85, 86, 87, 88, 89)
+
+user testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
+
+statement ok
+SET tracing = kv
+
+# Only read one of the PK column in the initial scan, which might only require
+# reading the first column family but should still lock all column families.
+query I rowsort
+SELECT b FROM abcde WHERE a = 85 AND b = 86 FOR UPDATE
+----
+86
+
+user root
+
+# Locked-reading from the same column family should block on the lock.
+query I async,rowsort q18
+BEGIN ISOLATION LEVEL READ COMMITTED;
+SELECT b FROM abcde WHERE a = 85 AND b = 86 FOR UPDATE;
+INSERT INTO abcde VALUES (85, 96, 97, 98, 99);
+COMMIT;
+----
+86
+
+user testuser
+
+query I rowsort
+SELECT b FROM abcde WHERE a = 85
+----
+86
+
+statement ok
+COMMIT
+
+user root
+
+awaitquery q18

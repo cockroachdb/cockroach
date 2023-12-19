@@ -388,11 +388,31 @@ func (b *Builder) buildLocking(item *lockingItem, inScope *scope) {
 func (b *Builder) buildLock(lb *lockBuilder, locking opt.Locking, inScope *scope) {
 	md := b.factory.Metadata()
 	tab := md.Table(lb.table)
+	// We need to use a fresh table reference to have control over the exact
+	// column families locked.
+	newTabID := md.DuplicateTable(lb.table, b.factory.RemapCols)
+	newTab := md.Table(newTabID)
+	// Add remapped columns for the new table reference. For now we lock all
+	// column families of the primary index of the table, so include all ordinary
+	// and mutation columns.
+	ordinals := tableOrdinals(newTab, columnKinds{
+		includeMutations: true,
+		includeSystem:    false,
+		includeInverted:  false,
+	})
+	var lockCols opt.ColSet
+	for _, ord := range ordinals {
+		lockCols.Add(newTabID.ColumnID(ord))
+	}
 	private := &memo.LockPrivate{
-		Table:   lb.table,
-		Locking: locking,
-		KeyCols: lb.keyCols,
-		Cols:    inScope.colSetWithExtraCols(),
+		Table:     newTabID,
+		KeySource: lb.table,
+		Locking:   locking,
+		KeyCols:   lb.keyCols,
+		LockCols:  lockCols,
+		// ExtraCols might include some of the primary key columns needed to lock the
+		// row, if they weren't in the output of the SELECT FOR UPDATE.
+		Cols: inScope.colSetWithExtraCols(),
 	}
 	// Validate that all of the PK cols are found within the input scope.
 	scopeCols := private.Cols
