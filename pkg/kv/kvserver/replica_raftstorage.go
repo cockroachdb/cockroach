@@ -820,6 +820,11 @@ func (r *Replica) applySnapshot(
 	// Inform the concurrency manager that this replica just applied a snapshot.
 	r.concMgr.OnReplicaSnapshotApplied()
 
+	if fn := r.store.cfg.TestingKnobs.AfterSnapshotApplication; fn != nil {
+		desc, _ := r.getReplicaDescriptorRLocked()
+		fn(desc, r.mu.state, inSnap)
+	}
+
 	r.mu.Unlock()
 
 	// Assert that the in-memory and on-disk states of the Replica are congruent
