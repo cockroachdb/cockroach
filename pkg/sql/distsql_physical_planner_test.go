@@ -1211,6 +1211,14 @@ func TestPartitionSpans(t *testing.T) {
 				t.Fatal(err)
 			}
 
+			var rangeCount int
+			for _, p := range partitions {
+				n, ok := p.NumRanges()
+				require.True(t, ok)
+				rangeCount += n
+			}
+			require.Equal(t, len(tc.ranges), rangeCount)
+
 			// Assert that the PartitionState is what we expect it to be.
 			tc.partitionState.testingOverrideRandomSelection = nil
 			planCtx.spanPartitionState.testingOverrideRandomSelection = nil
