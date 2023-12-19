@@ -198,7 +198,7 @@ func newIntervalSkl(clock *hlc.Clock, minRet time.Duration, metrics sklMetrics) 
 		minPages: defaultMinSklPages,
 		metrics:  metrics,
 	}
-	s.pushNewPage(0 /* maxTime */, nil /* arena */)
+	s.pushNewPage(0 /* maxWallTime */, nil /* arena */)
 	s.metrics.Pages.Update(1)
 	return &s
 }
@@ -297,10 +297,9 @@ func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue
 	s.rotMutex.RLock()
 	defer s.rotMutex.RUnlock()
 
-	// If floor ts is greater than the requested timestamp, then no need to
-	// perform a search or add any records. We don't return early when the
-	// timestamps are equal, because their flags may differ.
-	if val.ts.Less(s.floorTS) {
+	// If floor ts is >= requested timestamp, then no need to perform a search or
+	// add any records.
+	if val.ts.LessEq(s.floorTS) {
 		return nil
 	}
 
@@ -382,7 +381,7 @@ func (s *intervalSkl) frontPage() *sklPage {
 
 // pushNewPage prepends a new empty page to the front of the pages list. It
 // accepts an optional arena argument to facilitate re-use.
-func (s *intervalSkl) pushNewPage(maxTime ratchetingTime, arena *arenaskl.Arena) {
+func (s *intervalSkl) pushNewPage(maxWallTime int64, arena *arenaskl.Arena) {
 	size := s.nextPageSize()
 	if arena != nil && arena.Cap() == size {
 		// Re-use the provided arena, if possible.
@@ -392,7 +391,7 @@ func (s *intervalSkl) pushNewPage(maxTime ratchetingTime, arena *arenaskl.Arena)
 		arena = arenaskl.NewArena(size)
 	}
 	p := newSklPage(arena)
-	p.maxTime = maxTime
+	p.maxWallTime = maxWallTime
 	s.pages.PushFront(p)
 }
 
@@ -469,13 +468,13 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 		s.pages.Remove(evict)
 	}
 
-	// Push a new empty page on the front of the pages list. We give this page
-	// the maxTime of the old front page. This assures that the maxTime for a
+	// Push a new empty page on the front of the pages list. We give this page the
+	// maxWallTime of the old front page. This assures that the maxWallTime for a
 	// page is always equal to or greater than that for all earlier pages. In
-	// other words, it assures that the maxTime for a page is not only the
+	// other words, it assures that the maxWallTime for a page is not only the
 	// maximum timestamp for all values it contains, but also for all values any
 	// earlier pages contain.
-	s.pushNewPage(fp.maxTime, oldArena)
+	s.pushNewPage(fp.maxWallTime, oldArena)
 
 	// Update metrics.
 	s.metrics.Pages.Update(int64(s.pages.Len()))
@@ -551,9 +550,9 @@ func (s *intervalSkl) FloorTS() hlc.Timestamp {
 // filled up, it returns arenaskl.ErrArenaFull. At that point, a new fixed page
 // must be allocated and used instead.
 type sklPage struct {
-	list    *arenaskl.Skiplist
-	maxTime ratchetingTime // accessed atomically
-	isFull  int32          // accessed atomically
+	list        *arenaskl.Skiplist
+	maxWallTime int64 // accessed atomically
+	isFull      int32 // accessed atomically
 }
 
 func newSklPage(arena *arenaskl.Arena) *sklPage {
@@ -799,55 +798,6 @@ func (p *sklPage) ensureFloorValue(it *arenaskl.Iterator, to []byte, val cacheVa
 }
 
 func (p *sklPage) ratchetMaxTimestamp(ts hlc.Timestamp) {
-	new := makeRatchetingTime(ts)
-	for {
-		old := ratchetingTime(atomic.LoadInt64((*int64)(&p.maxTime)))
-		if new <= old {
-			break
-		}
-
-		if atomic.CompareAndSwapInt64((*int64)(&p.maxTime), int64(old), int64(new)) {
-			break
-		}
-	}
-}
-
-func (p *sklPage) getMaxTimestamp() hlc.Timestamp {
-	return ratchetingTime(atomic.LoadInt64((*int64)(&p.maxTime))).get()
-}
-
-// ratchetingTime is a compressed representation of an hlc.Timestamp, reduced
-// down to 64 bits to support atomic access.
-//
-// ratchetingTime implements compression such that any loss of information when
-// passing through the type results in the resulting Timestamp being ratcheted
-// to a larger value. This provides the guarantee that the following relation
-// holds, regardless of the value of x:
-//
-//	x.LessEq(makeRatchetingTime(x).get())
-//
-// It also provides the guarantee that if the synthetic flag is set on the
-// initial timestamp, then this flag is set on the resulting Timestamp. So the
-// following relation is guaranteed to hold, regardless of the value of x:
-//
-//	x.IsFlagSet(SYNTHETIC) == makeRatchetingTime(x).get().IsFlagSet(SYNTHETIC)
-//
-// Compressed ratchetingTime values compare such that taking the maximum of any
-// two ratchetingTime values and converting that back to a Timestamp is always
-// equal to or larger than the equivalent call through the Timestamp.Forward
-// method. So the following relation is guaranteed to hold, regardless of the
-// value of x or y:
-//
-//	z := max(makeRatchetingTime(x), makeRatchetingTime(y)).get()
-//	x.Forward(y).LessEq(z)
-//
-// Bit layout (LSB to MSB):
-//
-//	bits 0:      inverted synthetic flag
-//	bits 1 - 63: upper 63 bits of wall time
-type ratchetingTime int64
-
-func makeRatchetingTime(ts hlc.Timestamp) ratchetingTime {
 	// Cheat and just use the max wall time portion of the timestamp, since it's
 	// fine for the max timestamp to be a bit too large. This is the case
 	// because it's always safe to increase the timestamp in a range. It's also
@@ -861,38 +811,25 @@ func makeRatchetingTime(ts hlc.Timestamp) ratchetingTime {
 	// We could use an atomic.Value to store a "MaxValue" cacheValue for a given
 	// page, but this would be more expensive and it's not clear that it would
 	// be worth it.
-	rt := ratchetingTime(ts.WallTime)
+	new := ts.WallTime
 	if ts.Logical > 0 {
-		rt++
+		new++
 	}
 
-	// Similarly, cheat and use the last bit in the wall time to indicate
-	// whether the timestamp is synthetic or not. Do so by first rounding up the
-	// last bit of the wall time so that it is empty. This is safe for the same
-	// reason that rounding up the logical portion of the timestamp in the wall
-	// time is safe (see above).
-	//
-	// We use the last bit to indicate that the flag is NOT set. This ensures
-	// that if two timestamps have the same ordering but different values for
-	// the synthetic flag, the timestamp without the synthetic flag has a larger
-	// ratchetingTime value. This follows how Timestamp.Forward treats the flag.
-	if rt&1 == 1 {
-		rt++
-	}
-	if !ts.Synthetic {
-		rt |= 1
-	}
+	for {
+		old := atomic.LoadInt64(&p.maxWallTime)
+		if new <= old {
+			break
+		}
 
-	return rt
+		if atomic.CompareAndSwapInt64(&p.maxWallTime, old, new) {
+			break
+		}
+	}
 }
 
-func (rt ratchetingTime) get() hlc.Timestamp {
-	var ts hlc.Timestamp
-	ts.WallTime = int64(rt &^ 1)
-	if rt&1 == 0 {
-		ts.Synthetic = true
-	}
-	return ts
+func (p *sklPage) getMaxTimestamp() hlc.Timestamp {
+	return hlc.Timestamp{WallTime: atomic.LoadInt64(&p.maxWallTime)}
 }
 
 // ratchetPolicy defines the behavior a ratcheting attempt should take when

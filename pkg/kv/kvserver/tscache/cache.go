@@ -122,16 +122,13 @@ func ratchetValue(old, new cacheValue) (res cacheValue, updated bool) {
 	}
 
 	// Equal times.
-	if new.ts.Synthetic != old.ts.Synthetic {
-		// old.ts == new.ts but the values have different synthetic flags.
-		// Remove the synthetic flag from the resulting value.
-		new.ts.Synthetic = false
-	}
 	if new.txnID != old.txnID {
 		// old.ts == new.ts but the values have different txnIDs. Remove the
 		// transaction ID from the resulting value so that it is no longer owned
 		// by any transaction.
 		new.txnID = noTxnID
+		return new, old.txnID != noTxnID
 	}
-	return new, new != old
+	// old == new.
+	return old, false
 }
