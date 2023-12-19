@@ -64,8 +64,13 @@ func TestMrSystemDatabase(t *testing.T) {
 	tDB := sqlutils.MakeSQLRunner(tenantSQL)
 
 	// Generate stats for system.sqlinstances. See the "QueryByEnum" test for
-	// details.
+	// details. Since stats are generated asynchronously, we also poll to make
+	// sure the stats are generated.
 	tDB.Exec(t, `ANALYZE system.sqlliveness;`)
+	tDB.CheckQueryResultsRetry(t,
+		`select count(*) from [show statistics for table system.sqlliveness] where column_names = '{crdb_region}';`,
+		[][]string{{"1"}},
+	)
 
 	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
