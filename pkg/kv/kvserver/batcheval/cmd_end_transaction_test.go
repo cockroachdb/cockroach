@@ -1301,13 +1301,8 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 				expError: false,
 			},
 			{
-				name:     "past-syn",
-				commitTS: func(now hlc.Timestamp) hlc.Timestamp { return now.WithSynthetic(true) },
-				expError: false,
-			},
-			{
-				name:     "future-syn",
-				commitTS: func(now hlc.Timestamp) hlc.Timestamp { return now.Add(100, 0).WithSynthetic(true) },
+				name:     "future",
+				commitTS: func(now hlc.Timestamp) hlc.Timestamp { return now.Add(100, 0) },
 				// If the EndTxn carried a commit trigger and its transaction will need
 				// to commit-wait because the transaction has a future-time commit
 				// timestamp, evaluating the request should return an error.
