@@ -57,14 +57,6 @@ func makeTS(walltime int64, logical int32) hlc.Timestamp {
 	}
 }
 
-func makeSynTS(walltime int64, logical int32) hlc.Timestamp {
-	return hlc.Timestamp{
-		WallTime:  walltime,
-		Logical:   logical,
-		Synthetic: true,
-	}
-}
-
 func TestKeyClone(t *testing.T) {
 	k := Key{0x01, 0x02, 0x03}
 	c := k.Clone()
@@ -551,23 +543,22 @@ var nonZeroTxn = Transaction{
 		Key:               Key("foo"),
 		IsoLevel:          isolation.Snapshot,
 		Epoch:             2,
-		WriteTimestamp:    makeSynTS(20, 21),
-		MinTimestamp:      makeSynTS(10, 11),
+		WriteTimestamp:    makeTS(20, 21),
+		MinTimestamp:      makeTS(10, 11),
 		Priority:          957356782,
 		Sequence:          123,
 		CoordinatorNodeID: 3,
 	},
 	Name:                   "name",
 	Status:                 COMMITTED,
-	LastHeartbeat:          makeSynTS(1, 2),
-	ReadTimestamp:          makeSynTS(20, 22),
-	GlobalUncertaintyLimit: makeSynTS(40, 41),
+	LastHeartbeat:          makeTS(1, 2),
+	ReadTimestamp:          makeTS(20, 22),
+	GlobalUncertaintyLimit: makeTS(40, 41),
 	ObservedTimestamps: []ObservedTimestamp{{
 		NodeID: 1,
 		Timestamp: hlc.ClockTimestamp{
-			WallTime:  1,
-			Logical:   2,
-			Synthetic: true, // normally not set, but needed for zerofields.NoZeroField
+			WallTime: 1,
+			Logical:  2,
 		},
 	}},
 	WriteTooOld:        true,

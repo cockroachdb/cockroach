@@ -25,9 +25,8 @@ func TestSpanConfigHasConfigurationChange(t *testing.T) {
 			TTLSeconds: 10,
 			ProtectionPolicies: []ProtectionPolicy{{
 				ProtectedTimestamp: hlc.Timestamp{
-					WallTime:  1,
-					Logical:   1,
-					Synthetic: false,
+					WallTime: 1,
+					Logical:  1,
 				},
 				IgnoreIfExcludedFromBackup: false,
 			}},
@@ -57,9 +56,8 @@ func TestSpanConfigHasConfigurationChange(t *testing.T) {
 			TTLSeconds: 10,
 			ProtectionPolicies: []ProtectionPolicy{{
 				ProtectedTimestamp: hlc.Timestamp{
-					WallTime:  2,
-					Logical:   2,
-					Synthetic: false,
+					WallTime: 2,
+					Logical:  2,
 				},
 				IgnoreIfExcludedFromBackup: false,
 			}},
