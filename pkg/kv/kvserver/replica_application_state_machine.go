@@ -87,7 +87,11 @@ func (r *Replica) getStateMachine() *replicaStateMachine {
 
 // TODO(tbg): move this to replica_app_batch.go.
 func replicaApplyTestingFilters(
-	ctx context.Context, r *Replica, cmd *replicatedCmd, fr kvserverbase.ForcedErrResult,
+	ctx context.Context,
+	r *Replica,
+	cmd *replicatedCmd,
+	fr kvserverbase.ForcedErrResult,
+	ephemeral bool,
 ) kvserverbase.ForcedErrResult {
 	// By default, output is input.
 	newFR := fr
@@ -96,9 +100,13 @@ func replicaApplyTestingFilters(
 	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; fr.ForcedError != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.ID,
+			Cmd:                  cmd.Cmd,
+			Entry:                cmd.Entry.Entry,
 			ReplicatedEvalResult: *cmd.ReplicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
+			ReplicaID:            r.replicaID,
+			Ephemeral:            ephemeral,
 			ForcedError:          fr.ForcedError,
 		}
 		if fr.ForcedError == nil {
@@ -254,8 +262,11 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		// NB: ReplicatedEvalResult is emptied by now, so don't include it.
 		if _, pErr := f(kvserverbase.ApplyFilterArgs{
 			CmdID:       cmd.ID,
+			Cmd:         cmd.Cmd,
+			Entry:       cmd.Entry.Entry,
 			StoreID:     sm.r.store.StoreID(),
 			RangeID:     sm.r.RangeID,
+			ReplicaID:   sm.r.replicaID,
 			ForcedError: cmd.ForcedError,
 		}); pErr != nil {
 			return nil, pErr.GoError()
