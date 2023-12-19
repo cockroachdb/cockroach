@@ -13,7 +13,6 @@ package asof
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
@@ -244,22 +243,14 @@ func DatumToHLC(
 	switch d := d.(type) {
 	case *tree.DString:
 		s := string(*d)
-		// Parse synthetic flag.
-		syn := false
-		if strings.HasSuffix(s, "?") {
-			s = s[:len(s)-1]
-			syn = true
-		}
 		// Attempt to parse as timestamp.
 		if dt, _, err := tree.ParseDTimestampTZ(evalCtx, s, time.Nanosecond); err == nil {
 			ts.WallTime = dt.Time.UnixNano()
-			ts.Synthetic = syn
 			break
 		}
 		// Attempt to parse as a decimal.
 		if dec, _, err := apd.NewFromString(s); err == nil {
 			ts, convErr = hlc.DecimalToHLC(dec)
-			ts.Synthetic = syn
 			break
 		}
 		// Attempt to parse as an interval.
@@ -270,7 +261,6 @@ func DatumToHLC(
 				convErr = errors.Errorf("interval value %v too small, SPLIT AT interval must be >= %v", d, time.Microsecond)
 			}
 			ts.WallTime = duration.Add(stmtTimestamp, iv.Duration).UnixNano()
-			ts.Synthetic = syn
 			break
 		}
 		convErr = errors.Errorf("value is neither timestamp, decimal, nor interval")
