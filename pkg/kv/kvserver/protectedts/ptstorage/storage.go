@@ -91,7 +91,7 @@ func (p *storage) Protect(ctx context.Context, r *ptpb.Record) error {
 		sessiondata.NodeUserSessionDataOverride,
 		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
-		r.ID, r.Timestamp.WithSynthetic(false).AsOfSystemTime(),
+		r.ID, r.Timestamp.AsOfSystemTime(),
 		r.MetaType, meta,
 		len(r.DeprecatedSpans), encodedTarget, encodedTarget)
 	if err != nil {
@@ -230,7 +230,7 @@ func (p *storage) getRecords(ctx context.Context) ([]ptpb.Record, error) {
 func (p storage) UpdateTimestamp(ctx context.Context, id uuid.UUID, timestamp hlc.Timestamp) error {
 	row, err := p.txn.QueryRowEx(ctx, "protectedts-update", p.txn.KV(),
 		sessiondata.NodeUserSessionDataOverride,
-		updateTimestampQuery, id.GetBytesMut(), timestamp.WithSynthetic(false).AsOfSystemTime())
+		updateTimestampQuery, id.GetBytesMut(), timestamp.AsOfSystemTime())
 	if err != nil {
 		return errors.Wrapf(err, "failed to update record %v", id)
 	}
@@ -322,7 +322,7 @@ func (p *storage) deprecatedProtect(ctx context.Context, r *ptpb.Record, meta []
 		sessiondata.NodeUserSessionDataOverride,
 		protectQueryWithoutTarget,
 		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
-		r.ID, r.Timestamp.WithSynthetic(false).AsOfSystemTime(),
+		r.ID, r.Timestamp.AsOfSystemTime(),
 		r.MetaType, meta,
 		len(r.DeprecatedSpans), encodedSpans)
 	if err != nil {
