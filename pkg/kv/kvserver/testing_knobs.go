@@ -66,7 +66,7 @@ type StoreTestingKnobs struct {
 	// drop Raft proposals before they are handed to etcd/raft to begin the
 	// process of replication. Dropped proposals are still eligible to be
 	// reproposed due to ticks.
-	TestingProposalSubmitFilter func(*ProposalData) (drop bool, err error)
+	TestingProposalSubmitFilter func(kvserverbase.ProposalFilterArgs) (drop bool, err error)
 
 	// TestingAfterRaftLogSync is invoked after completion of a synced write to
 	// Raft log for the given replica, before the corresponding message is sent
