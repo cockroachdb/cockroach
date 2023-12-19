@@ -1275,7 +1275,7 @@ func TestStreamingRegionalConstraint(t *testing.T) {
 func TestStreamingMismatchedMRDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "takes too long under stress race")
+	skip.UnderDuress(t, "multi node c2c is very flaky")
 
 	ctx := context.Background()
 	regions := []string{"mars", "venus", "mercury"}
@@ -1356,7 +1356,7 @@ WHERE
 func TestStreamingZoneConfigsMismatchedRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "takes too long under stress race")
+	skip.UnderDuress(t, "multi node c2c is very flaky")
 
 	ctx := context.Background()
 	regions := []string{"mars", "venus", "mercury"}
