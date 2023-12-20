@@ -4,12 +4,13 @@ set -exuo pipefail
 
 dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-source "$dir/../../../../teamcity-support.sh"
+source "$dir/../../../teamcity-support.sh"
 
 if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   ssh-keygen -q -C "roachtest-stress $(date)" -N "" -f ~/.ssh/id_rsa
 fi
 
+os=linux
 arch=amd64
 if [[ ${FIPS_ENABLED:-0} == 1 ]]; then
   arch=amd64-fips
@@ -36,7 +37,7 @@ build/teamcity-roachtest-invoke.sh \
   --cpu-quota="${CPUQUOTA-1024}" \
   --cluster-id="${TC_BUILD_ID}" \
   --lifetime="36h" \
-  --cockroach="${PWD}/bin/cockroach" \
+  --cockroach="${PWD}/bin/cockroach.$os-$arch" \
   --artifacts="${PWD}/artifacts" \
   --disable-issue \
   "${TESTS}"
