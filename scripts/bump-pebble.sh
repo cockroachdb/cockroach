@@ -64,8 +64,7 @@ if ! git merge-base --is-ancestor $OLD_SHA $NEW_SHA; then
   exit 1
 fi
 
-COMMITS=$(git log --no-merges --pretty='format:%h %s' "$OLD_SHA..$NEW_SHA" |
-          sed 's#^#https://github.com/cockroachdb/pebble/commit/#')
+COMMITS=$(git log --no-merges --pretty='format: * [`%h`](https://github.com/cockroachdb/pebble/commit/%h) %s' "$OLD_SHA..$NEW_SHA")
 popd
 
 echo
@@ -92,6 +91,8 @@ go mod tidy
 ./dev generate bazel --mirror
 git add go.mod go.sum DEPS.bzl build/bazelutil/distdir_files.bzl
 git commit -m "go.mod: bump Pebble to ${NEW_SHA:0:12}
+
+Changes:
 
 $COMMITS
 
