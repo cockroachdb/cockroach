@@ -93,7 +93,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		Clock:              s.Clock(),
 		NodeDescs:          gs,
 		Stopper:            s.Stopper(),
-		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
+		TransportFactory:   kvcoord.GRPCTransportFactory(nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs))),
 		FirstRangeProvider: gs,
 	})
 	tsf := kvcoord.NewTxnCoordSenderFactory(
@@ -1129,7 +1129,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 						Clock:              clock,
 						NodeDescs:          gs,
 						Stopper:            s.Stopper(),
-						NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
+						TransportFactory:   kvcoord.GRPCTransportFactory(nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs))),
 						FirstRangeProvider: gs,
 					})
 
@@ -1657,7 +1657,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 		Clock:              s.Clock(),
 		NodeDescs:          gs,
 		Stopper:            s.Stopper(),
-		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
+		TransportFactory:   kvcoord.GRPCTransportFactory(nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs))),
 		Settings:           cluster.MakeTestingClusterSettings(),
 		FirstRangeProvider: gs,
 	})

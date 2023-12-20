@@ -455,7 +455,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		Stopper:            stopper,
 		LatencyFunc:        rpcContext.RemoteClocks.Latency,
 		RPCRetryOptions:    &retryOpts,
-		NodeDialer:         kvNodeDialer,
+		TransportFactory:   kvcoord.GRPCTransportFactory(kvNodeDialer),
 		FirstRangeProvider: g,
 		Locality:           cfg.Locality,
 		TestingKnobs:       clientTestingKnobs,
