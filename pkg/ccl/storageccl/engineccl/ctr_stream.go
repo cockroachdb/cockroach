@@ -13,6 +13,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/binary"
 	"fmt"
 
@@ -192,7 +193,5 @@ func (s *cTRBlockCipherStream) transform(blockIndex uint64, data []byte, scratch
 	binary.BigEndian.PutUint32(iv[len(iv):len(iv)+4], blockCounter)
 	iv = iv[0 : len(iv)+4]
 	s.cBlock.Encrypt(iv, iv)
-	for i := 0; i < ctrBlockSize; i++ {
-		data[i] = data[i] ^ iv[i]
-	}
+	subtle.XORBytes(data, data, iv)
 }
