@@ -444,14 +444,22 @@ func (f *featureFlag) enabled(r enthropy) featureState {
 
 type enumFeatureFlag struct {
 	state string
+	v     *featureState
 }
 
-func (f *enumFeatureFlag) choose(r enthropy, options []string) string {
-	if f.state != "" {
-		return f.state
+// enabled returns a valid string if the returned featureState is featureEnabled.
+func (f *enumFeatureFlag) enabled(r enthropy, choose func(enthropy) string) (string, featureState) {
+	if f.v != nil {
+		return f.state, *f.v
 	}
-	f.state = options[r.Intn(len(options))]
-	return f.state
+
+	if r.Bool() {
+		f.v = &featureEnabled
+		f.state = choose(r)
+		return f.state, featureEnabled
+	}
+	f.v = &featureDisabled
+	return f.state, featureDisabled
 }
 
 // cdcFeatureFlags describes various cdc feature flags.
@@ -2615,6 +2623,11 @@ func (cfc *changefeedCreator) Args(args ...interface{}) *changefeedCreator {
 	return cfc
 }
 
+func chooseDistributionStrategy(r enthropy) string {
+	vals := changefeedccl.RangeDistributionStrategy.GetAvailableValues()
+	return vals[r.Intn(len(vals))]
+}
+
 // applySettings aplies various settings to the cluster -- once per the
 // lifetime of changefeedCreator
 func (cfc *changefeedCreator) applySettings() error {
@@ -2646,13 +2659,16 @@ func (cfc *changefeedCreator) applySettings() error {
 		}
 	}
 
-	rangeDistribution := cfc.flags.DistributionStrategy.choose(cfc.rng,
-		changefeedccl.RangeDistributionStrategy.GetAvailableValues())
-	cfc.logger.Printf("Setting changefeed.default_range_distribution_strategy to %s", rangeDistribution)
-	if _, err := cfc.db.Exec(fmt.Sprintf(
-		"SET CLUSTER SETTING changefeed.default_range_distribution_strategy = '%s'", rangeDistribution)); err != nil {
-		return err
+	rangeDistribution, rangeDistributionEnabled := cfc.flags.DistributionStrategy.enabled(cfc.rng,
+		chooseDistributionStrategy)
+	if rangeDistributionEnabled == featureEnabled {
+		cfc.logger.Printf("Setting changefeed.default_range_distribution_strategy to %s", rangeDistribution)
+		if _, err := cfc.db.Exec(fmt.Sprintf(
+			"SET CLUSTER SETTING changefeed.default_range_distribution_strategy = '%s'", rangeDistribution)); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 
