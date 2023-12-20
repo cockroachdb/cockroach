@@ -120,6 +120,7 @@ const (
 	createTable    // CREATE TABLE <table> <def>
 	createTableAs  // CREATE TABLE <table> AS <def>
 	createView     // CREATE VIEW <view> AS <def>
+	createFunction // CREATE FUNCTION <function> ...
 
 	// DROP ...
 
@@ -225,6 +226,7 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterTableSetColumnDefault:        (*operationGenerator).setColumnDefault,
 	alterTableSetColumnNotNull:        (*operationGenerator).setColumnNotNull,
 	alterTypeDropValue:                (*operationGenerator).alterTypeDropValue,
+	createFunction:                    (*operationGenerator).createFunction,
 	createIndex:                       (*operationGenerator).createIndex,
 	createSchema:                      (*operationGenerator).createSchema,
 	createSequence:                    (*operationGenerator).createSequence,
@@ -267,6 +269,7 @@ var opWeights = []int{
 	createView:                        1,
 	createTypeEnum:                    1,
 	createSchema:                      1,
+	createFunction:                    1,
 	alterTableDropColumn:              0,
 	alterTableDropColumnDefault:       1,
 	alterTableDropNotNull:             1,
