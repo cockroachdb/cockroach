@@ -390,9 +390,8 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 	if err != nil {
 		return err
 	}
-	if distributionStrategySupported {
-		ff.DistributionStrategy.v = &featureEnabled
-		ff.DistributionStrategy.state = chooseDistributionStrategy(enthropy{r})
+	if !distributionStrategySupported {
+		ff.DistributionStrategy.v = &featureUnset
 	}
 
 	jobID, err := newChangefeedCreator(db, l, r, fmt.Sprintf("%s.%s", targetDB, targetTable),
