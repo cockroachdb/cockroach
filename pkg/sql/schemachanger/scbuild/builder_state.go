@@ -11,7 +11,6 @@
 package scbuild
 
 import (
-	"context"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -298,7 +297,6 @@ func (b *builderState) CheckPrivilege(e scpb.Element, privilege privilege.Kind) 
 	b.checkPrivilege(screl.GetDescID(e), privilege)
 }
 
-// checkPrivilege checks if current user has privilege `priv` on descriptor with `id`.
 func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 	b.ensureDescriptor(id)
 	c := b.descCache[id]
@@ -327,13 +325,6 @@ func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) {
 	}
 }
 
-// HasGlobalPrivilegeOrRoleOption implements the scbuildstmt.PrivilegeChecker interface.
-func (b *builderState) HasGlobalPrivilegeOrRoleOption(
-	ctx context.Context, privilege privilege.Kind,
-) (bool, error) {
-	return b.auth.HasGlobalPrivilegeOrRoleOption(ctx, privilege)
-}
-
 // CurrentUserHasAdminOrIsMemberOf implements the scbuildstmt.PrivilegeChecker interface.
 func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername) bool {
 	if b.hasAdmin {
@@ -352,11 +343,6 @@ func (b *builderState) CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername
 
 func (b *builderState) CurrentUser() username.SQLUsername {
 	return b.evalCtx.SessionData().User()
-}
-
-// CheckRoleExists implements the scbuild.AuthorizationAccessor interface.
-func (b *builderState) CheckRoleExists(ctx context.Context, role username.SQLUsername) error {
-	return b.auth.CheckRoleExists(ctx, role)
 }
 
 var _ scbuildstmt.TableHelpers = (*builderState)(nil)

@@ -12,7 +12,6 @@ go_library(
         "alter_table_drop_constraint.go",
         "alter_table_validate_constraint.go",
         "comment_on.go",
-        "create_database.go",
         "create_function.go",
         "create_index.go",
         "create_schema.go",
@@ -70,7 +69,6 @@ go_library(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
-        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/storageparam",
@@ -79,7 +77,6 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lib_pq//oid",
     ],
 )
