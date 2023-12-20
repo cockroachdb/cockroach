@@ -3562,9 +3562,9 @@ type RelocateOneOptions interface {
 	Allocator() allocatorimpl.Allocator
 	// StorePool returns the store's configured store pool.
 	StorePool() storepool.AllocatorStorePool
-	// SpanConfig returns the span configuration for the range with start key.
-	SpanConfig(ctx context.Context, startKey roachpb.RKey) (*roachpb.SpanConfig, error)
-	// LeaseHolder returns the descriptor of the replica which holds the lease
+	// LoadSpanConfig loads the span configuration for the range with start key.
+	LoadSpanConfig(ctx context.Context, startKey roachpb.RKey) (*roachpb.SpanConfig, error)
+	// Leaseholder returns the descriptor of the replica which holds the lease
 	// on the range with start key.
 	Leaseholder(ctx context.Context, startKey roachpb.RKey) (roachpb.ReplicaDescriptor, error)
 }
@@ -3583,8 +3583,8 @@ func (roo *replicaRelocateOneOptions) StorePool() storepool.AllocatorStorePool {
 	return roo.store.cfg.StorePool
 }
 
-// SpanConfig returns the span configuration for the range with start key.
-func (roo *replicaRelocateOneOptions) SpanConfig(
+// LoadSpanConfig loads the span configuration for the range with start key.
+func (roo *replicaRelocateOneOptions) LoadSpanConfig(
 	ctx context.Context, startKey roachpb.RKey,
 ) (*roachpb.SpanConfig, error) {
 	confReader, err := roo.store.GetConfReader(ctx)
@@ -3635,7 +3635,7 @@ func RelocateOne(
 	allocator := options.Allocator()
 	storePool := options.StorePool()
 
-	conf, err := options.SpanConfig(ctx, desc.StartKey)
+	conf, err := options.LoadSpanConfig(ctx, desc.StartKey)
 	if err != nil {
 		return nil, nil, err
 	}
