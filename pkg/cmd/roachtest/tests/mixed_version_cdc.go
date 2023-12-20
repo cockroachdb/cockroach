@@ -386,6 +386,14 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		ff.RangeFeedScheduler.v = &featureUnset
 	}
 
+	distributionStrategySupported, err := cmvt.distributionStrategySupported(r, h)
+	if err != nil {
+		return err
+	}
+	if !distributionStrategySupported {
+		ff.DistributionStrategy.v = &featureUnset
+	}
+
 	jobID, err := newChangefeedCreator(db, l, r, fmt.Sprintf("%s.%s", targetDB, targetTable),
 		cmvt.kafka.manager.sinkURL(ctx), ff).
 		With(options).
@@ -432,6 +440,12 @@ func (cmvt *cdcMixedVersionTester) muxRangeFeedSupported(
 const v232CV = "23.2"
 
 func (cmvt *cdcMixedVersionTester) rangefeedSchedulerSupported(
+	r *rand.Rand, h *mixedversion.Helper,
+) (bool, error) {
+	return h.ClusterVersionAtLeast(r, v232CV)
+}
+
+func (cmvt *cdcMixedVersionTester) distributionStrategySupported(
 	r *rand.Rand, h *mixedversion.Helper,
 ) (bool, error) {
 	return h.ClusterVersionAtLeast(r, v232CV)
