@@ -783,7 +783,6 @@ go_test(
         "//pkg/obs",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/rpc/nodedialer",
         "//pkg/scheduledjobs",
         "//pkg/security",
         "//pkg/security/securityassets",

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb/kvpbmock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -156,13 +155,10 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 						NodeDescs:       g,
 						RPCRetryOptions: &retry.Options{MaxRetries: 10},
 						Stopper:         stopper,
-						TestingKnobs: ClientTestingKnobs{
-							TransportFactory: func(SendOptions, *nodedialer.Dialer, ReplicaSlice) (Transport, error) {
-								return transport, nil
-							},
+						TransportFactory: func(options SendOptions, slice ReplicaSlice) (Transport, error) {
+							return transport, nil
 						},
 						RangeDescriptorDB: rangeDB,
-						NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
 						Settings:          cluster.MakeTestingClusterSettings(),
 					})
 					ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
