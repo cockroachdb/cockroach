@@ -897,21 +897,15 @@ func (p *planner) setAuditMode(
 	event := &auditevents.SensitiveTableAccessEvent{TableDesc: desc, Writing: true}
 	p.curPlan.auditEventBuilders = append(p.curPlan.auditEventBuilders, event)
 
-	// Requires admin or MODIFYCLUSTERSETTING as of 22.2
-	hasAdmin, err := p.HasAdminRole(ctx)
+	// Requires MODIFYCLUSTERSETTING as of 22.2.
+	// Check for system privilege first, otherwise fall back to role options.
+	hasModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
 	if err != nil {
 		return false, err
 	}
-	if !hasAdmin {
-		// Check for system privilege first, otherwise fall back to role options.
-		hasModify, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.MODIFYCLUSTERSETTING)
-		if err != nil {
-			return false, err
-		}
-		if !hasModify {
-			return false, pgerror.Newf(pgcode.InsufficientPrivilege,
-				"only users with admin or %s system privilege are allowed to change audit settings on a table ", privilege.MODIFYCLUSTERSETTING)
-		}
+	if !hasModify {
+		return false, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only users with admin or %s system privilege are allowed to change audit settings on a table ", privilege.MODIFYCLUSTERSETTING)
 	}
 
 	telemetry.Inc(sqltelemetry.SchemaSetAuditModeCounter(auditMode.TelemetryName()))

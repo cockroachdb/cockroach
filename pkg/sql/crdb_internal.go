@@ -1783,23 +1783,18 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		shouldRedactError := false
-		// Check if the user is admin.
-		if isAdmin, err := p.HasAdminRole(ctx); err != nil {
+		// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
+		// privileges.
+		if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
 			return err
-		} else if !isAdmin {
-			// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
-			// privileges.
-			if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
-				return err
-			} else if hasViewActivityRedacted {
-				shouldRedactError = true
-			} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
-				return err
-			} else if !hasViewActivity {
-				// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
-				// return insufficient privileges error.
-				return noViewActivityOrViewActivityRedactedRoleError(p.User())
-			}
+		} else if hasViewActivityRedacted {
+			shouldRedactError = true
+		} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
+			return err
+		} else if !hasViewActivity {
+			// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
+			// return insufficient privileges error.
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 
 		var alloc tree.DatumAlloc
@@ -2564,20 +2559,12 @@ func (p *planner) makeSessionsRequest(
 		ExcludeClosedSessions: excludeClosed,
 		IncludeInternal:       true,
 	}
-	hasAdmin, err := p.HasAdminRole(ctx)
+	hasViewActivityOrhasViewActivityRedacted, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
 	if err != nil {
 		return serverpb.ListSessionsRequest{}, err
 	}
-	if hasAdmin {
+	if hasViewActivityOrhasViewActivityRedacted {
 		req.Username = ""
-	} else {
-		hasViewActivityOrhasViewActivityRedacted, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
-		if err != nil {
-			return serverpb.ListSessionsRequest{}, err
-		}
-		if hasViewActivityOrhasViewActivityRedacted {
-			req.Username = ""
-		}
 	}
 	return req, nil
 }
@@ -2650,25 +2637,19 @@ func populateQueriesTable(
 	response *serverpb.ListSessionsResponse,
 ) error {
 	shouldRedactQuery := false
-	// Check if the user is admin.
-	if isAdmin, err := p.HasAdminRole(ctx); err != nil {
+	// Check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED privileges.
+	if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
 		return err
-	} else if !isAdmin {
-		// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
-		// privileges.
-		if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
-			return err
-		} else if hasViewActivityRedacted {
-			// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
-			// over VIEWACTIVITY.
-			shouldRedactQuery = true
-		} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
-			return err
-		} else if !hasViewActivity {
-			// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
-			// return insufficient privileges error.
-			return noViewActivityOrViewActivityRedactedRoleError(p.User())
-		}
+	} else if hasViewActivityRedacted {
+		// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
+		// over VIEWACTIVITY.
+		shouldRedactQuery = true
+	} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
+		return err
+	} else if !hasViewActivity {
+		// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
+		// return insufficient privileges error.
+		return noViewActivityOrViewActivityRedactedRoleError(p.User())
 	}
 	for _, session := range response.Sessions {
 		sessionID := getSessionID(session)
