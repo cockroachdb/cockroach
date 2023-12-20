@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/montanaflynn/stats"
@@ -151,20 +152,6 @@ func registerOnlineRestore(r registry.Registry) {
 							if _, err := db.Exec("SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled=true"); err != nil {
 								return err
 							}
-							// TODO(mb): due to *reasons*, restored statistics are not always
-							// considered fresh enough by the trigger of the stats job (e.g.
-							// if the backed up stat was not named as an automatic job). But
-							// generating a whole new stat requires full table scans, reading
-							// even data that the workload doesn't need, using up our scarce
-							// reduced capacity while operating on remote data. Instead we
-							// likely would prefer to wait until the download phase completes
-							// to go generate sightly fresher stats. For now, we blanket block
-							// automatic stats creation manually (and a user would toggle it
-							// back on post-download), but ideally we'd do this automatically
-							// on just the restored tables, flipping the bit back at job end.
-							if _, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false"); err != nil {
-								return err
-							}
 							// TODO(dt): AC appears periodically reduce the workload to 0 QPS
 							// during the download phase (sudden jumps from 0 to 2k qps to 0).
 							// Disable for now until we figure out how to smooth this out.
@@ -232,6 +219,9 @@ func registerOnlineRestore(r registry.Registry) {
 							return nil
 						})
 						mDownload.Wait()
+						if runOnline {
+							require.NoError(t, postRestoreValidation(ctx, c, t.L(), rd.sp.backup.workload.DatabaseName(), timeutil.Now()))
+						}
 						if runWorkload {
 							require.NoError(t, exportStats(ctx, rd, statsCollector, workloadStartTime, restoreStartTime))
 						}
@@ -240,6 +230,29 @@ func registerOnlineRestore(r registry.Registry) {
 			}
 		}
 	}
+}
+
+func postRestoreValidation(
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	dbName string,
+	approxDownloadJobEndTime time.Time,
+) error {
+	downloadJobHLC := hlc.Timestamp{WallTime: approxDownloadJobEndTime.Add(-time.Minute * 2).UnixNano()}
+	conn, err := c.ConnE(ctx, l, c.Node(1)[0])
+	if err != nil {
+		return err
+	}
+	var statsJobCount int
+	if err := conn.QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT count(*) FROM [SHOW AUTOMATIC JOBS] AS OF SYSTEM TIME '%s' WHERE description ~ '%s';`, downloadJobHLC.AsOfSystemTime(), dbName)).Scan(&statsJobCount); err != nil {
+		return err
+	}
+	if statsJobCount > 0 {
+		return errors.Newf("stats jobs found during download job on %s database", dbName)
+	}
+	return nil
 }
 
 func createStatCollector(
