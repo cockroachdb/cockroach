@@ -216,19 +216,12 @@ type PrivilegeChecker interface {
 	// privilege for the element.
 	CheckPrivilege(e scpb.Element, privilege privilege.Kind)
 
-	// HasGlobalPrivilegeOrRoleOption returns a bool representing whether the current user
-	// has a global privilege or the corresponding legacy role option.
-	HasGlobalPrivilegeOrRoleOption(ctx context.Context, privilege privilege.Kind) (bool, error)
-
 	// CurrentUserHasAdminOrIsMemberOf returns true iff the current user is (1)
 	// an admin or (2) has membership in the specified role.
-	CurrentUserHasAdminOrIsMemberOf(role username.SQLUsername) bool
+	CurrentUserHasAdminOrIsMemberOf(member username.SQLUsername) bool
 
 	// CurrentUser returns the user of current session.
 	CurrentUser() username.SQLUsername
-
-	// CheckRoleExists returns nil if `role` exists.
-	CheckRoleExists(ctx context.Context, role username.SQLUsername) error
 }
 
 // TableHelpers has methods useful for creating new table elements.

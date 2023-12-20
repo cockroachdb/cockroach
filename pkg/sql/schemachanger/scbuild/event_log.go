@@ -284,9 +284,7 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 	switch e := pb.Element().(type) {
 	case *scpb.Database:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
-			return &eventpb.CreateDatabase{
-				DatabaseName: fullyQualifiedName(b, e),
-			}
+			return nil
 		} else {
 			return &eventpb.DropDatabase{
 				DatabaseName:         fullyQualifiedName(b, e),
