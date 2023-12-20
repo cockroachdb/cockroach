@@ -99,14 +99,13 @@ func Authorize(
 	payload *jobspb.Payload,
 	accessLevel AccessLevel,
 ) error {
-	userIsAdmin, err := a.HasAdminRole(ctx)
+	callerIsAdmin, err := a.UserHasAdminRole(ctx, a.User())
 	if err != nil {
 		return err
 	}
-	if userIsAdmin {
+	if callerIsAdmin {
 		return nil
 	}
-
 	hasControlJob, err := a.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CONTROLJOB)
 	if err != nil {
 		return err
@@ -132,13 +131,6 @@ func Authorize(
 		return err
 	}
 	if jobOwnerIsAdmin {
-		callerIsAdmin, err := a.UserHasAdminRole(ctx, a.User())
-		if err != nil {
-			return err
-		}
-		if callerIsAdmin {
-			return nil
-		}
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only admins can control jobs owned by other admins")
 	}

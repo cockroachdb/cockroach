@@ -94,14 +94,6 @@ func (p *planner) ShowTenant(ctx context.Context, n *tree.ShowTenant) (planNode,
 }
 
 func CanManageTenant(ctx context.Context, p AuthorizationAccessor) error {
-	isAdmin, err := p.HasAdminRole(ctx)
-	if err != nil {
-		return err
-	}
-	if isAdmin {
-		return nil
-	}
-
 	return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MANAGEVIRTUALCLUSTER)
 }
 
