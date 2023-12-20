@@ -2722,7 +2722,7 @@ scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
 
 simple_select_clause ::=
-	'SELECT' opt_all_clause target_list from_clause opt_where_clause group_clause having_clause window_clause
+	'SELECT' opt_all_clause opt_target_list from_clause opt_where_clause group_clause having_clause window_clause
 	| 'SELECT' distinct_clause target_list from_clause opt_where_clause group_clause having_clause window_clause
 	| 'SELECT' distinct_on_clause target_list from_clause opt_where_clause group_clause having_clause window_clause
 
@@ -3286,6 +3286,10 @@ scrub_option ::=
 
 opt_all_clause ::=
 	'ALL'
+	| 
+
+opt_target_list ::=
+	target_list
 	| 
 
 from_clause ::=

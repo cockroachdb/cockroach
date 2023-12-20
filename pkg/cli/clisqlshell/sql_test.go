@@ -335,14 +335,12 @@ func Example_includes() {
 	// SELECT -- incomplete statement, \i invalid
 	// \i testdata/i_twolevels2.sql
 	// ^
-	// HINT: try \h SELECT
 	// ERROR: at or near "\": syntax error
 	// SQLSTATE: 42601
 	// DETAIL: source SQL:
 	// SELECT -- incomplete statement, \i invalid
 	// \i testdata/i_twolevels2.sql
 	// ^
-	// HINT: try \h SELECT
 	// sql -f testdata/i_stopmiddle.sql
 	// ?column?
 	// 123
