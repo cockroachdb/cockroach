@@ -752,27 +752,27 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 		// NB: The lease has just enough load to be worthwhile rebalancing.
 		{
 			storeIDs:     []roachpb.StoreID{1, 4},
-			qps:          minLeaseLoadFraction * localDesc.Capacity.QueriesPerSecond,
-			reqCPU:       minLeaseLoadFraction * localDesc.Capacity.CPUPerSecond,
+			qps:          defaultMinLeaseLoadFraction * localDesc.Capacity.QueriesPerSecond,
+			reqCPU:       defaultMinLeaseLoadFraction * localDesc.Capacity.CPUPerSecond,
 			expectTarget: 4,
 		},
 		{
 			storeIDs:     []roachpb.StoreID{1, 5},
-			qps:          minLeaseLoadFraction * localDesc.Capacity.QueriesPerSecond,
-			reqCPU:       minLeaseLoadFraction * localDesc.Capacity.CPUPerSecond,
+			qps:          defaultMinLeaseLoadFraction * localDesc.Capacity.QueriesPerSecond,
+			reqCPU:       defaultMinLeaseLoadFraction * localDesc.Capacity.CPUPerSecond,
 			expectTarget: 5,
 		},
 		// NB: The lease is no longer worth rebalancing.
 		{
 			storeIDs:     []roachpb.StoreID{1, 4},
-			qps:          minLeaseLoadFraction*localDesc.Capacity.QueriesPerSecond - 1,
-			reqCPU:       minLeaseLoadFraction*localDesc.Capacity.CPUPerSecond - 1,
+			qps:          defaultMinLeaseLoadFraction*localDesc.Capacity.QueriesPerSecond - 1,
+			reqCPU:       defaultMinLeaseLoadFraction*localDesc.Capacity.CPUPerSecond - 1,
 			expectTarget: 0,
 		},
 		{
 			storeIDs:     []roachpb.StoreID{1, 5},
-			qps:          minLeaseLoadFraction*localDesc.Capacity.QueriesPerSecond - 1,
-			reqCPU:       minLeaseLoadFraction*localDesc.Capacity.CPUPerSecond - 1,
+			qps:          defaultMinLeaseLoadFraction*localDesc.Capacity.QueriesPerSecond - 1,
+			reqCPU:       defaultMinLeaseLoadFraction*localDesc.Capacity.CPUPerSecond - 1,
 			expectTarget: 0,
 		},
 		{
