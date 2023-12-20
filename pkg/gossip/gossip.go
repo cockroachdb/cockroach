@@ -1002,9 +1002,10 @@ func (g *Gossip) GetInfoStatus() InfoStatus {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	is := InfoStatus{
-		Infos:  make(map[string]Info),
-		Client: clientStatus,
-		Server: serverStatus,
+		Infos:           make(map[string]Info),
+		Client:          clientStatus,
+		Server:          serverStatus,
+		HighWaterStamps: g.mu.is.getHighWaterStamps(),
 	}
 	for k, v := range g.mu.is.Infos {
 		is.Infos[k] = *protoutil.Clone(v).(*Info)
