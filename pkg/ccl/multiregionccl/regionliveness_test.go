@@ -43,6 +43,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testingRegionLivenessProbeTimeout = time.Second * 2
+)
+
 func TestRegionLivenessProber(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -84,7 +88,6 @@ func TestRegionLivenessProber(t *testing.T) {
 	var tenants []serverutils.ApplicationLayerInterface
 	var tenantSQL []*gosql.DB
 	blockProbeQuery := atomic.Bool{}
-	defer regionliveness.TestingSetProbeLivenessTimeout(500 * time.Millisecond)()
 
 	for _, s := range testCluster.Servers {
 		tenantArgs := base.TestTenantArgs{
@@ -97,7 +100,7 @@ func TestRegionLivenessProber(t *testing.T) {
 						const probeQuery = "SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.crdb_internal_region"
 						if strings.Contains(stmt, probeQuery) && blockProbeQuery.Swap(false) {
 							// Timeout this query intentionally.
-							time.Sleep(1 * time.Second)
+							time.Sleep(testingRegionLivenessProbeTimeout + time.Second)
 						}
 					},
 				},
@@ -114,6 +117,11 @@ func TestRegionLivenessProber(t *testing.T) {
 		_, err = tenantSQL[0].Exec(fmt.Sprintf("ALTER DATABASE system ADD REGION '%s'", expectedRegions[i]))
 		require.NoError(t, err)
 	}
+	// Override the table timeout probe for testing.
+	for _, ts := range tenants {
+		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeout)
+	}
+
 	var cachedRegionProvider *regions.CachedDatabaseRegions
 	cachedRegionProvider, err = regions.NewCachedDatabaseRegions(ctx, tenants[0].DB(), tenants[0].LeaseManager().(*lease.Manager))
 	require.NoError(t, err)
@@ -214,8 +222,6 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 		"us-west",
 	}
 	detectLeaseWait := atomic.Bool{}
-	defer regionliveness.TestingSetProbeLivenessTimeout(1 * time.Second)()
-
 	testCluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(t,
 		expectedRegions,
 		1,
@@ -248,9 +254,9 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 							if targetCount.Add(1) != 1 {
 								return
 							}
-							time.Sleep(time.Second * 2)
+							time.Sleep(testingRegionLivenessProbeTimeout + time.Second)
 						} else if strings.Contains(stmt, probeQuery) {
-							time.Sleep(time.Second * 2)
+							time.Sleep(testingRegionLivenessProbeTimeout + time.Second)
 							targetCount.Swap(0)
 							detectLeaseWait.Swap(false)
 						}
@@ -271,6 +277,10 @@ func TestRegionLivenessProberForLeases(t *testing.T) {
 	}
 	_, err = tenantSQL[0].Exec("ALTER DATABASE system SURVIVE ZONE FAILURE")
 	require.NoError(t, err)
+	// Override the table timeout probe for testing.
+	for _, ts := range tenants {
+		regionliveness.RegionLivenessProbeTimeout.Override(ctx, &ts.ClusterSettings().SV, testingRegionLivenessProbeTimeout)
+	}
 	// Create a new table and have it used on all nodes.
 	_, err = tenantSQL[0].Exec("CREATE TABLE t1(j int)")
 	require.NoError(t, err)
