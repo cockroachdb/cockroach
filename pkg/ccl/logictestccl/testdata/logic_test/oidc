@@ -1,0 +1,125 @@
+# LogicTest: 3node-tenant
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING TO testuser
+
+statement ok
+SET CLUSTER SETTING server.oidc_authentication.client_id = "fake_client_id"
+
+statement ok
+SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret"
+
+# Verify that the sensitive cluster settings cannot be viewed.
+
+user testuser
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_id
+----
+<redacted>
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret
+----
+<redacted>
+
+query TT rowsort
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable ILIKE 'server.oidc_authentication.client_%'
+----
+server.oidc_authentication.client_id      <redacted>
+server.oidc_authentication.client_secret  <redacted>
+
+user root
+
+# testuser should be able to see the values with the MODIFYCLUSTERSETTING privilege.
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+user testuser
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_id
+----
+fake_client_id
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret
+----
+fake_client_secret
+
+query TT rowsort
+SELECT variable, value
+FROM [show all cluster settings]
+WHERE variable ILIKE 'server.oidc_authentication.client_%'
+----
+server.oidc_authentication.client_id      fake_client_id
+server.oidc_authentication.client_secret  fake_client_secret
+
+# Verify that the sensitive cluster settings are redacted in tenant overrides.
+
+user host-cluster-root
+
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING server.oidc_authentication.client_id = "fake_tenant_client_id"
+
+statement ok
+ALTER TENANT [10] SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_tenant_client_secret"
+
+statement ok
+CREATE USER testuser
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING, VIEWCLUSTERMETADATA, MANAGEVIRTUALCLUSTER, VIEWSYSTEMTABLE TO testuser
+
+statement ok
+SET ROLE testuser
+
+query TTT rowsort
+SELECT variable, value, origin
+FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable ILIKE 'server.oidc_authentication.client_%'
+----
+server.oidc_authentication.client_id      <redacted>  per-tenant-override
+server.oidc_authentication.client_secret  <redacted>  per-tenant-override
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_id FOR TENANT [10]
+----
+<redacted>
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret FOR TENANT [10]
+----
+<redacted>
+
+statement ok
+RESET ROLE
+
+# testuser should be able to see the values with the MODIFYCLUSTERSETTING privilege.
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+statement ok
+SET ROLE testuser
+
+query TTT rowsort
+SELECT variable, value, origin
+FROM [SHOW CLUSTER SETTINGS FOR TENANT [10]]
+WHERE variable ILIKE 'server.oidc_authentication.client_%'
+----
+server.oidc_authentication.client_id      fake_tenant_client_id      per-tenant-override
+server.oidc_authentication.client_secret  fake_tenant_client_secret  per-tenant-override
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_id FOR TENANT [10]
+----
+fake_tenant_client_id
+
+query T
+SHOW CLUSTER SETTING server.oidc_authentication.client_secret FOR TENANT [10]
+----
+fake_tenant_client_secret
