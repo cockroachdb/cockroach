@@ -632,8 +632,10 @@ type EventuallyFileOnlyReader interface {
 	Reader
 	// WaitForFileOnly blocks the calling goroutine until this reader has
 	// transitioned to a file-only reader that does not pin any in-memory state.
-	// If an error is returned, this transition did not succeed.
-	WaitForFileOnly(context.Context) error
+	// If an error is returned, this transition did not succeed. The Duration
+	// argument specifies how long to wait for before attempting a flush to
+	// force a transition to a file-only snapshot.
+	WaitForFileOnly(ctx context.Context, gracePeriodBeforeFlush time.Duration) error
 }
 
 // Writer is the write interface to an engine's data.
