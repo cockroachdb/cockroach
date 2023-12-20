@@ -13,6 +13,7 @@ package metric
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/metric/tick"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/codahale/hdrhistogram"
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -39,7 +40,7 @@ type HdrHistogram struct {
 	mu     struct {
 		syncutil.Mutex
 		cumulative *hdrhistogram.Histogram
-		*tickHelper
+		*tick.Ticker
 		sliding *hdrhistogram.WindowedHistogram
 	}
 }
@@ -62,13 +63,12 @@ func NewHdrHistogram(
 	wHist := hdrhistogram.NewWindowed(WindowedHistogramWrapNum, 0, maxVal, sigFigs)
 	h.mu.cumulative = hdrhistogram.New(0, maxVal, sigFigs)
 	h.mu.sliding = wHist
-	h.mu.tickHelper = &tickHelper{
-		nextT:        now(),
-		tickInterval: duration / WindowedHistogramWrapNum,
-		onTick: func() {
+	h.mu.Ticker = tick.NewTicker(
+		now(),
+		duration/WindowedHistogramWrapNum,
+		func() {
 			wHist.Rotate()
-		},
-	}
+		})
 	return h
 }
 
@@ -100,14 +100,6 @@ func (h *HdrHistogram) RecordValue(v int64) {
 	}
 }
 
-// Total returns the (cumulative) number of samples and sum of samples.
-func (h *HdrHistogram) Total() (int64, float64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	totalSum := float64(h.mu.cumulative.TotalCount()) * h.mu.cumulative.Mean()
-	return h.mu.cumulative.TotalCount(), totalSum
-}
-
 // Min returns the minimum.
 func (h *HdrHistogram) Min() int64 {
 	h.mu.Lock()
@@ -117,14 +109,33 @@ func (h *HdrHistogram) Min() int64 {
 
 // Inspect calls the closure with the empty string and the receiver.
 func (h *HdrHistogram) Inspect(f func(interface{})) {
-	h.maybeTick()
+	func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		tick.MaybeTick(h.mu.Ticker)
+	}()
 	f(h)
 }
 
-func (h *HdrHistogram) maybeTick() {
+// NextTick returns the next tick timestamp of the underlying tick.Ticker
+// used by this HdrHistogram. Generally not useful - this is part of a band-aid
+// fix and should be expected to be removed.
+// TODO(obs-infra): remove this once pkg/util/aggmetric is merged with this package.
+func (h *HdrHistogram) NextTick() time.Time {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	maybeTick(h.mu.tickHelper)
+	return h.mu.NextTick()
+}
+
+// Tick triggers a tick of this HdrHistogram, regardless of whether we've passed
+// the next tick interval. Generally, this should not be used by any caller other
+// than aggmetric.AggHistogram. Future work will remove the need to expose this function
+// as part of the public API.
+// TODO(obs-infra): remove this once pkg/util/aggmetric is merged with this package.
+func (h *HdrHistogram) Tick() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.mu.Tick()
 }
 
 // GetType returns the prometheus type enum for this metric.
@@ -139,7 +150,7 @@ func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	bars := func() []hdrhistogram.Bar {
 		h.mu.Lock()
 		defer h.mu.Unlock()
-		maybeTick(h.mu.tickHelper)
+		tick.MaybeTick(h.mu.Ticker)
 		return h.mu.cumulative.Distribution()
 	}()
 	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
@@ -170,19 +181,16 @@ func (h *HdrHistogram) ToPrometheusMetric() *prometheusgo.Metric {
 	}
 }
 
-// TotalWindowed implements the WindowedHistogram interface.
-func (h *HdrHistogram) TotalWindowed() (int64, float64) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	hist := h.mu.sliding.Merge()
-	totalSum := float64(hist.TotalCount()) * hist.Mean()
-	return hist.TotalCount(), totalSum
+func (h *HdrHistogram) CumulativeSnapshot() HistogramSnapshot {
+	return MakeHistogramSnapshot(h.ToPrometheusMetric().Histogram)
 }
 
-func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {
+func (h *HdrHistogram) WindowedSnapshot() HistogramSnapshot {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	hist := &prometheusgo.Histogram{}
 
-	maybeTick(h.mu.tickHelper)
+	tick.MaybeTick(h.mu.Ticker)
 	mergedHist := h.mu.sliding.Merge()
 	bars := mergedHist.Distribution()
 	hist.Bucket = make([]*prometheusgo.Bucket, 0, len(bars))
@@ -207,16 +215,7 @@ func (h *HdrHistogram) toPrometheusMetricWindowedLocked() *prometheusgo.Metric {
 	}
 	hist.SampleCount = &cumCount
 	hist.SampleSum = &sum // can do better here; we approximate in the loop
-	return &prometheusgo.Metric{
-		Histogram: hist,
-	}
-}
-
-// ToPrometheusMetricWindowed returns a filled-in prometheus metric of the right type.
-func (h *HdrHistogram) ToPrometheusMetricWindowed() *prometheusgo.Metric {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.toPrometheusMetricWindowedLocked()
+	return MakeHistogramSnapshot(hist)
 }
 
 // GetMetadata returns the metric's metadata including the Prometheus
@@ -225,24 +224,4 @@ func (h *HdrHistogram) GetMetadata() Metadata {
 	baseMetadata := h.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_HISTOGRAM
 	return baseMetadata
-}
-
-func (h *HdrHistogram) ValueAtQuantileWindowed(q float64) float64 {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	return ValueAtQuantileWindowed(h.toPrometheusMetricWindowedLocked().Histogram, q)
-}
-
-func (h *HdrHistogram) Mean() float64 {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.mu.cumulative.Mean()
-}
-
-func (h *HdrHistogram) MeanWindowed() float64 {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	hist := h.mu.sliding.Merge()
-	return hist.Mean()
 }

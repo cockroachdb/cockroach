@@ -9,6 +9,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metric",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_guptarohit_asciigraph//:asciigraph",
         "@com_github_stretchr_testify//require",
     ],
