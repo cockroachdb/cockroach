@@ -92,7 +92,6 @@ func NewDistSenderForLocalTestCluster(
 		NodeDescs:          g,
 		RPCContext:         rpcContext,
 		RPCRetryOptions:    &retryOpts,
-		nodeDescriptor:     nodeDesc,
 		NodeDialer:         nodedialer.New(rpcContext, gossip.AddressResolver(g)),
 		FirstRangeProvider: g,
 		TestingKnobs: ClientTestingKnobs{
