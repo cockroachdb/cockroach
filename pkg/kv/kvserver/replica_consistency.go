@@ -30,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -55,6 +57,15 @@ type replicaChecksum struct {
 	// INVARIANT: result is written to or closed only if started is closed.
 	result chan CollectChecksumResponse
 }
+
+// TestingFastEFOSAcquisition speeds up EFOS WaitForFileOnly() to speed up
+// node-wide replica consistency check calls in roachtests.
+var TestingFastEFOSAcquisition = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.consistency_queue.testing_fast_efos_acquisition",
+	"set to true to speed up EventuallyFileOnlySnapshot acquisition/transition for tests at the expense of excessive flushes",
+	false, /* defaultValue */
+	settings.WithPublic)
 
 // CheckConsistency runs a consistency check on the range. It first applies a
 // ComputeChecksum through Raft and then issues CollectChecksum commands to the
@@ -479,6 +490,7 @@ func CalcReplicaDigest(
 	snap storage.Reader,
 	mode kvpb.ChecksumMode,
 	limiter *quotapool.RateLimiter,
+	settings *cluster.Settings,
 ) (*ReplicaDigest, error) {
 	statsOnly := mode == kvpb.ChecksumMode_CHECK_STATS
 
@@ -500,7 +512,13 @@ func CalcReplicaDigest(
 		// both requests are likely sharing the same `limiter` so if too many
 		// requests run concurrently, some of them could time out due to a
 		// combination of this wait and the limiter-induced wait.
-		if err := efos.WaitForFileOnly(ctx); err != nil {
+		efosWait := storage.MaxEFOSWait
+		if settings != nil && TestingFastEFOSAcquisition.Get(&settings.SV) {
+			if efosWait > 10*time.Millisecond {
+				efosWait = 10 * time.Millisecond
+			}
+		}
+		if err := efos.WaitForFileOnly(ctx, efosWait); err != nil {
 			return nil, err
 		}
 	}
@@ -773,7 +791,7 @@ func (r *Replica) computeChecksumPostApply(
 		); err != nil {
 			log.Errorf(ctx, "checksum collection did not join: %v", err)
 		} else {
-			result, err := CalcReplicaDigest(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter)
+			result, err := CalcReplicaDigest(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter, r.ClusterSettings())
 			if err != nil {
 				log.Errorf(ctx, "checksum computation failed: %v", err)
 				result = nil

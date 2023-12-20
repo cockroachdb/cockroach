@@ -49,6 +49,7 @@ func CheckReplicaDivergenceOnDB(ctx context.Context, l *logger.Logger, db *gosql
 	// is happening or how to disable it.
 	started := timeutil.Now()
 	rows, err := db.QueryContext(ctx, `
+SET CLUSTER SETTING kv.consistency_queue.testing_fast_efos_acquisition = true;
 SET statement_timeout = '20m';
 SELECT t.range_id, t.start_key_pretty, t.status, t.detail
 FROM crdb_internal.check_consistency(false, '', '') as t;`)

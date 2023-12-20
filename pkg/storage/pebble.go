@@ -3072,8 +3072,8 @@ func (p *pebbleEFOS) MVCCIterate(
 }
 
 // WaitForFileOnly implements the EventuallyFileOnlyReader interface.
-func (p *pebbleEFOS) WaitForFileOnly(ctx context.Context) error {
-	return p.efos.WaitForFileOnlySnapshot(ctx, MaxEFOSWait)
+func (p *pebbleEFOS) WaitForFileOnly(ctx context.Context, dur time.Duration) error {
+	return p.efos.WaitForFileOnlySnapshot(ctx, dur)
 }
 
 // NewMVCCIterator implements the Reader interface.
