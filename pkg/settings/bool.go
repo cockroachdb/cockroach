@@ -68,6 +68,11 @@ func (b *BoolSetting) Default() bool {
 	return b.defaultValue
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (b *BoolSetting) DefaultString() (string, error) {
+	return b.DecodeToString(b.EncodedDefault())
+}
+
 // Defeat the linter.
 var _ = (*BoolSetting).Default
 
