@@ -1478,7 +1478,7 @@ func (u *sqlSymUnion) showFingerprintOptions() *tree.ShowFingerprintOptions {
 %type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
 %type <tree.NameList> attrs
 %type <[]string> session_var_parts
-%type <tree.SelectExprs> target_list
+%type <tree.SelectExprs> opt_target_list target_list
 %type <tree.UpdateExprs> set_clause_list
 %type <*tree.UpdateExpr> set_clause multiple_set_clause
 %type <tree.ArraySubscripts> array_subscripts
@@ -12770,7 +12770,7 @@ simple_select:
 //        [ OFFSET <expr> [ ROW | ROWS ] ]
 // %SeeAlso: WEBDOCS/select-clause.html
 simple_select_clause:
-  SELECT opt_all_clause target_list
+  SELECT opt_all_clause opt_target_list
     from_clause opt_where_clause
     group_clause having_clause window_clause
   {
@@ -12812,7 +12812,6 @@ simple_select_clause:
       Window:     $8.window(),
     }
   }
-| SELECT error // SHOW HELP: SELECT
 
 set_operation:
   select_clause UNION all_or_distinct select_clause
@@ -16264,6 +16263,16 @@ target_list:
 | target_list ',' target_elem
   {
     $$.val = append($1.selExprs(), $3.selExpr())
+  }
+
+opt_target_list:
+  target_list
+  {
+    $$.val = $1.selExprs()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.SelectExprs{}
   }
 
 target_elem:
