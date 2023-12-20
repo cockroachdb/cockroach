@@ -1810,16 +1810,12 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   latency_seconds_p99 FLOAT
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		shouldRedactError := false
 		// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
 		// privileges.
-		if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+		hasPriv, shouldRedactError, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
 			return err
-		} else if hasViewActivityRedacted {
-			shouldRedactError = true
-		} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
-			return err
-		} else if !hasViewActivity {
+		} else if !hasPriv {
 			// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
 			// return insufficient privileges error.
 			return noViewActivityOrViewActivityRedactedRoleError(p.User())
@@ -2674,18 +2670,14 @@ func populateQueriesTable(
 	} else if !isAdmin {
 		// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
 		// privileges.
-		if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+		if hasPriv, shouldRedact, err := p.HasViewActivityOrViewActivityRedactedRole(ctx); err != nil {
 			return err
-		} else if hasViewActivityRedacted {
-			// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
-			// over VIEWACTIVITY.
-			shouldRedactOtherUserQuery = true
+		} else if hasPriv {
 			canViewOtherUser = true
-		} else if !hasViewActivityRedacted {
-			if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
-				return err
-			} else if hasViewActivity {
-				canViewOtherUser = true
+			if shouldRedact {
+				// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
+				// over VIEWACTIVITY.
+				shouldRedactOtherUserQuery = true
 			}
 		}
 	}
@@ -2894,20 +2886,16 @@ func populateSessionsTable(
 	} else if isAdmin {
 		canViewOtherUser = true
 	} else if !isAdmin {
-		// If the user is not admin, check the VIEWACTIVITYREDACTED privilege to
-		// see if constants need to be redacted.
-		if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+		// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
+		// privileges.
+		if hasPriv, shouldRedact, err := p.HasViewActivityOrViewActivityRedactedRole(ctx); err != nil {
 			return err
-		} else if hasViewActivityRedacted {
-			// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
-			// over VIEWACTIVITY.
-			shouldRedactOtherUserQuery = true
+		} else if hasPriv {
 			canViewOtherUser = true
-		} else if !hasViewActivityRedacted {
-			if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
-				return err
-			} else if hasViewActivity {
-				canViewOtherUser = true
+			if shouldRedact {
+				// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
+				// over VIEWACTIVITY.
+				shouldRedactOtherUserQuery = true
 			}
 		}
 	}
