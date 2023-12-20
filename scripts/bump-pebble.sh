@@ -64,8 +64,7 @@ if ! git merge-base --is-ancestor $OLD_SHA $NEW_SHA; then
   exit 1
 fi
 
-COMMITS=$(git log --pretty='format:%h %s' "$OLD_SHA..$NEW_SHA" |
-          grep -v 'Merge pull request' |
+COMMITS=$(git log --no-merges --pretty='format:%h %s' "$OLD_SHA..$NEW_SHA" |
           sed 's#^#https://github.com/cockroachdb/pebble/commit/#')
 popd
 
