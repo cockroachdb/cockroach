@@ -882,6 +882,9 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	stmt.potentialExecErrors.add(pgcode.ForeignKeyViolation)
 	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
 
+	// TODO why did I add this??
+	stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+
 	// It's possible for the table to be dropped concurrently, while we are running
 	// validation. In which case a potential commit error is an undefined table
 	// error.
@@ -3401,12 +3404,12 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
 	if err != nil {
 		if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
-			err = errors.CombineErrors(err, rbErr)
+			err = errors.CombineErrors(err, errors.WithStack(rbErr))
 		}
 		return nil, nil, err
 	}
 	if err = nestedTxn.Commit(ctx); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithStack(err)
 	}
 
 	columnToReturn := column{
