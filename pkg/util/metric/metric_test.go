@@ -263,6 +263,102 @@ func TestManualWindowHistogram(t *testing.T) {
 	require.Equal(t, 17.5, histWindow.ValueAtQuantile(50))
 	require.Equal(t, 75.0, histWindow.ValueAtQuantile(80))
 	require.Equal(t, 100.0, histWindow.ValueAtQuantile(99.99))
+
+	// This section will test that updating the histogram with new values results
+	// in a correctly merged view when quantiles are calculated.
+	prev := pMetric
+	new := &prometheusgo.Metric{}
+	measurements2 := []float64{3, 20, 50}
+	for _, m := range measurements2 {
+		histogram.Observe(m)
+		expSum += m
+	}
+	require.NoError(t, histogram.Write(new))
+	SubtractPrometheusHistograms(new.GetHistogram(), prev.GetHistogram())
+	h.Update(histogram, new.GetHistogram())
+
+	// Adding extra values to cumulative histogram to make sure it is not used in
+	// the expected outcome.
+	histogram.Observe(5)
+	histogram.Observe(5)
+
+	act = *h.WindowedSnapshot().h
+	exp = prometheusgo.Histogram{
+		SampleCount: u(len(measurements) + len(measurements2)),
+		SampleSum:   &expSum,
+		Bucket: []*prometheusgo.Bucket{
+			{CumulativeCount: u(1), UpperBound: f(1)},
+			{CumulativeCount: u(4), UpperBound: f(5)},
+			{CumulativeCount: u(5), UpperBound: f(10)},
+			{CumulativeCount: u(8), UpperBound: f(25)},
+			{CumulativeCount: u(12), UpperBound: f(100)},
+		},
+	}
+
+	if !reflect.DeepEqual(act, exp) {
+		t.Fatalf("expected differs from actual: %s", pretty.Diff(exp, act))
+	}
+}
+
+func TestManualWindowHistogramTicker(t *testing.T) {
+	now := time.UnixMicro(1699565116)
+	defer TestingSetNow(func() time.Time {
+		return now
+	})()
+
+	buckets := []float64{
+		0.25,
+		0.5,
+		1.0,
+		2.0,
+	}
+
+	h := NewManualWindowHistogram(
+		Metadata{},
+		buckets,
+		false, /* withRotate */
+	)
+
+	phistogram := prometheus.NewHistogram(prometheus.HistogramOpts{Buckets: buckets})
+	pMetric := &prometheusgo.Metric{}
+
+	recordValue := func() {
+		phistogram.Observe(1)
+		wHistogram := prometheus.NewHistogram(prometheus.HistogramOpts{Buckets: buckets})
+		wHistogram.Observe(1)
+		require.NoError(t, wHistogram.Write(pMetric))
+		h.Update(phistogram, pMetric.Histogram)
+	}
+
+	// Test 0 case, sum and count should be 0.
+	h.Inspect(func(interface{}) {})
+	wCount, wSum := h.WindowedSnapshot().Total()
+	require.Equal(t, float64(0), wSum)
+	require.Equal(t, int64(0), wCount)
+
+	// Record a value.
+	h.Inspect(func(interface{}) {})
+	recordValue()
+	wCount, wSum = h.WindowedSnapshot().Total()
+	require.Equal(t, float64(1), wSum)
+	require.Equal(t, int64(1), wCount)
+
+	// Add 30 seconds, the previous value will rotate but the merged window should
+	// still have the previous value.
+	now = now.Add(30 * time.Second)
+	h.Inspect(func(interface{}) {})
+	recordValue()
+	wCount, wSum = h.WindowedSnapshot().Total()
+	require.Equal(t, float64(2), wSum)
+	require.Equal(t, int64(2), wCount)
+
+	// Add another 30 seconds, the prev window should have reset, and the new
+	// value is now in the prev window, expect 1.
+	now = now.Add(30 * time.Second)
+	h.Inspect(func(interface{}) {})
+	wCount, wSum = h.WindowedSnapshot().Total()
+	require.Equal(t, float64(1), wSum)
+	require.Equal(t, int64(1), wCount)
 }
 
 func TestNewHistogramRotate(t *testing.T) {
