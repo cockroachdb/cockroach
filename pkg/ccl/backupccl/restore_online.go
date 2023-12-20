@@ -409,6 +409,20 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 	if err := grp.Wait(); err != nil {
 		return errors.Wrap(err, "failed to generate and send download spans")
 	}
+	return r.cleanupAfterDownload(ctx, details)
+}
 
+func (r *restoreResumer) cleanupAfterDownload(
+	ctx context.Context, details jobspb.RestoreDetails,
+) error {
+	executor := r.execCfg.InternalDB.Executor()
+
+	// Re-enable automatic stats collection on restored tables.
+	for _, table := range details.TableDescs {
+		_, err := executor.Exec(ctx, "enable-stats", nil, `ALTER TABLE $1 SET (sql_stats_automatic_collection_enabled = true);`, table.Name)
+		if err != nil {
+			log.Warningf(ctx, "could not enable automatic stats on table %s", table)
+		}
+	}
 	return nil
 }
