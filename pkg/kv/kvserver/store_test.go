@@ -258,11 +258,8 @@ func createTestStoreWithoutStart(
 		NodeDescs:          mockNodeStore{desc: nodeDesc},
 		Stopper:            stopper,
 		RPCRetryOptions:    &retry.Options{},
-		NodeDialer:         cfg.NodeDialer,
+		TransportFactory:   kvcoord.SenderTransportFactory(cfg.AmbientCtx.Tracer, &storeSender),
 		FirstRangeProvider: rangeProv,
-		TestingKnobs: kvcoord.ClientTestingKnobs{
-			TransportFactory: kvcoord.SenderTransportFactory(cfg.AmbientCtx.Tracer, &storeSender),
-		},
 	})
 
 	txnCoordSenderFactory := kvcoord.NewTxnCoordSenderFactory(kvcoord.TxnCoordSenderFactoryConfig{
