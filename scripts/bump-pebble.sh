@@ -93,7 +93,8 @@ git commit -m "go.mod: bump Pebble to ${NEW_SHA:0:12}
 
 $COMMITS
 
-Release note:
+Release note: none.
+Epic: none.
 "
 # Open an editor to allow the user to set the release note.
 git commit --amend
