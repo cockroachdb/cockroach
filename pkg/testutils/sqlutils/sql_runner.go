@@ -229,7 +229,7 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 	})
 }
 
-// ExpectErrWithTimeout wraps ExpectErr with a timeout..
+// ExpectErrWithTimeout wraps ExpectErr with a timeout.
 func (sr *SQLRunner) ExpectErrWithTimeout(
 	t Fataler, errRE string, query string, args ...interface{},
 ) {
@@ -238,13 +238,14 @@ func (sr *SQLRunner) ExpectErrWithTimeout(
 	if d == 0 {
 		d = testutils.DefaultSucceedsSoonDuration
 	}
-	_ = timeutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
+	err := timeutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
 		_, err := sr.DB.ExecContext(ctx, query, args...)
 		if !testutils.IsError(err, errRE) {
 			return errors.Newf("expected error '%s', got: %s", errRE, pgerror.FullError(err))
 		}
 		return nil
 	})
+	require.NoError(requireT{t}, err)
 }
 
 // Query is a wrapper around gosql.Query that kills the test on error.
