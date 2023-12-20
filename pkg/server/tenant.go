@@ -1193,7 +1193,7 @@ func makeTenantSQLServerArgs(
 		RPCRetryOptions:   &rpcRetryOptions,
 		Stopper:           stopper,
 		LatencyFunc:       rpcContext.RemoteClocks.Latency,
-		NodeDialer:        kvNodeDialer,
+		TransportFactory:  kvcoord.GRPCTransportFactory(kvNodeDialer),
 		RangeDescriptorDB: tenantConnect,
 		Locality:          baseCfg.Locality,
 		KVInterceptor:     costController,

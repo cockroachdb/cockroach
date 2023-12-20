@@ -19,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -83,7 +81,6 @@ func NewDistSenderForLocalTestCluster(
 ) *DistSender {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
-	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	senderTransportFactory := SenderTransportFactory(tracer, stores)
 	return NewDistSender(DistSenderConfig{
 		AmbientCtx:         log.MakeTestingAmbientContext(tracer),
@@ -92,20 +89,13 @@ func NewDistSenderForLocalTestCluster(
 		NodeDescs:          g,
 		Stopper:            stopper,
 		RPCRetryOptions:    &retryOpts,
-		NodeDialer:         nodedialer.New(rpcContext, gossip.AddressResolver(g)),
 		FirstRangeProvider: g,
-		TestingKnobs: ClientTestingKnobs{
-			TransportFactory: func(
-				opts SendOptions,
-				nodeDialer *nodedialer.Dialer,
-				replicas ReplicaSlice,
-			) (Transport, error) {
-				transport, err := senderTransportFactory(opts, nodeDialer, replicas)
-				if err != nil {
-					return nil, err
-				}
-				return &localTestClusterTransport{transport, latency}, nil
-			},
+		TransportFactory: func(opts SendOptions, replicas ReplicaSlice) (Transport, error) {
+			transport, err := senderTransportFactory(opts, replicas)
+			if err != nil {
+				return nil, err
+			}
+			return &localTestClusterTransport{transport, latency}, nil
 		},
 	})
 }

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -52,30 +51,30 @@ func TestCommitSanityCheckAssertionFiresOnUndetectedAmbiguousCommit(t *testing.T
 		},
 	}
 	args.ServerArgs.Knobs.KVClient = &kvcoord.ClientTestingKnobs{
-		TransportFactory: func(
-			options kvcoord.SendOptions,
-			dialer *nodedialer.Dialer,
-			slice kvcoord.ReplicaSlice,
-		) (kvcoord.Transport, error) {
-			tf, err := kvcoord.GRPCTransportFactory(options, dialer, slice)
-			if err != nil {
-				return nil, err
-			}
-			return &interceptingTransport{
-				Transport: tf,
-				afterSend: func(ctx context.Context, req *interceptedReq, resp *interceptedResp) (overrideResp *interceptedResp) {
-					if resp.err != nil || req.ba.Txn == nil || resp.br.Txn == nil ||
-						req.ba.Txn.Status != roachpb.PENDING || resp.br.Txn.Status != roachpb.COMMITTED ||
-						!keys.ScratchRangeMin.Equal(resp.br.Txn.Key) {
-						// Only want to inject error on successful commit for "our" txn.
-						return nil
-					}
+		TransportFactory: func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
+			return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
+				tf, err := factory(options, slice)
+				if err != nil {
+					return nil, err
+				}
+				return &interceptingTransport{
+					Transport: tf,
+					afterSend: func(ctx context.Context, req *interceptedReq, resp *interceptedResp) (overrideResp *interceptedResp) {
+						if resp.err != nil || req.ba.Txn == nil || resp.br.Txn == nil ||
+							req.ba.Txn.Status != roachpb.PENDING || resp.br.Txn.Status != roachpb.COMMITTED ||
+							!keys.ScratchRangeMin.Equal(resp.br.Txn.Key) {
+							// Only want to inject error on successful commit for "our" txn.
+							return nil
+						}
 
-					err := &netutil.InitialHeartbeatFailedError{}
-					assert.True(t, grpcutil.RequestDidNotStart(err)) // avoid Fatal on goroutine
-					return &interceptedResp{err: err}
-				},
-			}, nil
+						err := &netutil.InitialHeartbeatFailedError{}
+						assert.True(t, grpcutil.RequestDidNotStart(err)) // avoid Fatal on goroutine
+						return &interceptedResp{err: err}
+					},
+				}, nil
+
+			}
+
 		},
 	}
 
