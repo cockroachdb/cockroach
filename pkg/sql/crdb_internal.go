@@ -2368,7 +2368,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 			strVal := setting.String(&p.ExecCfg().Settings.SV)
 			isPublic := setting.Visibility() == settings.Public
 			desc := setting.Description()
-			defaultVal, err := setting.DecodeToString(setting.EncodedDefault())
+			defaultVal, err := setting.DefaultString()
 			if err != nil {
 				return err
 			}

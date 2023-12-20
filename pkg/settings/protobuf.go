@@ -88,6 +88,11 @@ func (s *ProtobufSetting) Default() protoutil.Message {
 	return s.defaultValue
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (s *ProtobufSetting) DefaultString() (string, error) {
+	return s.DecodeToString(s.EncodedDefault())
+}
+
 // Get retrieves the protobuf value in the setting.
 func (s *ProtobufSetting) Get(sv *Values) protoutil.Message {
 	loaded := sv.getGeneric(s.slot)
