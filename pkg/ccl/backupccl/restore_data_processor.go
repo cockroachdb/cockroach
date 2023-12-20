@@ -86,6 +86,10 @@ type restoreDataProcessor struct {
 	// qp is a MemoryBackedQuotaPool that restricts the amount of memory that
 	// can be used by this processor to open iterators on SSTs.
 	qp *backuputils.MemoryBackedQuotaPool
+
+	// progressMade is true if the processor has successfully processed a
+	// restore span entry.
+	progressMade bool
 }
 
 var (
@@ -125,6 +129,8 @@ var defaultNumWorkers = util.ConstantWithMetamorphicTestRange(
 	1, /* metamorphic min */
 	8, /* metamorphic max */
 )
+var retryableRestoreProcError = errors.New("restore processor error after forward progress")
+var restoreProcError = errors.New("restore processor error without forward progress")
 
 // TODO(pbardea): It may be worthwhile to combine this setting with the one that
 // controls the number of concurrent AddSSTable requests if each restore worker
@@ -664,7 +670,9 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 	if restoreKnobs, ok := rd.flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
 		if restoreKnobs.RunAfterProcessingRestoreSpanEntry != nil {
-			restoreKnobs.RunAfterProcessingRestoreSpanEntry(ctx, &entry)
+			if err := restoreKnobs.RunAfterProcessingRestoreSpanEntry(ctx, &entry); err != nil {
+				return summary, err
+			}
 		}
 	}
 
@@ -696,6 +704,11 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 		if !ok {
 			// Done. Check if any phase exited early with an error.
 			err := rd.phaseGroup.Wait()
+			if rd.progressMade {
+				err = errors.Mark(err, retryableRestoreProcError)
+			} else {
+				err = errors.Mark(err, restoreProcError)
+			}
 			rd.MoveToDraining(err)
 			return nil, rd.DrainHelper()
 		}
@@ -706,6 +719,7 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 			return nil, rd.DrainHelper()
 		}
 		prog.ProgressDetails = *details
+		rd.progressMade = true
 		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
 	case <-rd.aggTimer.C:
 		rd.aggTimer.Read = true
