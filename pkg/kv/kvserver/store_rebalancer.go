@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 )
 
@@ -125,6 +126,9 @@ const (
 	// replica (lease included) must contribute, in order to consider it
 	// worthwhile rebalancing when overfull.
 	minReplicaLoadFraction = 0.02
+	// maxHotRangesToLog is the maximum number of hot ranges which will be logged
+	// after failing to rebalance below the desired load threshold.
+	maxHotRangesToLog = 5
 )
 
 // StoreRebalancer is responsible for examining how the associated store's load
@@ -230,6 +234,7 @@ type RebalanceContext struct {
 	mode                               LBRebalancingMode
 	allStoresList                      storepool.StoreList
 	hottestRanges, rebalanceCandidates []CandidateReplica
+	leftoverCandidates                 []CandidateReplica
 }
 
 // RebalanceMode returns the mode of the store rebalancer. See
@@ -247,6 +252,35 @@ func (sr *StoreRebalancer) RebalanceObjective() LBRebalancingObjective {
 // threshold w.r.t the balanced load dimension, false otherwise.
 func (r *RebalanceContext) LessThanMaxThresholds() bool {
 	return !load.Greater(r.LocalDesc.Capacity.Load(), r.maxThresholds, r.loadDimension)
+}
+
+// formatHotRanges returns a redactable string containing a new line separated
+// list of ranges given. Each range's descriptor is included alongside range
+// usage information. Note the print order is identical to ranges slice.
+func formatHotRanges(ranges []CandidateReplica) redact.RedactableString {
+	var buf redact.StringBuilder
+	for idx, r := range ranges {
+		if idx > 0 {
+			buf.SafeRune('\n')
+		}
+		desc := r.Desc()
+		buf.Printf("\t%d: r%d:%v replicas=[%v] load=%v",
+			idx+1, desc.RangeID, desc.KeySpan(), desc.Replicas(), r.RangeUsageInfo())
+	}
+	return buf.RedactableString()
+}
+
+// logRemainingHotRanges logs the hottest candidate ranges which have had no
+// rebalance actions taken.
+func (r *RebalanceContext) logRemainingHotRanges(ctx context.Context) {
+	if n := len(r.leftoverCandidates); n > 0 {
+		candidatesToLog := maxHotRangesToLog
+		if candidatesToLog > n {
+			candidatesToLog = n
+		}
+		log.KvDistribution.Infof(ctx,
+			"%v", formatHotRanges(r.leftoverCandidates[:candidatesToLog]))
+	}
 }
 
 // Start runs an infinite loop in a goroutine which regularly checks whether
@@ -589,6 +623,8 @@ func (sr *StoreRebalancer) TransferToRebalanceRanges(
 			"ran out of leases worth transferring and load %s is still above desired threshold %s",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
 		sr.metrics.ImbalancedStateOverfullOptionsExhausted.Inc(1)
+		rctx.leftoverCandidates = append(rctx.leftoverCandidates, rctx.rebalanceCandidates...)
+		rctx.logRemainingHotRanges(ctx)
 		return false
 	}
 
@@ -611,6 +647,7 @@ func (sr *StoreRebalancer) LogRangeRebalanceOutcome(ctx context.Context, rctx *R
 			"ran out of replicas worth transferring and load %s is still above desired threshold %s; will check again soon",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
 		sr.metrics.ImbalancedStateOverfullOptionsExhausted.Inc(1)
+		rctx.logRemainingHotRanges(ctx)
 		return
 	}
 
@@ -869,6 +906,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				rctx.LocalDesc.StoreID,
 				rctx.LocalDesc.Capacity.Load(),
 			)
+			rctx.leftoverCandidates = append(rctx.leftoverCandidates, candidateReplica)
 			continue
 		}
 
@@ -890,6 +928,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				expected,
 				actual,
 			)
+			rctx.leftoverCandidates = append(rctx.leftoverCandidates, candidateReplica)
 			continue
 		}
 		if expected, actual := numDesiredNonVoters, len(rangeDesc.Replicas().NonVoterDescriptors()); expected != actual {
@@ -901,6 +940,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				expected,
 				actual,
 			)
+			rctx.leftoverCandidates = append(rctx.leftoverCandidates, candidateReplica)
 			continue
 		}
 		rebalanceCtx := rangeRebalanceContext{
@@ -952,6 +992,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 			// If the range needs a lease transfer to enable better load distribution,
 			// it will be handled by the logic in `chooseLeaseToTransfer()`.
 			log.KvDistribution.VEventf(ctx, 3, "could not find rebalance opportunities for r%d", candidateReplica.GetRangeID())
+			rctx.leftoverCandidates = append(rctx.leftoverCandidates, candidateReplica)
 			continue
 		}
 
@@ -991,6 +1032,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 				"could not find rebalance opportunities for r%d, no replica found to hold lease",
 				candidateReplica.GetRangeID(),
 			)
+			rctx.leftoverCandidates = append(rctx.leftoverCandidates, candidateReplica)
 			continue
 		}
 
