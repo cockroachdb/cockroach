@@ -105,6 +105,18 @@ func registerOnlineRestore(r registry.Registry) {
 							if _, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false"); err != nil {
 								return err
 							}
+							// TODO(dt): AC appears periodically reduce the workload to 0 QPS
+							// during the download phase (sudden jumps from 0 to 2k qps to 0).
+							// Disable for now until we figure out how to smooth this out.
+							if _, err := db.Exec("SET CLUSTER SETTING admission.disk_bandwidth_tokens.elastic.enabled=false"); err != nil {
+								return err
+							}
+							if _, err := db.Exec("SET CLUSTER SETTING admission.kv.enabled=false"); err != nil {
+								return err
+							}
+							if _, err := db.Exec("SET CLUSTER SETTING admission.sql_kv_response.enabled=false"); err != nil {
+								return err
+							}
 							opts := ""
 							if runOnline {
 								opts = "WITH EXPERIMENTAL DEFERRED COPY"
