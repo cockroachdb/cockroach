@@ -132,8 +132,13 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Future queries shouldn't work.
-	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); !testutils.IsError(err, "pq: AS OF SYSTEM TIME: cannot specify timestamp in the future") {
+	// Future queries shouldn't work if too far in the future.
+	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10h'").Scan(&i); !testutils.IsError(err, "pq: request timestamp .* too far in future") {
+		t.Fatal(err)
+	}
+
+	// Future queries work if only slightly in the future.
+	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '+10ms'").Scan(&i); err != nil {
 		t.Fatal(err)
 	}
 
