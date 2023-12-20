@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -861,4 +862,100 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 	if a, e := decommissioningReplicas, replicas[3:4]; !reflect.DeepEqual(a, e) {
 		t.Fatalf("expected decommissioning replicas %+v; got %+v", e, a)
 	}
+}
+
+// TestStorePoolString tests the string output of the store pool
+// implementation.
+func TestStorePoolString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const nodeCount = 9
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
+		liveness.TestTimeUntilNodeDead, false, /* deterministic */
+		func() int { return nodeCount },
+		livenesspb.NodeLivenessStatus_DEAD)
+	defer stopper.Stop(ctx)
+	sg := gossiputil.NewStoreGossiper(g)
+
+	stores := []*roachpb.StoreDescriptor{}
+	for i := 1; i <= nodeCount; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID: roachpb.StoreID(i),
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{
+				Capacity:   100,
+				Available:  int64(100 - i*10),
+				RangeCount: int32(i * 10),
+			},
+		})
+	}
+
+	sg.GossipStores(stores, t)
+	mnl.SetNodeStatus(1, livenesspb.NodeLivenessStatus_UNKNOWN)
+	mnl.SetNodeStatus(2, livenesspb.NodeLivenessStatus_DEAD)
+	mnl.SetNodeStatus(3, livenesspb.NodeLivenessStatus_UNAVAILABLE)
+	mnl.SetNodeStatus(4, livenesspb.NodeLivenessStatus_LIVE)
+	mnl.SetNodeStatus(5, livenesspb.NodeLivenessStatus_DECOMMISSIONING)
+	mnl.SetNodeStatus(6, livenesspb.NodeLivenessStatus_DECOMMISSIONED)
+	mnl.SetNodeStatus(7, livenesspb.NodeLivenessStatus_DRAINING)
+	mnl.SetNodeStatus(8, livenesspb.NodeLivenessStatus_LIVE)
+	mnl.SetNodeStatus(9, livenesspb.NodeLivenessStatus_LIVE)
+	sp.DetailsMu.StoreDetails[8].LastUnavailable = sp.clock.Now()
+	sp.DetailsMu.StoreDetails[9].ThrottledUntil = sp.clock.Now().AddDuration(time.Second)
+
+	require.Equal(t, "1 (status=unknown): range-count=10 fraction-used=0.10\n"+
+		"2 (status=dead): range-count=20 fraction-used=0.20\n"+
+		"3 (status=unknown): range-count=30 fraction-used=0.30\n"+
+		"4: range-count=40 fraction-used=0.40\n"+
+		"5 (status=decommissioning): range-count=50 fraction-used=0.50\n"+
+		"6 (status=dead): range-count=60 fraction-used=0.60\n"+
+		"7 (status=draining): range-count=70 fraction-used=0.70\n"+
+		"8 (status=suspect): range-count=80 fraction-used=0.80\n"+
+		"9 (status=throttled): range-count=90 fraction-used=0.90 [throttled=1s]\n",
+		sp.String())
+}
+
+// TestStoreListString tests the string output of store list.
+func TestStoreListString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const nodeCount = 5
+	const scale = 10
+	stores := []roachpb.StoreDescriptor{}
+	for i := 1; i <= nodeCount; i++ {
+		stores = append(stores, roachpb.StoreDescriptor{
+			StoreID: roachpb.StoreID(i),
+			Node:    roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{
+				LogicalBytes:     int64(i << scale),
+				RangeCount:       int32(i * scale),
+				LeaseCount:       int32(i * scale),
+				QueriesPerSecond: float64(i * scale),
+				CPUPerSecond:     float64(i << scale),
+				IOThreshold: admissionpb.IOThreshold{
+					L0NumSubLevels:          int64(i),
+					L0NumSubLevelsThreshold: scale,
+					L0NumFiles:              int64(i),
+					L0NumFilesThreshold:     scale,
+				},
+			},
+		})
+	}
+
+	require.Equal(t,
+		"  candidate: avg-ranges=0.00 avg-leases=0.00 avg-disk-usage=0 B avg-queries-per-second=0.00 avg-store-cpu-per-second=0µs <no candidates>",
+		MakeStoreList([]roachpb.StoreDescriptor{}).String())
+
+	require.Equal(t, "  candidate: avg-ranges=30.00 avg-leases=30.00 avg-disk-usage=3.0 KiB avg-queries-per-second=30.00 avg-store-cpu-per-second=3µs\n"+
+		"  1: ranges=10 leases=10 disk-usage=1.0 KiB queries-per-second=10.00 store-cpu-per-second=1µs io-overload=0.10\n"+
+		"  2: ranges=20 leases=20 disk-usage=2.0 KiB queries-per-second=20.00 store-cpu-per-second=2µs io-overload=0.20\n"+
+		"  3: ranges=30 leases=30 disk-usage=3.0 KiB queries-per-second=30.00 store-cpu-per-second=3µs io-overload=0.30\n"+
+		"  4: ranges=40 leases=40 disk-usage=4.0 KiB queries-per-second=40.00 store-cpu-per-second=4µs io-overload=0.40\n"+
+		"  5: ranges=50 leases=50 disk-usage=5.0 KiB queries-per-second=50.00 store-cpu-per-second=5µs io-overload=0.50\n",
+		MakeStoreList(stores).String())
 }

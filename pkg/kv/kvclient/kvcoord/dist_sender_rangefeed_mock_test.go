@@ -155,7 +155,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 						Clock:           clock,
 						NodeDescs:       g,
 						RPCRetryOptions: &retry.Options{MaxRetries: 10},
-						RPCContext:      rpcContext,
+						Stopper:         stopper,
 						TestingKnobs: ClientTestingKnobs{
 							TransportFactory: func(SendOptions, *nodedialer.Dialer, ReplicaSlice) (Transport, error) {
 								return transport, nil
