@@ -55,7 +55,6 @@ func EvalSystemTimeExpr(
 	semaCtx *tree.SemaContext,
 	systemTimeExpr tree.Expr,
 	op string,
-	usage DatumToHLCUsage,
 ) (hlc.Timestamp, error) {
 	typedExpr, err := TypeCheckSystemTimeExpr(ctx, semaCtx, systemTimeExpr, op)
 	if err != nil {
@@ -69,5 +68,5 @@ func EvalSystemTimeExpr(
 		return hlc.MaxTimestamp, nil
 	}
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
-	return DatumToHLC(evalCtx, stmtTimestamp, d, usage)
+	return DatumToHLC(evalCtx, stmtTimestamp, d)
 }

@@ -124,7 +124,7 @@ func parseExpirationTime(
 		return hlc.MaxTimestamp, nil
 	}
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
-	ts, err := asof.DatumToHLC(evalCtx, stmtTimestamp, d, asof.Split)
+	ts, err := asof.DatumToHLC(evalCtx, stmtTimestamp, d)
 	if err != nil {
 		return ts, errors.Wrap(err, "SPLIT AT")
 	}

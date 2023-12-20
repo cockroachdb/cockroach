@@ -106,7 +106,7 @@ func evalShowTenantFingerprintOptions(
 ) (*resolvedShowTenantFingerprintOptions, error) {
 	r := &resolvedShowTenantFingerprintOptions{}
 	if options.StartTimestamp != nil {
-		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, semaCtx, options.StartTimestamp, op, asof.ShowTenantFingerprint)
+		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, semaCtx, options.StartTimestamp, op)
 		if err != nil {
 			return nil, err
 		}

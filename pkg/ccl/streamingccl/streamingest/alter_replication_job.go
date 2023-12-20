@@ -77,7 +77,7 @@ func evalTenantReplicationOptions(
 		r.retention = &retSeconds
 	}
 	if options.ResumeTimestamp != nil {
-		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, semaCtx, options.ResumeTimestamp, op, asof.ReplicationCutover)
+		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, semaCtx, options.ResumeTimestamp, op)
 		if err != nil {
 			return nil, err
 		}
@@ -168,7 +168,7 @@ func alterReplicationJobHook(
 			}
 
 			ct, err := asof.EvalSystemTimeExpr(ctx, evalCtx, p.SemaCtx(), alterTenantStmt.Cutover.Timestamp,
-				alterReplicationJobOp, asof.ReplicationCutover)
+				alterReplicationJobOp)
 			if err != nil {
 				return nil, nil, nil, false, err
 			}

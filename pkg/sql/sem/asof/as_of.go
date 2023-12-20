@@ -202,41 +202,16 @@ func Eval(
 	}
 
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
-	ret.Timestamp, err = DatumToHLC(evalCtx, stmtTimestamp, d, AsOf)
+	ret.Timestamp, err = DatumToHLC(evalCtx, stmtTimestamp, d)
 	if err != nil {
 		return eval.AsOfSystemTime{}, errors.Wrap(err, "AS OF SYSTEM TIME")
 	}
 	return ret, nil
 }
 
-// DatumToHLCUsage specifies which statement DatumToHLC() is used for.
-type DatumToHLCUsage int64
-
-const (
-	// AsOf is when the DatumToHLC() is used for an AS OF SYSTEM TIME statement.
-	// In this case, if the interval is not synthetic, its value has to be negative
-	// and last longer than a nanosecond.
-	AsOf DatumToHLCUsage = iota
-	// Split is when the DatumToHLC() is used for a SPLIT statement.
-	// In this case, if the interval is not synthetic, its value has to be positive
-	// and last longer than a nanosecond.
-	Split
-
-	// ReplicationCutover is when the DatumToHLC() is used for an
-	// ALTER VIRTUAL CLUSTER ... COMPLETE REPLICATION statement.
-	ReplicationCutover
-
-	// ShowTenantFingerprint is when the DatumToHLC() is used for an SHOW
-	// EXPERIMENTAL_FINGERPRINTS FROM TENANT ... WITH START TIMESTAMP statement.
-	//
-	// ShowTenantFingerprint has the same constraints as AsOf, and so we use the
-	// same value.
-	ShowTenantFingerprint = AsOf
-)
-
 // DatumToHLC performs the conversion from a Datum to an HLC timestamp.
 func DatumToHLC(
-	evalCtx *eval.Context, stmtTimestamp time.Time, d tree.Datum, usage DatumToHLCUsage,
+	evalCtx *eval.Context, stmtTimestamp time.Time, d tree.Datum,
 ) (hlc.Timestamp, error) {
 	ts := hlc.Timestamp{}
 	var convErr error
@@ -257,10 +232,6 @@ func DatumToHLC(
 		if iv, err := tree.ParseDInterval(evalCtx.GetIntervalStyle(), s); err == nil {
 			if (iv.Duration == duration.Duration{}) {
 				convErr = errors.Errorf("interval value %v too small, absolute value must be >= %v", d, time.Microsecond)
-			} else if (usage == AsOf && iv.Duration.Compare(duration.Duration{}) > 0) {
-				convErr = errors.Errorf("interval value %v too large, AS OF interval must be <= -%v", d, time.Microsecond)
-			} else if (usage == Split && iv.Duration.Compare(duration.Duration{}) < 0) {
-				convErr = errors.Errorf("interval value %v too small, SPLIT AT interval must be >= %v", d, time.Microsecond)
 			}
 			ts.WallTime = duration.Add(stmtTimestamp, iv.Duration).UnixNano()
 			break
@@ -275,11 +246,6 @@ func DatumToHLC(
 	case *tree.DDecimal:
 		ts, convErr = hlc.DecimalToHLC(&d.Decimal)
 	case *tree.DInterval:
-		if (usage == AsOf && d.Duration.Compare(duration.Duration{}) > 0) {
-			convErr = errors.Errorf("interval value %v too large, AS OF interval must be <= -%v", d, time.Microsecond)
-		} else if (usage == Split && d.Duration.Compare(duration.Duration{}) < 0) {
-			convErr = errors.Errorf("interval value %v too small, SPLIT interval must be >= %v", d, time.Microsecond)
-		}
 		ts.WallTime = duration.Add(stmtTimestamp, d.Duration).UnixNano()
 	default:
 		convErr = errors.WithSafeDetails(
