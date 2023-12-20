@@ -61,7 +61,7 @@ func runLogicTest(t *testing.T, file string) {
 {{- define "runCCLLogicTest" }}
 {{- if .CclLogicTest -}}
 func runCCLLogicTest(t *testing.T, file string) {
-	{{ if .IsMultiRegion }}skip.UnderRace(t, "times out and/or OOM's")
+	{{ if or .IsMultiRegion .Is3NodeTenant }}skip.UnderRace(t, "large engflow executor is overloaded by this config")
 	{{ end }}skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(cclLogicTestDir, file))
 }
