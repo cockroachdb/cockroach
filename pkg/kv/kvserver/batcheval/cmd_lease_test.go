@@ -162,18 +162,14 @@ func TestLeaseTransferForwardsStartTime(t *testing.T) {
 			// The previous lease should have been revoked.
 			require.Equal(t, prevLease.Sequence, evalCtx.RevokedLeaseSeq)
 
-			// The prior read summary should reflect the maximum read times
-			// served under the current leaseholder.
+			// The prior read summary should reflect the maximum read times served
+			// under the current leaseholder, even if this time is below the proposed
+			// lease start time.
 			propReadSum, err := readsummary.Load(ctx, batch, desc.RangeID)
 			require.NoError(t, err)
 			require.NotNil(t, propReadSum, "should write prior read summary")
-			if servedFutureReads {
-				require.Equal(t, maxPriorReadTS, propReadSum.Local.LowWater)
-				require.Equal(t, maxPriorReadTS, propReadSum.Global.LowWater)
-			} else {
-				require.Equal(t, propLease.Start.ToTimestamp(), propReadSum.Local.LowWater)
-				require.Equal(t, propLease.Start.ToTimestamp(), propReadSum.Global.LowWater)
-			}
+			require.Equal(t, maxPriorReadTS, propReadSum.Local.LowWater)
+			require.Equal(t, maxPriorReadTS, propReadSum.Global.LowWater)
 		})
 	})
 }
