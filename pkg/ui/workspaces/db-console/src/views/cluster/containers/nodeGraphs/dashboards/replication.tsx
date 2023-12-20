@@ -107,6 +107,28 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="Lease Preferences"
+      sources={storeSources}
+      tenantSource={tenantSource}
+      tooltip={`Details about the conformance of range lease preferences. In 
+                the node view, shows details about ranges the node is 
+                responsible for. In the cluster view, shows details about
+                ranges all across the cluster.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="ranges">
+        <Metric
+          name="cr.store.leases.preferences.violating"
+          title="Lease Preferences Violating"
+        />
+        <Metric
+          name="cr.store.leases.preferences.less-preferred"
+          title="Lease Preferences Less Preferred"
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="Average Replica Queries per Node"
       tenantSource={tenantSource}
       tooltip={`Moving average of the number of KV batch requests processed by
