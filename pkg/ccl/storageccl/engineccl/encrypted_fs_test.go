@@ -273,11 +273,10 @@ func TestPebbleEncryption(t *testing.T) {
 
 	stats, err := db.GetEnvStats()
 	require.NoError(t, err)
-	// Opening the DB should've created OPTIONS, CURRENT, MANIFEST and the
-	// WAL.
-	require.GreaterOrEqual(t, stats.TotalFiles, uint64(4))
+	// Opening the DB should've created OPTIONS, MANIFEST, and the WAL.
+	require.GreaterOrEqual(t, stats.TotalFiles, uint64(3))
 	// We also created markers for the format version and the manifest.
-	require.Equal(t, uint64(6), stats.ActiveKeyFiles)
+	require.Equal(t, uint64(5), stats.ActiveKeyFiles)
 	var s enginepbccl.EncryptionStatus
 	require.NoError(t, protoutil.Unmarshal(stats.EncryptionStatus, &s))
 	require.Equal(t, "16.key", s.ActiveStoreKey.Source)

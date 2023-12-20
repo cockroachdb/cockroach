@@ -10,12 +10,17 @@
 
 package load
 
-import "math"
+import (
+	"math"
+
+	"github.com/cockroachdb/redact"
+)
 
 // Load represents a named collection of load dimensions. It is used for
 // performing arithmetic and comparison between comparable objects which have
 // load.
 type Load interface {
+	redact.SafeFormatter
 	// Dim returns the value of the Dimension given.
 	Dim(dim Dimension) float64
 	// String returns a string representation of Load.

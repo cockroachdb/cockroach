@@ -109,7 +109,7 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 		AmbientCtx: ambient,
 		Clock:      s.Clock,
 		NodeDescs:  s.Gossip,
-		RPCContext: s.Cfg.RPCContext,
+		Stopper:    s.Stopper(),
 		TestingKnobs: kvcoord.ClientTestingKnobs{
 			TransportFactory: kvcoord.TestingAdaptSimpleTransport(sendFn),
 		},

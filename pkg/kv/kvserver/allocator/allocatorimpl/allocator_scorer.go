@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -705,18 +706,24 @@ type candidate struct {
 }
 
 func (c candidate) String() string {
-	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, "+
+	return redact.StringWithoutMarkers(c)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (c candidate) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("s%d, valid:%t, fulldisk:%t, necessary:%t, "+
 		"voterNecessary:%t, diversity:%.2f, ioOverloaded: %t, ioOverload: %.2f, "+
 		"converges:%d, balance:%d, hasNonVoter:%t, rangeCount:%d, queriesPerSecond:%.2f",
 		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.voterNecessary,
 		c.diversityScore, c.ioOverloaded, c.ioOverloadScore, c.convergesScore,
 		c.balanceScore, c.hasNonVoter, c.rangeCount, c.store.Capacity.QueriesPerSecond)
 	if c.details != "" {
-		return fmt.Sprintf("%s, details:(%s)", str, c.details)
+		w.Printf(", details:(%s)", c.details)
 	}
-	return str
 }
 
+// compactString returns a compact represntation of the candidate. Note this
+// method is currently only used to populate the range log via details.
 func (c candidate) compactString() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "s%d", c.store.StoreID)
@@ -837,17 +844,23 @@ func (c candidate) compare(o candidate) float64 {
 type candidateList []candidate
 
 func (cl candidateList) String() string {
+	return redact.StringWithoutMarkers(cl)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (cl candidateList) SafeFormat(w redact.SafePrinter, r rune) {
 	if len(cl) == 0 {
-		return "[]"
+		w.Printf("[]")
+		return
 	}
-	var buffer bytes.Buffer
-	buffer.WriteRune('[')
+	var buf redact.StringBuilder
+	buf.SafeRune('[')
 	for _, c := range cl {
-		buffer.WriteRune('\n')
-		buffer.WriteString(c.String())
+		buf.SafeRune('\n')
+		buf.Print(c)
 	}
-	buffer.WriteRune(']')
-	return buffer.String()
+	buf.SafeRune(']')
+	w.Print(buf)
 }
 
 // byScore implements sort.Interface to sort by scores.
