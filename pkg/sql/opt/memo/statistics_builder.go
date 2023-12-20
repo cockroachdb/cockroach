@@ -1347,7 +1347,14 @@ func (sb *statisticsBuilder) buildJoin(
 	// Ignore columns that are already null in the input when calculating
 	// selectivity from null-removing filters - the selectivity would always be
 	// 1.
-	ignoreCols := constrainedCols
+	//
+	// NOTE: Aliasing constrainedCols without copying it is safe here because
+	// constrainedCols is not used after this point of the function. We set
+	// constrainedCols to the empty set to prevent future changes to this
+	// function from unknowingly breaking this invariant.
+	var ignoreCols opt.ColSet
+	ignoreCols, constrainedCols = constrainedCols, opt.ColSet{}
+	_ = constrainedCols
 	if relProps.NotNullCols.Intersects(h.leftProps.NotNullCols) ||
 		relProps.NotNullCols.Intersects(h.rightProps.NotNullCols) {
 		ignoreCols = ignoreCols.Union(h.leftProps.NotNullCols)
