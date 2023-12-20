@@ -1419,7 +1419,7 @@ func TestRestoreCheckpointing(t *testing.T) {
 	knobs := base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) {
+				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) error {
 					//  Because the restore processor has several workers that
 					//  concurrently send addsstable requests and because all workers will
 					//  wait on the lock below, when one flush gets blocked on the
@@ -1441,6 +1441,7 @@ func TestRestoreCheckpointing(t *testing.T) {
 					if wasPausedBeforeWaiting {
 						postResumeCount++
 					}
+					return nil
 				},
 			},
 		},
@@ -1569,6 +1570,75 @@ func TestRestoreJobRetryReset(t *testing.T) {
 	jobutils.WaitForJobToPause(t, sqlDB, restoreJobId)
 
 	require.Greater(t, mu.retryCount, maxRetries+2)
+}
+
+// TestRestoreRetryProcErr tests that the restore data processor will mark
+// errors as retryable if and only if it has made progress.
+func TestRestoreRetryProcErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "restore processor progress", func(t *testing.T, makeProgress bool) {
+		mu := struct {
+			syncutil.Mutex
+			flowCount int
+			spanCount int
+		}{}
+		params := base.TestClusterArgs{}
+		knobs := base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+					RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, _ *execinfrapb.RestoreSpanEntry) error {
+						mu.Lock()
+						defer mu.Unlock()
+						if makeProgress && mu.spanCount == 0 {
+							// Allow a span entry to progress to test that the restore processor
+							// sends a retryable error after progress was sent.
+							mu.spanCount++
+							return nil
+						}
+						// This error will only get retried if a span entry has already been processed.
+						return errors.New("gross external storage error")
+					}}},
+			BackupRestore: &sql.BackupRestoreTestingKnobs{
+				RestoreDistSQLRetryPolicy: &retry.Options{
+					InitialBackoff: time.Microsecond,
+					Multiplier:     2,
+					MaxBackoff:     2 * time.Microsecond,
+					MaxRetries:     4,
+				},
+				RunBeforeRestoreFlow: func() error {
+					mu.Lock()
+					defer mu.Unlock()
+					mu.flowCount++
+					return nil
+				},
+			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		}
+		params.ServerArgs = base.TestServerArgs{Knobs: knobs}
+
+		_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10, InitManualReplication, params)
+		defer cleanupFn()
+
+		sqlDB.Exec(t, `CREATE DATABASE d`)
+		for i := 1; i <= 4; i++ {
+			tableName := fmt.Sprintf("d.t%d", i)
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s (id INT PRIMARY KEY, s STRING)`, tableName))
+			sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO %s VALUES (1, 'x'),(2,'y')`, tableName))
+		}
+
+		sqlDB.Exec(t, `BACKUP DATABASE d INTO $1`, localFoo)
+		var restoreJobId jobspb.JobID
+		sqlDB.QueryRow(t, `RESTORE DATABASE d FROM LATEST IN $1 with new_db_name=d2, detached`, localFoo).Scan(&restoreJobId)
+		jobutils.WaitForJobToPause(t, sqlDB, restoreJobId)
+
+		expectedFlowCount := 1
+		if makeProgress {
+			expectedFlowCount = 2
+		}
+		require.Equal(t, mu.flowCount, expectedFlowCount)
+	})
 }
 
 func createAndWaitForJob(
@@ -7502,8 +7572,9 @@ func TestClientDisconnect(t *testing.T) {
 
 			args := base.TestClusterArgs{}
 			knobs := base.TestingKnobs{
-				DistSQL: &execinfra.TestingKnobs{BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, _ *execinfrapb.RestoreSpanEntry) {
+				DistSQL: &execinfra.TestingKnobs{BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, _ *execinfrapb.RestoreSpanEntry) error {
 					blockBackupOrRestore(ctx)
+					return nil
 				}}},
 				Store: &kvserver.StoreTestingKnobs{
 					TestingResponseFilter: func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
@@ -11360,8 +11431,9 @@ func TestRestoreMemoryMonitoringWithShadowing(t *testing.T) {
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-					RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry) {
+					RunAfterProcessingRestoreSpanEntry: func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry) error {
 						restoreProcessorKnobCount.Add(1)
+						return nil
 					},
 				},
 			},

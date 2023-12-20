@@ -1054,7 +1054,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 	knobs := base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
 			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) {
+				RunAfterProcessingRestoreSpanEntry: func(_ context.Context, _ *execinfrapb.RestoreSpanEntry) error {
 					mu.Lock()
 					defer mu.Unlock()
 					if entriesCount == 0 {
@@ -1065,6 +1065,7 @@ func TestReintroduceOfflineSpans(t *testing.T) {
 					}
 
 					entriesCount++
+					return nil
 				},
 			}},
 	}
