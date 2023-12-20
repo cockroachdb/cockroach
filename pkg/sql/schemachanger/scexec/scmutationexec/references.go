@@ -53,9 +53,6 @@ func (i *immediateVisitor) AddSchemaParent(ctx context.Context, op scop.AddSchem
 	if sc.Name == "" {
 		return errors.AssertionFailedf("schema name is empty")
 	}
-	if db.Schemas == nil {
-		db.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
-	}
 	if _, ok := db.Schemas[sc.Name]; ok {
 		return errors.AssertionFailedf("schema %v already exists in database %v", sc.Name, db.Name)
 	}
