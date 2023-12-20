@@ -1272,7 +1272,7 @@ message ProblemRangesResponse {
     ];
     repeated int64 circuit_breaker_error_range_ids = 10 [
       (gogoproto.customname) = "CircuitBreakerErrorRangeIDs",
-      (gogoproto.casttype) =
+      (gogoproto.casttype) = 
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
     repeated int64 paused_replica_ids = 11 [
