@@ -19,7 +19,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -511,11 +510,6 @@ type DistSender struct {
 	log.AmbientContext
 
 	st *cluster.Settings
-	// nodeDescriptor, if set, holds the descriptor of the node the
-	// DistSender lives on. It should be accessed via getNodeDescriptor(),
-	// which tries to obtain the value from the Gossip network if the
-	// descriptor is unknown.
-	nodeDescriptor unsafe.Pointer
 	// clock is used to set time for some calls. E.g. read-only ops
 	// which span ranges and don't require read consistency.
 	clock *hlc.Clock
@@ -599,11 +593,7 @@ type DistSenderConfig struct {
 	// NodeIDGetter, if set, provides non-gossip based implementation for
 	// obtaining the local KV node ID. The DistSender uses the node ID to
 	// preferentially route requests to a local replica (if one exists).
-	NodeIDGetter func() roachpb.NodeID
-	// nodeDescriptor, if provided, is used to describe which node the
-	// DistSender lives on, for instance when deciding where to send RPCs.
-	// Usually it is filled in from the Gossip network on demand.
-	nodeDescriptor  *roachpb.NodeDescriptor
+	NodeIDGetter    func() roachpb.NodeID
 	RPCRetryOptions *retry.Options
 	RPCContext      *rpc.Context
 	// NodeDialer is the dialer from the SQL layer to the KV layer.
@@ -675,9 +665,6 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		panic("no tracer set in AmbientCtx")
 	}
 
-	if cfg.nodeDescriptor != nil {
-		atomic.StorePointer(&ds.nodeDescriptor, unsafe.Pointer(cfg.nodeDescriptor))
-	}
 	var rdb rangecache.RangeDescriptorDB
 	if cfg.FirstRangeProvider != nil {
 		ds.firstRangeProvider = cfg.FirstRangeProvider
