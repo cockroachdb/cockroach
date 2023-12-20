@@ -43,6 +43,11 @@ func (e *EnumSetting) String(sv *Values) string {
 	return fmt.Sprintf("unknown(%d)", enumID)
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (e *EnumSetting) DefaultString() (string, error) {
+	return e.DecodeToString(e.EncodedDefault())
+}
+
 // DecodeToString decodes and renders an encoded value.
 func (e *EnumSetting) DecodeToString(encoded string) (string, error) {
 	v, err := e.DecodeValue(encoded)

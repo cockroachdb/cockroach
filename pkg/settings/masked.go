@@ -10,6 +10,8 @@
 
 package settings
 
+import "context"
+
 // maskedSetting is a wrapper for non-reportable settings that were retrieved
 // for reporting (see SetReportable and LookupForReportingByKey).
 type maskedSetting struct {
@@ -20,12 +22,17 @@ var _ Setting = &maskedSetting{}
 
 // String hides the underlying value.
 func (s *maskedSetting) String(sv *Values) string {
-	// Special case for non-reportable strings: we still want
+	// Special case for non-reportable/sensitive strings: we still want
 	// to distinguish empty from non-empty (= customized).
 	if st, ok := s.setting.(*StringSetting); ok && st.String(sv) == "" {
 		return ""
 	}
 	return "<redacted>"
+}
+
+// DefaultString returns the default value for the setting as a string.
+func (s *maskedSetting) DefaultString() (string, error) {
+	return s.setting.DecodeToString(s.setting.EncodedDefault())
 }
 
 // Visibility returns the visibility setting for the underlying setting.
@@ -56,6 +63,11 @@ func (s *maskedSetting) Typ() string {
 // Class returns the class for the underlying setting.
 func (s *maskedSetting) Class() Class {
 	return s.setting.Class()
+}
+
+// ValueOrigin returns the origin of the current value of the setting.
+func (s *maskedSetting) ValueOrigin(ctx context.Context, sv *Values) ValueOrigin {
+	return s.setting.ValueOrigin(ctx, sv)
 }
 
 // IsUnsafe returns whether the underlying setting is unsafe.

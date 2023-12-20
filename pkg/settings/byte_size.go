@@ -42,6 +42,11 @@ func (b *ByteSizeSetting) DecodeToString(encoded string) (string, error) {
 	return string(humanizeutil.IBytes(iv)), nil
 }
 
+// DefaultString returns the default value for the setting as a string.
+func (b *ByteSizeSetting) DefaultString() (string, error) {
+	return b.DecodeToString(b.EncodedDefault())
+}
+
 // RegisterByteSizeSetting defines a new setting with type bytesize and any
 // supplied validation function(s). If no validation functions are given, then
 // the non-negative int validation is performed.
