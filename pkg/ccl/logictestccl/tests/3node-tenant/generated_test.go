@@ -81,13 +81,12 @@ func TestMain(m *testing.M) {
 }
 
 func runLogicTest(t *testing.T, file string) {
-	if file == "fk" || file == "alter_primary_key" {
-		skip.UnderRace(t, "times out and/or OOM's")
-	}
+	skip.UnderRace(t, "large engflow executor is overloaded by 3node-tenant config")
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }
 func runCCLLogicTest(t *testing.T, file string) {
+	skip.UnderRace(t, "large engflow executor is overloaded by this config")
 	skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(cclLogicTestDir, file))
 }

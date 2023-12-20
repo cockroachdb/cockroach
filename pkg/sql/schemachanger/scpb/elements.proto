@@ -129,6 +129,7 @@ message ElementProto {
     SchemaParent schema_parent = 90 [(gogoproto.moretags) = "parent:\"Schema\""];
     SchemaComment schema_comment = 91 [(gogoproto.moretags) = "parent:\"Schema\""];
 
+
     // SchemaChild elements.
     SchemaChild schema_child = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
 
@@ -734,4 +735,3 @@ message FunctionParamDefaultExpression {
 message ElementCreationMetadata {
   bool in_23_1_or_later = 1;
 }
-

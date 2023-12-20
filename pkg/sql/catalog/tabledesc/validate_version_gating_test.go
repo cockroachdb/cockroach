@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,7 +54,6 @@ import (
 func TestIndexDoesNotStorePrimaryKeyColumnMixedVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderStressRace(t)
 
 	// Start a test cluster whose cluster version is MinSupported and auto-upgrade is
 	// disabled.
@@ -115,6 +114,8 @@ func TestIndexDoesNotStorePrimaryKeyColumnMixedVersion(t *testing.T) {
 
 	// Assert cluster version upgrade is blocked.
 	require.Equal(t, [][]string{{"1000023.1"}}, tdb.QueryStr(t, "SHOW CLUSTER SETTING version;"))
+	// disable AOST for upgrade precondition check to ensure it sees the injected, corrupt descriptor.
+	defer upgrades.TestingSetFirstUpgradePreconditionAOST(false)()
 	_, err := sqlDB.Exec(`SET CLUSTER SETTING version = $1`, clusterversion.Latest.String())
 	require.ErrorContains(t, err, `verifying precondition for version 1000023.1-upgrading-to-1000023.2-step-002: "".crdb_internal.invalid_objects is not empty`)
 }
