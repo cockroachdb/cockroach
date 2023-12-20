@@ -165,20 +165,76 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	util.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
 
+// DO NOT set storage.single_delete.crash_on_invariant_violation.enabled or
+// storage.single_delete.crash_on_ineffectual.enabled to true.
+//
+// Pebble's delete-only compactions can cause a recent RANGEDEL to peek below
+// an older SINGLEDEL and delete an arbitrary subset of data below that
+// SINGLEDEL. When that SINGLEDEL gets compacted (without the RANGEDEL), any
+// of these callbacks can happen, without it being a real correctness problem.
+//
+// Example 1:
+// RANGEDEL [a, c)#10 in L0
+// SINGLEDEL b#5 in L1
+// SET b#3 in L6
+//
+// If the L6 file containing the SET is narrow and the L1 file containing the
+// SINGLEDEL is wide, a delete-only compaction can remove the file in L2
+// before the SINGLEDEL is compacted down. Then when the SINGLEDEL is
+// compacted down, it will not find any SET to delete, resulting in the
+// ineffectual callback.
+//
+// Example 2:
+// RANGEDEL [a, z)#60 in L0
+// SINGLEDEL g#50 in L1
+// SET g#40 in L2
+// RANGEDEL [g,h)#30 in L3
+// SET g#20 in L6
+//
+// In this example, the two SETs represent the same intent, and the RANGEDELs
+// are caused by the CRDB range being dropped. That is, the transaction wrote
+// the intent once, range was dropped, then added back, which caused the SET
+// again, then the transaction committed, causing a SINGLEDEL, and then the
+// range was dropped again. The older RANGEDEL can get fragmented due to
+// compactions it has been part of. Say this L3 file containing the RANGEDEL
+// is very narrow, while the L1, L2, L6 files are wider than the RANGEDEL in
+// L0. Then the RANGEDEL in L3 can be dropped using a delete-only compaction,
+// resulting in an LSM with state:
+//
+// RANGEDEL [a, z)#60 in L0
+// SINGLEDEL g#50 in L1
+// SET g#40 in L2
+// SET g#20 in L6
+//
+// A multi-level compaction involving L1, L2, L6 will cause the invariant
+// violation callback. This example doesn't need multi-level compactions: say
+// there was a Pebble snapshot at g#21 preventing g#20 from being dropped when
+// it meets g#40 in a compaction. That snapshot will not save RANGEDEL
+// [g,h)#30, so we can have:
+//
+// SINGLEDEL g#50 in L1
+// SET g#40, SET g#20 in L6
+//
+// And say the snapshot is removed and then the L1 and L6 compaction happens,
+// resulting in the invariant violation callback.
+//
+// TODO(sumeer): remove these cluster settings or figure out a way to bring
+// back some invariant checking.
+
 var SingleDeleteCrashOnInvariantViolation = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.single_delete.crash_on_invariant_violation.enabled",
 	"set to true to crash if the single delete invariant is violated",
-	true,
-	settings.WithPublic,
+	false,
+	settings.WithVisibility(settings.Reserved),
 )
 
 var SingleDeleteCrashOnIneffectual = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.single_delete.crash_on_ineffectual.enabled",
 	"set to true to crash if the single delete was ineffectual",
-	true,
-	settings.WithPublic,
+	false,
+	settings.WithVisibility(settings.Reserved),
 )
 
 // ShouldUseEFOS returns true if either of the UseEFOS or UseExciseForSnapshots
@@ -885,6 +941,8 @@ type Pebble struct {
 
 	storeIDPebbleLog *base.StoreIDContainer
 	replayer         *replay.WorkloadCollector
+
+	singleDelLogEvery log.EveryN
 }
 
 // WorkloadCollector implements an workloadCollectorGetter and returns the
@@ -1196,26 +1254,27 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	storeProps := computeStoreProperties(ctx, cfg.Dir, opts.ReadOnly, encryptionEnv != nil /* encryptionEnabled */)
 
 	p = &Pebble{
-		FS:               opts.FS,
-		readOnly:         opts.ReadOnly,
-		path:             cfg.Dir,
-		auxDir:           auxDir,
-		ballastPath:      ballastPath,
-		ballastSize:      cfg.BallastSize,
-		maxSize:          cfg.MaxSize,
-		attrs:            cfg.Attrs,
-		properties:       storeProps,
-		settings:         cfg.Settings,
-		encryption:       encryptionEnv,
-		fileLock:         opts.Lock,
-		fileRegistry:     fileRegistry,
-		unencryptedFS:    unencryptedFS,
-		logger:           opts.LoggerAndTracer,
-		logCtx:           logCtx,
-		storeIDPebbleLog: storeIDContainer,
-		closer:           filesystemCloser,
-		onClose:          cfg.onClose,
-		replayer:         replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
+		FS:                opts.FS,
+		readOnly:          opts.ReadOnly,
+		path:              cfg.Dir,
+		auxDir:            auxDir,
+		ballastPath:       ballastPath,
+		ballastSize:       cfg.BallastSize,
+		maxSize:           cfg.MaxSize,
+		attrs:             cfg.Attrs,
+		properties:        storeProps,
+		settings:          cfg.Settings,
+		encryption:        encryptionEnv,
+		fileLock:          opts.Lock,
+		fileRegistry:      fileRegistry,
+		unencryptedFS:     unencryptedFS,
+		logger:            opts.LoggerAndTracer,
+		logCtx:            logCtx,
+		storeIDPebbleLog:  storeIDContainer,
+		closer:            filesystemCloser,
+		onClose:           cfg.onClose,
+		replayer:          replay.NewWorkloadCollector(cfg.StorageConfig.Dir),
+		singleDelLogEvery: log.Every(5 * time.Minute),
 	}
 	// In test builds, add a layer of VFS middleware that ensures users of an
 	// Engine don't try to use the filesystem after the Engine has been closed.
@@ -1231,24 +1290,24 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	}
 
 	opts.Experimental.SingleDeleteInvariantViolationCallback = func(userKey []byte) {
-		logFunc := log.Errorf
+		logFunc := func(ctx context.Context, format string, args ...interface{}) {}
 		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.Settings.SV) {
 			logFunc = log.Fatalf
+		} else if p.singleDelLogEvery.ShouldLog() {
+			logFunc = log.Infof
 		}
-		logFunc(logCtx, "SingleDel invariant violation on key %s", roachpb.Key(userKey))
+		logFunc(logCtx, "SingleDel invariant violation callback (can be false positive) on key %s", roachpb.Key(userKey))
 		atomic.AddInt64(&p.singleDelInvariantViolationCount, 1)
 	}
-	// TODO(sumeer): remove this nil check once the metamorphic test is fixed,
-	// and does not need to override.
-	if opts.Experimental.IneffectualSingleDeleteCallback == nil {
-		opts.Experimental.IneffectualSingleDeleteCallback = func(userKey []byte) {
-			logFunc := log.Errorf
-			if SingleDeleteCrashOnIneffectual.Get(&cfg.Settings.SV) {
-				logFunc = log.Fatalf
-			}
-			logFunc(logCtx, "Ineffectual SingleDel on key %s", roachpb.Key(userKey))
-			atomic.AddInt64(&p.singleDelIneffectualCount, 1)
+	opts.Experimental.IneffectualSingleDeleteCallback = func(userKey []byte) {
+		logFunc := func(ctx context.Context, format string, args ...interface{}) {}
+		if SingleDeleteCrashOnInvariantViolation.Get(&cfg.Settings.SV) {
+			logFunc = log.Fatalf
+		} else if p.singleDelLogEvery.ShouldLog() {
+			logFunc = log.Infof
 		}
+		logFunc(logCtx, "Ineffectual SingleDel callback (can be false positive) on key %s", roachpb.Key(userKey))
+		atomic.AddInt64(&p.singleDelIneffectualCount, 1)
 	}
 
 	// MaxConcurrentCompactions can be set by multiple sources, but all the
