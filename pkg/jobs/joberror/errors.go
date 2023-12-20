@@ -38,5 +38,4 @@ func IsPermanentBulkJobError(err error) bool {
 		!sysutil.IsErrConnectionReset(err) &&
 		!sysutil.IsErrConnectionRefused(err) &&
 		!errors.Is(err, sqlinstance.NonExistentInstanceError)
-
 }
