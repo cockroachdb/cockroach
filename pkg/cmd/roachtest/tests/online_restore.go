@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/montanaflynn/stats"
@@ -151,20 +152,6 @@ func registerOnlineRestore(r registry.Registry) {
 							if _, err := db.Exec("SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled=true"); err != nil {
 								return err
 							}
-							// TODO(mb): due to *reasons*, restored statistics are not always
-							// considered fresh enough by the trigger of the stats job (e.g.
-							// if the backed up stat was not named as an automatic job). But
-							// generating a whole new stat requires full table scans, reading
-							// even data that the workload doesn't need, using up our scarce
-							// reduced capacity while operating on remote data. Instead we
-							// likely would prefer to wait until the download phase completes
-							// to go generate sightly fresher stats. For now, we blanket block
-							// automatic stats creation manually (and a user would toggle it
-							// back on post-download), but ideally we'd do this automatically
-							// on just the restored tables, flipping the bit back at job end.
-							if _, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false"); err != nil {
-								return err
-							}
 							// TODO(dt): AC appears periodically reduce the workload to 0 QPS
 							// during the download phase (sudden jumps from 0 to 2k qps to 0).
 							// Disable for now until we figure out how to smooth this out.
@@ -212,10 +199,14 @@ func registerOnlineRestore(r registry.Registry) {
 							rd.t.L().Printf("workload successfully finished")
 							return nil
 						})
+						var downloadEndTimeLowerBound time.Time
 						mDownload.Go(func(ctx context.Context) error {
 							defer workloadCancel()
 							if runOnline {
-								return waitForDownloadJob(ctx, c, t.L())
+								downloadEndTimeLowerBound, err = waitForDownloadJob(ctx, c, t.L())
+								if err != nil {
+									return err
+								}
 							}
 							if runWorkload {
 								// If we just completed an offline restore and are running the
@@ -232,6 +223,9 @@ func registerOnlineRestore(r registry.Registry) {
 							return nil
 						})
 						mDownload.Wait()
+						if runOnline {
+							require.NoError(t, postRestoreValidation(ctx, c, t.L(), rd.sp.backup.workload.DatabaseName(), downloadEndTimeLowerBound))
+						}
 						if runWorkload {
 							require.NoError(t, exportStats(ctx, rd, statsCollector, workloadStartTime, restoreStartTime))
 						}
@@ -240,6 +234,32 @@ func registerOnlineRestore(r registry.Registry) {
 			}
 		}
 	}
+}
+
+func postRestoreValidation(
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	dbName string,
+	approxDownloadJobEndTime time.Time,
+) error {
+	downloadJobHLC := hlc.Timestamp{WallTime: approxDownloadJobEndTime.UnixNano()}
+	conn, err := c.ConnE(ctx, l, c.Node(1)[0])
+	if err != nil {
+		return err
+	}
+	var statsJobCount int
+
+	// Ensure there are no automatic jobs acting on restoring tables before the
+	// download job completes.
+	if err := conn.QueryRowContext(ctx, fmt.Sprintf(
+		`SELECT count(*) FROM [SHOW AUTOMATIC JOBS] AS OF SYSTEM TIME '%s' WHERE description ~ '%s';`, downloadJobHLC.AsOfSystemTime(), dbName)).Scan(&statsJobCount); err != nil {
+		return err
+	}
+	if statsJobCount > 0 {
+		return errors.Newf("stats jobs found during download job on %s database", dbName)
+	}
+	return nil
 }
 
 func createStatCollector(
@@ -351,34 +371,40 @@ func exportStats(
 	return nil
 }
 
-func waitForDownloadJob(ctx context.Context, c cluster.Cluster, l *logger.Logger) error {
+func waitForDownloadJob(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (time.Time, error) {
 	l.Printf(`Begin tracking online restore download phase completion`)
 	// Wait for the job to succeed.
-	succeededJobTick := time.NewTicker(time.Minute * 1)
+	var downloadJobEndTimeLowerBound time.Time
+	pollingInterval := time.Minute
+	succeededJobTick := time.NewTicker(pollingInterval)
 	defer succeededJobTick.Stop()
 	done := ctx.Done()
 	conn, err := c.ConnE(ctx, l, c.Node(1)[0])
 	if err != nil {
-		return err
+		return downloadJobEndTimeLowerBound, err
 	}
 	defer conn.Close()
 	for {
 		select {
 		case <-done:
-			return ctx.Err()
+			return downloadJobEndTimeLowerBound, ctx.Err()
 		case <-succeededJobTick.C:
 			var status string
 			if err := conn.QueryRow(`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1`).Scan(&status); err != nil {
-				return err
+				return downloadJobEndTimeLowerBound, err
 			}
 			if status == string(jobs.StatusSucceeded) {
-				l.Printf("Download job completed; let workload run for 1 minute")
-				time.Sleep(time.Minute * 1)
-				return nil
+				postDownloadDelay := time.Minute
+				l.Printf("Download job completed; let workload run for %.2f minute", postDownloadDelay.Minutes())
+				time.Sleep(postDownloadDelay)
+				downloadJobEndTimeLowerBound = timeutil.Now().Add(-pollingInterval).Add(-postDownloadDelay)
+				return downloadJobEndTimeLowerBound, nil
 			} else if status == string(jobs.StatusRunning) {
 				l.Printf("Download job still running")
 			} else {
-				return errors.Newf("job unexpectedly found in %s state", status)
+				return downloadJobEndTimeLowerBound, errors.Newf("job unexpectedly found in %s state", status)
 			}
 		}
 	}
