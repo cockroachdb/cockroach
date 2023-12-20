@@ -256,7 +256,7 @@ func createTestStoreWithoutStart(
 		Settings:           cfg.Settings,
 		Clock:              cfg.Clock,
 		NodeDescs:          mockNodeStore{desc: nodeDesc},
-		RPCContext:         rpcContext,
+		Stopper:            stopper,
 		RPCRetryOptions:    &retry.Options{},
 		NodeDialer:         cfg.NodeDialer,
 		FirstRangeProvider: rangeProv,

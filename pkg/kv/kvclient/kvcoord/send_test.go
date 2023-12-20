@@ -372,7 +372,7 @@ func sendBatch(
 		AmbientCtx:         log.MakeTestingAmbientCtxWithNewTracer(),
 		Settings:           cluster.MakeTestingClusterSettings(),
 		NodeDescs:          g,
-		RPCContext:         rpcContext,
+		Stopper:            stopper,
 		NodeDialer:         nodeDialer,
 		FirstRangeProvider: g,
 		TestingKnobs: ClientTestingKnobs{

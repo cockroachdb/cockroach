@@ -27,6 +27,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -43,6 +44,7 @@ go_test(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils/gossiputil",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

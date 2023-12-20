@@ -89,6 +89,20 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 						"RaftTerm":          {},
 						"PushTxnType":       {},
 					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator": {
+						"LeaseTransferOutcome": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl": {
+						"AllocatorAction":   {},
+						"TargetReplicaType": {},
+						"ReplicaStatus":     {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load": {
+						"Dimension": {},
+					},
+					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool": {
+						"storeStatus": {},
+					},
 					"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb": {
 						"SeqNum": {},
 					},

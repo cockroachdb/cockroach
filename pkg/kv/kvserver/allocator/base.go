@@ -218,3 +218,6 @@ func (o LeaseTransferOutcome) String() string {
 		return fmt.Sprintf("unexpected status value: %d", o)
 	}
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (o LeaseTransferOutcome) SafeValue() {}

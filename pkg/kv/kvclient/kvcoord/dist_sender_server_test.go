@@ -92,7 +92,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		Settings:           cluster.MakeTestingClusterSettings(),
 		Clock:              s.Clock(),
 		NodeDescs:          gs,
-		RPCContext:         s.RPCContext(),
+		Stopper:            s.Stopper(),
 		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
 		FirstRangeProvider: gs,
 	})
@@ -1128,7 +1128,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 						Settings:           s.ClusterSettings(),
 						Clock:              clock,
 						NodeDescs:          gs,
-						RPCContext:         s.RPCContext(),
+						Stopper:            s.Stopper(),
 						NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
 						FirstRangeProvider: gs,
 					})
@@ -1656,7 +1656,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 		AmbientCtx:         s.AmbientCtx(),
 		Clock:              s.Clock(),
 		NodeDescs:          gs,
-		RPCContext:         s.RPCContext(),
+		Stopper:            s.Stopper(),
 		NodeDialer:         nodedialer.New(s.RPCContext(), gossip.AddressResolver(gs)),
 		Settings:           cluster.MakeTestingClusterSettings(),
 		FirstRangeProvider: gs,

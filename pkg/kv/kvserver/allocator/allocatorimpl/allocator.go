@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"go.etcd.io/raft/v3"
 	"go.etcd.io/raft/v3/tracker"
 )
@@ -233,6 +233,9 @@ func (a AllocatorAction) String() string {
 	return allocatorActionNames[a]
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (a AllocatorAction) SafeValue() {}
+
 // Priority defines the priorities for various repair operations.
 //
 // NB: These priorities only influence the replicateQueue's understanding of
@@ -344,6 +347,9 @@ func (t TargetReplicaType) String() string {
 	}
 }
 
+// SafeValue implements the redact.SafeValue interface.
+func (t TargetReplicaType) SafeValue() {}
+
 func (s ReplicaStatus) String() string {
 	switch s {
 	case Alive:
@@ -356,6 +362,9 @@ func (s ReplicaStatus) String() string {
 		panic(fmt.Sprintf("unknown replicaStatus %d", s))
 	}
 }
+
+// SafeValue implements the redact.SafeValue interface.
+func (t ReplicaStatus) SafeValue() {}
 
 type transferDecision int
 
@@ -379,64 +388,75 @@ type allocatorError struct {
 	throttledStores       int
 }
 
+var _ errors.SafeFormatter = &allocatorError{}
+
 func (ae *allocatorError) Error() string {
-	var existingVoterStr string
+	return redact.Sprint(ae).StripMarkers()
+}
+
+func (ae *allocatorError) SafeFormatError(p errors.Printer) (next error) {
+	var existingVoterStr redact.RedactableString
 	if ae.existingVoterCount == 1 {
 		existingVoterStr = "1 already has a voter"
 	} else {
-		existingVoterStr = fmt.Sprintf("%d already have a voter", ae.existingVoterCount)
+		existingVoterStr = redact.Sprintf("%d already have a voter",
+			ae.existingVoterCount)
 	}
 
-	var existingNonVoterStr string
+	var existingNonVoterStr redact.RedactableString
 	if ae.existingNonVoterCount == 1 {
 		existingNonVoterStr = "1 already has a non-voter"
 	} else {
-		existingNonVoterStr = fmt.Sprintf("%d already have a non-voter", ae.existingNonVoterCount)
+		existingNonVoterStr = redact.Sprintf("%d already have a non-voter",
+			ae.existingNonVoterCount)
 	}
 
-	var baseMsg string
+	var baseMsg redact.RedactableString
 	if ae.throttledStores != 0 {
-		baseMsg = fmt.Sprintf(
+		baseMsg = redact.Sprintf(
 			"0 of %d live stores are able to take a new replica for the range (%d throttled, %s, %s)",
-			ae.aliveStores, ae.throttledStores, existingVoterStr, existingNonVoterStr)
+			ae.aliveStores, ae.throttledStores,
+			existingVoterStr, existingNonVoterStr)
 	} else {
-		baseMsg = fmt.Sprintf(
+		baseMsg = redact.Sprintf(
 			"0 of %d live stores are able to take a new replica for the range (%s, %s)",
 			ae.aliveStores, existingVoterStr, existingNonVoterStr)
 	}
 
 	if len(ae.constraints) == 0 && len(ae.voterConstraints) == 0 {
-		if ae.throttledStores > 0 {
-			return baseMsg
+		p.Print(baseMsg)
+		if ae.throttledStores == 0 {
+			p.Printf("; likely not enough nodes in cluster")
 		}
-		return baseMsg + "; likely not enough nodes in cluster"
+		return
 	}
 
-	var b strings.Builder
-	b.WriteString(baseMsg)
-	b.WriteString("; replicas must match constraints [")
+	var b redact.StringBuilder
+	b.Print(baseMsg)
+	b.Printf("; replicas must match constraints [")
 	for i := range ae.constraints {
 		if i > 0 {
-			b.WriteByte(' ')
+			b.SafeRune(' ')
 		}
-		b.WriteByte('{')
-		b.WriteString(ae.constraints[i].String())
-		b.WriteByte('}')
+		b.SafeRune('{')
+		b.Print(ae.constraints[i])
+		b.SafeRune('}')
 	}
-	b.WriteString("]")
+	b.SafeRune(']')
 
-	b.WriteString("; voting replicas must match voter_constraints [")
+	b.Printf("; voting replicas must match voter_constraints [")
 	for i := range ae.voterConstraints {
 		if i > 0 {
-			b.WriteByte(' ')
+			b.SafeRune(' ')
 		}
-		b.WriteByte('{')
-		b.WriteString(ae.voterConstraints[i].String())
-		b.WriteByte('}')
+		b.SafeRune('{')
+		b.Print(ae.voterConstraints[i].String())
+		b.SafeRune('}')
 	}
-	b.WriteString("]")
+	b.SafeRune(']')
 
-	return b.String()
+	p.Print(b)
+	return nil
 }
 
 func (*allocatorError) AllocationErrorMarker() {}
@@ -2522,6 +2542,12 @@ func (a *Allocator) ShouldTransferLease(
 	if a.leaseholderShouldMoveDueToPreferences(ctx, storePool, conf, leaseRepl, existing) {
 		return true
 	}
+
+	if a.leaseholderShouldMoveDueToIOOverload(
+		ctx, storePool, existing, leaseRepl.StoreID(), a.IOOverloadOptions()) {
+		return true
+	}
+
 	existing = a.ValidLeaseTargets(
 		ctx,
 		storePool,

@@ -324,7 +324,7 @@ func TestListClosedSessions(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// The active sessions might close before the stress race can finish.
-	skip.UnderStressRace(t, "active sessions")
+	skip.UnderRace(t, "active sessions")
 
 	ctx := context.Background()
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
