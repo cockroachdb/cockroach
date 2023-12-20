@@ -231,7 +231,7 @@ func newMockCluster(
 		t:        t,
 		nodes:    make(map[roachpb.NodeID]roachpb.NodeDescriptor),
 		ranges:   make(map[roachpb.RangeID]roachpb.RangeDescriptor),
-		liveness: livenesspb.TestNodeVitality{},
+		liveness: livenesspb.TestCreateNodeVitality(),
 		store: spanconfigstore.New(
 			roachpb.TestingDefaultSpanConfig(),
 			st,
