@@ -1782,16 +1782,12 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   latency_seconds_p99 FLOAT
 )`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		shouldRedactError := false
 		// If the user is not admin, check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED
 		// privileges.
-		if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+		hasPriv, shouldRedactError, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
 			return err
-		} else if hasViewActivityRedacted {
-			shouldRedactError = true
-		} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
-			return err
-		} else if !hasViewActivity {
+		} else if !hasPriv {
 			// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
 			// return insufficient privileges error.
 			return noViewActivityOrViewActivityRedactedRoleError(p.User())
@@ -2636,17 +2632,11 @@ func populateQueriesTable(
 	addRow func(...tree.Datum) error,
 	response *serverpb.ListSessionsResponse,
 ) error {
-	shouldRedactQuery := false
 	// Check the individual VIEWACTIVITY and VIEWACTIVITYREDACTED privileges.
-	if hasViewActivityRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+	hasPriv, shouldRedactQuery, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+	if err != nil {
 		return err
-	} else if hasViewActivityRedacted {
-		// If the user has VIEWACTIVITYREDACTED, redact the query as it takes precedence
-		// over VIEWACTIVITY.
-		shouldRedactQuery = true
-	} else if hasViewActivity, err := p.HasViewActivity(ctx); err != nil {
-		return err
-	} else if !hasViewActivity {
+	} else if !hasPriv {
 		// If the user is not admin and does not have VIEWACTIVITY or VIEWACTIVITYREDACTED,
 		// return insufficient privileges error.
 		return noViewActivityOrViewActivityRedactedRoleError(p.User())

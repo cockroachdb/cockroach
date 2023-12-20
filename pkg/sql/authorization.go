@@ -1065,27 +1065,19 @@ func (p *planner) HasViewActivityOrViewActivityRedactedRole(
 	// We check for VIEWACTIVITYREDACTED first as users can have both
 	// VIEWACTIVITY and VIEWACTIVITYREDACTED, where VIEWACTIVITYREDACTED
 	// takes precedence (i.e. we must redact senstitive values).
-	if hasViewRedacted, err := p.HasViewActivityRedacted(ctx); err != nil {
+	if hasViewRedacted, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWACTIVITYREDACTED); err != nil {
 		return false, false, err
 	} else if hasViewRedacted {
 		return true, true, nil
 	}
 
-	if hasView, err := p.HasViewActivity(ctx); err != nil {
+	if hasView, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWACTIVITY); err != nil {
 		return false, false, err
 	} else if hasView {
 		return true, false, nil
 	}
 
 	return false, false, nil
-}
-
-func (p *planner) HasViewActivityRedacted(ctx context.Context) (bool, error) {
-	return p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWACTIVITYREDACTED)
-}
-
-func (p *planner) HasViewActivity(ctx context.Context) (bool, error) {
-	return p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.VIEWACTIVITY)
 }
 
 func insufficientPrivilegeError(
