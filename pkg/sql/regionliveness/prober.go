@@ -38,6 +38,12 @@ var RegionLivenessEnabled = settings.RegisterBoolSetting(settings.ApplicationLev
 	false, /* disabled */
 	settings.WithVisibility(settings.Reserved))
 
+var RegionLivenessProbeTimeout = settings.RegisterDurationSetting(settings.ApplicationLevel,
+	"sql.region_liveness.probe.timeout",
+	"enables region liveness for system databases (experimental)",
+	15*time.Second, /* 15 seconds */
+	settings.WithVisibility(settings.Reserved))
+
 // LiveRegions are regions which are currently still avaialble,
 // and not quarantined due to expiration.
 type LiveRegions map[string]struct{}
@@ -89,16 +95,6 @@ type livenessProber struct {
 	settings        *clustersettings.Settings
 }
 
-var probeLivenessTimeout = 15 * time.Second
-
-func TestingSetProbeLivenessTimeout(newTimeout time.Duration) func() {
-	oldTimeout := probeLivenessTimeout
-	probeLivenessTimeout = newTimeout
-	return func() {
-		probeLivenessTimeout = oldTimeout
-	}
-}
-
 // NewLivenessProber creates a new region liveness prober.
 func NewLivenessProber(
 	db isql.DB, cachedDBRegions CachedDatabaseRegions, settings *clustersettings.Settings,
@@ -113,13 +109,14 @@ func NewLivenessProber(
 // ProbeLiveness implements Prober.
 func (l *livenessProber) ProbeLiveness(ctx context.Context, region string) error {
 	// If region liveness is disabled then nothing to do.
-	if !RegionLivenessEnabled.Get(&l.settings.SV) {
+	regionLivenessEnabled, tableTimeout := l.GetTableTimeout()
+	if !regionLivenessEnabled {
 		return nil
 	}
 	const probeQuery = `
 SELECT count(*) FROM system.sql_instances WHERE crdb_region = $1::system.crdb_internal_region
 `
-	err := timeutil.RunWithTimeout(ctx, "probe-liveness", probeLivenessTimeout,
+	err := timeutil.RunWithTimeout(ctx, "probe-liveness", tableTimeout,
 		func(ctx context.Context) error {
 			return l.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				_, err := txn.QueryRowEx(
@@ -206,7 +203,8 @@ func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRe
 // GetTableTimeout gets maximum timeout waiting on a table before issuing
 // liveness queries.
 func (l *livenessProber) GetTableTimeout() (bool, time.Duration) {
-	return RegionLivenessEnabled.Get(&l.settings.SV), probeLivenessTimeout
+	return RegionLivenessEnabled.Get(&l.settings.SV),
+		RegionLivenessProbeTimeout.Get(&l.settings.SV)
 }
 
 // IsQueryTimeoutErr determines if a query timeout error was hit, specifically
