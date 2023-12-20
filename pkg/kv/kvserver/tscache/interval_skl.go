@@ -395,7 +395,7 @@ func (s *intervalSkl) pushNewPage(maxWallTime int64, arena *arenaskl.Arena) {
 		arena = arenaskl.NewArena(size)
 	}
 	p := newSklPage(arena)
-	p.maxWallTime = maxWallTime
+	p.maxWallTime.Store(maxWallTime)
 	s.pages.PushFront(p)
 }
 
@@ -478,7 +478,7 @@ func (s *intervalSkl) rotatePages(ctx context.Context, filledPage *sklPage) {
 	// other words, it assures that the maxWallTime for a page is not only the
 	// maximum timestamp for all values it contains, but also for all values any
 	// earlier pages contain.
-	s.pushNewPage(fp.maxWallTime, oldArena)
+	s.pushNewPage(fp.maxWallTime.Load(), oldArena)
 
 	// Update metrics.
 	s.metrics.Pages.Update(int64(s.pages.Len()))
@@ -557,8 +557,8 @@ func (s *intervalSkl) FloorTS() hlc.Timestamp {
 // must be allocated and used instead.
 type sklPage struct {
 	list        *arenaskl.Skiplist
-	maxWallTime int64 // accessed atomically
-	isFull      int32 // accessed atomically
+	maxWallTime atomic.Int64
+	isFull      atomic.Int32
 }
 
 func newSklPage(arena *arenaskl.Arena) *sklPage {
@@ -652,7 +652,7 @@ func (p *sklPage) addNode(
 
 		switch {
 		case errors.Is(err, arenaskl.ErrArenaFull):
-			atomic.StoreInt32(&p.isFull, 1)
+			p.isFull.Store(1)
 			return err
 		case errors.Is(err, arenaskl.ErrRecordExists):
 			// Another thread raced and added the node, so just ratchet its
@@ -774,7 +774,7 @@ func (p *sklPage) ensureFloorValue(it *arenaskl.Iterator, to []byte, val cacheVa
 			break
 		}
 
-		if atomic.LoadInt32(&p.isFull) == 1 {
+		if p.isFull.Load() == 1 {
 			// Page is full, so stop iterating. The caller will then be able to
 			// release the read lock and rotate the pages. Not doing this could
 			// result in forcing all other operations to wait for this thread to
@@ -823,19 +823,19 @@ func (p *sklPage) ratchetMaxTimestamp(ts hlc.Timestamp) {
 	}
 
 	for {
-		old := atomic.LoadInt64(&p.maxWallTime)
+		old := p.maxWallTime.Load()
 		if new <= old {
 			break
 		}
 
-		if atomic.CompareAndSwapInt64(&p.maxWallTime, old, new) {
+		if p.maxWallTime.CompareAndSwap(old, new) {
 			break
 		}
 	}
 }
 
 func (p *sklPage) getMaxTimestamp() hlc.Timestamp {
-	return hlc.Timestamp{WallTime: atomic.LoadInt64(&p.maxWallTime)}
+	return hlc.Timestamp{WallTime: p.maxWallTime.Load()}
 }
 
 // ratchetPolicy defines the behavior a ratcheting attempt should take when
@@ -931,7 +931,7 @@ func (p *sklPage) ratchetValueSet(
 				// was initialized after this, its value set would be relied
 				// upon to stand on its own even though it would be missing the
 				// ratcheting we tried to perform here.
-				atomic.StoreInt32(&p.isFull, 1)
+				p.isFull.Store(1)
 
 				if !inited && (meta&cantInit) == 0 {
 					err := it.SetMeta(meta | cantInit)

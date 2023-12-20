@@ -90,13 +90,13 @@ func TestIntervalSklAdd(t *testing.T) {
 	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, makeSklMetrics())
 
 	s.Add(ctx, []byte("apricot"), val1)
-	require.Equal(t, ts1.WallTime, s.frontPage().maxWallTime)
+	require.Equal(t, ts1.WallTime, s.frontPage().maxWallTime.Load())
 	require.Equal(t, emptyVal, s.LookupTimestamp(ctx, []byte("apple")))
 	require.Equal(t, val1, s.LookupTimestamp(ctx, []byte("apricot")))
 	require.Equal(t, emptyVal, s.LookupTimestamp(ctx, []byte("banana")))
 
 	s.Add(ctx, []byte("banana"), val2)
-	require.Equal(t, ts2Ceil.WallTime, s.frontPage().maxWallTime)
+	require.Equal(t, ts2Ceil.WallTime, s.frontPage().maxWallTime.Load())
 	require.Equal(t, emptyVal, s.LookupTimestamp(ctx, []byte("apple")))
 	require.Equal(t, val1, s.LookupTimestamp(ctx, []byte("apricot")))
 	require.Equal(t, val2, s.LookupTimestamp(ctx, []byte("banana")))
@@ -450,7 +450,7 @@ func TestIntervalSklSingleKeyRanges(t *testing.T) {
 
 	// Don't allow inverted ranges.
 	require.Panics(t, func() { s.AddRange(ctx, []byte("kiwi"), []byte("apple"), 0, val1) })
-	require.Equal(t, int64(0), s.frontPage().maxWallTime)
+	require.Equal(t, int64(0), s.frontPage().maxWallTime.Load())
 	require.Equal(t, emptyVal, s.LookupTimestamp(ctx, []byte("apple")))
 	require.Equal(t, emptyVal, s.LookupTimestamp(ctx, []byte("banana")))
 	require.Equal(t, emptyVal, s.LookupTimestamp(ctx, []byte("kiwi")))
@@ -762,7 +762,7 @@ func TestIntervalSklLookupEqualsEarlierMaxWallTime(t *testing.T) {
 		if logical {
 			expMaxTS = ts2Ceil
 		}
-		require.Equal(t, expMaxTS.WallTime, s.frontPage().maxWallTime)
+		require.Equal(t, expMaxTS.WallTime, s.frontPage().maxWallTime.Load())
 
 		// Rotate the page so that new writes will go to a different page.
 		s.rotatePages(ctx, s.frontPage())
