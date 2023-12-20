@@ -11,7 +11,6 @@
 package idxrecommendations
 
 import (
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -52,13 +51,9 @@ type IndexRecCache struct {
 		// lastCleanupTs has the last time we cleaned up the cache.
 		lastCleanupTs time.Time
 	}
-
-	atomic struct {
-		// uniqueIndexRecInfo is the number of unique index recommendations info
-		// we are storing in memory.
-		uniqueIndexRecInfo int64
-	}
 }
+
+const minutesBetweenCleanups = 5
 
 // NewIndexRecommendationsCache creates a new map to be used as a cache for index recommendations.
 func NewIndexRecommendationsCache(setting *cluster.Settings) *IndexRecCache {
@@ -158,17 +153,24 @@ func (idxRec *IndexRecCache) statementCanHaveRecommendation(
 	return true
 }
 
-func (idxRec *IndexRecCache) getIndexRecommendation(key indexRecKey) (indexRecInfo, bool) {
+func (idxRec *IndexRecCache) getIndexRecommendation(key indexRecKey) (indexRecInfo, bool, int, time.Time) {
 	idxRec.mu.RLock()
 	defer idxRec.mu.RUnlock()
 
 	recInfo, found := idxRec.mu.idxRecommendations[key]
 
-	return recInfo, found
+	cacheSize := 0
+	// The cacheSize is only used when no index is found, so we avoid calculating its value
+	// when it is found to not increase overhead.
+	if !found {
+		cacheSize = len(idxRec.mu.idxRecommendations)
+	}
+
+	return recInfo, found, cacheSize, idxRec.mu.lastCleanupTs
 }
 
 func (idxRec *IndexRecCache) getOrCreateIndexRecommendation(key indexRecKey) (indexRecInfo, bool) {
-	recInfo, found := idxRec.getIndexRecommendation(key)
+	recInfo, found, cacheSize, lastCleanup := idxRec.getIndexRecommendation(key)
 	if found {
 		return recInfo, true
 	}
@@ -176,22 +178,8 @@ func (idxRec *IndexRecCache) getOrCreateIndexRecommendation(key indexRecKey) (in
 	// Get the cluster setting value of the limit on number of unique index
 	// recommendations info we can store in memory.
 	limit := sqlstats.MaxMemReportedSampleIndexRecommendations.Get(&idxRec.st.SV)
-	incrementedCount :=
-		atomic.AddInt64(&idxRec.atomic.uniqueIndexRecInfo, int64(1))
-
-	// If it was not found, check if a new entry can be created, without
-	// passing the limit of unique index recommendations from the cache.
-	if incrementedCount > limit {
-		atomic.AddInt64(&idxRec.atomic.uniqueIndexRecInfo, -int64(1))
-		// If we have exceeded the limit of unique index recommendations try to delete older data.
-		idxRec.clearOldIdxRecommendations()
-
-		// Confirm if after the cleanup we can add new entries.
-		incrementedCount =
-			atomic.AddInt64(&idxRec.atomic.uniqueIndexRecInfo, int64(1))
-		// Abort if no entries were deleted.
-		if incrementedCount > limit {
-			atomic.AddInt64(&idxRec.atomic.uniqueIndexRecInfo, -int64(1))
+	if int64(cacheSize) >= limit {
+		if timeutil.Since(lastCleanup).Minutes() < minutesBetweenCleanups {
 			return indexRecInfo{}, false
 		}
 	}
@@ -203,6 +191,29 @@ func (idxRec *IndexRecCache) getOrCreateIndexRecommendation(key indexRecKey) (in
 	recInfo, found = idxRec.mu.idxRecommendations[key]
 	if found {
 		return recInfo, true
+	}
+
+	// If it was not found, check if a new entry can be created, without
+	// passing the limit of unique index recommendations from the cache.
+	// Calculate the size again, because it could have been updated by another thread.
+	if int64(len(idxRec.mu.idxRecommendations)) >= limit {
+		// Check if has been at least 5min since last cleanup, to avoid
+		// lock contention when we reached the limit.
+		if timeutil.Since(idxRec.mu.lastCleanupTs).Minutes() < minutesBetweenCleanups {
+			return indexRecInfo{}, false
+		}
+
+		// Clear entries that were last updated more than a day ago.
+		for idxKey, value := range idxRec.mu.idxRecommendations {
+			if timeutil.Since(value.lastGeneratedTs).Hours() >= 24 {
+				delete(idxRec.mu.idxRecommendations, idxKey)
+			}
+		}
+		idxRec.mu.lastCleanupTs = timeutil.Now()
+
+		if int64(len(idxRec.mu.idxRecommendations)) >= limit {
+			return indexRecInfo{}, false
+		}
 	}
 
 	// For a new entry, we want the lastGeneratedTs to be in the past, in case we reach
@@ -231,28 +242,6 @@ func (idxRec *IndexRecCache) setIndexRecommendations(
 			recommendations: recommendations,
 			executionCount:  execCount,
 		}
-	}
-}
-
-// clearOldIdxRecommendations clear entries that was last updated
-// more than a day ago. Returns the total deleted entries.
-func (idxRec *IndexRecCache) clearOldIdxRecommendations() {
-	timeSinceLastCleanup := timeutil.Since(idxRec.getLastCleanupTs())
-	// Check if has been at least 5min since last cleanup, to avoid
-	// lock contention when we reached the limit.
-	if timeSinceLastCleanup.Minutes() >= 5 {
-		idxRec.mu.Lock()
-		defer idxRec.mu.Unlock()
-
-		deleted := 0
-		for key, value := range idxRec.mu.idxRecommendations {
-			if timeutil.Since(value.lastGeneratedTs).Hours() >= 24 {
-				delete(idxRec.mu.idxRecommendations, key)
-				deleted++
-			}
-		}
-		atomic.AddInt64(&idxRec.atomic.uniqueIndexRecInfo, int64(-deleted))
-		idxRec.mu.lastCleanupTs = timeutil.Now()
 	}
 }
 
