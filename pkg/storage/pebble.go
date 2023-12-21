@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -793,7 +792,7 @@ type PebbleConfig struct {
 	SharedStorage cloud.ExternalStorage
 
 	// RemoteStorageFactory is used to pass the ExternalStorage factory.
-	RemoteStorageFactory *cloud.ExternalStorageAccessor
+	RemoteStorageFactory *cloud.EarlyBootExternalStorageAccessor
 
 	// onClose is a slice of functions to be invoked before the engine is closed.
 	onClose []func(*Pebble)
@@ -992,11 +991,11 @@ func (p *Pebble) Download(ctx context.Context, span roachpb.Span) error {
 type remoteStorageAdaptor struct {
 	p       *Pebble
 	ctx     context.Context
-	factory *cloud.ExternalStorageAccessor
+	factory *cloud.EarlyBootExternalStorageAccessor
 }
 
 func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Storage, error) {
-	es, err := r.factory.OpenURL(r.ctx, string(locator), username.SQLUsername{})
+	es, err := r.factory.OpenURL(r.ctx, string(locator))
 	return &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}, err
 }
 

@@ -477,13 +477,11 @@ func TestReadFileAtReturnsSize(t *testing.T) {
 	gsURI := fmt.Sprintf("gs://%s/%s-%d?AUTH=implicit", bucket, "read-file-at-returns-size", testID)
 	conf, err := cloud.ExternalStorageConfFromURI(gsURI, user)
 	require.NoError(t, err)
-	args := cloud.ExternalStorageContext{
-		IOConf:          base.ExternalIODirConfig{},
-		Settings:        testSettings,
-		DB:              nil,
-		Options:         nil,
-		Limiters:        nil,
-		MetricsRecorder: cloud.NilMetrics,
+	args := cloud.EarlyBootExternalStorageContext{
+		IOConf:   base.ExternalIODirConfig{},
+		Settings: testSettings,
+		Options:  nil,
+		Limiters: nil,
 	}
 	s, err := makeGCSStorage(ctx, args, conf)
 	require.NoError(t, err)

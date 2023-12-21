@@ -2066,7 +2066,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
 	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
 	s.externalStorageBuilder.init(
-		ctx,
+		s.cfg.EarlyBootExternalStorageAccessor,
 		s.cfg.ExternalIODirConfig,
 		s.st,
 		s.sqlServer.sqlIDContainer,
@@ -2077,11 +2077,6 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		nil, /* TenantExternalIORecorder */
 		s.appRegistry,
 	)
-	if err := s.cfg.ExternalStorageAccessor.Init(
-		s.externalStorageBuilder.makeExternalStorage, s.externalStorageBuilder.makeExternalStorageFromURI,
-	); err != nil {
-		return err
-	}
 
 	// Start the job scheduler now that the SQL Server and
 	// external storage is initialized.
