@@ -35,6 +35,9 @@ type TestFeedMessage struct {
 	Topic, Partition string
 	Key, Value       []byte
 	Resolved         []byte
+
+	// RawMessage is the sink-specific message type.
+	RawMessage interface{}
 }
 
 func (m TestFeedMessage) String() string {

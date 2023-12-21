@@ -34,6 +34,8 @@ type TopicDescriptor interface {
 	// GetTargetSpecification() returns the target specification for this topic.
 	// Currently this is assumed to be 1:1, or to be many: 1 for EachColumnFamily topics.
 	GetTargetSpecification() changefeedbase.Target
+	// GetTableName returns the table name for the row attached to this event.
+	GetTableName() string
 }
 
 // TopicIdentifier is a minimal set of fields that
@@ -255,6 +257,11 @@ func (tdt *tableDescriptorTopic) GetTargetSpecification() changefeedbase.Target 
 	return tdt.spec
 }
 
+// GetTableName implements the TopicDescriptor interface
+func (tdt *tableDescriptorTopic) GetTableName() string {
+	return tdt.TableName
+}
+
 var _ TopicDescriptor = &tableDescriptorTopic{}
 
 type columnFamilyTopic struct {
@@ -289,6 +296,11 @@ func (cft *columnFamilyTopic) GetTargetSpecification() changefeedbase.Target {
 	return cft.spec
 }
 
+// GetTableName implements the TopicDescriptor interface
+func (cft *columnFamilyTopic) GetTableName() string {
+	return cft.TableName
+}
+
 var _ TopicDescriptor = &columnFamilyTopic{}
 
 type noTopic struct{}
@@ -309,6 +321,11 @@ func (n noTopic) GetVersion() descpb.DescriptorVersion {
 
 func (n noTopic) GetTargetSpecification() changefeedbase.Target {
 	return changefeedbase.Target{}
+}
+
+// GetTableName implements the TopicDescriptor interface
+func (n noTopic) GetTableName() string {
+	return ""
 }
 
 var _ TopicDescriptor = &noTopic{}

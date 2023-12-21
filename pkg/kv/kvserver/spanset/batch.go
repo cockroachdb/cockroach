@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -938,6 +939,8 @@ func NewEventuallyFileOnlySnapshot(
 }
 
 // WaitForFileOnly implements the storage.EventuallyFileOnlyReader interface.
-func (e *spanSetEFOS) WaitForFileOnly(ctx context.Context) error {
-	return e.efos.WaitForFileOnly(ctx)
+func (e *spanSetEFOS) WaitForFileOnly(
+	ctx context.Context, gracePeriodBeforeFlush time.Duration,
+) error {
+	return e.efos.WaitForFileOnly(ctx, gracePeriodBeforeFlush)
 }

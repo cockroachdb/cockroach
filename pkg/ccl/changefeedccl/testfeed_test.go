@@ -2209,7 +2209,9 @@ func (f *webhookFeed) Close() error {
 
 type mockPubsubMessage struct {
 	data string
-	// NB: the topic may be empty.
+	// attributes are only populated for the non-deprecated pubsub sink.
+	attributes map[string]string
+	// topic is only populated for the non-deprecated pubsub sink.
 	topic string
 }
 
@@ -2316,7 +2318,8 @@ func (ps *fakePubsubServer) React(req interface{}) (handled bool, ret interface{
 		defer ps.mu.Unlock()
 
 		for _, msg := range publishReq.Messages {
-			ps.mu.buffer = append(ps.mu.buffer, mockPubsubMessage{data: string(msg.Data), topic: publishReq.Topic})
+			ps.mu.buffer = append(ps.mu.buffer,
+				mockPubsubMessage{data: string(msg.Data), topic: publishReq.Topic, attributes: msg.Attributes})
 		}
 		if ps.mu.notify != nil {
 			notifyCh := ps.mu.notify
@@ -2397,10 +2400,11 @@ func (p *pubsubFeedFactory) Feed(create string, args ...interface{}) (cdctest.Te
 		return nil, err
 	}
 	createStmt := parsed.AST.(*tree.CreateChangefeed)
-
-	err = setURI(createStmt, GcpScheme+"://testfeed?region=testfeedRegion", true, &args)
-	if err != nil {
-		return nil, err
+	if createStmt.SinkURI == nil {
+		err = setURI(createStmt, GcpScheme+"://testfeed?region=testfeedRegion", true, &args)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	mockServer := makeFakePubsubServer()
@@ -2505,7 +2509,9 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 				return nil, err
 			}
 
-			m := &cdctest.TestFeedMessage{}
+			m := &cdctest.TestFeedMessage{
+				RawMessage: msg,
+			}
 			switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
 			case ``, changefeedbase.OptFormatJSON:
 				resolved, err := isResolvedTimestamp([]byte(msg.data))
@@ -2536,24 +2542,28 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return m, nil
 		}
 
-		if err := timeutil.RunWithTimeout(
-			context.Background(), timeoutOp("pubsub.Next", p.jobID), timeout(),
-			func(ctx context.Context) error {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-p.ss.eventReady():
-					return nil
-				case <-p.mockServer.NotifyMessage():
-					return nil
-				case <-p.shutdown:
-					return p.terminalJobError()
-				}
-			},
-		); err != nil {
+		if err := p.waitForMessage(); err != nil {
 			return nil, err
 		}
 	}
+}
+
+func (p *pubsubFeed) waitForMessage() error {
+	return timeutil.RunWithTimeout(
+		context.Background(), timeoutOp("pubsub.Next", p.jobID), timeout(),
+		func(ctx context.Context) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-p.ss.eventReady():
+				return nil
+			case <-p.mockServer.NotifyMessage():
+				return nil
+			case <-p.shutdown:
+				return p.terminalJobError()
+			}
+		},
+	)
 }
 
 // Close implements TestFeed
