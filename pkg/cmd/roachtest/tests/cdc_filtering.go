@@ -31,9 +31,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func registerCDCSessionFiltering(r registry.Registry) {
+func registerCDCFiltering(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "cdc-filtering",
+		Name:             "cdc/filtering/session",
 		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(3),
 		CompatibleClouds: registry.AllClouds,
@@ -142,6 +142,24 @@ INSERT INTO events VALUES ('C', 1);`)
 		"UPDATE events SET revision = 4 WHERE id = 'A';",
 	})
 
+	// Session 4:
+	// - Insert D@1. We expect this event WILL be in the sink.
+	s4, err := c.ConnE(ctx, t.L(), 1)
+	require.NoError(t, err)
+	defer s4.Close()
+	execWithChangefeedReplication(s4, replicationEnabled, []string{
+		"INSERT INTO events VALUES ('D', 1);",
+	})
+
+	// Session 5:
+	// - Delete D. We expect this event WILL NOT be in the sink.
+	s5, err := c.ConnE(ctx, t.L(), 1)
+	require.NoError(t, err)
+	defer s5.Close()
+	execWithChangefeedReplication(s5, replicationDisabled, []string{
+		"DELETE FROM events WHERE id = 'D'",
+	})
+
 	// Wait for the changefeed to reach the current time.
 	t.Status("waiting for changefeed")
 	now := timeutil.Now()
@@ -185,7 +203,7 @@ INSERT INTO events VALUES ('C', 1);`)
 		events = append(events, e)
 	}
 
-	// Sort the events by (updated, id) to yeild a total ordering.
+	// Sort the events by (updated, id) to yield a total ordering.
 	sort.Slice(events, func(i, j int) bool {
 		idA, idB := events[i].Key[0], events[j].Key[0]
 		tsA, err := hlc.ParseHLC(events[i].Updated)
@@ -214,6 +232,7 @@ INSERT INTO events VALUES ('C', 1);`)
 
 	// We expect to see the following sequence:
 	want := "A@1, B@1, C@1, " +
-		"B@2 (before: B@1), C@2 (before: C@1), C@3 (before: C@2), A@4 (before: A@3)"
+		"B@2 (before: B@1), C@2 (before: C@1), C@3 (before: C@2), A@4 (before: A@3), " +
+		"D@1"
 	require.Equal(t, want, sb.String())
 }
