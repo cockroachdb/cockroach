@@ -51,7 +51,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -3515,39 +3514,6 @@ func TestSnapshotRateLimit(t *testing.T) {
 	require.Equal(t, int64(32<<20), limit)
 }
 
-type entry struct {
-	conf   roachpb.SpanConfig
-	bounds roachpb.Span
-}
-
-type mockSpanConfigReader struct {
-	real      spanconfig.StoreReader
-	overrides map[string]entry
-}
-
-func (m *mockSpanConfigReader) NeedsSplit(
-	ctx context.Context, start, end roachpb.RKey,
-) (bool, error) {
-	panic("unimplemented")
-}
-
-func (m *mockSpanConfigReader) ComputeSplitKey(
-	ctx context.Context, start, end roachpb.RKey,
-) (roachpb.RKey, error) {
-	panic("unimplemented")
-}
-
-func (m *mockSpanConfigReader) GetSpanConfigForKey(
-	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
-	if e, ok := m.overrides[string(key)]; ok {
-		return e.conf, roachpb.Span{}, nil
-	}
-	return m.GetSpanConfigForKey(ctx, key)
-}
-
-var _ spanconfig.StoreReader = &mockSpanConfigReader{}
-
 // TestAllocatorCheckRangeUnconfigured tests evaluating the allocation decisions
 // for a range with a single replica using the default system configuration and
 // no other available allocation targets.
@@ -3699,7 +3665,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 				{NodeID: 4, StoreID: 4, ReplicaID: 4},
 				{NodeID: 5, StoreID: 5, ReplicaID: 5},
 			},
-			spanConfig: &defaultSystemSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 			},
@@ -3717,7 +3682,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 				{NodeID: 4, StoreID: 4, ReplicaID: 4},
 				{NodeID: 5, StoreID: 5, ReplicaID: 5},
 			},
-			spanConfig: &defaultSystemSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				3: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
 				4: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
@@ -3741,7 +3705,6 @@ func TestAllocatorCheckRange(t *testing.T) {
 				// Region "c"
 				{NodeID: 7, StoreID: 7, ReplicaID: 5},
 			},
-			spanConfig: &defaultSystemSpanConfig,
 			livenessOverrides: map[roachpb.NodeID]livenesspb.NodeLivenessStatus{
 				// Downsize to one node per region: 3,6,9.
 				1: livenesspb.NodeLivenessStatus_DECOMMISSIONING,
@@ -3992,22 +3955,8 @@ func TestAllocatorCheckRange(t *testing.T) {
 			cfg.Gossip = g
 			cfg.StorePool = sp
 			if tc.spanConfig != nil {
-				mockSr := &mockSpanConfigReader{
-					real: cfg.SystemConfigProvider.GetSystemConfig(),
-					overrides: map[string]entry{
-						"a": {
-							conf: *tc.spanConfig,
-							bounds: roachpb.Span{
-								Key:    []byte("a"),
-								EndKey: []byte("b"),
-							},
-						},
-					},
-				}
-
-				cfg.TestingKnobs.ConfReaderInterceptor = func() spanconfig.StoreReader {
-					return mockSr
-				}
+				cfg.SpanConfigsDisabled = true
+				cfg.DefaultSpanConfig = *tc.spanConfig
 			}
 
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
