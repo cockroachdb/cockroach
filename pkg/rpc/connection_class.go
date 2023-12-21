@@ -58,10 +58,11 @@ func (c ConnectionClass) String() string {
 // SafeValue implements the redact.SafeValue interface.
 func (ConnectionClass) SafeValue() {}
 
-var systemClassKeyPrefixes = []roachpb.RKey{
-	roachpb.RKey(keys.Meta1Prefix),
-	roachpb.RKey(keys.NodeLivenessPrefix),
-}
+// All the ranges that include keys between /Min and/ System/tsd should
+// use the system class. To avoid relying on the NoSplit list we just check if
+// the a key is within the system span to determine the connection class.
+// within this span.
+var systemClassSpan = roachpb.Span{Key: keys.MinKey, EndKey: keys.TimeseriesPrefix}
 
 // ConnectionClassForKey determines the ConnectionClass which should be used
 // for traffic addressed to the RKey.
@@ -69,11 +70,8 @@ func ConnectionClassForKey(key roachpb.RKey) ConnectionClass {
 	// An empty RKey addresses range 1 and warrants SystemClass.
 	if len(key) == 0 {
 		return SystemClass
-	}
-	for _, prefix := range systemClassKeyPrefixes {
-		if bytes.HasPrefix(key, prefix) {
-			return SystemClass
-		}
+	} else if bytes.Compare(key, systemClassSpan.Key) >= 0 && bytes.Compare(key, systemClassSpan.EndKey) < 0 {
+		return SystemClass
 	}
 	return DefaultClass
 }
