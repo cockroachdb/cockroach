@@ -510,6 +510,220 @@ func TestStatusAPIStatements(t *testing.T) {
 	testPath(fmt.Sprintf("statements?combined=true&start=%d", aggregatedTs+60), nil)
 }
 
+func TestStatusAPICombinedStatementsTotalLatency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "test is too slow to run under race")
+	// Increase the timeout for the http client if under stress.
+	additionalTimeout := 0 * time.Second
+	if skip.Stress() {
+		additionalTimeout = additionalTimeoutUnderStress
+	}
+
+	stubTime := timeutil.Now().Truncate(time.Hour)
+	sqlStatsKnobs := sqlstats.CreateTestingKnobs()
+	sqlStatsKnobs.StubTimeNow = func() time.Time { return stubTime }
+	// Start the cluster.
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure: true,
+		Knobs: base.TestingKnobs{
+			SQLStatsKnobs: sqlStatsKnobs,
+		},
+	})
+
+	defer srv.Stopper().Stop(context.Background())
+	defer sqlDB.Close()
+	ts := srv.ApplicationLayer()
+	db := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Disabled flush so no extra data is inserted to the system table.
+	db.Exec(t, "SET CLUSTER SETTING sql.stats.activity.flush.enabled = 'f'")
+
+	// Give permission to write to system tables.
+	db.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
+	db.Exec(t, "GRANT node TO root")
+
+	testCases := []struct {
+		testName     string
+		start        string
+		end          string
+		count        int
+		totalLatency float32
+		sourceTable  string
+	}{
+		{
+			testName:     "getting first result",
+			start:        "1704103200", // January 1, 2024 10:00:00
+			end:          "1704104400", // January 1, 2024 10:20:00
+			count:        1,
+			totalLatency: 1600,
+		},
+		{
+			testName:     "getting second result",
+			start:        "1704106800", // January 1, 2024 11:00:00
+			end:          "1704109200", // January 1, 2024 11:40:00
+			count:        1,
+			totalLatency: 450,
+		},
+		{
+			testName:     "getting both results",
+			start:        "1704103200", // January 1, 2024 10:00:00
+			end:          "1704109200", // January 1, 2024 11:40:00
+			count:        2,
+			totalLatency: 2050,
+		},
+	}
+
+	// Test with 2 rows on system.statement_statistics and nothing on system.statement_activity table.
+	query := `INSERT INTO system.statement_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  node_id,
+  agg_interval,
+  metadata,
+  statistics,
+  plan,
+  index_recommendations
+)
+VALUES (
+  '2024-01-01 10:00:00+00:00',
+  '\x0f1c01d65b4b88b9',
+  '\xa07fbc9add4a3f66',
+  '\xbff951ae7cecdd4b',
+  'app',
+  1,
+  '01:00:00',
+  '{"db": "database", "distsql": false, "failed": false, "fullScan": true, "implicitTxn": false, "query": "SELECT * FROM foo", "querySummary": "SELECT * FROM foo", "stmtType": "TypeDDL", "vec": true}',
+  '{"execution_statistics": {"cnt": 3, "contentionTime": {"mean": 0, "sqDiff": 0}, "cpuSQLNanos": {"mean": 5, "sqDiff": 1}, "maxDiskUsage": {"mean": 0, "sqDiff": 0}, "maxMemUsage": {"mean": 3.072E+4, "sqDiff": 0}, "mvccIteratorStats": {"blockBytes": {"mean": 67298.66666666667, "sqDiff": 56815650.666666664}, "blockBytesInCache": {"mean": 0, "sqDiff": 0}, "keyBytes": {"mean": 0, "sqDiff": 0}, "pointCount": {"mean": 0, "sqDiff": 0}, "pointsCoveredByRangeTombstones": {"mean": 0, "sqDiff": 0}, "rangeKeyContainedPoints": {"mean": 0, "sqDiff": 0}, "rangeKeyCount": {"mean": 0, "sqDiff": 0}, "rangeKeySkippedPoints": {"mean": 0, "sqDiff": 0}, "seekCount": {"mean": 2, "sqDiff": 0}, "seekCountInternal": {"mean": 2, "sqDiff": 0}, "stepCount": {"mean": 0, "sqDiff": 0}, "stepCountInternal": {"mean": 0, "sqDiff": 0}, "valueBytes": {"mean": 0, "sqDiff": 0}}, "networkBytes": {"mean": 0, "sqDiff": 0}, "networkMsgs": {"mean": 0, "sqDiff": 0}}, "index_recommendations": [], "statistics": {"bytesRead": {"mean": 0, "sqDiff": 0}, "cnt": 160, "firstAttemptCnt": 160, "idleLat": {"mean": 0, "sqDiff": 0}, "indexes": ["15@4"], "lastErrorCode": "", "lastExecAt": "2024-01-01T10:10:10.000000Z", "latencyInfo": {"max": 10.007567166, "min": 0.001230625, "p50": 0, "p90": 0, "p99": 0}, "maxRetries": 0, "nodes": [1], "numRows": {"mean": 0, "sqDiff": 0}, "ovhLat": {"mean": 0.000009547925000000002, "sqDiff": 0.0000011356103418930996}, "parseLat": {"mean": 0, "sqDiff": 0}, "planGists": ["AgEeCADnAwIAAAMHEgUUIR4AAA=="], "planLat": {"mean": 0.0015467471499999998, "sqDiff": 0.00005468349517742839}, "regions": ["us-east1"], "rowsRead": {"mean": 0, "sqDiff": 0}, "rowsWritten": {"mean": 0, "sqDiff": 0}, "runLat": {"mean": 0.0023178065125, "sqDiff": 0.00010373159889491199}, "svcLat": {"mean": 10, "sqDiff": 0.0002}}}'::JSONB,
+  '{"Children": [], "Name": ""}',
+  ARRAY['creation : CREATE INDEX t3_k_i_f ON t3(k, i, f)']
+),
+(
+  '2024-01-01 11:00:00+00:00',
+  '\x21a018638734c1fa',
+  '\x8ec3a52f01357625',
+  '\xa3ca652fbc7ba181',
+  'app',
+  1,
+  '01:00:00',
+  '{"db": "database", "distsql": false, "failed": false, "fullScan": true, "implicitTxn": false, "query": "SELECT * FROM bar", "querySummary": "SELECT * FROM foo", "stmtType": "TypeDDL", "vec": true}',
+  '{"execution_statistics": {"cnt": 3, "contentionTime": {"mean": 0, "sqDiff": 0}, "cpuSQLNanos": {"mean": 5, "sqDiff": 1}, "maxDiskUsage": {"mean": 0, "sqDiff": 0}, "maxMemUsage": {"mean": 3.072E+4, "sqDiff": 0}, "mvccIteratorStats": {"blockBytes": {"mean": 67298.66666666667, "sqDiff": 56815650.666666664}, "blockBytesInCache": {"mean": 0, "sqDiff": 0}, "keyBytes": {"mean": 0, "sqDiff": 0}, "pointCount": {"mean": 0, "sqDiff": 0}, "pointsCoveredByRangeTombstones": {"mean": 0, "sqDiff": 0}, "rangeKeyContainedPoints": {"mean": 0, "sqDiff": 0}, "rangeKeyCount": {"mean": 0, "sqDiff": 0}, "rangeKeySkippedPoints": {"mean": 0, "sqDiff": 0}, "seekCount": {"mean": 2, "sqDiff": 0}, "seekCountInternal": {"mean": 2, "sqDiff": 0}, "stepCount": {"mean": 0, "sqDiff": 0}, "stepCountInternal": {"mean": 0, "sqDiff": 0}, "valueBytes": {"mean": 0, "sqDiff": 0}}, "networkBytes": {"mean": 0, "sqDiff": 0}, "networkMsgs": {"mean": 0, "sqDiff": 0}}, "index_recommendations": [], "statistics": {"bytesRead": {"mean": 0, "sqDiff": 0}, "cnt": 30, "firstAttemptCnt": 30, "idleLat": {"mean": 0, "sqDiff": 0}, "indexes": ["15@4"], "lastErrorCode": "", "lastExecAt": "2024-01-01T10:10:10.000000Z", "latencyInfo": {"max": 10.007567166, "min": 0.001230625, "p50": 0, "p90": 0, "p99": 0}, "maxRetries": 0, "nodes": [1], "numRows": {"mean": 0, "sqDiff": 0}, "ovhLat": {"mean": 0.000009547925000000002, "sqDiff": 0.0000011356103418930996}, "parseLat": {"mean": 0, "sqDiff": 0}, "planGists": ["AgEeCADnAwIAAAMHEgUUIR4AAA=="], "planLat": {"mean": 0.0015467471499999998, "sqDiff": 0.00005468349517742839}, "regions": ["us-east1"], "rowsRead": {"mean": 0, "sqDiff": 0}, "rowsWritten": {"mean": 0, "sqDiff": 0}, "runLat": {"mean": 0.0023178065125, "sqDiff": 0.00010373159889491199}, "svcLat": {"mean": 15, "sqDiff": 0.0002}}}'::JSONB,
+  '{"Children": [], "Name": ""}',
+  ARRAY['creation : CREATE INDEX t3_k_i_f ON t3(k, i, f)']
+)`
+	db.Exec(t, query)
+
+	for _, tc := range testCases {
+		compareResults(
+			t,
+			tc.testName,
+			tc.start,
+			tc.end,
+			tc.count,
+			tc.totalLatency,
+			"crdb_internal.statement_statistics_persisted",
+			additionalTimeout,
+			ts,
+		)
+	}
+
+	// Test with 2 rows on system.statement_activity table.
+	query = `INSERT INTO system.statement_activity (
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  agg_interval,
+  metadata,
+  statistics,
+  plan,
+  index_recommendations,
+  execution_count,
+	execution_total_seconds,
+	execution_total_cluster_seconds,
+	contention_time_avg_seconds,
+	cpu_sql_avg_nanos,
+	service_latency_avg_seconds,
+	service_latency_p99_seconds
+)
+VALUES (
+  '2024-01-01 10:00:00+00:00',
+  '\x0f1c01d65b4b88b9',
+  '\xa07fbc9add4a3f66',
+  '\xbff951ae7cecdd4b',
+  'app',
+  '01:00:00',
+  '{"db": ["database"], "distsql": false, "failed": false, "fullScan": true, "implicitTxn": false, "query": "SELECT * FROM foo", "querySummary": "SELECT * FROM foo", "stmtType": "TypeDDL", "vec": true}',
+  '{"execution_statistics": {"cnt": 3, "contentionTime": {"mean": 0, "sqDiff": 0}, "cpuSQLNanos": {"mean": 5, "sqDiff": 1}, "maxDiskUsage": {"mean": 0, "sqDiff": 0}, "maxMemUsage": {"mean": 3.072E+4, "sqDiff": 0}, "mvccIteratorStats": {"blockBytes": {"mean": 67298.66666666667, "sqDiff": 56815650.666666664}, "blockBytesInCache": {"mean": 0, "sqDiff": 0}, "keyBytes": {"mean": 0, "sqDiff": 0}, "pointCount": {"mean": 0, "sqDiff": 0}, "pointsCoveredByRangeTombstones": {"mean": 0, "sqDiff": 0}, "rangeKeyContainedPoints": {"mean": 0, "sqDiff": 0}, "rangeKeyCount": {"mean": 0, "sqDiff": 0}, "rangeKeySkippedPoints": {"mean": 0, "sqDiff": 0}, "seekCount": {"mean": 2, "sqDiff": 0}, "seekCountInternal": {"mean": 2, "sqDiff": 0}, "stepCount": {"mean": 0, "sqDiff": 0}, "stepCountInternal": {"mean": 0, "sqDiff": 0}, "valueBytes": {"mean": 0, "sqDiff": 0}}, "networkBytes": {"mean": 0, "sqDiff": 0}, "networkMsgs": {"mean": 0, "sqDiff": 0}}, "index_recommendations": [], "statistics": {"bytesRead": {"mean": 0, "sqDiff": 0}, "cnt": 160, "firstAttemptCnt": 160, "idleLat": {"mean": 0, "sqDiff": 0}, "indexes": ["15@4"], "lastErrorCode": "", "lastExecAt": "2024-01-01T10:10:10.000000Z", "latencyInfo": {"max": 10.007567166, "min": 0.001230625, "p50": 0, "p90": 0, "p99": 0}, "maxRetries": 0, "nodes": [1], "numRows": {"mean": 0, "sqDiff": 0}, "ovhLat": {"mean": 0.000009547925000000002, "sqDiff": 0.0000011356103418930996}, "parseLat": {"mean": 0, "sqDiff": 0}, "planGists": ["AgEeCADnAwIAAAMHEgUUIR4AAA=="], "planLat": {"mean": 0.0015467471499999998, "sqDiff": 0.00005468349517742839}, "regions": ["us-east1"], "rowsRead": {"mean": 0, "sqDiff": 0}, "rowsWritten": {"mean": 0, "sqDiff": 0}, "runLat": {"mean": 0.0023178065125, "sqDiff": 0.00010373159889491199}, "svcLat": {"mean": 10, "sqDiff": 0.0002}}}'::JSONB,
+  '{"Children": [], "Name": ""}',
+  ARRAY['creation : CREATE INDEX t3_k_i_f ON t3(k, i, f)'],
+	160,
+	1600,
+	1600,
+	0,
+	5,
+	10,
+	7
+),
+(
+  '2024-01-01 11:00:00+00:00',
+  '\x21a018638734c1fa',
+  '\x8ec3a52f01357625',
+  '\xa3ca652fbc7ba181',
+  'app',
+  '01:00:00',
+  '{"db": ["database"], "distsql": false, "failed": false, "fullScan": true, "implicitTxn": false, "query": "SELECT * FROM bar", "querySummary": "SELECT * FROM foo", "stmtType": "TypeDDL", "vec": true}',
+  '{"execution_statistics": {"cnt": 3, "contentionTime": {"mean": 0, "sqDiff": 0}, "cpuSQLNanos": {"mean": 5, "sqDiff": 1}, "maxDiskUsage": {"mean": 0, "sqDiff": 0}, "maxMemUsage": {"mean": 3.072E+4, "sqDiff": 0}, "mvccIteratorStats": {"blockBytes": {"mean": 67298.66666666667, "sqDiff": 56815650.666666664}, "blockBytesInCache": {"mean": 0, "sqDiff": 0}, "keyBytes": {"mean": 0, "sqDiff": 0}, "pointCount": {"mean": 0, "sqDiff": 0}, "pointsCoveredByRangeTombstones": {"mean": 0, "sqDiff": 0}, "rangeKeyContainedPoints": {"mean": 0, "sqDiff": 0}, "rangeKeyCount": {"mean": 0, "sqDiff": 0}, "rangeKeySkippedPoints": {"mean": 0, "sqDiff": 0}, "seekCount": {"mean": 2, "sqDiff": 0}, "seekCountInternal": {"mean": 2, "sqDiff": 0}, "stepCount": {"mean": 0, "sqDiff": 0}, "stepCountInternal": {"mean": 0, "sqDiff": 0}, "valueBytes": {"mean": 0, "sqDiff": 0}}, "networkBytes": {"mean": 0, "sqDiff": 0}, "networkMsgs": {"mean": 0, "sqDiff": 0}}, "index_recommendations": [], "statistics": {"bytesRead": {"mean": 0, "sqDiff": 0}, "cnt": 30, "firstAttemptCnt": 30, "idleLat": {"mean": 0, "sqDiff": 0}, "indexes": ["15@4"], "lastErrorCode": "", "lastExecAt": "2024-01-01T10:10:10.000000Z", "latencyInfo": {"max": 10.007567166, "min": 0.001230625, "p50": 0, "p90": 0, "p99": 0}, "maxRetries": 0, "nodes": [1], "numRows": {"mean": 0, "sqDiff": 0}, "ovhLat": {"mean": 0.000009547925000000002, "sqDiff": 0.0000011356103418930996}, "parseLat": {"mean": 0, "sqDiff": 0}, "planGists": ["AgEeCADnAwIAAAMHEgUUIR4AAA=="], "planLat": {"mean": 0.0015467471499999998, "sqDiff": 0.00005468349517742839}, "regions": ["us-east1"], "rowsRead": {"mean": 0, "sqDiff": 0}, "rowsWritten": {"mean": 0, "sqDiff": 0}, "runLat": {"mean": 0.0023178065125, "sqDiff": 0.00010373159889491199}, "svcLat": {"mean": 15, "sqDiff": 0.0002}}}'::JSONB,
+  '{"Children": [], "Name": ""}',
+  ARRAY['creation : CREATE INDEX t3_k_i_f ON t3(k, i, f)'],
+  30,
+  450,
+  450,
+  0,
+  5,
+  15,
+  10
+)`
+	db.Exec(t, query)
+	for _, tc := range testCases {
+		compareResults(
+			t,
+			tc.testName,
+			tc.start,
+			tc.end,
+			tc.count,
+			tc.totalLatency,
+			"crdb_internal.statement_activity",
+			additionalTimeout,
+			ts,
+		)
+	}
+}
+
+func compareResults(
+	t *testing.T,
+	testName string,
+	start string,
+	end string,
+	count int,
+	totalLatency float32,
+	sourceTable string,
+	additionalTimeout time.Duration,
+	ts serverutils.ApplicationLayerInterface,
+) {
+	var resp serverpb.StatementsResponse
+	endpoint := fmt.Sprintf("combinedstmts?start=%s&end=%s", start, end)
+	err := srvtestutils.GetStatusJSONProtoWithAdminAndTimeoutOption(ts, endpoint, &resp, true, additionalTimeout)
+	require.NoError(t, err, fmt.Sprintf("server error on %s", testName))
+	require.Equal(t, sourceTable, resp.StmtsSourceTable, fmt.Sprintf("source table error on %s", testName))
+	require.Equal(t, count, len(resp.Statements), fmt.Sprintf("stmts length error on %s", testName))
+	require.Equal(t, totalLatency, resp.StmtsTotalRuntimeSecs, fmt.Sprintf("total latency on %s", testName))
+}
+
 func TestStatusAPICombinedStatementsWithFullScans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
