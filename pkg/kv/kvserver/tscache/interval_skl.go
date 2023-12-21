@@ -576,6 +576,16 @@ func newSklPage(arena *arenaskl.Arena) *sklPage {
 // lookupTimestampRange scans the range of keys between from and to and returns
 // the maximum (initialized or uninitialized) value found.
 func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheValue {
+	var maxVal cacheValue
+	p.visitRange(from, to, opt, func(val cacheValue) {
+		maxVal, _ = ratchetValue(maxVal, val)
+	})
+	return maxVal
+}
+
+// visitRange scans the range of keys between from and to and calls the visitor
+// function for each (initialized or uninitialized) value found.
+func (p *sklPage) visitRange(from, to []byte, opt rangeOptions, visit func(cacheValue)) {
 	if to != nil {
 		cmp := 0
 		if from != nil {
@@ -584,13 +594,13 @@ func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheV
 
 		if cmp > 0 {
 			// Starting key is after ending key, so range is zero length.
-			return cacheValue{}
+			return
 		}
 		if cmp == 0 {
 			// Starting key is same as ending key.
 			if opt == (excludeFrom | excludeTo) {
 				// Both from and to keys are excluded, so range is zero length.
-				return cacheValue{}
+				return
 			}
 
 			// Scan over a single key.
@@ -608,26 +618,25 @@ func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheV
 	prevGapVal := p.incomingGapVal(&it, from)
 
 	if !it.Valid() {
-		// No more nodes.
-		return prevGapVal
+		// No more nodes. Visit the previous gap value and return.
+		visit(prevGapVal)
+		return
 	} else if bytes.Equal(it.Key(), from) {
-		// Found a node at from.
+		// Found a node at from. No need to visit the gap value.
 		if (it.Meta() & initialized) != 0 {
 			// The node was initialized. Ignore the previous gap value.
 			prevGapVal = cacheValue{}
 		}
 	} else {
-		// No node at from. Remove excludeFrom option.
+		// No node at from. Visit the gap value and remove the excludeFrom option.
+		visit(prevGapVal)
 		opt &^= excludeFrom
 	}
 
 	// Scan the rest of the way. Notice that we provide the previous gap value.
-	// This is important for two reasons:
-	// 1. it will be counted towards the maxVal result.
-	// 2. it will be used to ratchet uninitialized nodes that the scan sees
-	//    before any initialized nodes.
-	_, maxVal := p.scanTo(&it, to, opt, prevGapVal)
-	return maxVal
+	// This is important because it will be used to ratchet uninitialized nodes
+	// that the scan sees before any initialized nodes.
+	p.scanTo(&it, to, opt, prevGapVal, visit)
 }
 
 // addNode adds a new node at key with the provided value if one does not exist.
@@ -1030,8 +1039,7 @@ func (p *sklPage) incomingGapVal(it *arenaskl.Iterator, key []byte) cacheValue {
 	prevInitNode(it)
 
 	// Iterate forwards to key, remembering the last gap value.
-	prevGapVal, _ := p.scanTo(it, key, 0, cacheValue{})
-	return prevGapVal
+	return p.scanTo(it, key, 0, cacheValue{}, nil)
 }
 
 // scanTo scans from the current iterator position until the key "to". While
@@ -1039,16 +1047,24 @@ func (p *sklPage) incomingGapVal(it *arenaskl.Iterator, key []byte) cacheValue {
 // which is essential to avoiding ratchet inversions (see the comment on
 // ensureInitialized).
 //
-// The function then returns the maximum value seen along with the gap value at
-// the end of the scan. If the iterator is positioned at a key > "to", the
-// function will return zero values. The function takes an optional initial gap
-// value argument, which is used to initialize the running maximum and gap
-// values. When finished, the iterator will be positioned the same as if
-// it.Seek(to) had been called.
+// The function calls the provided visitor function for each value that it
+// encounters, if not nil. The visitor function is called for both key and gap
+// values.
+//
+// The function then returns the gap value at the end of the scan. If the
+// iterator is positioned at a key > "to", the function will return a zero
+// value.
+//
+// The function takes an optional initial gap value argument, which is used to
+// initialize the running gap value so that it can ratchet uninitialized nodes
+// that the scan sees before any initialized nodes.
+//
+// When finished, the iterator will be positioned the same as if it.Seek(to) had
+// been called.
 func (p *sklPage) scanTo(
-	it *arenaskl.Iterator, to []byte, opt rangeOptions, initGapVal cacheValue,
-) (prevGapVal, maxVal cacheValue) {
-	prevGapVal, maxVal = initGapVal, initGapVal
+	it *arenaskl.Iterator, to []byte, opt rangeOptions, initGapVal cacheValue, visit func(cacheValue),
+) (prevGapVal cacheValue) {
+	prevGapVal = initGapVal
 	first := true
 	for {
 		util.RacePreempt()
@@ -1087,19 +1103,21 @@ func (p *sklPage) scanTo(
 			}
 		}
 
-		if !(first && (opt&excludeFrom) != 0) {
+		if !(first && (opt&excludeFrom) != 0) && visit != nil {
 			// As long as this isn't the first key and opt says to exclude the
-			// first key, we ratchet the maxVal.
-			maxVal, _ = ratchetValue(maxVal, keyVal)
+			// first key, we call the visitor.
+			visit(keyVal)
 		}
 
 		if toCmp == 0 {
-			// We're on the scan's end key, so return the max value seen.
+			// We're on the scan's end key, so return.
 			return
 		}
 
-		// Ratchet the maxVal by the current gapVal.
-		maxVal, _ = ratchetValue(maxVal, gapVal)
+		// Call the visitor with the current gapVal.
+		if visit != nil {
+			visit(gapVal)
+		}
 
 		// Haven't yet reached the scan's end key, so keep iterating.
 		prevGapVal = gapVal
