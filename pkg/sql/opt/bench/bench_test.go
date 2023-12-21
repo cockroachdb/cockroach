@@ -1445,6 +1445,121 @@ var slowQueries = [...]benchQuery{
 			"'EJ'", "'LQIZHIJX'", "'NNSMWHCO'", "'UDJG'", "'82894'", "'AAYUMINX'", "'JGJYKJZR'", 0,
 		},
 	},
+	{
+		name: "slow-query-7",
+		query: `
+			WITH t1 AS MATERIALIZED (
+				SELECT tmp1.*, tmp2.*
+				FROM sq6a AS tmp1
+				JOIN sq6a AS tmp2 ON tmp1.c1 = tmp2.c1 AND tmp1.c2 = tmp2.c2
+			)
+			SELECT t1.*, t2.*, t4.*, t17.*, t8.*, t9.*, t3.*, t11.*
+			FROM t1
+			JOIN sq6b AS t2 ON
+				t2.c1 = t1.c1
+				AND t2.c2 = t1.c2
+				AND t2.c3 = t1.c3
+				AND t2.c4 = t1.c4
+				AND t2.c44 = t1.c100
+			JOIN sq6c AS t3 ON
+				t3.c1 = t2.c1
+				AND t3.c2 = t2.c6
+				AND t3.c34 = t2.c44
+			JOIN sq6d AS t4 ON
+				t4.c1 = t2.c1
+				AND t4.c2 = t2.c41
+				AND t4.c3 = $1
+				AND t4.c28 = t2.c44
+			JOIN sq6e AS t5 ON
+				t5.c1 = t1.c81
+				AND t5.c23 = t1.c100
+			JOIN sq6f AS t6 ON
+				t6.c12 = t1.c100
+				AND t6.c1 = t1.c1
+				AND t6.c4 = t1.c2
+				AND t6.c5 = t1.c3
+				AND t6.c6 = t1.c4
+				AND t6.c2 IN ($1, $2)
+			JOIN sq6g AS t7 ON
+				t7.c24 = t6.c12
+				AND t7.c1 = t6.c1
+				AND t7.c3 = t6.c3
+				AND t7.c2 = t6.c2
+			LEFT JOIN sq6h AS t8 ON
+				t8.c2 = t2.c37
+				AND t8.c1 = t2.c1
+				AND t8.c3 = $3
+				AND t8.c13 = t2.c44
+			LEFT JOIN sq6h AS t9 ON
+				t9.c2 = t2.c37
+				AND t9.c1 = t2.c1
+				AND t9.c3 = $4
+				AND t9.c13 = t2.c44
+			LEFT JOIN sq6i AS t10 ON
+				t10.c1 = t1.c1
+				AND t10.c2 = t1.c2
+				AND t10.c3 = t1.c3
+				AND t10.c4 = t1.c4
+				AND t10.c6 = 1
+				AND t10.c7 = t1.c100
+			LEFT JOIN sq6j AS t11 ON
+				t11.c1 = t1.c1
+				AND t11.c2 = t1.c2
+				AND t11.c3 = t1.c3
+				AND t11.c4 = t1.c4
+				AND t11.c36 = t1.c100
+			LEFT JOIN sq6k AS t12 ON
+				t12.c1 = t1.c1
+				AND t12.c2 = t1.c2
+				AND t12.c3 = t1.c3
+				AND t12.c4 = t1.c4
+				AND t12.c6 = $5
+				AND t12.c5 = t1.c100
+			LEFT JOIN sq6k AS t13 ON
+				t13.c1 = t1.c1
+				AND t13.c2 = t1.c2
+				AND t13.c3 = t1.c3
+				AND t13.c4 = t1.c4
+				AND t13.c6 = $6
+				AND t13.c5 = t1.c100
+			LEFT JOIN sq6k AS t15 ON
+				t15.c1 = t1.c1
+				AND t15.c2 = t1.c2
+				AND t15.c3 = t1.c3
+				AND t15.c4 = t1.c4
+				AND t15.c6 = $7
+				AND t15.c5 = t1.c100
+			LEFT JOIN sq6k AS t16 ON
+				t16.c1 = t1.c1
+				AND t16.c2 = t1.c2
+				AND t16.c3 = t1.c3
+				AND t16.c4 = t1.c4
+				AND t16.c6 = $8
+				AND t16.c5 = t1.c100
+			LEFT JOIN sq6l AS t17 ON
+				t17.c1 = t1.c1
+				AND t17.c2 = t1.c2
+				AND t17.c3 = t1.c3
+				AND t17.c4 = t1.c4
+				AND t17.c5 = $9
+				AND t17.c28 = t1.c100
+			LEFT JOIN sq6m AS t18 ON
+				t18.c4 = t1.c2
+				AND t18.c1 = t1.c3
+				AND t18.c2 = t1.c4
+				AND t18.c36 = t1.c100
+			WHERE
+				t1.c1 IN ($10, $11, $12)
+				AND t1.c2 = $13
+				AND t1.c3 = $14
+				AND t1.c4 = $15
+				AND t1.c100 = $16
+    `,
+		args: []interface{}{
+			"'WX'", "'ZG'", "'TTT'", "'FFF'", "'JQYJSUWE'", "'RDDQXFRN'", "'HCLDUJOA'", "'GESIUACE'",
+			"'EJ'", "'LQIZHIJX'", "'NNSMWHCO'", "'UDJG'", "'82894'", "'AAYUMINX'", "'JGJYKJZR'", 0,
+		},
+	},
 }
 
 func BenchmarkSlowQueries(b *testing.B) {
