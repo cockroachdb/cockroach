@@ -4174,35 +4174,47 @@ func TestConnectionClass(t *testing.T) {
 	defer stopper.Stop(ctx)
 	// Create a mock range descriptor DB that can resolve made up meta1, node
 	// liveness and user ranges.
+
+	replicas := []roachpb.ReplicaDescriptor{
+		{NodeID: 1, StoreID: 1},
+	}
 	rDB := MockRangeDescriptorDB(func(key roachpb.RKey, _ bool) (
 		[]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error,
 	) {
 		if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
 			return []roachpb.RangeDescriptor{{
-				RangeID:  1,
-				StartKey: roachpb.RKeyMin,
-				EndKey:   roachpb.RKey(keys.NodeLivenessPrefix),
-				InternalReplicas: []roachpb.ReplicaDescriptor{
-					{NodeID: 1, StoreID: 1},
-				},
+				RangeID:          1,
+				StartKey:         roachpb.RKeyMin,
+				EndKey:           roachpb.RKey(keys.NodeLivenessPrefix),
+				InternalReplicas: replicas,
 			}}, nil, nil
 		} else if bytes.HasPrefix(key, keys.NodeLivenessPrefix) {
 			return []roachpb.RangeDescriptor{{
-				RangeID:  2,
-				StartKey: roachpb.RKey(keys.NodeLivenessPrefix),
-				EndKey:   roachpb.RKey(keys.NodeLivenessKeyMax),
-				InternalReplicas: []roachpb.ReplicaDescriptor{
-					{NodeID: 1, StoreID: 1},
-				},
+				RangeID:          2,
+				StartKey:         roachpb.RKey(keys.NodeLivenessPrefix),
+				EndKey:           roachpb.RKey(keys.NodeLivenessKeyMax),
+				InternalReplicas: replicas,
+			}}, nil, nil
+		} else if bytes.Compare(key.AsRawKey(), keys.NodeLivenessKeyMax) >= 0 && bytes.Compare(key.AsRawKey(), keys.TimeseriesPrefix) < 0 {
+			return []roachpb.RangeDescriptor{{
+				RangeID:          3,
+				StartKey:         roachpb.RKey(keys.NodeLivenessKeyMax),
+				EndKey:           roachpb.RKey(keys.TimeseriesPrefix),
+				InternalReplicas: replicas,
+			}}, nil, nil
+		} else if bytes.HasPrefix(key, keys.TimeseriesPrefix) {
+			return []roachpb.RangeDescriptor{{
+				RangeID:          4,
+				StartKey:         roachpb.RKey(keys.TimeseriesPrefix),
+				EndKey:           roachpb.RKey(keys.TimeseriesKeyMax),
+				InternalReplicas: replicas,
 			}}, nil, nil
 		}
 		return []roachpb.RangeDescriptor{{
-			RangeID:  3,
-			StartKey: roachpb.RKey(keys.NodeLivenessKeyMax),
-			EndKey:   roachpb.RKeyMax,
-			InternalReplicas: []roachpb.ReplicaDescriptor{
-				{NodeID: 1, StoreID: 1},
-			},
+			RangeID:          5,
+			StartKey:         roachpb.RKey(keys.TimeseriesKeyMax),
+			EndKey:           roachpb.RKeyMax,
+			InternalReplicas: replicas,
 		}}, nil, nil
 	})
 
@@ -4234,28 +4246,32 @@ func TestConnectionClass(t *testing.T) {
 	}
 	ds := NewDistSender(cfg)
 
-	// Check the three important cases to ensure they are sent with the correct
-	// ConnectionClass.
-	for _, key := range []roachpb.Key{
-		keys.Meta1Prefix,
-		keys.NodeLivenessKey(1),
-		keys.SystemSQLCodec.TablePrefix(1234), // A non-system table
+	for _, pair := range []struct {
+		key       roachpb.Key
+		wantClass rpc.ConnectionClass
+	}{
+		{key: keys.Meta1Prefix, wantClass: rpc.SystemClass},
+		{key: keys.NodeLivenessKey(1), wantClass: rpc.SystemClass},
+		{key: keys.StatusNodePrefix, wantClass: rpc.SystemClass},
+		{key: keys.NodeStatusKey(15), wantClass: rpc.SystemClass},
+		{key: keys.NodeIDGenerator, wantClass: rpc.SystemClass},
+		{key: keys.TimeseriesPrefix, wantClass: rpc.DefaultClass},
+		{key: keys.SystemSpanConfigPrefix, wantClass: rpc.DefaultClass},
+		{key: keys.SystemSQLCodec.TablePrefix(1234), wantClass: rpc.DefaultClass},
 	} {
-		t.Run(key.String(), func(t *testing.T) {
+		t.Run(pair.key.String(), func(t *testing.T) {
 			ba := &kvpb.BatchRequest{}
 			ba.Add(&kvpb.GetRequest{
 				RequestHeader: kvpb.RequestHeader{
-					Key: key,
+					Key: pair.key,
 				},
 			})
 			_, pErr := ds.Send(context.Background(), ba)
 			require.Nil(t, pErr)
 
 			// Verify that the request carries the class we expect it to for its span.
-			span, err := keys.Range(ba.Requests)
-			require.NoError(t, err)
-			require.Equalf(t, rpc.ConnectionClassForKey(span.Key, rpc.DefaultClass), class,
-				"unexpected class for span key %v", span.Key)
+			require.Equalf(t, pair.wantClass, class,
+				"unexpected class for span key %v", pair.key)
 		})
 	}
 }
