@@ -2483,6 +2483,32 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 	s.rangefeedReplicas.Unlock()
 }
 
+// GetSpanConfigForKey loads the span config starting at the given key. This
+// allows inserting test configurations through knobs.
+func (s *Store) GetSpanConfigForKey(
+	ctx context.Context, key roachpb.RKey,
+) (*roachpb.SpanConfig, error) {
+	if s.cfg.TestingKnobs.MakeSystemConfigSpanUnavailableToQueues {
+		return nil, errSpanConfigsUnavailable
+	}
+
+	// TODO(baptist): Tests should correctly set the span configs.
+	if s.cfg.SpanConfigsDisabled {
+		return &s.cfg.DefaultSpanConfig, nil
+	}
+	confReader, err := s.GetConfReader(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.cfg.TestingKnobs.ConfReaderInterceptor != nil {
+		if reader := s.cfg.TestingKnobs.ConfReaderInterceptor(); reader != nil {
+			confReader = reader
+		}
+	}
+	conf, err := confReader.GetSpanConfigForKey(ctx, key)
+	return &conf, err
+}
+
 // onSpanConfigUpdate is the callback invoked whenever this store learns of a
 // span config update.
 func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
@@ -2522,12 +2548,12 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 				// adjacent table. This results in a single update, corresponding to the
 				// new table's span, which forms the right-hand side post split.
 
-				conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, startKey)
+				conf, err := s.GetSpanConfigForKey(replCtx, startKey)
 				if err != nil {
 					log.Errorf(replCtx, "skipped applying update, unexpected error reading from subscriber: %v", err)
 					return err
 				}
-				changed = repl.SetSpanConfig(conf)
+				changed = repl.SetSpanConfig(*conf)
 			}
 			if changed {
 				repl.MaybeQueue(ctx, now)
@@ -2547,13 +2573,13 @@ func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		replCtx := repl.AnnotateCtx(ctx)
 		key := repl.Desc().StartKey
-		conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(replCtx, key)
+		conf, err := s.GetSpanConfigForKey(replCtx, key)
 		if err != nil {
 			log.Errorf(ctx, "skipped applying config update, unexpected error reading from subscriber: %v", err)
 			return true // more
 		}
 
-		changed := repl.SetSpanConfig(conf)
+		changed := repl.SetSpanConfig(*conf)
 		if changed {
 			repl.MaybeQueue(replCtx, now)
 		}
@@ -3539,13 +3565,7 @@ func (s *Store) AllocatorCheckRange(
 	}
 	ctx, sp := tracing.EnsureChildSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator check range", spanOptions...)
 
-	confReader, err := s.GetConfReader(ctx)
-	if err != nil {
-		log.Eventf(ctx, "span configs unavailable: %s", err)
-		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
-	}
-
-	conf, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+	conf, err := s.GetSpanConfigForKey(ctx, desc.StartKey)
 	if err != nil {
 		log.Eventf(ctx, "error retrieving span config for range %s: %s", desc, err)
 		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
@@ -3560,7 +3580,7 @@ func (s *Store) AllocatorCheckRange(
 		storePool = s.cfg.StorePool
 	}
 
-	action, _ := s.allocator.ComputeAction(ctx, storePool, &conf, desc)
+	action, _ := s.allocator.ComputeAction(ctx, storePool, conf, desc)
 
 	// In the case that the action does not require a target, return immediately.
 	if !(action.Add() || action.Replace()) {
@@ -3574,7 +3594,7 @@ func (s *Store) AllocatorCheckRange(
 		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
-	target, _, err := s.allocator.AllocateTarget(ctx, storePool, &conf,
+	target, _, err := s.allocator.AllocateTarget(ctx, storePool, conf,
 		filteredVoters, filteredNonVoters, replacing, action.ReplicaStatus(), action.TargetReplicaType(),
 	)
 	if err == nil {
@@ -3585,7 +3605,7 @@ func (s *Store) AllocatorCheckRange(
 		fragileQuorumErr := s.allocator.CheckAvoidsFragileQuorum(
 			ctx,
 			storePool,
-			&conf,
+			conf,
 			desc.Replicas().VoterDescriptors(),
 			filteredVoters,
 			action.ReplicaStatus(),
