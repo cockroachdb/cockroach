@@ -51,9 +51,6 @@ go_test(
         "s3_storage_test.go",
     ],
     embed = [":amazon"],
-    exec_properties = {
-        "dockerNetwork": "standard",
-    },
     deps = [
         "//pkg/base",
         "//pkg/blobs",

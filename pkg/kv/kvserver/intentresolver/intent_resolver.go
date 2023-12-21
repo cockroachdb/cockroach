@@ -1029,7 +1029,8 @@ func (ir *IntentResolver) resolveIntents(
 	// We skip the warning for release builds to avoid printing out verbose stack traces.
 	// TODO(aaditya): reconsider this once #112680 is resolved.
 	if !build.IsRelease() && h == (kvpb.AdmissionHeader{}) && ir.everyAdmissionHeaderMissing.ShouldLog() {
-		log.Warningf(ctx, "empty admission header provided by %s", string(debug.Stack()))
+		log.Warningf(ctx,
+			"test-only warning: if you see this, please report to https://github.com/cockroachdb/cockroach/issues/112680. empty admission header provided by %s", string(debug.Stack()))
 	}
 	// Send the requests ...
 	if opts.sendImmediately {
