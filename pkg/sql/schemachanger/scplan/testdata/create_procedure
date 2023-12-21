@@ -12,7 +12,7 @@ CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
 ----
 
 ops
-CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+CREATE PROCEDURE p(a notmyworkday) LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
@@ -21,12 +21,11 @@ CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
   SELECT nextval('sq1');
 $$;
 ----
-StatementPhase stage 1 of 1 with 12 MutationType ops
+StatementPhase stage 1 of 1 with 11 MutationType ops
   transitions:
     [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
@@ -36,6 +35,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     *scop.CreateFunctionDescriptor
       Function:
         FunctionID: 109
+        IsProcedure: true
         Params:
         - name: a
           class:
@@ -57,15 +57,11 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
             - 108
         ReturnType:
           Type:
-            family: IntFamily
-            oid: 20
-            width: 64
+            family: VoidFamily
+            oid: 2278
     *scop.SetFunctionName
       FunctionID: 109
-      Name: f
-    *scop.SetFunctionVolatility
-      FunctionID: 109
-      Volatility: 1
+      Name: p
     *scop.UpdateOwner
       Owner:
         DescriptorID: 109
@@ -158,7 +154,6 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Function:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionName:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
-    [[FunctionVolatility:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], PUBLIC] -> ABSENT
@@ -167,12 +162,11 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 12 MutationType ops
+PreCommitPhase stage 2 of 2 with 11 MutationType ops
   transitions:
     [[Function:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 109, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 109, Name: public}, PUBLIC], ABSENT] -> PUBLIC
@@ -182,6 +176,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
     *scop.CreateFunctionDescriptor
       Function:
         FunctionID: 109
+        IsProcedure: true
         Params:
         - name: a
           class:
@@ -203,15 +198,11 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
             - 108
         ReturnType:
           Type:
-            family: IntFamily
-            oid: 20
-            width: 64
+            family: VoidFamily
+            oid: 2278
     *scop.SetFunctionName
       FunctionID: 109
-      Name: f
-    *scop.SetFunctionVolatility
-      FunctionID: 109
-      Volatility: 1
+      Name: p
     *scop.UpdateOwner
       Owner:
         DescriptorID: 109
@@ -301,7 +292,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
       DescriptorID: 109
 
 deps
-CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+CREATE PROCEDURE p(a notmyworkday) LANGUAGE SQL AS $$
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
@@ -316,10 +307,6 @@ $$;
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
   to:   [FunctionName:{DescID: 110}, PUBLIC]
-  kind: Precedence
-  rule: descriptor existence precedes dependents
-- from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
-  to:   [FunctionVolatility:{DescID: 110}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 110}, DESCRIPTOR_ADDED]
@@ -354,10 +341,6 @@ $$;
   to:   [SchemaChild:{DescID: 110, ReferencedDescID: 101}, PUBLIC]
   kind: Precedence
   rule: function name should be set before parent ids
-- from: [FunctionVolatility:{DescID: 110}, PUBLIC]
-  to:   [Function:{DescID: 110}, PUBLIC]
-  kind: Precedence
-  rule: dependents exist before descriptor becomes public
 - from: [Owner:{DescID: 110}, PUBLIC]
   to:   [Function:{DescID: 110}, PUBLIC]
   kind: Precedence
@@ -380,23 +363,22 @@ $$;
   rule: dependents exist before descriptor becomes public
 
 ops
-CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE PLpgSQL AS $$
+CREATE PROCEDURE p(a notmyworkday) LANGUAGE PLpgSQL AS $$
   BEGIN
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
   SELECT a FROM v;
   SELECT 'Monday'::notmyworkday;
-  RETURN nextval('sq1');
+  SELECT nextval('sq1');
   END
 $$;
 ----
-StatementPhase stage 1 of 1 with 12 MutationType ops
+StatementPhase stage 1 of 1 with 11 MutationType ops
   transitions:
     [[Function:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionVolatility:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT] -> PUBLIC
@@ -406,6 +388,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
     *scop.CreateFunctionDescriptor
       Function:
         FunctionID: 111
+        IsProcedure: true
         Params:
         - name: a
           class:
@@ -427,15 +410,11 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
             - 108
         ReturnType:
           Type:
-            family: IntFamily
-            oid: 20
-            width: 64
+            family: VoidFamily
+            oid: 2278
     *scop.SetFunctionName
       FunctionID: 111
-      Name: f
-    *scop.SetFunctionVolatility
-      FunctionID: 111
-      Volatility: 1
+      Name: p
     *scop.UpdateOwner
       Owner:
         DescriptorID: 111
@@ -466,7 +445,7 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
           SELECT c FROM t@t_idx_c;
           SELECT a FROM v;
           SELECT b'@':::@100107;
-          RETURN nextval(105:::REGCLASS);
+          SELECT nextval(105:::REGCLASS);
           END
           ;
         FunctionID: 111
@@ -531,7 +510,6 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[Function:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
     [[FunctionName:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
-    [[FunctionVolatility:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], PUBLIC] -> ABSENT
@@ -540,12 +518,11 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 12 MutationType ops
+PreCommitPhase stage 2 of 2 with 11 MutationType ops
   transitions:
     [[Function:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
     [[FunctionName:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
-    [[FunctionVolatility:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[Owner:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: public}, PUBLIC], ABSENT] -> PUBLIC
@@ -555,6 +532,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
     *scop.CreateFunctionDescriptor
       Function:
         FunctionID: 111
+        IsProcedure: true
         Params:
         - name: a
           class:
@@ -576,15 +554,11 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
             - 108
         ReturnType:
           Type:
-            family: IntFamily
-            oid: 20
-            width: 64
+            family: VoidFamily
+            oid: 2278
     *scop.SetFunctionName
       FunctionID: 111
-      Name: f
-    *scop.SetFunctionVolatility
-      FunctionID: 111
-      Volatility: 1
+      Name: p
     *scop.UpdateOwner
       Owner:
         DescriptorID: 111
@@ -615,7 +589,7 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
           SELECT c FROM t@t_idx_c;
           SELECT a FROM v;
           SELECT b'@':::@100107;
-          RETURN nextval(105:::REGCLASS);
+          SELECT nextval(105:::REGCLASS);
           END
           ;
         FunctionID: 111
@@ -677,14 +651,14 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
       DescriptorID: 111
 
 deps
-CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE PLpgSQL AS $$
+CREATE PROCEDURE p(a notmyworkday) LANGUAGE PLpgSQL AS $$
   BEGIN
   SELECT a FROM t;
   SELECT b FROM t@t_idx_b;
   SELECT c FROM t@t_idx_c;
   SELECT a FROM v;
   SELECT 'Monday'::notmyworkday;
-  RETURN nextval('sq1');
+  SELECT nextval('sq1');
   END
 $$;
 ----
@@ -694,10 +668,6 @@ $$;
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
   to:   [FunctionName:{DescID: 112}, PUBLIC]
-  kind: Precedence
-  rule: descriptor existence precedes dependents
-- from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
-  to:   [FunctionVolatility:{DescID: 112}, PUBLIC]
   kind: Precedence
   rule: descriptor existence precedes dependents
 - from: [Function:{DescID: 112}, DESCRIPTOR_ADDED]
@@ -732,10 +702,6 @@ $$;
   to:   [SchemaChild:{DescID: 112, ReferencedDescID: 101}, PUBLIC]
   kind: Precedence
   rule: function name should be set before parent ids
-- from: [FunctionVolatility:{DescID: 112}, PUBLIC]
-  to:   [Function:{DescID: 112}, PUBLIC]
-  kind: Precedence
-  rule: dependents exist before descriptor becomes public
 - from: [Owner:{DescID: 112}, PUBLIC]
   to:   [Function:{DescID: 112}, PUBLIC]
   kind: Precedence
