@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -40,6 +42,15 @@ func registerCDCFiltering(r registry.Registry) {
 		Suites:           registry.Suites(registry.Nightly),
 		RequiresLicense:  true,
 		Run:              runCDCSessionFiltering,
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/filtering/ttl",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(3),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		RequiresLicense:  true,
+		Run:              runCDCTTLFiltering,
 	})
 }
 
@@ -267,4 +278,126 @@ func checkCDCEvents[S any](
 	require.Equal(t, expectedEvents, actualEvents)
 
 	return nil
+}
+
+func runCDCTTLFiltering(ctx context.Context, t test.Test, c cluster.Cluster) {
+	t.Status("starting cluster")
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	// kv.rangefeed.enabled is required for changefeeds to run
+	_, err := conn.ExecContext(ctx, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	require.NoError(t, err)
+
+	t.Status("creating table with TTL")
+	_, err = conn.ExecContext(ctx, `CREATE TABLE events (
+	id STRING PRIMARY KEY,
+	expired_at TIMESTAMPTZ
+) WITH (ttl_expiration_expression = 'expired_at', ttl_job_cron = '* * * * *')`)
+	require.NoError(t, err)
+
+	t.Status("creating changefeed")
+	var jobID int
+	err = conn.QueryRowContext(ctx, `CREATE CHANGEFEED FOR TABLE events
+INTO 'nodelocal://1/events'
+WITH diff, updated, min_checkpoint_frequency = '1s'`).Scan(&jobID)
+	require.NoError(t, err)
+
+	const (
+		expiredTime    = "2000-01-01"
+		notExpiredTime = "2200-01-01"
+	)
+
+	t.Status("insert initial table data")
+	_, err = conn.Exec(`INSERT INTO events VALUES ('A', $1), ('B', $2)`, expiredTime, notExpiredTime)
+	require.NoError(t, err)
+
+	t.Status("wait for TTL to run and delete rows")
+	err = waitForTTL(ctx, conn, "defaultdb.public.events", timeutil.Now())
+	require.NoError(t, err)
+
+	t.Status("check that rows are deleted")
+	var countA int
+	err = conn.QueryRow(`SELECT count(*) FROM events WHERE id = 'A'`).Scan(&countA)
+	require.NoError(t, err)
+	require.Equal(t, countA, 0)
+
+	t.Status("set sql.ttl.changefeed_replication.disabled")
+	_, err = conn.ExecContext(ctx, `SET CLUSTER SETTING sql.ttl.changefeed_replication.disabled = true`)
+	require.NoError(t, err)
+
+	t.Status("update remaining rows to be expired")
+	_, err = conn.Exec(`UPDATE events SET expired_at = $1 WHERE id = 'B'`, expiredTime)
+	require.NoError(t, err)
+
+	t.Status("wait for TTL to run and delete rows")
+	err = waitForTTL(ctx, conn, "defaultdb.public.events", timeutil.Now().Add(time.Minute))
+	require.NoError(t, err)
+
+	t.Status("check that rows are deleted")
+	var countB int
+	err = conn.QueryRow(`SELECT count(*) FROM events WHERE id = 'B'`).Scan(&countB)
+	require.NoError(t, err)
+	require.Equal(t, countB, 0)
+
+	expectedEvents := []string{
+		// initial
+		"A@2000-01-01T00:00:00Z", "B@2200-01-01T00:00:00Z",
+		// TTL deletes A
+		"<deleted> (before: A@2000-01-01T00:00:00Z)",
+		// update B to be expired
+		"B@2000-01-01T00:00:00Z (before: B@2200-01-01T00:00:00Z)",
+		// TTL deletes B (no events)
+	}
+	type state struct {
+		ID        string `json:"id"`
+		ExpiredAt string `json:"expired_at"`
+	}
+	err = checkCDCEvents[state](ctx, t, c, conn, jobID, "events",
+		// Produce a canonical format that we can assert on. The format is of the
+		// form: id@exp_at (before: id@exp_at)[, id@exp_at (before: id@exp_at), ...]
+		func(before *state, after *state) string {
+			var s string
+			if after == nil {
+				s += "<deleted>"
+			} else {
+				s += fmt.Sprintf("%s@%s", after.ID, after.ExpiredAt)
+			}
+			if before != nil {
+				s += fmt.Sprintf(" (before: %s@%s)", before.ID, before.ExpiredAt)
+			}
+			return s
+		},
+		expectedEvents,
+	)
+	require.NoError(t, err)
+}
+
+// waitForTTL waits until the row-level TTL job for a given table has run
+// and succeeded at least once after the specified time.
+func waitForTTL(ctx context.Context, conn *gosql.DB, table string, t time.Time) error {
+	retryOpts := retry.Options{
+		InitialBackoff: 1 * time.Minute,
+		MaxBackoff:     5 * time.Minute,
+	}
+	// We add an extra buffer to account for the TTL job's AOST duration.
+	minJobCreateTime := t.Add(-2 * ttlbase.DefaultAOSTDuration)
+	return retry.WithMaxAttempts(ctx, retryOpts, 5, func() error {
+		var count int
+		err := conn.QueryRowContext(ctx,
+			fmt.Sprintf(`SELECT count(*) FROM [SHOW JOBS]
+WHERE description ILIKE 'ttl for %s%%'
+AND status = 'succeeded'
+AND created > $1`, table),
+			minJobCreateTime,
+		).Scan(&count)
+		if err != nil {
+			return err
+		}
+		if count == 0 {
+			return errors.Newf("ttl has not run yet")
+		}
+		return nil
+	})
 }
