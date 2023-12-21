@@ -327,8 +327,6 @@ func TestClusterResetSQLStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "probable OOM")
-
 	ctx := context.Background()
 
 	for _, flushed := range []bool{false, true} {
