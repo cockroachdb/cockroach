@@ -488,16 +488,21 @@ func (h *queryComparisonHelper) runQuery(stmt string) ([][]string, error) {
 	// Only save the stmt on success - this makes it easier to reproduce the
 	// log. The caller still can include it into the statements later if
 	// necessary.
+	h.addStmtForLogging(stmt, rows)
+	return rows, nil
+}
+
+// addStmtForLogging includes the provided stmt (as well as optional output
+// rows) to be included into logging later.
+func (h *queryComparisonHelper) addStmtForLogging(stmt string, rows [][]string) {
 	h.statements = append(h.statements, stmt)
 	h.statementsAndExplains = append(h.statementsAndExplains, sqlAndOutput{sql: stmt, output: rows})
-	return rows, nil
 }
 
 // execStmt executes the given statement. As a side effect, it also saves the
 // statement so it can be logged in case of failure.
 func (h *queryComparisonHelper) execStmt(stmt string) error {
-	h.statements = append(h.statements, stmt)
-	h.statementsAndExplains = append(h.statementsAndExplains, sqlAndOutput{sql: stmt})
+	h.addStmtForLogging(stmt, nil /* rows */)
 	_, err := h.conn.Exec(stmt)
 	return err
 }
