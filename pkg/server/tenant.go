@@ -832,8 +832,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
 	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
 	s.externalStorageBuilder.init(
-		ctx,
-		s.sqlCfg.ExternalIODirConfig,
+		s.cfg.EarlyBootExternalStorageAccessor,
+		s.cfg.ExternalIODirConfig,
 		s.sqlServer.cfg.Settings,
 		s.sqlServer.sqlIDContainer,
 		s.kvNodeDialer,

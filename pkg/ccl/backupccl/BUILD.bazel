@@ -233,6 +233,7 @@ go_test(
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/gcp",
         "//pkg/cloud/impl:cloudimpl",
+        "//pkg/cloud/nodelocal",
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
