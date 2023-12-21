@@ -68,7 +68,7 @@ func TestSQLStatsFlush(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "test uses multi-node cluster; takes too long to run")
+	skip.UnderStressRace(t)
 
 	fakeTime := stubTime{
 		aggInterval: time.Hour,
