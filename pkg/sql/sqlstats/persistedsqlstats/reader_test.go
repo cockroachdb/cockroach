@@ -37,8 +37,8 @@ import (
 func TestPersistedSQLStatsReadMemory(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	skip.UnderStress(t, "the test is too slow to run under stress")
-	skip.UnderRaceWithIssue(t, 116036, "likely OOM")
 
 	testCluster, ctx := createCluster(t)
 	defer testCluster.Stopper().Stop(ctx)
@@ -51,8 +51,8 @@ func TestPersistedSQLStatsReadMemory(t *testing.T) {
 func TestPersistedSQLStatsReadDisk(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	skip.UnderStress(t, "the test is too slow to run under stress")
-	skip.UnderRaceWithIssue(t, 116035, "likely OOM")
 
 	testCluster, ctx := createCluster(t)
 	defer testCluster.Stopper().Stop(ctx)
@@ -66,8 +66,8 @@ func TestPersistedSQLStatsReadDisk(t *testing.T) {
 func TestPersistedSQLStatsReadHybrid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	skip.UnderStress(t, "the test is too slow to run under stress")
-	skip.UnderRaceWithIssue(t, 116033, "likely OOM")
 
 	testCluster, ctx := createCluster(t)
 	defer testCluster.Stopper().Stop(ctx)

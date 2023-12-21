@@ -76,8 +76,6 @@ func TestCancelQueryOtherNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRaceWithIssue(t, 116031, "likely OOM")
-
 	ctx, cancel := context.WithCancel(context.Background())
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
