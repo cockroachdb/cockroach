@@ -66,7 +66,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -2233,11 +2232,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.cfg.SpanConfigSubscriber.Subscribe(func(ctx context.Context, update roachpb.Span) {
 			s.onSpanConfigUpdate(ctx, update)
 		})
-
-		// We also want to do it when the fallback config setting is changed.
-		spanconfigstore.FallbackConfigOverride.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-			s.applyAllFromSpanConfigStore(ctx)
-		})
 	}
 
 	// Start Raft processing goroutines.
@@ -2564,27 +2558,6 @@ func (s *Store) onSpanConfigUpdate(ctx context.Context, updated roachpb.Span) {
 		// Errors here should not be possible, but if there is one, log loudly.
 		log.Errorf(ctx, "unexpected error visiting replicas: %v", err)
 	}
-}
-
-// applyAllFromSpanConfigStore applies, on each replica, span configs from the
-// embedded span config store.
-func (s *Store) applyAllFromSpanConfigStore(ctx context.Context) {
-	now := s.cfg.Clock.NowAsClockTimestamp()
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		replCtx := repl.AnnotateCtx(ctx)
-		key := repl.Desc().StartKey
-		conf, err := s.GetSpanConfigForKey(replCtx, key)
-		if err != nil {
-			log.Errorf(ctx, "skipped applying config update, unexpected error reading from subscriber: %v", err)
-			return true // more
-		}
-
-		changed := repl.SetSpanConfig(*conf)
-		if changed {
-			repl.MaybeQueue(replCtx, now)
-		}
-		return true // more
-	})
 }
 
 // GossipStore broadcasts the store on the gossip network.

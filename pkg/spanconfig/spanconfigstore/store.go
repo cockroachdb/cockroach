@@ -25,14 +25,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// FallbackConfigOverride is a hidden cluster setting to override the fallback
-// config used for ranges with no explicit span configs set.
-var FallbackConfigOverride = settings.RegisterProtobufSetting(
-	settings.SystemOnly,
-	"spanconfig.store.fallback_config_override",
-	"override the fallback used for ranges with no explicit span configs set",
-	&roachpb.SpanConfig{},
-)
+func (s *Store) getFallbackConfig() roachpb.SpanConfig {
+	if s.knobs != nil && s.knobs.OverrideFallbackConf != nil {
+		return s.knobs.OverrideFallbackConf(s.fallback)
+	}
+	return s.fallback
+}
 
 // BoundsEnabled is a hidden cluster setting which controls whether
 // SpanConfigBounds should be consulted (to perform clamping of secondary tenant
@@ -170,16 +168,6 @@ func (s *Store) getSpanConfigForKeyRLocked(
 		log.VInfof(ctx, 3, "span config for tenant clamped to %v", conf)
 	}
 	return conf, nil
-}
-
-func (s *Store) getFallbackConfig() roachpb.SpanConfig {
-	if conf := FallbackConfigOverride.Get(&s.settings.SV).(*roachpb.SpanConfig); !conf.IsEmpty() {
-		return *conf
-	}
-	if s.knobs != nil && s.knobs.OverrideFallbackConf != nil {
-		return s.knobs.OverrideFallbackConf(s.fallback)
-	}
-	return s.fallback
 }
 
 // Apply is part of the spanconfig.StoreWriter interface.
