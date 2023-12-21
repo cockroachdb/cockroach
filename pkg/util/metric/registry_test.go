@@ -81,6 +81,8 @@ func TestRegistry(t *testing.T) {
 	topCounter := NewCounter(Metadata{Name: "top.counter"})
 	r.AddMetric(topCounter)
 
+	r.AddMetric(NewCounterFloat64(Metadata{Name: "top.floatcounter"}))
+
 	r.AddMetric(NewHistogram(HistogramOptions{
 		Mode:         HistogramModePrometheus,
 		Metadata:     Metadata{Name: "top.histogram"},
@@ -93,6 +95,7 @@ func TestRegistry(t *testing.T) {
 		StructGauge         *Gauge
 		StructGauge64       *GaugeFloat64
 		StructCounter       *Counter
+		StructCounter64     *CounterFloat64
 		StructHistogram     IHistogram
 		NestedStructGauge   NestedStruct
 		ArrayStructCounters [4]*Counter
@@ -105,9 +108,10 @@ func TestRegistry(t *testing.T) {
 		ReallyNotAMetric              *Registry
 		DefinitelyNotAnArrayOfMetrics [2]int
 	}{
-		StructGauge:   NewGauge(Metadata{Name: "struct.gauge"}),
-		StructGauge64: NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
-		StructCounter: NewCounter(Metadata{Name: "struct.counter"}),
+		StructGauge:     NewGauge(Metadata{Name: "struct.gauge"}),
+		StructGauge64:   NewGaugeFloat64(Metadata{Name: "struct.gauge64"}),
+		StructCounter:   NewCounter(Metadata{Name: "struct.counter"}),
+		StructCounter64: NewCounterFloat64(Metadata{Name: "struct.counter64"}),
 		StructHistogram: NewHistogram(HistogramOptions{
 			Mode:         HistogramModePrometheus,
 			Metadata:     Metadata{Name: "struct.histogram"},
@@ -141,10 +145,12 @@ func TestRegistry(t *testing.T) {
 		"top.gauge":                   {},
 		"top.floatgauge":              {},
 		"top.counter":                 {},
+		"top.floatcounter":            {},
 		"bottom.gauge":                {},
 		"struct.gauge":                {},
 		"struct.gauge64":              {},
 		"struct.counter":              {},
+		"struct.counter64":            {},
 		"struct.histogram":            {},
 		"nested.struct.gauge":         {},
 		"array.struct.counter.0":      {},

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -506,9 +507,13 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 
 	deltaConsumption := c.run.consumption
 	deltaConsumption.Sub(&c.run.lastReportedConsumption)
+
+	// Report consumption metrics. Update local data first before sending a
+	// token bucket request to the KV servers.
+	c.metrics.incrementConsumption(deltaConsumption)
+
 	var requested tenantcostmodel.RU
 	now := c.timeSource.Now()
-
 	if c.run.trickleTimer != nil {
 		// Don't request additional RUs if we're in the middle of a trickle
 		// that was started recently.
@@ -892,4 +897,9 @@ func (c *tenantSideCostController) GetCPUMovingAvg() float64 {
 // GetCostConfig is part of the multitenant.TenantSideCostController interface.
 func (c *tenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
 	return c.costCfg.Load()
+}
+
+// Metrics returns a metric.Struct which holds metrics for the controller.
+func (c *tenantSideCostController) Metrics() metric.Struct {
+	return &c.metrics
 }
