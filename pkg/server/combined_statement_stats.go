@@ -396,10 +396,9 @@ FROM %s %s`, table, whereClauseOldestDate), args...)
 
 	createActivityTableQuery := func(table string) string {
 		return fmt.Sprintf(`
-SELECT COALESCE(
-         execution_total_cluster_seconds,
-       0)
-FROM %s %s LIMIT 1`, table, whereClause)
+SELECT COALESCE(sum(total_latency), 0) from (SELECT aggregated_ts, 
+        max(execution_total_cluster_seconds) as total_latency
+FROM %s %s GROUP BY aggregated_ts) %s`, table, whereClause, testingKnobs.GetAOSTClause())
 	}
 
 	createStatsTableQuery := func(table string) string {
