@@ -294,7 +294,9 @@ func NewTestCluster(
 				args.DefaultTestTenant, defaultTestTenantOptions)
 		}
 	}
-	tc.defaultTestTenantOptions = serverutils.ShouldStartDefaultTestTenant(t, defaultTestTenantOptions)
+	tc.defaultTestTenantOptions = serverutils.ShouldStartDefaultTestTenant(
+		t, defaultTestTenantOptions, nodes > 1, /* multiNodeCluster */
+	)
 
 	var firstListener net.Listener
 	for i := 0; i < nodes; i++ {

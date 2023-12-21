@@ -78,7 +78,6 @@ go_test(
         "//pkg/testutils/distsqlutils",
         "//pkg/testutils/physicalplanutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
