@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -76,7 +77,11 @@ func (sbs scheduledBackupSpecs) scheduledBackupCmd() string {
 	// backup schedules. To ensure that only one full backup chain gets created,
 	// begin the backup schedule at the beginning of the week, as a new full
 	// backup will get created on Sunday at Midnight ;)
-	backupCmd := fmt.Sprintf(`BACKUP INTO %s WITH revision_history`, sbs.backupCollection())
+	options := ""
+	if !sbs.nonRevisionHistory {
+		options = "WITH revision_history"
+	}
+	backupCmd := fmt.Sprintf(`BACKUP INTO %s %s`, sbs.backupCollection(), options)
 	cmd := fmt.Sprintf(`CREATE SCHEDULE %s FOR %s RECURRING '%s' FULL BACKUP '@weekly' WITH SCHEDULE OPTIONS first_run = 'now'`,
 		scheduleLabel, backupCmd, sbs.incrementalBackupCrontab)
 	if sbs.ignoreExistingBackups {
@@ -227,6 +232,7 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) {
 }
 
 func registerBackupFixtures(r registry.Registry) {
+	rng, _ := randutil.NewPseudoRand()
 	for _, bf := range []backupFixtureSpecs{
 		{
 			// 400GB backup fixture with 48 incremental layers. This is used by
@@ -246,14 +252,16 @@ func registerBackupFixtures(r registry.Registry) {
 		},
 		{
 			// 15 GB backup fixture with 48 incremental layers. This is used by
-			// restore/tpce/15GB/aws/nodes=4/cpus=8.
+			// restore/tpce/15GB/aws/nodes=4/cpus=8. Runs weekly to catch any
+			// regressions in the fixture generation code.
 			hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true, cpus: 4}),
 			scheduledBackupSpecs: makeBackupFixtureSpecs(
 				scheduledBackupSpecs{
 					incrementalBackupCrontab: "*/2 * * * *",
 					ignoreExistingBackups:    true,
 					backupSpecs: backupSpecs{
-						workload: tpceRestore{customers: 1000}}}),
+						nonRevisionHistory: rng.Intn(2) == 1,
+						workload:           tpceRestore{customers: 1000}}}),
 			initWorkloadViaRestore: &restoreSpecs{
 				backup:                 backupSpecs{version: "v22.2.1", numBackupsInChain: 48},
 				restoreUptoIncremental: 48,
