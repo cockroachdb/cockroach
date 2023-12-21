@@ -127,7 +127,7 @@ func countLeasesByRegion(
 			return err
 		}
 		var err error
-		if hasTimeout, timeout := prober.GetTableTimeout(); hasTimeout {
+		if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
 			err = timeutil.RunWithTimeout(ctx, "count-leases-region", timeout, queryRegionRows)
 		} else {
 			err = queryRegionRows(ctx)
