@@ -1196,9 +1196,13 @@ type Metrics struct {
 	// SingleDelInvariantViolationCount counts the number of times a
 	// SingleDelete was found to violate the invariant that it should only be
 	// used when there is at most one older Set for it to delete.
+	//
+	// TODO(sumeer): remove, since can fire due to delete-only compactions.
 	SingleDelInvariantViolationCount int64
 	// SingleDelIneffectualCount counts the number of times a SingleDelete was
 	// ineffectual, i.e., it was elided without deleting anything.
+	//
+	// TODO(sumeer): remove, since can fire due to delete-only compactions.
 	SingleDelIneffectualCount int64
 	// SharedStorageWriteBytes counts the number of bytes written to shared storage.
 	SharedStorageWriteBytes int64
