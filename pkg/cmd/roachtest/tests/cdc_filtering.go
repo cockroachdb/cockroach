@@ -160,12 +160,67 @@ INSERT INTO events VALUES ('C', 1);`)
 		"DELETE FROM events WHERE id = 'D'",
 	})
 
+	// We expect to see the following sequence of events:
+	expectedEvents := []string{
+		// initial
+		"A@1", "B@1", "C@1",
+		// session 1
+		"B@2 (before: B@1)", "C@2 (before: C@1)",
+		// session 2
+		"C@3 (before: C@2)",
+		// session 3
+		"A@4 (before: A@3)",
+		// session 4
+		"D@1",
+		// session 5 (no events)
+	}
+	type state struct {
+		ID       string `json:"id"`
+		Revision int    `json:"revision"`
+	}
+	err = checkCDCEvents[state](ctx, t, c, conn, jobID, "events",
+		// Produce a canonical format that we can assert on. The format is of the
+		// form: id@rev (before: id@rev)[, id@rev (before: id@rev), ...]
+		func(before *state, after *state) string {
+			var s string
+			if after == nil {
+				s += "<deleted>"
+			} else {
+				s += fmt.Sprintf("%s@%d", after.ID, after.Revision)
+			}
+			if before != nil {
+				s += fmt.Sprintf(" (before: %s@%d)", before.ID, before.Revision)
+			}
+			return s
+		},
+		expectedEvents,
+	)
+	require.NoError(t, err)
+}
+
+type changefeedSinkEvent[S any] struct {
+	After   *S       `json:"after"`
+	Before  *S       `json:"before"`
+	Key     []string `json:"key"`
+	Updated string   `json:"updated"`
+}
+
+func checkCDCEvents[S any](
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	conn *gosql.DB,
+	jobID int,
+	nodeLocalSinkDir string,
+	eventToString func(before *S, after *S) string,
+	expectedEvents []string,
+) error {
 	// Wait for the changefeed to reach the current time.
 	t.Status("waiting for changefeed")
 	now := timeutil.Now()
 	t.L().Printf("waiting for changefeed watermark to reach current time (%s)",
 		now.Format(time.RFC3339))
-	_, err = waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
+	_, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
 		switch jobs.Status(info.status) {
 		case jobs.StatusPending, jobs.StatusRunning:
 			return info.highwaterTime.After(now), nil
@@ -176,29 +231,17 @@ INSERT INTO events VALUES ('C', 1);`)
 	require.NoError(t, err)
 
 	// Collect the events from the file-based sink on n1.
-	cmd := "find {store-dir}/extern/events -name '*.ndjson' | xargs cat"
+	cmd := fmt.Sprintf("find {store-dir}/extern/%s -name '*.ndjson' | xargs cat", nodeLocalSinkDir)
 	d, err := c.RunWithDetailsSingleNode(ctx, t.L(), c.Node(1), cmd)
 	require.NoError(t, err)
 
-	// Parse the JSON events into an internal representation.
-	type event struct {
-		ID       string `json:"id"`
-		Revision int    `json:"revision"`
-	}
-	type changefeedSinkEvent struct {
-		After   event    `json:"after"`
-		Before  *event   `json:"before"`
-		Key     []string `json:"key"`
-		Updated string   `json:"updated"`
-	}
-
-	var events []changefeedSinkEvent
+	var events []changefeedSinkEvent[S]
 	for _, line := range strings.Split(d.Stdout, "\n") {
 		// Skip empty lines.
 		if line == "" {
 			continue
 		}
-		var e changefeedSinkEvent
+		var e changefeedSinkEvent[S]
 		require.NoError(t, json.Unmarshal([]byte(line), &e))
 		events = append(events, e)
 	}
@@ -216,23 +259,12 @@ INSERT INTO events VALUES ('C', 1);`)
 		return tsA.Less(tsB)
 	})
 
-	// Produce a canonical format that we can assert on. The format is of the
-	// form: id@rev (before: id@rev)[, id@rev (before: id@rev), ...]
-	var sb strings.Builder
-	for i, e := range events {
-		if i > 0 {
-			sb.WriteString(", ")
-		}
-		var before string
-		if e.Before != nil {
-			before = fmt.Sprintf(" (before: %s@%d)", e.Before.ID, e.Before.Revision)
-		}
-		sb.WriteString(fmt.Sprintf("%s@%d%s", e.After.ID, e.After.Revision, before))
+	// Convert actual events to strings and compare to expected events.
+	var actualEvents []string
+	for _, e := range events {
+		actualEvents = append(actualEvents, eventToString(e.Before, e.After))
 	}
+	require.Equal(t, expectedEvents, actualEvents)
 
-	// We expect to see the following sequence:
-	want := "A@1, B@1, C@1, " +
-		"B@2 (before: B@1), C@2 (before: C@1), C@3 (before: C@2), A@4 (before: A@3), " +
-		"D@1"
-	require.Equal(t, want, sb.String())
+	return nil
 }
