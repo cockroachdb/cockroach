@@ -13,7 +13,6 @@ package jobutils
 import (
 	"context"
 	gosql "database/sql"
-	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -103,47 +102,6 @@ func waitForJobToHaveStatus(
 		}
 		return nil
 	}, 2*time.Minute)
-}
-
-// RunJob runs the provided job control statement, initializing, notifying and
-// closing the chan at the passed pointer (see below for why) and returning the
-// jobID and error result. PAUSE JOB and CANCEL JOB are racy in that it's hard
-// to guarantee that the job is still running when executing a PAUSE or
-// CANCEL--or that the job has even started running. To synchronize, we can
-// install a store response filter which does a blocking receive for one of the
-// responses used by our job (for example, Export for a BACKUP). Later, when we
-// want to guarantee the job is in progress, we do exactly one blocking send.
-// When this send completes, we know the job has started, as we've seen one
-// expected response. We also know the job has not finished, because we're
-// blocking all future responses until we close the channel, and our operation
-// is large enough that it will generate more than one of the expected response.
-func RunJob(
-	t *testing.T,
-	db *sqlutils.SQLRunner,
-	allowProgressIota *chan struct{},
-	ops []string,
-	query string,
-	args ...interface{},
-) (jobspb.JobID, error) {
-	*allowProgressIota = make(chan struct{})
-	errCh := make(chan error)
-	go func() {
-		_, err := db.DB.ExecContext(context.TODO(), query, args...)
-		errCh <- err
-	}()
-	select {
-	case *allowProgressIota <- struct{}{}:
-	case err := <-errCh:
-		return 0, errors.Wrapf(err, "query returned before expected: %s", query)
-	}
-	var jobID jobspb.JobID
-	db.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
-	for _, op := range ops {
-		db.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
-		*allowProgressIota <- struct{}{}
-	}
-	close(*allowProgressIota)
-	return jobID, <-errCh
 }
 
 // BulkOpResponseFilter creates a blocking response filter for the responses

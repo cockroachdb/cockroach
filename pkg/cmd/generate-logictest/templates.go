@@ -52,6 +52,9 @@ const templateText = `
 {{- if .LogicTest -}}
 func runLogicTest(t *testing.T, file string) {
 	{{ if .Is3NodeTenant }}skip.UnderRace(t, "large engflow executor is overloaded by 3node-tenant config")
+	{{ else if eq .TestRuleName "local"}}if file == "lookup_join_local" {
+		skip.UnderRace(t, "this file is too slow under race")
+	}
 	{{ end }}skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
 }
