@@ -173,6 +173,11 @@ func (m *ColStatsMap) LookupSingleton(col opt.ColumnID) (colStat *ColumnStatisti
 	// Fetch index entry for next prefix+col combo.
 	key := colStatKey{prefix: 0, id: col}
 	if val, ok := m.index[key]; ok {
+		if val.pos == -1 {
+			// No stat exists for this column set.
+			return nil, false
+		}
+
 		// A stat exists, so return it.
 		return m.Get(int(val.pos)), true
 	}
