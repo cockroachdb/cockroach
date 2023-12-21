@@ -11,8 +11,6 @@
 package rpc
 
 import (
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcpb"
@@ -55,29 +53,19 @@ const (
 	NumConnectionClasses = int(rpcpb.ConnectionClass_NEXT)
 )
 
-var systemClassKeyPrefixes = []roachpb.RKey{
-	roachpb.RKey(keys.Meta1Prefix),
-	roachpb.RKey(keys.NodeLivenessPrefix),
-}
-
-// isSystemKey returns true if the given key belongs to a range eligible for
-// SystemClass connection.
+// systemClassSpan is the key span for all ranges considered to be a critical
+// system range. Generally, not all system ranges are critical. For example, the
+// timeseries ranges are not, because they can be busy and disrupt other
+// system traffic. We try to make SystemClass responsive by keeping it small.
 //
-// Generally, not all system ranges are eligible. For example, the timeseries
-// ranges are not, because they can be busy and disrupt other system traffic. We
-// try to make SystemClass responsive by keeping it small.
-func isSystemKey(key roachpb.RKey) bool {
-	// An empty RKey addresses range 1 and warrants SystemClass.
-	if len(key) == 0 {
-		return true
-	}
-	for _, prefix := range systemClassKeyPrefixes {
-		if bytes.HasPrefix(key, prefix) {
-			return true
-		}
-	}
-	return false
-}
+// All the ranges that include keys between /Meta1 and/ System/tsd are considered
+// part of the system class. We keep things simple by checking if the start key
+// of a range is within the system span to determine if we should use the
+// SystemClass. This eliminates most of the coupling between how system ranges
+// are structured (i.e. #NoSplits and # staticSplits lists) and how they
+// split/merge except at the boundaries. Specifically it's safe to use
+// keys.TimeseriesPrefix because nothing >= to this key will merge into this span.
+var systemClassSpan = roachpb.Span{Key: keys.Meta1Prefix, EndKey: keys.TimeseriesPrefix}
 
 // ConnectionClassForKey determines the ConnectionClass which should be used for
 // traffic addressed to the range starting at the given key. Returns SystemClass
@@ -87,7 +75,10 @@ func isSystemKey(key roachpb.RKey) bool {
 // This also takes the `COCKROACH_RPC_USE_DEFAULT_CONNECTION_CLASS` env variable
 // into account, and returns DefaultClass instead of `def` if it is set.
 func ConnectionClassForKey(key roachpb.RKey, def ConnectionClass) ConnectionClass {
-	if isSystemKey(key) {
+	// We have to check for special condition of 0 length key, to catch Range 1.
+	// Once https://github.com/cockroachdb/cockroach/issues/95055 is fixed, we can
+	// remove this check.
+	if len(key) == 0 || systemClassSpan.ContainsKey(key.AsRawKey()) {
 		return SystemClass
 	}
 	return ConnectionClassOrDefault(def)
