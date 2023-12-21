@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -43,17 +42,11 @@ import (
 )
 
 // TestCreateStatsControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
-// work as intended on create statistics jobs.
+// work as intended on CREATE STATISTICS jobs.
 func TestCreateStatsControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderDeadlock(t, "possible OOM")
-	skip.UnderRace(t, "possible OOM")
-
-	// Test with 3 nodes and rowexec.SamplerProgressInterval=100 to ensure
-	// that progress metadata is sent correctly after every 100 input rows.
-	const nodes = 3
 	defer func(oldSamplerInterval int, oldSampleAgggregatorInterval time.Duration) {
 		rowexec.SamplerProgressInterval = oldSamplerInterval
 		rowexec.SampleAggregatorProgressInterval = oldSampleAgggregatorInterval
@@ -62,19 +55,19 @@ func TestCreateStatsControlJob(t *testing.T) {
 	rowexec.SampleAggregatorProgressInterval = time.Millisecond
 
 	var allowRequest chan struct{}
-
-	var serverArgs base.TestServerArgs
 	filter, setTableID := createStatsRequestFilter(&allowRequest)
-	params := base.TestClusterArgs{ServerArgs: serverArgs}
-	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+	var serverArgs base.TestServerArgs
+	serverArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	serverArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
 		TestingRequestFilter: filter,
 	}
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, nodes, params)
-	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
+	srv, db, _ := serverutils.StartServer(t, serverArgs)
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	// Disable auto stats so that they don't interfere with the test.
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
 	var tID descpb.ID
@@ -86,9 +79,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 		query := `CREATE STATISTICS s1 FROM d.t`
 
 		setTableID(tID)
-		if _, err := jobutils.RunJob(
-			t, sqlDB, &allowRequest, []string{"cancel"}, query,
-		); err == nil {
+		if _, err := runCreateStatsJob(ctx, t, sqlDB, &allowRequest, "CANCEL", query); err == nil {
 			t.Fatal("expected an error")
 		}
 
@@ -102,9 +93,7 @@ func TestCreateStatsControlJob(t *testing.T) {
 		// Test that CREATE STATISTICS can be paused and resumed.
 		query := `CREATE STATISTICS s2 FROM d.t`
 
-		jobID, err := jobutils.RunJob(
-			t, sqlDB, &allowRequest, []string{"PAUSE"}, query,
-		)
+		jobID, err := runCreateStatsJob(ctx, t, sqlDB, &allowRequest, "PAUSE", query)
 		if !testutils.IsError(err, "pause") && !testutils.IsError(err, "liveness") {
 			t.Fatalf("unexpected: %v", err)
 		}
@@ -127,6 +116,47 @@ func TestCreateStatsControlJob(t *testing.T) {
 				{"s2", "{x}", "1000"},
 			})
 	})
+}
+
+// runCreateStatsJob runs the provided CREATE STATISTICS job control statement,
+// initializing, notifying and closing the chan at the passed pointer (see below
+// for why) and returning the jobID and error result. PAUSE JOB and CANCEL JOB
+// are racy in that it's hard to guarantee that the job is still running when
+// executing a PAUSE or CANCEL -- or that the job has even started running. To
+// synchronize, we can install a store response filter which does a blocking
+// receive for one of the responses used by our job (for example, Export for a
+// BACKUP). Later, when we want to guarantee the job is in progress, we do
+// exactly one blocking send. When this send completes, we know the job has
+// started, as we've seen one expected response. We also know the job has not
+// finished, because we're blocking all future responses until we close the
+// channel, and our operation is large enough that it will generate more than
+// one of the expected response.
+func runCreateStatsJob(
+	ctx context.Context,
+	t *testing.T,
+	db *sqlutils.SQLRunner,
+	allowProgressIota *chan struct{},
+	op string,
+	query string,
+	args ...interface{},
+) (jobspb.JobID, error) {
+	*allowProgressIota = make(chan struct{})
+	errCh := make(chan error)
+	go func() {
+		_, err := db.DB.ExecContext(ctx, query, args...)
+		errCh <- err
+	}()
+	select {
+	case *allowProgressIota <- struct{}{}:
+	case err := <-errCh:
+		return 0, errors.Wrapf(err, "query returned before expected: %s", query)
+	}
+	var jobID jobspb.JobID
+	db.QueryRow(t, `SELECT id FROM system.jobs WHERE job_type = 'CREATE STATS' ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+	db.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
+	*allowProgressIota <- struct{}{}
+	close(*allowProgressIota)
+	return jobID, <-errCh
 }
 
 func TestCreateStatisticsCanBeCancelled(t *testing.T) {
@@ -538,9 +568,9 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 		})
 }
 
-// Create a blocking request filter for the actions related
-// to CREATE STATISTICS, i.e. Scanning a user table. See discussion
-// on jobutils.RunJob for where this might be useful.
+// Create a blocking request filter for the actions related to CREATE
+// STATISTICS, i.e. Scanning a user table. See discussion on runCreateStatsJob
+// for where this might be useful.
 //
 // Note that it only supports system tenants as well as the secondary tenant
 // with serverutils.TestTenantID() tenant ID.
