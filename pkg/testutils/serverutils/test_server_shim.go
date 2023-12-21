@@ -85,7 +85,7 @@ var PreventStartTenantError = errors.New("attempting to manually start a virtual
 // directly so that it only gets linked into test code (and to avoid a linter
 // error that 'skip' must only be used in test code).
 func ShouldStartDefaultTestTenant(
-	t TestLogger, baseArg base.DefaultTestTenantOptions,
+	t TestLogger, baseArg base.DefaultTestTenantOptions, multiNodeCluster bool,
 ) (retval base.DefaultTestTenantOptions) {
 	// Explicit case for disabling the default test tenant.
 	if baseArg.TestTenantAlwaysDisabled() {
@@ -106,6 +106,14 @@ func ShouldStartDefaultTestTenant(
 	// we are done.
 	if !baseArg.TestTenantNoDecisionMade() {
 		return baseArg
+	}
+
+	if multiNodeCluster && util.RaceEnabled {
+		// Race builds now run in the EngFlow environment which seems to be
+		// often overloaded if we have multi-node clusters and start default
+		// test tenant, so we disable the tenant randomization in such a
+		// scenario.
+		return base.InternalNonDefaultDecision(baseArg, false /* enable */, false /* shared */)
 	}
 
 	// Determine if the default test tenant should be run as a shared process.
@@ -258,7 +266,9 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 	allowAdditionalTenants := params.DefaultTestTenant.AllowAdditionalTenants()
 	// Update the flags with the actual decision as to whether we should
 	// start the service for a default test tenant.
-	params.DefaultTestTenant = ShouldStartDefaultTestTenant(t, params.DefaultTestTenant)
+	params.DefaultTestTenant = ShouldStartDefaultTestTenant(
+		t, params.DefaultTestTenant, false, /* multiNodeCluster */
+	)
 
 	s, err := NewServer(params)
 	if err != nil {
