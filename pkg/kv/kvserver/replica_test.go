@@ -10425,7 +10425,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		snap := tc.engine.NewSnapshot()
 		defer snap.Close()
 		res, err := CalcReplicaDigest(ctx, *tc.repl.Desc(), tc.engine, kvpb.ChecksumMode_CHECK_FULL,
-			quotapool.NewRateLimiter("test", quotapool.Inf(), 0))
+			quotapool.NewRateLimiter("test", quotapool.Inf(), 0), nil /* settings */)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
