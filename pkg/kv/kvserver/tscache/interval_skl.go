@@ -573,6 +573,8 @@ func newSklPage(arena *arenaskl.Arena) *sklPage {
 	return &sklPage{list: arenaskl.NewSkiplist(arena)}
 }
 
+// lookupTimestampRange scans the range of keys between from and to and returns
+// the maximum (initialized or uninitialized) value found.
 func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheValue {
 	if to != nil {
 		cmp := 0
@@ -601,7 +603,31 @@ func (p *sklPage) lookupTimestampRange(from, to []byte, opt rangeOptions) cacheV
 	it.Init(p.list)
 	it.SeekForPrev(from)
 
-	return p.maxInRange(&it, from, to, opt)
+	// Determine the previous gap value. This will move the iterator to the
+	// first node >= from.
+	prevGapVal := p.incomingGapVal(&it, from)
+
+	if !it.Valid() {
+		// No more nodes.
+		return prevGapVal
+	} else if bytes.Equal(it.Key(), from) {
+		// Found a node at from.
+		if (it.Meta() & initialized) != 0 {
+			// The node was initialized. Ignore the previous gap value.
+			prevGapVal = cacheValue{}
+		}
+	} else {
+		// No node at from. Remove excludeFrom option.
+		opt &^= excludeFrom
+	}
+
+	// Scan the rest of the way. Notice that we provide the previous gap value.
+	// This is important for two reasons:
+	// 1. it will be counted towards the maxVal result.
+	// 2. it will be used to ratchet uninitialized nodes that the scan sees
+	//    before any initialized nodes.
+	_, maxVal := p.scanTo(&it, to, opt, prevGapVal)
+	return maxVal
 }
 
 // addNode adds a new node at key with the provided value if one does not exist.
@@ -977,37 +1003,6 @@ func (p *sklPage) ratchetValueSet(
 			return nil
 		}
 	}
-}
-
-// maxInRange scans the range of keys between from and to and returns the
-// maximum (initialized or uninitialized) value found. When finished, the
-// iterator will be positioned the same as if it.Seek(to) had been called.
-func (p *sklPage) maxInRange(it *arenaskl.Iterator, from, to []byte, opt rangeOptions) cacheValue {
-	// Determine the previous gap value. This will move the iterator to the
-	// first node >= from.
-	prevGapVal := p.incomingGapVal(it, from)
-
-	if !it.Valid() {
-		// No more nodes.
-		return prevGapVal
-	} else if bytes.Equal(it.Key(), from) {
-		// Found a node at from.
-		if (it.Meta() & initialized) != 0 {
-			// The node was initialized. Ignore the previous gap value.
-			prevGapVal = cacheValue{}
-		}
-	} else {
-		// No node at from. Remove excludeFrom option.
-		opt &^= excludeFrom
-	}
-
-	// Scan the rest of the way. Notice that we provide the previous gap value.
-	// This is important for two reasons:
-	// 1. it will be counted towards the maxVal result.
-	// 2. it will be used to ratchet uninitialized nodes that the scan sees
-	//    before any initialized nodes.
-	_, maxVal := p.scanTo(it, to, opt, prevGapVal)
-	return maxVal
 }
 
 // incomingGapVal determines the gap value active at the specified key by first
