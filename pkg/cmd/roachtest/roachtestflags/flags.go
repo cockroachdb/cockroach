@@ -248,7 +248,7 @@ var (
 		Usage: `The number of cloud CPUs roachtest is allowed to use at any one time.`,
 	})
 
-	HTTPPort int = 8080
+	HTTPPort int = 0
 	_            = registerRunFlag(&HTTPPort, FlagInfo{
 		Name:  "port",
 		Usage: `The port on which to serve the HTTP interface`,
