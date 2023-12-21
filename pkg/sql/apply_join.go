@@ -285,22 +285,19 @@ func runPlanInsidePlan(
 
 	plannerCopy := *params.p
 	plannerCopy.curPlan.planComponents = *plan
-
 	// "Pausable portal" execution model is only applicable to the outer
 	// statement since we actually need to execute all inner plans to completion
 	// before we can produce any "outer" rows to be returned to the client, so
 	// we make sure to unset pausablePortal field on the planner.
 	plannerCopy.pausablePortal = nil
-	evalCtxFactory := func() *extendedEvalContext {
-		plannerCopy.extendedEvalCtx = *params.p.ExtendedEvalContextCopy()
-		evalCtx := &plannerCopy.extendedEvalCtx
-		evalCtx.Planner = &plannerCopy
-		evalCtx.StreamManagerFactory = &plannerCopy
-		if deferredRoutineSender != nil {
-			evalCtx.RoutineSender = deferredRoutineSender
-		}
-		return evalCtx
-	}
+
+	// planner object embeds the extended eval context, so we will modify that
+	// (which won't affect the outer planner's extended eval context), and we'll
+	// use it as the golden version going forward.
+	plannerCopy.extendedEvalCtx.Planner = &plannerCopy
+	plannerCopy.extendedEvalCtx.StreamManagerFactory = &plannerCopy
+	plannerCopy.extendedEvalCtx.RoutineSender = deferredRoutineSender
+	evalCtxFactory := plannerCopy.ExtendedEvalContextCopy
 
 	if len(plan.subqueryPlans) != 0 {
 		// We currently don't support cases when both the "inner" and the
@@ -371,12 +368,15 @@ func runPlanInsidePlan(
 		return resultWriter.Err()
 	}
 
-	evalCtxFactory2 := func(usedConcurrently bool) *extendedEvalContext {
-		return evalCtxFactory()
-	}
 	plannerCopy.autoCommit = false
 	execCfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
-		ctx, &plannerCopy, evalCtxFactory2, &plannerCopy.curPlan.planComponents, recv,
+		ctx,
+		&plannerCopy,
+		func(usedConcurrently bool) *extendedEvalContext {
+			return evalCtxFactory()
+		},
+		&plannerCopy.curPlan.planComponents,
+		recv,
 	)
 	// We might have appended some cascades or checks to the plannerCopy, so we
 	// need to update the plan for cleanup purposes before proceeding.
