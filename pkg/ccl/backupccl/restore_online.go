@@ -128,11 +128,23 @@ func sendAddRemoteSSTWorker(
 				// NB: Since the restored span is a subset of the BackupFileEntrySpan,
 				// these counts may be an overestimate of what actually gets restored.
 				counts := file.BackupFileEntryCounts
+				fileSize := file.BackingFileSize
+				// If we don't have backing file size info, just use the mvcc size; it
+				// isn't physical size but is good enough for reflecting that there are
+				// some number of bytes in this sst span for the purposes tracking which
+				// spans have non-zero remote bytes.
+				if fileSize == 0 {
+					fileSize = uint64(counts.DataSize)
+				}
+				// If MVCC stats are _also_ zero just guess. Any non-zero value is fine.
+				if fileSize == 0 {
+					fileSize = 16 << 20
+				}
 
 				loc := kvpb.AddSSTableRequest_RemoteFile{
 					Locator:         file.Dir.URI,
 					Path:            file.Path,
-					BackingFileSize: uint64(counts.DataSize),
+					BackingFileSize: fileSize,
 				}
 				// TODO(dt): see if KV has any better ideas for making these up.
 				fileStats := &enginepb.MVCCStats{
