@@ -58,16 +58,16 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	parallelism := roachtestflags.Parallelism
 	if roachtestflags.Cloud == spec.Local {
 		clusterType = localCluster
-
-		// This will suppress the annoying "Allow incoming network connections" popup from
-		// OSX when running a roachtest
-		bindTo = "localhost"
-
-		fmt.Printf("--local specified. Binding http listener to localhost only")
 		if parallelism != 1 {
 			fmt.Printf("--local specified. Overriding --parallelism to 1.\n")
 			parallelism = 1
 		}
+	}
+
+	if runtime.GOOS == "darwin" {
+		// This will suppress the annoying "Allow incoming network connections" popup from
+		// OSX when running a roachtest
+		bindTo = "localhost"
 	}
 
 	opt := clustersOpt{
