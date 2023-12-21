@@ -280,6 +280,10 @@ func (sq *splitQueue) processAttempt(
 	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, err error) {
 	desc := r.Desc()
+	conf, err := r.LoadSpanConfig(ctx)
+	if err != nil {
+		return false, errors.Wrapf(err, "unable to load span config")
+	}
 	// First handle the case of splitting due to span config maps.
 	splitKey, err := confReader.ComputeSplitKey(ctx, desc.StartKey, desc.EndKey)
 	if err != nil {
@@ -296,6 +300,7 @@ func (sq *splitQueue) processAttempt(
 				ExpirationTime: hlc.Timestamp{},
 			},
 			desc,
+			conf,
 			false, /* delayable */
 			"span config",
 			false, /* findFirstSafeSplitKey */
@@ -321,6 +326,7 @@ func (sq *splitQueue) processAttempt(
 			ctx,
 			kvpb.AdminSplitRequest{},
 			desc,
+			conf,
 			false, /* delayable */
 			reason,
 			false, /* findFirstSafeSplitKey */
@@ -373,6 +379,7 @@ func (sq *splitQueue) processAttempt(
 				ExpirationTime: expTime,
 			},
 			desc,
+			conf,
 			false, /* delayable */
 			reason,
 			true, /* findFirstSafeSplitKey */
