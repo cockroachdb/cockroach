@@ -4,6 +4,7 @@
 ALL_TESTS = [
     "//pkg/acceptance:acceptance_test",
     "//pkg/base:base_test",
+    "//pkg/bench/hashbench:hashbench_test",
     "//pkg/bench/rttanalysis:rttanalysis_test",
     "//pkg/bench/tpcc:tpcc_test",
     "//pkg/bench:bench_test",
@@ -763,6 +764,7 @@ GO_TARGETS = [
     "//pkg/base:base_test",
     "//pkg/bench/cmd/pgbenchsetup:pgbenchsetup",
     "//pkg/bench/cmd/pgbenchsetup:pgbenchsetup_lib",
+    "//pkg/bench/hashbench:hashbench_test",
     "//pkg/bench/rttanalysis:rttanalysis",
     "//pkg/bench/rttanalysis:rttanalysis_test",
     "//pkg/bench/tpcc:tpcc",
