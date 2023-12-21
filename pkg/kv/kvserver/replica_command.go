@@ -3742,15 +3742,11 @@ func (roo *replicaRelocateOneOptions) StorePool() storepool.AllocatorStorePool {
 func (roo *replicaRelocateOneOptions) LoadSpanConfig(
 	ctx context.Context, startKey roachpb.RKey,
 ) (*roachpb.SpanConfig, error) {
-	confReader, err := roo.store.GetConfReader(ctx)
+	conf, _, err := roo.store.GetSpanConfigForKey(ctx, startKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "can't relocate range")
 	}
-	conf, _, err := confReader.GetSpanConfigForKey(ctx, startKey)
-	if err != nil {
-		return nil, err
-	}
-	return &conf, nil
+	return conf, nil
 }
 
 // Leaseholder returns the descriptor of the replica which holds the lease on
