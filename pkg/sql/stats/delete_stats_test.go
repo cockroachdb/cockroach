@@ -673,6 +673,7 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t) // slow test
+	skip.UnderDeadlock(t, "low ScanMaxIdleTime and deadlock overloads the EngFlow executor")
 
 	var params base.TestServerArgs
 	params.ScanMaxIdleTime = time.Millisecond // speed up MVCC GC queue scans
