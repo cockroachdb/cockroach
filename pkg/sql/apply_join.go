@@ -285,22 +285,20 @@ func runPlanInsidePlan(
 
 	plannerCopy := *params.p
 	plannerCopy.curPlan.planComponents = *plan
+
 	// "Pausable portal" execution model is only applicable to the outer
 	// statement since we actually need to execute all inner plans to completion
 	// before we can produce any "outer" rows to be returned to the client, so
 	// we make sure to unset pausablePortal field on the planner.
 	plannerCopy.pausablePortal = nil
-
-	plannerCopy.extendedEvalCtx.RoutineSender = deferredRoutineSender
-	serialEvalCtx := plannerCopy.ExtendedEvalContextCopyAndReset()
-	evalCtxFactory := func(usedConcurrently bool) *extendedEvalContext {
-		// Reuse the same object if this factory is not used concurrently.
-		evalCtx := serialEvalCtx
-		if usedConcurrently {
-			evalCtx = plannerCopy.ExtendedEvalContextCopyAndReset()
-		}
+	evalCtxFactory := func() *extendedEvalContext {
+		plannerCopy.extendedEvalCtx = *params.p.ExtendedEvalContextCopy()
+		evalCtx := &plannerCopy.extendedEvalCtx
 		evalCtx.Planner = &plannerCopy
 		evalCtx.StreamManagerFactory = &plannerCopy
+		if deferredRoutineSender != nil {
+			evalCtx.RoutineSender = deferredRoutineSender
+		}
 		return evalCtx
 	}
 
@@ -322,9 +320,7 @@ func runPlanInsidePlan(
 		if !execCfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx,
 			&plannerCopy,
-			func() *extendedEvalContext {
-				return evalCtxFactory(false /* usedConcurrently */)
-			},
+			evalCtxFactory,
 			plan.subqueryPlans,
 			recv,
 			&subqueryResultMemAcc,
@@ -353,7 +349,7 @@ func runPlanInsidePlan(
 	if distributePlan.WillDistribute() {
 		distributeType = DistributionTypeAlways
 	}
-	evalCtx := evalCtxFactory(false /* usedConcurrently */)
+	evalCtx := evalCtxFactory()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
 	planCtx.stmtType = recv.stmtType
 	planCtx.mustUseLeafTxn = params.p.mustUseLeafTxn()
@@ -375,9 +371,12 @@ func runPlanInsidePlan(
 		return resultWriter.Err()
 	}
 
+	evalCtxFactory2 := func(usedConcurrently bool) *extendedEvalContext {
+		return evalCtxFactory()
+	}
 	plannerCopy.autoCommit = false
 	execCfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
-		ctx, &plannerCopy, evalCtxFactory, &plannerCopy.curPlan.planComponents, recv,
+		ctx, &plannerCopy, evalCtxFactory2, &plannerCopy.curPlan.planComponents, recv,
 	)
 	// We might have appended some cascades or checks to the plannerCopy, so we
 	// need to update the plan for cleanup purposes before proceeding.
