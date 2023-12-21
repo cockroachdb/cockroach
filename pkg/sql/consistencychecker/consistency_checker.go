@@ -33,7 +33,7 @@ func NewConsistencyChecker(db *kv.DB) *ConsistencyChecker {
 
 // CheckConsistency implements the eval.ConsistencyChecker interface.
 func (s *ConsistencyChecker) CheckConsistency(
-	ctx context.Context, from, to roachpb.Key, mode kvpb.ChecksumMode,
+	ctx context.Context, from, to roachpb.Key, mode kvpb.ChecksumMode, checkpoint bool,
 ) (*kvpb.CheckConsistencyResponse, error) {
 	var b kv.Batch
 	b.AddRawRequest(&kvpb.CheckConsistencyRequest{
@@ -41,7 +41,8 @@ func (s *ConsistencyChecker) CheckConsistency(
 			Key:    from,
 			EndKey: to,
 		},
-		Mode: mode,
+		Mode:       mode,
+		Checkpoint: checkpoint,
 	})
 
 	// NB: DistSender has special code to avoid parallelizing the request if

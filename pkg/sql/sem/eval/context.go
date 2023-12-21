@@ -334,7 +334,7 @@ var _ tree.ParseContext = &Context{}
 // crdb_internal.check_consistency.
 type ConsistencyCheckRunner interface {
 	CheckConsistency(
-		ctx context.Context, from, to roachpb.Key, mode kvpb.ChecksumMode,
+		ctx context.Context, from, to roachpb.Key, mode kvpb.ChecksumMode, checkpoint bool,
 	) (*kvpb.CheckConsistencyResponse, error)
 }
 

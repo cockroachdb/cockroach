@@ -2538,6 +2538,7 @@ var builtinOidsArray = []string{
 	2570: `array_position(array: refcursor[], elem: refcursor, start: int) -> int`,
 	2571: `bit_count(val: bytes) -> int`,
 	2572: `bit_count(val: varbit) -> int`,
+	2573: `crdb_internal.check_consistency(stats_only: bool, start_key: bytes, end_key: bytes, checkpoint: bool) -> tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail, interval AS duration}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

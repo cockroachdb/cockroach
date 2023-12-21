@@ -448,6 +448,25 @@ var generators = map[string]builtinDefinition{
 				"`SELECT * FROM crdb_internal.check_consistency(true, b'\\x02', b'\\x04')`",
 			volatility.Volatile,
 		),
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "stats_only", Typ: types.Bool},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+				{Name: "checkpoint", Typ: types.Bool},
+			},
+			checkConsistencyGeneratorType,
+			makeCheckConsistencyGenerator,
+			"Runs a consistency check on ranges touching the specified key range, "+
+				"and takes storage checkpoints of any inconsistent ranges if requested. "+
+				"Requires stats_only: false. An empty start or end key is treated as the "+
+				"minimum and maximum possible, respectively. Each returned row "+
+				"contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), "+
+				"and verbose detail.\n\n"+
+				"Example usage:\n\n"+
+				"`SELECT * FROM crdb_internal.check_consistency(false, b'\\x02', b'\\x04', true)`",
+			volatility.Volatile,
+		),
 	),
 
 	"crdb_internal.list_sql_keys_in_range": makeBuiltin(
@@ -2079,6 +2098,7 @@ type checkConsistencyGenerator struct {
 	consistencyChecker eval.ConsistencyCheckRunner
 	rangeDescIterator  rangedesc.Iterator
 	mode               kvpb.ChecksumMode
+	checkpoint         bool
 
 	// The descriptors for which we haven't yet emitted rows. Rows are consumed
 	// from this field and produce one (or more, in the case of splits not reflected
@@ -2141,6 +2161,10 @@ func makeCheckConsistencyGenerator(
 	if statsOnly := bool(*args[0].(*tree.DBool)); statsOnly {
 		mode = kvpb.ChecksumMode_CHECK_STATS
 	}
+	checkpoint := bool(len(args) >= 4 && *args[3].(*tree.DBool))
+	if checkpoint && mode != kvpb.ChecksumMode_CHECK_FULL {
+		return nil, errors.New("can't request checkpoints for stats_only checks")
+	}
 
 	if evalCtx.ConsistencyChecker == nil {
 		return nil, errors.WithIssueLink(
@@ -2161,6 +2185,7 @@ func makeCheckConsistencyGenerator(
 		consistencyChecker: evalCtx.ConsistencyChecker,
 		rangeDescIterator:  rangeDescIterator,
 		mode:               mode,
+		checkpoint:         checkpoint,
 	}, nil
 }
 
@@ -2206,7 +2231,7 @@ func (c *checkConsistencyGenerator) maybeRefillRows(ctx context.Context) time.Du
 	desc := c.descs[0]
 	c.descs = c.descs[1:]
 	resp, err := c.consistencyChecker.CheckConsistency(
-		ctx, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), c.mode,
+		ctx, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), c.mode, c.checkpoint,
 	)
 	if err != nil {
 		resp = &kvpb.CheckConsistencyResponse{Result: []kvpb.CheckConsistencyResponse_Result{{
