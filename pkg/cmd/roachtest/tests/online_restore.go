@@ -96,6 +96,16 @@ func registerOnlineRestore(r registry.Registry) {
 								return err
 							}
 							defer db.Close()
+
+							// TODO(dt): what's the right value for this? How do we tune this
+							// on the fly automatically during the restore instead of by-hand?
+							// Context: We expect many operations to take longer than usual
+							// when some or all of the data they touch is remote. For now this
+							// is being blanket set to 1h manually, and a user's run-book
+							// would need to do this by hand before an online restore and
+							// reset it manually after, but ideally the queues would be aware
+							// of remote-ness when they pick their own timeouts and pick
+							// according.
 							if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
 								return err
 							}
