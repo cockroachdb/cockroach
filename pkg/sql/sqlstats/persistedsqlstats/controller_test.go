@@ -35,7 +35,7 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRaceWithIssue(t, 116037, "probable OOM")
+	skip.UnderStress(t, "the test is too slow to run under stress")
 
 	ctx := context.Background()
 	cluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{})

@@ -683,6 +683,8 @@ func TestRelocateVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDuress(t, "test flakes in slow builds; see #108081")
+
 	testCases := []testCase{
 		{
 			desc:  "ALTER RANGE x RELOCATE VOTERS",
@@ -773,6 +775,8 @@ func TestRelocateVoters(t *testing.T) {
 func TestExperimentalRelocateVoters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "test flakes in slow builds; see #108081")
 
 	testCases := []testCase{
 		{
