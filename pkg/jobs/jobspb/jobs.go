@@ -26,3 +26,21 @@ func (t *TraceData) ToText() []byte {
 	rec := tracingpb.Recording(t.CollectedSpans)
 	return []byte(rec.String())
 }
+
+// RestoreFrontierEntries is a slice of RestoreFrontierEntries.
+type RestoreFrontierEntries []RestoreProgress_FrontierEntry
+
+func (fes RestoreFrontierEntries) Equal(fes2 RestoreFrontierEntries) bool {
+	if len(fes) != len(fes2) {
+		return false
+	}
+	for i := range fes {
+		if !fes[i].Span.Equal(fes2[i].Span) {
+			return false
+		}
+		if !fes[i].Timestamp.Equal(fes2[i].Timestamp) {
+			return false
+		}
+	}
+	return true
+}
