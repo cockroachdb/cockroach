@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
@@ -40,6 +41,9 @@ type TenantSideCostController interface {
 	// GetCostConfig returns the cost model config this TenantSideCostController
 	// is using.
 	GetCostConfig() *tenantcostmodel.Config
+
+	// Metrics returns a metric.Struct which holds metrics for the controller.
+	Metrics() metric.Struct
 
 	TenantSideKVInterceptor
 

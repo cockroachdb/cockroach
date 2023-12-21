@@ -1067,6 +1067,7 @@ func makeTenantSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
+	registry.AddMetricStruct(costController.Metrics())
 
 	dsCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:        baseCfg.AmbientCtx,
@@ -1357,4 +1358,8 @@ func (noopTenantSideCostController) GetCPUMovingAvg() float64 {
 
 func (noopTenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
 	return nil
+}
+
+func (noopTenantSideCostController) Metrics() metric.Struct {
+	return emptyMetricStruct{}
 }

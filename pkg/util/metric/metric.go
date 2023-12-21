@@ -157,15 +157,18 @@ func (m *Metadata) AddLabel(name, value string) {
 var _ Iterable = &Gauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
+var _ Iterable = &CounterFloat64{}
 
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
+var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
 
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
+var _ PrometheusExportable = &CounterFloat64{}
 
 var now = timeutil.Now
 
@@ -764,6 +767,9 @@ func (c *CounterFloat64) Snapshot() *CounterFloat64 {
 func (c *CounterFloat64) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_COUNTER.Enum()
 }
+
+// Inspect calls the given closure with the empty string and itself.
+func (c *CounterFloat64) Inspect(f func(interface{})) { f(c) }
 
 // ToPrometheusMetric returns a filled-in prometheus metric of the right type.
 func (c *CounterFloat64) ToPrometheusMetric() *prometheusgo.Metric {

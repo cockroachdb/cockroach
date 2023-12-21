@@ -6112,3 +6112,7 @@ func (mockTenantSideCostController) GetCPUMovingAvg() float64 {
 func (m *mockTenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
 	return m.cfg
 }
+
+func (m *mockTenantSideCostController) Metrics() metric.Struct {
+	return nil
+}
