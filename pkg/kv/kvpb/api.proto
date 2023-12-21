@@ -828,6 +828,15 @@ enum ChecksumMode {
 message CheckConsistencyRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   ChecksumMode mode = 3;
+
+  // If enabled, take a storage checkpoint of inconsistent ranges (but do not
+  // fatal nodes). Used with CHECK_FULL for crdb_internal.check_consistency(),
+  // this is done unconditionally with CHECK_VIA_QUEUE.
+  //
+  // TODO(erikgrinaker): the checkpointing should be moved out of the method,
+  // see TODO on CHECK_VIA_QUEUE and Replica.CheckConsistency.
+  bool checkpoint = 6;
+
   reserved 2, 4, 5;
 }
 

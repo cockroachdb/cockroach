@@ -75,18 +75,28 @@ var TestingFastEFOSAcquisition = settings.RegisterBoolSetting(
 // consistency check will be re-run to save storage engine checkpoints and
 // terminate suspicious nodes. This behavior should be lifted to the consistency
 // checker queue in the future.
+//
+// When an inconsistency is detected and CheckConsistencyRequest.Checkpoint is
+// true with CHECK_FULL, it will also be re-run to save storage engine
+// checkpoints, but the node will not be terminated. This behavior should also
+// be lifted out in the future (see comment above).
 func (r *Replica) CheckConsistency(
 	ctx context.Context, req kvpb.CheckConsistencyRequest,
 ) (kvpb.CheckConsistencyResponse, *kvpb.Error) {
+	checkpointOnInconsistency := req.Checkpoint
+	if checkpointOnInconsistency && req.Mode != kvpb.ChecksumMode_CHECK_FULL {
+		return kvpb.CheckConsistencyResponse{}, kvpb.NewError(errors.AssertionFailedf(
+			"CheckConsistencyRequest.Checkpoint can only be used with mode CHECK_FULL"))
+	}
 	return r.checkConsistencyImpl(ctx, kvpb.ComputeChecksumRequest{
 		RequestHeader: kvpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
 		Version:       batcheval.ReplicaChecksumVersion,
 		Mode:          req.Mode,
-	})
+	}, checkpointOnInconsistency)
 }
 
 func (r *Replica) checkConsistencyImpl(
-	ctx context.Context, args kvpb.ComputeChecksumRequest,
+	ctx context.Context, args kvpb.ComputeChecksumRequest, checkpointOnInconsistency bool,
 ) (kvpb.CheckConsistencyResponse, *kvpb.Error) {
 	isQueue := args.Mode == kvpb.ChecksumMode_CHECK_VIA_QUEUE
 
@@ -198,10 +208,11 @@ func (r *Replica) checkConsistencyImpl(
 	var resp kvpb.CheckConsistencyResponse
 	resp.Result = append(resp.Result, res)
 
-	// Bail out at this point except if the queue is the caller. All of the stuff
-	// below should really happen in the consistency queue to keep CheckConsistency
-	// itself self-contained.
-	if !isQueue {
+	// Bail out at this point except if the queue is the caller or the caller
+	// requested checkpoints on inconsistency. All of the stuff below should
+	// really happen in the consistency queue to keep CheckConsistency itself
+	// self-contained.
+	if !isQueue && !checkpointOnInconsistency {
 		return resp, nil
 	}
 
@@ -212,8 +223,9 @@ func (r *Replica) checkConsistencyImpl(
 		// is through this mechanism that existing ranges are updated. Hence, the
 		// logging below is relatively timid.
 
-		// If there's no delta, there's nothing else to do.
-		if !haveDelta {
+		// If there's no delta, there's nothing else to do. Only CHECK_VIA_QUEUE
+		// should recompute stats.
+		if !haveDelta || !isQueue {
 			return resp, nil
 		}
 
@@ -241,21 +253,25 @@ func (r *Replica) checkConsistencyImpl(
 	}
 
 	// No checkpoint was requested, so we want to re-run the check with
-	// checkpoints and termination of suspicious nodes. Note that this recursive
-	// call will be terminated in the `args.Checkpoint` branch above.
+	// checkpoints, and termination of suspicious nodes when run via the queue.
+	// Note that this recursive call will be terminated in the `args.Checkpoint`
+	// branch above.
 	args.Checkpoint = true
-	for _, idxs := range shaToIdxs[minoritySHA] {
-		args.Terminate = append(args.Terminate, results[idxs].Replica)
-	}
-	// args.Terminate is a slice of properly redactable values, but
-	// with %v `redact` will not realize that and will redact the
-	// whole thing. Wrap it as a ReplicaSet which is a SafeFormatter
-	// and will get the job done.
-	//
-	// TODO(knz): clean up after https://github.com/cockroachdb/redact/issues/5.
-	{
-		var tmp redact.SafeFormatter = roachpb.MakeReplicaSet(args.Terminate)
-		log.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", tmp)
+
+	if isQueue {
+		for _, idxs := range shaToIdxs[minoritySHA] {
+			args.Terminate = append(args.Terminate, results[idxs].Replica)
+		}
+		// args.Terminate is a slice of properly redactable values, but
+		// with %v `redact` will not realize that and will redact the
+		// whole thing. Wrap it as a ReplicaSet which is a SafeFormatter
+		// and will get the job done.
+		//
+		// TODO(knz): clean up after https://github.com/cockroachdb/redact/issues/5.
+		{
+			var tmp redact.SafeFormatter = roachpb.MakeReplicaSet(args.Terminate)
+			log.Errorf(ctx, "consistency check failed; fetching details and shutting down minority %v", tmp)
+		}
 	}
 
 	// We've noticed in practice that if the snapshot diff is large, the
@@ -267,7 +283,7 @@ func (r *Replica) checkConsistencyImpl(
 	// TODO(pavelkalinnikov): remove this now that diffs are not printed?
 	defer log.TemporarilyDisableFileGCForMainLogger()()
 
-	if _, pErr := r.checkConsistencyImpl(ctx, args); pErr != nil {
+	if _, pErr := r.checkConsistencyImpl(ctx, args, checkpointOnInconsistency); pErr != nil {
 		log.Errorf(ctx, "replica inconsistency detected; second round failed: %s", pErr)
 	}
 
