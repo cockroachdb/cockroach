@@ -16,8 +16,8 @@ package kvcoord
 import "github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 
 // GRPCTransportFactory is the default TransportFactory, using GRPC.
-func GRPCTransportFactory(
-	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice,
-) (Transport, error) {
-	return grpcTransportFactoryImpl(opts, nodeDialer, replicas)
+func GRPCTransportFactory(nodeDialer *nodedialer.Dialer) TransportFactory {
+	return func(options SendOptions, slice ReplicaSlice) (Transport, error) {
+		return grpcTransportFactoryImpl(options, nodeDialer, slice)
+	}
 }

@@ -106,13 +106,11 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 	}
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
 	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
-		AmbientCtx: ambient,
-		Clock:      s.Clock,
-		NodeDescs:  s.Gossip,
-		Stopper:    s.Stopper(),
-		TestingKnobs: kvcoord.ClientTestingKnobs{
-			TransportFactory: kvcoord.TestingAdaptSimpleTransport(sendFn),
-		},
+		AmbientCtx:        ambient,
+		Clock:             s.Clock,
+		NodeDescs:         s.Gossip,
+		Stopper:           s.Stopper(),
+		TransportFactory:  kvcoord.TestingAdaptSimpleTransport(sendFn),
 		RangeDescriptorDB: descDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	})

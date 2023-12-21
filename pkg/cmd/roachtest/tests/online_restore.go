@@ -96,13 +96,46 @@ func registerOnlineRestore(r registry.Registry) {
 								return err
 							}
 							defer db.Close()
+
+							// TODO(dt): what's the right value for this? How do we tune this
+							// on the fly automatically during the restore instead of by-hand?
+							// Context: We expect many operations to take longer than usual
+							// when some or all of the data they touch is remote. For now this
+							// is being blanket set to 1h manually, and a user's run-book
+							// would need to do this by hand before an online restore and
+							// reset it manually after, but ideally the queues would be aware
+							// of remote-ness when they pick their own timeouts and pick
+							// accordingly.
 							if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
 								return err
 							}
 							if _, err := db.Exec("SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled=true"); err != nil {
 								return err
 							}
+							// TODO(mb): due to *reasons*, restored statistics are not always
+							// considered fresh enough by the trigger of the stats job (e.g.
+							// if the backed up stat was not named as an automatic job). But
+							// generating a whole new stat requires full table scans, reading
+							// even data that the workload doesn't need, using up our scarce
+							// reduced capacity while operating on remote data. Instead we
+							// likely would prefer to wait until the download phase completes
+							// to go generate sightly fresher stats. For now, we blanket block
+							// automatic stats creation manually (and a user would toggle it
+							// back on post-download), but ideally we'd do this automatically
+							// on just the restored tables, flipping the bit back at job end.
 							if _, err := db.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false"); err != nil {
+								return err
+							}
+							// TODO(dt): AC appears periodically reduce the workload to 0 QPS
+							// during the download phase (sudden jumps from 0 to 2k qps to 0).
+							// Disable for now until we figure out how to smooth this out.
+							if _, err := db.Exec("SET CLUSTER SETTING admission.disk_bandwidth_tokens.elastic.enabled=false"); err != nil {
+								return err
+							}
+							if _, err := db.Exec("SET CLUSTER SETTING admission.kv.enabled=false"); err != nil {
+								return err
+							}
+							if _, err := db.Exec("SET CLUSTER SETTING admission.sql_kv_response.enabled=false"); err != nil {
 								return err
 							}
 							opts := ""

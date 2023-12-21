@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -296,50 +295,52 @@ func TestTransactionUnexpectedlyCommitted(t *testing.T) {
 			T: t,
 		},
 	}
-	getInterceptingTransportFactory := func(nID roachpb.NodeID) kvcoord.TransportFactory {
-		return func(options kvcoord.SendOptions, dialer *nodedialer.Dialer, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
-			transport, tErr := kvcoord.GRPCTransportFactory(options, dialer, slice)
-			interceptor := &interceptingTransport{
-				Transport: transport,
-				nID:       nID,
-				beforeSend: func(ctx context.Context, req *interceptedReq) (overrideResp *interceptedResp) {
-					tMu.RLock()
-					defer tMu.RUnlock()
+	getInterceptingTransportFactory := func(nID roachpb.NodeID) func(kvcoord.TransportFactory) kvcoord.TransportFactory {
+		return func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
+			return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
+				transport, tErr := factory(options, slice)
+				interceptor := &interceptingTransport{
+					Transport: transport,
+					nID:       nID,
+					beforeSend: func(ctx context.Context, req *interceptedReq) (overrideResp *interceptedResp) {
+						tMu.RLock()
+						defer tMu.RUnlock()
 
-					if tMu.filter != nil && tMu.filter(req) {
-						opID := atomic.AddInt64(&tMu.lastInterceptedOpID, 1)
-						req.prefix = fmt.Sprintf("[op %d] ", opID)
-						tMu.Logf("%s batchReq={%s}, meta={%s}", req, req.ba, req.txnMeta)
+						if tMu.filter != nil && tMu.filter(req) {
+							opID := atomic.AddInt64(&tMu.lastInterceptedOpID, 1)
+							req.prefix = fmt.Sprintf("[op %d] ", opID)
+							tMu.Logf("%s batchReq={%s}, meta={%s}", req, req.ba, req.txnMeta)
 
-						if tMu.maybeWait != nil {
-							err := tMu.maybeWait(BeforeSending, req, nil)
+							if tMu.maybeWait != nil {
+								err := tMu.maybeWait(BeforeSending, req, nil)
+								if err != nil {
+									return &interceptedResp{err: err}
+								}
+							}
+						}
+
+						if tMu.modifyReq != nil && tMu.modifyReq(req) {
+							tMu.Logf("%s modified", req)
+						}
+
+						return nil
+					},
+					afterSend: func(ctx context.Context, req *interceptedReq, resp *interceptedResp) (overrideResp *interceptedResp) {
+						tMu.RLock()
+						defer tMu.RUnlock()
+
+						if tMu.filter != nil && tMu.filter(req) && tMu.maybeWait != nil {
+							err := tMu.maybeWait(AfterSending, req, resp)
 							if err != nil {
 								return &interceptedResp{err: err}
 							}
 						}
-					}
 
-					if tMu.modifyReq != nil && tMu.modifyReq(req) {
-						tMu.Logf("%s modified", req)
-					}
-
-					return nil
-				},
-				afterSend: func(ctx context.Context, req *interceptedReq, resp *interceptedResp) (overrideResp *interceptedResp) {
-					tMu.RLock()
-					defer tMu.RUnlock()
-
-					if tMu.filter != nil && tMu.filter(req) && tMu.maybeWait != nil {
-						err := tMu.maybeWait(AfterSending, req, resp)
-						if err != nil {
-							return &interceptedResp{err: err}
-						}
-					}
-
-					return nil
-				},
+						return nil
+					},
+				}
+				return interceptor, tErr
 			}
-			return interceptor, tErr
 		}
 	}
 
