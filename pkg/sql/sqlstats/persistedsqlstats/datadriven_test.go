@@ -70,7 +70,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t)
+	skip.UnderStressRace(t)
 
 	stubTime := &stubTime{}
 	injector := newRuntimeKnobsInjector()
