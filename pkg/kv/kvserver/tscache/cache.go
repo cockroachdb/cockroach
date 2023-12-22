@@ -13,6 +13,7 @@
 package tscache
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -55,7 +56,7 @@ type Cache interface {
 	// from start to end. If end is nil, the range covers the start key only.
 	// An empty txnID can be passed when the operation is not done on behalf of a
 	// particular txn.
-	Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID)
+	Add(ctx context.Context, start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID)
 
 	// GetMax returns the maximum timestamp which overlaps the interval spanning
 	// from start to end. If that maximum timestamp belongs to a single
@@ -64,7 +65,7 @@ type Cache interface {
 	// Finally, if no part of the specified range is overlapped by timestamp
 	// intervals from any transactions in the cache, the low water timestamp is
 	// returned for the read timestamps.
-	GetMax(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
+	GetMax(ctx context.Context, start, end roachpb.Key) (hlc.Timestamp, uuid.UUID)
 
 	// Metrics returns the Cache's metrics struct.
 	Metrics() Metrics

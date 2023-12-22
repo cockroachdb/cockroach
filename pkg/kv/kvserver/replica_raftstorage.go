@@ -814,7 +814,7 @@ func (r *Replica) applySnapshot(
 	// make sure to update the timestamp cache using the prior read summary to
 	// account for any reads that were served on the right-hand side range(s).
 	if len(subsumedRepls) > 0 && state.Lease.Replica.ReplicaID == r.replicaID && prioReadSum != nil {
-		applyReadSummaryToTimestampCache(r.store.tsCache, r.descRLocked(), *prioReadSum)
+		applyReadSummaryToTimestampCache(ctx, r.store.tsCache, r.descRLocked(), *prioReadSum)
 	}
 
 	// Inform the concurrency manager that this replica just applied a snapshot.

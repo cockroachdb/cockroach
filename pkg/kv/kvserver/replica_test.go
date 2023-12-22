@@ -1276,7 +1276,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
-		rTS, _ := tc.repl.store.tsCache.GetMax(roachpb.Key("a"), nil /* end */)
+		rTS, _ := tc.repl.store.tsCache.GetMax(ctx, roachpb.Key("a"), nil /* end */)
 
 		if test.expLowWater == 0 {
 			continue
@@ -2221,17 +2221,17 @@ func TestReplicaUpdateTSCache(t *testing.T) {
 	}
 	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
 	noID := uuid.UUID{}
-	rTS, rTxnID := tc.repl.store.tsCache.GetMax(roachpb.Key("a"), nil)
+	rTS, rTxnID := tc.repl.store.tsCache.GetMax(ctx, roachpb.Key("a"), nil)
 	if rTS != ts1 || rTxnID != noID {
 		t.Errorf("expected rTS=%s but got %s; rTxnID=%s", ts1, rTS, rTxnID)
 	}
 	// Verify the timestamp cache has rTS=2s for "b".
-	rTS, rTxnID = tc.repl.store.tsCache.GetMax(roachpb.Key("b"), nil)
+	rTS, rTxnID = tc.repl.store.tsCache.GetMax(ctx, roachpb.Key("b"), nil)
 	if rTS != ts2 || rTxnID != noID {
 		t.Errorf("expected rTS=%s but got %s; rTxnID=%s", ts2, rTS, rTxnID)
 	}
 	// Verify another key ("c") has 0sec in timestamp cache.
-	rTS, rTxnID = tc.repl.store.tsCache.GetMax(roachpb.Key("c"), nil)
+	rTS, rTxnID = tc.repl.store.tsCache.GetMax(ctx, roachpb.Key("c"), nil)
 	if rTS.WallTime != startNanos || rTxnID != noID {
 		t.Errorf("expected rTS=0s but got %s; rTxnID=%s", rTS, rTxnID)
 	}
@@ -13502,7 +13502,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				ba.Add(putReq(keyA))
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
-				r.store.tsCache.Add(keyA, keyA, minReadTS.Next(), uuid.MakeV4())
+				r.store.tsCache.Add(ctx, keyA, keyA, minReadTS.Next(), uuid.MakeV4())
 				require.True(t, r.applyTimestampCache(ctx, ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
@@ -13517,7 +13517,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
 				t.Log(ba.Timestamp, minReadTS, minReadTS.Next())
-				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4())
+				r.store.tsCache.Add(ctx, keyAA, keyAA, minReadTS.Next(), uuid.MakeV4())
 				require.True(t, r.applyTimestampCache(ctx, ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
@@ -14446,13 +14446,13 @@ func TestResolveIntentReplicatedLocksBumpsTSCache(t *testing.T) {
 			expTs = bumpedTs
 		}
 
-		rTS, _ := tc.store.tsCache.GetMax(roachpb.Key("a"), nil)
+		rTS, _ := tc.store.tsCache.GetMax(ctx, roachpb.Key("a"), nil)
 		require.Equal(t, expTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("b"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("b"), nil)
 		require.Equal(t, expTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("c"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("c"), nil)
 		require.Equal(t, expTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("d"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("d"), nil)
 		require.Equal(t, notBumpedTs, rTS)
 	}
 
@@ -14562,7 +14562,7 @@ func TestResolveIntentRangeReplicatedLocksBumpsTSCache(t *testing.T) {
 		}
 
 		for _, keyStr := range []string{"a", "b", "c", "d"} {
-			rTS, _ := tc.store.tsCache.GetMax(roachpb.Key(keyStr), nil)
+			rTS, _ := tc.store.tsCache.GetMax(ctx, roachpb.Key(keyStr), nil)
 			require.Equal(t, expTs, rTS)
 		}
 	}
@@ -14660,13 +14660,13 @@ func TestEndTxnReplicatedLocksBumpsTSCache(t *testing.T) {
 			expTs = bumpedTs
 		}
 
-		rTS, _ := tc.store.tsCache.GetMax(roachpb.Key("a"), nil)
+		rTS, _ := tc.store.tsCache.GetMax(ctx, roachpb.Key("a"), nil)
 		require.Equal(t, expTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("b"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("b"), nil)
 		require.Equal(t, notBumpedTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("c"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("c"), nil)
 		require.Equal(t, expTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("d"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("d"), nil)
 		require.Equal(t, expTs, rTS)
 	}
 
