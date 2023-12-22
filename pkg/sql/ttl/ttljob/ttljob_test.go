@@ -572,14 +572,13 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// This test is very slow.
-	skip.UnderDeadlock(t)
-	skip.UnderRace(t)
+	skip.UnderDuress(t, "this test is very slow")
 
 	rng, _ := randutil.NewTestRand()
 
+	collatedStringType := types.MakeCollatedString(types.String, "en" /* locale */)
 	var indexableTyps []*types.T
-	for _, typ := range types.Scalar {
+	for _, typ := range append(types.Scalar, collatedStringType) {
 		// TODO(#76419): DateFamily has a broken `-infinity` case.
 		// TODO(#99432): JsonFamily has broken cases. This is because the test is wrapping JSON
 		//   objects in multiple single quotes which causes parsing errors.
@@ -742,8 +741,29 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			},
 		},
 	}
-	// Also randomly generate random PKs.
+	// Also randomly generate random PKs and families.
+	generateFamilyClauses := func(colNames []string) string {
+		familyClauses := strings.Builder{}
+		numFamilies := rng.Intn(len(colNames))
+		for fam := 0; fam < numFamilies && len(colNames) > 0; fam++ {
+			rng.Shuffle(len(colNames), func(i, j int) {
+				colNames[i], colNames[j] = colNames[j], colNames[i]
+			})
+			familySize := 1 + rng.Intn(len(colNames))
+			familyClauses.WriteString(fmt.Sprintf("FAMILY fam%d (", fam))
+			for col := 0; col < familySize; col++ {
+				if col > 0 {
+					familyClauses.WriteString(", ")
+				}
+				familyClauses.WriteString(colNames[col])
+			}
+			colNames = colNames[familySize:]
+			familyClauses.WriteString("), ")
+		}
+		return familyClauses.String()
+	}
 	for i := 0; i < 5; i++ {
+		familyClauses := generateFamilyClauses([]string{"id", "rand_col_1", "rand_col_2", "t", "i"})
 		testCases = append(
 			testCases,
 			testCase{
@@ -753,11 +773,14 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	id UUID DEFAULT gen_random_uuid(),
 	rand_col_1 %s,
 	rand_col_2 %s,
-	text TEXT,
+	t TEXT NULL,
+	i INT8 NULL,
+	%s
 	PRIMARY KEY (id, rand_col_1, rand_col_2)
 ) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = %d, ttl_delete_batch_size = %d)`,
 					randgen.RandTypeFromSlice(rng, indexableTyps).SQLString(),
 					randgen.RandTypeFromSlice(rng, indexableTyps).SQLString(),
+					familyClauses,
 					1+rng.Intn(100),
 					1+rng.Intn(100),
 				),
@@ -783,10 +806,15 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				lexbase.EncodeRestrictedSQLIdent(&b, string(def.Name), lexbase.EncNoFlags)
 				insertColumns = append(insertColumns, b.String())
 
-				d := randgen.RandDatum(rng, def.Type.(*types.T), false /* nullOk */)
-				f := tree.NewFmtCtx(tree.FmtBareStrings)
-				d.Format(f)
-				values = append(values, f.CloseAndGetString())
+				nullOK := def.Nullable.Nullability == tree.Null
+				d := randgen.RandDatum(rng, def.Type.(*types.T), nullOK)
+				if d == tree.DNull {
+					values = append(values, nil)
+				} else {
+					f := tree.NewFmtCtx(tree.FmtBareStrings)
+					d.Format(f)
+					values = append(values, f.CloseAndGetString())
+				}
 			}
 		}
 

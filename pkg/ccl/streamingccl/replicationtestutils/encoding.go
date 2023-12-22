@@ -26,9 +26,29 @@ func EncodeKV(
 	t *testing.T, codec keys.SQLCodec, descr catalog.TableDescriptor, pkeyVals ...interface{},
 ) roachpb.KeyValue {
 	require.Equal(t, 1, descr.NumFamilies(), "there can be only one")
-	primary := descr.GetPrimaryIndex()
-	require.LessOrEqual(t, primary.NumKeyColumns(), len(pkeyVals))
+	indexEntries := encodeKVImpl(t, codec, descr, pkeyVals...)
+	require.Equal(t, 1, len(indexEntries))
+	return roachpb.KeyValue{Key: indexEntries[0].Key, Value: indexEntries[0].Value}
+}
 
+// EncodeKVs is similar to EncodeKV, but can be used for a table with multiple
+// column families, in which case up to one KV is returned per family.
+func EncodeKVs(
+	t *testing.T, codec keys.SQLCodec, descr catalog.TableDescriptor, pkeyVals ...interface{},
+) []roachpb.KeyValue {
+	indexEntries := encodeKVImpl(t, codec, descr, pkeyVals...)
+	require.GreaterOrEqual(t, len(indexEntries), 1)
+	kvs := make([]roachpb.KeyValue, len(indexEntries))
+	for i := range indexEntries {
+		kvs[i] = roachpb.KeyValue{Key: indexEntries[i].Key, Value: indexEntries[i].Value}
+	}
+	return kvs
+}
+
+func encodeKVImpl(
+	t *testing.T, codec keys.SQLCodec, descr catalog.TableDescriptor, pkeyVals ...interface{},
+) []rowenc.IndexEntry {
+	primary := descr.GetPrimaryIndex()
 	var datums tree.Datums
 	var colMap catalog.TableColMap
 	for i, val := range pkeyVals {
@@ -42,9 +62,10 @@ func EncodeKV(
 	indexEntries, err := rowenc.EncodePrimaryIndex(codec, descr, primary,
 		colMap, datums, includeEmpty)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(indexEntries))
-	indexEntries[0].Value.InitChecksum(indexEntries[0].Key)
-	return roachpb.KeyValue{Key: indexEntries[0].Key, Value: indexEntries[0].Value}
+	for i := range indexEntries {
+		indexEntries[i].Value.InitChecksum(indexEntries[i].Key)
+	}
+	return indexEntries
 }
 
 func nativeToDatum(t *testing.T, native interface{}) tree.Datum {
