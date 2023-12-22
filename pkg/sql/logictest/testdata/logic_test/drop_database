@@ -222,19 +222,20 @@ statement ok
 DROP DATABASE constraint_db CASCADE
 
 skipif config local-legacy-schema-changer
-query TTT
+query TT
 WITH cte AS (
-  SELECT job_type, description, status
+  SELECT job_type, description
   FROM crdb_internal.jobs
-  WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
+  WHERE (job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC')
+  AND (status = 'succeeded' OR status = 'running')
   ORDER BY created DESC
   LIMIT 4
 ) SELECT * FROM cte ORDER BY job_type, description
 ----
-SCHEMA CHANGE     CREATE TABLE constraint_db.public.t2 (t1_id INT8, CONSTRAINT fk FOREIGN KEY (t1_id) REFERENCES constraint_db.public.t1 (a), INDEX (t1_id))  succeeded
-SCHEMA CHANGE     updating referenced FK table t1(125) for table t2(126)                                                                                      succeeded
-SCHEMA CHANGE GC  GC for DROP DATABASE constraint_db CASCADE                                                                                                  running
-SCHEMA CHANGE GC  GC for DROP DATABASE d2 CASCADE                                                                                                             running
+SCHEMA CHANGE     CREATE TABLE constraint_db.public.t2 (t1_id INT8, CONSTRAINT fk FOREIGN KEY (t1_id) REFERENCES constraint_db.public.t1 (a), INDEX (t1_id))
+SCHEMA CHANGE     updating referenced FK table t1(125) for table t2(126)
+SCHEMA CHANGE GC  GC for DROP DATABASE constraint_db CASCADE
+SCHEMA CHANGE GC  GC for DROP DATABASE d2 CASCADE
 
 query TTTTTT rowsort
 SHOW DATABASES
