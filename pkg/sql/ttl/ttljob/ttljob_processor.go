@@ -98,9 +98,11 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 	var (
 		relationName      string
+		pkColIDs          catalog.TableColMap
 		pkColNames        []string
 		pkColTypes        []*types.T
 		pkColDirs         []catenumpb.IndexColumn_Direction
+		numFamilies       int
 		labelMetrics      bool
 		processorRowCount int64
 	)
@@ -110,6 +112,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			return err
 		}
 
+		numFamilies = desc.NumFamilies()
 		var buf bytes.Buffer
 		primaryIndexDesc := desc.GetPrimaryIndex().IndexDesc()
 		pkColNames = make([]string, 0, len(primaryIndexDesc.KeyColumnNames))
@@ -123,6 +126,10 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			return err
 		}
 		pkColDirs = primaryIndexDesc.KeyColumnDirections
+		pkColIDs = catalog.TableColMap{}
+		for i, id := range primaryIndexDesc.KeyColumnIDs {
+			pkColIDs.Set(id, i)
+		}
 
 		if !desc.HasRowLevelTTL() {
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
@@ -215,8 +222,10 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				ctx,
 				kvDB,
 				codec,
+				pkColIDs,
 				pkColTypes,
 				pkColDirs,
+				numFamilies,
 				span,
 				&alloc,
 			); err != nil {
@@ -401,15 +410,16 @@ func SpanToQueryBounds(
 	ctx context.Context,
 	kvDB *kv.DB,
 	codec keys.SQLCodec,
+	pkColIDs catalog.TableColMap,
 	pkColTypes []*types.T,
 	pkColDirs []catenumpb.IndexColumn_Direction,
+	numFamilies int,
 	span roachpb.Span,
 	alloc *tree.DatumAlloc,
 ) (bounds QueryBounds, hasRows bool, _ error) {
-	const maxRows = 1
 	partialStartKey := span.Key
 	partialEndKey := span.EndKey
-	startKeyValues, err := kvDB.Scan(ctx, partialStartKey, partialEndKey, maxRows)
+	startKeyValues, err := kvDB.Scan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
 	if err != nil {
 		return bounds, false, errors.Wrapf(err, "scan error startKey=%x endKey=%x", []byte(partialStartKey), []byte(partialEndKey))
 	}
@@ -417,7 +427,7 @@ func SpanToQueryBounds(
 	if len(startKeyValues) == 0 {
 		return bounds, false, nil
 	}
-	endKeyValues, err := kvDB.ReverseScan(ctx, partialStartKey, partialEndKey, maxRows)
+	endKeyValues, err := kvDB.ReverseScan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
 	if err != nil {
 		return bounds, false, errors.Wrapf(err, "reverse scan error startKey=%x endKey=%x", []byte(partialStartKey), []byte(partialEndKey))
 	}
@@ -427,15 +437,13 @@ func SpanToQueryBounds(
 	if len(endKeyValues) == 0 {
 		return bounds, false, nil
 	}
-	startKey := startKeyValues[0].Key
-	bounds.Start, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, startKey, alloc)
+	bounds.Start, err = rowenc.DecodeIndexKeyToDatums(codec, pkColIDs, pkColTypes, pkColDirs, startKeyValues, alloc)
 	if err != nil {
-		return bounds, false, errors.Wrapf(err, "decode startKey error key=%x", []byte(startKey))
+		return bounds, false, errors.Wrapf(err, "decode startKeyValues error on %+v", startKeyValues)
 	}
-	endKey := endKeyValues[0].Key
-	bounds.End, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, endKey, alloc)
+	bounds.End, err = rowenc.DecodeIndexKeyToDatums(codec, pkColIDs, pkColTypes, pkColDirs, endKeyValues, alloc)
 	if err != nil {
-		return bounds, false, errors.Wrapf(err, "decode endKey error key=%x", []byte(endKey))
+		return bounds, false, errors.Wrapf(err, "decode endKeyValues error on %+v", endKeyValues)
 	}
 	return bounds, true, nil
 }
