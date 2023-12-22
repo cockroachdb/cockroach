@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -445,18 +446,55 @@ func DecodeIndexKey(
 
 // DecodeIndexKeyToDatums decodes a key to tree.Datums. It is similar to
 // DecodeIndexKey, but eagerly decodes the []EncDatum to tree.Datums.
+// Also, unlike DecodeIndexKey, this function is able to handle types
+// with composite encoding.
 func DecodeIndexKeyToDatums(
 	codec keys.SQLCodec,
+	colIDs catalog.TableColMap,
 	types []*types.T,
 	colDirs []catenumpb.IndexColumn_Direction,
-	key []byte,
+	keyValue kv.KeyValue,
 	a *tree.DatumAlloc,
 ) (tree.Datums, error) {
 	vals := make([]EncDatum, len(types))
-	numVals, err := DecodeIndexKey(codec, vals, colDirs, key)
+	numVals, err := DecodeIndexKey(codec, vals, colDirs, keyValue.Key)
 	if err != nil {
 		return nil, err
 	}
+
+	if kvVal := keyValue.Value; kvVal != nil && kvVal.GetTag() == roachpb.ValueType_TUPLE {
+		valueBytes, err := kvVal.GetTuple()
+		if err != nil {
+			return nil, err
+		}
+		var lastColID descpb.ColumnID = 0
+		// Types that have a composite encoding can their data stored in the value.
+		// See docs/tech-notes/encoding.md#composite-encoding for details.
+		for len(valueBytes) > 0 {
+			typeOffset, _, colIDDiff, _, err := encoding.DecodeValueTag(valueBytes)
+			if err != nil {
+				return nil, err
+			}
+			colID := lastColID + descpb.ColumnID(colIDDiff)
+			lastColID = colID
+			colOrdinal, ok := colIDs.Get(colID)
+			if !ok {
+				// This is for a column that is not in the index. We still need to
+				// consume the data.
+				_, encLen, err := encoding.PeekValueLength(valueBytes[typeOffset:])
+				if err != nil {
+					return nil, err
+				}
+				valueBytes = valueBytes[typeOffset+encLen:]
+				continue
+			}
+			vals[colOrdinal], valueBytes, err = EncDatumFromBuffer(catenumpb.DatumEncoding_VALUE, valueBytes[typeOffset:])
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	datums := make(tree.Datums, 0, numVals)
 	for i, encDatum := range vals[:numVals] {
 		if err := encDatum.EnsureDecoded(types[i], a); err != nil {

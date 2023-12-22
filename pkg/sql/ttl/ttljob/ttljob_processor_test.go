@@ -12,11 +12,14 @@ package ttljob_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -167,6 +170,10 @@ func TestSpanToQueryBounds(t *testing.T) {
 				tableName,
 			)
 			primaryIndexDesc := tableDesc.GetPrimaryIndex().IndexDesc()
+			pkColIDs := catalog.TableColMap{}
+			for i, id := range primaryIndexDesc.KeyColumnIDs {
+				pkColIDs.Set(id, i)
+			}
 			pkColTypes, err := ttljob.GetPKColumnTypes(tableDesc, primaryIndexDesc)
 			require.NoError(t, err)
 			pkColDirs := primaryIndexDesc.KeyColumnDirections
@@ -182,8 +189,9 @@ func TestSpanToQueryBounds(t *testing.T) {
 				key := keyValue.Key
 				if truncateKey {
 					key = key[:len(key)-3]
+					kvKeyValue := kv.KeyValue{Key: key, Value: &keyValue.Value}
 					// Ensure truncated key cannot be decoded.
-					_, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, key, &alloc)
+					_, err = rowenc.DecodeIndexKeyToDatums(codec, pkColIDs, pkColTypes, pkColDirs, kvKeyValue, &alloc)
 					require.ErrorContainsf(t, err, "did not find terminator 0x0 in buffer", "pkValue=%s", pkValue)
 				}
 				return key
@@ -194,18 +202,10 @@ func TestSpanToQueryBounds(t *testing.T) {
 			endKey := createKey(tc.endPKValue, tc.truncateEndPKValue, primaryIndexSpan.EndKey)
 
 			// Run test function.
-			actualBounds, actualHasRows, err := ttljob.SpanToQueryBounds(
-				ctx,
-				kvDB,
-				codec,
-				pkColTypes,
-				pkColDirs,
-				roachpb.Span{
-					Key:    startKey,
-					EndKey: endKey,
-				},
-				&alloc,
-			)
+			actualBounds, actualHasRows, err := ttljob.SpanToQueryBounds(ctx, kvDB, codec, pkColIDs, pkColTypes, pkColDirs, roachpb.Span{
+				Key:    startKey,
+				EndKey: endKey,
+			}, &alloc)
 
 			// Verify results.
 			require.NoError(t, err)
@@ -214,6 +214,206 @@ func TestSpanToQueryBounds(t *testing.T) {
 				actualBoundsStart := string(*actualBounds.Start[0].(*tree.DString))
 				require.Equalf(t, tc.expectedBoundsStart, actualBoundsStart, "start")
 				actualBoundsEnd := string(*actualBounds.End[0].(*tree.DString))
+				require.Equalf(t, tc.expectedBoundsEnd, actualBoundsEnd, "end")
+			}
+		})
+	}
+}
+
+func TestSpanToQueryBoundsCompositeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc string
+		// tablePKValues are PK values initially inserted into the table.
+		tablePKValues [][]string
+		// startPKValue is the PK value used to create the span start key.
+		startPKValue []string
+		// truncateStartPKValue removes end bytes from startPKValue to cause a
+		// decoding error.
+		truncateStartPKValue bool
+		// endPKValue is the PK value used to create the span end key.
+		endPKValue []string
+		// truncateEndPKValue removes end bytes from endPKValue to cause a
+		// decoding error.
+		truncateEndPKValue  bool
+		expectedHasRows     bool
+		expectedBoundsStart []string
+		expectedBoundsEnd   []string
+	}{
+		{
+			desc:            "empty table",
+			tablePKValues:   [][]string{},
+			expectedHasRows: false,
+		},
+		{
+			desc:                "start key < table value",
+			tablePKValues:       [][]string{{"B", "2"}},
+			startPKValue:        []string{"A", "1"},
+			expectedHasRows:     true,
+			expectedBoundsStart: []string{"B", "2"},
+			expectedBoundsEnd:   []string{"B", "2"},
+		},
+		{
+			desc:                "start key = table value",
+			tablePKValues:       [][]string{{"A", "1"}},
+			startPKValue:        []string{"A", "1"},
+			expectedHasRows:     true,
+			expectedBoundsStart: []string{"A", "1"},
+			expectedBoundsEnd:   []string{"A", "1"},
+		},
+		{
+			desc:            "start key > table value",
+			tablePKValues:   [][]string{{"A", "1"}},
+			startPKValue:    []string{"B", "2"},
+			expectedHasRows: false,
+		},
+		{
+			desc:            "end key < table value",
+			tablePKValues:   [][]string{{"B", "2"}},
+			endPKValue:      []string{"A", "1"},
+			expectedHasRows: false,
+		},
+		{
+			desc:            "end key = table value",
+			tablePKValues:   [][]string{{"A", "1"}},
+			endPKValue:      []string{"A", "1"},
+			expectedHasRows: false,
+		},
+		{
+			desc:                "end key > table value",
+			tablePKValues:       [][]string{{"A", "1"}},
+			endPKValue:          []string{"B", "2"},
+			expectedHasRows:     true,
+			expectedBoundsStart: []string{"A", "1"},
+			expectedBoundsEnd:   []string{"A", "1"},
+		},
+		{
+			desc:                "start key between values",
+			tablePKValues:       [][]string{{"A", "1"}, {"B", "2"}, {"D", "4"}, {"E", "5"}},
+			startPKValue:        []string{"C", "3"},
+			expectedHasRows:     true,
+			expectedBoundsStart: []string{"D", "4"},
+			expectedBoundsEnd:   []string{"E", "5"},
+		},
+		{
+			desc:                "end key between values",
+			tablePKValues:       [][]string{{"A", "1"}, {"B", "2"}, {"D", "4"}, {"E", "5"}},
+			endPKValue:          []string{"C", "3"},
+			expectedHasRows:     true,
+			expectedBoundsStart: []string{"A", "1"},
+			expectedBoundsEnd:   []string{"B", "2"},
+		},
+		{
+			desc:                 "truncated start key",
+			tablePKValues:        [][]string{{"A", "1"}, {"B", "2"}, {"C", "3"}},
+			startPKValue:         []string{"B", "2"},
+			truncateStartPKValue: true,
+			expectedHasRows:      true,
+			expectedBoundsStart:  []string{"B", "2"},
+			expectedBoundsEnd:    []string{"C", "3"},
+		},
+		{
+			desc:                "truncated end key",
+			tablePKValues:       [][]string{{"A", "1"}, {"B", "2"}, {"C", "3"}},
+			endPKValue:          []string{"B", "2"},
+			truncateEndPKValue:  true,
+			expectedHasRows:     true,
+			expectedBoundsStart: []string{"A", "1"},
+			expectedBoundsEnd:   []string{"A", "1"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+
+			const tableName = "tbl"
+			ctx := context.Background()
+			srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			defer srv.Stopper().Stop(ctx)
+			codec := srv.ApplicationLayer().Codec()
+
+			sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+
+			// Create table.
+			sqlRunner.Exec(t, fmt.Sprintf("CREATE TABLE %s (a string, b string COLLATE en_US_u_ks_level2, PRIMARY KEY(a,b))", tableName))
+
+			// Insert tablePKValues into table.
+			if len(tc.tablePKValues) > 0 {
+				insertValues := ""
+				for i, val := range tc.tablePKValues {
+					if i > 0 {
+						insertValues += ", "
+					}
+					insertValues += "('" + strings.Join(val, "','") + "')"
+				}
+				sqlRunner.Exec(t, fmt.Sprintf("INSERT INTO %s VALUES %s", tableName, insertValues))
+			}
+
+			// Get table descriptor.
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+				kvDB,
+				codec,
+				"defaultdb", /* database */
+				tableName,
+			)
+			primaryIndexDesc := tableDesc.GetPrimaryIndex().IndexDesc()
+			pkColIDs := catalog.TableColMap{}
+			for i, id := range primaryIndexDesc.KeyColumnIDs {
+				pkColIDs.Set(id, i)
+			}
+			pkColTypes, err := ttljob.GetPKColumnTypes(tableDesc, primaryIndexDesc)
+			require.NoError(t, err)
+			pkColDirs := primaryIndexDesc.KeyColumnDirections
+
+			var alloc tree.DatumAlloc
+			primaryIndexSpan := tableDesc.PrimaryIndexSpan(codec)
+
+			createKey := func(pkValue []string, truncateKey bool, defaultKey roachpb.Key) roachpb.Key {
+				if len(pkValue) == 0 {
+					return defaultKey
+				}
+				require.Equal(t, 2, len(pkValue))
+				dString := tree.NewDString(pkValue[0])
+				dCollatedString, err := alloc.NewDCollatedString(pkValue[1], "en_US_u_ks_level2")
+				require.NoError(t, err)
+
+				keyValue := replicationtestutils.EncodeKV(t, codec, tableDesc, dString, dCollatedString)
+				key := keyValue.Key
+				if truncateKey {
+					key = key[:len(key)-3]
+					kvKeyValue := kv.KeyValue{Key: key, Value: &keyValue.Value}
+					// Ensure truncated key cannot be decoded.
+					_, err = rowenc.DecodeIndexKeyToDatums(codec, pkColIDs, pkColTypes, pkColDirs, kvKeyValue, &alloc)
+					require.ErrorContainsf(t, err, "did not find terminator 0x0 in buffer", "pkValue=%s", pkValue)
+				}
+				return key
+			}
+
+			// Create keys for test.
+			startKey := createKey(tc.startPKValue, tc.truncateStartPKValue, primaryIndexSpan.Key)
+			endKey := createKey(tc.endPKValue, tc.truncateEndPKValue, primaryIndexSpan.EndKey)
+
+			// Run test function.
+			actualBounds, actualHasRows, err := ttljob.SpanToQueryBounds(ctx, kvDB, codec, pkColIDs, pkColTypes, pkColDirs, roachpb.Span{
+				Key:    startKey,
+				EndKey: endKey,
+			}, &alloc)
+
+			// Verify results.
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedHasRows, actualHasRows)
+			if actualHasRows {
+				actualBoundsStart := []string{
+					string(*actualBounds.Start[0].(*tree.DString)),
+					actualBounds.Start[1].(*tree.DCollatedString).Contents,
+				}
+				require.Equalf(t, tc.expectedBoundsStart, actualBoundsStart, "start")
+				actualBoundsEnd := []string{
+					string(*actualBounds.End[0].(*tree.DString)),
+					actualBounds.End[1].(*tree.DCollatedString).Contents,
+				}
 				require.Equalf(t, tc.expectedBoundsEnd, actualBoundsEnd, "end")
 			}
 		})

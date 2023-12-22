@@ -98,6 +98,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 
 	var (
 		relationName      string
+		pkColIDs          catalog.TableColMap
 		pkColNames        []string
 		pkColTypes        []*types.T
 		pkColDirs         []catenumpb.IndexColumn_Direction
@@ -123,6 +124,10 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 			return err
 		}
 		pkColDirs = primaryIndexDesc.KeyColumnDirections
+		pkColIDs = catalog.TableColMap{}
+		for i, id := range primaryIndexDesc.KeyColumnIDs {
+			pkColIDs.Set(id, i)
+		}
 
 		if !desc.HasRowLevelTTL() {
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
@@ -215,6 +220,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 				ctx,
 				kvDB,
 				codec,
+				pkColIDs,
 				pkColTypes,
 				pkColDirs,
 				span,
@@ -400,6 +406,7 @@ func SpanToQueryBounds(
 	ctx context.Context,
 	kvDB *kv.DB,
 	codec keys.SQLCodec,
+	pkColIDs catalog.TableColMap,
 	pkColTypes []*types.T,
 	pkColDirs []catenumpb.IndexColumn_Direction,
 	span roachpb.Span,
@@ -426,15 +433,19 @@ func SpanToQueryBounds(
 	if len(endKeyValues) == 0 {
 		return bounds, false, nil
 	}
-	startKey := startKeyValues[0].Key
-	bounds.Start, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, startKey, alloc)
+	startKeyValue := startKeyValues[0]
+	bounds.Start, err = rowenc.DecodeIndexKeyToDatums(codec, pkColIDs, pkColTypes, pkColDirs, startKeyValue, alloc)
 	if err != nil {
-		return bounds, false, errors.Wrapf(err, "decode startKey error key=%x", []byte(startKey))
+		return bounds, false, errors.Wrapf(err,
+			"decode startKeyValue error key=%x value=%x",
+			[]byte(startKeyValue.Key), startKeyValue.Value.RawBytes)
 	}
-	endKey := endKeyValues[0].Key
-	bounds.End, err = rowenc.DecodeIndexKeyToDatums(codec, pkColTypes, pkColDirs, endKey, alloc)
+	endKeyValue := endKeyValues[0]
+	bounds.End, err = rowenc.DecodeIndexKeyToDatums(codec, pkColIDs, pkColTypes, pkColDirs, endKeyValue, alloc)
 	if err != nil {
-		return bounds, false, errors.Wrapf(err, "decode endKey error key=%x", []byte(endKey))
+		return bounds, false, errors.Wrapf(err,
+			"decode endKey error key=%x value=%x",
+			[]byte(endKeyValue.Key), endKeyValue.Value.RawBytes)
 	}
 	return bounds, true, nil
 }
