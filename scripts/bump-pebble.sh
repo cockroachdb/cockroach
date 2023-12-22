@@ -101,4 +101,3 @@ Epic: none.
 "
 # Open an editor to allow the user to set the release note.
 git commit --amend
-popd
