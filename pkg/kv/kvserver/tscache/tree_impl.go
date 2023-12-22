@@ -11,6 +11,7 @@
 package tscache
 
 import (
+	"context"
 	"fmt"
 	"unsafe"
 
@@ -107,7 +108,9 @@ func (tc *treeImpl) len() int {
 }
 
 // Add implements the Cache interface.
-func (tc *treeImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID) {
+func (tc *treeImpl) Add(
+	_ context.Context, start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID,
+) {
 	// This gives us a memory-efficient end key if end is empty.
 	if len(end) == 0 {
 		end = start.Next()
@@ -455,7 +458,7 @@ func (tc *treeImpl) getLowWater() hlc.Timestamp {
 }
 
 // GetMax implements the Cache interface.
-func (tc *treeImpl) GetMax(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
+func (tc *treeImpl) GetMax(_ context.Context, start, end roachpb.Key) (hlc.Timestamp, uuid.UUID) {
 	return tc.getMax(start, end)
 }
 

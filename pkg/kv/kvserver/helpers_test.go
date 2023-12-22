@@ -419,7 +419,7 @@ func (r *Replica) IsFollowerActiveSince(
 func (r *Replica) GetTSCacheHighWater() hlc.Timestamp {
 	start := roachpb.Key(r.Desc().StartKey)
 	end := roachpb.Key(r.Desc().EndKey)
-	t, _ := r.store.tsCache.GetMax(start, end)
+	t, _ := r.store.tsCache.GetMax(context.Background(), start, end)
 	return t
 }
 
