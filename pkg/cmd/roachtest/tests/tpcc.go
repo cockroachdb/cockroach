@@ -455,7 +455,6 @@ func registerTPCC(r registry.Registry) {
 		Benchmark:         true,
 		CompatibleClouds:  registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly, registry.ReleaseQualification),
-		Tags:              registry.Tags(`default`, `release_qualification`, `aws`),
 		Cluster:           headroomSpec,
 		Timeout:           4 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
@@ -485,7 +484,6 @@ func registerTPCC(r registry.Registry) {
 		// buggy.
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
-		Tags:              registry.Tags(`default`),
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -517,7 +515,6 @@ func registerTPCC(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
-		Tags:             registry.Tags(`weekly`),
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16)),
 		// Give the test a generous extra 10 hours to load the dataset and
 		// slowly ramp up the load.
@@ -812,7 +809,6 @@ func registerTPCC(r registry.Registry) {
 		EstimatedMaxAWS:   3500,
 		Clouds:            registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly),
-		Tags:              registry.Tags(`aws`),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
@@ -824,7 +820,6 @@ func registerTPCC(r registry.Registry) {
 		EstimatedMaxAWS:   3500,
 		Clouds:            registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly),
-		Tags:              registry.Tags(`aws`),
 		SharedProcessMT:   true,
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
@@ -838,7 +833,6 @@ func registerTPCC(r registry.Registry) {
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Weekly),
-		Tags:   registry.Tags(`weekly`),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:        6,
@@ -909,7 +903,6 @@ func registerTPCC(r registry.Registry) {
 		EncryptionEnabled: true,
 		Clouds:            registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly),
-		Tags:              registry.Tags(`aws`),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
@@ -923,7 +916,6 @@ func registerTPCC(r registry.Registry) {
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Weekly),
-		Tags:   registry.Tags(`weekly`),
 	})
 
 	// Expiration lease benchmarks. These are duplicates of variants above.
@@ -951,7 +943,6 @@ func registerTPCC(r registry.Registry) {
 		ExpirationLeases:  true,
 		Clouds:            registry.AllClouds,
 		Suites:            registry.Suites(registry.Nightly),
-		Tags:              registry.Tags(`aws`),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 12,
@@ -965,7 +956,6 @@ func registerTPCC(r registry.Registry) {
 
 		Clouds: registry.AllExceptAWS,
 		Suites: registry.Suites(registry.Weekly),
-		Tags:   registry.Tags(`weekly`),
 	})
 }
 
@@ -1060,8 +1050,6 @@ type tpccBenchSpec struct {
 
 	Clouds registry.CloudSet
 	Suites registry.SuiteSet
-	// Tags to pass to testRegistryImpl.Add.
-	Tags map[string]struct{}
 	// EncryptionEnabled determines if the benchmark uses encrypted stores (i.e.
 	// Encryption-At-Rest / EAR).
 	EncryptionEnabled bool
@@ -1183,7 +1171,6 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		Timeout:           7 * time.Hour,
 		CompatibleClouds:  b.Clouds,
 		Suites:            b.Suites,
-		Tags:              b.Tags,
 		EncryptionSupport: encryptionSupport,
 		Leases:            leases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

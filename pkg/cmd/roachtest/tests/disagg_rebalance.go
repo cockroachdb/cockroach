@@ -30,7 +30,6 @@ func registerDisaggRebalance(r registry.Registry) {
 		Name:              fmt.Sprintf("disagg-rebalance/aws/%s", disaggRebalanceSpec),
 		CompatibleClouds:  registry.OnlyAWS,
 		Suites:            registry.Suites(registry.Nightly),
-		Tags:              registry.Tags("aws"),
 		Owner:             registry.OwnerStorage,
 		Cluster:           disaggRebalanceSpec,
 		RequiresLicense:   true,
