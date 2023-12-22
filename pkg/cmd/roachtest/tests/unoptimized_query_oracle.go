@@ -134,6 +134,9 @@ func runUnoptimizedQueryOracleImpl(
 		// internal error).
 		if es := err.Error(); strings.Contains(es, "internal error") {
 			verboseLogging = true
+			// The stmt wasn't already included since it resulted in an error,
+			// but to make the reproduction easier, we do want to include it.
+			h.addStmtForLogging(stmt, nil /* rows */)
 			return h.makeError(err, "internal error while running unoptimized statement")
 		}
 		//nolint:returnerrcheck
@@ -182,6 +185,9 @@ func runUnoptimizedQueryOracleImpl(
 		es := err.Error()
 		if strings.Contains(es, "internal error") {
 			verboseLogging = true
+			// The stmt wasn't already included since it resulted in an error,
+			// but to make the reproduction easier, we do want to include it.
+			h.addStmtForLogging(stmt, nil /* rows */)
 			return h.makeError(err, "internal error while running optimized statement")
 		}
 		// Otherwise, skip optimized statements that fail with a non-internal
