@@ -11,6 +11,7 @@
 package rowenc
 
 import (
+	"bytes"
 	"context"
 	"sort"
 	"unsafe"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -425,7 +427,8 @@ func DecodeIndexKeyPrefix(
 }
 
 // DecodeIndexKey decodes the values that are a part of the specified index
-// key (setting vals).
+// key (setting vals). This function does not handle types that have composite
+// encoding. See DecodeIndexKeyToDatums for a function that does.
 // numVals returns the number of vals populated - this can be less than
 // len(vals) if key ran out of bytes while populating vals.
 func DecodeIndexKey(
@@ -445,18 +448,80 @@ func DecodeIndexKey(
 
 // DecodeIndexKeyToDatums decodes a key to tree.Datums. It is similar to
 // DecodeIndexKey, but eagerly decodes the []EncDatum to tree.Datums.
+// Also, unlike DecodeIndexKey, this function is able to handle types
+// with composite encoding.
 func DecodeIndexKeyToDatums(
 	codec keys.SQLCodec,
+	colIDs catalog.TableColMap,
 	types []*types.T,
 	colDirs []catenumpb.IndexColumn_Direction,
-	key []byte,
+	keyValues []kv.KeyValue,
 	a *tree.DatumAlloc,
 ) (tree.Datums, error) {
+	if len(keyValues) == 0 {
+		return nil, errors.AssertionFailedf("no key values to decode")
+	}
 	vals := make([]EncDatum, len(types))
-	numVals, err := DecodeIndexKey(codec, vals, colDirs, key)
+	numVals, err := DecodeIndexKey(codec, vals, colDirs, keyValues[0].Key)
 	if err != nil {
 		return nil, err
 	}
+	prefixLen, err := keys.GetRowPrefixLength(keyValues[0].Key)
+	if err != nil {
+		return nil, err
+	}
+	rowPrefix := keyValues[0].Key[:prefixLen]
+
+	// Types that have a composite encoding can have their data stored in the
+	// value. See docs/tech-notes/encoding.md#composite-encoding for details.
+	for _, keyValue := range keyValues {
+		kvVal := keyValue.Value
+
+		if !bytes.HasPrefix(keyValue.Key, rowPrefix) {
+			// This KV is not part of the same row as the start primary key. Sometimes
+			// a KV is omitted if all the columns in its column family are NULL. This
+			// could cause us to scan more KVs than needed to decode the primary index
+			// columns, so the slice we're iterating through might contain KVs from a
+			// different row at the end.
+			break
+		}
+
+		// The composite encoding for primary index keys is always a tuple, so we
+		// can ignore anything else.
+		if kvVal == nil || kvVal.GetTag() != roachpb.ValueType_TUPLE {
+			continue
+		}
+		valueBytes, err := kvVal.GetTuple()
+		if err != nil {
+			return nil, err
+		}
+
+		var lastColID descpb.ColumnID = 0
+		for len(valueBytes) > 0 {
+			typeOffset, dataOffset, colIDDiff, typ, err := encoding.DecodeValueTag(valueBytes)
+			if err != nil {
+				return nil, err
+			}
+			colID := lastColID + descpb.ColumnID(colIDDiff)
+			lastColID = colID
+			colOrdinal, ok := colIDs.Get(colID)
+			if !ok {
+				// This is for a column that is not in the index. We still need to
+				// consume the data.
+				numBytes, err := encoding.PeekValueLengthWithOffsetsAndType(valueBytes, dataOffset, typ)
+				if err != nil {
+					return nil, err
+				}
+				valueBytes = valueBytes[numBytes:]
+				continue
+			}
+			vals[colOrdinal], valueBytes, err = EncDatumFromBuffer(catenumpb.DatumEncoding_VALUE, valueBytes[typeOffset:])
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	datums := make(tree.Datums, 0, numVals)
 	for i, encDatum := range vals[:numVals] {
 		if err := encDatum.EnsureDecoded(types[i], a); err != nil {
