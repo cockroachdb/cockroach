@@ -13,16 +13,37 @@ package tests
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/montanaflynn/stats"
+	"github.com/stretchr/testify/require"
 )
+
+// sqlServiceLatencyP95Agg is the 10s avg P95 latency of foreground SQL traffic
+// across all nodes measured in milliseconds.
+var sqlServiceLatencyP95Agg = clusterstats.AggQuery{
+	Stat:  sqlServiceLatency,
+	Query: "histogram_quantile(0.95, sum by(le) (rate(sql_service_latency_bucket[30s]))) / (1000*1000)",
+	Tag:   "P95 Foreground Latency (ms)",
+}
+
+var queriesThroughput = clusterstats.ClusterStat{Query: "rate(sql_query_count[30s])", LabelName: "node"}
+
+var queriesThroughputAgg = clusterstats.AggQuery{
+	Stat:  queriesThroughput,
+	Query: applyAggQuery("sum", queriesThroughput.Query),
+	Tag:   "Queries over Time",
+}
 
 func registerOnlineRestore(r registry.Registry) {
 	// This driver creates a variety of roachtests to benchmark online restore
@@ -33,6 +54,18 @@ func registerOnlineRestore(r registry.Registry) {
 	// cluster topology and workload in order to measure post restore query
 	// latency relative to online restore (prefix restore/control/*).
 	for _, sp := range []restoreSpecs{
+		{
+			// 15GB tpce Online Restore
+			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */, workloadNode: true}),
+			backup: makeRestoringBackupSpecs(backupSpecs{
+				nonRevisionHistory: true,
+				version:            "v23.1.11",
+				workload:           tpceRestore{customers: 1000}}),
+			timeout:                30 * time.Minute,
+			suites:                 registry.Suites(registry.Nightly),
+			restoreUptoIncremental: 1,
+			skip:                   "used for ad hoc testing",
+		},
 		{
 			// 400GB tpce Online Restore
 			hardware:               makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */, workloadNode: true}),
@@ -82,6 +115,8 @@ func registerOnlineRestore(r registry.Registry) {
 					CompatibleClouds:  registry.Clouds(sp.backup.cloud),
 					Suites:            sp.suites,
 					Skip:              sp.skip,
+					// Takes 10 minutes on OR tests for some reason.
+					SkipPostValidations: registry.PostValidationReplicaDivergence,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 						testStartTime := timeutil.Now()
@@ -89,7 +124,11 @@ func registerOnlineRestore(r registry.Registry) {
 						rd := makeRestoreDriver(t, c, sp)
 						rd.prepareCluster(ctx)
 
+						statsCollector, err := createStatCollector(ctx, rd)
+						require.NoError(t, err)
+
 						m := c.NewMonitor(ctx, sp.hardware.getCRDBNodes())
+						var restoreStartTime time.Time
 						m.Go(func(ctx context.Context) error {
 							db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
 							if err != nil {
@@ -142,6 +181,7 @@ func registerOnlineRestore(r registry.Registry) {
 							if runOnline {
 								opts = "WITH EXPERIMENTAL DEFERRED COPY"
 							}
+							restoreStartTime = timeutil.Now()
 							restoreCmd := rd.restoreCmd("DATABASE tpce", opts)
 							t.L().Printf("Running %s", restoreCmd)
 							if _, err = db.ExecContext(ctx, restoreCmd); err != nil {
@@ -153,7 +193,8 @@ func registerOnlineRestore(r registry.Registry) {
 
 						workloadCtx, workloadCancel := context.WithCancel(ctx)
 						mDownload := c.NewMonitor(workloadCtx, sp.hardware.getCRDBNodes())
-						// TODO(msbutler): add foreground query latency tracker
+
+						workloadStartTime := timeutil.Now()
 
 						mDownload.Go(func(ctx context.Context) error {
 							if !runWorkload {
@@ -191,11 +232,123 @@ func registerOnlineRestore(r registry.Registry) {
 							return nil
 						})
 						mDownload.Wait()
+						if runWorkload {
+							require.NoError(t, exportStats(ctx, rd, statsCollector, workloadStartTime, restoreStartTime))
+						}
 					},
 				})
 			}
 		}
 	}
+}
+
+func createStatCollector(
+	ctx context.Context, rd restoreDriver,
+) (clusterstats.StatCollector, error) {
+	if rd.c.IsLocal() {
+		rd.t.L().Printf("Local test. Don't setup grafana")
+		return nil, nil
+	}
+
+	// TODO(msbutler): figure out why we need to
+	// pass a grafana dashboard for this to work
+	promCfg := (&prometheus.Config{}).
+		WithPrometheusNode(rd.c.Node(rd.sp.hardware.getWorkloadNode()).InstallNodes()[0]).
+		WithCluster(rd.sp.hardware.getCRDBNodes().InstallNodes()).
+		WithNodeExporter(rd.sp.hardware.getCRDBNodes().InstallNodes()).
+		WithGrafanaDashboard("https://go.crdb.dev/p/changefeed-roachtest-grafana-dashboard")
+
+	// StartGrafana clutters the test.log. Try logging setup to a separate file.
+	promLog, err := rd.t.L().ChildLogger("prom_setup", logger.QuietStderr, logger.QuietStdout)
+	if err != nil {
+		promLog = rd.t.L()
+	}
+	require.NoError(rd.t, rd.c.StartGrafana(ctx, promLog, promCfg))
+	rd.t.L().Printf("Prom has started")
+
+	client, err := clusterstats.SetupCollectorPromClient(ctx, rd.c, rd.t.L(), promCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return clusterstats.NewStatsCollector(ctx, client), nil
+}
+
+// exportStats creates an artifacts file for roachperf. Online Restore
+// roachtests will export QPS and p95 sql latency stats over the download job to
+// roachperf. The top line metric is the duration between the restore stmt
+// execution time and the timestamp we reach and maintain an "acceptable" p99
+// latency. We define an acceptable latency as within 1.25x of the latency
+// observed 1 minute after the download job completed.
+func exportStats(
+	ctx context.Context,
+	rd restoreDriver,
+	statsCollector clusterstats.StatCollector,
+	workloadStartTime, restoreStartTime time.Time,
+) error {
+	endTime := timeutil.Now()
+	latencyQueryKey := sqlServiceLatency.Query
+	exportingStats, err := statsCollector.Exporter().Export(ctx, rd.c, rd.t, true, /* dryRun */
+		workloadStartTime,
+		endTime,
+		[]clusterstats.AggQuery{sqlServiceLatencyP95Agg, queriesThroughputAgg},
+		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+			var timeToHealth time.Time
+			healthyLatencyRatio := 1.25
+			n := len(stats[latencyQueryKey].Value)
+			rd.t.L().Printf("aggregating latency over %d data points", n)
+			if n == 0 {
+				return "", 0
+			}
+			healthyLatency := stats[latencyQueryKey].Value[n-1]
+			latestHealthyValue := healthyLatency
+
+			for i := 0; i < n; i++ {
+				if stats[latencyQueryKey].Value[i] < healthyLatency*healthyLatencyRatio && timeToHealth.IsZero() && stats[latencyQueryKey].Value[i] != 0 {
+					timeToHealth = timeutil.Unix(0, stats[latencyQueryKey].Time[i])
+					latestHealthyValue = stats[latencyQueryKey].Value[i]
+				} else if !timeToHealth.IsZero() {
+					// Latency increased after it was previously acceptable.
+					timeToHealth = time.Time{}
+				}
+			}
+			if timeToHealth.IsZero() {
+				timeToHealth = endTime
+			}
+			rto := timeToHealth.Sub(restoreStartTime).Minutes()
+			fullRestoreTime := endTime.Sub(restoreStartTime).Minutes()
+			description := "Time to within 1.25x of regular p95 latency (mins)"
+			rd.t.L().Printf("%s: %.2f minutes, compared to link + download phase time %.2f", description, rto, fullRestoreTime)
+			rd.t.L().Printf("Latency at Recovery Time %.0f ms; at end of test %.0f ms", latestHealthyValue, healthyLatency)
+			return description, rto
+		},
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to construct stats")
+	}
+
+	outlier, err := stats.Percentile(exportingStats.Stats[latencyQueryKey].Value, 95)
+	if err != nil {
+		return errors.Wrap(err, "could not compute latency outliers")
+	}
+
+	for i, val := range exportingStats.Stats[latencyQueryKey].Value {
+		// Json cannot serialize Nan's so convert them to 0 (I tried suffixing the
+		// prom query with "or vector(0)", which does not work. These nans appear at
+		// the beginning of the workload when 0 queries run in the interval.
+		if math.IsNaN(val) {
+			exportingStats.Stats[latencyQueryKey].Value[i] = 0
+		}
+		// Remove outliers from stats to improve roachperf graph quality by reducing
+		// the y-axis bounds.
+		if val >= outlier {
+			exportingStats.Stats[latencyQueryKey].Value[i] = 0
+		}
+	}
+	if err := exportingStats.SerializeOutRun(ctx, rd.t, rd.c); err != nil {
+		return errors.Wrap(err, "failed to export stats")
+	}
+	return nil
 }
 
 func waitForDownloadJob(ctx context.Context, c cluster.Cluster, l *logger.Logger) error {
@@ -219,6 +372,8 @@ func waitForDownloadJob(ctx context.Context, c cluster.Cluster, l *logger.Logger
 				return err
 			}
 			if status == string(jobs.StatusSucceeded) {
+				l.Printf("Download job completed; let workload run for 1 minute")
+				time.Sleep(time.Minute * 1)
 				return nil
 			} else if status == string(jobs.StatusRunning) {
 				l.Printf("Download job still running")
