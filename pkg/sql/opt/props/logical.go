@@ -105,10 +105,28 @@ type Shared struct {
 	// Rule props are lazily calculated and typically only apply to a single
 	// rule. See the comment above Relational.Rule for more details.
 	Rule struct {
+		// Available contains bits that indicate whether lazily-populated Rule
+		// properties have been initialized. For example, if the UnfilteredCols
+		// bit is set, then the Rule.UnfilteredCols field has been initialized
+		// and is ready for use.
+		Available AvailableRuleProps
+
 		// WithUses tracks information about the WithScans inside the given
 		// expression which reference WithIDs outside of that expression.
 		WithUses WithUsesMap
 	}
+}
+
+// IsAvailable returns true if the specified rule property has been populated
+// on this relational/scaler properties instance.
+func (r *Shared) IsAvailable(p AvailableRuleProps) bool {
+	return (r.Rule.Available & p) != 0
+}
+
+// SetAvailable sets the available bits for the given properties, in order to
+// mark them as populated on this relational/scaler properties instance.
+func (r *Shared) SetAvailable(p AvailableRuleProps) {
+	r.Rule.Available |= p
 }
 
 // WithUsesMap stores information about each WithScan referencing an outside
@@ -195,12 +213,6 @@ type Relational struct {
 	// what works best for those rules. Neither the rules nor their properties
 	// can be considered in isolation, without considering the other.
 	Rule struct {
-		// Available contains bits that indicate whether lazily-populated Rule
-		// properties have been initialized. For example, if the UnfilteredCols
-		// bit is set, then the Rule.UnfilteredCols field has been initialized
-		// and is ready for use.
-		Available AvailableRuleProps
-
 		// PruneCols is the subset of output columns that can potentially be
 		// eliminated by one of the PruneCols normalization rules. Those rules
 		// operate by pushing a Project operator down the tree that discards
@@ -337,12 +349,6 @@ type Scalar struct {
 	// with specific sets of transformation rules. See the Relational.Rule
 	// comment for more details.
 	Rule struct {
-		// Available contains bits that indicate whether lazily-populated Rule
-		// properties have been initialized. For example, if the
-		// HasHoistableSubquery bit is set, then the Rule.HasHoistableSubquery
-		// field has been initialized and is ready for use.
-		Available AvailableRuleProps
-
 		// HasHoistableSubquery is true if the scalar expression tree contains a
 		// subquery having one or more outer columns, and if the subquery needs
 		// to be hoisted up into its parent query as part of query decorrelation.
@@ -363,28 +369,4 @@ type Scalar struct {
 // expression.
 func (r *Relational) Statistics() *Statistics {
 	return &r.stats
-}
-
-// IsAvailable returns true if the specified rule property has been populated
-// on this relational properties instance.
-func (r *Relational) IsAvailable(p AvailableRuleProps) bool {
-	return (r.Rule.Available & p) != 0
-}
-
-// SetAvailable sets the available bits for the given properties, in order to
-// mark them as populated on this relational properties instance.
-func (r *Relational) SetAvailable(p AvailableRuleProps) {
-	r.Rule.Available |= p
-}
-
-// IsAvailable returns true if the specified rule property has been populated
-// on this scalar properties instance.
-func (s *Scalar) IsAvailable(p AvailableRuleProps) bool {
-	return (s.Rule.Available & p) != 0
-}
-
-// SetAvailable sets the available bits for the given properties, in order to
-// mark them as populated on this scalar properties instance.
-func (s *Scalar) SetAvailable(p AvailableRuleProps) {
-	s.Rule.Available |= p
 }
