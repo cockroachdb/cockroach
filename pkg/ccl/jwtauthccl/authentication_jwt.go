@@ -10,7 +10,10 @@ package jwtauthccl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -18,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/lestrrat-go/jwx/jws"
 	"github.com/lestrrat-go/jwx/jwt"
 )
 
@@ -121,7 +126,11 @@ func (authenticator *jwtAuthenticator) mapUsername(
 // * the issuer field is one of the values in the issuer cluster setting.
 // * the cluster has an enterprise license.
 func (authenticator *jwtAuthenticator) ValidateJWTLogin(
-	st *cluster.Settings, user username.SQLUsername, tokenBytes []byte, identMap *identmap.Conf,
+	ctx context.Context,
+	st *cluster.Settings,
+	user username.SQLUsername,
+	tokenBytes []byte,
+	identMap *identmap.Conf,
 ) error {
 	authenticator.mu.Lock()
 	defer authenticator.mu.Unlock()
@@ -132,22 +141,52 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 
 	telemetry.Inc(beginAuthUseCounter)
 
-	parsedToken, err := jwt.Parse(tokenBytes, jwt.WithKeySet(authenticator.mu.conf.jwks), jwt.WithValidate(true), jwt.InferAlgorithmFromKey(true))
+	// Just parse the token to check the format is valid and issuer is present.
+	// The token will be parsed again later to actually verify the signature.
+	unverifiedToken, err := jwt.Parse(tokenBytes)
 	if err != nil {
 		return errors.Newf("JWT authentication: invalid token")
 	}
 
+	// Check for issuer match against configured issuers.
+	issuerUrl := ""
 	issuerMatch := false
 	for _, issuer := range authenticator.mu.conf.issuers {
-		if issuer == parsedToken.Issuer() {
+		if issuer == unverifiedToken.Issuer() {
 			issuerMatch = true
+			issuerUrl = issuer
 			break
 		}
 	}
 	if !issuerMatch {
 		return errors.WithDetailf(
 			errors.Newf("JWT authentication: invalid issuer"),
-			"token issued by %s", parsedToken.Issuer())
+			"token issued by %s", unverifiedToken.Issuer())
+	}
+
+	// Check for key-id match against configured jwks.
+	jwkSet := authenticator.mu.conf.jwks
+	keyExists := false
+	if authenticator.mu.conf.jwks.Len() > 0 {
+		jwsMessage, err := jws.Parse(tokenBytes)
+		if err != nil || len(jwsMessage.Signatures()) == 0 {
+			return errors.Newf("JWT authentication: invalid token signature")
+		}
+		tokenKeyId := jwsMessage.Signatures()[0].ProtectedHeaders().KeyID()
+		_, keyExists = authenticator.mu.conf.jwks.LookupKeyID(tokenKeyId)
+	}
+	// if key not found in jwks, fetch remote jwks from issuerUrl and try again.
+	if !keyExists {
+		jwkSet, err = getJWKS(ctx, issuerUrl)
+		if err != nil {
+			return errors.Newf("JWT authentication: unable to validate token")
+		}
+	}
+
+	// Now that both the issuer and key-id are matched, parse the token again to validate the signature.
+	parsedToken, err := jwt.Parse(tokenBytes, jwt.WithKeySet(jwkSet), jwt.WithValidate(true), jwt.InferAlgorithmFromKey(true))
+	if err != nil {
+		return errors.Newf("JWT authentication: invalid token")
 	}
 
 	// Extract all requested principals from the token. By default, we take it from the subject unless they specify
@@ -234,6 +273,63 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 
 	telemetry.Inc(loginSuccessUseCounter)
 	return nil
+}
+
+// getJWKS fetches the JWKS from the provided URI.
+func getJWKS(ctx context.Context, issuerUrl string) (jwk.Set, error) {
+	jwksUrl, err := getJWKSUrl(ctx, issuerUrl)
+	if err != nil {
+		return nil, err
+	}
+	body, err := getHttpResponse(ctx, jwksUrl)
+	if err != nil {
+		return nil, err
+	}
+	jwkSet, err := jwk.Parse(body)
+	if err != nil {
+		return nil, err
+	}
+	return jwkSet, nil
+}
+
+// getJWKSUrl returns the JWKS URI from the OpenID configuration endpoint.
+func getJWKSUrl(ctx context.Context, issuerUrl string) (string, error) {
+	type OIDCConfigResponse struct {
+		JWKSUri string `json:"jwks_uri"`
+	}
+	openIdConfigEndpoint := getOpenIdConfigEndpoint(issuerUrl)
+	body, err := getHttpResponse(ctx, openIdConfigEndpoint)
+	if err != nil {
+		return "", err
+	}
+	var config OIDCConfigResponse
+	if err = json.Unmarshal(body, &config); err != nil {
+		return "", err
+	}
+	if config.JWKSUri == "" {
+		return "", errors.Newf("no JWKS URI found in OpenID configuration")
+	}
+	return config.JWKSUri, nil
+}
+
+// getOpenIdConfigEndpoint returns the OpenID configuration endpoint by appending standard open-id url.
+func getOpenIdConfigEndpoint(issuerUrl string) string {
+	openIdConfigEndpoint := strings.TrimSuffix(issuerUrl, "/") + "/.well-known/openid-configuration"
+	return openIdConfigEndpoint
+}
+
+var getHttpResponse = func(ctx context.Context, url string) ([]byte, error) {
+	resp, err := httputil.Get(ctx, url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
 // ConfigureJWTAuth initializes and returns a jwtAuthenticator. It also sets up listeners so
