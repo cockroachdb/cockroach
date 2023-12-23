@@ -20,11 +20,10 @@ ERROR: JWT authentication: not enabled (SQLSTATE 28000)
 jwt_cluster_setting enabled=true
 ----
 
-
 # see authentication_jwt_test.go for examples of how to generate these tokens.
+jwt_cluster_setting issuers=issuer
 connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QifQ.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjM5NTcsImlhdCI6MTY2MTI2Mzk1NywiaXNzIjoiaXNzdWVyIiwic3ViIjoidGVzdCJ9.Z0Hyi7YbnRZRfOJxjz0K9b1bFNA4eoWa4g8kH5LoYRivvARAZLdD7Ux0OQfsrFHAjK4eOtglF4nmY0usGl8diUsL86ifinyxMNC78xzaKrV620Kzt2k2kld0cwCPc-pRAjN8RSMw6Ypt9oIpnFTsFwIhB9QN_7t6KF4NRjgqdENI4UbBTgw0cR5kExk7PGpyEIxJ_6Y0cVwCBgosnKAEA7XpA2fHU_k61zX9MIiDgdnwWl0KuB3Csr37N998T-oxQPNI8o9JVwsSYGPPVvET70PankDUNhVWrU7rxKVVQ579khhdApPpDB82lypI7W8eVcZoamTWo19o1_CMUSzb2A
 ----
-ERROR: JWT authentication: invalid token (SQLSTATE 28000)
 
 subtest end
 
@@ -38,17 +37,17 @@ jwt_cluster_setting jwks={"kty":"RSA","use":"sig","alg":"RS256","kid":"test","n"
 # see authentication_jwt_test.go for examples of how to generate these tokens.
 connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QifQ.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjM5NTcsImlhdCI6MTY2MTI2Mzk1NywiaXNzIjoiaXNzdWVyIiwic3ViIjoidGVzdCJ9.Z0Hyi7YbnRZRfOJxjz0K9b1bFNA4eoWa4g8kH5LoYRivvARAZLdD7Ux0OQfsrFHAjK4eOtglF4nmY0usGl8diUsL86ifinyxMNC78xzaKrV620Kzt2k2kld0cwCPc-pRAjN8RSMw6Ypt9oIpnFTsFwIhB9QN_7t6KF4NRjgqdENI4UbBTgw0cR5kExk7PGpyEIxJ_6Y0cVwCBgosnKAEA7XpA2fHU_k61zX9MIiDgdnwWl0KuB3Csr37N998T-oxQPNI8o9JVwsSYGPPVvET70PankDUNhVWrU7rxKVVQ579khhdApPpDB82lypI7W8eVcZoamTWo19o1_CMUSzb2A
 ----
-ERROR: JWT authentication: invalid issuer (SQLSTATE 28000)
-DETAIL: token issued by issuer
+ERROR: JWT authentication: invalid principal (SQLSTATE 28000)
+DETAIL: token issued for [test] and login was for jwt_user
 
 subtest end
 
 subtest multiple_jwks_key
 
 # see authentication_jwt_test.go for examples of how to generate these tokens.
+jwt_cluster_setting issuers=["issuer","issuer2"]
 connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
 ----
-ERROR: JWT authentication: invalid token (SQLSTATE 28000)
 
 # see authentication_jwt_test.go for examples of how to generate JWKS values.
 jwt_cluster_setting jwks={"keys":[{"kty":"RSA","use":"sig","alg":"RS256","kid":"test","n":"sJCwOk5gVjZZu3oaODecZaT_-Lee7J-q3rQIvCilg-7B8fFNJ2XHZCsF74JX2d7ePyjz7u9d2r5CvstufiH0qGPHBBm0aKrxGRILRGUTfqBs8Dnrnv9ymTEFsRUQjgy9ACUfwcgLVQIwv1NozySLb4Z5N8X91b0TmcJun6yKjBrnr1ynUsI_XXjzLnDpJ2Ng_shuj-z7DKSEeiFUg9eSFuTeg_wuHtnnhw4Y9pwT47c-XBYnqtGYMADSVEzKLQbUini0p4-tfYboF6INluKQsO5b1AZaaXgmStPIqteS7r2eR3LFL-XB7rnZOR4cAla773Cq5DD-8RnYamnmmLu_gQ","e":"AQAB"},{"kty":"RSA","use":"sig","alg":"RS256","kid":"test2","n":"3gOrVdePypBAs6bTwD-6dZhMuwOSq8QllMihBfcsiRmo3c14_wfa_DRDy3kSsacwdih5-CaeF8ou-Dan6WqXzjDyJNekmGltPLfO2XB5FkHQoZ-X9lnXktsAgNLj3WsKjr-xUxrh8p8FFz62HJYN8QGaNttWBJZb3CgdzF7i8bPqVet4P1ekzs7mPBH2arEDy1f1q4o7fpmw0t9wuCrmtkj_g_eS6Hi2Rxm3m7HJUFVVbQeuZlT_W84FUzpSQCkNi2QDvoNVVCE2DSYZxDrzRxSZSv_fIh5XeJhwYY-f8iEfI4qx91ONGzGMvPn2GagrBnLBQRx-6RsORh4YmOOeeQ","e":"AQAB"}]}
@@ -57,8 +56,8 @@ jwt_cluster_setting jwks={"keys":[{"kty":"RSA","use":"sig","alg":"RS256","kid":"
 # see authentication_jwt_test.go for examples of how to generate these tokens.
 connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
 ----
-ERROR: JWT authentication: invalid issuer (SQLSTATE 28000)
-DETAIL: token issued by issuer2
+ERROR: JWT authentication: invalid principal (SQLSTATE 28000)
+DETAIL: token issued for [test2] and login was for jwt_user
 
 subtest end
 
@@ -88,8 +87,8 @@ jwt_cluster_setting jwks={"keys":[{"kty":"RSA","use":"sig","alg":"RS256","kid":"
 # see authentication_jwt_test.go for examples of how to generate these tokens.
 connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
 ----
-ERROR: JWT authentication: invalid issuer (SQLSTATE 28000)
-DETAIL: token issued by issuer2
+ERROR: JWT authentication: invalid principal (SQLSTATE 28000)
+DETAIL: token issued for [test2] and login was for jwt_user
 
 subtest end
 
