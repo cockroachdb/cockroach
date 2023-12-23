@@ -16,11 +16,13 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/identmap",
+        "//pkg/util/httputil",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lestrrat_go_jwx//jwk",
+        "@com_github_lestrrat_go_jwx//jws",
         "@com_github_lestrrat_go_jwx//jwt",
     ],
 )
