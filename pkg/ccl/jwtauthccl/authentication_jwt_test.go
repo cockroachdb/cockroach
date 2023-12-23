@@ -15,6 +15,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -22,12 +23,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/lestrrat-go/jwx/jwa"
-	jwk "github.com/lestrrat-go/jwx/jwk"
+	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/lestrrat-go/jwx/jwt"
 	"github.com/stretchr/testify/require"
 )
@@ -599,4 +603,186 @@ func TestAudienceCheck(t *testing.T) {
 	// Validation passes the audience check now that both audiences are accepted.
 	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.NoError(t, err)
+}
+
+// mockGetHttpResponseWithLocalFileContent is a mock function for getHttpResponse. This is used to intercept the call to
+// getHttpResponse and return the content of a local file instead of making a http call.
+var mockGetHttpResponseWithLocalFileContent = func(ctx context.Context, url string) ([]byte, error) {
+	// remove https:// and replace / with _ in the url to get the testdata file name
+	fileName := "testdata/" + strings.ReplaceAll(strings.ReplaceAll(url, "https://", ""), "/", "_")
+	// read content of the file as a byte array
+	byteValue, err := os.ReadFile(fileName)
+	if err != nil {
+		if oserror.IsNotExist(err) {
+			// return http status 404 if the file does not exist
+			return nil, errors.New("404 Not Found")
+		}
+		return nil, err
+	}
+	return byteValue, nil
+}
+
+// createJWKSFromFile creates a jwk set from a local file. The file used by this function is expected to contain both
+// private and public keys.
+func createJWKSFromFile(t *testing.T, fileName string) jwk.Set {
+	byteValue, err := os.ReadFile(fileName)
+	require.NoError(t, err)
+	jwkSet, err := jwk.Parse(byteValue)
+	if err != nil {
+		return nil
+	}
+	return jwkSet
+}
+
+// test that jwks url is used when jwks cluster setting is not configured.
+func Test_JWKSFallBackWhenJWKSClusterSettingNotConfigured(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Intercept the call to getHttpResponse and return the mockGetHttpResponse
+	restoreHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponseWithLocalFileContent)
+	defer func() {
+		restoreHook()
+	}()
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	identMapString := ""
+	identMap, err := identmap.From(strings.NewReader(identMapString))
+	require.NoError(t, err)
+
+	// Create key from a file. This key will be used to sign the token.
+	// Matching public key available in jwks url is used to verify token.
+	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
+	key, _ := keySet.Get(0)
+	validIssuer := "https://accounts.idp1.com"
+	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+
+	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
+	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+	//JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
+	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, validIssuer)
+
+	// Set audience field to audience2.
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
+
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+
+	// Validation fails with an audience error when the audience in the token doesn't match the cluster's audience.
+	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+
+	// Update the audience field to "test_cluster".
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
+
+	// Validation passes the audience check now that they match.
+	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.NoError(t, err)
+
+	// Set audience field to both audience1 and audience2.
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, "[\""+audience2+"\",\""+audience1+"\"]")
+	// Validation passes the audience check now that both audiences are accepted.
+	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.NoError(t, err)
+}
+
+// test that jwks url is used when jwks cluster setting is configured but does not have the kid required by token.
+func Test_JWKSFallBackWhenJWKSClusterSettingConfiguredButFails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Intercept the call to getHttpResponse and return the mockGetHttpResponse
+	restoreHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponseWithLocalFileContent)
+	defer func() {
+		restoreHook()
+	}()
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	identMapString := ""
+	identMap, err := identmap.From(strings.NewReader(identMapString))
+	require.NoError(t, err)
+
+	// Create key from a file. This key will be used to sign the token.
+	// Matching public key available in jwks url is used to verify token.
+	keySetUsedForSigning := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
+	key, _ := keySetUsedForSigning.Get(0)
+	validIssuer := "https://accounts.idp1.com"
+	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+
+	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
+	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
+	// Configure cluster setting with a key that is not used for signing.
+	keySetNotUsedForSigning, _, _ := createJWKS(t)
+	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySetNotUsedForSigning))
+	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, validIssuer)
+
+	// Set audience field to audience2.
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
+
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+
+	// Validation fails with an audience error when the audience in the token doesn't match the cluster's audience.
+	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid audience")
+
+	// Update the audience field to "test_cluster".
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
+
+	// Validation passes the audience check now that they match.
+	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.NoError(t, err)
+
+	// Set audience field to both audience1 and audience2.
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, "[\""+audience2+"\",\""+audience1+"\"]")
+	// Validation passes the audience check now that both audiences are accepted.
+	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.NoError(t, err)
+}
+
+// Test that jwks url is not used when jwks cluster setting is configured and has the kid required by token.
+func Test_NoFallbackWhenSameKIDExitsInClusterSetting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Intercept the call to getHttpResponse and return the mockGetHttpResponse
+	restoreHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponseWithLocalFileContent)
+	defer func() {
+		restoreHook()
+	}()
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	identMapString := ""
+	identMap, err := identmap.From(strings.NewReader(identMapString))
+	require.NoError(t, err)
+
+	// Create keyUsedForSigning from a file. This keyUsedForSigning will be used to sign the token.
+	// Matching public keyUsedForSigning available in jwks url is used to verify token.
+	keySetUsedForSigning := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
+	keyUsedForSigning, _ := keySetUsedForSigning.Get(0)
+	validIssuer := "https://accounts.idp1.com"
+	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), keyUsedForSigning, jwa.RS256, "", "")
+
+	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
+	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+
+	// Configure cluster setting with a keyUsedForSigning that is not used for signing.
+	keySetNotUsedForSigning, _, _ := createJWKS(t)
+	keyNotUsedForSigning, _ := keySetNotUsedForSigning.Get(0)
+
+	//Override the kid of keyNotUsedForSigning to match the kid of keyUsedForSigning
+	require.NoError(t, keyNotUsedForSigning.Set(jwk.KeyIDKey, keyUsedForSigning.KeyID()))
+	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySetNotUsedForSigning))
+	JWTAuthIssuers.Override(ctx, &s.ClusterSettings().SV, validIssuer)
+
+	// Set audience field to audience2.
+	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
+
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+
+	// kid of keyUsedForSigning is found in the cluster setting, but the validation fails.
+	err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
+	require.ErrorContains(t, err, "JWT authentication: invalid token")
 }
