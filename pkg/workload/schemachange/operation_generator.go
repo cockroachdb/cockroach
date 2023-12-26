@@ -24,7 +24,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -882,6 +881,9 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	_ = rowsSatisfyConstraint
 	stmt.potentialExecErrors.add(pgcode.ForeignKeyViolation)
 	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
+
+	// TODO why did I add this??
+	stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
 
 	// It's possible for the table to be dropped concurrently, while we are running
 	// validation. In which case a potential commit error is an undefined table
@@ -2530,116 +2532,192 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 func (og *operationGenerator) alterTableAlterPrimaryKey(
 	ctx context.Context, tx pgx.Tx,
 ) (*opStmt, error) {
-	type Column struct {
-		Name     tree.Name
-		Nullable bool
-		Unique   bool
+	// Primary Keys are backed by a unique index, therefore we can only use
+	// columns that are of an indexable type. This information is only available
+	// via the colinfo package (not SQL) and is subject to change across
+	// versions. To eliminate the chance of flakes, rely on this allow list to do
+	// the filtering. As this list is static and non-exhaustive, we're trading a
+	// bit of coverage for stability. It may be worth while to add index-ability
+	// information to `SHOW COLUMNS` or an internal SQL function in the future.
+	indexableFamilies := []string{
+		"DecimalFamily",
+		"IntFamily",
+		"StringFamily",
+		"UuidFamily",
 	}
 
-	rowToTableName := func(row pgx.CollectableRow) (*tree.UnresolvedName, error) {
-		var schema string
-		var name string
-		if err := row.Scan(&schema, &name); err != nil {
-			return nil, err
-		}
-		return tree.NewUnresolvedName(schema, name), nil
-	}
-
-	columnsFrom := func(table tree.NodeFormatter) ([]Column, error) {
-		query := With([]CTE{
-			{"stats", fmt.Sprintf(`SELECT * FROM [SHOW STATISTICS FOR TABLE %v]`, table)},
-			{"unique_columns", `SELECT column_names[1] AS name FROM stats WHERE row_count = distinct_count AND array_length(column_names, 1) = 1`},
-		}, fmt.Sprintf(`SELECT column_name, is_nullable, EXISTS(SELECT * FROM unique_columns WHERE name = column_name) FROM [SHOW COLUMNS FROM %v] WHERE NOT is_hidden`, table))
-
-		return Collect(ctx, og, tx, pgx.RowToStructByPos[Column], query)
-	}
-
-	ctes := []CTE{
-		{"tables", `SELECT * FROM [SHOW TABLES] WHERE type = 'table'`},
+	q := With([]CTE{
 		{"descriptors", descJSONQuery},
-		{"tables_undergoing_schema_changes", `SELECT id FROM descriptors WHERE descriptor ? 'table' AND json_array_length(descriptor->'table'->'mutations') > 0`},
+		{"tables", tableDescQuery},
+		{"columns", colDescQuery},
+	}, `
+		SELECT
+			json_array_length(table_descriptor->'mutation') > 0 AS table_undergoing_schema_change,
+			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(table_name) AS table_name,
+			quote_ident("column"->>'name') AS column_name,
+			COALESCE(("column"->'nullable')::bool, false) AS is_nullable,
+			("column"->>'computedExpr' = '') AS is_computed,
+			(("column"->'type'->>'family') = ANY($1)) AS is_indexable,
+			(NOT EXISTS(
+				SELECT *
+				FROM crdb_internal.table_indexes
+				JOIN crdb_internal.index_columns USING (descriptor_id)
+				WHERE table_indexes.is_inverted
+				AND table_indexes.descriptor_id = columns.table_id
+				AND index_columns.column_id = (columns."column"->'id')::int8
+			)) AS is_in_inverted_index,
+			(EXISTS(
+				SELECT *
+				FROM crdb_internal.table_indexes
+				JOIN crdb_internal.index_columns USING (descriptor_id)
+				WHERE table_indexes.is_unique
+				AND table_indexes.descriptor_id = columns.table_id
+				AND index_columns.column_id = (columns."column"->'id')::int8
+			)) AS is_unique
+		FROM columns
+		WHERE NOT (
+			COALESCE(("column"->'hidden')::bool, false)
+			OR  COALESCE(("column"->'inaccessible')::bool, false)
+		)`)
+
+	columns, err := Collect(ctx, og, tx, pgx.RowToMap, q, indexableFamilies)
+	if err != nil {
+		return nil, err
 	}
 
-	tablesUndergoingSchemaChangesQuery := With(ctes, `SELECT schema_name, table_name FROM tables WHERE NOT EXISTS(SELECT * FROM tables_undergoing_schema_changes WHERE id = (schema_name || '.' || table_name)::regclass::oid)`)
-	tablesNotUndergoingSchemaChangesQuery := With(ctes, `SELECT schema_name, table_name FROM tables WHERE EXISTS(SELECT * FROM tables_undergoing_schema_changes WHERE id = (schema_name || '.' || table_name)::regclass::oid)`)
+	// Group columns by table for convenience in our templates. This could have
+	// been done within SQL but I didn't want to fight with unmarshalling nested
+	// JSON fields.
+	byTable := map[string][]map[string]any{}
+	for i, col := range columns {
+		byTable[col["table_name"].(string)] = append(
+			byTable[col["table_name"].(string)],
+			columns[i],
+		)
+	}
 
-	var table *tree.UnresolvedName
+	tables := make([]map[string]any, 0, len(byTable))
+	for table_name, grouped := range byTable {
+		tables = append(tables, map[string]any{
+			"table_name":                     table_name,
+			"table_undergoing_schema_change": grouped[0]["table_undergoing_schema_change"].(bool),
+			"columns":                        grouped,
+		})
+	}
+
+	// Our big query can only check if there are any unique indexes on columns.
+	// We'll also want to check if any columns happen to be unique rather than
+	// being constrained to uniqueness.
+	fillIsUnique := func(table map[string]any) error {
+		// Cache uniqueness checks. They're expensive and might run twice in some
+		// weird cases with the Generate helper.
+		if _, ok := table["unique_check"]; ok {
+			return nil
+		}
+
+		table["unique_check"] = true
+
+		var b strings.Builder
+		fmt.Fprintf(&b, `SELECT * FROM VALUES (`)
+		for _, column := range table["columns"].([]map[string]any) {
+			// If this column is already known to be unique, don't bother checking
+			// it. This should only happen if there's a unique constraint on the
+			// column.
+			if column["is_unique"].(bool) {
+				fmt.Fprintf(&b, `(SELECT true)`)
+			} else {
+				fmt.Fprintf(&b, `(SELECT EXISTS(SELECT 1 FROM %s GROUP BY %s HAVING count(*) > 1))`, table["table_name"], column["column_name"])
+			}
+		}
+		fmt.Fprintf(&b, `)`)
+
+		results, err := Collect(ctx, og, tx, pgx.RowTo[bool], b.String())
+		if err != nil {
+			return err
+		}
+
+		for i, unique := range results {
+			table["columns"].([]map[string]any)[i]["is_unique"] = unique
+		}
+
+		return nil
+	}
+
 	stmt, code, err := Generate[*tree.AlterTable](og.params.rng, og.produceError(), []GenerationCase{
 		// IF EXISTS should noop if the table doesn't exist.
 		{pgcode.SuccessfulCompletion, `ALTER TABLE IF EXISTS "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
 		// Targeting a table that doesn't exist should error out.
 		{pgcode.UndefinedTable, `ALTER TABLE "NonExistentTable" ALTER PRIMARY KEY USING COLUMNS ("IrrelevantColumn")`},
 		// Targeting a column that doesn't exist should error out.
-		{pgcode.InvalidSchemaDefinition, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ("NonExistentColumn")`},
+		{pgcode.UndefinedColumn, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ("NonExistentColumn") { end }`},
 		// NonUniqueColumns can't be used as PKs.
-		{pgcode.UniqueViolation, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({NonUniqueColumns})`},
+		{pgcode.UniqueViolation, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique false | Nullable false | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
 		// NullableColumns can't be used as PKs.
-		{pgcode.InvalidSchemaDefinition, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({NullableColumns})`},
+		{pgcode.InvalidSchemaDefinition, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable true | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
+		// UnindexableColumns can't be used as PKs.
+		{pgcode.InvalidSchemaDefinition, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable false | InInvertedIndex false | Columns }) { end }`},
+		// TODO(sql-foundations): Columns that have an inverted index can't be used
+		// as a primary key. This check isn't 100% correct because we only care
+		// about the final column in an inverted index and we're checking if
+		// columns are in an inverted index at all.
+		// {pgcode.InvalidSchemaDefinition, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable true | InInvertedIndex true | Columns }) { end }`},
 		// Tables undergoing a schema change may not have their PK changed.
-		// TODO(chrisseto): This case doesn't cause errors as expected.
+		// TODO(sql-foundations): This case doesn't cause errors as expected.
 		// {pgcode.Code{}, `ALTER TABLE {TableUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({UniqueNotNullableColumns})`},
 		// Successful cases.
-		{pgcode.SuccessfulCompletion, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({UniqueNotNullableColumns})`},
-		{pgcode.SuccessfulCompletion, `ALTER TABLE {TableNotUnderGoingSchemaChange} ALTER PRIMARY KEY USING COLUMNS ({UniqueNotNullableColumns}) USING HASH`},
-		// TODO(chrisseto): Add support for hash parameters and storage parameters.
+		{pgcode.SuccessfulCompletion, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable true | InInvertedIndex false | Columns }) { end }`},
+		{pgcode.SuccessfulCompletion, `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable true | InInvertedIndex false | Columns }) USING HASH { end }`},
+		// TODO(sql-foundations): Add support for hash parameters and storage parameters.
 	}, template.FuncMap{
-		"TableNotUnderGoingSchemaChange": func() (*tree.UnresolvedName, error) {
-			tables, err := Collect(ctx, og, tx, rowToTableName, tablesNotUndergoingSchemaChangesQuery)
-			if err != nil {
-				return nil, err
-			}
-			table, err = PickOne(og.params.rng, tables)
-			return table, err
-		},
-		"TableUnderGoingSchemaChange": func() (*tree.UnresolvedName, error) {
-			tables, err := Collect(ctx, og, tx, rowToTableName, tablesUndergoingSchemaChangesQuery)
-			if err != nil {
-				return nil, err
-			}
-			table, err = PickOne(og.params.rng, tables)
-			return table, err
-		},
-		"NullableColumns": func() (Values, error) {
-			columns, err := columnsFrom(table)
-			if err != nil {
-				return nil, err
-			}
-
-			names := util.Map(util.Filter(columns, func(c Column) bool {
-				return c.Nullable
-			}), func(c Column) *tree.Name {
-				return &c.Name
+		"TableNotUnderGoingSchemaChange": func() (map[string]any, error) {
+			tbls := util.Filter(tables, func(table map[string]any) bool {
+				return !table["table_undergoing_schema_change"].(bool)
 			})
-
-			return AsValues(PickAtLeast(og.params.rng, 1, names))
+			return PickOne(og.params.rng, tbls)
 		},
-		"NonUniqueColumns": func() (Values, error) {
-			columns, err := columnsFrom(table)
-			if err != nil {
+		"TableUnderGoingSchemaChange": func() (map[string]any, error) {
+			tbls := util.Filter(tables, func(table map[string]any) bool {
+				return table["table_undergoing_schema_change"].(bool)
+			})
+			return PickOne(og.params.rng, tbls)
+		},
+		"Columns": func(table map[string]any) (string, error) {
+			selected, err := PickAtLeast(og.params.rng, 1, table["columns"].([]map[string]any))
+			names := util.Map(selected, func(col map[string]any) string { return col["column_name"].(string) })
+			return strings.Join(names, ", "), err
+		},
+		"Nullable": func(nullable bool, table map[string]any) map[string]any {
+			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
+				return col["is_nullable"].(bool) == nullable
+			})
+			return table
+		},
+		"Unique": func(unique bool, table map[string]any) (map[string]any, error) {
+			if err := fillIsUnique(table); err != nil {
 				return nil, err
 			}
-
-			names := util.Map(util.Filter(columns, func(c Column) bool {
-				return !c.Nullable && !c.Unique
-			}), func(c Column) *tree.Name {
-				return &c.Name
+			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
+				return col["is_unique"].(bool) == unique
 			})
-
-			return AsValues(PickAtLeast(og.params.rng, 1, names))
+			return table, nil
 		},
-		"UniqueNotNullableColumns": func() (Values, error) {
-			columns, err := columnsFrom(table)
-			if err != nil {
-				return nil, err
-			}
-
-			names := util.Map(util.Filter(columns, func(c Column) bool {
-				return !c.Nullable && c.Unique
-			}), func(c Column) *tree.Name {
-				return &c.Name
+		"Generated": func(unique bool, table map[string]any) map[string]any {
+			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
+				return col["is_unique"].(bool) == unique
 			})
-
-			return AsValues(PickAtLeast(og.params.rng, 1, names))
+			return table
+		},
+		"Indexable": func(indexable bool, table map[string]any) map[string]any {
+			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
+				return col["is_indexable"].(bool) == indexable
+			})
+			return table
+		},
+		"InInvertedIndex": func(inIndex bool, table map[string]any) map[string]any {
+			table["columns"] = util.Filter(table["columns"].([]map[string]any), func(col map[string]any) bool {
+				return col["is_in_inverted_index"].(bool) == inIndex
+			})
+			return table
 		},
 	})
 	if err != nil {
@@ -2684,6 +2762,40 @@ func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, 
 		return nil, err
 	}
 	stmt.sql = fmt.Sprintf(`ALTER DATABASE %s SURVIVE %s`, dbName, survive)
+	return stmt, nil
+}
+
+func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"tables", tableDescQuery},
+		{"columns", `SELECT schema_id::REGNAMESPACE::TEXT as schema_name, name AS table_name, jsonb_array_elements(descriptor->'table'->'columns') AS column FROM tables`},
+		{"indexes", `SELECT schema_id::REGNAMESPACE::TEXT as schema_name, name AS table_name, jsonb_array_elements(descriptor->'table'->'indexes') AS index FROM tables`},
+		{"constraints", `SELECT schema_id::REGNAMESPACE::TEXT as schema_name, name AS table_name, jsonb_array_elements(descriptor->'table'->'checks') AS constraint FROM tables`},
+	}, `
+	SELECT 'SCHEMA ' || quote_ident(schema_name) FROM [SHOW SCHEMAS] WHERE owner != 'node'
+		UNION ALL
+	SELECT 'TABLE ' || quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type = 'table'
+		UNION ALL
+	SELECT 'COLUMN ' || quote_ident(schema_name) || '.' || quote_ident(table_name) || '.' || quote_ident("column"->>'name') FROM columns
+		UNION ALL
+	SELECT 'INDEX ' || quote_ident(schema_name) || '.' || quote_ident(table_name) || '@' || quote_ident("index"->>'name') FROM indexes
+		UNION ALL
+	SELECT 'CONSTRAINT ' || quote_ident("constraint"->>'name') || ' ON ' || quote_ident(schema_name) || '.' || quote_ident(table_name) FROM constraints
+	`)
+
+	commentables, err := Collect(ctx, og, tx, pgx.RowTo[string], q)
+	if err != nil {
+		return nil, err
+	}
+
+	picked, err := PickOne(og.params.rng, commentables)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.sql = fmt.Sprintf(`COMMENT ON %s IS 'comment from the RSW'`, picked)
 	return stmt, nil
 }
 
@@ -3292,12 +3404,12 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
 	if err != nil {
 		if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
-			err = errors.CombineErrors(err, rbErr)
+			err = errors.CombineErrors(err, errors.WithStack(rbErr))
 		}
 		return nil, nil, err
 	}
 	if err = nestedTxn.Commit(ctx); err != nil {
-		return nil, nil, err
+		return nil, nil, errors.WithStack(err)
 	}
 
 	columnToReturn := column{
@@ -3675,8 +3787,12 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (*opS
 		opStmt.expectedExecErrors.add(pgcode.DuplicateSchema)
 	}
 
-	// TODO(jayshrivastava): Support authorization
-	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, tree.MakeRoleSpecWithRoleName(username.RootUserName().Normalized()))
+	// TODO(sql-foundations): CREATE SCHEMA AUTHORIZATION is not currently
+	// support in the DSC. Either add support and re-enable it here or gate the
+	// AUTHORIZATION aspect by checking if the DSC is enabled or not. Previously,
+	// `username.RootUserName().Normalized()` was used for
+	// MakeRoleSpecWithRoleName.
+	stmt := randgen.MakeSchemaName(ifNotExists, schemaName, tree.MakeRoleSpecWithRoleName(""))
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
 }
@@ -3824,6 +3940,152 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 				return strings.Join(refs, " AND "), nil
 			}
 			return "TRUE", nil //nolint:returnerrcheck
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	}), nil
+}
+
+func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+			quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')'
+			FROM functions
+			JOIN LATERAL (
+				SELECT
+					COALESCE(array_agg(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname)), '{}') AS funcargs
+				FROM pg_catalog.pg_type
+				JOIN LATERAL (
+					SELECT unnest(proargtypes) AS oid FROM pg_catalog.pg_proc WHERE oid = (id + 100000)
+				) args ON args.oid = pg_type.oid
+			) funcargs ON TRUE
+			`,
+	)
+
+	functions, err := Collect(ctx, og, tx, pgx.RowTo[string], q)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, expectedCode, err := Generate[*tree.DropRoutine](og.params.rng, og.produceError(), []GenerationCase{
+		{pgcode.UndefinedFunction, `DROP FUNCTION "NoSuchFunction"`},
+		{pgcode.SuccessfulCompletion, `DROP FUNCTION IF EXISTS "NoSuchFunction"`},
+		{pgcode.SuccessfulCompletion, `DROP FUNCTION { Function }`},
+	}, template.FuncMap{
+		"Function": func() (string, error) {
+			return PickOne(og.params.rng, functions)
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	}), nil
+}
+
+func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+				quote_ident(schema_id::REGNAMESPACE::TEXT) AS schema,
+				quote_ident(name) AS name,
+				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) || '(' || array_to_string(funcargs, ', ') || ')' AS qualified_name
+			FROM functions
+			JOIN LATERAL (
+				SELECT
+					COALESCE(array_agg(quote_ident(typnamespace::REGNAMESPACE::TEXT) || '.' || quote_ident(typname)), '{}') AS funcargs
+				FROM pg_catalog.pg_type
+				JOIN LATERAL (
+					SELECT unnest(proargtypes) AS oid FROM pg_catalog.pg_proc WHERE oid = (id + 100000)
+				) args ON args.oid = pg_type.oid
+			) funcargs ON TRUE
+	`)
+
+	functions, err := Collect(ctx, og, tx, pgx.RowToMap, q)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, expectedCode, err := Generate[*tree.AlterRoutineRename](og.params.rng, og.produceError(), []GenerationCase{
+		{pgcode.UndefinedFunction, `ALTER FUNCTION "NoSuchFunction" RENAME TO "IrrelevantFunctionName"`},
+		// TODO(chrisseto): Neither of these seem to work as expected. Renaming a
+		// function to itself within a SQL shell results in conflicts but doesn't
+		// seem to reliably error in the context of the RSW. I'm guessing this has
+		// something to do with search paths and/or function overloads.
+		// {pgcode.DuplicateFunction, `{ with ExistingFunction } ALTER FUNCTION { .qualified_name } RENAME TO { ConflictingName . } { end }`},
+		// {pgcode.DuplicateFunction, `{ with ExistingFunction } ALTER FUNCTION { .qualified_name } RENAME TO { .name } { end }`},
+		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { (ExistingFunction).qualified_name } RENAME TO { UniqueName }`},
+	}, template.FuncMap{
+		"UniqueName": func() *tree.Name {
+			name := tree.Name(fmt.Sprintf("udf_%d", og.newUniqueSeqNum()))
+			return &name
+		},
+		"ExistingFunction": func() (map[string]any, error) {
+			return PickOne(og.params.rng, functions)
+		},
+		"ConflictingName": func(existing map[string]any) (string, error) {
+			selected, err := PickOne(og.params.rng, util.Filter(functions, func(other map[string]any) bool {
+				return other["schema"] == existing["schema"] && other["name"] != existing["name"]
+			}))
+			if err != nil {
+				return "", err
+			}
+			return selected["name"].(string), nil
+		},
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	}), nil
+}
+
+func (og *operationGenerator) alterFunctionSetSchema(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	functionsQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) FROM functions`)
+
+	schemasQuery := With([]CTE{
+		{"descriptors", descJSONQuery},
+	}, `SELECT quote_ident(name) FROM descriptors WHERE descriptor ? 'schema'`)
+
+	functions, err := Collect(ctx, og, tx, pgx.RowTo[string], functionsQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	schemas, err := Collect(ctx, og, tx, pgx.RowTo[string], schemasQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt, expectedCode, err := Generate[*tree.AlterRoutineSetSchema](og.params.rng, og.produceError(), []GenerationCase{
+		{pgcode.UndefinedFunction, `ALTER FUNCTION "NoSuchFunction" SET SCHEMA "IrrelevantSchema"`},
+		{pgcode.InvalidSchemaName, `ALTER FUNCTION { Function } SET SCHEMA "NoSuchSchema"`},
+		// NB: It's considered valid to set a function's schema to the schema it already exists within.
+		{pgcode.SuccessfulCompletion, `ALTER FUNCTION { Function } SET SCHEMA { Schema }`},
+	}, template.FuncMap{
+		"Function": func() (string, error) {
+			return PickOne(og.params.rng, functions)
+		},
+		"Schema": func() (string, error) {
+			return PickOne(og.params.rng, schemas)
 		},
 	})
 

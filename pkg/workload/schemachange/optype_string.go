@@ -20,35 +20,39 @@ func _() {
 	_ = x[alterDatabaseSurvivalGoal-9]
 	_ = x[alterDatabaseAddSuperRegion-10]
 	_ = x[alterDatabaseDropSuperRegion-11]
-	_ = x[alterTableAddColumn-12]
-	_ = x[alterTableAddConstraint-13]
-	_ = x[alterTableAddConstraintForeignKey-14]
-	_ = x[alterTableAddConstraintUnique-15]
-	_ = x[alterTableAlterColumnType-16]
-	_ = x[alterTableAlterPrimaryKey-17]
-	_ = x[alterTableDropColumn-18]
-	_ = x[alterTableDropColumnDefault-19]
-	_ = x[alterTableDropConstraint-20]
-	_ = x[alterTableDropNotNull-21]
-	_ = x[alterTableDropStored-22]
-	_ = x[alterTableLocality-23]
-	_ = x[alterTableRenameColumn-24]
-	_ = x[alterTableSetColumnDefault-25]
-	_ = x[alterTableSetColumnNotNull-26]
-	_ = x[alterTypeDropValue-27]
-	_ = x[createTypeEnum-28]
-	_ = x[createIndex-29]
-	_ = x[createSchema-30]
-	_ = x[createSequence-31]
-	_ = x[createTable-32]
-	_ = x[createTableAs-33]
-	_ = x[createView-34]
-	_ = x[createFunction-35]
-	_ = x[dropIndex-36]
-	_ = x[dropSchema-37]
-	_ = x[dropSequence-38]
-	_ = x[dropTable-39]
-	_ = x[dropView-40]
+	_ = x[alterFunctionRename-12]
+	_ = x[alterFunctionSetSchema-13]
+	_ = x[alterTableAddColumn-14]
+	_ = x[alterTableAddConstraint-15]
+	_ = x[alterTableAddConstraintForeignKey-16]
+	_ = x[alterTableAddConstraintUnique-17]
+	_ = x[alterTableAlterColumnType-18]
+	_ = x[alterTableAlterPrimaryKey-19]
+	_ = x[alterTableDropColumn-20]
+	_ = x[alterTableDropColumnDefault-21]
+	_ = x[alterTableDropConstraint-22]
+	_ = x[alterTableDropNotNull-23]
+	_ = x[alterTableDropStored-24]
+	_ = x[alterTableLocality-25]
+	_ = x[alterTableRenameColumn-26]
+	_ = x[alterTableSetColumnDefault-27]
+	_ = x[alterTableSetColumnNotNull-28]
+	_ = x[alterTypeDropValue-29]
+	_ = x[createTypeEnum-30]
+	_ = x[createIndex-31]
+	_ = x[createSchema-32]
+	_ = x[createSequence-33]
+	_ = x[createTable-34]
+	_ = x[createTableAs-35]
+	_ = x[createView-36]
+	_ = x[createFunction-37]
+	_ = x[commentOn-38]
+	_ = x[dropFunction-39]
+	_ = x[dropIndex-40]
+	_ = x[dropSchema-41]
+	_ = x[dropSequence-42]
+	_ = x[dropTable-43]
+	_ = x[dropView-44]
 }
 
 func (i opType) String() string {
@@ -77,6 +81,10 @@ func (i opType) String() string {
 		return "alterDatabaseAddSuperRegion"
 	case alterDatabaseDropSuperRegion:
 		return "alterDatabaseDropSuperRegion"
+	case alterFunctionRename:
+		return "alterFunctionRename"
+	case alterFunctionSetSchema:
+		return "alterFunctionSetSchema"
 	case alterTableAddColumn:
 		return "alterTableAddColumn"
 	case alterTableAddConstraint:
@@ -125,6 +133,10 @@ func (i opType) String() string {
 		return "createView"
 	case createFunction:
 		return "createFunction"
+	case commentOn:
+		return "commentOn"
+	case dropFunction:
+		return "dropFunction"
 	case dropIndex:
 		return "dropIndex"
 	case dropSchema:
