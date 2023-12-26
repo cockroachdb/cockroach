@@ -130,7 +130,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			// For the JSON flag, we only want to emit the diagram JSON.
 			rows = []string{diagramJSON}
 		} else {
-			if err := emitExplain(ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
+			if err := emitExplain(params.ctx, ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
 				return err
 			}
 			rows = ob.BuildStringRows()
@@ -176,7 +176,11 @@ func (e *explainPlanNode) startExec(params runParams) error {
 }
 
 func emitExplain(
-	ob *explain.OutputBuilder, evalCtx *eval.Context, codec keys.SQLCodec, explainPlan *explain.Plan,
+	ctx context.Context,
+	ob *explain.OutputBuilder,
+	evalCtx *eval.Context,
+	codec keys.SQLCodec,
+	explainPlan *explain.Plan,
 ) (err error) {
 	// Guard against bugs in the explain code.
 	defer func() {
@@ -226,31 +230,48 @@ func emitExplain(
 		return catalogkeys.PrettySpans(idx, spans, skip)
 	}
 
-	return explain.Emit(explainPlan, ob, spanFormatFn)
+	return explain.Emit(ctx, explainPlan, ob, spanFormatFn)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
 func (e *explainPlanNode) Values() tree.Datums                 { return e.run.results.Values() }
 
-func (e *explainPlanNode) Close(ctx context.Context) {
-	closeNode := func(n exec.Node) {
-		switch n := n.(type) {
-		case planNode:
-			n.Close(ctx)
-		case planMaybePhysical:
-			n.Close(ctx)
-		default:
-			panic(errors.AssertionFailedf("unknown plan node type %T", n))
+// closeExplainNode closes the given node which can either be planNode or
+// planMaybePhysical.
+func closeExplainNode(ctx context.Context, n exec.Node) {
+	switch n := n.(type) {
+	case planNode:
+		n.Close(ctx)
+	case planMaybePhysical:
+		n.Close(ctx)
+	default:
+		panic(errors.AssertionFailedf("unknown plan node type %T", n))
+	}
+}
+
+// closeExplainPlan closes the provided explain plan.
+func closeExplainPlan(ctx context.Context, ep *explain.Plan, selfReferencingCascade bool) {
+	closeExplainNode(ctx, ep.Root.WrappedNode())
+	for i := range ep.Subqueries {
+		closeExplainNode(ctx, ep.Subqueries[i].Root.(*explain.Node).WrappedNode())
+	}
+	if !selfReferencingCascade {
+		// We don't recurse into self-referencing cascades to prevent infinite
+		// recursion.
+		for i := range ep.Cascades {
+			if cp, selfReferencing, err := ep.Cascades[i].GetExplainPlan(ctx); err == nil {
+				// If an error is returned, then cp is nil.
+				closeExplainPlan(ctx, cp.(*explain.Plan), selfReferencing)
+			}
 		}
 	}
-	// The wrapped node can be planNode or planMaybePhysical.
-	closeNode(e.plan.Root.WrappedNode())
-	for i := range e.plan.Subqueries {
-		closeNode(e.plan.Subqueries[i].Root.(*explain.Node).WrappedNode())
+	for i := range ep.Checks {
+		closeExplainNode(ctx, ep.Checks[i].WrappedNode())
 	}
-	for i := range e.plan.Checks {
-		closeNode(e.plan.Checks[i].WrappedNode())
-	}
+}
+
+func (e *explainPlanNode) Close(ctx context.Context) {
+	closeExplainPlan(ctx, e.plan, false /* selfReferencingCascade */)
 	if e.run.results != nil {
 		e.run.results.Close(ctx)
 	}

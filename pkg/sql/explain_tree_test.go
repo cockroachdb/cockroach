@@ -85,6 +85,7 @@ func TestPlanToTreeAndPlanToString(t *testing.T) {
 			p.curPlan.savePlanInfo()
 			if d.Cmd == "plan-string" {
 				ob := ih.emitExplainAnalyzePlanToOutputBuilder(
+					ctx,
 					explain.Flags{Verbose: true, ShowTypes: true},
 					sessionphase.NewTimes(),
 					&execstats.QueryLevelStats{},

@@ -12,6 +12,7 @@ package explain
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -32,7 +33,17 @@ import (
 
 // Emit produces the EXPLAIN output against the given OutputBuilder. The
 // OutputBuilder flags are taken into account.
-func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
+func Emit(ctx context.Context, plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
+	return emitInternal(ctx, plan, ob, spanFormatFn, false /* selfReferencingCascade */)
+}
+
+func emitInternal(
+	ctx context.Context,
+	plan *Plan,
+	ob *OutputBuilder,
+	spanFormatFn SpanFormatFn,
+	selfReferencingCascade bool,
+) error {
 	e := makeEmitter(ob, spanFormatFn)
 	var walk func(n *Node) error
 	walk = func(n *Node) error {
@@ -109,7 +120,15 @@ func Emit(plan *Plan, ob *OutputBuilder, spanFormatFn SpanFormatFn) error {
 	for i := range plan.Cascades {
 		ob.EnterMetaNode("fk-cascade")
 		ob.Attr("fk", plan.Cascades[i].FKName)
-		if buffer := plan.Cascades[i].Buffer; buffer != nil {
+		if !selfReferencingCascade {
+			// We don't recurse into self-referencing cascades to prevent
+			// infinite recursion.
+			if cascadePlan, selfReferencing, err := plan.Cascades[i].GetExplainPlan(ctx); err != nil {
+				return err
+			} else if err = emitInternal(ctx, cascadePlan.(*Plan), ob, spanFormatFn, selfReferencing); err != nil {
+				return err
+			}
+		} else if buffer := plan.Cascades[i].Buffer; buffer != nil {
 			ob.Attr("input", buffer.(*Node).args.(*bufferArgs).Label)
 		}
 		ob.LeaveNode()

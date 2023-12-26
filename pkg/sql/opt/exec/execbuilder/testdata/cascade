@@ -837,10 +837,27 @@ vectorized: true
 │     spans: [/1 - /1]
 │
 ├── • fk-cascade
-│     fk: delrng2_p_fkey
+│   │ fk: delrng2_p_fkey
+│   │
+│   └── • root
+│       │
+│       ├── • delete range
+│       │     from: delrng2
+│       │     spans: [/1 - /1]
+│       │
+│       └── • fk-cascade
+│           │ fk: delrng3_p_q_fkey
+│           │
+│           └── • delete range
+│                 from: delrng3
+│                 spans: [/1 - /1]
 │
 └── • fk-cascade
-      fk: delrng2a_p_fkey
+    │ fk: delrng2a_p_fkey
+    │
+    └── • delete range
+          from: delrng2a
+          spans: [/1 - /1]
 
 query T kvtrace(Del,DelRange)
 DELETE FROM delrng1 WHERE p = 1
@@ -857,3 +874,61 @@ DelRange /Table/165/1/10 - /Table/165/1/21
 DelRange /Table/166/1/10 - /Table/166/1/21
 DelRange /Table/167/1/10 - /Table/167/1/21
 DelRange /Table/168/1/10 - /Table/168/1/21
+
+statement ok
+CREATE TABLE self (a INT PRIMARY KEY, b INT REFERENCES self(a) ON DELETE CASCADE, FAMILY (a, b))
+
+statement ok
+INSERT INTO self VALUES (1, NULL);
+INSERT INTO self SELECT x, x-1 FROM generate_series(2, 100) AS g(x)
+
+query T
+EXPLAIN DELETE FROM self WHERE a = 4
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • delete
+│   │ from: self
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             missing stats
+│             table: self@self_pkey
+│             spans: [/4 - /4]
+│
+└── • fk-cascade
+    │ fk: self_b_fkey
+    │
+    └── • root
+        │
+        ├── • delete
+        │   │ from: self
+        │   │
+        │   └── • buffer
+        │       │ label: buffer 1
+        │       │
+        │       └── • hash join
+        │           │ equality: (b) = (a)
+        │           │ right cols are key
+        │           │
+        │           ├── • scan
+        │           │     missing stats
+        │           │     table: self@self_pkey
+        │           │     spans: FULL SCAN
+        │           │
+        │           └── • distinct
+        │               │ estimated row count: 10
+        │               │ distinct on: a
+        │               │
+        │               └── • scan buffer
+        │                     estimated row count: 100
+        │                     label: buffer 1000000
+        │
+        └── • fk-cascade
+              fk: self_b_fkey
+              input: buffer 1

@@ -623,7 +623,7 @@ func (ih *instrumentationHelper) Finish(
 		ih.stmtDiagnosticsRecorder.MaybeRemoveRequest(ih.diagRequestID, ih.diagRequest, execLatency)
 		if ih.stmtDiagnosticsRecorder.IsConditionSatisfied(ih.diagRequest, execLatency) {
 			placeholders := p.extendedEvalCtx.Placeholders
-			ob := ih.emitExplainAnalyzePlanToOutputBuilder(ih.explainFlags, phaseTimes, queryLevelStats)
+			ob := ih.emitExplainAnalyzePlanToOutputBuilder(ctx, ih.explainFlags, phaseTimes, queryLevelStats)
 			warnings = ob.GetWarnings()
 			var payloadErr error
 			if pwe, ok := retPayload.(payloadWithError); ok {
@@ -773,7 +773,7 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *appstatspb.E
 	})
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
-	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
+	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
 		log.Warningf(ctx, "unable to emit explain plan tree: %v", err)
 		return nil
 	}
@@ -784,7 +784,10 @@ func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *appstatspb.E
 // populates it with the EXPLAIN ANALYZE plan. BuildString/BuildStringRows can
 // be used on the result.
 func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
-	flags explain.Flags, phaseTimes *sessionphase.Times, queryStats *execstats.QueryLevelStats,
+	ctx context.Context,
+	flags explain.Flags,
+	phaseTimes *sessionphase.Times,
+	queryStats *execstats.QueryLevelStats,
 ) *explain.OutputBuilder {
 	ob := explain.NewOutputBuilder(flags)
 	if ih.explainPlan == nil {
@@ -839,8 +842,8 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	}
 	ob.AddTxnInfo(iso, ih.txnPriority, qos)
 
-	if err := emitExplain(ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
-		ob.AddTopLevelField("error emitting plan", fmt.Sprint(err))
+	if err := emitExplain(ctx, ob, ih.evalCtx, ih.codec, ih.explainPlan); err != nil {
+		ob.AddField("error emitting plan", fmt.Sprint(err))
 	}
 	return ob
 }
@@ -865,7 +868,7 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 		return nil //nolint:returnerrcheck
 	}
 
-	ob := ih.emitExplainAnalyzePlanToOutputBuilder(ih.explainFlags, phaseTimes, queryLevelStats)
+	ob := ih.emitExplainAnalyzePlanToOutputBuilder(ctx, ih.explainFlags, phaseTimes, queryLevelStats)
 	rows := ob.BuildStringRows()
 	if distSQLFlowInfos != nil {
 		rows = append(rows, "")
@@ -927,7 +930,22 @@ func (m execNodeTraceMetadata) associateNodeWithComponents(
 // annotateExplain aggregates the statistics in the trace and annotates
 // explain.Nodes with execution stats.
 func (m execNodeTraceMetadata) annotateExplain(
-	plan *explain.Plan, spans []tracingpb.RecordedSpan, makeDeterministic bool, p *planner,
+	ctx context.Context,
+	plan *explain.Plan,
+	spans []tracingpb.RecordedSpan,
+	makeDeterministic bool,
+	p *planner,
+) {
+	m.annotateExplainInternal(ctx, plan, spans, makeDeterministic, p, false /* selfReferencingCascade */)
+}
+
+func (m execNodeTraceMetadata) annotateExplainInternal(
+	ctx context.Context,
+	plan *explain.Plan,
+	spans []tracingpb.RecordedSpan,
+	makeDeterministic bool,
+	p *planner,
+	selfReferencingCascade bool,
 ) {
 	statsMap := execinfrapb.ExtractStatsFromSpans(spans, makeDeterministic)
 
@@ -1015,6 +1033,16 @@ func (m execNodeTraceMetadata) annotateExplain(
 	walk(plan.Root)
 	for i := range plan.Subqueries {
 		walk(plan.Subqueries[i].Root.(*explain.Node))
+	}
+	if !selfReferencingCascade {
+		// We don't recurse into self-referencing cascades to prevent infinite
+		// recursion.
+		for i := range plan.Cascades {
+			cp, selfReferencing, err := plan.Cascades[i].GetExplainPlan(ctx)
+			if err == nil {
+				m.annotateExplainInternal(ctx, cp.(*explain.Plan), spans, makeDeterministic, p, selfReferencing)
+			}
+		}
 	}
 	for i := range plan.Checks {
 		walk(plan.Checks[i])
