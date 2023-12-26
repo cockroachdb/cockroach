@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/errors"
 )
 
 // llrbFrontier is a legacy span btreeFrontier implementation using LLRB tree.
@@ -302,6 +303,9 @@ func (f *llrbFrontier) insert(span roachpb.Span, insertTS hlc.Timestamp) error {
 		// Trim todoRange if it falls outside the span(s) tracked by this frontier.
 		// This establishes the invariant that overlap start must be at or before todoRange start.
 		if todoRange.Start.Compare(overlap.keys.Start) < 0 {
+			if spanMustBeTracked {
+				return StopMatch.asBool()
+			}
 			todoRange.Start = overlap.keys.Start
 		}
 
@@ -351,6 +355,12 @@ func (f *llrbFrontier) insert(span roachpb.Span, insertTS hlc.Timestamp) error {
 
 		return ContinueMatch.asBool()
 	}, span.AsRange())
+
+	if spanMustBeTracked {
+		if todoRange.Start.Compare(todoRange.End) < 0 {
+			return errors.Newf("span %s is not a sub-span of this frontier (remaining %s)", span, todoRange)
+		}
+	}
 
 	// Add remaining pending range.
 	addPending()
