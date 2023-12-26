@@ -479,6 +479,16 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		rampDone = make(chan struct{})
 	}
 
+	// If ops.Close is specified, defer it to ensure that it is run before
+	// exiting.
+	if ops.Close != nil {
+		defer func() {
+			if err := ops.Close(ctx); err != nil {
+				fmt.Printf("failed .Close: %v\n", err)
+			}
+		}()
+	}
+
 	workersCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
 	var wg sync.WaitGroup
@@ -586,9 +596,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 		case <-done:
 			cancelWorkers()
-			if ops.Close != nil {
-				ops.Close(ctx)
-			}
 
 			startElapsed := timeutil.Since(start)
 			resultTick := histogram.Tick{Name: ops.ResultHist}

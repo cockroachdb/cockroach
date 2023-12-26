@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -33,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgx/v5"
@@ -96,10 +97,10 @@ type OpGenLogMessage struct {
 
 // LogQueryResults logs a string query result.
 func (og *operationGenerator) LogQueryResults(
-	queryName string, result interface{}, queryArgs ...interface{},
+	sql string, result interface{}, queryArgs ...interface{},
 ) {
-	formattedQuery := queryName
-	parsedQuery, err := parser.Parse(queryName)
+	formattedQuery := sql
+	parsedQuery, err := parser.Parse(sql)
 	if err == nil {
 		formattedQuery = parsedQuery.String()
 	}
@@ -148,219 +149,6 @@ func (og *operationGenerator) resetTxnState() {
 	og.potentialCommitErrors.reset()
 	og.opsInTxn = nil
 	og.stmtsInTxt = nil
-}
-
-//go:generate stringer -type=opType
-type opType int
-
-const (
-	addColumn               opType = iota // ALTER TABLE <table> ADD [COLUMN] <column> <type>
-	addConstraint                         // ALTER TABLE <table> ADD CONSTRAINT <constraint> <def>
-	addForeignKeyConstraint               // ALTER TABLE <table> ADD CONSTRAINT <constraint> FOREIGN KEY (<column>) REFERENCES <table> (<column>)
-	addRegion                             // ALTER DATABASE <db> ADD REGION <region>
-	addUniqueConstraint                   // ALTER TABLE <table> ADD CONSTRAINT <constraint> UNIQUE (<column>)
-
-	alterTableLocality // ALTER TABLE <table> LOCALITY <locality>
-
-	createIndex    // CREATE INDEX <index> ON <table> <def>
-	createSequence // CREATE SEQUENCE <sequence> <def>
-	createTable    // CREATE TABLE <table> <def>
-	createTableAs  // CREATE TABLE <table> AS <def>
-	createView     // CREATE VIEW <view> AS <def>
-	createEnum     // CREATE TYPE <type> ENUM AS <def>
-	createSchema   // CREATE SCHEMA <schema>
-
-	dropColumn        // ALTER TABLE <table> DROP COLUMN <column>
-	dropColumnDefault // ALTER TABLE <table> ALTER [COLUMN] <column> DROP DEFAULT
-	dropColumnNotNull // ALTER TABLE <table> ALTER [COLUMN] <column> DROP NOT NULL
-	dropColumnStored  // ALTER TABLE <table> ALTER [COLUMN] <column> DROP STORED
-	dropConstraint    // ALTER TABLE <table> DROP CONSTRAINT <constraint>
-	dropIndex         // DROP INDEX <index>@<table>
-	dropSequence      // DROP SEQUENCE <sequence>
-	dropTable         // DROP TABLE <table>
-	dropEnumValue     // ALTER TYPE <type> DROP VALUE <value>
-	dropView          // DROP VIEW <view>
-	dropSchema        // DROP SCHEMA <schema>
-
-	primaryRegion //  ALTER DATABASE <db> PRIMARY REGION <region>
-
-	renameColumn   // ALTER TABLE <table> RENAME [COLUMN] <column> TO <column>
-	renameIndex    // ALTER TABLE <table> RENAME CONSTRAINT <constraint> TO <constraint>
-	renameSequence // ALTER SEQUENCE <sequence> RENAME TO <sequence>
-	renameTable    // ALTER TABLE <table> RENAME TO <table>
-	renameView     // ALTER VIEW <view> RENAME TO <view>
-
-	setColumnDefault // ALTER TABLE <table> ALTER [COLUMN] <column> SET DEFAULT <expr>
-	setColumnNotNull // ALTER TABLE <table> ALTER [COLUMN] <column> SET NOT NULL
-	setColumnType    // ALTER TABLE <table> ALTER [COLUMN] <column> [SET DATA] TYPE <type>
-
-	survive // ALTER DATABASE <db> SURVIVE <failure_mode>
-
-	insertRow // INSERT INTO <table> (<cols>) VALUES (<values>)
-
-	selectStmt // SELECT..
-
-	validate // validate all table descriptors
-
-	numOpTypes int = iota
-)
-
-var opFuncs = map[opType]func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, error){
-	addColumn:               (*operationGenerator).addColumn,
-	addConstraint:           (*operationGenerator).addConstraint,
-	addForeignKeyConstraint: (*operationGenerator).addForeignKeyConstraint,
-	addRegion:               (*operationGenerator).addRegion,
-	addUniqueConstraint:     (*operationGenerator).addUniqueConstraint,
-	alterTableLocality:      (*operationGenerator).alterTableLocality,
-	createIndex:             (*operationGenerator).createIndex,
-	createSequence:          (*operationGenerator).createSequence,
-	createTable:             (*operationGenerator).createTable,
-	createTableAs:           (*operationGenerator).createTableAs,
-	createView:              (*operationGenerator).createView,
-	createEnum:              (*operationGenerator).createEnum,
-	createSchema:            (*operationGenerator).createSchema,
-	dropColumn:              (*operationGenerator).dropColumn,
-	dropColumnDefault:       (*operationGenerator).dropColumnDefault,
-	dropColumnNotNull:       (*operationGenerator).dropColumnNotNull,
-	dropColumnStored:        (*operationGenerator).dropColumnStored,
-	dropConstraint:          (*operationGenerator).dropConstraint,
-	dropIndex:               (*operationGenerator).dropIndex,
-	dropSequence:            (*operationGenerator).dropSequence,
-	dropTable:               (*operationGenerator).dropTable,
-	dropView:                (*operationGenerator).dropView,
-	dropEnumValue:           (*operationGenerator).dropTypeValue,
-	dropSchema:              (*operationGenerator).dropSchema,
-	primaryRegion:           (*operationGenerator).primaryRegion,
-	renameColumn:            (*operationGenerator).renameColumn,
-	renameIndex:             (*operationGenerator).renameIndex,
-	renameSequence:          (*operationGenerator).renameSequence,
-	renameTable:             (*operationGenerator).renameTable,
-	renameView:              (*operationGenerator).renameView,
-	setColumnDefault:        (*operationGenerator).setColumnDefault,
-	setColumnNotNull:        (*operationGenerator).setColumnNotNull,
-	setColumnType:           (*operationGenerator).setColumnType,
-	survive:                 (*operationGenerator).survive,
-	insertRow:               (*operationGenerator).insertRow,
-	selectStmt:              (*operationGenerator).selectStmt,
-	validate:                (*operationGenerator).validate,
-}
-
-func init() {
-	// Validate that we have an operation function for each opType.
-	if len(opFuncs) != numOpTypes {
-		panic(errors.Errorf("expected %d opFuncs, got %d", numOpTypes, len(opFuncs)))
-	}
-}
-
-var opWeights = []int{
-	addColumn:               1,
-	addConstraint:           0, // TODO(spaskob): unimplemented
-	addForeignKeyConstraint: 0, // Disabled and tracked with #91195
-	addRegion:               1,
-	addUniqueConstraint:     0,
-	alterTableLocality:      1,
-	createIndex:             1,
-	createSequence:          1,
-	createTable:             1,
-	createTableAs:           1,
-	createView:              1,
-	createEnum:              1,
-	createSchema:            1,
-	dropColumn:              0,
-	dropColumnDefault:       1,
-	dropColumnNotNull:       1,
-	dropColumnStored:        1,
-	dropConstraint:          1,
-	dropIndex:               1,
-	dropSequence:            1,
-	dropTable:               1,
-	dropView:                1,
-	dropEnumValue:           1,
-	dropSchema:              1,
-	primaryRegion:           0, // Disabled and tracked with #83831
-	renameColumn:            1,
-	renameIndex:             1,
-	renameSequence:          1,
-	renameTable:             1,
-	renameView:              1,
-	setColumnDefault:        1,
-	setColumnNotNull:        1,
-	setColumnType:           0, // Disabled and tracked with #66662.
-	survive:                 0, // Disabled and tracked with #83831
-	insertRow:               0, // Disabled and tracked with #91863
-	selectStmt:              10,
-	validate:                2, // validate twice more often
-}
-
-var opDeclarative = []bool{
-	addColumn:               true,
-	addConstraint:           false,
-	addForeignKeyConstraint: true,
-	addRegion:               false,
-	addUniqueConstraint:     true,
-	alterTableLocality:      false,
-	createIndex:             true,
-	createSequence:          true,
-	createTable:             false,
-	createTableAs:           false,
-	createView:              false,
-	createEnum:              false,
-	createSchema:            false,
-	dropColumn:              true,
-	dropColumnDefault:       false,
-	dropColumnNotNull:       true,
-	dropColumnStored:        false,
-	dropConstraint:          true,
-	dropIndex:               true,
-	dropSequence:            true,
-	dropTable:               true,
-	dropView:                true,
-	dropEnumValue:           false,
-	dropSchema:              true,
-	primaryRegion:           false,
-	renameColumn:            false,
-	renameIndex:             false,
-	renameSequence:          false,
-	renameTable:             false,
-	renameView:              false,
-	setColumnDefault:        false,
-	setColumnNotNull:        false,
-	setColumnType:           false,
-	survive:                 false,
-	insertRow:               false,
-	selectStmt:              false,
-	validate:                false,
-}
-
-// This workload will maintain its own list of supported versions for declarative
-// schema changer, since the cluster we are running against can be downlevel.
-// The declarative schema changer builder does have a supported list, but it's not
-// sufficient for that reason.
-var opDeclarativeVersion = []clusterversion.Key{
-	addColumn:               clusterversion.BinaryMinSupportedVersionKey,
-	addForeignKeyConstraint: clusterversion.BinaryMinSupportedVersionKey,
-	addUniqueConstraint:     clusterversion.BinaryMinSupportedVersionKey,
-	createIndex:             clusterversion.BinaryMinSupportedVersionKey,
-	createSequence:          clusterversion.BinaryMinSupportedVersionKey,
-	dropColumn:              clusterversion.BinaryMinSupportedVersionKey,
-	dropColumnNotNull:       clusterversion.BinaryMinSupportedVersionKey,
-	dropConstraint:          clusterversion.BinaryMinSupportedVersionKey,
-	dropIndex:               clusterversion.BinaryMinSupportedVersionKey,
-	dropSequence:            clusterversion.BinaryMinSupportedVersionKey,
-	dropTable:               clusterversion.BinaryMinSupportedVersionKey,
-	dropView:                clusterversion.BinaryMinSupportedVersionKey,
-	dropEnumValue:           clusterversion.BinaryMinSupportedVersionKey,
-	dropSchema:              clusterversion.BinaryMinSupportedVersionKey,
-}
-
-func init() {
-	// Assert that an active version is set for all declarative statements.
-	for op := range opDeclarative {
-		if opDeclarative[op] &&
-			opDeclarativeVersion[op] < clusterversion.BinaryMinSupportedVersionKey {
-			panic(errors.AssertionFailedf("declarative op %v doesn't have an active version", op))
-		}
-	}
 }
 
 // getSupportedDeclarativeOp generates declarative operations until,
@@ -704,10 +492,7 @@ func (og *operationGenerator) getDatabaseRegionNames(
 }
 
 func (og *operationGenerator) getDatabase(ctx context.Context, tx pgx.Tx) (string, error) {
-	var database string
-	err := tx.QueryRow(ctx, "SHOW DATABASE").Scan(&database)
-	og.LogQueryResults("SHOW DATABASE", database)
-	return database, err
+	return Scan[string](ctx, og, tx, `SHOW DATABASE`)
 }
 
 type getRegionsResult struct {
@@ -2173,37 +1958,59 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (*opStmt,
 	return stmt, nil
 }
 
-func (og *operationGenerator) dropTypeValue(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
-	enum, exists, err := og.randEnum(ctx, tx, og.pctExisting(true))
+func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// Query for all enum values returning:
+	// * name - the escaped fully qualified type name.
+	// * value - the escaped enum value.
+	// * droppping - a bool indicating if this value is being actively dropped.
+	//   has_references - a bool indicating if this *type* is referenced by other
+	//   descriptors.
+	query := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"enums", enumDescsQuery},
+		{"enum_members", enumMemberDescsQuery},
+	}, `SELECT
+				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
+				quote_literal(member->>'logicalRepresentation') AS value,
+				COALESCE(member->>'direction' = 'REMOVE', false) AS dropping,
+				COALESCE(json_array_length(descriptor->'referencingDescriptorIds') > 0, false) AS has_references
+			FROM enum_members
+	`)
+
+	enumMembers, err := Collect(ctx, og, tx, pgx.RowToMap, query)
 	if err != nil {
 		return nil, err
 	}
 
-	validValue := false
-	value := "IrrelevantEnumValue"
+	// TODO(chrisseto): We're currently missing cases around enum members being
+	// referenced as it's quite difficult to tell if an individual member is
+	// referenced. Unreferenced members can be dropped but referenced members may
+	// not. For now, we skip over all enums where the type itself is being
+	// referenced.
 
-	if exists {
-		value, validValue, err = og.randEnumValue(ctx, tx, og.pctExisting(true), enum)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	valueDropping := false
-	if validValue {
-		valueDropping, err = og.enumValueIsBeingRemoved(ctx, tx, enum.String(), value)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	stmt := makeOpStmt(OpStmtDDL)
-	stmt.expectedExecErrors.addAll(codesWithConditions{
-		{pgcode.UndefinedObject, !exists || !validValue},
-		{pgcode.ObjectNotInPrerequisiteState, valueDropping},
+	stmt, code, err := Generate[*tree.AlterType](og.params.rng, og.produceError(), []GenerationCase{
+		// Fail to drop values from a type that doesn't exist.
+		{pgcode.UndefinedObject, `ALTER TYPE "EnumThatDoesntExist" DROP VALUE 'IrrelevantValue'`},
+		// Fail to drop a value that is in the process of being dropped.
+		{pgcode.ObjectNotInPrerequisiteState, `{ with (EnumValue true false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
+		// Fail to drop values that don't exist.
+		{pgcode.UndefinedObject, `{ with (EnumValue false false) } ALTER TYPE { .name } DROP VALUE 'ValueThatDoesntExist' { end }`},
+		// Successful drop of an enum value.
+		{pgcode.SuccessfulCompletion, `{ with (EnumValue false false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
+	}, template.FuncMap{
+		"EnumValue": func(dropping, referenced bool) (map[string]any, error) {
+			return PickOne(og.params.rng, util.Filter(enumMembers, func(enum map[string]any) bool {
+				return enum["has_references"].(bool) == referenced && enum["dropping"].(bool) == dropping
+			}))
+		},
 	})
-	stmt.sql = fmt.Sprintf(`ALTER TYPE %s DROP VALUE '%s'`, enum, value)
-	return stmt, nil
+	if err != nil {
+		return nil, err
+	}
+
+	return newOpStmt(stmt, codesWithConditions{
+		{code, true},
+	}), nil
 }
 
 func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -2887,6 +2694,31 @@ func makeOpStmt(queryType opStmtType) *opStmt {
 	}
 }
 
+// opStmtFromTree constructs an operation from the provide tree.Statement.
+//
+//lint:ignore U1000 Used in future commits. TODO(chrisseto): Remove the ignore.
+func newOpStmt(stmt tree.Statement, expectedExecErrors codesWithConditions) *opStmt {
+	var queryType opStmtType
+	switch stmt.StatementType() {
+	case tree.TypeDDL:
+		queryType = OpStmtDDL
+	case tree.TypeDML:
+		queryType = OpStmtDML
+	default:
+		panic("unhandled statement type")
+	}
+
+	expectedErrors := makeExpectedErrorSet()
+	expectedErrors.addAll(expectedExecErrors)
+
+	return &opStmt{
+		sql:                 tree.Serialize(stmt),
+		queryType:           queryType,
+		expectedExecErrors:  expectedErrors,
+		potentialExecErrors: makeExpectedErrorSet(),
+	}
+}
+
 // ErrorState wraps schemachange workload errors to have state information for
 // the purpose of dumping in our JSON log.
 type ErrorState struct {
@@ -3441,50 +3273,6 @@ ORDER BY random()
 	return &typeName, true, nil
 }
 
-func (og *operationGenerator) randEnumValue(
-	ctx context.Context, tx pgx.Tx, pctExisting int, enum *tree.TypeName,
-) (value string, exists bool, err error) {
-	const q = `SELECT unnest(values) FROM [SHOW ENUMS] WHERE schema = $1 AND name = $2`
-
-	rows, err := tx.Query(ctx, q, enum.Schema(), enum.Object())
-	if err != nil {
-		return "", false, err
-	}
-
-	defer rows.Close()
-
-	var values []string
-	for rows.Next() {
-		var v string
-		if err := rows.Scan(&v); err != nil {
-			return "", false, err
-		}
-		values = append(values, v)
-	}
-
-	if rows.Err() != nil {
-		return "", false, rows.Err()
-	}
-
-	if og.randIntn(100) >= pctExisting || len(values) == 0 {
-		valueSet := make(map[string]bool, len(values))
-		for _, v := range values {
-			valueSet[v] = true
-		}
-
-		// It's pretty unlikely that we'll generate conflicting values but better
-		// safe than sorry.
-		for {
-			nonExistentValue := og.randString(5, 5)
-			if !valueSet[nonExistentValue] {
-				return nonExistentValue, false, nil
-			}
-		}
-	}
-
-	return values[og.randIntn(len(values))], true, nil
-}
-
 // randTable returns a schema name along with a table name
 func (og *operationGenerator) randTable(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
@@ -3918,21 +3706,6 @@ func (og *operationGenerator) produceError() bool {
 // randIntn returns an int in the range [0,topBound). It panics if topBound <= 0.
 func (og *operationGenerator) randIntn(topBound int) int {
 	return og.params.rng.Intn(topBound)
-}
-
-// randString return a random string that matches the regex `[a-z_]{min,max}`.
-// It panics if min < 0 or min > max.
-func (og *operationGenerator) randString(min, max int) string {
-	if min < 0 || min > max {
-		panic("invalid arguments to randString")
-	}
-
-	// Use a more restricted alphabet here so we generate strings that are safe
-	// for values or identifiers.
-	const alphabet = "abcdefghijklmnopqrstuvwxyz_"
-
-	length := og.randIntn(max) + min
-	return randutil.RandString(og.params.rng, length, alphabet)
 }
 
 func (og *operationGenerator) newUniqueSeqNum() int64 {

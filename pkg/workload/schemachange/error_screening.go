@@ -79,36 +79,13 @@ func (og *operationGenerator) tableHasRows(
 func (og *operationGenerator) scanInt(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) (i int, err error) {
-	err = tx.QueryRow(ctx, query, args...).Scan(&i)
-	if err == nil {
-		og.LogQueryResults(
-			query,
-			i,
-			args...,
-		)
-	}
-	return i, errors.Wrapf(err, "scanBool: %q %q", query, args)
+	return Scan[int](ctx, og, tx, query, args...)
 }
 
 func (og *operationGenerator) scanBool(
 	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
 ) (b bool, err error) {
-	err = tx.QueryRow(ctx, query, args...).Scan(&b)
-	if err == nil {
-		og.LogQueryResults(
-			query,
-			b,
-			args...,
-		)
-	}
-	return b, errors.Wrapf(err, "scanBool: %q %q", query, args)
-}
-
-func scanString(
-	ctx context.Context, tx pgx.Tx, query string, args ...interface{},
-) (s string, err error) {
-	err = tx.QueryRow(ctx, query, args...).Scan(&s)
-	return s, errors.Wrapf(err, "scanString: %q %q", query, args)
+	return Scan[bool](ctx, og, tx, query, args...)
 }
 
 func (og *operationGenerator) schemaExists(
@@ -1468,32 +1445,6 @@ SELECT
 	)
 }
 
-// enumValueIsBeingRemoved returns true if val is currently being removed from
-// enum.
-func (og *operationGenerator) enumValueIsBeingRemoved(
-	ctx context.Context, tx pgx.Tx, enum, val string,
-) (bool, error) {
-	return og.scanBool(ctx, tx, `
-WITH enum_members AS (
-		SELECT
-				json_array_elements(
-						crdb_internal.pb_to_json(
-								'cockroach.sql.sqlbase.Descriptor',
-								descriptor
-						)->'type'->'enumMembers'
-				) AS member
-		FROM
-				system.descriptor
-		WHERE
-			id = ($1::REGTYPE::INT8 - 100000)
-)
-SELECT EXISTS(SELECT * FROM enum_members WHERE member->>'logicalRepresentation' = $2 AND member->>'direction' = 'REMOVE')
-`,
-		enum,
-		val,
-	)
-}
-
 // tableHasOngoingSchemaChanges returns whether the table has any mutations lined up.
 func (og *operationGenerator) tableHasOngoingSchemaChanges(
 	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
@@ -1582,10 +1533,7 @@ func (og *operationGenerator) getRegionColumn(
 			tableName.String())
 	}
 
-	regionCol, err := scanString(
-		ctx,
-		tx,
-		`
+	regionCol, err := Scan[string](ctx, og, tx, `
 WITH
 	descriptors
 		AS (
