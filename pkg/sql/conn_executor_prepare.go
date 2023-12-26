@@ -224,10 +224,6 @@ func (ex *connExecutor) prepare(
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime())
 		}
 
-		if err := ex.maybeUpgradeToSerializable(ctx, stmt); err != nil {
-			return err
-		}
-
 		if placeholderHints == nil {
 			placeholderHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
 		} else if rawTypeHints != nil {
