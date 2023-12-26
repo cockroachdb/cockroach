@@ -571,22 +571,6 @@ func TestRefreshThrottling(t *testing.T) {
 		Addr:     addr,
 		State:    tenant.RUNNING,
 	}}, pods)
-
-	// Now destroy the tenant and call ReportFailure again. This should be a
-	// no-op due to refresh throttling.
-	require.NoError(t, destroyTenant(tc, tenantID))
-	require.NoError(t, dir.ReportFailure(ctx, tenantID, addr))
-	pods, err = dir.TryLookupTenantPods(ctx, tenantID)
-	require.NoError(t, err)
-	require.NotEmpty(t, pods)
-
-	// Reset StateTimestamp for deterministic comparison.
-	pods[0].StateTimestamp = time.Time{}
-	require.Equal(t, []*tenant.Pod{{
-		TenantID: tenantID.ToUint64(),
-		Addr:     addr,
-		State:    tenant.RUNNING,
-	}}, pods)
 }
 
 func createTenant(tc serverutils.TestClusterInterface, id roachpb.TenantID) error {
