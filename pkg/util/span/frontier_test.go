@@ -93,6 +93,7 @@ func TestSpanFrontier(t *testing.T) {
 
 		f, err := MakeFrontier(spAD)
 		require.NoError(t, err)
+
 		require.Equal(t, hlc.Timestamp{}, f.Frontier())
 		require.Equal(t, `{a-d}@0`, entriesStr(f))
 
@@ -196,6 +197,40 @@ func TestSpanFrontier(t *testing.T) {
 			expectAdvanced(true).
 			expectFrontier(9).
 			expectEntries(`{a-d}@9`)
+	})
+}
+
+func TestForwardOutOfBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	spanMustBeTracked = true
+	defer func() {
+		spanMustBeTracked = false
+	}()
+
+	testutils.RunTrueAndFalse(t, "btree", func(t *testing.T, useBtreeFrontier bool) {
+		defer enableBtreeFrontier(useBtreeFrontier)()
+
+		t.Run("out of bounds", func(t *testing.T) {
+			f, err := MakeFrontier(makeSpan("a", "d"), makeSpan("p", "w"))
+			require.NoError(t, err)
+
+			for _, tc := range []roachpb.Span{
+				makeSpan("A", "Z"),
+				makeSpan("W", "b"),
+				makeSpan("W", "q"),
+				makeSpan("W", "z"),
+				makeSpan("a", "f"),
+				makeSpan("d", "z"),
+			} {
+				s := tc
+				t.Run(s.String(), func(t *testing.T) {
+					// Completely outside of spAD
+					_, err := f.Forward(s, hlc.Timestamp{WallTime: 10})
+					require.Regexp(t, "is not a sub-span", err)
+				})
+			}
+		})
 	})
 }
 
