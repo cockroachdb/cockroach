@@ -15,7 +15,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/errors"
 )
 
 // Factory implements exec.ExplainFactory. It wraps another factory and forwards
@@ -25,6 +29,8 @@ import (
 // produce EXPLAIN information.
 type Factory struct {
 	wrappedFactory exec.Factory
+	semaCtx        *tree.SemaContext
+	evalCtx        *eval.Context
 }
 
 var _ exec.ExplainFactory = &Factory{}
@@ -128,9 +134,13 @@ type Plan struct {
 var _ exec.Plan = &Plan{}
 
 // NewFactory creates a new explain factory.
-func NewFactory(wrappedFactory exec.Factory) *Factory {
+func NewFactory(
+	wrappedFactory exec.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context,
+) *Factory {
 	return &Factory{
 		wrappedFactory: wrappedFactory,
+		semaCtx:        semaCtx,
+		evalCtx:        evalCtx,
 	}
 }
 
@@ -163,8 +173,64 @@ func (f *Factory) ConstructPlan(
 	}
 	wrappedCascades := append([]exec.Cascade(nil), cascades...)
 	for i := range wrappedCascades {
-		if wrappedCascades[i].Buffer != nil {
-			wrappedCascades[i].Buffer = wrappedCascades[i].Buffer.(*Node).WrappedNode()
+		buffer := wrappedCascades[i].Buffer
+		if buffer != nil {
+			wrappedCascades[i].Buffer = buffer.(*Node).WrappedNode()
+		}
+		// cascadePlan and fk will be populated lazily, either when PlanFn is
+		// invoked during the execution or when GetExplainPlan is invoked during
+		// the explain output population.
+		var cascadePlan exec.Plan
+		var fk cat.ForeignKeyConstraint
+		// In order to capture the plan for the cascade, we'll inject some
+		// additional code into the planning function.
+		origPlanFn := wrappedCascades[i].PlanFn
+		wrappedCascades[i].PlanFn = func(
+			ctx context.Context,
+			semaCtx *tree.SemaContext,
+			evalCtx *eval.Context,
+			execFactory exec.Factory,
+			bufferRef exec.Node,
+			numBufferedRows int,
+			allowAutoCommit bool,
+		) (exec.Plan, cat.ForeignKeyConstraint, error) {
+			// Sanity check that the buffer node we captured earlier references
+			// the same wrapped node as the one we're given.
+			if (buffer == nil) != (bufferRef == nil) {
+				return nil, fk, errors.AssertionFailedf("expected both buffer %v and bufferRef %v be either nil or non-nil", buffer, bufferRef)
+			}
+			if buffer != nil && buffer.(*Node).WrappedNode() != bufferRef {
+				return nil, fk, errors.AssertionFailedf("expected captured buffer %v to wrap the provided bufferRef %v", buffer, bufferRef)
+			}
+			f.wrappedFactory = execFactory
+			var err error
+			cascadePlan, fk, err = origPlanFn(ctx, semaCtx, evalCtx, f, buffer, numBufferedRows, allowAutoCommit)
+			if err != nil {
+				return nil, fk, err
+			}
+			return cascadePlan.(*Plan).WrappedPlan, fk, nil
+		}
+		cascades[i].GetExplainPlan = func(ctx context.Context) (exec.Plan, cat.ForeignKeyConstraint, error) {
+			if cascadePlan != nil {
+				// If PlanFn was already invoked (presumably because we're in
+				// EXPLAIN ANALYZE context), then we'll use the stored plan.
+				return cascadePlan, fk, nil
+			}
+			// We're in vanilla EXPLAIN context, so we need to create the
+			// cascade plan ourselves. Note that cascades can create other
+			// cascades, but that will be transparently handled by internal
+			// recursive call to explain.Factory.ConstructPlan.
+			var numBufferedRows int
+			if buffer != nil {
+				// TODO(yuzefovich): we should use an estimate for it.
+				numBufferedRows = 100
+			}
+			// We're not going to execute the plan so this value doesn't
+			// actually matter.
+			const allowAutoCommit = false
+			var err error
+			cascadePlan, fk, err = origPlanFn(ctx, f.semaCtx, f.evalCtx, f, buffer, numBufferedRows, allowAutoCommit)
+			return cascadePlan, fk, err
 		}
 	}
 	wrappedChecks := make([]exec.Node, len(checks))
