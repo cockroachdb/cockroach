@@ -120,7 +120,7 @@ func PlanCDCExpression(
 
 	const allowAutoCommit = false
 	if err := opc.runExecBuilder(
-		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.EvalContext(), allowAutoCommit,
+		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.SemaCtx(), p.EvalContext(), allowAutoCommit,
 	); err != nil {
 		return cdcPlan, err
 	}
