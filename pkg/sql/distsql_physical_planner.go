@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -3114,7 +3115,13 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		return nil, err
 	}
 
-	splitter := span.MakeSplitter(n.table.desc, n.table.index, fetchOrdinals)
+	var splitter span.Splitter
+	if joinReaderSpec.LockingStrength != descpb.ScanLockingStrength_FOR_NONE &&
+		planCtx.ExtendedEvalCtx.TxnIsoLevel != isolation.Serializable {
+		splitter = span.MakeSplitterForSideEffect(n.table.desc, n.table.index, fetchOrdinals)
+	} else {
+		splitter = span.MakeSplitter(n.table.desc, n.table.index, fetchOrdinals)
+	}
 	joinReaderSpec.SplitFamilyIDs = splitter.FamilyIDs()
 
 	joinReaderSpec.LookupColumns = make([]uint32, len(n.eqCols))

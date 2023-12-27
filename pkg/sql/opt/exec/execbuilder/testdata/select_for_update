@@ -2668,6 +2668,10 @@ project
 statement ok
 RESET enable_durable_locking_for_serializable
 
+# ------------------------------------------------------------------------------
+# Tests with optimizer_use_lock_op_for_serializable.
+# ------------------------------------------------------------------------------
+
 subtest lock_op_optimizations
 
 statement ok
@@ -2924,6 +2928,93 @@ vectorized: true
       estimated row count: 1 (missing stats)
       table: t@t_pkey
       spans: /5/0
+
+# Table with multiple column families. Cannot push down locking.
+statement ok
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT NOT NULL,
+  z INT,
+  INDEX (z),
+  FAMILY (x, y),
+  FAMILY (z)
+)
+
+query T
+EXPLAIN (VERBOSE) SELECT y FROM xyz WHERE x = 1 FOR UPDATE
+----
+distribution: local
+vectorized: true
+·
+• project
+│ columns: (y)
+│
+└── • lookup join (semi)
+    │ columns: (x, y)
+    │ estimated row count: 1 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ equality: (x) = (x)
+    │ equality cols are key
+    │ locking strength: for update
+    │
+    └── • scan
+          columns: (x, y)
+          estimated row count: 1 (missing stats)
+          table: xyz@xyz_pkey
+          spans: /1/0
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z = 2 FOR SHARE
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (x, y, z)
+│ estimated row count: 10 (missing stats)
+│ table: xyz@xyz_pkey
+│ equality: (x) = (x)
+│ equality cols are key
+│ locking strength: for share
+│
+└── • index join
+    │ columns: (x, y, z)
+    │ estimated row count: 10 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ key columns: x
+    │
+    └── • scan
+          columns: (x, z)
+          estimated row count: 10 (missing stats)
+          table: xyz@xyz_z_idx
+          spans: /2-/3
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t INNER LOOKUP JOIN xyz ON x = b WHERE a = 5 FOR UPDATE OF xyz
+----
+distribution: local
+vectorized: true
+·
+• lookup join (semi)
+│ columns: (a, b, x, y, z)
+│ estimated row count: 1 (missing stats)
+│ table: xyz@xyz_pkey
+│ equality: (x) = (x)
+│ equality cols are key
+│ locking strength: for update
+│
+└── • lookup join (inner)
+    │ columns: (a, b, x, y, z)
+    │ estimated row count: 1 (missing stats)
+    │ table: xyz@xyz_pkey
+    │ equality: (b) = (x)
+    │ equality cols are key
+    │
+    └── • scan
+          columns: (a, b)
+          estimated row count: 1 (missing stats)
+          table: t@t_pkey
+          spans: /5/0
 
 statement ok
 RESET optimizer_use_lock_op_for_serializable
