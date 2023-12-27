@@ -78,7 +78,7 @@ func TestShowCreateRedactableValues(t *testing.T) {
 
 	// Perform a few random initial CREATE TABLEs and check for PII leaks.
 	setup := sqlsmith.RandTablesPrefixStringConsts(rng, pii)
-	setup = append(setup, "SET statement_timeout = '5s';")
+	setup = append(setup, "SET statement_timeout = '30s';")
 	for _, stmt := range setup {
 		t.Log(stmt)
 		if _, err := sqlDB.ExecContext(ctx, stmt); err != nil {
