@@ -118,7 +118,7 @@ type telemetryLoggingMetrics struct {
 	mu struct {
 		syncutil.RWMutex
 		// The last time at which an event was sampled to the telemetry channel.
-		lastEmittedTime time.Time
+		lastSampledTime time.Time
 	}
 
 	Knobs *TelemetryLoggingTestingKnobs
@@ -158,12 +158,12 @@ func NewTelemetryLoggingTestingKnobs(
 	}
 }
 
-// Returns the last emitted time for a telemetry event.
+// Returns the last sampled time for a telemetry event.
 // Used in testing.
-func (t *telemetryLoggingMetrics) getLastEmittedTime() time.Time {
+func (t *telemetryLoggingMetrics) getLastSampledTime() time.Time {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.mu.lastEmittedTime
+	return t.mu.lastSampledTime
 }
 
 // shouldEmitTransactionLog returns true if the transaction should be tracked for telemetry.
@@ -195,7 +195,7 @@ func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(force, isInternal boo
 	if force {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		t.mu.lastEmittedTime = txnSampleTime
+		t.mu.lastSampledTime = txnSampleTime
 		return true
 	}
 
@@ -205,7 +205,7 @@ func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(force, isInternal boo
 		// Avoid taking the full lock if we don't have to.
 		t.mu.RLock()
 		defer t.mu.RUnlock()
-		enoughTimeElapsed = txnSampleTime.Sub(t.mu.lastEmittedTime) >= requiredTimeElapsed
+		enoughTimeElapsed = txnSampleTime.Sub(t.mu.lastSampledTime) >= requiredTimeElapsed
 	}()
 
 	if !enoughTimeElapsed {
@@ -215,11 +215,11 @@ func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(force, isInternal boo
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if txnSampleTime.Sub(t.mu.lastEmittedTime) < requiredTimeElapsed {
+	if txnSampleTime.Sub(t.mu.lastSampledTime) < requiredTimeElapsed {
 		return false
 	}
 
-	t.mu.lastEmittedTime = txnSampleTime
+	t.mu.lastSampledTime = txnSampleTime
 
 	return true
 }
@@ -241,7 +241,7 @@ func (t *telemetryLoggingMetrics) timeNow() time.Time {
 //   - The telemetry mode is set to "statement" AND the required amount of time has elapsed
 //   - The stmt is being forced to log.
 //
-// In addition, the lastEmittedTime tracked by TelemetryLoggingMetrics is updated if the statement
+// In addition, the lastSampledTime tracked by TelemetryLoggingMetrics is updated if the statement
 // is logged and we are in "statement" mode.
 func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
 	txnIsTracked bool, stmtNum int, force bool,
@@ -274,7 +274,7 @@ func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
 		defer t.mu.Unlock()
 		skippedQueryCount = t.skippedQueryCount.Swap(0)
 		if !isTxnMode {
-			t.mu.lastEmittedTime = newTime
+			t.mu.lastSampledTime = newTime
 		}
 		return true, skippedQueryCount
 	}
@@ -312,7 +312,7 @@ func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
 		t.mu.RLock()
 		defer t.mu.RUnlock()
 		skippedQueryCount = t.skippedQueryCount.Load()
-		enoughTimeElapsed = newTime.Sub(t.mu.lastEmittedTime) >= requiredTimeElapsed
+		enoughTimeElapsed = newTime.Sub(t.mu.lastSampledTime) >= requiredTimeElapsed
 	}()
 
 	if !enoughTimeElapsed {
@@ -322,12 +322,12 @@ func (t *telemetryLoggingMetrics) shouldEmitStatementLog(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if newTime.Sub(t.mu.lastEmittedTime) < requiredTimeElapsed {
+	if newTime.Sub(t.mu.lastSampledTime) < requiredTimeElapsed {
 		return false, t.skippedQueryCount.Load()
 	}
 
 	skippedQueryCount = t.skippedQueryCount.Swap(0)
-	t.mu.lastEmittedTime = newTime
+	t.mu.lastSampledTime = newTime
 	return true, skippedQueryCount
 }
 
@@ -347,8 +347,8 @@ func (t *telemetryLoggingMetrics) isTracing(_ *tracing.Span, tracingEnabled bool
 	return tracingEnabled
 }
 
-func (t *telemetryLoggingMetrics) resetLastEmittedTime() {
+func (t *telemetryLoggingMetrics) resetLastSampledTime() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.lastEmittedTime = time.Time{}
+	t.mu.lastSampledTime = time.Time{}
 }
