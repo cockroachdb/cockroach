@@ -5021,7 +5021,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	sqlDB.ExpectErrWithTimeout(
-		t, `cannot specify timestamp in the future`,
+		t, `request timestamp .* too far in future`,
 		`EXPERIMENTAL CHANGEFEED FOR foo WITH cursor=$1`, timeutil.Now().Add(time.Hour),
 	)
 
