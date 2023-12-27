@@ -118,7 +118,7 @@ type TelemetryLoggingMetrics struct {
 	mu struct {
 		syncutil.RWMutex
 		// The last time at which an event was sampled to the telemetry channel.
-		lastEmittedTime time.Time
+		lastSampledTime time.Time
 	}
 
 	Knobs *TelemetryLoggingTestingKnobs
@@ -158,12 +158,12 @@ func NewTelemetryLoggingTestingKnobs(
 	}
 }
 
-// Returns the last emitted time for a telemetry event.
+// Returns the last sampled time for a telemetry event.
 // Used in testing.
-func (t *TelemetryLoggingMetrics) getLastEmittedTime() time.Time {
+func (t *TelemetryLoggingMetrics) getLastSampledTime() time.Time {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	return t.mu.lastEmittedTime
+	return t.mu.lastSampledTime
 }
 
 // shouldEmitTransactionLog returns true if the transaction should be tracked for telemetry.
@@ -188,7 +188,7 @@ func (t *TelemetryLoggingMetrics) shouldEmitTransactionLog(force, isInternal boo
 	if force {
 		t.mu.Lock()
 		defer t.mu.Unlock()
-		t.mu.lastEmittedTime = txnSampleTime
+		t.mu.lastSampledTime = txnSampleTime
 		return true
 	}
 
@@ -198,7 +198,7 @@ func (t *TelemetryLoggingMetrics) shouldEmitTransactionLog(force, isInternal boo
 		// Avoid taking the full lock if we don't have to.
 		t.mu.RLock()
 		defer t.mu.RUnlock()
-		enoughTimeElapsed = txnSampleTime.Sub(t.mu.lastEmittedTime) >= requiredTimeElapsed
+		enoughTimeElapsed = txnSampleTime.Sub(t.mu.lastSampledTime) >= requiredTimeElapsed
 	}()
 
 	if !enoughTimeElapsed {
@@ -208,11 +208,11 @@ func (t *TelemetryLoggingMetrics) shouldEmitTransactionLog(force, isInternal boo
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if txnSampleTime.Sub(t.mu.lastEmittedTime) < requiredTimeElapsed {
+	if txnSampleTime.Sub(t.mu.lastSampledTime) < requiredTimeElapsed {
 		return false
 	}
 
-	t.mu.lastEmittedTime = txnSampleTime
+	t.mu.lastSampledTime = txnSampleTime
 
 	return true
 }
@@ -234,7 +234,7 @@ func (t *TelemetryLoggingMetrics) timeNow() time.Time {
 //   - The telemetry mode is set to "statement" AND the required amount of time has elapsed
 //   - The stmt is being forced to log.
 //
-// In addition, the lastEmittedTime tracked by TelemetryLoggingMetrics is updated if the statement
+// In addition, the lastSampledTime tracked by TelemetryLoggingMetrics is updated if the statement
 // is logged and we are in "statement" mode.
 func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
 	txnIsTracked bool, stmtNum int, force bool,
@@ -253,7 +253,7 @@ func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
 		if !isTxnMode {
 			t.mu.Lock()
 			defer t.mu.Unlock()
-			t.mu.lastEmittedTime = newTime
+			t.mu.lastSampledTime = newTime
 		}
 		return true
 	}
@@ -269,7 +269,7 @@ func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
 		if txnIsTracked {
 			// Log if we are not at the limit for the number of statements logged
 			// for this transaction.
-			// We don't need to update the last emitted time in this case.
+			// We don't need to update the last sampled time in this case.
 			return int64(stmtNum) <= telemetryStatementsPerTransactionMax.Get(&t.st.SV)
 		}
 
@@ -285,7 +285,7 @@ func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
 		// Avoid taking the full lock if we don't have to.
 		t.mu.RLock()
 		defer t.mu.RUnlock()
-		enoughTimeElapsed = newTime.Sub(t.mu.lastEmittedTime) >= requiredTimeElapsed
+		enoughTimeElapsed = newTime.Sub(t.mu.lastSampledTime) >= requiredTimeElapsed
 	}()
 
 	if !enoughTimeElapsed {
@@ -295,11 +295,11 @@ func (t *TelemetryLoggingMetrics) shouldEmitStatementLog(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if newTime.Sub(t.mu.lastEmittedTime) < requiredTimeElapsed {
+	if newTime.Sub(t.mu.lastSampledTime) < requiredTimeElapsed {
 		return false
 	}
 
-	t.mu.lastEmittedTime = newTime
+	t.mu.lastSampledTime = newTime
 	return true
 }
 
@@ -327,8 +327,8 @@ func (t *TelemetryLoggingMetrics) incSkippedQueryCount() {
 	t.skippedQueryCount.Add(1)
 }
 
-func (t *TelemetryLoggingMetrics) resetLastEmittedTime() {
+func (t *TelemetryLoggingMetrics) resetLastSampledTime() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.lastEmittedTime = time.Time{}
+	t.mu.lastSampledTime = time.Time{}
 }
