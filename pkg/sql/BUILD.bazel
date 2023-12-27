@@ -253,6 +253,7 @@ go_library(
         "tablewriter_upsert_opt.go",
         "telemetry.go",
         "telemetry_logging.go",
+        "telemetry_testutils.go",
         "temporary_schema.go",
         "tenant_accessors.go",
         "tenant_capability.go",
