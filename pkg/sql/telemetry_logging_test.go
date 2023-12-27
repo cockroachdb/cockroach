@@ -475,7 +475,7 @@ func TestTelemetryLogging(t *testing.T) {
 	for _, tc := range testData {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Cleanup(func() {
-				s.SQLServer().(*Server).TelemetryLoggingMetrics.resetLastEmittedTime()
+				s.SQLServer().(*Server).TelemetryLoggingMetrics.resetLastSampledTime()
 			})
 			logCount := 0
 			expectedLogCount := len(tc.expectedSkipped)
