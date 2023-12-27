@@ -285,6 +285,11 @@ func checkStats(
 		expectedStats = nil
 	}
 
+	sort.Slice(expectedStats, func(i, j int) bool {
+		return expectedStats[i].TableID < expectedStats[j].TableID ||
+			(expectedStats[i].TableID == expectedStats[j].TableID && expectedStats[i].StatisticID < expectedStats[j].StatisticID)
+	})
+
 	it := bm.NewStatsIter(ctx)
 	defer it.Close()
 	metaStats, err := bulk.CollectToSlice(it)
