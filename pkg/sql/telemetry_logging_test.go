@@ -487,7 +487,7 @@ func TestTelemetryLogging(t *testing.T) {
 	for _, tc := range testData {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Cleanup(func() {
-				s.SQLServer().(*Server).TelemetryLoggingMetrics.resetLastEmittedTime()
+				s.SQLServer().(*Server).TelemetryLoggingMetrics.resetLastSampledTime()
 			})
 			logCount := 0
 			expectedLogCount := len(tc.expectedSkipped)
@@ -1915,13 +1915,13 @@ func TestTelemetryShouldEmitStatement(t *testing.T) {
 			telemetryTransactionSamplingFrequency.Override(ctx, &cs.SV, int64(tc.transactionSamplingFrequency))
 			telemetryLoggingEnabled.Override(ctx, &cs.SV, !tc.telemetryDisabled)
 
-			telemetryLoggingMetrics.resetLastEmittedTime()
+			telemetryLoggingMetrics.resetLastSampledTime()
 
 			for _, p := range tc.params {
 				fnParamsStr := fmt.Sprintf("timeNow:%f force:%t isTrackedTxn:%t stmtNum:%d expected:%t",
 					p.timeNowSecs, p.force, p.isTrackedTxn, p.stmtNum, p.expectedRet)
 				t.Run(fnParamsStr, func(t *testing.T) {
-					prevTime := telemetryLoggingMetrics.getLastEmittedTime()
+					prevTime := telemetryLoggingMetrics.getLastSampledTime()
 					ts := timeutil.FromUnixMicros(int64(p.timeNowSecs * 1e6))
 					st.SetTime(ts)
 
@@ -1930,10 +1930,10 @@ func TestTelemetryShouldEmitStatement(t *testing.T) {
 
 					if shouldEmit && !tc.isTxnMode {
 						// If we are in stmt mode and the function returns true, we should have
-						// updated the last emitted time to the current time.
-						require.Equal(t, ts, telemetryLoggingMetrics.getLastEmittedTime())
+						// updated the last sampled time to the current time.
+						require.Equal(t, ts, telemetryLoggingMetrics.getLastSampledTime())
 					} else {
-						require.Equal(t, prevTime, telemetryLoggingMetrics.getLastEmittedTime())
+						require.Equal(t, prevTime, telemetryLoggingMetrics.getLastSampledTime())
 					}
 				})
 			}
@@ -2147,13 +2147,13 @@ func TestTelemetryShouldTrackTransaction(t *testing.T) {
 			telemetryInternalQueriesEnabled.Override(ctx, &cs.SV, tc.isInternalStatementsEnabled)
 			telemetryLoggingEnabled.Override(ctx, &cs.SV, !tc.telemetryDisabled)
 
-			telemetryLoggingMetrics.resetLastEmittedTime()
+			telemetryLoggingMetrics.resetLastSampledTime()
 
 			for _, p := range tc.params {
 				fnParamsStr := fmt.Sprintf("timeNow:%f, force:%t isInternal:%t",
 					p.timeNowSecs, p.force, p.isInternal)
 				t.Run(fnParamsStr, func(t *testing.T) {
-					prevTime := telemetryLoggingMetrics.getLastEmittedTime()
+					prevTime := telemetryLoggingMetrics.getLastSampledTime()
 					ts := timeutil.FromUnixMicros(int64(p.timeNowSecs * 1e6))
 					st.SetTime(ts)
 
@@ -2161,9 +2161,9 @@ func TestTelemetryShouldTrackTransaction(t *testing.T) {
 					require.Equal(t, p.expectedRet, shouldEmit)
 
 					if shouldEmit {
-						require.Equal(t, ts, telemetryLoggingMetrics.getLastEmittedTime())
+						require.Equal(t, ts, telemetryLoggingMetrics.getLastSampledTime())
 					} else {
-						require.Equal(t, prevTime, telemetryLoggingMetrics.getLastEmittedTime())
+						require.Equal(t, prevTime, telemetryLoggingMetrics.getLastSampledTime())
 					}
 
 				})
