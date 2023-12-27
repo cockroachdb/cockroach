@@ -124,6 +124,30 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	}
 }
 
+// MakeIngestibleBackupSSTWriter creates a new SSTWriter tailored for ingestion
+// SSTs which can be created and stored by backups. These differ from ingestion
+// SST in that they're intended to be written by backup and stored in external
+// storage, but may be ingested directly, byte-for-byte or as as virtual files,
+// during some forms of RESTORE, and thus are also tuned for being in an active
+// LSM (so they e.g. should include bloom filters).
+func MakeIngestibleBackupSSTWriter(
+	ctx context.Context, cs *cluster.Settings, w objstorage.Writable,
+) SSTWriter {
+	opts := MakeIngestionWriterOptions(ctx, cs)
+
+	// TODO(dt): We're forced to disable value blocks due to unbounded buffering
+	// of them during sst construction. Unfortunately this means also disabling
+	// all subsequent format version functionality at the same time. Ideally we
+	// would be able to just disable value blocks or better yet configure them
+	// to be flushed mid-file instead of causing unbounded memory usage.
+	opts.TableFormat = sstable.TableFormatPebblev2
+
+	return SSTWriter{
+		fw:                sstable.NewWriter(w, opts),
+		supportsRangeKeys: opts.TableFormat >= sstable.TableFormatPebblev2,
+	}
+}
+
 // MakeIngestionSSTWriter creates a new SSTWriter tailored for ingestion SSTs.
 // These SSTs have bloom filters enabled (as set in DefaultPebbleOptions) and
 // format set to RocksDBv2.
