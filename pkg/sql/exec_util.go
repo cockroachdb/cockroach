@@ -2057,11 +2057,6 @@ func (p *planner) EvalAsOfTimestamp(
 	if err != nil {
 		return eval.AsOfSystemTime{}, err
 	}
-	ts := asOf.Timestamp
-	if now := p.execCfg.Clock.Now(); now.Less(ts) && !ts.Synthetic {
-		return eval.AsOfSystemTime{}, errors.Errorf(
-			"AS OF SYSTEM TIME: cannot specify timestamp in the future (%s > %s)", ts, now)
-	}
 	return asOf, nil
 }
 

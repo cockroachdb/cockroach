@@ -50,11 +50,13 @@ SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp('boom')
 statement error pq: AS OF SYSTEM TIME: only constant expressions, with_min_timestamp, with_max_staleness, or follower_read_timestamp are allowed
 SELECT * FROM t AS OF SYSTEM TIME now()
 
-statement error pq: AS OF SYSTEM TIME: interval value '10s' too large, AS OF interval must be <= -1µs
+statement error pq: request timestamp .* too far in future
 SELECT * FROM t AS OF SYSTEM TIME '10s'
 
-statement error pq: AS OF SYSTEM TIME: interval value '00:00:00.000001' too large, AS OF interval must be <= -1µs
+query I
 SELECT * FROM t AS OF SYSTEM TIME interval '1 microsecond'
+----
+2
 
 # Verify that the TxnTimestamp used to generate now() and current_timestamp() is
 # set to the historical timestamp.
