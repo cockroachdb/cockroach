@@ -159,7 +159,7 @@ var (
 	}
 	metaDistSenderSlowRPCs = metric.Metadata{
 		Name: "requests.slow.distsender",
-		Help: `Number of replica-bound RPCs currently stuck or retrying for a long time.
+		Help: `Number of slow replica-bound RPCs.
 
 Note that this is not a good signal for KV health. The remote side of the
 RPCs tracked here may experience contention, so an end user can easily
@@ -309,7 +309,7 @@ type DistSenderMetrics struct {
 	NotLeaseHolderErrCount             *metric.Counter
 	InLeaseTransferBackoffs            *metric.Counter
 	RangeLookups                       *metric.Counter
-	SlowRPCs                           *metric.Gauge
+	SlowRPCs                           *metric.Counter
 	MethodCounts                       [kvpb.NumMethods]*metric.Counter
 	ErrCounts                          [kvpb.NumErrors]*metric.Counter
 	DistSenderRangeFeedMetrics
@@ -341,7 +341,7 @@ func makeDistSenderMetrics() DistSenderMetrics {
 		NotLeaseHolderErrCount:             metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
 		InLeaseTransferBackoffs:            metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
 		RangeLookups:                       metric.NewCounter(metaDistSenderRangeLookups),
-		SlowRPCs:                           metric.NewGauge(metaDistSenderSlowRPCs),
+		SlowRPCs:                           metric.NewCounter(metaDistSenderSlowRPCs),
 		DistSenderRangeFeedMetrics:         makeDistSenderRangeFeedMetrics(),
 	}
 	for i := range m.MethodCounts {
@@ -1810,8 +1810,20 @@ func slowRangeRPCWarningStr(
 		dur.Seconds(), attempts, ba, desc, resp)
 }
 
-func slowRangeRPCReturnWarningStr(s *redact.StringBuilder, dur time.Duration, attempts int64) {
-	s.Printf("slow RPC finished after %.2fs (%d attempts)", dur.Seconds(), attempts)
+func slowReplicaRPCWarningStr(
+	s *redact.StringBuilder,
+	ba *kvpb.BatchRequest,
+	dur time.Duration,
+	attempts int64,
+	err error,
+	br *kvpb.BatchResponse,
+) {
+	resp := interface{}(err)
+	if resp == nil {
+		resp = br
+	}
+	s.Printf("have been waiting %.2fs (%d attempts) for RPC %s to replica %s; resp: %s",
+		dur.Seconds(), attempts, ba, ba.Replica, resp)
 }
 
 // sendPartialBatch sends the supplied batch to the range specified by the
@@ -1906,24 +1918,11 @@ func (ds *DistSender) sendPartialBatch(
 
 		prevTok = routingTok
 		reply, err = ds.sendToReplicas(ctx, ba, routingTok, withCommit)
-
-		const slowDistSenderThreshold = time.Minute
-		if dur := timeutil.Since(tBegin); dur > slowDistSenderThreshold && !tBegin.IsZero() {
+		if dur := timeutil.Since(tBegin); dur > slowDistSenderRangeThreshold && !tBegin.IsZero() {
 			{
 				var s redact.StringBuilder
 				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
 				log.Warningf(ctx, "slow range RPC: %v", &s)
-			}
-			// If the RPC wasn't successful, defer the logging of a message once the
-			// RPC is not retried any more.
-			if err != nil || reply.Error != nil {
-				ds.metrics.SlowRPCs.Inc(1)
-				defer func(tBegin time.Time, attempts int64) {
-					ds.metrics.SlowRPCs.Dec(1)
-					var s redact.StringBuilder
-					slowRangeRPCReturnWarningStr(&s, timeutil.Since(tBegin), attempts)
-					log.Warningf(ctx, "slow RPC response: %v", &s)
-				}(tBegin, attempts)
 			}
 			tBegin = time.Time{} // prevent reentering branch for this RPC
 		}
@@ -2185,6 +2184,13 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 	return newSendError(errors.Wrap(lastAttemptErr, "sending to all replicas failed; last error"))
 }
 
+// slowDistSenderRangeThreshold is a latency threshold for logging slow requests to a range,
+// potentially involving RPCs to multiple replicas of the range.
+const slowDistSenderRangeThreshold = time.Minute
+
+// slowDistSenderReplicaThreshold is a latency threshold for logging a slow RPC to a single replica.
+const slowDistSenderReplicaThreshold = 3 * time.Second
+
 // defaultSendClosedTimestampPolicy is used when the closed timestamp policy
 // is not known by the range cache. This choice prevents sending batch requests
 // to only voters when a perfectly good non-voter may exist in the local
@@ -2318,7 +2324,8 @@ func (ds *DistSender) sendToReplicas(
 	// per-replica state and may succeed on other replicas.
 	var ambiguousError error
 	var br *kvpb.BatchResponse
-	for first := true; ; first = false {
+	attempts := int64(0)
+	for first := true; ; first, attempts = false, attempts+1 {
 		if !first {
 			ds.metrics.NextReplicaErrCount.Inc(1)
 		}
@@ -2404,7 +2411,15 @@ func (ds *DistSender) sendToReplicas(
 		comparisonResult := ds.getLocalityComparison(ctx, ds.nodeIDGetter(), ba.Replica.NodeID)
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchRequest(comparisonResult, int64(ba.Size()))
 
+		tBegin := timeutil.Now() // for slow log message
 		br, err = transport.SendNext(ctx, ba)
+		if dur := timeutil.Since(tBegin); dur > slowDistSenderReplicaThreshold && !tBegin.IsZero() {
+			var s redact.StringBuilder
+			// Note that these RPC may or may not have succeeded. Errors are counted separately below.
+			ds.metrics.SlowRPCs.Inc(1)
+			slowReplicaRPCWarningStr(&s, ba, dur, attempts, err, br)
+			log.Warningf(ctx, "slow replica RPC: %v", &s)
+		}
 		ds.metrics.updateCrossLocalityMetricsOnReplicaAddressedBatchResponse(comparisonResult, int64(br.Size()))
 		ds.maybeIncrementErrCounters(br, err)
 
