@@ -229,7 +229,7 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 	})
 }
 
-// ExpectErrWithTimeout wraps ExpectErr with a timeout..
+// ExpectErrWithTimeout wraps ExpectErr with a timeout.
 func (sr *SQLRunner) ExpectErrWithTimeout(
 	t Fataler, errRE string, query string, args ...interface{},
 ) {
