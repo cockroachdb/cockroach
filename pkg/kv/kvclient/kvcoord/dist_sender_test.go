@@ -4546,6 +4546,11 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 	get.KeyLockingStrength = lock.Shared
 	get.KeyLockingDurability = lock.Unreplicated
 	ba.Add(get)
+	ba.Replica = roachpb.ReplicaDescriptor{
+		ReplicaID: 1,
+		NodeID:    2,
+		StoreID:   3,
+	}
 	br := &kvpb.BatchResponse{}
 	br.Error = kvpb.NewError(errors.New("boom"))
 	desc := &roachpb.RangeDescriptor{RangeID: 9, StartKey: roachpb.RKey("x"), EndKey: roachpb.RKey("z")}
@@ -4557,11 +4562,18 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 		act := s.RedactableString()
 		require.EqualValues(t, exp, act)
 	}
-
 	{
 		exp := `slow RPC finished after 8.16s (120 attempts)`
 		var s redact.StringBuilder
 		slowRangeRPCReturnWarningStr(&s, dur, attempts)
+		act := s.RedactableString()
+		require.EqualValues(t, exp, act)
+	}
+	{
+		exp := `have been waiting 8.16s (120 attempts) for RPC Get(Shared,Unreplicated) [‹"a"›] to` +
+			` replica (n2,s3):1; resp: ‹(err: boom)›`
+		var s redact.StringBuilder
+		slowReplicaRPCWarningStr(&s, ba, dur, attempts, nil /* err */, br)
 		act := s.RedactableString()
 		require.EqualValues(t, exp, act)
 	}
