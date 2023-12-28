@@ -349,3 +349,7 @@ func (t *TelemetryLoggingMetrics) resetSkippedTransactionCount() (res uint64) {
 func (t *TelemetryLoggingMetrics) incSkippedTransactionCount() {
 	t.skippedTransactionCount.Add(1)
 }
+
+func (t *TelemetryLoggingMetrics) getSkippedTransactionCount() uint64 {
+	return t.skippedTransactionCount.Load()
+}

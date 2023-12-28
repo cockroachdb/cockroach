@@ -3295,6 +3295,14 @@ func (ex *connExecutor) recordTransactionFinish(
 
 	ex.maybeRecordRetrySerializableContention(ev.txnID, transactionFingerprintID, txnErr)
 
+	ex.planner.maybeLogTransaction(ctx,
+		ex.executorType,
+		int(ex.extraTxnState.txnCounter.Load()),
+		transactionFingerprintID,
+		&recordedTxnStats,
+		ex.server.TelemetryLoggingMetrics,
+		ex.extraTxnState.shouldLogToTelemetry)
+
 	return ex.statsCollector.RecordTransaction(
 		ctx,
 		transactionFingerprintID,
