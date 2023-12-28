@@ -175,3 +175,49 @@ CREATE TYPE composite_typ AS (a int, b int)
 ----
 sql.schema.create_type
 sql.schema.schema_changer_mode.legacy
+
+exec
+BEGIN;
+SELECT 1;
+DROP INDEX t_b_idx;
+SELECT 1/0;
+----
+error: pq: division by zero
+
+feature-usage
+ROLLBACK;
+----
+sql.schema.transaction.mixed_ddl_dml.failure
+
+exec
+BEGIN;
+DROP INDEX t_b_idx;
+----
+
+feature-usage
+ROLLBACK;
+----
+sql.schema.transaction.ddl_only.failure
+
+feature-usage
+BEGIN;
+SELECT 1;
+DROP INDEX t_b_idx;
+COMMIT;
+----
+sql.schema.change_in_explicit_txn
+sql.schema.drop_index
+sql.schema.get_virtual_table.pg_catalog.pg_attribute
+sql.schema.schema_changer_mode.legacy
+sql.schema.transaction.mixed_ddl_dml.success
+
+feature-usage
+BEGIN;
+CREATE INDEX ON t(b);
+COMMIT;
+----
+sql.schema.change_in_explicit_txn
+sql.schema.create_index
+sql.schema.get_virtual_table.pg_catalog.pg_attribute
+sql.schema.schema_changer_mode.legacy
+sql.schema.transaction.ddl_only.success
