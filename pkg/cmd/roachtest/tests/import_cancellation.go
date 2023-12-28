@@ -40,8 +40,8 @@ func registerImportCancellation(r registry.Registry) {
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Cloud() != spec.GCE {
-					t.Skip("uses gs://cockroach-fixtures; see https://github.com/cockroachdb/cockroach/issues/105968")
+				if c.Spec().Cloud != spec.GCE {
+					t.Skip("uses gs://cockroach-fixtures-us-east1; see https://github.com/cockroachdb/cockroach/issues/105968")
 				}
 				runImportCancellation(ctx, t, c, rangeTombstones)
 			},
@@ -114,7 +114,7 @@ func runImportCancellation(
 		"lineitem": 2,
 	}
 	for tbl := range tablesToNumFiles {
-		fixtureURL := fmt.Sprintf("gs://cockroach-fixtures/tpch-csv/schema/%s.sql?AUTH=implicit", tbl)
+		fixtureURL := fmt.Sprintf("gs://cockroach-fixtures-us-east1/tpch-csv/schema/%s.sql?AUTH=implicit", tbl)
 		createStmt, err := readCreateTableFromFixture(fixtureURL, conn)
 		if err != nil {
 			t.Fatal(err)
@@ -205,9 +205,9 @@ func (t *importCancellationTest) makeFilename(tableName string, number int, numF
 	// Tables with more than one files have the number as a suffix on the
 	// filename, `<tablename>.tbl.1`. Tables with a single file do not.
 	if numFiles > 1 {
-		return fmt.Sprintf(`'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl.%[2]d?AUTH=implicit'`, tableName, number)
+		return fmt.Sprintf(`'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl.%[2]d?AUTH=implicit'`, tableName, number)
 	}
-	return fmt.Sprintf(`'gs://cockroach-fixtures/tpch-csv/sf-100/%[1]s.tbl?AUTH=implicit'`, tableName)
+	return fmt.Sprintf(`'gs://cockroach-fixtures-us-east1/tpch-csv/sf-100/%[1]s.tbl?AUTH=implicit'`, tableName)
 }
 
 func (t *importCancellationTest) runImportSequence(
