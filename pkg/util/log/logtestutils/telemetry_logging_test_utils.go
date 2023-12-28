@@ -11,10 +11,16 @@
 package logtestutils
 
 import (
+	"encoding/json"
+	"strings"
+	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/redact"
 )
 
 // StubTime is a helper struct to stub the current time.
@@ -76,4 +82,70 @@ func (s *StubTracingStatus) TracingStatus() bool {
 	s.RWMutex.RLock()
 	defer s.RWMutex.RUnlock()
 	return s.isTracing
+}
+
+type SampledQueryLogSpy struct {
+	testState          *testing.T
+	stripRedactMarkers bool
+
+	mu struct {
+		syncutil.RWMutex
+		logs   []eventpb.SampledQuery
+		filter func(entry eventpb.SampledQuery) bool
+	}
+}
+
+func NewSampledQueryLogSpy(
+	testState *testing.T, stripRedactMarkers bool, filter func(entry eventpb.SampledQuery) bool,
+) *SampledQueryLogSpy {
+	s := &SampledQueryLogSpy{
+		testState:          testState,
+		stripRedactMarkers: stripRedactMarkers,
+	}
+	s.mu.filter = filter
+	return s
+}
+
+func (s *SampledQueryLogSpy) Intercept(entry []byte) {
+	var logEntry logpb.Entry
+
+	if err := json.Unmarshal(entry, &logEntry); err != nil {
+		s.testState.Fatal(err)
+	}
+
+	if logEntry.Channel != logpb.Channel_TELEMETRY || !strings.Contains(logEntry.Message, "sampled_query") {
+		return
+	}
+
+	var statementLog eventpb.SampledQuery
+	if err := json.Unmarshal([]byte(logEntry.Message[logEntry.StructuredStart:logEntry.StructuredEnd]),
+		&statementLog); err != nil {
+		s.testState.Fatal(err)
+	}
+
+	if s.mu.filter != nil && !s.mu.filter(statementLog) {
+		return
+	}
+
+	if s.stripRedactMarkers {
+		statementLog.Statement = redact.RedactableString(statementLog.Statement.StripMarkers())
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.logs = append(s.mu.logs, statementLog)
+}
+
+func (s *SampledQueryLogSpy) GetStatementLogs() []eventpb.SampledQuery {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	stmtLogs := make([]eventpb.SampledQuery, len(s.mu.logs))
+	copy(stmtLogs, s.mu.logs)
+	return stmtLogs
+}
+
+func (s *SampledQueryLogSpy) ClearCollectedLogs() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.mu.logs = make([]eventpb.SampledQuery, 0)
 }
