@@ -1562,6 +1562,10 @@ type connExecutor struct {
 		// Note that the number of statement events emitted per transaction is
 		// capped by the cluster setting telemetryStatementsPerTransactionMax.
 		shouldLogToTelemetry bool
+
+		// telemetrySkippedTxns contains the number of transactions skipped by
+		// telemetry logging prior to this one.
+		telemetrySkippedTxns uint64
 	}
 
 	// sessionDataStack contains the user-configurable connection variables.
@@ -2010,9 +2014,11 @@ func (ex *connExecutor) resetExtraTxnState(ctx context.Context, ev txnEvent, pay
 		ex.state.mu.Lock()
 		defer ex.state.mu.Unlock()
 		ex.state.mu.stmtCount = 0
-		tracingEnabled := ex.planner.ExtendedEvalContext().Tracing.Enabled()
-		ex.extraTxnState.shouldLogToTelemetry =
-			ex.server.TelemetryLoggingMetrics.shouldEmitTransactionLog(tracingEnabled, ex.executorType == executorTypeInternal)
+		isTracing := ex.planner.ExtendedEvalContext().Tracing.Enabled()
+		ex.extraTxnState.shouldLogToTelemetry, ex.extraTxnState.telemetrySkippedTxns =
+			ex.server.TelemetryLoggingMetrics.shouldEmitTransactionLog(isTracing,
+				ex.executorType == executorTypeInternal,
+				ex.applicationName.Load().(string))
 	}
 
 	// NOTE: on txnRestart we don't need to muck with the savepoints stack. It's either a
