@@ -471,7 +471,7 @@ func TestLockTableBasic(t *testing.T) {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
 				foundLock := roachpb.MakeLock(txnMeta, roachpb.Key(key), lock.Intent)
-				seq := int(1)
+				seq := 1
 				if d.HasArg("lease-seq") {
 					d.ScanArgs(t, "lease-seq", &seq)
 				}

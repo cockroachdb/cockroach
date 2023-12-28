@@ -73,6 +73,16 @@ num=1
     active: true req: 3, strength: Intent, txn: 00000000-0000-0000-0000-000000000003
    distinguished req: 3
 
+# When uncontented=false one or more active waiters marks the lock as contented.
+query span=a,c
+----
+num locks: 1, bytes returned: 85, resume reason: RESUME_UNKNOWN, resume span: <nil>
+ locks:
+  range_id=3 key="a" holder=<nil> durability=Unreplicated duration=0s
+   waiters:
+    waiting_txn:00000000-0000-0000-0000-000000000002 active_waiter:false strength:Exclusive wait_duration:0s
+    waiting_txn:00000000-0000-0000-0000-000000000003 active_waiter:true strength:Exclusive wait_duration:0s
+
 guard-state r=req2
 ----
 new: state=doneWaiting
@@ -120,6 +130,11 @@ num=1
  lock: "a"
    queued locking requests:
     active: false req: 2, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+
+# When uncontented=false no reader and no active waiter marks the lock as uncontented.
+query span=a,c
+----
+num locks: 0, bytes returned: 0, resume reason: RESUME_UNKNOWN, resume span: <nil>
 
 guard-state r=req2
 ----
