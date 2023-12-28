@@ -86,7 +86,6 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 	blockGC := make(chan struct{}, 1)
-	defer close(blockGC)
 	params := base.TestServerArgs{}
 	params.ScanMaxIdleTime = time.Millisecond
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
@@ -99,6 +98,10 @@ func doTestSchemaChangeGCJob(t *testing.T, dropItem DropItem, ttlTime TTLTime) {
 	s, db, kvDB := serverutils.StartServer(t, params)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
+	// The deferred call to unblock the GC job needs to run before the deferred
+	// call to stop the TestServer. Otherwise, the quiesce step of shutting down
+	// can hang forever waiting for the GC job.
+	defer close(blockGC)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
