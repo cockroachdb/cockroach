@@ -114,7 +114,6 @@ func maybeRandomlySkip(t *testing.T) {
 
 func backupSuccess(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
 	maybeRandomlySkip(t)
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 	ctx := context.Background()
 	url := fmt.Sprintf("userfile://backups.public.userfiles_$user/data_%s_%d",
 		cs.Phase, cs.StageOrdinal)
@@ -224,7 +223,6 @@ func backupRollbacks(t *testing.T, factory TestServerFactory, cs CumulativeTestC
 		return
 	}
 	maybeRandomlySkip(t)
-	t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 	ctx := context.Background()
 	var urls atomic.Value
 	var dbForBackup atomic.Pointer[gosql.DB]
