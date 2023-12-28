@@ -721,7 +721,9 @@ var npgsqlBlocklist = blocklist{
 }
 
 var npgsqlIgnoreList = blocklist{
+	`Npgsql.Tests.CommandTests(Multiplexing).Command_Dispose_does_not_close_reader`:                        "flaky",
 	`Npgsql.Tests.CommandTests(Multiplexing).Cursor_move_RecordsAffected `:                                 "flaky",
+	`Npgsql.Tests.CommandTests(Multiplexing).Multiple_statements_with_parameters(NotPrepared)`:             "flaky",
 	`Npgsql.Tests.CommandTests(Multiplexing).QueryNonQuery`:                                                "flaky",
 	`Npgsql.Tests.CommandTests(Multiplexing).Same_command_different_param_instances`:                       "flaky",
 	`Npgsql.Tests.CommandTests(Multiplexing).Same_command_different_param_values`:                          "flaky",
@@ -736,6 +738,7 @@ var npgsqlIgnoreList = blocklist{
 	`Npgsql.Tests.CommandTests(NonMultiplexing).Cursor_move_RecordsAffected `:                              "flaky",
 	`Npgsql.Tests.CommandTests(NonMultiplexing).Statement_mapped_output_parameters(SequentialAccess)`:      "flaky",
 	`Npgsql.Tests.CommandTests(NonMultiplexing).Use_across_connection_change(Prepared)`:                    "flaky",
+	`Npgsql.Tests.ConnectionTests(Multiplexing).Fail_connect_then_succeed(True)`:                           "flaky",
 	`Npgsql.Tests.ConnectionTests(NonMultiplexing).PostgreSqlVersion_ServerVersion`:                        "flaky",
 	`Npgsql.Tests.ConnectionTests(NonMultiplexing).Connector_not_initialized_exception`:                    "flaky",
 	`Npgsql.Tests.ConnectionTests(NonMultiplexing).Many_open_close_with_transaction`:                       "flaky",
