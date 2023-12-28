@@ -434,15 +434,12 @@ func TestUnavailableZip(t *testing.T) {
 
 	t.Run("server 1", func(t *testing.T) {
 		c := TestCLI{
-			t:        t,
 			Server:   tc.Server(0),
 			Insecure: true,
 		}
 
 		out, err := c.RunWithCapture(debugZipCommand)
-		if err != nil {
-			c.fail(err)
-		}
+		require.NoError(t, err)
 
 		// Assert debug zip output for cluster, node 1, node 2, node 3.
 		assert.NotEmpty(t, out)
@@ -470,15 +467,12 @@ func TestUnavailableZip(t *testing.T) {
 	t.Run("server 2", func(t *testing.T) {
 		// Run debug zip against node 2.
 		c := TestCLI{
-			t:        t,
 			Server:   tc.Server(1),
 			Insecure: true,
 		}
 
 		out, err := c.RunWithCapture(debugZipCommand)
-		if err != nil {
-			c.fail(err)
-		}
+		require.NoError(t, err)
 
 		// Assert debug zip output for cluster, node 2.
 		assert.NotEmpty(t, out)
