@@ -233,6 +233,18 @@ var (
 		Measurement: "Packets",
 		Help:        "Packets received on all network interfaces since this process started",
 	}
+	metaHostNetRecvErr = metric.Metadata{
+		Name:        "sys.host.net.recv.err",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Packets",
+		Help:        "Error receiving packets on all network interfaces since this process started (as reported by the OS)",
+	}
+	metaHostNetRecvDrop = metric.Metadata{
+		Name:        "sys.host.net.recv.drop",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Packets",
+		Help:        "Receiving packets that got dropped on all network interfaces since this process started (as reported by the OS)",
+	}
 	metaHostNetSendBytes = metric.Metadata{
 		Name:        "sys.host.net.send.bytes",
 		Unit:        metric.Unit_BYTES,
@@ -244,6 +256,18 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Packets",
 		Help:        "Packets sent on all network interfaces since this process started",
+	}
+	metaHostNetSendErr = metric.Metadata{
+		Name:        "sys.host.net.send.err",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Packets",
+		Help:        "Error on sending packets on all network interfaces since this process started (as reported by the OS)",
+	}
+	metaHostNetSendDrop = metric.Metadata{
+		Name:        "sys.host.net.send.drop",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Packets",
+		Help:        "Sending packets that got dropped on all network interfaces since this process started (as reported by the OS)",
 	}
 )
 
@@ -334,8 +358,12 @@ type RuntimeStatSampler struct {
 	IopsInProgress         *metric.Gauge
 	HostNetRecvBytes       *metric.Gauge
 	HostNetRecvPackets     *metric.Gauge
+	HostNetRecvErr         *metric.Gauge
+	HostNetRecvDrop        *metric.Gauge
 	HostNetSendBytes       *metric.Gauge
 	HostNetSendPackets     *metric.Gauge
+	HostNetSendErr         *metric.Gauge
+	HostNetSendDrop        *metric.Gauge
 	// Uptime and build.
 	Uptime         *metric.Gauge // We use a gauge to be able to call Update.
 	BuildTimestamp *metric.Gauge
@@ -371,7 +399,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	}
 	netCounters, err := getSummedNetStats(ctx)
 	if err != nil {
-		log.Ops.Errorf(ctx, "could not get initial disk IO counters: %v", err)
+		log.Ops.Errorf(ctx, "could not get initial network stat counters: %v", err)
 	}
 
 	rsr := &RuntimeStatSampler{
@@ -411,8 +439,12 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		IopsInProgress:         metric.NewGauge(metaHostIopsInProgress),
 		HostNetRecvBytes:       metric.NewGauge(metaHostNetRecvBytes),
 		HostNetRecvPackets:     metric.NewGauge(metaHostNetRecvPackets),
+		HostNetRecvErr:         metric.NewGauge(metaHostNetRecvErr),
+		HostNetRecvDrop:        metric.NewGauge(metaHostNetRecvDrop),
 		HostNetSendBytes:       metric.NewGauge(metaHostNetSendBytes),
 		HostNetSendPackets:     metric.NewGauge(metaHostNetSendPackets),
+		HostNetSendErr:         metric.NewGauge(metaHostNetSendErr),
+		HostNetSendDrop:        metric.NewGauge(metaHostNetSendDrop),
 		FDOpen:                 metric.NewGauge(metaFDOpen),
 		FDSoftLimit:            metric.NewGauge(metaFDSoftLimit),
 		Uptime:                 metric.NewGauge(metaUptime),
@@ -544,11 +576,14 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(
 		subtractNetworkCounters(&deltaNet, rsr.last.net)
 		rsr.last.net = netCounters
 		subtractNetworkCounters(&netCounters, rsr.initialNetCounters)
-
-		rsr.HostNetSendBytes.Update(int64(netCounters.BytesSent))
-		rsr.HostNetSendPackets.Update(int64(netCounters.PacketsSent))
 		rsr.HostNetRecvBytes.Update(int64(netCounters.BytesRecv))
 		rsr.HostNetRecvPackets.Update(int64(netCounters.PacketsRecv))
+		rsr.HostNetRecvErr.Update(int64(netCounters.Errin))
+		rsr.HostNetRecvDrop.Update(int64(netCounters.Dropin))
+		rsr.HostNetSendBytes.Update(int64(netCounters.BytesSent))
+		rsr.HostNetSendPackets.Update(int64(netCounters.PacketsSent))
+		rsr.HostNetSendErr.Update(int64(netCounters.Errout))
+		rsr.HostNetSendDrop.Update(int64(netCounters.Dropout))
 	}
 
 	// Time statistics can be compared to the total elapsed time to create a
@@ -760,9 +795,13 @@ func sumNetworkCounters(netCounters []net.IOCountersStat) net.IOCountersStat {
 	output := net.IOCountersStat{}
 	for _, counter := range netCounters {
 		output.BytesRecv += counter.BytesRecv
-		output.BytesSent += counter.BytesSent
 		output.PacketsRecv += counter.PacketsRecv
+		output.Errin += counter.Errin
+		output.Dropin += counter.Dropin
+		output.BytesSent += counter.BytesSent
 		output.PacketsSent += counter.PacketsSent
+		output.Errout += counter.Errout
+		output.Dropout += counter.Dropout
 	}
 	return output
 }
@@ -771,9 +810,13 @@ func sumNetworkCounters(netCounters []net.IOCountersStat) net.IOCountersStat {
 // saving the results in `from`.
 func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
 	from.BytesRecv -= sub.BytesRecv
-	from.BytesSent -= sub.BytesSent
 	from.PacketsRecv -= sub.PacketsRecv
+	from.Errin -= sub.Errin
+	from.Dropin -= sub.Dropin
+	from.BytesSent -= sub.BytesSent
 	from.PacketsSent -= sub.PacketsSent
+	from.Errout -= sub.Errout
+	from.Dropout -= sub.Dropout
 }
 
 // GetProcCPUTime returns the cumulative user/system time (in ms) since the process start.
