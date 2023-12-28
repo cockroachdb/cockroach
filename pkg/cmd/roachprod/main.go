@@ -568,6 +568,8 @@ environment variables to the cockroach process.
 			install.EnvOption(nodeEnv),
 			install.NumRacksOption(numRacks),
 		}
+		// TODO(DarrylWong): remove once #117125 is addressed.
+		startOpts.AdminUIPort = 0
 
 		startOpts.Target = install.StartSharedProcessForVirtualCluster
 		if externalProcessNodes != "" {
