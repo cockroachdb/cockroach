@@ -126,6 +126,14 @@ var includeByDefault = map[string]struct{}{
 	"KVRowsRead":              {},
 	"IndexRecommendations":    {},
 	"ScanCount":               {},
+
+	// Transaction fields.
+	"Committed":                {},
+	"Implicit":                 {},
+	"LastAutoRetryReason":      {},
+	"SkippedTransactions":      {},
+	"TransactionFingerprintID": {},
+	"StatementFingerprintIDs":  {},
 }
 
 // printJSONMap prints a map as a JSON string. In the future we can
@@ -150,8 +158,17 @@ type TelemetryLogSpy struct {
 		syncutil.RWMutex
 		logs    []string
 		filters []func(entry logpb.Entry) bool
-		format  func(entry logpb.Entry) string
+		format  func(entry logpb.Entry) (string, error)
 	}
+}
+
+func defaultFormatEntry(entry logpb.Entry) (string, error) {
+	var jsonMap map[string]interface{}
+	if err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &jsonMap); err != nil {
+		return "", err
+	}
+
+	return printJSONMap(jsonMap)
 }
 
 func NewSampledQueryLogScrubVolatileFields(testState *testing.T) *TelemetryLogSpy {
@@ -161,17 +178,19 @@ func NewSampledQueryLogScrubVolatileFields(testState *testing.T) *TelemetryLogSp
 	s.mu.filters = append(s.mu.filters, func(entry logpb.Entry) bool {
 		return strings.Contains(entry.Message, "sampled_query")
 	})
-	s.mu.format = func(entry logpb.Entry) string {
-		var jsonMap map[string]interface{}
-		if err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &jsonMap); err != nil {
-			s.testState.Fatal(err)
-		}
-		out, err := printJSONMap(jsonMap)
-		if err != nil {
-			s.testState.Error(err)
-		}
-		return out
+	s.mu.format = defaultFormatEntry
+
+	return s
+}
+
+func NewSampledTransactionLogScrubVolatileFields(testState *testing.T) *TelemetryLogSpy {
+	s := &TelemetryLogSpy{
+		testState: testState,
 	}
+	s.mu.filters = append(s.mu.filters, func(entry logpb.Entry) bool {
+		return strings.Contains(entry.Message, "sampled_transaction")
+	})
+	s.mu.format = defaultFormatEntry
 
 	return s
 }
@@ -216,7 +235,10 @@ func (s *TelemetryLogSpy) Intercept(entry []byte) {
 		}
 	}
 
-	formattedLogStr := s.mu.format(logEntry)
+	formattedLogStr, err := s.mu.format(logEntry)
+	if err != nil {
+		s.testState.Fatal(err)
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

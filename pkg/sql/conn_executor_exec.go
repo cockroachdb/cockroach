@@ -3175,9 +3175,11 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 		TxnFingerprintID: appstatspb.InvalidTransactionFingerprintID,
 	})
 
-	tracingEnabled := ex.planner.ExtendedEvalContext().Tracing.Enabled()
-	ex.extraTxnState.shouldLogToTelemetry =
-		ex.server.TelemetryLoggingMetrics.shouldEmitTransactionLog(tracingEnabled, ex.executorType == executorTypeInternal)
+	forceSampling := ex.server.TelemetryLoggingMetrics.shouldForceTxnSampling(
+		ex.applicationName.Load().(string),
+		ex.planner.ExtendedEvalContext().Tracing.Enabled())
+	ex.extraTxnState.shouldLogToTelemetry, ex.extraTxnState.telemetrySkippedTxns =
+		ex.server.TelemetryLoggingMetrics.shouldEmitTransactionLog(forceSampling, ex.executorType == executorTypeInternal)
 
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
@@ -3297,6 +3299,16 @@ func (ex *connExecutor) recordTransactionFinish(
 	}
 
 	ex.maybeRecordRetrySerializableContention(ev.txnID, transactionFingerprintID, txnErr)
+
+	ex.planner.maybeLogTransaction(ctx,
+		ex.executorType,
+		int(ex.extraTxnState.txnCounter.Load()),
+		transactionFingerprintID,
+		&recordedTxnStats,
+		ex.server.TelemetryLoggingMetrics,
+		ex.extraTxnState.shouldLogToTelemetry,
+		ex.extraTxnState.telemetrySkippedTxns,
+	)
 
 	return ex.statsCollector.RecordTransaction(
 		ctx,

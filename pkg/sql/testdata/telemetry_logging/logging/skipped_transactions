@@ -1,0 +1,83 @@
+# SkippedTransactions tracked by telemetry should only be incremented when
+# telemetry logging is enabled for transactions.
+
+subtest telemetry_logging_off
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = false
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction"
+----
+
+exec-sql
+CREATE TABLE t (a INT)
+----
+
+
+# Logged if telemetry transaction sampling was enabled.
+spy-sql unixSedcs=1
+BEGIN; TRUNCATE t; COMMIT
+----
+
+# Skipped if telemetry transaction sampling was enabled.
+spy-sql unixSedcs=1
+SELECT 1, 2
+----
+
+# Skipped if telemetry transaction sampling was enabled.
+spy-sql unixSedcs=1.01
+SELECT * FROM t LIMIT 1
+----
+
+show-skipped-transactions
+----
+0
+
+subtest end
+
+subtest telemetry_logging_on_stmt_mode
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "statement"
+----
+
+exec-sql
+SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true
+----
+
+
+# Note that only a statement log appears.
+spy-sql unixSedcs=1
+BEGIN; TRUNCATE t; COMMIT
+----
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Database": "defaultdb",
+	"Distribution": "local",
+	"EventType": "sampled_query",
+	"PlanGist": "Ais=",
+	"SkippedQueries": 1,
+	"Statement": "TRUNCATE TABLE defaultdb.public.t",
+	"StatementFingerprintID": 802230861479752300,
+	"StmtPosInTxn": 1,
+	"Tag": "TRUNCATE",
+	"User": "root"
+}
+
+# Skipped if telemetry transaction sampling was enabled.
+spy-sql unixSedcs=1
+SELECT 1, 2
+----
+
+# Skipped if telemetry transaction sampling was enabled.
+spy-sql unixSedcs=1.01
+SELECT * FROM t LIMIT 1
+----
+
+show-skipped-transactions
+----
+0
+
+subtest end

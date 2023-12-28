@@ -438,6 +438,103 @@ func (p *planner) maybeLogStatementInternal(
 	}
 }
 
+// maybeLogTransaction conditionally records the current transaction
+// to the TELEMETRY channel.
+func (p *planner) maybeLogTransaction(
+	ctx context.Context,
+	execType executorType,
+	txnCounter int,
+	txnFingerprintID appstatspb.TransactionFingerprintID,
+	txnStats *sqlstats.RecordedTxnStats,
+	telemetryLoggingMetrics *telemetryLoggingMetrics,
+	trackedForTelemetry bool,
+	skippedTransactions uint64,
+) {
+	isTxnTelemetryMode := telemetrySamplingMode.Get(&p.execCfg.Settings.SV) == telemetryModeTransaction
+
+	// Exit if transaction telemetry logging is not enabled for this statement type.
+	// Note that this prevents us from incrementing the skipped transaction counter, which
+	// should only be incremented when telemetry is enabled.
+	if !telemetryLoggingEnabled.Get(&p.execCfg.Settings.SV) || !isTxnTelemetryMode ||
+		(execType == executorTypeInternal && !telemetryInternalQueriesEnabled.Get(&p.execCfg.Settings.SV)) {
+		return
+	}
+
+	if !trackedForTelemetry {
+		return
+	}
+
+	// Redact error messages.
+	var execErrStr, retryErr redact.RedactableString
+	sqlErrState := ""
+	if txnStats.TxnErr != nil {
+		execErrStr = redact.Sprint(txnStats.TxnErr)
+		sqlErrState = pgerror.GetPGCode(txnStats.TxnErr).String()
+	}
+
+	if txnStats.AutoRetryReason != nil {
+		retryErr = redact.Sprint(txnStats.AutoRetryReason)
+	}
+
+	sampledTxn := getSampledTransaction()
+	defer releaseSampledTransaction(sampledTxn)
+
+	*sampledTxn = eventpb.SampledTransaction{
+		SkippedTransactions:      int64(skippedTransactions),
+		User:                     txnStats.SessionData.SessionUser().Normalized(),
+		ApplicationName:          txnStats.SessionData.ApplicationName,
+		TxnCounter:               uint32(txnCounter),
+		SessionID:                txnStats.SessionID.String(),
+		TransactionID:            txnStats.TransactionID.String(),
+		TransactionFingerprintID: txnFingerprintID,
+		Committed:                txnStats.Committed,
+		ImplicitTxn:              txnStats.ImplicitTxn,
+		StartTimeUnixNanos:       txnStats.StartTime.UnixNano(),
+		EndTimeUnixNanos:         txnStats.EndTime.UnixNano(),
+		ServiceLatNanos:          txnStats.ServiceLatency.Nanoseconds(),
+		SQLSTATE:                 sqlErrState,
+		ErrorText:                execErrStr,
+		NumRetries:               txnStats.RetryCount,
+		LastAutoRetryReason:      retryErr,
+		StatementFingerprintIDs:  txnStats.StatementFingerprintIDs,
+		NumRows:                  int64(txnStats.RowsAffected),
+		RetryLatNanos:            txnStats.RetryLatency.Nanoseconds(),
+		CommitLatNanos:           txnStats.CommitLatency.Nanoseconds(),
+		IdleLatNanos:             txnStats.IdleLatency.Nanoseconds(),
+		BytesRead:                txnStats.BytesRead,
+		RowsRead:                 txnStats.RowsRead,
+		RowsWritten:              txnStats.RowsWritten,
+	}
+
+	if txnStats.CollectedExecStats {
+		sampledTxn.SampledExecStats = &eventpb.SampledExecStats{
+			NetworkBytes:    txnStats.ExecStats.NetworkBytesSent,
+			MaxMemUsage:     txnStats.ExecStats.MaxMemUsage,
+			ContentionTime:  int64(txnStats.ExecStats.ContentionTime.Seconds()),
+			NetworkMessages: txnStats.ExecStats.NetworkMessages,
+			MaxDiskUsage:    txnStats.ExecStats.MaxDiskUsage,
+			CPUSQLNanos:     txnStats.ExecStats.CPUTime.Nanoseconds(),
+			MVCCIteratorStats: eventpb.MVCCIteratorStats{
+				StepCount:                      txnStats.ExecStats.MvccSteps,
+				StepCountInternal:              txnStats.ExecStats.MvccStepsInternal,
+				SeekCount:                      txnStats.ExecStats.MvccSeeks,
+				SeekCountInternal:              txnStats.ExecStats.MvccSeeksInternal,
+				BlockBytes:                     txnStats.ExecStats.MvccBlockBytes,
+				BlockBytesInCache:              txnStats.ExecStats.MvccBlockBytesInCache,
+				KeyBytes:                       txnStats.ExecStats.MvccKeyBytes,
+				ValueBytes:                     txnStats.ExecStats.MvccValueBytes,
+				PointCount:                     txnStats.ExecStats.MvccPointCount,
+				PointsCoveredByRangeTombstones: txnStats.ExecStats.MvccPointsCoveredByRangeTombstones,
+				RangeKeyCount:                  txnStats.ExecStats.MvccRangeKeyCount,
+				RangeKeyContainedPoints:        txnStats.ExecStats.MvccRangeKeyContainedPoints,
+				RangeKeySkippedPoints:          txnStats.ExecStats.MvccRangeKeySkippedPoints,
+			},
+		}
+	}
+
+	log.StructuredEvent(ctx, sampledTxn)
+}
+
 func (p *planner) logEventsOnlyExternally(ctx context.Context, entries ...logpb.EventPayload) {
 	// The API contract for logEventsWithOptions() is that it returns
 	// no error when system.eventlog is not written to.
