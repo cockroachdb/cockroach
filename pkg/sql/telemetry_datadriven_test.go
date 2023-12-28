@@ -64,6 +64,13 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
+	txnsSpy := logtestutils.NewSampledTransactionLogScrubVolatileFields(t)
+	txnsSpy.AddFilter(func(ev logpb.Entry) bool {
+		return strings.Contains(ev.Message, appName)
+	})
+	cleanupTxnSpy := log.InterceptWith(ctx, txnsSpy)
+	defer cleanupTxnSpy()
+
 	st := logtestutils.StubTime{}
 	st.SetTime(timeutil.FromUnixMicros(0))
 	sts := logtestutils.StubTracingStatus{}
@@ -88,13 +95,22 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 
 	telemetryLogging := s.SQLServer().(*Server).TelemetryLoggingMetrics
 	setupConn := s.SQLConn(t)
+	_, err := setupConn.Exec("CREATE USER testuser")
+	require.NoError(t, err)
 
-	spiedConn := s.SQLConn(t)
-	_, err := spiedConn.Exec("SET application_name = $1", appName)
+	spiedConnRootUser := s.SQLConn(t)
+	spiedConnTestUser := s.SQLConn(t, serverutils.User("testuser"))
+	spiedConn := spiedConnRootUser
+
+	// Set spied connections to the app name observed by the log spy.
+	_, err = spiedConn.Exec("SET application_name = $1", appName)
+	require.NoError(t, err)
+	_, err = spiedConnTestUser.Exec("SET application_name = $1", appName)
 	require.NoError(t, err)
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "telemetryLogging"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			spiedConn = spiedConnRootUser
 			switch d.Cmd {
 			case "exec-sql":
 				sts.SetTracingStatus(false)
@@ -103,7 +119,8 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 					return err.Error()
 				}
 			case "spy-sql":
-				logCount := stmtSpy.Count()
+				stmtLogCount := stmtSpy.Count()
+				txnLogCount := txnsSpy.Count()
 				var stubTimeUnixSecs float64
 				var tracing bool
 
@@ -127,15 +144,31 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 				}
 				st.SetTime(timeutil.FromUnixMicros(stubTimeMicros))
 
-				// Execute query input.
-				_, err := spiedConn.Exec(d.Input)
-				if err != nil {
-					return err.Error()
+				// Setup the sql user.
+				user := "root"
+				d.MaybeScanArgs(t, "user", &user)
+				switch user {
+				case "root":
+				case "testuser":
+					spiedConn = spiedConnTestUser
 				}
 
-				// Display any new statement logs have been generated since executing the query.
-				newLogCount := stmtSpy.Count()
-				return stmtSpy.GetLastNLogs(newLogCount - logCount)
+				// Execute query input.
+				_, err := spiedConn.Exec(d.Input)
+				var sb strings.Builder
+
+				if err != nil {
+					sb.WriteString(err.Error())
+					sb.WriteString("\n")
+				}
+
+				newStmtLogCount := stmtSpy.Count()
+				sb.WriteString(stmtSpy.GetLastNLogs(newStmtLogCount - stmtLogCount))
+				sb.WriteString("\n")
+
+				newTxnLogCount := txnsSpy.Count()
+				sb.WriteString(txnsSpy.GetLastNLogs(newTxnLogCount - txnLogCount))
+				return sb.String()
 			case "reset-last-sampled":
 				telemetryLogging.resetLastSampledTime()
 				return ""

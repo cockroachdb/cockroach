@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,6 +39,12 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
+
+type testQuery struct {
+	query          string
+	logTime        float64
+	tracingEnabled bool
+}
 
 // TestTelemetryLogging verifies that telemetry events are logged to the telemetry log
 // and are sampled according to the configured sample rate.
@@ -1679,6 +1686,125 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 			t.Errorf("did not find expected query log in log entries: %s", expected)
 		}
 	}
+}
+
+// TestTelemetryLoggingTransactionModeSkippedTransactions tests that we increment
+// the skipped transaction count for transactions not logged to telemetry only when
+// telemetry logging is enabled for transactions.
+func TestTelemetryLoggingTransactionModeSkippedTransactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	appName := "telemetry-logging-transaction-mode"
+
+	st := logtestutils.StubTime{}
+	st.SetTime(timeutil.FromUnixMicros(0))
+	sts := logtestutils.StubTracingStatus{}
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
+				getTimeNow:       st.TimeNow,
+				getTracingStatus: sts.TracingStatus,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	telemetryLogging := s.SQLServer().(*Server).TelemetryLoggingMetrics
+	conn := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	conn.Exec(t, `SET application_name = $1`, appName)
+
+	queries := []testQuery{
+		{
+			// This would be logged if telemetry transaction sampling was enabled.
+			query:   "BEGIN; TRUNCATE t; COMMIT",
+			logTime: 0.1,
+		},
+		{
+			// This would be logged if telemetry transaction sampling was enabled.
+			query:   "BEGIN; SELECT 1; SELECT 2; SELECT 3; COMMIT",
+			logTime: 1,
+		},
+		{
+			query:   "SELECT 1, 2;",
+			logTime: 1, // Skipped.
+		},
+		{
+			// This would be logged if telemetry transaction sampling was enabled.
+			query:          "SELECT 1, 2;",
+			logTime:        1,
+			tracingEnabled: true,
+		},
+		{
+			query:   `SELECT * FROM t LIMIT 1`,
+			logTime: 1.05, // Skipped.
+		},
+		{
+			query:   `SELECT * FROM t LIMIT 1`,
+			logTime: 1.08, // Skipped.
+		},
+		{
+			// This would be logged if telemetry transaction sampling was enabled.
+			query:   `SELECT * FROM t LIMIT 2`,
+			logTime: 1.1,
+		},
+		{
+			query:   `BEGIN; SELECT * FROM t LIMIT 3; COMMIT`,
+			logTime: 1.15, // Skipped.
+		},
+		{
+			// This would be logged if telemetry transaction sampling was enabled.
+			query:   `BEGIN; SELECT * FROM t LIMIT 4; SELECT * FROM t LIMIT 5; COMMIT`,
+			logTime: 1.2,
+		},
+	}
+
+	st.SetTime(timeutil.FromUnixMicros(0))
+	conn.Exec(t, "CREATE TABLE t();")
+
+	// Set the sampling time observed by telemetry to a constant.
+	// When telemetry is on, we should be skipping most transactions that
+	// are not traced.
+	stubTime := timeutil.FromUnixMicros(int64(1))
+	st.SetTime(stubTime)
+	testutils.RunTrueAndFalse(t, "telemetryEnabled", func(t *testing.T, telemetryEnabled bool) {
+		conn.Exec(t, `SET CLUSTER SETTING sql.telemetry.transaction_sampling.max_event_frequency = 10`)
+		conn.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = $1`, telemetryEnabled)
+
+		// Set up all combinations of cluster settings that would turn transaction mode off/on.
+		// For each scenario we'll run all the queries above and verify that the skipped txn
+		// count is either incremented or left untouched as expected.
+		testutils.RunTrueAndFalse(t, "txnMode", func(t *testing.T, txnMode bool) {
+			telemetryLogging.resetLastSampledTime()
+			telemetryLogging.resetSkippedTransactionCount()
+			if txnMode {
+				conn.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "transaction"`)
+			} else {
+				conn.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.mode = "statement"`)
+			}
+
+			for _, query := range queries {
+				sts.SetTracingStatus(query.tracingEnabled)
+				conn.Exec(t, query.query)
+
+				// The below txn should always be skipped provided txn telemetry is on
+				// since it is not traced and the above query have the same sampled time.
+				sts.SetTracingStatus(false)
+				conn.Exec(t, "SELECT 1")
+
+				skippedTxns := telemetryLogging.getSkippedTransactionCount()
+				if txnMode && telemetryEnabled {
+					// Transaction telemetry is enabled, so we should have skipped
+					// the last transaction.
+					require.Greater(t, skippedTxns, uint64(0), "query: %s", query.query)
+				} else {
+					require.Zero(t, skippedTxns, "query: %s", query.query)
+				}
+			}
+		})
+	})
 }
 
 // TestTelemetryShouldEmitStatement test will validate shouldEmitStatement with a
