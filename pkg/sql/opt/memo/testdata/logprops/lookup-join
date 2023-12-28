@@ -25,7 +25,7 @@ opt
 SELECT * FROM small JOIN abcd ON a=m
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) c:8(int)
+ ├── columns: a:6(int!null) b:7(int) c:8(int) m:1(int!null) n:2(int)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -48,7 +48,7 @@ opt
 SELECT * FROM small JOIN abcd ON a=m WHERE n > 2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int) c:8(int)
+ ├── columns: a:6(int!null) b:7(int) c:8(int) m:1(int!null) n:2(int!null)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -77,7 +77,7 @@ opt
 SELECT * FROM small JOIN abcd ON a=m WHERE b > 2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int!null) c:8(int)
+ ├── columns: a:6(int!null) b:7(int!null) c:8(int) m:1(int!null) n:2(int)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -106,7 +106,7 @@ opt
 SELECT * FROM small JOIN abcd ON a=m WHERE c>2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) c:8(int!null)
+ ├── columns: a:6(int!null) b:7(int) c:8(int!null) m:1(int!null) n:2(int)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1)
@@ -131,7 +131,7 @@ opt
 SELECT * FROM small JOIN abcd ON a=m AND b=n WHERE c>2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int!null) c:8(int!null)
+ ├── columns: a:6(int!null) b:7(int!null) c:8(int!null) m:1(int!null) n:2(int!null)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── fd: (1)==(6), (6)==(1), (2)==(7), (7)==(2)

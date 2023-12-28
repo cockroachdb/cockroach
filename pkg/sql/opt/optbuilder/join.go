@@ -117,9 +117,16 @@ func (b *Builder) buildJoin(
 
 	case *tree.OnJoinCond, nil:
 		// Append columns added by the children, as they are visible to the filter.
+		// Reuse the larger column slice between the two children. This is safe,
+		// since the child scopes are not referenced outside of this method.
 		outScope = inScope.push()
-		outScope.appendColumnsFromScope(leftScope)
-		outScope.appendColumnsFromScope(rightScope)
+		leftCols, rightCols := leftScope.cols, rightScope.cols
+		if len(rightCols) > len(leftCols) {
+			leftCols, rightCols = rightCols, leftCols
+		}
+		outScope.cols = leftCols[:0]
+		outScope.appendColumns(leftCols)
+		outScope.appendColumns(rightCols)
 
 		var filters memo.FiltersExpr
 		if on, ok := cond.(*tree.OnJoinCond); ok {

@@ -818,7 +818,7 @@ INNER JOIN
 ON u = y
 ----
 inner-join (hash)
- ├── columns: u:1!null v:2 k:5!null i:6 f:7 s:8 x:11!null y:12!null
+ ├── columns: k:5!null i:6 f:7 s:8 x:11!null y:12!null u:1!null v:2
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── key: (11)
  ├── fd: (1)-->(2), (5)-->(6-8), (11)-->(12), (5)==(11), (11)==(5), (1)==(12), (12)==(1)
@@ -894,7 +894,7 @@ INNER JOIN
 ON u = y
 ----
 inner-join (hash)
- ├── columns: u:1!null v:2 k:5!null i:6 f:7 s:8 x:11!null y:12!null
+ ├── columns: k:5!null i:6 f:7 s:8 x:11!null y:12!null u:1!null v:2
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── key: (11)
  ├── fd: (1)-->(2), (5)-->(6-8), (11)-->(12), (5)==(11), (11)==(5), (1)==(12), (12)==(1)
@@ -972,7 +972,7 @@ INNER JOIN LATERAL
 ON x = i
 ----
 inner-join-apply
- ├── columns: x:1!null y:2 v:5!null k:6!null i:7!null f:8 s:9
+ ├── columns: k:6!null i:7!null f:8 s:9 v:5!null x:1!null y:2
  ├── key: (1)
  ├── fd: (1)-->(2,5,6,8,9), (5)==(6), (6)==(5), (1)==(7), (7)==(1)
  ├── scan xy
@@ -1091,7 +1091,7 @@ LEFT JOIN
 ON u = y
 ----
 left-join (hash)
- ├── columns: u:1!null v:2 k:5 i:6 f:7 s:8 x:11 y:12
+ ├── columns: k:5 i:6 f:7 s:8 x:11 y:12 u:1!null v:2
  ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
  ├── key: (1,11)
  ├── fd: (1)-->(2), (5)-->(6-8), (11)-->(12), (5)==(11), (11)==(5)
@@ -1134,7 +1134,7 @@ LEFT JOIN LATERAL
 ON u = y
 ----
 left-join-apply
- ├── columns: u:1!null v:2 v:5 x:6 y:7
+ ├── columns: u:1!null v:2 x:6 y:7 v:5
  ├── key: (1)
  ├── fd: (1)-->(2,5-7), (5)==(6), (6)==(5)
  ├── scan uv

@@ -324,7 +324,7 @@ WHERE
     i = 3
 ----
 project
- ├── columns: u:1!null v:2 x:5!null ntile:16 i:10!null
+ ├── columns: u:1!null v:2 ntile:16 i:10!null x:5!null
  ├── fd: ()-->(10), (1)-->(2)
  └── select
       ├── columns: u:1!null v:2 x:5!null i:10!null ntile:16 ntile_1_arg1:17!null

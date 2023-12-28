@@ -913,21 +913,23 @@ func (s *scope) FindSourceMatchingName(
 	// ancestor scopes, we return an error.
 	var source tree.TableName
 	for ; s != nil; s = s.parent {
-		sources := make(map[tree.TableName]struct{})
-		for i := range s.cols {
-			sources[s.cols[i].table] = struct{}{}
-		}
-
 		found := false
-		for src := range sources {
-			if !sourceNameMatches(src, tn) {
+		var last tree.TableName
+		for i := range s.cols {
+			table := s.cols[i].table
+			if table == last || table == source {
+				// Take advantage of the fact that columns from the same table tend to
+				// be adjacent.
+				continue
+			}
+			if !sourceNameMatches(table, tn) {
 				continue
 			}
 			if found {
 				return colinfo.MoreThanOne, nil, s, newAmbiguousSourceError(&tn)
 			}
 			found = true
-			source = src
+			source = table
 		}
 
 		if found {

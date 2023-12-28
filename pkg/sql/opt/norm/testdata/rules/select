@@ -1028,7 +1028,7 @@ norm
 SELECT * FROM xy LEFT JOIN a ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
- ├── columns: x:1!null y:2 k:5 i:6 f:7 s:8 j:9
+ ├── columns: k:5 i:6 f:7 s:8 j:9 x:1!null y:2
  ├── key: (1)
  ├── fd: (1)-->(2,5-9), (5)-->(6-9)
  ├── left-join (hash)
@@ -1054,7 +1054,7 @@ norm
 SELECT * FROM xy FULL JOIN a ON a.k=xy.x WHERE a.i=100 OR a.i IS NULL
 ----
 select
- ├── columns: x:1 y:2 k:5 i:6 f:7 s:8 j:9
+ ├── columns: k:5 i:6 f:7 s:8 j:9 x:1 y:2
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6-9)
  ├── full-join (hash)

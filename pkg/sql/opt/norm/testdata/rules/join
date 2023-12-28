@@ -153,7 +153,7 @@ norm expect=SimplifyJoinFilters
 SELECT * FROM xy INNER JOIN booleans ON (a AND x > 0) IS True
 ----
 inner-join (cross)
- ├── columns: x:1!null y:2 a:5!null b:6 c:7 d:8 e:9
+ ├── columns: a:5!null b:6 c:7 d:8 e:9 x:1!null y:2
  ├── fd: ()-->(5), (1)-->(2)
  ├── select
  │    ├── columns: x:1!null y:2
@@ -179,7 +179,7 @@ norm expect=SimplifyJoinFilters
 SELECT * FROM xy INNER JOIN booleans ON (a AND x > 0) IS False
 ----
 inner-join (cross)
- ├── columns: x:1!null y:2 a:5 b:6 c:7 d:8 e:9
+ ├── columns: a:5 b:6 c:7 d:8 e:9 x:1!null y:2
  ├── fd: (1)-->(2)
  ├── scan xy
  │    ├── columns: x:1!null y:2
@@ -195,7 +195,7 @@ norm expect=SimplifyJoinFilters
 SELECT * FROM xy LEFT JOIN booleans ON (a AND x > 0) IS True
 ----
 left-join (cross)
- ├── columns: x:1!null y:2 a:5 b:6 c:7 d:8 e:9
+ ├── columns: a:5 b:6 c:7 d:8 e:9 x:1!null y:2
  ├── fd: (1)-->(2)
  ├── scan xy
  │    ├── columns: x:1!null y:2
@@ -216,7 +216,7 @@ norm expect=SimplifyJoinFilters
 SELECT * FROM xy FULL JOIN booleans ON (a AND x > 0) IS True
 ----
 full-join (cross)
- ├── columns: x:1 y:2 a:5 b:6 c:7 d:8 e:9
+ ├── columns: a:5 b:6 c:7 d:8 e:9 x:1 y:2
  ├── fd: (1)-->(2)
  ├── scan xy
  │    ├── columns: x:1!null y:2
@@ -233,7 +233,7 @@ norm expect-not=SimplifyJoinFilters
 SELECT * FROM xy INNER JOIN booleans ON (a AND x > 0) IS NOT True
 ----
 inner-join (cross)
- ├── columns: x:1!null y:2 a:5 b:6 c:7 d:8 e:9
+ ├── columns: a:5 b:6 c:7 d:8 e:9 x:1!null y:2
  ├── fd: (1)-->(2)
  ├── scan xy
  │    ├── columns: x:1!null y:2
@@ -249,7 +249,7 @@ norm expect-not=SimplifyJoinFilters
 SELECT * FROM xy INNER JOIN booleans ON (a AND x > 0) IS Null
 ----
 inner-join (cross)
- ├── columns: x:1!null y:2 a:5 b:6 c:7 d:8 e:9
+ ├── columns: a:5 b:6 c:7 d:8 e:9 x:1!null y:2
  ├── fd: (1)-->(2)
  ├── scan xy
  │    ├── columns: x:1!null y:2
@@ -441,7 +441,7 @@ norm expect=PushFilterIntoJoinRight
 SELECT * FROM b INNER JOIN a ON b.x=a.k AND a.s='foo'
 ----
 inner-join (hash)
- ├── columns: x:1!null y:2 k:5!null i:6 f:7!null s:8!null j:9
+ ├── columns: k:5!null i:6 f:7!null s:8!null j:9 x:1!null y:2
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: (5)
  ├── fd: ()-->(8), (1)-->(2), (5)-->(6,7,9), (1)==(5), (5)==(1)
@@ -466,7 +466,7 @@ norm expect=PushFilterIntoJoinRight
 SELECT * FROM b LEFT JOIN a ON (a.i<0 OR a.i>10) AND b.y=1 AND a.s='foo' AND b.x=a.k
 ----
 left-join (hash)
- ├── columns: x:1!null y:2 k:5 i:6 f:7 s:8 j:9
+ ├── columns: k:5 i:6 f:7 s:8 j:9 x:1!null y:2
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
  ├── fd: (1)-->(2,5-9), (5)-->(6,7,9)
@@ -494,7 +494,7 @@ norm expect-not=PushFilterIntoJoinRight
 SELECT * FROM b RIGHT JOIN a ON b.x=a.k AND a.i=1
 ----
 left-join (hash)
- ├── columns: x:1 y:2 k:5!null i:6 f:7!null s:8 j:9
+ ├── columns: k:5!null i:6 f:7!null s:8 j:9 x:1 y:2
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (5)
  ├── fd: (5)-->(1,2,6-9), (1)-->(2)
@@ -1909,7 +1909,7 @@ norm expect=SimplifyLeftJoin
 SELECT * FROM (SELECT length(s), f FROM a) AS a FULL JOIN a AS a2 ON a.f=a2.f
 ----
 inner-join (hash)
- ├── columns: length:8 f:3!null k:9!null i:10 f:11!null s:12 j:13
+ ├── columns: k:9!null i:10 f:11!null s:12 j:13 length:8 f:3!null
  ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── immutable
  ├── fd: (9)-->(10-13), (3)==(11), (11)==(3)
@@ -1932,7 +1932,7 @@ norm expect=SimplifyLeftJoin
 SELECT * FROM a FULL JOIN (SELECT * FROM a INNER JOIN a AS a2 ON a.k=a2.k) AS a2 ON a.f=a2.f
 ----
 inner-join (hash)
- ├── columns: k:1!null i:2 f:3!null s:4 j:5 k:8!null i:9 f:10!null s:11 j:12 k:15!null i:16 f:17!null s:18 j:19
+ ├── columns: k:8!null i:9 f:10!null s:11 j:12 k:15!null i:16 f:17!null s:18 j:19 k:1!null i:2 f:3!null s:4 j:5
  ├── multiplicity: left-rows(one-or-more), right-rows(one-or-more)
  ├── key: (1,8)
  ├── fd: (8)-->(9-12), (1)-->(2-5), (8)==(15), (15)==(8), (9)==(16), (16)==(9), (3)==(10,17), (10)==(3,17), (17)==(3,10), (11)==(18), (18)==(11), (12)==(19), (19)==(12)
@@ -1965,7 +1965,7 @@ LEFT OUTER JOIN a
 ON c.y = a.k
 ----
 inner-join (hash)
- ├── columns: x:1!null y:2!null z:3!null k:6!null i:7 f:8!null s:9 j:10
+ ├── columns: k:6!null i:7 f:8!null s:9 j:10 x:1!null y:2!null z:3!null
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2,3), (6)-->(7-10), (2)==(6), (6)==(2)
@@ -2056,7 +2056,7 @@ norm expect=SimplifyRightJoin
 SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 ----
 left-join (cross)
- ├── columns: count:5!null k:6 i:7 f:8 s:9 j:10
+ ├── columns: k:6 i:7 f:8 s:9 j:10 count:5!null
  ├── cardinality: [1 - ]
  ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (6)
@@ -2080,7 +2080,7 @@ norm expect=SimplifyRightJoin
 SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 ----
 left-join (cross)
- ├── columns: count:5!null k:6 i:7 f:8 s:9 j:10
+ ├── columns: k:6 i:7 f:8 s:9 j:10 count:5!null
  ├── cardinality: [1 - ]
  ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (6)
@@ -2104,7 +2104,7 @@ norm expect=SimplifyRightJoin
 SELECT * FROM (SELECT count(*) FROM b) FULL JOIN a ON True
 ----
 left-join (cross)
- ├── columns: count:5!null k:6 i:7 f:8 s:9 j:10
+ ├── columns: k:6 i:7 f:8 s:9 j:10 count:5!null
  ├── cardinality: [1 - ]
  ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (6)
@@ -2221,7 +2221,7 @@ norm expect-not=SimplifyRightJoin
 SELECT * FROM (SELECT count(*) FROM b) LEFT JOIN a ON True
 ----
 left-join (cross)
- ├── columns: count:5!null k:6 i:7 f:8 s:9 j:10
+ ├── columns: k:6 i:7 f:8 s:9 j:10 count:5!null
  ├── cardinality: [1 - ]
  ├── multiplicity: left-rows(one-or-more), right-rows(exactly-one)
  ├── key: (6)
@@ -2272,7 +2272,7 @@ LEFT OUTER JOIN a
 ON c.z = a.k
 ----
 left-join (hash)
- ├── columns: x:1!null y:2!null z:3!null k:6 i:7 f:8 s:9 j:10
+ ├── columns: k:6 i:7 f:8 s:9 j:10 x:1!null y:2!null z:3!null
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2,3,6-10), (6)-->(7-10)
@@ -2295,7 +2295,7 @@ LEFT OUTER JOIN a
 ON c.x = a.k
 ----
 left-join (hash)
- ├── columns: x:1!null y:2!null z:3!null k:6 i:7 f:8 s:9 j:10
+ ├── columns: k:6 i:7 f:8 s:9 j:10 x:1!null y:2!null z:3!null
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
  ├── fd: (1)-->(2,3,6-10), (6)-->(7-10)
@@ -2501,7 +2501,7 @@ LEFT OUTER JOIN a
 ON c.y = a.k
 ----
 left-join (hash)
- ├── columns: x:1!null y:2!null z:3!null k:6 i:7 f:8 s:9 j:10
+ ├── columns: k:6 i:7 f:8 s:9 j:10 x:1!null y:2!null z:3!null
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2,3,6-10), (6)-->(7-10)
@@ -2729,7 +2729,7 @@ norm expect=HoistJoinProjectLeft
 SELECT * FROM (SELECT x FROM b WHERE y=10) INNER JOIN a ON x=k
 ----
 project
- ├── columns: x:1!null k:5!null i:6 f:7!null s:8 j:9
+ ├── columns: k:5!null i:6 f:7!null s:8 j:9 x:1!null
  ├── key: (5)
  ├── fd: (5)-->(6-9), (1)==(5), (5)==(1)
  └── inner-join (hash)
@@ -2759,7 +2759,7 @@ norm expect=HoistJoinProjectLeft
 SELECT * FROM (SELECT x FROM b WHERE y=10) LEFT JOIN a ON x=k
 ----
 project
- ├── columns: x:1!null k:5 i:6 f:7 s:8 j:9
+ ├── columns: k:5 i:6 f:7 s:8 j:9 x:1!null
  ├── key: (1)
  ├── fd: (5)-->(6-9), (1)-->(5-9)
  └── left-join (hash)
@@ -3220,7 +3220,7 @@ norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN comp ON x=i+10 AND y=abs(i)
 ----
 inner-join (hash)
- ├── columns: x:1!null y:2!null i:5 c:6!null v:7!null
+ ├── columns: i:5 c:6!null v:7!null x:1!null y:2!null
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── immutable
  ├── fd: (1)-->(2), (5)-->(6,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
@@ -3252,7 +3252,7 @@ norm expect=ExtractJoinComparisons
 SELECT * FROM xy JOIN comp ON i+10=x AND abs(i)=y
 ----
 inner-join (hash)
- ├── columns: x:1!null y:2!null i:5 c:6!null v:7!null
+ ├── columns: i:5 c:6!null v:7!null x:1!null y:2!null
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── immutable
  ├── fd: (1)-->(2), (5)-->(6,7), (1)==(6), (6)==(1), (2)==(7), (7)==(2)

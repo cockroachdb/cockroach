@@ -799,7 +799,7 @@ norm expect=PushLimitIntoJoinRight
 SELECT * FROM uv INNER JOIN kvr_fk ON u = r LIMIT 10
 ----
 inner-join (hash)
- ├── columns: u:1!null v:2 k:5!null v:6 r:7!null
+ ├── columns: k:5!null v:6 r:7!null u:1!null v:2
  ├── cardinality: [0 - 10]
  ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
  ├── key: (5)
@@ -1037,7 +1037,7 @@ norm expect-not=PushLimitIntoJoinLeft
 SELECT * FROM (SELECT * FROM ab LIMIT 5) LEFT JOIN uv ON a = u LIMIT 10
 ----
 left-join (hash)
- ├── columns: a:1!null b:2 u:5 v:6
+ ├── columns: u:5 v:6 a:1!null b:2
  ├── cardinality: [0 - 5]
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
@@ -1065,7 +1065,7 @@ norm expect=PushLimitIntoJoinLeft
 SELECT * FROM (SELECT * FROM ab LIMIT 20) LEFT JOIN uv ON a = u LIMIT 10
 ----
 left-join (hash)
- ├── columns: a:1!null b:2 u:5 v:6
+ ├── columns: u:5 v:6 a:1!null b:2
  ├── cardinality: [0 - 10]
  ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
  ├── key: (1)
@@ -1191,7 +1191,7 @@ norm expect-not=PushLimitIntoJoinRight
 SELECT * FROM uv LEFT JOIN kvr_fk ON u = r LIMIT 10
 ----
 limit
- ├── columns: u:1!null v:2 k:5 v:6 r:7
+ ├── columns: k:5 v:6 r:7 u:1!null v:2
  ├── cardinality: [0 - 10]
  ├── key: (1,5)
  ├── fd: (1)-->(2), (5)-->(6,7)

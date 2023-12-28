@@ -655,7 +655,7 @@ build
 SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 project
- ├── columns: x:1!null x:5 y:6!null
+ ├── columns: x:5 y:6!null x:1!null
  └── inner-join (hash)
       ├── columns: a.x:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.x:5 y:6!null b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
       ├── scan onecolumn [as=a]
@@ -669,7 +669,7 @@ build
 SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 project
- ├── columns: x:1!null x:5 y:6!null
+ ├── columns: x:5 y:6!null x:1!null
  └── inner-join (hash)
       ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 twocolumn.x:5 y:6!null twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
       ├── scan onecolumn
@@ -776,7 +776,7 @@ build
 SELECT * FROM a INNER JOIN b ON a.i = b.i
 ----
 project
- ├── columns: i:1!null i:5!null b:6
+ ├── columns: i:5!null b:6 i:1!null
  └── inner-join (hash)
       ├── columns: a.i:1!null a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.i:5!null b:6 b.rowid:7!null b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
       ├── scan a
@@ -790,7 +790,7 @@ build
 SELECT * FROM a LEFT OUTER JOIN b ON a.i = b.i
 ----
 project
- ├── columns: i:1 i:5 b:6
+ ├── columns: i:5 b:6 i:1
  └── left-join (hash)
       ├── columns: a.i:1 a.rowid:2!null a.crdb_internal_mvcc_timestamp:3 a.tableoid:4 b.i:5 b:6 b.rowid:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
       ├── scan a
@@ -804,7 +804,7 @@ build
 SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i ORDER BY b.i, b.b
 ----
 sort
- ├── columns: i:1 i:5 b:6
+ ├── columns: i:5 b:6 i:1
  ├── ordering: +5,+6
  └── project
       ├── columns: a.i:1 b.i:5 b:6
@@ -821,7 +821,7 @@ build
 SELECT * FROM a FULL OUTER JOIN b ON a.i = b.i ORDER BY b.i, b.b
 ----
 sort
- ├── columns: i:1 i:5 b:6
+ ├── columns: i:5 b:6 i:1
  ├── ordering: +5,+6
  └── project
       ├── columns: a.i:1 b.i:5 b:6
@@ -839,7 +839,7 @@ build
 SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2) ORDER BY a.i, b.i
 ----
 sort
- ├── columns: i:1 i:5 b:6
+ ├── columns: i:5 b:6 i:1
  ├── ordering: +1,+5
  └── project
       ├── columns: a.i:1 b.i:5 b:6
@@ -857,12 +857,12 @@ build
 SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1 LIMIT 1
 ----
 limit
- ├── columns: x:1!null x:5!null y:6 b:10!null d:14!null e:15
- ├── internal-ordering: +1
- ├── ordering: +1
+ ├── columns: x:5!null y:6 x:1!null b:10!null d:14!null e:15
+ ├── internal-ordering: +5
+ ├── ordering: +5
  ├── sort
  │    ├── columns: onecolumn.x:1!null twocolumn.x:5!null y:6 b:10!null d:14!null e:15
- │    ├── ordering: +1
+ │    ├── ordering: +5
  │    ├── limit hint: 1.00
  │    └── project
  │         ├── columns: onecolumn.x:1!null twocolumn.x:5!null y:6 b:10!null d:14!null e:15
@@ -892,7 +892,7 @@ build
 SELECT * FROM onecolumn JOIN twocolumn ON twocolumn.x = onecolumn.x AND onecolumn.x IN (SELECT x FROM twocolumn WHERE y >= 52)
 ----
 project
- ├── columns: x:1!null x:5!null y:6
+ ├── columns: x:5!null y:6 x:1!null
  └── inner-join (cross)
       ├── columns: onecolumn.x:1!null onecolumn.rowid:2!null onecolumn.crdb_internal_mvcc_timestamp:3 onecolumn.tableoid:4 twocolumn.x:5!null y:6 twocolumn.rowid:7!null twocolumn.crdb_internal_mvcc_timestamp:8 twocolumn.tableoid:9
       ├── scan onecolumn

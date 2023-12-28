@@ -63,7 +63,7 @@ norm expect=SimplifyZeroCardinalityGroup
 SELECT * FROM a INNER JOIN b ON a.k=b.k WHERE False
 ----
 values
- ├── columns: k:1!null k:4!null i:5!null f:6!null s:7!null j:8!null
+ ├── columns: k:4!null i:5!null f:6!null s:7!null j:8!null k:1!null
  ├── cardinality: [0 - 0]
  ├── key: ()
  └── fd: ()-->(1,4-8)

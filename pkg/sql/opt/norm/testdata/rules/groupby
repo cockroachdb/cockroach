@@ -2370,7 +2370,7 @@ LEFT JOIN (SELECT * FROM abc)
 ON x=a AND y=c
 ----
 distinct-on
- ├── columns: x:1!null y:2!null a:3 b:4 c:5
+ ├── columns: a:3 b:4 c:5 x:1!null y:2!null
  ├── grouping columns: column1:1!null column2:2!null
  ├── cardinality: [1 - ]
  ├── key: (1,2)

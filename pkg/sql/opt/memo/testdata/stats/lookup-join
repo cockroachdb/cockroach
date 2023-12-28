@@ -26,7 +26,7 @@ opt
 SELECT * FROM small JOIN abcd ON a=m
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) c:8(int)
+ ├── columns: a:6(int!null) b:7(int) c:8(int) m:1(int!null) n:2(int)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
@@ -48,7 +48,7 @@ opt
 SELECT * FROM small JOIN abcd ON a=m WHERE n > 2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int) c:8(int)
+ ├── columns: a:6(int!null) b:7(int) c:8(int) m:1(int!null) n:2(int!null)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(6)=9.9, null(6)=0]
@@ -75,7 +75,7 @@ opt
 SELECT * FROM small JOIN abcd ON a=m WHERE b > 2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int!null) c:8(int)
+ ├── columns: a:6(int!null) b:7(int!null) c:8(int) m:1(int!null) n:2(int)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── stats: [rows=33.58237, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
@@ -99,7 +99,7 @@ opt
 SELECT * FROM small JOIN abcd ON a=m WHERE c>2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int) a:6(int!null) b:7(int) c:8(int!null)
+ ├── columns: a:6(int!null) b:7(int) c:8(int!null) m:1(int!null) n:2(int)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── stats: [rows=33.58237, distinct(1)=10, null(1)=0, distinct(6)=10, null(6)=0]
@@ -121,7 +121,7 @@ opt
 SELECT * FROM small JOIN abcd ON a=m AND b=n WHERE c>2
 ----
 inner-join (lookup abcd)
- ├── columns: m:1(int!null) n:2(int!null) a:6(int!null) b:7(int!null) c:8(int!null)
+ ├── columns: a:6(int!null) b:7(int!null) c:8(int!null) m:1(int!null) n:2(int!null)
  ├── key columns: [9] = [9]
  ├── lookup columns are key
  ├── stats: [rows=0.3349493, distinct(1)=0.334949, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(6)=0.334949, null(6)=0, distinct(7)=1e-10, null(7)=0]
@@ -249,7 +249,7 @@ opt colstat=9
 SELECT * FROM abc LEFT JOIN DEF ON a = d AND b = 3
 ----
 left-join (lookup def)
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int) f:8(int) g:9(float)
+ ├── columns: d:6(int) e:7(int) f:8(int) g:9(float) a:1(int!null) b:2(int) c:3(int!null)
  ├── key columns: [8 7] = [8 7]
  ├── lookup columns are key
  ├── stats: [rows=100, distinct(6)=10, null(6)=90, distinct(9)=9.95022, null(9)=91]
@@ -276,7 +276,7 @@ opt colstat=9
 SELECT * FROM abc LEFT JOIN DEF ON a = e AND b = 3
 ----
 right-join (hash)
- ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:6(int) e:7(int) f:8(int) g:9(float)
+ ├── columns: d:6(int) e:7(int) f:8(int) g:9(float) a:1(int!null) b:2(int) c:3(int!null)
  ├── stats: [rows=100, distinct(7)=100, null(7)=0, distinct(9)=95.1671, null(9)=1]
  ├── key: (1,3,7,8)
  ├── fd: (1,3)-->(2), (7,8)-->(6,9)
@@ -408,7 +408,7 @@ opt
 SELECT * FROM medium INNER JOIN wxyz ON m=x AND y=10
 ----
 inner-join (lookup wxyz)
- ├── columns: m:1(int!null) n:2(int) w:6(int) x:7(int!null) y:8(int!null) z:9(int)
+ ├── columns: w:6(int) x:7(int!null) y:8(int!null) z:9(int) m:1(int!null) n:2(int)
  ├── key columns: [10] = [10]
  ├── lookup columns are key
  ├── stats: [rows=49.34419, distinct(1)=39.1263, null(1)=0, distinct(7)=39.1263, null(7)=0]
@@ -452,7 +452,7 @@ opt
 SELECT * FROM medium INNER JOIN wxyz ON m=x AND y=10
 ----
 inner-join (hash)
- ├── columns: m:1(int!null) n:2(int) w:6(int) x:7(int!null) y:8(int!null) z:9(int)
+ ├── columns: w:6(int) x:7(int!null) y:8(int!null) z:9(int) m:1(int!null) n:2(int)
  ├── stats: [rows=356.4, distinct(1)=40, null(1)=0, distinct(7)=40, null(7)=0]
  ├── fd: ()-->(8), (1)==(7), (7)==(1)
  ├── select

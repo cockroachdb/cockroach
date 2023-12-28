@@ -1897,7 +1897,7 @@ build
 SELECT * FROM (SELECT t.a FROM t LEFT JOIN u ON b = c FOR UPDATE of t) j RIGHT JOIN t ON j.a = t.a FOR UPDATE of t
 ----
 project
- ├── columns: a:1 a:9!null b:10
+ ├── columns: a:9!null b:10 a:1
  └── right-join (hash)
       ├── columns: t.a:1 t.a:9!null b:10 t.crdb_internal_mvcc_timestamp:11 t.tableoid:12
       ├── project
@@ -2555,7 +2555,7 @@ build
 SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
 ----
 project
- ├── columns: a:1!null b:2!null a:5!null b:6!null c:7
+ ├── columns: a:5!null b:6!null c:7 a:1!null b:2!null
  └── select
       ├── columns: t.a:1!null t.b:2!null t.crdb_internal_mvcc_timestamp:3 t.tableoid:4 indexed.a:5!null indexed.b:6!null c:7 indexed.crdb_internal_mvcc_timestamp:8 indexed.tableoid:9
       ├── inner-join (hash)
@@ -2575,7 +2575,7 @@ build set=optimizer_use_lock_op_for_serializable=true
 SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
 ----
 lock indexed
- ├── columns: a:1!null b:2!null a:5!null b:6!null c:7
+ ├── columns: a:5!null b:6!null c:7 a:1!null b:2!null
  ├── locking: for-update
  └── lock t
       ├── columns: t.a:1!null t.b:2!null indexed.a:5!null indexed.b:6!null c:7

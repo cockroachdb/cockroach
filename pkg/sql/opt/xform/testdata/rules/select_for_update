@@ -115,7 +115,7 @@ opt expect=GenerateLookupJoins
 SELECT * FROM t JOIN indexed ON t.b = indexed.b WHERE t.a = 2 FOR UPDATE
 ----
 inner-join (lookup indexed)
- ├── columns: a:1!null b:2!null a:5!null b:6!null c:7
+ ├── columns: a:5!null b:6!null c:7 a:1!null b:2!null
  ├── key columns: [5] = [5]
  ├── lookup columns are key
  ├── locking: for-update

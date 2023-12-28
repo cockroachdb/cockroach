@@ -383,7 +383,7 @@ norm expect=InlineJoinConstantsLeft
 SELECT * FROM (SELECT 1 AS one) LEFT JOIN a ON k=one
 ----
 left-join (cross)
- ├── columns: one:1!null k:2 i:3 f:4 s:5 j:6
+ ├── columns: k:2 i:3 f:4 s:5 j:6 one:1!null
  ├── cardinality: [1 - 1]
  ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
  ├── key: ()

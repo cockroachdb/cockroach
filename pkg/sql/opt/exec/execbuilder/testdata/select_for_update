@@ -1780,7 +1780,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join (inner)
-│ columns: (a, b, a, b, c)
+│ columns: (a, b, c, a, b)
 │ estimated row count: 10 (missing stats)
 │ table: indexed@indexed_pkey
 │ equality: (a) = (a)
@@ -2782,7 +2782,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join (inner)
-│ columns: (a, b, a, b, c)
+│ columns: (a, b, c, a, b)
 │ estimated row count: 1 (missing stats)
 │ table: u@u_pkey
 │ equality: (b) = (a)
@@ -2804,7 +2804,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join (semi)
-│ columns: (a, b, a, b, c)
+│ columns: (a, b, c, a, b)
 │ estimated row count: 1 (missing stats)
 │ table: u@u_pkey
 │ equality: (a) = (a)
@@ -2860,7 +2860,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join (semi)
-│ columns: (a, b, a, b, c)
+│ columns: (a, b, c, a, b)
 │ estimated row count: 1 (missing stats)
 │ table: t@t_pkey
 │ equality: (a) = (a)
@@ -2996,7 +2996,7 @@ distribution: local
 vectorized: true
 ·
 • lookup join (semi)
-│ columns: (a, b, x, y, z)
+│ columns: (x, y, z, a, b)
 │ estimated row count: 1 (missing stats)
 │ table: xyz@xyz_pkey
 │ equality: (x) = (x)
