@@ -3081,6 +3081,7 @@ An event of type `sampled_transaction` is the event logged to telemetry at the e
 | `RowsRead` | RowsRead is the number of rows read from disk. | no |
 | `RowsWritten` | RowsWritten is the number of rows written to disk. | no |
 | `SampledExecStats` | SampledExecStats is a nested field containing execution statistics. This field will be omitted if the stats were not sampled. | yes |
+| `SkippedTransactions` | SkippedTransactions is the number of transactions that were skipped as part of sampling prior to this one. We only count skipped transactions when telemetry logging is enabled and the sampling mode is set to "transaction". | no |
 
 
 #### Common fields
