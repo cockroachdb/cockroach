@@ -6,19 +6,19 @@ set-cluster-settings telemetryLoggingEnabled=false samplingMode=statement stmtSa
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=false stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=false stmtNum=1 force=true
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=true stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=2 isTrackedTxn=false stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 subtest end
 
@@ -30,19 +30,19 @@ set-cluster-settings telemetryLoggingEnabled=true samplingMode=statement stmtSam
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=false stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=false stmtNum=1 force=true
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=true stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=2 isTrackedTxn=false stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 subtest end
 
@@ -54,31 +54,31 @@ set-cluster-settings telemetryLoggingEnabled=true samplingMode=statement stmtSam
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=false stmtNum=1 force=false
 ----
-true
+emit: true, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=1.05 isTrackedTxn=false stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 1
 
 # Force should override the sampling frequency.
 shouldEmitStatementLog unixSecs=1.05 isTrackedTxn=false stmtNum=1 force=true
 ----
-true
+emit: true, skippedQueries: 1
 
 # Tracked txn is true but we are not in txn mode.
 shouldEmitStatementLog unixSecs=1.1 isTrackedTxn=true stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 1
 
 # Enough time has elapsed. stmtNum is greater than stmtsPerTxnMax but we are not in txn mode.
 shouldEmitStatementLog unixSecs=1.15 isTrackedTxn=false stmtNum=1000 force=false
 ----
-true
+emit: true, skippedQueries: 1
 
 # Enough time has elapsed.
 shouldEmitStatementLog unixSecs=2 isTrackedTxn=false stmtNum=1 force=false
 ----
-true
+emit: true, skippedQueries: 0
 
 subtest end
 
@@ -91,35 +91,35 @@ set-cluster-settings telemetryLoggingEnabled=true samplingMode=transaction stmtS
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=true stmtNum=1 force=false
 ----
-true
+emit: true, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=true stmtNum=2 force=false
 ----
-true
+emit: true, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=true stmtNum=3 force=false
 ----
-true
+emit: true, skippedQueries: 0
 
 # Enough time has elapsed but stmtNum is greater than stmtsPerTxnMax.
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=true stmtNum=4 force=false
 ----
-false
+emit: false, skippedQueries: 1
 
 # stmtNum is greater than stmtsPerTxnMax but force is true.
 shouldEmitStatementLog unixSecs=4 isTrackedTxn=true stmtNum=4 force=true
 ----
-true
+emit: true, skippedQueries: 1
 
 # Enough time has elapsed but txn is not tracked.
 shouldEmitStatementLog unixSecs=5 isTrackedTxn=false stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 1
 
 # Txn is not tracked but force is true.
 shouldEmitStatementLog unixSecs=6 isTrackedTxn=false stmtNum=1 force=true
 ----
-true
+emit: true, skippedQueries: 1
 
 subtest end
 
@@ -131,27 +131,26 @@ set-cluster-settings telemetryLoggingEnabled=true samplingMode=transaction stmtS
 
 shouldEmitStatementLog unixSecs=1 isTrackedTxn=true stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=2 isTrackedTxn=true stmtNum=2 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=3 isTrackedTxn=true stmtNum=3 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=4 isTrackedTxn=true stmtNum=4 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=5 isTrackedTxn=false stmtNum=1 force=false
 ----
-false
+emit: false, skippedQueries: 0
 
 shouldEmitStatementLog unixSecs=6 isTrackedTxn=false stmtNum=1 force=true
 ----
-false
+emit: false, skippedQueries: 0
 
 subtest end
-

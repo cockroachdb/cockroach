@@ -32,6 +32,20 @@ BEGIN; SELECT 1; SELECT 2; COMMIT;
 	"Tag": "SELECT",
 	"User": "root"
 }
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 2,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		16085855936700856000,
+		16085855936700856000
+	],
+	"TransactionFingerprintID": 14263644654231036000,
+	"User": "root"
+}
 
 spy-sql
 SELECT 5;
@@ -49,6 +63,19 @@ SELECT 5;
 	"StatementFingerprintID": 16085855936700856000,
 	"StmtPosInTxn": 1,
 	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 1,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		16085855936700856000
+	],
+	"TransactionFingerprintID": 8097417102642120000,
 	"User": "root"
 }
 
@@ -100,6 +127,23 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"StatementFingerprintID": 16085855936700856000,
 	"StmtPosInTxn": 3,
 	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 4,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		16085855936700856000,
+		16085855936700856000,
+		16085855936700856000,
+		16085855936700856000
+	],
+	"TransactionFingerprintID": 63991751604173224,
 	"User": "root"
 }
 
@@ -165,5 +209,22 @@ BEGIN; SELECT 1; SELECT 2; SELECT 3; SELECT 4; COMMIT;
 	"StatementFingerprintID": 16085855936700856000,
 	"StmtPosInTxn": 4,
 	"Tag": "SELECT",
+	"User": "root"
+}
+{
+	"ApplicationName": "telemetry-logging-datadriven",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 4,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"SkippedTransactions": 1,
+	"StatementFingerprintIDs": [
+		16085855936700856000,
+		16085855936700856000,
+		16085855936700856000,
+		16085855936700856000
+	],
+	"TransactionFingerprintID": 63991751604173224,
 	"User": "root"
 }

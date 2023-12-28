@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -115,6 +116,23 @@ func releaseSampledQuery(sq *eventpb.SampledQuery) {
 	sampledQueryPool.Put(sq)
 }
 
+// SampledTransaction objects are short-lived but can be
+// allocated frequently if logging frequency is high.
+var sampledTransactionPool = sync.Pool{
+	New: func() interface{} {
+		return new(eventpb.SampledTransaction)
+	},
+}
+
+func getSampledTransaction() *eventpb.SampledTransaction {
+	return sampledTransactionPool.Get().(*eventpb.SampledTransaction)
+}
+
+func releaseSampledTransaction(st *eventpb.SampledTransaction) {
+	*st = eventpb.SampledTransaction{}
+	sampledTransactionPool.Put(st)
+}
+
 // TelemetryLoggingMetrics keeps track of the last time at which an event
 // was sampled to the telemetry channel, and the number of skipped events
 // since the last sampled event.
@@ -189,19 +207,22 @@ func NewTelemetryLoggingTestingKnobs(
 //     is enabled
 //
 // If the conditions are met, the last sampled time is updated.
-func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(forceSampling, isInternal bool) bool {
+func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(
+	forceSampling, isInternal bool,
+) (emit bool, skippedTxns uint64) {
+	// We should not increase the skipped transaction count if telemetry logging is disabled.
 	if !telemetryLoggingEnabled.Get(&t.st.SV) {
-		return false
+		return false, t.skippedTransactionCount.Load()
 	}
 	if telemetrySamplingMode.Get(&t.st.SV) != telemetryModeTransaction {
-		return false
+		return false, t.skippedTransactionCount.Load()
 	}
 	if isInternal && !telemetryInternalQueriesEnabled.Get(&t.st.SV) {
-		return false
+		return false, t.skippedTransactionCount.Load()
 	}
 	maxEventFrequency := telemetryTransactionSamplingFrequency.Get(&t.st.SV)
 	if maxEventFrequency == 0 {
-		return false
+		return false, t.skippedTransactionCount.Load()
 	}
 
 	txnSampleTime := t.timeNow()
@@ -210,7 +231,7 @@ func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(forceSampling, isInte
 		t.mu.Lock()
 		defer t.mu.Unlock()
 		t.mu.lastSampledTime = txnSampleTime
-		return true
+		return true, t.skippedTransactionCount.Swap(0)
 	}
 
 	requiredTimeElapsed := time.Second / time.Duration(maxEventFrequency)
@@ -223,19 +244,19 @@ func (t *telemetryLoggingMetrics) shouldEmitTransactionLog(forceSampling, isInte
 	}()
 
 	if !enoughTimeElapsed {
-		return false
+		return false, t.skippedTransactionCount.Add(1)
 	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	if txnSampleTime.Sub(t.mu.lastSampledTime) < requiredTimeElapsed {
-		return false
+		return false, t.skippedTransactionCount.Add(1)
 	}
 
 	t.mu.lastSampledTime = txnSampleTime
 
-	return true
+	return true, t.skippedTransactionCount.Swap(0)
 }
 
 // ModuleTestingKnobs implements base.ModuleTestingKnobs interface.
@@ -350,16 +371,34 @@ func (t *telemetryLoggingMetrics) isTracing(_ *tracing.Span, tracingEnabled bool
 	return tracingEnabled
 }
 
+func (t *telemetryLoggingMetrics) shouldForceTxnSampling(
+	applicationName string, tracingOn bool,
+) bool {
+	if !telemetryLoggingEnabled.Get(&t.st.SV) {
+		return false
+	}
+	if telemetrySamplingMode.Get(&t.st.SV) != telemetryModeTransaction {
+		return false
+	}
+
+	tracingEnabled := t.isTracing(nil, tracingOn)
+	logConsoleQuery := telemetryInternalConsoleQueriesEnabled.Get(&t.st.SV) &&
+		strings.HasPrefix(applicationName, "$ internal-console")
+	return tracingEnabled || logConsoleQuery
+}
+
 func (t *telemetryLoggingMetrics) resetLastSampledTime() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.lastSampledTime = time.Time{}
 }
 
-func (t *TelemetryLoggingMetrics) resetSkippedTransactionCount() (res uint64) {
-	return t.skippedTransactionCount.Swap(0)
+// resetCounters resets the skipped query and transaction counters
+func (t *telemetryLoggingMetrics) resetCounters() {
+	t.skippedQueryCount.Swap(0)
+	t.skippedTransactionCount.Swap(0)
 }
 
-func (t *TelemetryLoggingMetrics) incSkippedTransactionCount() {
-	t.skippedTransactionCount.Add(1)
+func (t *telemetryLoggingMetrics) getSkippedTransactionCount() uint64 {
+	return t.skippedTransactionCount.Load()
 }
