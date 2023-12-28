@@ -432,6 +432,7 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 	// as that only happens during the EXECUTE phase. If the query does not
 	// contain placeholders, then also apply exploration rules to the Memo so
 	// that there's even less to do during the EXECUTE phase.
+	// TODO(mgartner): Reword this.
 	//
 	f := opc.optimizer.Factory()
 	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
@@ -469,6 +470,11 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 		}
 		if ok {
 			opc.log(ctx, "placeholder fast path")
+		} else if opc.p.SessionData().SessionData.ApplicationName == "generic_plans" {
+			// Try to optimize the plan if it has placeholders anyway.
+			if _, err := opc.optimizer.Optimize(); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		// If the memo doesn't have placeholders and did not encounter any stable
@@ -498,7 +504,8 @@ func (opc *optPlanningCtx) buildReusableMemo(ctx context.Context) (_ *memo.Memo,
 func (opc *optPlanningCtx) reuseMemo(
 	ctx context.Context, cachedMemo *memo.Memo,
 ) (*memo.Memo, error) {
-	if cachedMemo.IsOptimized() {
+	if cachedMemo.IsOptimized() ||
+		opc.p.SessionData().SessionData.ApplicationName == "generic_plans" {
 		// The query could have been already fully optimized if there were no
 		// placeholders or the placeholder fast path succeeded (see
 		// buildReusableMemo).
