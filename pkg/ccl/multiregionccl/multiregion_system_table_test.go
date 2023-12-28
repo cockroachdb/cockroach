@@ -64,13 +64,8 @@ func TestMrSystemDatabase(t *testing.T) {
 	tDB := sqlutils.MakeSQLRunner(tenantSQL)
 
 	// Generate stats for system.sqlinstances. See the "QueryByEnum" test for
-	// details. Since stats are generated asynchronously, we also poll to make
-	// sure the stats are generated.
+	// details.
 	tDB.Exec(t, `ANALYZE system.sqlliveness;`)
-	tDB.CheckQueryResultsRetry(t,
-		`select count(*) from [show statistics for table system.sqlliveness] where column_names = '{crdb_region}';`,
-		[][]string{{"1"}},
-	)
 
 	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
@@ -239,18 +234,27 @@ func TestMrSystemDatabase(t *testing.T) {
 	t.Run("QueryByEnum", func(t *testing.T) {
 		// This is a regression test for a bug triggered by setting up the system
 		// database. If the operation to configure the does not clear table
-		// statistics, this query will fail in the optimizer, because the stats
-		// will have the wrong type for the crdb_column.
-		row := tDB.QueryRow(t, `
-			SELECT crdb_region, session_id, expiration 
-			FROM system.sqlliveness 
-			WHERE crdb_region = 'us-east1'
-			LIMIT 1;`)
-		var sessionID string
-		var crdbRegion string
-		var rawExpiration apd.Decimal
-		row.Scan(&crdbRegion, &sessionID, &rawExpiration)
-		require.Equal(t, "us-east1", crdbRegion)
+		// statistics, this query will fail in the optimizer, because the stats will
+		// have the wrong type for the crdb_region column. Since stats are generated
+		// asynchronously, we poll for the results until they are correct.
+		testutils.SucceedsSoon(t, func() error {
+			var sessionID string
+			var crdbRegion string
+			var rawExpiration apd.Decimal
+			err := tenantSQL.QueryRow(`
+				SELECT crdb_region, session_id, expiration 
+				FROM system.sqlliveness 
+				WHERE crdb_region = 'us-east1'
+				LIMIT 1;`).Scan(&crdbRegion, &sessionID, &rawExpiration)
+			if err != nil {
+				return err
+			}
+			if crdbRegion != "us-east1" {
+				return errors.Newf("expected region to be us-east1; got %s", crdbRegion)
+			}
+			return nil
+		})
+
 	})
 }
 
