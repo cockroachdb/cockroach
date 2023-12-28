@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -48,8 +49,9 @@ import (
  *    - unixSecs: sets the current time used for telemetry log sampling to the given unix time in seconds.
  *               If omitted, the current time is automatically changed by 0.1 seconds.
  *    - restartUnixSecs: sets the stub time on txn restarts.
- *
- * tracing: sets the tracing status to the given value
+ *    - tracing: sets the tracing status to the given value. If omitted, the tracing status is set to false.
+ *    - useRealTracing: if set, the real tracing status is used instead of the stubbed one.
+ *    - user: sets the user for the connection. If omitted, the root user is used.
  *
  * reset-last-sampled: resets the last sampled time.
  */
@@ -65,18 +67,30 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 	ctx := context.Background()
 	stmtSpy := logtestutils.NewSampledQueryLogScrubVolatileFields(t)
 	stmtSpy.AddFilter(func(ev logpb.Entry) bool {
-		return strings.Contains(ev.Message, appName)
+		return strings.Contains(ev.Message, appName) || strings.Contains(ev.Message, internalConsoleAppName)
 	})
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
+	txnsSpy := logtestutils.NewSampledTransactionLogScrubVolatileFields(t)
+	txnsSpy.AddFilter(func(ev logpb.Entry) bool {
+		return strings.Contains(ev.Message, appName) || strings.Contains(ev.Message, internalConsoleAppName)
+	})
+	cleanupTxnSpy := log.InterceptWith(ctx, txnsSpy)
+	defer cleanupTxnSpy()
+
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "telemetry_logging/logging"), func(t *testing.T, path string) {
 		stmtSpy.Reset()
+		txnsSpy.Reset()
 
 		st := logtestutils.StubTime{}
 		st.SetTime(timeutil.FromUnixMicros(0))
 		sts := logtestutils.StubTracingStatus{}
 		stubTimeOnRestart := int64(0)
+		telemetryKnobs := &TelemetryLoggingTestingKnobs{
+			getTimeNow:       st.TimeNow,
+			getTracingStatus: sts.TracingStatus,
+		}
 		tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
@@ -85,10 +99,7 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 							st.SetTime(timeutil.FromUnixMicros(stubTimeOnRestart * 1e6))
 						},
 					},
-					TelemetryLoggingKnobs: &TelemetryLoggingTestingKnobs{
-						getTimeNow:       st.TimeNow,
-						getTracingStatus: sts.TracingStatus,
-					},
+					TelemetryLoggingKnobs: telemetryKnobs,
 				},
 			},
 		})
@@ -97,12 +108,21 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 
 		telemetryLogging := s.SQLServer().(*Server).TelemetryLoggingMetrics
 		setupConn := s.SQLConn(t)
+		_, err := setupConn.Exec("CREATE USER testuser")
+		require.NoError(t, err)
 
-		spiedConn := s.SQLConn(t)
-		_, err := spiedConn.Exec("SET application_name = $1", appName)
+		spiedConnRootUser := s.SQLConn(t)
+		spiedConnTestUser := s.SQLConn(t, serverutils.User("testuser"))
+		spiedConn := spiedConnRootUser
+
+		// Set spied connections to the app name observed by the log spy.
+		_, err = spiedConn.Exec("SET application_name = $1", appName)
+		require.NoError(t, err)
+		_, err = spiedConnTestUser.Exec("SET application_name = $1", appName)
 		require.NoError(t, err)
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			spiedConn = spiedConnRootUser
 			switch d.Cmd {
 			case "exec-sql":
 				sts.SetTracingStatus(false)
@@ -112,12 +132,21 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 				}
 				return ""
 			case "spy-sql":
-				logCount := stmtSpy.Count()
+				stmtLogCount := stmtSpy.Count()
+				txnLogCount := txnsSpy.Count()
 				var stubTimeUnixSecs float64
-				var tracing bool
+				var tracing, useRealTracing bool
 
 				d.MaybeScanArgs(t, "tracing", &tracing)
 				sts.SetTracingStatus(tracing)
+
+				d.MaybeScanArgs(t, "useRealTracing", &useRealTracing)
+				if useRealTracing {
+					telemetryKnobs.getTracingStatus = nil
+					defer func() {
+						telemetryKnobs.getTracingStatus = sts.TracingStatus
+					}()
+				}
 
 				// Set stubbed stubbed time if this txn is restarted.
 				scanned := d.MaybeScanArgs(t, "restartUnixSecs", &stubTimeOnRestart)
@@ -136,18 +165,38 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 				}
 				st.SetTime(timeutil.FromUnixMicros(stubTimeMicros))
 
-				// Execute query input.
-				_, err := spiedConn.Exec(d.Input)
-				if err != nil {
-					return err.Error()
+				// Setup the sql user.
+				user := "root"
+				d.MaybeScanArgs(t, "user", &user)
+				switch user {
+				case "root":
+				case "testuser":
+					spiedConn = spiedConnTestUser
 				}
 
-				// Display any new statement logs have been generated since executing the query.
-				newLogCount := stmtSpy.Count()
-				return stmtSpy.GetLastNLogs(newLogCount - logCount)
+				// Execute query input.
+				_, err := spiedConn.Exec(d.Input)
+				var sb strings.Builder
+
+				if err != nil {
+					sb.WriteString(err.Error())
+					sb.WriteString("\n")
+				}
+
+				newStmtLogCount := stmtSpy.Count()
+				sb.WriteString(stmtSpy.GetLastNLogs(newStmtLogCount - stmtLogCount))
+				if newStmtLogCount > stmtLogCount {
+					sb.WriteString("\n")
+				}
+
+				newTxnLogCount := txnsSpy.Count()
+				sb.WriteString(txnsSpy.GetLastNLogs(newTxnLogCount - txnLogCount))
+				return sb.String()
 			case "reset-last-sampled":
 				telemetryLogging.resetLastSampledTime()
 				return ""
+			case "show-skipped-transactions":
+				return strconv.FormatUint(telemetryLogging.getSkippedTransactionCount(), 10)
 			default:
 				t.Fatal("unknown command")
 				return ""
@@ -185,8 +234,9 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
  * shouldEmitTransactionLog: calls shouldEmitTransactionLog with the provided arguments
  *    Args:
  *    - unixSecs: stubbed sampling time in unix seconds
- *    - force: value for the 'force' param
+ *    - isTracing: value for the 'isTracing' param
  *    - isInternal: value for the 'isInternal' param
+ *    - appName: value for the 'appName' param
  */
 func TestTelemetryLoggingDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -201,11 +251,12 @@ func TestTelemetryLoggingDecision(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			t.Cleanup(func() {
 				telemetryLogging.resetLastSampledTime()
+				telemetryLogging.resetCounters()
 			})
 
 			switch d.Cmd {
 			case "set-cluster-settings":
-				var telemLoggingEnabled, internalStmtsEnabled bool
+				var telemLoggingEnabled, internalStmtsEnabled, consoleQueriesEnabled bool
 				var samplingMode string
 				var stmtSampleFreq, txnSampleFreq int
 				stmtsPerTxnMax := 10
@@ -215,6 +266,7 @@ func TestTelemetryLoggingDecision(t *testing.T) {
 				d.MaybeScanArgs(t, "txnSampleFreq", &txnSampleFreq)
 				d.MaybeScanArgs(t, "stmtsPerTxnMax", &stmtsPerTxnMax)
 				d.MaybeScanArgs(t, "internalStmtsOn", &internalStmtsEnabled)
+				d.MaybeScanArgs(t, "telemetryInternalConsoleQueriesEnabled", &consoleQueriesEnabled)
 
 				mode := telemetryModeStatement
 				if samplingMode == "transaction" {
@@ -226,6 +278,7 @@ func TestTelemetryLoggingDecision(t *testing.T) {
 				telemetryTransactionSamplingFrequency.Override(ctx, &cs.SV, int64(txnSampleFreq))
 				telemetryLoggingEnabled.Override(ctx, &cs.SV, telemLoggingEnabled)
 				telemetryInternalQueriesEnabled.Override(ctx, &cs.SV, internalStmtsEnabled)
+				telemetryInternalConsoleQueriesEnabled.Override(ctx, &cs.SV, consoleQueriesEnabled)
 
 				return ""
 			case "shouldEmitStatementLog":
@@ -238,18 +291,20 @@ func TestTelemetryLoggingDecision(t *testing.T) {
 				d.ScanArgs(t, "force", &force)
 				st.SetTime(timeutil.FromUnixMicros(int64(unixSecs * 1e6)))
 
-				shouldEmit, _ := telemetryLogging.shouldEmitStatementLog(isTrackedTxn, stmtNum, force)
-				return strconv.FormatBool(shouldEmit)
+				shouldEmit, skipped := telemetryLogging.shouldEmitStatementLog(isTrackedTxn, stmtNum, force)
+				return fmt.Sprintf(`emit: %t, skippedQueries: %d`, shouldEmit, skipped)
 			case "shouldEmitTransactionLog":
 				var unixSecs float64
-				var force, isInternal bool
+				var isTracing, isInternal bool
+				var appName string
 				d.ScanArgs(t, "unixSecs", &unixSecs)
-				d.ScanArgs(t, "force", &force)
+				d.ScanArgs(t, "isTracing", &isTracing)
 				d.MaybeScanArgs(t, "isInternal", &isInternal)
 				st.SetTime(timeutil.FromUnixMicros(int64(unixSecs * 1e6)))
+				d.ScanArgs(t, "appName", &appName)
 
-				shouldEmit := telemetryLogging.shouldEmitTransactionLog(force, isInternal)
-				return strconv.FormatBool(shouldEmit)
+				shouldEmit, skipped := telemetryLogging.shouldEmitTransactionLog(isTracing, isInternal, appName)
+				return fmt.Sprintf(`emit: %t, skippedTxns: %d`, shouldEmit, skipped)
 			default:
 				t.Fatal("unknown command")
 				return ""
