@@ -1879,16 +1879,10 @@ func (kl *keyLocks) collectLockStateInfo(
 		return nil
 	}
 
-	// Filter out locks without waiting readers/locking requests unless explicitly
+	// Filter out locks without waiting readers/active locking requests unless explicitly
 	// requested.
-	//
-	// TODO(arul): This should consider the active/inactive status of all queued
-	// locking requests. If all waiting requests are inactive (and there are no
-	// waiting readers either), we should consider the lock to be uncontended.
-	// See https://github.com/cockroachdb/cockroach/issues/103894.
 	if !includeUncontended && kl.waitingReaders.Len() == 0 &&
-		(kl.queuedLockingRequests.Len() == 0 ||
-			(kl.queuedLockingRequests.Len() == 1 && !kl.queuedLockingRequests.Front().Value.active)) {
+		!kl.hasActiveLockingRequest() {
 		return nil
 	}
 
@@ -4061,6 +4055,15 @@ func (kl *keyLocks) verify(st *cluster.Settings) error {
 	}
 
 	return nil
+}
+
+func (kl *keyLocks) hasActiveLockingRequest() bool {
+	for e := kl.lockWaitQueue.queuedLockingRequests.Front(); e != nil; e = e.Next() {
+		if e.Value.active {
+			return true
+		}
+	}
+	return false
 }
 
 // Delete removes the specified lock from the tree.
