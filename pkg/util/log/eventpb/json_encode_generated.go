@@ -5261,6 +5261,15 @@ func (m *SampledTransaction) AppendJSONFields(printComma bool, b redact.Redactab
 		b = append(b, '}')
 	}
 
+	if m.SkippedTransactions != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"SkippedTransactions\":"...)
+		b = strconv.AppendInt(b, int64(m.SkippedTransactions), 10)
+	}
+
 	return printComma, b
 }
 
