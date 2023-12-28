@@ -344,13 +344,17 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	if startOpts.Target == StartRoutingProxy {
 		return fmt.Errorf("start SQL proxy not implemented")
 	}
+
 	// Local clusters do not support specifying ports. An error is returned if we
 	// detect that they were set.
-	if c.IsLocal() && (startOpts.SQLPort != 0 || startOpts.AdminUIPort != 0) {
+	if c.IsLocal() {
 		// We don't need to return an error if the ports are the default values
 		// specified in DefaultStartOps, as these have not been specified explicitly
 		// by the user.
-		if startOpts.SQLPort != config.DefaultSQLPort || startOpts.AdminUIPort != config.DefaultAdminUIPort {
+		if startOpts.SQLPort != 0 && startOpts.SQLPort != config.DefaultSQLPort {
+			return fmt.Errorf("local clusters do not support specifying ports")
+		}
+		if startOpts.AdminUIPort != 0 && startOpts.AdminUIPort != config.DefaultAdminUIPort {
 			return fmt.Errorf("local clusters do not support specifying ports")
 		}
 		startOpts.SQLPort = 0

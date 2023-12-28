@@ -689,7 +689,8 @@ func DefaultStartOpts() install.StartOpts {
 		InitTarget:         1,
 		SQLPort:            0,
 		VirtualClusterName: install.SystemInterfaceName,
-		AdminUIPort:        0,
+		// TODO(DarrylWong): revert back to 0 once #117125 is addressed.
+		AdminUIPort: config.DefaultAdminUIPort,
 	}
 }
 
