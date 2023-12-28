@@ -183,6 +183,16 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 		return c.makeSpansForSingleColumnDatum(offset, op, memo.ExtractConstDatum(val), out)
 	}
 
+	// TODO(mgartner): Handle more ops than just EqOp.
+	if p, ok := val.(*memo.PlaceholderExpr); ok && op == opt.EqOp {
+		tp, ok := p.Value.(*tree.Placeholder)
+		if !ok {
+			panic(errors.AssertionFailedf("unexpected value of placeholder"))
+		}
+		c.eqSpan(offset, tp, out)
+		return true
+	}
+
 	c.unconstrained(offset, out)
 	return false
 }

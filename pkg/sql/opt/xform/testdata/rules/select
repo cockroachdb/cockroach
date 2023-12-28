@@ -551,6 +551,17 @@ scan a
  ├── key: ()
  └── fd: ()-->(1)
 
+opt
+SELECT k FROM a WHERE k = $1
+----
+scan a
+ ├── columns: k:1!null
+ ├── constraint: /1: [/$1 - /$1]
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── key: ()
+ └── fd: ()-->(1)
+
 memo
 SELECT k FROM a WHERE k = 1
 ----
