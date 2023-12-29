@@ -123,6 +123,11 @@ func (s *Statistics) CopyFrom(other *Statistics) {
 // See ColumnStatistic.ApplySelectivity for updating distinct counts, null
 // counts, and histograms.
 func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
+	if selectivity == ZeroSelectivity {
+		s.RowCount = 0
+		s.Selectivity = ZeroSelectivity
+		return
+	}
 	s.RowCount *= selectivity.AsFloat()
 	s.Selectivity.Multiply(selectivity)
 }
@@ -134,7 +139,10 @@ func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
 func (s *Statistics) UnionWith(other *Statistics) {
 	s.Available = s.Available && other.Available
 	s.RowCount += other.RowCount
-	s.Selectivity.Add(other.Selectivity)
+	s.Selectivity.UnsafeAdd(other.Selectivity)
+	if s.Selectivity.AsFloat() > 1.0 {
+		s.Selectivity = OneSelectivity
+	}
 }
 
 // String returns a string representation of the statistics.
@@ -245,7 +253,6 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity Selectivity, inputRows fl
 		// non-zero).
 		c.DistinctCount = epsilon
 	}
-
 }
 
 // CopyFromOther copies all fields of the other ColumnStatistic except Cols,
