@@ -915,7 +915,7 @@ expr
 ----
 semi-join-apply
  ├── columns: a:1(int)
- ├── cardinality: [0 - 10]
+ ├── cardinality: [0 - 0]
  ├── fake-rel
  │    ├── columns: a:1(int)
  │    └── cardinality: [0 - 10]
@@ -3052,3 +3052,120 @@ inner-join (hash)
       └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
            ├── variable: xyz.x:1 [type=int]
            └── variable: foo.x:6 [type=int]
+
+# Regression tests for #116943.
+
+# Semi-joins with right side cardinality of 0 have cardinality of 0.
+norm disable=(EliminateExistsZeroRows,SimplifyZeroCardinalitySemiJoin)
+SELECT * FROM mn WHERE m = 5 AND n::FLOAT IN (SELECT x::FLOAT FROM xysd WHERE false)
+----
+project
+ ├── columns: m:1(int!null) n:2(int)
+ ├── cardinality: [0 - 0]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── prune: (1,2)
+ └── semi-join (hash)
+      ├── columns: m:1(int!null) n:2(int) column12:12(float)
+      ├── cardinality: [0 - 0]
+      ├── immutable
+      ├── key: ()
+      ├── fd: ()-->(1,2,12)
+      ├── prune: (1,2)
+      ├── project
+      │    ├── columns: column12:12(float) m:1(int!null) n:2(int)
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,2,12)
+      │    ├── prune: (1,2,12)
+      │    ├── select
+      │    │    ├── columns: m:1(int!null) n:2(int)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(1,2)
+      │    │    ├── prune: (2)
+      │    │    ├── scan mn
+      │    │    │    ├── columns: m:1(int!null) n:2(int)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(2), (2)~~>(1)
+      │    │    │    ├── prune: (1,2)
+      │    │    │    └── interesting orderings: (+1) (+2,+1)
+      │    │    └── filters
+      │    │         └── eq [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+      │    │              ├── variable: m:1 [type=int]
+      │    │              └── const: 5 [type=int]
+      │    └── projections
+      │         └── cast: FLOAT8 [as=column12:12, type=float, outer=(2), immutable]
+      │              └── variable: n:2 [type=int]
+      ├── project
+      │    ├── columns: x:11(float!null)
+      │    ├── cardinality: [0 - 0]
+      │    ├── immutable
+      │    ├── key: ()
+      │    ├── fd: ()-->(11)
+      │    ├── prune: (11)
+      │    ├── values
+      │    │    ├── columns: xysd.x:5(int!null)
+      │    │    ├── cardinality: [0 - 0]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(5)
+      │    │    └── prune: (5)
+      │    └── projections
+      │         └── cast: FLOAT8 [as=x:11, type=float, outer=(5), immutable]
+      │              └── variable: xysd.x:5 [type=int]
+      └── filters
+           └── eq [type=bool, outer=(11,12), constraints=(/11: (/NULL - ]; /12: (/NULL - ]), fd=(11)==(12), (12)==(11)]
+                ├── variable: column12:12 [type=float]
+                └── variable: x:11 [type=float]
+
+# Anti-joins with right side cardinality of 0 have cardinality equal to left side cardinality.
+norm disable=(EliminateExistsZeroRows,EliminateAntiJoin)
+SELECT * FROM mn WHERE m = 5 AND n::FLOAT NOT IN (SELECT x::FLOAT FROM xysd WHERE false)
+----
+anti-join (cross)
+ ├── columns: m:1(int!null) n:2(int)
+ ├── cardinality: [0 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── select
+ │    ├── columns: m:1(int!null) n:2(int)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(1,2)
+ │    ├── prune: (2)
+ │    ├── scan mn
+ │    │    ├── columns: m:1(int!null) n:2(int)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2), (2)~~>(1)
+ │    │    ├── prune: (1,2)
+ │    │    └── interesting orderings: (+1) (+2,+1)
+ │    └── filters
+ │         └── eq [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+ │              ├── variable: m:1 [type=int]
+ │              └── const: 5 [type=int]
+ ├── project
+ │    ├── columns: x:11(float!null)
+ │    ├── cardinality: [0 - 0]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(11)
+ │    ├── prune: (11)
+ │    ├── values
+ │    │    ├── columns: xysd.x:5(int!null)
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(5)
+ │    │    └── prune: (5)
+ │    └── projections
+ │         └── cast: FLOAT8 [as=x:11, type=float, outer=(5), immutable]
+ │              └── variable: xysd.x:5 [type=int]
+ └── filters
+      └── is-not [type=bool, outer=(2,11), immutable]
+           ├── eq [type=bool]
+           │    ├── variable: x:11 [type=float]
+           │    └── cast: FLOAT8 [type=float]
+           │         └── variable: n:2 [type=int]
+           └── false [type=bool]
