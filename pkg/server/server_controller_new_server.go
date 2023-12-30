@@ -74,7 +74,8 @@ func (s *topLevelServer) newTenantServer(
 	if err != nil {
 		return nil, err
 	}
-	baseCfg, sqlCfg, err := s.makeSharedProcessTenantConfig(ctx, tenantID, portStartHint, tenantStopper)
+
+	baseCfg, sqlCfg, err := s.makeSharedProcessTenantConfig(ctx, tenantID, portStartHint, tenantStopper, testArgs.Settings)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +150,11 @@ func newTenantServerInternal(
 }
 
 func (s *topLevelServer) makeSharedProcessTenantConfig(
-	ctx context.Context, tenantID roachpb.TenantID, portStartHint int, stopper *stop.Stopper,
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	portStartHint int,
+	stopper *stop.Stopper,
+	testSettings *cluster.Settings,
 ) (BaseConfig, SQLConfig, error) {
 	// Create a configuration for the new tenant.
 	parentCfg := s.cfg
@@ -158,7 +163,14 @@ func (s *topLevelServer) makeSharedProcessTenantConfig(
 		ServerInterceptors:              s.grpc.serverInterceptorsInfo,
 		SameProcessCapabilityAuthorizer: s.rpcContext.TenantRPCAuthorizer,
 	}
-	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, portStartHint, parentCfg, localServerInfo, stopper, s.recorder)
+	st := cluster.MakeClusterSettings()
+	if testSettings != nil {
+		// If there are testing default overrides in the base config, copy them to the
+		// shared process server too.
+		st.SV.TestingCopyForVirtualCluster(&testSettings.SV)
+	}
+
+	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, portStartHint, parentCfg, localServerInfo, st, stopper, s.recorder)
 	if err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
@@ -173,11 +185,10 @@ func makeSharedProcessTenantServerConfig(
 	portStartHint int,
 	kvServerCfg Config,
 	kvServerInfo LocalKVServerInfo,
+	st *cluster.Settings,
 	stopper *stop.Stopper,
 	nodeMetricsRecorder *status.MetricsRecorder,
 ) (baseCfg BaseConfig, sqlCfg SQLConfig, err error) {
-	st := cluster.MakeClusterSettings()
-
 	// We need a value in the version setting prior to the update
 	// coming from the system.settings table. This value must be valid
 	// and compatible with the state of the tenant's keyspace.
