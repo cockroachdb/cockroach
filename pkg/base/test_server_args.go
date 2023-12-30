@@ -549,6 +549,8 @@ type TestSharedProcessTenantArgs struct {
 
 	// Skip check for tenant existence when running the test.
 	SkipTenantCheck bool
+
+	Settings *cluster.Settings
 }
 
 // TestTenantArgs are the arguments to TestServer.StartTenant.
