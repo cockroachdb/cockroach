@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -73,6 +74,10 @@ func TestFullClusterBackup(t *testing.T) {
 		}
 
 		settings := clustersettings.MakeTestingClusterSettings()
+		// Disable automatic stats collection on the backup and restoring clusters to ensure
+		// the test is deterministic.
+		stats.AutomaticStatisticsClusterMode.Override(context.Background(), &settings.SV, false)
+
 		params := base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				Settings:          settings,
@@ -116,11 +121,6 @@ func TestFullClusterBackup(t *testing.T) {
 
 		// Pause SQL Stats compaction job to ensure the test is deterministic.
 		sqlDB.Exec(t, `PAUSE SCHEDULES SELECT id FROM [SHOW SCHEDULES FOR SQL STATISTICS]`)
-
-		// Disable automatic stats collection on the backup and restoring clusters to ensure
-		// the test is deterministic.
-		sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
-		sqlDBRestore.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`)
 
 		// Create some other descriptors as well.
 		sqlDB.Exec(t, `
