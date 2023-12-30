@@ -651,6 +651,7 @@ func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcess
 		TenantID:    serverutils.TestTenantID(),
 		Knobs:       ts.params.Knobs,
 		UseDatabase: ts.params.UseDatabase,
+		Settings:    ts.params.Settings,
 	}
 	// See comment above on separate process tenant regarding the testing knobs.
 	args.Knobs.Server = &TestingKnobs{}
