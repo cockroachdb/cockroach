@@ -776,8 +776,9 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 		}
 		for customRestoreSystemTable, cfg := range customRestoreSystemTables {
 			t.Run(customRestoreSystemTable, func(t *testing.T) {
+				short := time.Millisecond * 5
 				args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
-					Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+					Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithIntervals(short, short, time.Microsecond, time.Millisecond)},
 				}}
 				tcRestore, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, args)
 				defer cleanupEmptyCluster()
@@ -805,12 +806,10 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 				}
 				// The initial restore will return an error, and restart.
 				sqlDBRestore.ExpectErr(t, `running execution from '.*' to '.*' on \d+ failed: injected error`, `RESTORE FROM LATEST IN $1`, localFoo)
-				// Reduce retry delays.
-				sqlDBRestore.Exec(t, "SET CLUSTER SETTING jobs.registry.retry.initial_delay = '1ms'")
+				tcRestore.Servers[0].JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 				// Expect the restore to succeed.
-				sqlDBRestore.CheckQueryResultsRetry(t,
-					`SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'RESTORE' AND status = 'succeeded'`,
-					[][]string{{"1"}})
+				id := sqlDBRestore.QueryStr(t, `SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1`)[0][0]
+				sqlDBRestore.CheckQueryResultsRetry(t, fmt.Sprintf(`SELECT status FROM [SHOW JOB WHEN COMPLETE %s]`, id), [][]string{{"succeeded"}})
 			})
 		}
 	})
