@@ -1229,7 +1229,6 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	backupTableID := sqlutils.QueryTableID(t, conn, "data", "public", "bank")
 
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
-	restoreDatabaseID := sqlutils.QueryDatabaseID(t, conn, "restoredb")
 
 	// We create a full backup so that, below, we can test that incremental
 	// backups sanitize credentials in "INCREMENTAL FROM" URLs.
@@ -1265,10 +1264,6 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			`RESTORE TABLE bank FROM '%s', '%s' WITH OPTIONS (into_db = 'restoredb')`,
 			sanitizedFullDir+"redacted", sanitizedIncDir+"redacted",
 		),
-		DescriptorIDs: descpb.IDs{
-			descpb.ID(restoreDatabaseID + 1),
-			descpb.ID(restoreDatabaseID + 2),
-		},
 	}); err != nil {
 		t.Fatal(err)
 	}

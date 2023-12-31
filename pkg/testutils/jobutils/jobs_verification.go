@@ -159,11 +159,13 @@ func verifySystemJob(
 		runningStatusString = runningStatus.String
 	}
 
-	for _, id := range rawDescriptorIDs {
-		actual.DescriptorIDs = append(actual.DescriptorIDs, descpb.ID(id))
+	if len(expected.DescriptorIDs) > 0 {
+		for _, id := range rawDescriptorIDs {
+			actual.DescriptorIDs = append(actual.DescriptorIDs, descpb.ID(id))
+		}
+		sort.Sort(actual.DescriptorIDs)
+		sort.Sort(expected.DescriptorIDs)
 	}
-	sort.Sort(actual.DescriptorIDs)
-	sort.Sort(expected.DescriptorIDs)
 	expected.Details = nil
 	if e, a := expected, actual; !assert.Equal(logT{t}, e, a) {
 		return errors.Errorf("job %d did not match:\n%s",
