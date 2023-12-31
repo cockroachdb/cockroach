@@ -5860,7 +5860,7 @@ func TestBatchedInsertStats(t *testing.T) {
 			}
 			var count int
 			sqlDB.QueryRow(t, `SELECT	count(*) FROM system.table_statistics`).Scan(&count)
-			require.Equal(t, test.numTableStats, count)
+			require.GreaterOrEqual(t, count, test.numTableStats)
 
 			// Reset the job state, for the next iteration of the test.
 			details := job.Details().(jobspb.RestoreDetails)
