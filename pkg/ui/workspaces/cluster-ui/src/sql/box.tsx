@@ -13,7 +13,7 @@ import { Highlight } from "./highlight";
 import classNames from "classnames/bind";
 
 import styles from "./sqlhighlight.module.scss";
-import { api as clusterUiApi } from "../index";
+import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { FormatQuery } from "src/util";
 
 export enum SqlBoxSize {
@@ -24,7 +24,7 @@ export enum SqlBoxSize {
 
 export interface SqlBoxProps {
   value: string;
-  zone?: clusterUiApi.DatabaseDetailsResponse;
+  zone?: protos.cockroach.server.serverpb.DatabaseDetailsResponse;
   className?: string;
   size?: SqlBoxSize;
   format?: boolean;

@@ -9,32 +9,23 @@
 // licenses/APL.txt.
 
 import { all, call, put, takeEvery } from "redux-saga/effects";
-
-import { databaseDetailsReducer } from "./databaseDetails.reducer";
-import {
-  DatabaseDetailsReqParams,
-  ErrorWithKey,
-  getDatabaseDetails,
-} from "src/api";
-import moment from "moment";
 import { PayloadAction } from "@reduxjs/toolkit";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
-const actions = databaseDetailsReducer.actions;
+import { ErrorWithKey, getDatabaseDetails } from "src/api";
+import { actions } from "./databaseDetails.reducer";
+
 export function* refreshDatabaseDetailsSaga(
-  action: PayloadAction<DatabaseDetailsReqParams>,
-) {
+  action: PayloadAction<cockroach.server.serverpb.DatabaseDetailsRequest>,
+): any {
   yield put(actions.request(action.payload));
 }
 
 export function* requestDatabaseDetailsSaga(
-  action: PayloadAction<DatabaseDetailsReqParams>,
+  action: PayloadAction<cockroach.server.serverpb.DatabaseDetailsRequest>,
 ): any {
   try {
-    const result = yield call(
-      getDatabaseDetails,
-      action.payload,
-      moment.duration(10, "m"),
-    );
+    const result = yield call(getDatabaseDetails, action.payload);
     yield put(
       actions.received({
         key: action.payload.database,
@@ -50,7 +41,7 @@ export function* requestDatabaseDetailsSaga(
   }
 }
 
-export function* databaseDetailsSaga() {
+export function* databaseDetailsSaga(): any {
   yield all([
     takeEvery(actions.refresh, refreshDatabaseDetailsSaga),
     takeEvery(actions.request, requestDatabaseDetailsSaga),

@@ -51,7 +51,6 @@ import {
   TableNameCell,
 } from "./tableCells";
 import {
-  isMaxSizeError,
   SqlApiQueryResponse,
   SqlExecutionErrorMessage,
   TableHeuristicDetailsRow,
@@ -60,7 +59,6 @@ import {
   TableSpanStatsRow,
 } from "../api";
 import { checkInfoAvailable } from "../databases";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -109,8 +107,6 @@ export interface DatabaseDetailsPageData {
   loaded: boolean;
   // Request error when getting table names.
   requestError?: Error;
-  // Query error when getting table names.
-  queryError?: SqlExecutionErrorMessage;
   name: string;
   tables: DatabaseDetailsPageDataTable[];
   sortSettingTables: SortSetting;
@@ -872,17 +868,6 @@ export class DatabaseDetailsPage extends React.Component<
               })
             }
           >
-            {isMaxSizeError(this.props.queryError?.message) && (
-              <InlineAlert
-                intent="info"
-                title={
-                  <>
-                    Not all tables are displayed because the maximum number of
-                    tables was reached in the console.&nbsp;
-                  </>
-                }
-              />
-            )}
             <DatabaseSortedTable
               className={cx("database-table")}
               tableWrapperClassName={cx("sorted-table")}

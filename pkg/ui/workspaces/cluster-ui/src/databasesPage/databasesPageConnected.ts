@@ -32,10 +32,10 @@ import { actions as clusterSettingsActions } from "../store/clusterSettings";
 import { actions as databasesListActions } from "../store/databasesList";
 import {
   databaseDetailsReducer,
-  databaseDetailsSpanStatsReducer,
+  // databaseDetailsSpanStatsReducer,
 } from "../store/databaseDetails";
 const databaseDetailsActions = databaseDetailsReducer.actions;
-const databaseDetailsSpanStatsActions = databaseDetailsSpanStatsReducer.actions;
+// const databaseDetailsSpanStatsActions = databaseDetailsSpanStatsReducer.actions;
 
 import {
   actions as localStorageActions,
@@ -58,11 +58,10 @@ const mapStateToProps = (state: AppState): DatabasesPageData => {
     loading: !!databasesListState?.inFlight,
     loaded: !!databasesListState?.valid,
     requestError: databasesListState?.lastError,
-    queryError: databasesListState?.data?.error,
+    // queryError: databasesListState?.data?.error,
     databases: deriveDatabaseDetailsMemoized({
       dbListResp: databasesListState?.data,
       databaseDetails: state.adminUI?.databaseDetails,
-      spanStats: state.adminUI?.databaseDetailsSpanStats,
       nodeRegions,
       isTenant,
     }),
@@ -84,14 +83,12 @@ const mapDispatchToProps = (dispatch: Dispatch): DatabasesPageActions => ({
   refreshDatabases: () => {
     dispatch(databasesListActions.refresh());
   },
-  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
-    dispatch(
-      databaseDetailsActions.refresh({ database, csIndexUnusedDuration }),
-    );
+  refreshDatabaseDetails: (database: string) => {
+    dispatch(databaseDetailsActions.refresh({ database, include_stats: true }));
   },
-  refreshDatabaseSpanStats: (database: string) => {
-    dispatch(databaseDetailsSpanStatsActions.refresh({ database }));
-  },
+  // refreshDatabaseSpanStats: (database: string) => {
+  //   dispatch(databaseDetailsSpanStatsActions.refresh({ database }));
+  // },
   refreshSettings: () => {
     dispatch(clusterSettingsActions.refresh());
   },

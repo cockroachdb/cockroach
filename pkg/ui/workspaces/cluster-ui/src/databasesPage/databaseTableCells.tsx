@@ -19,11 +19,7 @@ import { EncodeDatabaseUri } from "../util";
 import { Link } from "react-router-dom";
 import { StackIcon } from "../icon/stackIcon";
 import { CockroachCloudContext } from "../contexts";
-import {
-  checkInfoAvailable,
-  getNetworkErrorMessage,
-  getQueryErrorMessage,
-} from "../databases";
+import { checkInfoAvailable, getNetworkErrorMessage } from "../databases";
 import * as format from "../util/format";
 import { Caution } from "@cockroachlabs/icons";
 
@@ -37,10 +33,12 @@ export const DiskSizeCell = ({ database }: CellProps): JSX.Element => {
   return (
     <>
       {checkInfoAvailable(
-        database.spanStatsRequestError,
-        database.spanStats?.error,
-        database.spanStats?.approximate_disk_bytes
-          ? format.Bytes(database.spanStats?.approximate_disk_bytes)
+        database.error,
+        null,
+        database.details?.stats?.approximate_disk_bytes
+          ? format.Bytes(
+              database.details?.stats?.approximate_disk_bytes?.toNumber(),
+            )
           : null,
       )}
     </>
@@ -49,11 +47,11 @@ export const DiskSizeCell = ({ database }: CellProps): JSX.Element => {
 
 export const IndexRecCell = ({ database }: CellProps): JSX.Element => {
   const text =
-    database.numIndexRecommendations > 0
-      ? `${database.numIndexRecommendations} index recommendation(s)`
+    database.details?.stats?.num_index_recommendations > 0
+      ? `${database.details?.stats?.num_index_recommendations} index recommendation(s)`
       : "None";
   const classname =
-    database.numIndexRecommendations > 0
+    database.details?.stats?.num_index_recommendations > 0
       ? "index-recommendations-icon__exist"
       : "index-recommendations-icon__none";
   return (
@@ -71,27 +69,8 @@ export const DatabaseNameCell = ({ database }: CellProps): JSX.Element => {
     : EncodeDatabaseUri(database.name);
   let icon = <StackIcon className={cx("icon--s", "icon--primary")} />;
 
-  const needsWarning =
-    database.detailsRequestError ||
-    database.spanStatsRequestError ||
-    database.detailsQueryError ||
-    database.spanStatsQueryError;
-
-  if (needsWarning) {
-    const titleList = [];
-    if (database.detailsRequestError) {
-      titleList.push(getNetworkErrorMessage(database.detailsRequestError));
-    }
-    if (database.spanStatsRequestError) {
-      titleList.push(getNetworkErrorMessage(database.spanStatsRequestError));
-    }
-    if (database.detailsQueryError) {
-      titleList.push(database.detailsQueryError.message);
-    }
-    if (database.spanStatsQueryError) {
-      titleList.push(getQueryErrorMessage(database.spanStatsQueryError));
-    }
-
+  if (database.error) {
+    const titleList = [getNetworkErrorMessage(database.error)];
     icon = (
       <Tooltip
         overlayStyle={{ whiteSpace: "pre-line" }}

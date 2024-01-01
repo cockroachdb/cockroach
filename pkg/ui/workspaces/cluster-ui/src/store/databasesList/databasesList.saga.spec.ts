@@ -15,22 +15,17 @@ import {
 } from "redux-saga-test-plan/providers";
 import * as matchers from "redux-saga-test-plan/matchers";
 import { expectSaga } from "redux-saga-test-plan";
-import { DatabasesListResponse, getDatabasesList } from "../../api";
+import { getDatabasesList } from "../../api";
 import {
   refreshDatabasesListSaga,
   requestDatabasesListSaga,
 } from "./databasesList.saga";
 import { actions, DatabasesListState, reducer } from "./databasesList.reducers";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 describe("DatabasesList sagas", () => {
-  const databasesListResponse: DatabasesListResponse = {
+  const databasesListResponse: cockroach.server.serverpb.DatabasesResponse = {
     databases: ["one", "of", "many", "databases"],
-    error: {
-      message: "sql execution error message!",
-      code: "10101",
-      severity: "high",
-      source: null,
-    },
   };
   const databasesListAPIProvider: (EffectProviders | StaticProvider)[] = [
     [matchers.call.fn(getDatabasesList), databasesListResponse],

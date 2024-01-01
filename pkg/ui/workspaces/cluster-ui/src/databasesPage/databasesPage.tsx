@@ -50,15 +50,8 @@ import {
   IndexRecCell,
   DiskSizeCell,
 } from "./databaseTableCells";
-import {
-  DatabaseSpanStatsRow,
-  DatabaseTablesResponse,
-  isMaxSizeError,
-  SqlApiQueryResponse,
-  SqlExecutionErrorMessage,
-} from "../api";
-import { InlineAlert } from "@cockroachlabs/ui-components";
 import { checkInfoAvailable } from "../databases";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -75,8 +68,6 @@ export interface DatabasesPageData {
   loaded: boolean;
   // Request error when getting database names.
   requestError: Error;
-  // Query error when getting database names.
-  queryError: SqlExecutionErrorMessage;
   databases: DatabasesPageDataDatabase[];
   sortSetting: SortSetting;
   search: string;
@@ -90,37 +81,20 @@ export interface DatabasesPageData {
 }
 
 export interface DatabasesPageDataDatabase {
+  details: cockroach.server.serverpb.DatabaseDetailsResponse;
   detailsLoading: boolean;
   detailsLoaded: boolean;
-
-  spanStatsLoading: boolean;
-  spanStatsLoaded: boolean;
-
-  // Request error when getting database details.
-  detailsRequestError: Error;
-  spanStatsRequestError: Error;
-  // Query error when getting database details.
-  detailsQueryError: SqlExecutionErrorMessage;
-  spanStatsQueryError: SqlExecutionErrorMessage;
+  error: Error;
   name: string;
-  spanStats?: SqlApiQueryResponse<DatabaseSpanStatsRow>;
-  tables?: SqlApiQueryResponse<DatabaseTablesResponse>;
-  // Array of node IDs used to unambiguously filter by node and region.
-  nodes?: number[];
   // String of nodes grouped by region in alphabetical order, e.g.
   // regionA(n1,n2), regionB(n3). Used for display in the table's
   // "Regions/Nodes" column.
   nodesByRegionString?: string;
-  numIndexRecommendations: number;
 }
 
 export interface DatabasesPageActions {
   refreshDatabases: () => void;
-  refreshDatabaseDetails: (
-    database: string,
-    csIndexUnusedDuration: string,
-  ) => void;
-  refreshDatabaseSpanStats: (database: string) => void;
+  refreshDatabaseDetails: (database: string) => void;
   refreshSettings: () => void;
   refreshNodes?: () => void;
   onFilterChange?: (value: Filters) => void;
@@ -324,19 +298,9 @@ export class DatabasesPage extends React.Component<
       if (
         !database.detailsLoaded &&
         !database.detailsLoading &&
-        database.detailsRequestError == null
+        database.error == null
       ) {
-        this.props.refreshDatabaseDetails(
-          database.name,
-          this.props.csIndexUnusedDuration,
-        );
-      }
-      if (
-        !database.spanStatsLoaded &&
-        !database.spanStatsLoading &&
-        database.spanStatsRequestError == null
-      ) {
-        this.props.refreshDatabaseSpanStats(database.name);
+        this.props.refreshDatabaseDetails(database.name);
       }
     });
   }
@@ -456,7 +420,7 @@ export class DatabasesPage extends React.Component<
         let foundRegion = regionsSelected.length === 0;
         let foundNode = nodesSelected.length === 0;
 
-        db.nodes?.forEach(node => {
+        db.details.stats?.node_ids?.forEach(node => {
           const n = node?.toString() || "";
           if (foundRegion || regionsSelected.includes(nodeRegions[n])) {
             foundRegion = true;
@@ -479,13 +443,7 @@ export class DatabasesPage extends React.Component<
     if (
       !this.props.databases ||
       this.props.databases.length === 0 ||
-      this.props.databases.every(
-        x =>
-          x.detailsLoading ||
-          x.detailsLoaded ||
-          x.spanStatsLoaded ||
-          x.spanStatsLoading,
-      )
+      this.props.databases.every(x => x.detailsLoading || x.detailsLoaded)
     ) {
       return false;
     }
@@ -505,18 +463,7 @@ export class DatabasesPage extends React.Component<
       i++
     ) {
       const db = filteredDatabases[i];
-      if (
-        db.detailsLoaded ||
-        db.detailsLoading ||
-        db.detailsRequestError != null
-      ) {
-        continue;
-      }
-      if (
-        db.spanStatsLoading ||
-        db.spanStatsLoaded ||
-        db.spanStatsRequestError != null
-      ) {
+      if (db.detailsLoaded || db.detailsLoading || db.error != null) {
         continue;
       }
       // Info is not loaded for a visible database.
@@ -549,7 +496,8 @@ export class DatabasesPage extends React.Component<
           </Tooltip>
         ),
         cell: database => <DiskSizeCell database={database} />,
-        sort: database => database.spanStats?.approximate_disk_bytes,
+        sort: database =>
+          database.details?.stats?.approximate_disk_bytes?.toNumber(),
         className: cx("databases-table__col-size"),
         name: "size",
       },
@@ -564,11 +512,11 @@ export class DatabasesPage extends React.Component<
         ),
         cell: database =>
           checkInfoAvailable(
-            database.detailsRequestError,
-            database.tables?.error,
-            database.tables?.tables?.length,
+            database.error,
+            null,
+            database.details?.table_names?.length,
           ),
-        sort: database => database.tables?.tables.length ?? 0,
+        sort: database => database.details?.table_names?.length ?? 0,
         className: cx("databases-table__col-table-count"),
         name: "tableCount",
       },
@@ -581,13 +529,8 @@ export class DatabasesPage extends React.Component<
             Range Count
           </Tooltip>
         ),
-        cell: database =>
-          checkInfoAvailable(
-            database.spanStatsRequestError,
-            database.spanStats?.error,
-            database.spanStats?.range_count,
-          ),
-        sort: database => database.spanStats?.range_count,
+        cell: database => database.details?.stats?.range_count?.toNumber(),
+        sort: database => database.details?.stats?.range_count?.toNumber(),
         className: cx("databases-table__col-range-count"),
         name: "rangeCount",
       },
@@ -602,7 +545,7 @@ export class DatabasesPage extends React.Component<
         ),
         cell: database =>
           checkInfoAvailable(
-            database.detailsRequestError,
+            database.error,
             null,
             database.nodesByRegionString ? database.nodesByRegionString : null,
           ),
@@ -625,7 +568,7 @@ export class DatabasesPage extends React.Component<
           </Tooltip>
         ),
         cell: database => <IndexRecCell database={database} />,
-        sort: database => database.numIndexRecommendations,
+        sort: database => database.details?.stats?.num_index_recommendations,
         className: cx("databases-table__col-idx-rec"),
         name: "numIndexRecommendations",
       });
@@ -720,31 +663,14 @@ export class DatabasesPage extends React.Component<
           <Loading
             loading={this.props.loading}
             page={"databases"}
-            error={
-              isMaxSizeError(this.props.queryError?.message)
-                ? new Error(this.props.queryError?.message)
-                : this.props.requestError
-            }
+            error={this.props.requestError}
             renderError={() =>
               LoadingError({
                 statsType: "databases",
-                error: isMaxSizeError(this.props.queryError?.message)
-                  ? new Error(this.props.queryError?.message)
-                  : this.props.requestError,
+                error: this.props.requestError,
               })
             }
           >
-            {isMaxSizeError(this.props.queryError?.message) && (
-              <InlineAlert
-                intent="info"
-                title={
-                  <>
-                    Not all databases are displayed because the maximum number
-                    of databases was reached in the console.&nbsp;
-                  </>
-                }
-              />
-            )}
             <DatabasesSortedTable
               className={cx("databases-table")}
               tableWrapperClassName={cx("sorted-table")}

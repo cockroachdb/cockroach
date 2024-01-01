@@ -50,15 +50,13 @@ const mapStateToProps = (
 ): DatabaseDetailsPageData => {
   const database = getMatchParamByName(props.match, databaseNameCCAttr);
   const databaseDetails = state.adminUI?.databaseDetails;
-  const dbTables =
-    databaseDetails[database]?.data?.results.tablesResp.tables || [];
+  const dbTables = databaseDetails[database]?.data?.table_names || [];
   const nodeRegions = nodeRegionsByIDSelector(state);
   const isTenant = selectIsTenant(state);
   return {
     loading: !!databaseDetails[database]?.inFlight,
     loaded: !!databaseDetails[database]?.valid,
     requestError: databaseDetails[database]?.lastError,
-    queryError: databaseDetails[database]?.data?.results?.error,
     name: database,
     showNodeRegionsColumn: Object.keys(nodeRegions).length > 1 && !isTenant,
     viewMode: selectDatabaseDetailsViewModeSetting(state),
@@ -83,10 +81,8 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): DatabaseDetailsPageActions => ({
-  refreshDatabaseDetails: (database: string, csIndexUnusedDuration: string) => {
-    dispatch(
-      databaseDetailsActions.refresh({ database, csIndexUnusedDuration }),
-    );
+  refreshDatabaseDetails: (database: string) => {
+    dispatch(databaseDetailsActions.refresh({ database, include_stats: true }));
   },
   refreshTableDetails: (
     database: string,

@@ -12,7 +12,6 @@ import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { actions } from "./databasesList.reducers";
 import { getDatabasesList } from "src/api";
-import moment from "moment-timezone";
 
 export function* refreshDatabasesListSaga() {
   yield put(actions.request());
@@ -20,7 +19,7 @@ export function* refreshDatabasesListSaga() {
 
 export function* requestDatabasesListSaga(): any {
   try {
-    const result = yield call(getDatabasesList, moment.duration(10, "m"));
+    const result = yield call(getDatabasesList);
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));

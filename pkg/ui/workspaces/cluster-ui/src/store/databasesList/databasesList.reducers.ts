@@ -9,11 +9,11 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DatabasesListResponse } from "src/api";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DOMAIN_NAME, noopReducer } from "../utils";
 
 export type DatabasesListState = {
-  data: DatabasesListResponse;
+  data: cockroach.server.serverpb.DatabasesResponse;
   // Captures thrown errors.
   lastError: Error;
   valid: boolean;
@@ -31,7 +31,10 @@ const databasesListSlice = createSlice({
   name: `${DOMAIN_NAME}/databasesList`,
   initialState,
   reducers: {
-    received: (state, action: PayloadAction<DatabasesListResponse>) => {
+    received: (
+      state,
+      action: PayloadAction<cockroach.server.serverpb.DatabasesResponse>,
+    ) => {
       state.data = action.payload;
       state.valid = true;
       state.inFlight = false;

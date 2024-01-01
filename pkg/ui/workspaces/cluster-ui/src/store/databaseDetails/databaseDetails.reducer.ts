@@ -8,49 +8,44 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import {
-  DatabaseDetailsReqParams,
-  DatabaseDetailsResponse,
-  DatabaseDetailsSpanStatsReqParams,
-  DatabaseDetailsSpanStatsResponse,
-  ErrorWithKey,
-  SqlApiResponse,
-} from "../../api";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+
+import { ErrorWithKey } from "../../api";
 import { DOMAIN_NAME } from "../utils";
 
 type DatabaseDetailsWithKey = {
-  databaseDetailsResponse: SqlApiResponse<DatabaseDetailsResponse>;
+  databaseDetailsResponse: cockroach.server.serverpb.DatabaseDetailsResponse;
   key: string; // Database name.
 };
 
-type DatabaseDetailsSpanStatsWithKey = {
-  response: SqlApiResponse<DatabaseDetailsSpanStatsResponse>;
-  key: string; // Database name.
-};
+// type DatabaseDetailsSpanStatsWithKey = {
+//   response: SqlApiResponse<DatabaseDetailsSpanStatsResponse>;
+//   key: string; // Database name.
+// };
 
 export type DatabaseDetailsState = {
-  data?: SqlApiResponse<DatabaseDetailsResponse>;
+  data?: cockroach.server.serverpb.DatabaseDetailsResponse;
   // Captures thrown errors.
   lastError?: Error;
   valid: boolean;
   inFlight: boolean;
 };
 
-export type DatabaseDetailsSpanStatsState = {
-  data?: SqlApiResponse<DatabaseDetailsSpanStatsResponse>;
-  lastError?: Error;
-  valid: boolean;
-  inFlight: boolean;
-};
+// export type DatabaseDetailsSpanStatsState = {
+//   data?: SqlApiResponse<DatabaseDetailsSpanStatsResponse>;
+//   lastError?: Error;
+//   valid: boolean;
+//   inFlight: boolean;
+// };
 
 export type KeyedDatabaseDetailsState = {
   [dbName: string]: DatabaseDetailsState;
 };
 
-export type KeyedDatabaseDetailsSpanStatsState = {
-  [dbName: string]: DatabaseDetailsSpanStatsState;
-};
+// export type KeyedDatabaseDetailsSpanStatsState = {
+//   [dbName: string]: DatabaseDetailsSpanStatsState;
+// };
 
 // const initialState: KeyedDatabaseDetailsState = {};
 
@@ -74,51 +69,9 @@ export const databaseDetailsReducer = createSlice({
         lastError: action.payload.err,
       };
     },
-    refresh: (state, action: PayloadAction<DatabaseDetailsReqParams>) => {
-      state[action.payload.database] = {
-        valid: false,
-        inFlight: true,
-        data: null,
-        lastError: null,
-      };
-    },
-    request: (state, action: PayloadAction<DatabaseDetailsReqParams>) => {
-      state[action.payload.database] = {
-        valid: false,
-        inFlight: true,
-        data: null,
-        lastError: null,
-      };
-    },
-  },
-});
-
-export const databaseDetailsSpanStatsReducer = createSlice({
-  name: `${DOMAIN_NAME}/databaseDetailsSpanStats`,
-  initialState: {} as KeyedDatabaseDetailsSpanStatsState,
-  reducers: {
-    received: (
-      state,
-      action: PayloadAction<DatabaseDetailsSpanStatsWithKey>,
-    ) => {
-      state[action.payload.key] = {
-        valid: true,
-        inFlight: false,
-        data: action.payload.response,
-        lastError: null,
-      };
-    },
-    failed: (state, action: PayloadAction<ErrorWithKey>) => {
-      state[action.payload.key] = {
-        valid: false,
-        inFlight: false,
-        data: null,
-        lastError: action.payload.err,
-      };
-    },
     refresh: (
       state,
-      action: PayloadAction<DatabaseDetailsSpanStatsReqParams>,
+      action: PayloadAction<cockroach.server.serverpb.DatabaseDetailsRequest>,
     ) => {
       state[action.payload.database] = {
         valid: false,
@@ -129,7 +82,7 @@ export const databaseDetailsSpanStatsReducer = createSlice({
     },
     request: (
       state,
-      action: PayloadAction<DatabaseDetailsSpanStatsReqParams>,
+      action: PayloadAction<cockroach.server.serverpb.DatabaseDetailsRequest>,
     ) => {
       state[action.payload.database] = {
         valid: false,
@@ -140,3 +93,54 @@ export const databaseDetailsSpanStatsReducer = createSlice({
     },
   },
 });
+
+// TODO: refactor to separate file if it is needed?
+// export const databaseDetailsSpanStatsReducer = createSlice({
+//   name: `${DOMAIN_NAME}/databaseDetailsSpanStats`,
+//   initialState: {} as KeyedDatabaseDetailsSpanStatsState,
+//   reducers: {
+//     received: (
+//       state,
+//       action: PayloadAction<DatabaseDetailsSpanStatsWithKey>,
+//     ) => {
+//       state[action.payload.key] = {
+//         valid: true,
+//         inFlight: false,
+//         data: action.payload.response,
+//         lastError: null,
+//       };
+//     },
+//     failed: (state, action: PayloadAction<ErrorWithKey>) => {
+//       state[action.payload.key] = {
+//         valid: false,
+//         inFlight: false,
+//         data: null,
+//         lastError: action.payload.err,
+//       };
+//     },
+//     refresh: (
+//       state,
+//       action: PayloadAction<DatabaseDetailsSpanStatsReqParams>,
+//     ) => {
+//       state[action.payload.database] = {
+//         valid: false,
+//         inFlight: true,
+//         data: null,
+//         lastError: null,
+//       };
+//     },
+//     request: (
+//       state,
+//       action: PayloadAction<DatabaseDetailsSpanStatsReqParams>,
+//     ) => {
+//       state[action.payload.database] = {
+//         valid: false,
+//         inFlight: true,
+//         data: null,
+//         lastError: null,
+//       };
+//     },
+//   },
+// });
+
+export const { reducer, actions } = databaseDetailsReducer;
