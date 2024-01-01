@@ -1455,7 +1455,7 @@ func (t *testTenant) QueryTableID(
 func (t *testTenant) StatsForSpan(
 	ctx context.Context, span roachpb.Span,
 ) (*serverpb.TableStatsResponse, error) {
-	return t.t.admin.statsForSpan(ctx, span)
+	return t.t.admin.statsForSpan(ctx, []roachpb.Span{span})
 }
 
 // SetReady is part of the serverutils.ApplicationLayerInterface.
@@ -2351,7 +2351,7 @@ func (ts *testServer) QueryTableID(
 func (ts *testServer) StatsForSpan(
 	ctx context.Context, span roachpb.Span,
 ) (*serverpb.TableStatsResponse, error) {
-	return ts.admin.statsForSpan(ctx, span)
+	return ts.admin.statsForSpan(ctx, []roachpb.Span{span})
 }
 
 // SetReady is part of the serverutils.ApplicationLayerInterface.

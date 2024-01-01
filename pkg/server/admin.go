@@ -681,57 +681,28 @@ func (s *adminServer) getDatabaseStats(
 	// limit on stats requests being sent to KV nodes. Such a two-level scheme
 	// would provide fairness such that earlier requests finish before later
 	// requests.
-	sem := quotapool.NewIntPool(
-		"database stats", s.statsLimiter.Capacity(),
-	)
-	responses := make(chan tableStatsResponse, len(tableSpans))
-	for tableName, tableSpan := range tableSpans {
-		// Because Go reuses loop variables across iterations, we must
-		// make these local, stable copies for the async task to close
-		// over, else our results will be nondeterministic.
-		tableName := tableName
-		tableSpan := tableSpan
-		if err := s.sqlServer.stopper.RunAsyncTaskEx(
-			ctx, stop.TaskOpts{
-				TaskName:   "server.adminServer: requesting table stats",
-				Sem:        sem,
-				WaitForSem: true,
-			},
-			func(ctx context.Context) {
-				statsResponse, err := s.statsForSpan(ctx, tableSpan)
+	//sem := quotapool.NewIntPool(
+	//	"database stats", s.statsLimiter.Capacity(),
+	//)
 
-				responses <- tableStatsResponse{
-					name: tableName,
-					resp: statsResponse,
-					err:  err,
-				}
-			}); err != nil {
-			return nil, err
-		}
+	spansSlice := make([]roachpb.Span, 0)
+	for _, span := range tableSpans {
+		spansSlice = append(spansSlice, span)
 	}
+
+	resp, err := s.statsForSpan(ctx, spansSlice)
+	if err != nil {
+		return nil, err
+	}
+	stats.RangeCount = resp.RangeCount
+	stats.ApproximateDiskBytes = resp.ApproximateDiskBytes
+	stats.LiveBytes = uint64(resp.Stats.LiveBytes)
+	stats.TotalBytes = uint64(resp.Stats.Total())
 
 	// Track all nodes storing databases.
 	nodeIDs := make(map[roachpb.NodeID]struct{})
-	for i := 0; i < len(tableSpans); i++ {
-		select {
-		case response := <-responses:
-			if response.err != nil {
-				stats.MissingTables = append(
-					stats.MissingTables,
-					&serverpb.DatabaseDetailsResponse_Stats_MissingTable{
-						Name:         response.name,
-						ErrorMessage: response.err.Error(),
-					})
-			} else {
-				stats.RangeCount += response.resp.RangeCount
-				stats.ApproximateDiskBytes += response.resp.ApproximateDiskBytes
-				for _, id := range response.resp.NodeIDs {
-					nodeIDs[id] = struct{}{}
-				}
-			}
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+	for _, id := range resp.NodeIDs {
+		nodeIDs[id] = struct{}{}
 	}
 
 	stats.NodeIDs = make([]roachpb.NodeID, 0, len(nodeIDs))
@@ -1252,7 +1223,7 @@ func (s *adminServer) TableStats(
 	}
 	tableSpan := generateTableSpan(tableID, s.sqlServer.execCfg.Codec)
 
-	r, err := s.statsForSpan(ctx, tableSpan)
+	r, err := s.statsForSpan(ctx, []roachpb.Span{tableSpan})
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -1271,10 +1242,10 @@ func (s *adminServer) NonTableStats(
 		return nil, err
 	}
 
-	timeSeriesStats, err := s.statsForSpan(ctx, roachpb.Span{
+	timeSeriesStats, err := s.statsForSpan(ctx, []roachpb.Span{{
 		Key:    keys.TimeseriesPrefix,
 		EndKey: keys.TimeseriesPrefix.PrefixEnd(),
-	})
+	}})
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -1297,7 +1268,7 @@ func (s *adminServer) NonTableStats(
 		},
 	}
 	for _, span := range spansForInternalUse {
-		nonTableStats, err := s.statsForSpan(ctx, span)
+		nonTableStats, err := s.statsForSpan(ctx, []roachpb.Span{span})
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}
@@ -1326,16 +1297,40 @@ func (s *adminServer) NonTableStats(
 // TODO(clust-obs): This method should not be implemented on top of
 // `adminServer`. There should be a better place for it.
 func (s *adminServer) statsForSpan(
-	ctx context.Context, span roachpb.Span,
+	ctx context.Context, spansss []roachpb.Span,
 ) (*serverpb.TableStatsResponse, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Get a list of nodeIDs, range counts, and replica counts per node
-	// for the specified span.
-	nodeIDs, rangeCount, replCounts, err := s.getSpanDetails(ctx, span)
-	if err != nil {
-		return nil, err
+	nodeIdsToSpans := make(map[roachpb.NodeID][]roachpb.Span)
+	replCounts := make(map[roachpb.NodeID]int64)
+	var rangeCount int64
+	var nodeIDs []roachpb.NodeID
+
+	for _, span := range spansss {
+		// Get a list of nodeIDs, range counts, and replica counts per node
+		// for the specified span.
+		nodeIDs1, rangeCount1, replCounts1, err := s.getSpanDetails(ctx, span)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, nodeID := range nodeIDs1 {
+			n := nodeIdsToSpans[nodeID]
+			n = append(n, span)
+			nodeIdsToSpans[nodeID] = n
+		}
+
+		rangeCount += rangeCount1
+
+		for nodeID, i := range replCounts1 {
+			c := replCounts[nodeID]
+			replCounts[nodeID] = c + i
+		}
+	}
+
+	for nodeID := range nodeIdsToSpans {
+		nodeIDs = append(nodeIDs, nodeID)
 	}
 
 	// Construct TableStatsResponse by sending an RPC to every node involved.
@@ -1365,8 +1360,8 @@ func (s *adminServer) statsForSpan(
 	}
 
 	// Send a SpanStats query to each node.
-	responses := make(chan nodeResponse, len(nodeIDs))
-	for _, nodeID := range nodeIDs {
+	responses := make(chan nodeResponse, len(nodeIdsToSpans))
+	for nodeID, spans := range nodeIdsToSpans {
 		nodeID := nodeID // avoid data race
 		if err := s.sqlServer.stopper.RunAsyncTaskEx(
 			ctx, stop.TaskOpts{
@@ -1383,8 +1378,9 @@ func (s *adminServer) statsForSpan(
 						if err == nil {
 							client := serverpb.NewStatusClient(conn)
 							req := roachpb.SpanStatsRequest{
-								Spans:  []roachpb.Span{span},
-								NodeID: nodeID.String(),
+								Spans:         spans,
+								NodeID:        nodeID.String(),
+								SkipMvccStats: true,
 							}
 							spanResponse, err = client.SpanStats(ctx, &req)
 						}
@@ -1410,7 +1406,7 @@ func (s *adminServer) statsForSpan(
 		tableStatResponse.ReplicaCount += replCount
 	}
 
-	for remainingResponses := len(nodeIDs); remainingResponses > 0; remainingResponses-- {
+	for remainingResponses := len(nodeIdsToSpans); remainingResponses > 0; remainingResponses-- {
 		select {
 		case resp := <-responses:
 			// For nodes which returned an error, note that the node's data
@@ -1432,8 +1428,10 @@ func (s *adminServer) statsForSpan(
 					},
 				)
 			} else {
-				tableStatResponse.Stats.Add(resp.resp.SpanToStats[span.String()].TotalStats)
-				tableStatResponse.ApproximateDiskBytes += resp.resp.SpanToStats[span.String()].ApproximateDiskBytes
+				for _, span := range nodeIdsToSpans[resp.nodeID] {
+					tableStatResponse.Stats.Add(resp.resp.SpanToStats[span.String()].TotalStats)
+					tableStatResponse.ApproximateDiskBytes += resp.resp.SpanToStats[span.String()].ApproximateDiskBytes
+				}
 			}
 		case <-ctx.Done():
 			// Caller gave up, stop doing work.

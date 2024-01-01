@@ -188,7 +188,7 @@ func (s *systemStatusServer) getLocalStats(
 ) (*roachpb.SpanStatsResponse, error) {
 	var res = &roachpb.SpanStatsResponse{SpanToStats: make(map[string]*roachpb.SpanStats)}
 	for _, span := range req.Spans {
-		spanStats, err := s.statsForSpan(ctx, span, req.SkipMvccStats)
+		spanStats, err := s.statsForSpan(ctx, span, req.SkipMvccStats, true)
 		if err != nil {
 			return nil, err
 		}
@@ -198,7 +198,7 @@ func (s *systemStatusServer) getLocalStats(
 }
 
 func (s *systemStatusServer) statsForSpan(
-	ctx context.Context, span roachpb.Span, skipMVCCStats bool,
+	ctx context.Context, span roachpb.Span, skipMVCCStats bool, simplifiedMVCCStats bool,
 ) (*roachpb.SpanStats, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "systemStatusServer.statsForSpan")
 	defer sp.Finish()
@@ -245,6 +245,7 @@ func (s *systemStatusServer) statsForSpan(
 		return spanStats, nil
 	}
 
+	s.TenantRanges()
 	var fullyContainedKeysBatch []roachpb.Key
 	// Iterate through the span's ranges.
 	for _, desc := range descriptors {

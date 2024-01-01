@@ -5654,6 +5654,8 @@ zone configuration, and size statistics for a database.
 | approximate_disk_bytes | [uint64](#cockroach.server.serverpb.DatabaseDetailsResponse-uint64) |  | An approximation of the disk space (in bytes) used for all replicas of all tables across the cluster. | [reserved](#support-status) |
 | node_ids | [int32](#cockroach.server.serverpb.DatabaseDetailsResponse-int32) | repeated | node_ids is the ordered list of node ids on which data is stored. | [reserved](#support-status) |
 | num_index_recommendations | [int32](#cockroach.server.serverpb.DatabaseDetailsResponse-int32) |  |  | [reserved](#support-status) |
+| live_bytes | [uint64](#cockroach.server.serverpb.DatabaseDetailsResponse-uint64) |  |  | [reserved](#support-status) |
+| total_bytes | [uint64](#cockroach.server.serverpb.DatabaseDetailsResponse-uint64) |  |  | [reserved](#support-status) |
 
 
 

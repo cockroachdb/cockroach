@@ -99,6 +99,10 @@ message DatabaseDetailsResponse {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
     int32 num_index_recommendations = 5;
+
+    uint64 live_bytes = 6;
+
+    uint64 total_bytes = 7;
   }
 
   // grants are the results of SHOW GRANTS for this database.
