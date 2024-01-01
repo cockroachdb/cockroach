@@ -223,6 +223,7 @@ func (rdt *rangeDistributionTester) getPartitions() (partitions []sql.SpanPartit
 			return errors.New("no partitions found")
 		}
 	})
+	rdt.t.Logf("found partitions: %v", partitions)
 	return
 }
 
@@ -330,8 +331,8 @@ func (rdt *rangeDistributionTester) countRangesPerNode(partitions []sql.SpanPart
 				}
 			}
 		}
-
 	}
+	rdt.t.Logf("range counts: %v", counts)
 	return counts
 }
 
@@ -345,10 +346,9 @@ func TestChangefeedDistributionStrategy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// The test is slow.
+	// The test is slow and will time out under deadlock/race/stress.
 	skip.UnderShort(t)
-	skip.UnderStress(t)
-	skip.UnderRace(t)
+	skip.UnderDuress(t)
 
 	noLocality := func(i int) []roachpb.Tier {
 		return make([]roachpb.Tier, 0)
