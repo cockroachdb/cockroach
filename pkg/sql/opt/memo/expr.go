@@ -459,14 +459,12 @@ type JoinFlags uint16
 
 // Each flag indicates if a certain type of join is disallowed.
 const (
-	// DisallowHashJoinStoreLeft corresponds to a hash join where the left side is
-	// stored into the hashtable. Note that execution can override the stored side
-	// if it finds that the other side is smaller (up to a certain size).
+	// DisallowHashJoinStoreLeft corresponds to a hash join where the left side
+	// is stored into the hashtable.
 	DisallowHashJoinStoreLeft JoinFlags = 1 << iota
 
-	// DisallowHashJoinStoreRight corresponds to a hash join where the right side
-	// is stored into the hashtable. Note that execution can override the stored
-	// side if it finds that the other side is smaller (up to a certain size).
+	// DisallowHashJoinStoreRight corresponds to a hash join where the right
+	// side is stored into the hashtable.
 	DisallowHashJoinStoreRight
 
 	// DisallowMergeJoin corresponds to a merge join.
