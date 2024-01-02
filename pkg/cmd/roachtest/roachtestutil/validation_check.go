@@ -33,6 +33,10 @@ import (
 // The consistency check may not get enough time to complete, but will return
 // any inconsistencies that it did find before timing out.
 func CheckReplicaDivergenceOnDB(ctx context.Context, l *logger.Logger, db *gosql.DB) error {
+	// Cancel context if we error out early.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Speed up consistency checks. The test is done, so let's go full throttle.
 	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.consistency_check.max_rate = '1GB'")
 	if err != nil {
@@ -46,13 +50,15 @@ func CheckReplicaDivergenceOnDB(ctx context.Context, l *logger.Logger, db *gosql
 	// TODO(erikgrinaker): avoid result set buffering. We seem to be receiving
 	// results in batches of 64 rows, regardless of results_buffer_size or the
 	// row size (e.g. with 16 KB ballast per row). Not clear where this buffering
-	// is happening or how to disable it.
+	// is happening or how to disable it. This also means that we can take more
+	// than maxInconsistencies storage checkpoints, if they happen within the
+	// same buffered result.
 	started := timeutil.Now()
 	rows, err := db.QueryContext(ctx, `
 SET CLUSTER SETTING kv.consistency_queue.testing_fast_efos_acquisition.enabled = true;
 SET statement_timeout = '20m';
 SELECT t.range_id, t.start_key_pretty, t.status, t.detail
-FROM crdb_internal.check_consistency(false, '', '') as t;`)
+FROM crdb_internal.check_consistency(false, '', '', true) as t;`)
 	if err != nil {
 		// TODO(tbg): the checks can fail for silly reasons like missing gossiped
 		// descriptors, etc. -- not worth failing the test for. Ideally this would
@@ -65,7 +71,7 @@ FROM crdb_internal.check_consistency(false, '', '') as t;`)
 	logEvery := log.Every(time.Minute)
 	logEvery.ShouldLog() // don't immediately log
 
-	const maxReport = 10 // max number of inconsistencies to report
+	const maxInconsistencies = 10
 	var finalErr error
 	var ranges, inconsistent int
 	for rows.Next() {
@@ -79,19 +85,16 @@ FROM crdb_internal.check_consistency(false, '', '') as t;`)
 		// since these can happen in rare cases due to lease requests not respecting
 		// latches: https://github.com/cockroachdb/cockroach/issues/93896
 		//
-		// TODO(erikgrinaker): We should take storage checkpoints for inconsistent
-		// ranges as well, up to maxReport. This requires support in
-		// check_consistency() such that we take the checkpoints at the same Raft
-		// log index across nodes.
+		// Bail out after maxInconsistencies failures.
 		if status == kvpb.CheckConsistencyResponse_RANGE_INCONSISTENT.String() {
 			inconsistent++
 			msg := fmt.Sprintf("r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail)
 			l.Printf(msg)
-			if inconsistent <= maxReport {
-				finalErr = errors.CombineErrors(finalErr, errors.Newf("%s", redact.SafeString(msg)))
-			} else if inconsistent == maxReport+1 {
+			finalErr = errors.CombineErrors(finalErr, errors.Newf("%s", redact.SafeString(msg)))
+			if inconsistent >= maxInconsistencies {
 				finalErr = errors.CombineErrors(finalErr,
-					errors.Newf("max number of inconsistencies %d exceeded", maxReport))
+					errors.Newf("found max number of inconsistencies %d", maxInconsistencies))
+				return finalErr
 			}
 		}
 
