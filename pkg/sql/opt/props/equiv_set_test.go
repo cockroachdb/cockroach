@@ -75,7 +75,7 @@ func TestEquivSet_Rand(t *testing.T) {
 		return "expected columns not to be equivalent, but were"
 	}
 
-	equivSet := NewEquivSet()
+	equivSet := EquivSet{}
 	for numCols := 2; numCols <= maxCols; numCols = numCols << 1 {
 		for i := 0; i < numIterations; i++ {
 			var colsUsed opt.ColSet
@@ -93,7 +93,7 @@ func TestEquivSet_Rand(t *testing.T) {
 						rightCol = getRandValueForCol(colsUsed, useExistingRight)
 					}
 					addToOracle(leftCol, rightCol)
-					equivSet.Add(opt.MakeColSet(leftCol, rightCol))
+					equivSet.addNoCopy(opt.MakeColSet(leftCol, rightCol))
 					fds.AddEquivalency(leftCol, rightCol)
 					colsUsed.Add(leftCol)
 					colsUsed.Add(rightCol)
