@@ -12,3 +12,4 @@ export * from "./transactionsPage";
 export * from "./transactionsPageConnected";
 export * from "./recentTransactionsView";
 export * from "./transactionsPageRoot";
+export { getTxnFromSqlStatsTxns } from "./utils";

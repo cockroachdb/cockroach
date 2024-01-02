@@ -49,11 +49,11 @@ import {
   getMatchParamByName,
   queryByName,
   appNamesAttr,
-  unset,
 } from "../util";
 import { TimeScale } from "../timeScaleDropdown";
 import { actions as analyticsActions } from "../store/analytics";
 import { selectRequestTime } from "src/transactionsPage/transactionsPage.selectors";
+import { getTxnFromSqlStatsTxns } from "../transactionsPage/utils";
 
 export const selectTransaction = createSelector(
   (state: AppState) => state.adminUI?.transactions,
@@ -68,7 +68,9 @@ export const selectTransaction = createSelector(
       };
     }
 
-    const apps = queryByName(props.location, appNamesAttr)
+    // We convert the empty string to null here so that ?appNames= is treated as
+    // selecting all apps.
+    const apps = (queryByName(props.location, appNamesAttr) || null)
       ?.split(",")
       .map(s => s.trim());
 
@@ -77,11 +79,10 @@ export const selectTransaction = createSelector(
       txnFingerprintIdAttr,
     );
 
-    const transaction = transactions.find(
-      txn =>
-        txn.stats_data.transaction_fingerprint_id.toString() ===
-          txnFingerprintId &&
-        (apps?.length ? apps.includes(txn.stats_data.app ?? unset) : true),
+    const transaction = getTxnFromSqlStatsTxns(
+      transactions,
+      txnFingerprintId,
+      apps,
     );
 
     return {

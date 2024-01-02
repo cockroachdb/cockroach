@@ -18,7 +18,7 @@ import {
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { appNamesAttr, txnFingerprintIdAttr, unset } from "src/util/constants";
+import { appNamesAttr, txnFingerprintIdAttr } from "src/util/constants";
 import { getMatchParamByName, queryByName } from "src/util/query";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
@@ -33,6 +33,7 @@ import {
   TransactionDetailsDispatchProps,
   TransactionDetailsProps,
   TransactionDetails,
+  getTxnFromSqlStatsTxns,
 } from "@cockroachlabs/cluster-ui";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
@@ -53,7 +54,9 @@ export const selectTransaction = createSelector(
       };
     }
 
-    const apps = queryByName(props.location, appNamesAttr)
+    // We convert the empty string to null here so that ?appNames= is treated as
+    // selecting all apps.
+    const apps = (queryByName(props.location, appNamesAttr) || null)
       ?.split(",")
       .map(s => s.trim());
 
@@ -62,11 +65,10 @@ export const selectTransaction = createSelector(
       txnFingerprintIdAttr,
     );
 
-    const transaction = transactions.find(
-      txn =>
-        txn.stats_data.transaction_fingerprint_id.toString() ===
-          txnFingerprintId &&
-        (apps?.length ? apps.includes(txn.stats_data.app ?? unset) : true),
+    const transaction = getTxnFromSqlStatsTxns(
+      transactions,
+      txnFingerprintId,
+      apps,
     );
 
     return {

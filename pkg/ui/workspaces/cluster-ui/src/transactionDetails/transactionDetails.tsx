@@ -32,7 +32,7 @@ import { tableClasses } from "../transactionsTable/transactionsTableClasses";
 import { SqlBox } from "../sql";
 import {
   aggregateStatements,
-  statementFingerprintIdsToText,
+  getTxnQueryString,
 } from "../transactionsPage/utils";
 import { Loading } from "../loading";
 import { SummaryCard, SummaryCardItem } from "../summaryCard";
@@ -42,7 +42,8 @@ import {
   FixFingerprintHexValue,
   Duration,
   formatNumberForDisplay,
-  unset,
+  queryByName,
+  appNamesAttr,
 } from "src/util";
 import { UIConfigState } from "../store";
 import LoadingError from "../sqlActivity/errorComponent";
@@ -94,6 +95,8 @@ const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 const insightsTableCx = classNames.bind(insightTableStyles);
+import { unset } from "src/util";
+import { getStatementsForTransaction } from "../transactionsPage/utils";
 
 type Statement =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -137,6 +140,8 @@ interface TState {
   sortSetting: SortSetting;
   pagination: ISortedTablePagination;
   latestTransactionText: string;
+  appsAsStr: string | null;
+  statementsForTransaction: Statement[];
 }
 
 function statementsRequestFromProps(
@@ -157,17 +162,30 @@ export class TransactionDetails extends React.Component<
 > {
   constructor(props: TransactionDetailsProps) {
     super(props);
+
+    const appsAsStr = queryByName(this.props.location, appNamesAttr) || null;
+    const appsList = appsAsStr?.split(",").map(s => s.trim()) ?? [];
+    const statementsForTransaction = getStatementsForTransaction(
+      props.transactionFingerprintId,
+      appsList,
+      this.props.statements,
+    );
     this.state = {
       sortSetting: {
         // Sort by statement latency as default column.
         ascending: false,
         columnTitle: "statementTime",
       },
+      statementsForTransaction,
       pagination: {
         pageSize: 10,
         current: 1,
       },
-      latestTransactionText: this.getTxnQueryString(),
+      latestTransactionText: getTxnQueryString(
+        props.transaction,
+        statementsForTransaction,
+      ),
+      appsAsStr,
     };
 
     // In case the user selected a option not available on this page,
@@ -179,35 +197,26 @@ export class TransactionDetails extends React.Component<
     }
   }
 
-  getTxnQueryString = (): string => {
-    const { transaction } = this.props;
-
-    const statementFingerprintIds =
-      transaction?.stats_data?.statement_fingerprint_ids;
-
-    return (
-      (statementFingerprintIds &&
-        statementFingerprintIdsToText(
-          statementFingerprintIds,
-          this.getStatementsForTransaction(),
-        )) ??
-      ""
-    );
-  };
-
-  setTxnQueryString = (): void => {
-    const transactionText = this.getTxnQueryString();
-
+  updateTxnState = (): void => {
     // If a new, non-empty-string transaction text is available (derived from the time-frame-specific endpoint
     // response), cache the text.
-    if (
-      transactionText &&
-      transactionText !== this.state.latestTransactionText
-    ) {
-      this.setState({
-        latestTransactionText: transactionText,
-      });
-    }
+    const appsAsStr = queryByName(this.props.location, appNamesAttr) || null;
+    const appsList = appsAsStr?.split(",").map(s => s.trim()) ?? [];
+    const statementsForTransaction = getStatementsForTransaction(
+      this.props.transactionFingerprintId,
+      appsList,
+      this.props.statements,
+    );
+    const transactionText = getTxnQueryString(
+      this.props.transaction,
+      statementsForTransaction,
+    );
+
+    this.setState({
+      latestTransactionText: transactionText,
+      appsAsStr,
+      statementsForTransaction,
+    });
   };
 
   changeTimeScale = (ts: TimeScale): void => {
@@ -242,9 +251,10 @@ export class TransactionDetails extends React.Component<
     if (
       prevProps.transactionFingerprintId !==
         this.props.transactionFingerprintId ||
-      prevProps.statements !== this.props.statements
+      prevProps.statements !== this.props.statements ||
+      prevProps.location?.search !== this.props.location?.search
     ) {
-      this.setTxnQueryString();
+      this.updateTxnState();
     }
 
     if (this.props.timeScale !== prevProps.timeScale) {
@@ -268,29 +278,18 @@ export class TransactionDetails extends React.Component<
     this.props.history.push("/sql-activity?tab=Transactions&view=fingerprints");
   };
 
-  getStatementsForTransaction = (): Statement[] => {
-    const { transaction, statements } = this.props;
-
-    const statementFingerprintIds =
-      transaction?.stats_data?.statement_fingerprint_ids;
-    if (!statementFingerprintIds) {
-      return [];
-    }
-
-    return (
-      statements?.filter(
-        s =>
-          s.key.key_data.transaction_fingerprint_id.toString() ===
-          this.props.transactionFingerprintId,
-      ) ?? []
-    );
-  };
-
   render(): React.ReactElement {
     const { error, nodeRegions, transaction } = this.props;
     const { latestTransactionText } = this.state;
-    const statementsForTransaction = this.getStatementsForTransaction();
+    const statementsForTransaction = this.state.statementsForTransaction;
     const transactionStats = transaction?.stats_data?.stats;
+    const visibleApps = Array.from(
+      new Set(
+        statementsForTransaction.map(s =>
+          s.key.key_data.app ? s.key.key_data.app : unset,
+        ),
+      ),
+    )?.join(", ");
 
     return (
       <div>
@@ -479,11 +478,7 @@ export class TransactionDetails extends React.Component<
                         />
                         <SummaryCardItem
                           label="Application name"
-                          value={
-                            transaction?.stats_data?.app?.length > 0
-                              ? transaction?.stats_data?.app
-                              : unset
-                          }
+                          value={visibleApps}
                         />
                         <SummaryCardItem
                           label="Fingerprint ID"
