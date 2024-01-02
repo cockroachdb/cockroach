@@ -64,10 +64,11 @@ type Manager struct {
 	idAlloc uint64
 	scopes  [spanset.NumSpanScope]scopedManager
 
-	stopper           *stop.Stopper
-	slowReqs          *metric.Gauge
-	settings          *cluster.Settings
-	everySecondLogger log.EveryN
+	stopper            *stop.Stopper
+	slowReqs           *metric.Gauge
+	settings           *cluster.Settings
+	everySecondLogger  log.EveryN
+	latchWaitDurations metric.IHistogram
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
@@ -79,12 +80,18 @@ type scopedManager struct {
 
 // Make returns an initialized Manager. Using this constructor is optional as
 // the type's zero value is valid to use directly.
-func Make(stopper *stop.Stopper, slowReqs *metric.Gauge, settings *cluster.Settings) Manager {
+func Make(
+	stopper *stop.Stopper,
+	slowReqs *metric.Gauge,
+	settings *cluster.Settings,
+	latchWaitDurations metric.IHistogram,
+) Manager {
 	return Manager{
-		stopper:           stopper,
-		slowReqs:          slowReqs,
-		settings:          settings,
-		everySecondLogger: log.Every(1 * time.Second),
+		stopper:            stopper,
+		slowReqs:           slowReqs,
+		settings:           settings,
+		everySecondLogger:  log.Every(1 * time.Second),
+		latchWaitDurations: latchWaitDurations,
 	}
 }
 
@@ -568,6 +575,12 @@ func (m *Manager) waitForSignal(
 	waitType, heldType spanset.SpanAccess,
 	wait, held *latch,
 ) error {
+	tBegin := timeutil.Now()
+	defer func() {
+		if m.latchWaitDurations != nil {
+			m.latchWaitDurations.RecordValue(int64(timeutil.Since(tBegin)))
+		}
+	}()
 	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
 	poisonCh := held.g.poison.signalChan()
 	for {
