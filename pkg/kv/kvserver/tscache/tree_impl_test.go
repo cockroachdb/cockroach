@@ -33,14 +33,14 @@ func TestTreeImplEviction(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	manual.Advance(1)
 	aTS := clock.Now()
-	tc.Add(roachpb.Key("a"), nil, aTS, noTxnID)
+	tc.Add(ctx, roachpb.Key("a"), nil, aTS, noTxnID)
 
 	// Increment time by the MinRetentionWindow and add another key.
 	manual.Advance(MinRetentionWindow)
-	tc.Add(roachpb.Key("b"), nil, clock.Now(), noTxnID)
+	tc.Add(ctx, roachpb.Key("b"), nil, clock.Now(), noTxnID)
 
 	// Verify looking up key "c" returns the new low water mark ("a"'s timestamp).
-	if rTS, rTxnID := tc.GetMax(roachpb.Key("c"), nil); rTS != aTS || rTxnID != noTxnID {
+	if rTS, rTxnID := tc.GetMax(ctx, roachpb.Key("c"), nil); rTS != aTS || rTxnID != noTxnID {
 		t.Errorf("expected low water mark %s, got %s; txnID=%s", aTS, rTS, rTxnID)
 	}
 }
@@ -58,11 +58,11 @@ func TestTreeImplNoEviction(t *testing.T) {
 	// Increment time to the low water mark + 1.
 	manual.Advance(1)
 	aTS := clock.Now()
-	tc.Add(roachpb.Key("a"), nil, aTS, noTxnID)
+	tc.Add(ctx, roachpb.Key("a"), nil, aTS, noTxnID)
 
 	// Increment time by the MinRetentionWindow and add another key.
 	manual.Advance(MinRetentionWindow)
-	tc.Add(roachpb.Key("b"), nil, clock.Now(), noTxnID)
+	tc.Add(ctx, roachpb.Key("b"), nil, clock.Now(), noTxnID)
 
 	// Verify that the cache still has 2 entries in it
 	if l, want := tc.len(), 2; l != want {
