@@ -61,6 +61,14 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 		return err
 	}
 
+	var proxyProtocolLn net.Listener
+	if proxyContext.ProxyProtocolListenAddr != "" {
+		proxyProtocolLn, err = net.Listen("tcp", proxyContext.ProxyProtocolListenAddr)
+		if err != nil {
+			return err
+		}
+	}
+
 	metricsLn, err := net.Listen("tcp", proxyContext.MetricsAddress)
 	if err != nil {
 		return err
@@ -85,11 +93,22 @@ func runStartSQLProxy(cmd *cobra.Command, args []string) (returnErr error) {
 
 	if err := stopper.RunAsyncTask(ctx, "serve-proxy", func(ctx context.Context) {
 		log.Infof(ctx, "proxy server listening at %s", proxyLn.Addr())
-		if err := server.Serve(ctx, proxyLn); err != nil {
+		if err := server.Serve(ctx, proxyLn, proxyContext.RequireProxyProtocol); err != nil {
 			errChan <- err
 		}
 	}); err != nil {
 		return err
+	}
+
+	if proxyProtocolLn != nil {
+		if err := stopper.RunAsyncTask(ctx, "serve-proxy-with-required-proxy-headers", func(ctx context.Context) {
+			log.Infof(ctx, "proxy with required proxy headers server listening at %s", proxyProtocolLn.Addr())
+			if err := server.Serve(ctx, proxyProtocolLn, true /* requireProxyProtocol */); err != nil {
+				errChan <- err
+			}
+		}); err != nil {
+			return err
+		}
 	}
 
 	return waitForSignals(ctx, server, stopper, proxyLn, errChan)

@@ -216,8 +216,8 @@ func (s *Server) ServeHTTP(ctx context.Context, ln net.Listener) error {
 // Serve serves a listener according to the Options given in NewServer().
 // Incoming client connections are taken through the Postgres handshake and
 // relayed to the configured backend server.
-func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
-	if s.handler.RequireProxyProtocol {
+func (s *Server) Serve(ctx context.Context, ln net.Listener, requireProxyProtocol bool) error {
+	if requireProxyProtocol {
 		ln = &proxyproto.Listener{
 			Listener: ln,
 			Policy: func(upstream net.Addr) (proxyproto.Policy, error) {
