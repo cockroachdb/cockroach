@@ -1971,6 +1971,13 @@ func (c *clusterImpl) StartE(
 		settings.Env = append(settings.Env, "COCKROACH_FORCE_DEPRECATED_SHOW_RANGE_BEHAVIOR=false")
 	}
 
+	// Make crdb_internal.check_consistency() take storage checkpoints and
+	// terminate nodes on inconsistencies. This is done in post-test assertions
+	// across most roachtests, see CheckReplicaDivergenceOnDB().
+	if !envExists(settings.Env, "COCKROACH_INTERNAL_CHECK_CONSISTENCY_FATAL") {
+		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_CHECK_CONSISTENCY_FATAL=true")
+	}
+
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
 
 	if err := roachprod.Start(ctx, l, c.MakeNodes(opts...), startOpts.RoachprodOpts, clusterSettingsOpts...); err != nil {
