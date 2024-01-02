@@ -47,6 +47,11 @@ wait for the tenant id to be fully written to the file (with a newline character
 		Description: "Listen address for incoming connections.",
 	}
 
+	ProxyProtocolListenAddr = FlagInfo{
+		Name:        "proxy-protocol-listen-addr",
+		Description: "Listen address for incoming connections which require proxy protocol headers.",
+	}
+
 	ThrottleBaseDelay = FlagInfo{
 		Name:        "throttle-base-delay",
 		Description: "Initial value for the exponential backoff used to throttle connection attempts.",

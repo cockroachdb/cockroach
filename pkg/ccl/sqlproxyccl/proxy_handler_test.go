@@ -2858,7 +2858,7 @@ func newProxyServer(
 	require.NoError(t, err)
 
 	err = server.Stopper.RunAsyncTask(ctx, "proxy-server-serve", func(ctx context.Context) {
-		_ = server.Serve(ctx, ln)
+		_ = server.Serve(ctx, ln, false /* requireProxyProtocol */)
 	})
 	require.NoError(t, err)
 	err = server.Stopper.RunAsyncTask(ctx, "proxy-http-server-serve", func(ctx context.Context) {
