@@ -1,8 +1,36 @@
 # Test that the controller reports consumption as expected.
 
-# With no usage, consumption gets reported only every 40s.
+# With no usage, consumption metrics should still get reported. Tick occurs
+# once every 10s.
 advance
-40s
+10s
+----
+00:00:10.000
+
+wait-for-event
+tick
+----
+
+metrics
+----
+tenant.sql_usage.request_units: 0.00
+tenant.sql_usage.kv_request_units: 0.00
+tenant.sql_usage.read_batches: 0
+tenant.sql_usage.read_requests: 0
+tenant.sql_usage.read_bytes: 0
+tenant.sql_usage.write_batches: 0
+tenant.sql_usage.write_requests: 0
+tenant.sql_usage.write_bytes: 0
+tenant.sql_usage.sql_pods_cpu_seconds: 0.00
+tenant.sql_usage.pgwire_egress_bytes: 0
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
+
+# With no usage, consumption gets reported only every 40s. Advance by 30s here
+# since we're at the 10s mark.
+advance
+30s
 ----
 00:00:40.000
 
@@ -31,6 +59,27 @@ advance
 10s
 ----
 00:00:50.000
+
+# Metrics should already be updated, even if it's a small read.
+wait-for-event
+tick
+----
+
+metrics
+----
+tenant.sql_usage.request_units: 16.62
+tenant.sql_usage.kv_request_units: 16.62
+tenant.sql_usage.read_batches: 1
+tenant.sql_usage.read_requests: 1
+tenant.sql_usage.read_bytes: 1048576
+tenant.sql_usage.write_batches: 0
+tenant.sql_usage.write_requests: 0
+tenant.sql_usage.write_bytes: 0
+tenant.sql_usage.sql_pods_cpu_seconds: 0.00
+tenant.sql_usage.pgwire_egress_bytes: 0
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
 
 usage
 ----
@@ -65,6 +114,23 @@ PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 
+# Metrics remain after we report consumption since there's no diff.
+metrics
+----
+tenant.sql_usage.request_units: 16.62
+tenant.sql_usage.kv_request_units: 16.62
+tenant.sql_usage.read_batches: 1
+tenant.sql_usage.read_requests: 1
+tenant.sql_usage.read_bytes: 1048576
+tenant.sql_usage.write_batches: 0
+tenant.sql_usage.write_requests: 0
+tenant.sql_usage.write_bytes: 0
+tenant.sql_usage.sql_pods_cpu_seconds: 0.00
+tenant.sql_usage.pgwire_egress_bytes: 0
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
+
 # Test write operation consumption.
 write bytes=1024
 ----
@@ -89,6 +155,23 @@ SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+
+# Metrics now include write operation consumption.
+metrics
+----
+tenant.sql_usage.request_units: 19.62
+tenant.sql_usage.kv_request_units: 19.62
+tenant.sql_usage.read_batches: 1
+tenant.sql_usage.read_requests: 1
+tenant.sql_usage.read_bytes: 1048576
+tenant.sql_usage.write_batches: 1
+tenant.sql_usage.write_requests: 1
+tenant.sql_usage.write_bytes: 1024
+tenant.sql_usage.sql_pods_cpu_seconds: 0.00
+tenant.sql_usage.pgwire_egress_bytes: 0
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
 
 # Test CPU consumption.
 advance wait=true
@@ -124,6 +207,23 @@ PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 
+# Metrics with CPU usage.
+metrics
+----
+tenant.sql_usage.request_units: 319.62
+tenant.sql_usage.kv_request_units: 19.62
+tenant.sql_usage.read_batches: 1
+tenant.sql_usage.read_requests: 1
+tenant.sql_usage.read_bytes: 1048576
+tenant.sql_usage.write_batches: 1
+tenant.sql_usage.write_requests: 1
+tenant.sql_usage.write_bytes: 1024
+tenant.sql_usage.sql_pods_cpu_seconds: 0.90
+tenant.sql_usage.pgwire_egress_bytes: 0
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
+
 # Test multiple operations together.
 write bytes=4096
 ----
@@ -135,7 +235,32 @@ write bytes=4096
 ----
 
 advance
-40s
+10s
+----
+00:02:50.000
+
+wait-for-event
+tick
+----
+
+metrics
+----
+tenant.sql_usage.request_units: 333.25
+tenant.sql_usage.kv_request_units: 33.25
+tenant.sql_usage.read_batches: 2
+tenant.sql_usage.read_requests: 2
+tenant.sql_usage.read_bytes: 1114112
+tenant.sql_usage.write_batches: 3
+tenant.sql_usage.write_requests: 3
+tenant.sql_usage.write_bytes: 9216
+tenant.sql_usage.sql_pods_cpu_seconds: 0.90
+tenant.sql_usage.pgwire_egress_bytes: 0
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
+
+advance
+30s
 ----
 00:03:20.000
 
@@ -154,6 +279,22 @@ SQL Pods CPU seconds:  0.90
 PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+
+metrics
+----
+tenant.sql_usage.request_units: 333.25
+tenant.sql_usage.kv_request_units: 33.25
+tenant.sql_usage.read_batches: 2
+tenant.sql_usage.read_requests: 2
+tenant.sql_usage.read_bytes: 1114112
+tenant.sql_usage.write_batches: 3
+tenant.sql_usage.write_requests: 3
+tenant.sql_usage.write_bytes: 9216
+tenant.sql_usage.sql_pods_cpu_seconds: 0.90
+tenant.sql_usage.pgwire_egress_bytes: 0
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
 
 # Test larger amount of CPU usage that exceeds 100 RUs. The consumption report
 # should be sent after only 10s. In addition, the CPU usage should only be
@@ -183,6 +324,22 @@ PGWire egress:  0 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 
+metrics
+----
+tenant.sql_usage.request_units: 1299.92
+tenant.sql_usage.kv_request_units: 33.25
+tenant.sql_usage.read_batches: 2
+tenant.sql_usage.read_requests: 2
+tenant.sql_usage.read_bytes: 1114112
+tenant.sql_usage.write_batches: 3
+tenant.sql_usage.write_requests: 3
+tenant.sql_usage.write_bytes: 9216
+tenant.sql_usage.sql_pods_cpu_seconds: 3.80
+tenant.sql_usage.pgwire_egress_bytes: 0
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
+
 # Test egress.
 pgwire-egress
 12345
@@ -208,6 +365,22 @@ SQL Pods CPU seconds:  3.80
 PGWire egress:  12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+
+metrics
+----
+tenant.sql_usage.request_units: 1311.97
+tenant.sql_usage.kv_request_units: 33.25
+tenant.sql_usage.read_batches: 2
+tenant.sql_usage.read_requests: 2
+tenant.sql_usage.read_bytes: 1114112
+tenant.sql_usage.write_batches: 3
+tenant.sql_usage.write_requests: 3
+tenant.sql_usage.write_bytes: 9216
+tenant.sql_usage.sql_pods_cpu_seconds: 3.80
+tenant.sql_usage.pgwire_egress_bytes: 12345
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
 
 # Test multiple requests in the same batch.
 write count=2 bytes=1024
@@ -236,6 +409,22 @@ SQL Pods CPU seconds:  3.80
 PGWire egress:  12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+
+metrics
+----
+tenant.sql_usage.request_units: 1317.72
+tenant.sql_usage.kv_request_units: 39.00
+tenant.sql_usage.read_batches: 3
+tenant.sql_usage.read_requests: 4
+tenant.sql_usage.read_bytes: 1179648
+tenant.sql_usage.write_batches: 4
+tenant.sql_usage.write_requests: 5
+tenant.sql_usage.write_bytes: 10240
+tenant.sql_usage.sql_pods_cpu_seconds: 3.80
+tenant.sql_usage.pgwire_egress_bytes: 12345
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
 
 # Test a small amount of CPU usage in a tick that has no read/write operations.
 # Anything under 30ms (3% of one CPU) should be ignored.
@@ -276,6 +465,22 @@ PGWire egress:  12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
 
+metrics
+----
+tenant.sql_usage.request_units: 1317.72
+tenant.sql_usage.kv_request_units: 39.00
+tenant.sql_usage.read_batches: 3
+tenant.sql_usage.read_requests: 4
+tenant.sql_usage.read_bytes: 1179648
+tenant.sql_usage.write_batches: 4
+tenant.sql_usage.write_requests: 5
+tenant.sql_usage.write_bytes: 10240
+tenant.sql_usage.sql_pods_cpu_seconds: 3.80
+tenant.sql_usage.pgwire_egress_bytes: 12345
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
+
 # Now ensure that 30ms meets the threshold and is reported.
 cpu
 30ms
@@ -307,6 +512,22 @@ SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
 ExternalIO egress: 0 bytes
 ExternalIO ingress: 0 bytes
+
+metrics
+----
+tenant.sql_usage.request_units: 1324.39
+tenant.sql_usage.kv_request_units: 39.00
+tenant.sql_usage.read_batches: 3
+tenant.sql_usage.read_requests: 4
+tenant.sql_usage.read_bytes: 1179648
+tenant.sql_usage.write_batches: 4
+tenant.sql_usage.write_requests: 5
+tenant.sql_usage.write_bytes: 10240
+tenant.sql_usage.sql_pods_cpu_seconds: 3.82
+tenant.sql_usage.pgwire_egress_bytes: 12345
+tenant.sql_usage.external_io_ingress_bytes: 0
+tenant.sql_usage.external_io_egress_bytes: 0
+tenant.sql_usage.cross_region_network_ru: 0.00
 
 # Ensure no RU usage is reported, but ingress/egress bytes are reported.
 disable-external-ru-accounting
@@ -340,6 +561,22 @@ PGWire egress:  12345 bytes
 ExternalIO egress: 2000 bytes
 ExternalIO ingress: 10000 bytes
 
+metrics
+----
+tenant.sql_usage.request_units: 1324.39
+tenant.sql_usage.kv_request_units: 39.00
+tenant.sql_usage.read_batches: 3
+tenant.sql_usage.read_requests: 4
+tenant.sql_usage.read_bytes: 1179648
+tenant.sql_usage.write_batches: 4
+tenant.sql_usage.write_requests: 5
+tenant.sql_usage.write_bytes: 10240
+tenant.sql_usage.sql_pods_cpu_seconds: 3.82
+tenant.sql_usage.pgwire_egress_bytes: 12345
+tenant.sql_usage.external_io_ingress_bytes: 10000
+tenant.sql_usage.external_io_egress_bytes: 2000
+tenant.sql_usage.cross_region_network_ru: 0.00
+
 # Enable accounting and ensure RUs are updated.
 enable-external-ru-accounting
 ----
@@ -372,6 +609,22 @@ PGWire egress:  12345 bytes
 ExternalIO egress: 1026000 bytes
 ExternalIO ingress: 1034000 bytes
 
+metrics
+----
+tenant.sql_usage.request_units: 2324.39
+tenant.sql_usage.kv_request_units: 39.00
+tenant.sql_usage.read_batches: 3
+tenant.sql_usage.read_requests: 4
+tenant.sql_usage.read_bytes: 1179648
+tenant.sql_usage.write_batches: 4
+tenant.sql_usage.write_requests: 5
+tenant.sql_usage.write_bytes: 10240
+tenant.sql_usage.sql_pods_cpu_seconds: 3.82
+tenant.sql_usage.pgwire_egress_bytes: 12345
+tenant.sql_usage.external_io_ingress_bytes: 1034000
+tenant.sql_usage.external_io_egress_bytes: 1026000
+tenant.sql_usage.cross_region_network_ru: 0.00
+
 # Read the same amount of bytes as the first subtest. Should have an increase
 # of ~10.5 RUs compared to the first test.
 read bytes=1048576 networkCost=0.00001
@@ -398,6 +651,22 @@ PGWire egress:  12345 bytes
 ExternalIO egress: 1026000 bytes
 ExternalIO ingress: 1034000 bytes
 
+metrics
+----
+tenant.sql_usage.request_units: 2351.50
+tenant.sql_usage.kv_request_units: 55.62
+tenant.sql_usage.read_batches: 4
+tenant.sql_usage.read_requests: 5
+tenant.sql_usage.read_bytes: 2228224
+tenant.sql_usage.write_batches: 4
+tenant.sql_usage.write_requests: 5
+tenant.sql_usage.write_bytes: 10240
+tenant.sql_usage.sql_pods_cpu_seconds: 3.82
+tenant.sql_usage.pgwire_egress_bytes: 12345
+tenant.sql_usage.external_io_ingress_bytes: 1034000
+tenant.sql_usage.external_io_egress_bytes: 1026000
+tenant.sql_usage.cross_region_network_ru: 10.49
+
 # This write is expected to consume an extra 5.12 RUs from network cost usage.
 write bytes=1024 networkCost=0.005
 ----
@@ -422,6 +691,22 @@ SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
 ExternalIO egress: 1026000 bytes
 ExternalIO ingress: 1034000 bytes
+
+metrics
+----
+tenant.sql_usage.request_units: 2359.62
+tenant.sql_usage.kv_request_units: 58.62
+tenant.sql_usage.read_batches: 4
+tenant.sql_usage.read_requests: 5
+tenant.sql_usage.read_bytes: 2228224
+tenant.sql_usage.write_batches: 5
+tenant.sql_usage.write_requests: 6
+tenant.sql_usage.write_bytes: 11264
+tenant.sql_usage.sql_pods_cpu_seconds: 3.82
+tenant.sql_usage.pgwire_egress_bytes: 12345
+tenant.sql_usage.external_io_ingress_bytes: 1034000
+tenant.sql_usage.external_io_egress_bytes: 1026000
+tenant.sql_usage.cross_region_network_ru: 15.61
 
 # Test multiple requests in the same batch with RU multiplier of 1.
 write count=2 bytes=1024 networkCost=0
@@ -450,3 +735,19 @@ SQL Pods CPU seconds:  3.82
 PGWire egress:  12345 bytes
 ExternalIO egress: 1026000 bytes
 ExternalIO ingress: 1034000 bytes
+
+metrics
+----
+tenant.sql_usage.request_units: 2365.37
+tenant.sql_usage.kv_request_units: 64.38
+tenant.sql_usage.read_batches: 5
+tenant.sql_usage.read_requests: 7
+tenant.sql_usage.read_bytes: 2293760
+tenant.sql_usage.write_batches: 6
+tenant.sql_usage.write_requests: 8
+tenant.sql_usage.write_bytes: 12288
+tenant.sql_usage.sql_pods_cpu_seconds: 3.82
+tenant.sql_usage.pgwire_egress_bytes: 12345
+tenant.sql_usage.external_io_ingress_bytes: 1034000
+tenant.sql_usage.external_io_egress_bytes: 1026000
+tenant.sql_usage.cross_region_network_ru: 15.61
