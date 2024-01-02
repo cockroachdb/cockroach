@@ -781,12 +781,14 @@ bytes preserved during flushes and compactions over the lifetime of the process.
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
+	// TODO(sumeer): remove, since can fire due to delete-only compactions.
 	metaStorageSingleDelInvariantViolationCount = metric.Metadata{
 		Name:        "storage.single-delete.invariant-violation",
 		Help:        "Number of SingleDelete invariant violations",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	// TODO(sumeer): remove, since can fire due to delete-only compactions.
 	metaStorageSingleDelIneffectualCount = metric.Metadata{
 		Name:        "storage.single-delete.ineffectual",
 		Help:        "Number of SingleDeletes that were ineffectual",
