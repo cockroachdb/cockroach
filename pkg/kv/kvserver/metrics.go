@@ -2203,6 +2203,12 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 		Measurement: "Lock-Queue Waiters",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLatchWaitDuration = metric.Metadata{
+		Name:        "kv.concurrency.latch_wait_duration",
+		Help:        "Duration(nanoseconds) spent on latch acquisition step to measure wait time on conflicts with other latches",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 
 	// Closed timestamp metrics.
 	metaClosedTimestampMaxBehindNanos = metric.Metadata{
@@ -2673,6 +2679,7 @@ type StoreMetrics struct {
 	AverageLockWaitDurationNanos   *metric.Gauge
 	MaxLockWaitDurationNanos       *metric.Gauge
 	MaxLockWaitQueueWaitersForLock *metric.Gauge
+	LatchWaitDuration              *metric.HdrHistogram
 
 	// Ingestion metrics
 	IngestCount *metric.Gauge
@@ -3390,6 +3397,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AverageLockWaitDurationNanos:   metric.NewGauge(metaConcurrencyAverageLockWaitDurationNanos),
 		MaxLockWaitDurationNanos:       metric.NewGauge(metaConcurrencyMaxLockWaitDurationNanos),
 		MaxLockWaitQueueWaitersForLock: metric.NewGauge(metaConcurrencyMaxLockWaitQueueWaitersForLock),
+		LatchWaitDuration:              metric.NewHdrLatency(metaLatchWaitDuration, histogramWindow),
 
 		// Closed timestamp metrics.
 		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),

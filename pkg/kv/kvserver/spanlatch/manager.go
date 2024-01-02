@@ -62,8 +62,9 @@ type Manager struct {
 	idAlloc uint64
 	scopes  [spanset.NumSpanScope]scopedManager
 
-	stopper  *stop.Stopper
-	slowReqs *metric.Gauge
+	stopper           *stop.Stopper
+	slowReqs          *metric.Gauge
+	latchWaitDuration *metric.HdrHistogram
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
@@ -75,10 +76,13 @@ type scopedManager struct {
 
 // Make returns an initialized Manager. Using this constructor is optional as
 // the type's zero value is valid to use directly.
-func Make(stopper *stop.Stopper, slowReqs *metric.Gauge) Manager {
+func Make(
+	stopper *stop.Stopper, slowReqs *metric.Gauge, latchWaitDuration *metric.HdrHistogram,
+) Manager {
 	return Manager{
-		stopper:  stopper,
-		slowReqs: slowReqs,
+		stopper:           stopper,
+		slowReqs:          slowReqs,
+		latchWaitDuration: latchWaitDuration,
 	}
 }
 
@@ -470,7 +474,13 @@ func ignoreNothing(ts, other hlc.Timestamp) bool { return false }
 func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 	timer := timeutil.NewTimer()
 	timer.Reset(base.SlowRequestThreshold)
-	defer timer.Stop()
+	tBegin := timeutil.Now()
+	defer func() {
+		timer.Stop()
+		if m.latchWaitDuration != nil {
+			m.latchWaitDuration.RecordValue(int64(timeutil.Since(tBegin)))
+		}
+	}()
 
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
 		tr := &snap.trees[s]
