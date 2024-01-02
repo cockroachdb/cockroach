@@ -258,9 +258,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			mon:   ct.mon,
 		}
 		kafka.install(ct.ctx)
-		str := getAzureEnvVars()
-		kafka.start(ct.ctx, "kafka", str)
-		fmt.Println(str)
+		kafka.start(ct.ctx, "kafka")
 		if err := kafka.installAzureCli(ct.ctx); err != nil {
 			kafka.t.Fatal(err)
 		}
@@ -2177,6 +2175,11 @@ func (k kafkaManager) installAzureCli(ctx context.Context) error {
 }
 
 func (k kafkaManager) getConnectionString(ctx context.Context) (string, error) {
+	azureClientID := os.Getenv("AZURE_CLIENT_ID")
+	azureClientSecret := os.Getenv("AZURE_CLIENT_SECRET")
+	azureSubscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
+	azureTenantID := os.Getenv("AZURE_TENANT_ID")
+
 	k.t.Status("getting azure event hub connection string")
 	cmdStr := "echo $AZURE_CLIENT_ID"
 	results, err := k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
@@ -2189,14 +2192,14 @@ func (k kafkaManager) getConnectionString(ctx context.Context) (string, error) {
 	k.t.L().Printf("$AZURE_CLIENT_ID is:%s\n", results.Stdout)
 
 	// az login --service-principal -t <Tenant-ID> -u <Client-ID> -p <Client-secret>
-	cmdStr = "az login --service-principal -t $AZURE_TENANT_ID -u $AZURE_CLIENT_ID -p $AZURE_CLIENT_SECRET"
+	cmdStr = fmt.Sprintf("az login --service-principal -t %s -u %s -p %s", azureTenantID, azureClientID, azureClientSecret)
 	results, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
 	k.t.L().Printf("az login%s\n", results.Stdout)
 	if err != nil {
 		return "", errors.Wrap(err, "error running az login")
 	}
 
-	cmdStr = "az account set --subscription $AZURE_SUBSCRIPTION_ID"
+	cmdStr = fmt.Sprintf("az account set --subscription %s", azureSubscriptionID)
 	results, err = k.c.RunWithDetailsSingleNode(ctx, k.t.L(), k.nodes, cmdStr)
 	k.t.L().Printf("az account set:%s\n", results.Stdout)
 	if err != nil {
@@ -2267,10 +2270,7 @@ func (k kafkaManager) configureHydraOauth(ctx context.Context) (string, string) 
 }
 
 func getAzureEnvVars() (kafkaEnv string) {
-	kafkaEnv = " AZURE_CLIENT_ID=" + os.Getenv("AZURE_CLIENT_ID")
-	kafkaEnv += " AZURE_CLIENT_SECRET=" + os.Getenv("AZURE_CLIENT_SECRET")
-	kafkaEnv += " AZURE_SUBSCRIPTION_ID=" + os.Getenv("AZURE_SUBSCRIPTION_ID")
-	kafkaEnv += " AZURE_TENANT_ID=" + os.Getenv("AZURE_TENANT_ID")
+
 	return
 }
 
