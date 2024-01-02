@@ -416,7 +416,7 @@ func mergeWithData(t *testing.T, retries int64) {
 //
 //   - futureRead: configures whether or not the reads performed on the RHS range
 //     before the merge is initiated are performed in the future of present
-//     time using synthetic timestamps.
+//     time.
 func TestStoreRangeMergeTimestampCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -565,7 +565,7 @@ func mergeCheckingTimestampCaches(
 
 	readTS := tc.Servers[0].Clock().Now()
 	if futureRead {
-		readTS = readTS.Add(500*time.Millisecond.Nanoseconds(), 0).WithSynthetic(true)
+		readTS = readTS.Add(500*time.Millisecond.Nanoseconds(), 0)
 	}
 
 	// Simulate a read on the RHS from a node with a newer clock.
@@ -1178,14 +1178,8 @@ func TestStoreRangeMergeTxnRefresh(t *testing.T) {
 			// Detect the range merge's deletion of the local range descriptor
 			// and use it as an opportunity to bump the merge transaction's
 			// write timestamp. This will necessitate a refresh.
-			//
-			// Also mark as synthetic, while we're here, to simulate the
-			// behavior of a range merge across two ranges with the
-			// LEAD_FOR_GLOBAL_READS closed timestamp policy.
 			if !v.Value.IsPresent() && bytes.HasSuffix(v.Key, keys.LocalRangeDescriptorSuffix) {
-				br.Txn.WriteTimestamp = br.Txn.WriteTimestamp.
-					Add(100*time.Millisecond.Nanoseconds(), 0).
-					WithSynthetic(true)
+				br.Txn.WriteTimestamp = br.Txn.WriteTimestamp.Add(100*time.Millisecond.Nanoseconds(), 0)
 			}
 		case *kvpb.RefreshRequest:
 			if bytes.HasSuffix(v.Key, keys.LocalRangeDescriptorSuffix) {
