@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -605,6 +606,15 @@ func MemberOfWithAdminOption(
 		func(ctx context.Context) (interface{}, error) {
 			var m map[username.SQLUsername]bool
 			err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, newTxn isql.Txn) error {
+				// Run the membership read as high-priority, thereby pushing any intents
+				// out of its way. This prevents deadlocks in cases where a GRANT/REVOKE
+				// txn, which has already laid a write intent on the
+				// `system.role_members` table, waits for `newTxn` and `newTxn`, which
+				// attempts to read the same system table, is blocked by the
+				// GRANT/REVOKE txn.
+				if err := newTxn.KV().SetUserPriority(roachpb.MaxUserPriority); err != nil {
+					return err
+				}
 				err := newTxn.KV().SetFixedTimestamp(ctx, newTxnTimestamp)
 				if err != nil {
 					return err
