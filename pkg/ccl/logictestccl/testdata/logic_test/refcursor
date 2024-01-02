@@ -43,7 +43,7 @@ CREATE TABLE xy (x INT, y TEXT);
 SET enable_experimental_alter_column_type_general=true;
 
 statement ok
-ALTER TABLE xy ALTER COLUMN y TYPE REFCURSOR;
+ALTER TABLE xy ALTER COLUMN y TYPE REFCURSOR USING y::REFCURSOR;
 
 statement ok
 INSERT INTO xy VALUES (1, 'bar');

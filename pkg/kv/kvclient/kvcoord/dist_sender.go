@@ -794,6 +794,18 @@ func (ds *DistSender) RangeDescriptorCache() *rangecache.RangeCache {
 func (ds *DistSender) RangeLookup(
 	ctx context.Context, key roachpb.RKey, rc rangecache.RangeLookupConsistency, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+
+	// In this case, the requested key is stored in the cluster's first
+	// range. Return the first range, which is always gossiped and not
+	// queried from the datastore.
+	if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
+		desc, err := ds.firstRangeProvider.GetFirstRangeDescriptor()
+		if err != nil {
+			return nil, nil, err
+		}
+		return []roachpb.RangeDescriptor{*desc}, nil, nil
+	}
+
 	ds.metrics.RangeLookups.Inc(1)
 	switch rc {
 	case kvpb.INCONSISTENT, kvpb.READ_UNCOMMITTED:
@@ -806,18 +818,6 @@ func (ds *DistSender) RangeLookup(
 	// still find it when we scan to the next range. This addresses the issue
 	// described in #18032 and #16266, allowing us to support meta2 splits.
 	return kv.RangeLookup(ctx, ds, key.AsRawKey(), rc, RangeLookupPrefetchCount, useReverseScan)
-}
-
-// FirstRange implements the RangeDescriptorDB interface.
-//
-// It returns the RangeDescriptor for the first range in the cluster using the
-// FirstRangeProvider, which is typically implemented using the gossip protocol
-// instead of the datastore.
-func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
-	if ds.firstRangeProvider == nil {
-		panic("with `nil` firstRangeProvider, DistSender must not use itself as RangeDescriptorDB")
-	}
-	return ds.firstRangeProvider.GetFirstRangeDescriptor()
 }
 
 // CountRanges returns the number of ranges that encompass the given key span.

@@ -664,11 +664,6 @@ func (c *connector) TenantRanges(
 	return
 }
 
-// FirstRange implements the kvcoord.RangeDescriptorDB interface.
-func (c *connector) FirstRange() (*roachpb.RangeDescriptor, error) {
-	return nil, status.Error(codes.Unauthenticated, "kvtenant.Proxy does not have access to FirstRange")
-}
-
 // NewIterator implements the rangedesc.IteratorFactory interface.
 func (c *connector) NewIterator(
 	ctx context.Context, span roachpb.Span,
