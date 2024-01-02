@@ -220,3 +220,101 @@ func TestFilterSpans(t *testing.T) {
 	exp40 := []ReadSpan{}
 	require.Equal(t, exp40, filter40)
 }
+
+func TestSegmentCompress(t *testing.T) {
+	testCases := []struct {
+		seg    Segment
+		budget int64
+		exp    Segment
+	}{
+		// Test empty segment and no budget.
+		{
+			seg:    Segment{},
+			budget: 0,
+			exp:    Segment{},
+		},
+		// Test segment with low water and no budget.
+		{
+			seg:    Segment{LowWater: ts10},
+			budget: 0,
+			exp:    Segment{LowWater: ts10},
+		},
+		// Test segment with low water and spans and no budget.
+		{
+			seg: Segment{
+				LowWater: ts10,
+				ReadSpans: []ReadSpan{
+					{Key: keyA, Timestamp: ts20},
+					{Key: keyB, Timestamp: ts30},
+					{Key: keyC, Timestamp: ts40},
+				},
+			},
+			budget: 0,
+			exp:    Segment{LowWater: ts40},
+		},
+		// Test segment with low water and spans and a small budget.
+		{
+			seg: Segment{
+				LowWater: ts10,
+				ReadSpans: []ReadSpan{
+					{Key: keyA, Timestamp: ts20},
+					{Key: keyB, Timestamp: ts30},
+					{Key: keyC, Timestamp: ts40},
+				},
+			},
+			budget: 30,
+			exp: Segment{
+				LowWater: ts30,
+				ReadSpans: []ReadSpan{
+					{Key: keyC, Timestamp: ts40},
+				},
+			},
+		},
+		// Test segment with low water and spans and a medium budget.
+		{
+			seg: Segment{
+				LowWater: ts10,
+				ReadSpans: []ReadSpan{
+					{Key: keyA, Timestamp: ts20},
+					{Key: keyB, Timestamp: ts30},
+					{Key: keyC, Timestamp: ts40},
+				},
+			},
+			budget: 60,
+			exp: Segment{
+				LowWater: ts20,
+				ReadSpans: []ReadSpan{
+					{Key: keyB, Timestamp: ts30},
+					{Key: keyC, Timestamp: ts40},
+				},
+			},
+		},
+		// Test segment with low water and spans and a large budget.
+		{
+			seg: Segment{
+				LowWater: ts10,
+				ReadSpans: []ReadSpan{
+					{Key: keyA, Timestamp: ts20},
+					{Key: keyB, Timestamp: ts30},
+					{Key: keyC, Timestamp: ts40},
+				},
+			},
+			budget: 100,
+			exp: Segment{
+				LowWater: ts10,
+				ReadSpans: []ReadSpan{
+					{Key: keyA, Timestamp: ts20},
+					{Key: keyB, Timestamp: ts30},
+					{Key: keyC, Timestamp: ts40},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			res := tc.seg.Clone()
+			res.Compress(tc.budget)
+			require.Equal(t, tc.exp, res)
+		})
+	}
+}

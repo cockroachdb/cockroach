@@ -13,6 +13,7 @@ package rspb
 import (
 	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -130,3 +131,68 @@ func filterSpans(spans []ReadSpan, minTs hlc.Timestamp) []ReadSpan {
 	}
 	return res
 }
+
+// Compress compresses the segment to fit within the provided size budget,
+// provide in bytes. The compression is performed in-place and may mutate the
+// segment.
+//
+// Compression is performed by truncating the read spans in the segment while
+// advancing the low water mark to account for the loss in resolution.
+func (c *Segment) Compress(budget int64) {
+	sizeBefore := int64(c.Size())
+	if sizeBefore <= budget {
+		return // already under budget
+	}
+
+	// Sort the read spans by decreasing timestamp.
+	spans := c.ReadSpans
+	sort.Sort(readSpansByDecrTime(spans))
+
+	// Determine the number of spans to truncate, from oldest to newest.
+	c.ReadSpans = nil
+	sizeNoSpans := int64(c.Size())
+	spanAllowance := budget - sizeNoSpans // may be negative
+	truncIdx := 0
+	for truncIdx < len(spans) {
+		span := spans[truncIdx]
+		spanSize := int64(span.Size())
+		if spanSize > spanAllowance {
+			break
+		}
+		spanAllowance -= spanSize
+		truncIdx++
+	}
+	if truncIdx < len(spans) {
+		// If we're truncating, the low water mark is advanced to the timestamp of
+		// the first span that is being truncated. Due to the sort by timestamp, is
+		// the maximum timestamp of any span that is being truncated.
+		c.LowWater.Forward(spans[truncIdx].Timestamp)
+	}
+	if truncIdx > 0 {
+		// If we're keeping any spans, perform the truncation.
+		for i := truncIdx; i < len(spans); i++ {
+			spans[i] = ReadSpan{} // zero out for GC
+		}
+		spans = spans[:truncIdx]
+
+		// Then re-sort the spans by start key. The spans were previously
+		// non-overlapping, so they will be non-overlapping after the sort.
+		sort.Sort(readSpansByKey(spans))
+		c.ReadSpans = spans
+	}
+}
+
+// readSpansByDecrTime implements sorting of a slice of ReadSpans by timestamp,
+// with the largest timestamps sorting first.
+type readSpansByDecrTime []ReadSpan
+
+func (s readSpansByDecrTime) Len() int           { return len(s) }
+func (s readSpansByDecrTime) Less(i, j int) bool { return s[j].Timestamp.Less(s[i].Timestamp) }
+func (s readSpansByDecrTime) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
+// readSpansByKey implements sorting of a slice of ReadSpans by start key.
+type readSpansByKey []ReadSpan
+
+func (s readSpansByKey) Len() int           { return len(s) }
+func (s readSpansByKey) Less(i, j int) bool { return bytes.Compare(s[i].Key, s[j].Key) < 0 }
+func (s readSpansByKey) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
