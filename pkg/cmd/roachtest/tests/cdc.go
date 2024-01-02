@@ -2850,11 +2850,7 @@ func stopFeeds(db *gosql.DB) {
 // the test runner can connect to it. Returns a function to be called
 // at the end of the test for stopping Kafka.
 func setupKafka(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	nodes option.NodeListOption,
-	envVars ...string,
+	ctx context.Context, t test.Test, c cluster.Cluster, nodes option.NodeListOption,
 ) (kafkaManager, func()) {
 	kafka := kafkaManager{
 		t:     t,
@@ -2871,7 +2867,7 @@ func setupKafka(
 			filepath.Join(kafka.configDir(), "server.properties"))
 	}
 
-	kafka.start(ctx, "kafka", envVars)
+	kafka.start(ctx, "kafka")
 	return kafka, func() { kafka.stop(ctx) }
 }
 
