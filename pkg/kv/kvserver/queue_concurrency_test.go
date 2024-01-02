@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -68,7 +67,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		pending:         metric.NewGauge(metric.Metadata{Name: "pending"}),
 		processingNanos: metric.NewCounter(metric.Metadata{Name: "processingnanos"}),
 		purgatory:       metric.NewGauge(metric.Metadata{Name: "purgatory"}),
-		disabledConfig:  &settings.BoolSetting{},
+		disabledConfig:  testQueueEnabled,
 	}
 
 	// Set up a fake store with just exactly what the code calls into. Ideally
