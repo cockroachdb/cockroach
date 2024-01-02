@@ -20,6 +20,17 @@ type MaskedSetting struct {
 
 var _ Setting = &MaskedSetting{}
 
+// redactSensitiveSettingsEnabled enables or disables the redaction of sensitive
+// cluster settings.
+var redactSensitiveSettingsEnabled = RegisterBoolSetting(
+	ApplicationLevel,
+	"server.redact_sensitive_settings.enabled",
+	"enables or disables the redaction of sensitive settings in the output of SHOW CLUSTER SETTINGS and "+
+		"SHOW ALL CLUSTER SETTINGS for users without the MODIFYCLUSTERSETTING privilege",
+	false,
+	WithPublic,
+)
+
 // String hides the underlying value.
 func (s *MaskedSetting) String(sv *Values) string {
 	// Special case for non-reportable/sensitive strings: we still want
@@ -27,7 +38,17 @@ func (s *MaskedSetting) String(sv *Values) string {
 	if st, ok := s.setting.(*StringSetting); ok && st.String(sv) == "" {
 		return ""
 	}
-	return "<redacted>"
+	isSensitive := false
+	if st, ok := s.setting.(internalSetting); ok {
+		isSensitive = st.isSensitive()
+	}
+	sensitiveRedactionEnabled := redactSensitiveSettingsEnabled.Get(sv)
+	// Non-reportable settings are always redacted. Sensitive settings are
+	// redacted if the redaction cluster setting is enabled.
+	if !isSensitive || sensitiveRedactionEnabled {
+		return "<redacted>"
+	}
+	return s.setting.String(sv)
 }
 
 // DefaultString returns the default value for the setting as a string.
