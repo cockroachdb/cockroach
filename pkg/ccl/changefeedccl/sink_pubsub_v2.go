@@ -50,12 +50,13 @@ func isPubsubSink(u *url.URL) bool {
 }
 
 type pubsubSinkClient struct {
-	ctx       context.Context
-	client    *pubsub.PublisherClient
-	projectID string
-	format    changefeedbase.FormatType
-	batchCfg  sinkBatchConfig
-	mu        struct {
+	ctx                    context.Context
+	client                 *pubsub.PublisherClient
+	projectID              string
+	format                 changefeedbase.FormatType
+	batchCfg               sinkBatchConfig
+	withTableNameAttribute bool
+	mu                     struct {
 		syncutil.RWMutex
 
 		// Topic creation errors may not be an actual issue unless the Publish call
@@ -78,6 +79,7 @@ func makePubsubSinkClient(
 	targets changefeedbase.Targets,
 	batchCfg sinkBatchConfig,
 	unordered bool,
+	withTableNameAttribute bool,
 	knobs *TestingKnobs,
 ) (SinkClient, error) {
 	if u.Scheme != GcpScheme {
@@ -122,11 +124,12 @@ func makePubsubSinkClient(
 	}
 
 	sinkClient := &pubsubSinkClient{
-		ctx:       ctx,
-		format:    formatType,
-		client:    publisherClient,
-		batchCfg:  batchCfg,
-		projectID: projectID,
+		ctx:                    ctx,
+		format:                 formatType,
+		client:                 publisherClient,
+		batchCfg:               batchCfg,
+		projectID:              projectID,
+		withTableNameAttribute: withTableNameAttribute,
 	}
 	sinkClient.mu.topicCache = make(map[string]struct{})
 
@@ -213,12 +216,16 @@ type pubsubBuffer struct {
 	topicEncoded []byte
 	messages     []*pb.PubsubMessage
 	numBytes     int
+	// Cache for attributes which are sent along with each message.
+	// This lets us re-use expensive map allocs for messages in the batch
+	// with the same attributes.
+	attributesCache map[attributes]map[string]string
 }
 
 var _ BatchBuffer = (*pubsubBuffer)(nil)
 
 // Append implements the BatchBuffer interface
-func (psb *pubsubBuffer) Append(key []byte, value []byte) {
+func (psb *pubsubBuffer) Append(key []byte, value []byte, attributes attributes) {
 	var content []byte
 	switch psb.sc.format {
 	case changefeedbase.OptFormatJSON:
@@ -237,7 +244,15 @@ func (psb *pubsubBuffer) Append(key []byte, value []byte) {
 		content = value
 	}
 
-	psb.messages = append(psb.messages, &pb.PubsubMessage{Data: content})
+	msg := &pb.PubsubMessage{Data: content}
+	if psb.sc.withTableNameAttribute {
+		if _, ok := psb.attributesCache[attributes]; !ok {
+			psb.attributesCache[attributes] = map[string]string{"TABLE_NAME": attributes.tableName}
+		}
+		msg.Attributes = psb.attributesCache[attributes]
+	}
+
+	psb.messages = append(psb.messages, msg)
 	psb.numBytes += len(content)
 }
 
@@ -258,12 +273,16 @@ func (psb *pubsubBuffer) ShouldFlush() bool {
 func (sc *pubsubSinkClient) MakeBatchBuffer(topic string) BatchBuffer {
 	var topicBuffer bytes.Buffer
 	json.FromString(topic).Format(&topicBuffer)
-	return &pubsubBuffer{
+	psb := &pubsubBuffer{
 		sc:           sc,
 		topic:        topic,
 		topicEncoded: topicBuffer.Bytes(),
 		messages:     make([]*pb.PubsubMessage, 0, sc.batchCfg.Messages),
 	}
+	if sc.withTableNameAttribute {
+		psb.attributesCache = make(map[attributes]map[string]string)
+	}
+	return psb
 }
 
 // Close implements the SinkClient interface
@@ -415,12 +434,18 @@ func makePubsubSink(
 		return nil, err
 	}
 
-	sinkClient, err := makePubsubSinkClient(ctx, u, encodingOpts, targets, batchCfg, unordered, knobs)
+	pubsubURL := sinkURL{URL: u, q: u.Query()}
+	var includeTableNameAttribute bool
+	_, err = pubsubURL.consumeBool(changefeedbase.SinkParamTableNameAttribute, &includeTableNameAttribute)
+	if err != nil {
+		return nil, err
+	}
+	sinkClient, err := makePubsubSinkClient(ctx, u, encodingOpts, targets, batchCfg, unordered,
+		includeTableNameAttribute, knobs)
 	if err != nil {
 		return nil, err
 	}
 
-	pubsubURL := sinkURL{URL: u, q: u.Query()}
 	pubsubTopicName := pubsubURL.consumeParam(changefeedbase.SinkParamTopicName)
 	topicNamer, err := MakeTopicNamer(targets, WithSingleName(pubsubTopicName))
 	if err != nil {

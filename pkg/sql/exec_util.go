@@ -1742,6 +1742,8 @@ type SchemaTelemetryTestingKnobs struct {
 func (*SchemaTelemetryTestingKnobs) ModuleTestingKnobs() {}
 
 // BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
+//
+// TODO (msbutler): move these to backupccl
 type BackupRestoreTestingKnobs struct {
 	// CaptureResolvedTableDescSpans allows for intercepting the spans which are
 	// resolved during backup planning, and will eventually be backed up during
@@ -1764,6 +1766,12 @@ type BackupRestoreTestingKnobs struct {
 	// testing. This is typically the bulk mem monitor if not
 	// specified here.
 	BackupMemMonitor *mon.BytesMonitor
+
+	RestoreDistSQLRetryPolicy *retry.Options
+
+	RunBeforeRestoreFlow func() error
+
+	RunAfterRestoreFlow func() error
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
@@ -2048,11 +2056,6 @@ func (p *planner) EvalAsOfTimestamp(
 	asOf, err := asof.Eval(ctx, asOfClause, &p.semaCtx, p.EvalContext(), opts...)
 	if err != nil {
 		return eval.AsOfSystemTime{}, err
-	}
-	ts := asOf.Timestamp
-	if now := p.execCfg.Clock.Now(); now.Less(ts) && !ts.Synthetic {
-		return eval.AsOfSystemTime{}, errors.Errorf(
-			"AS OF SYSTEM TIME: cannot specify timestamp in the future (%s > %s)", ts, now)
 	}
 	return asOf, nil
 }

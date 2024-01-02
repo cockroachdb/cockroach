@@ -405,7 +405,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 		// Compute a checksum over the content of the problematic range.
 		rd, err := kvserver.CalcReplicaDigest(context.Background(), *desc, cpEng,
-			kvpb.ChecksumMode_CHECK_FULL, quotapool.NewRateLimiter("test", quotapool.Inf(), 0))
+			kvpb.ChecksumMode_CHECK_FULL, quotapool.NewRateLimiter("test", quotapool.Inf(), 0), nil /* settings */)
 		require.NoError(t, err)
 		hashes[i] = rd.SHA512[:]
 	}

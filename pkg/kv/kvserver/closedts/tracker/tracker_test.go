@@ -79,19 +79,6 @@ func testTracker(ctx context.Context, t *testing.T, tr Tracker) {
 	}
 	tr.Untrack(ctx, tok30)
 	require.True(t, tr.LowerBound(ctx).IsEmpty())
-
-	// Check that synthetic timestamps are tracked as such.
-	synthTS := hlc.Timestamp{
-		WallTime:  10,
-		Synthetic: true,
-	}
-	tok := tr.Track(ctx, synthTS)
-	require.Equal(t, synthTS, tr.LowerBound(ctx))
-	// Check that after the Tracker is emptied, lowerbounds are not synthetic any
-	// more.
-	tr.Untrack(ctx, tok)
-	tr.Track(ctx, ts(10))
-	require.Equal(t, ts(10), tr.LowerBound(ctx))
 }
 
 // Test the tracker by throwing random requests at it. We verify that, at all

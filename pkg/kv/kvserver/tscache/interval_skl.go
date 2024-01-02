@@ -206,8 +206,8 @@ func newIntervalSkl(clock *hlc.Clock, minRet time.Duration, metrics sklMetrics) 
 // Add marks the a single key as having been read at the given timestamp. Once
 // Add completes, future lookups of this key are guaranteed to return an equal
 // or greater timestamp.
-func (s *intervalSkl) Add(key []byte, val cacheValue) {
-	s.AddRange(nil, key, 0, val)
+func (s *intervalSkl) Add(ctx context.Context, key []byte, val cacheValue) {
+	s.AddRange(ctx, nil, key, 0, val)
 }
 
 // AddRange marks the given range of keys [from, to] as having been read at the
@@ -229,7 +229,9 @@ func (s *intervalSkl) Add(key []byte, val cacheValue) {
 // the range is split into sub-ranges that are each marked with the maximum read
 // timestamp for that sub-range. Once AddRange completes, future lookups at any
 // point in the range are guaranteed to return an equal or greater timestamp.
-func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue) {
+func (s *intervalSkl) AddRange(
+	ctx context.Context, from, to []byte, opt rangeOptions, val cacheValue,
+) {
 	if from == nil && to == nil {
 		panic("from and to keys cannot be nil")
 	}
@@ -275,13 +277,13 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue
 
 	for {
 		// Try to add the range to the later page.
-		filledPage := s.addRange(from, to, opt, val)
+		filledPage := s.addRange(ctx, from, to, opt, val)
 		if filledPage == nil {
 			break
 		}
 
 		// The page was filled up, so rotate the pages and then try again.
-		s.rotatePages(filledPage)
+		s.rotatePages(ctx, filledPage)
 	}
 }
 
@@ -291,10 +293,12 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue
 // "to" arguments in accordance with AddRange's contract. It returns nil if the
 // operation was successful, or a pointer to an sklPage if the operation failed
 // because that page was full.
-func (s *intervalSkl) addRange(from, to []byte, opt rangeOptions, val cacheValue) *sklPage {
+func (s *intervalSkl) addRange(
+	ctx context.Context, from, to []byte, opt rangeOptions, val cacheValue,
+) *sklPage {
 	// Acquire the rotation mutex read lock so that the page will not be rotated
 	// while add or lookup operations are in progress.
-	s.rotMutex.RLock()
+	s.rotMutex.TracedRLock(ctx)
 	defer s.rotMutex.RUnlock()
 
 	// If floor ts is greater than the requested timestamp, then no need to
@@ -422,9 +426,9 @@ func (s *intervalSkl) maximumPageSize() uint32 {
 // earlier page. The max timestamp of the earlier page becomes the new floor
 // timestamp, in order to guarantee that timestamp lookups never return decreasing
 // values.
-func (s *intervalSkl) rotatePages(filledPage *sklPage) {
+func (s *intervalSkl) rotatePages(ctx context.Context, filledPage *sklPage) {
 	// Acquire the rotation mutex write lock to lock the entire intervalSkl.
-	s.rotMutex.Lock()
+	s.rotMutex.TracedLock(ctx)
 	defer s.rotMutex.Unlock()
 
 	fp := s.frontPage()
@@ -485,21 +489,23 @@ func (s *intervalSkl) rotatePages(filledPage *sklPage) {
 // LookupTimestamp returns the latest timestamp value at which the given key was
 // read. If this operation is repeated with the same key, it will always result
 // in an equal or greater timestamp.
-func (s *intervalSkl) LookupTimestamp(key []byte) cacheValue {
-	return s.LookupTimestampRange(nil, key, 0)
+func (s *intervalSkl) LookupTimestamp(ctx context.Context, key []byte) cacheValue {
+	return s.LookupTimestampRange(ctx, nil, key, 0)
 }
 
 // LookupTimestampRange returns the latest timestamp value of any key within the
 // specified range. If this operation is repeated with the same range, it will
 // always result in an equal or greater timestamp.
-func (s *intervalSkl) LookupTimestampRange(from, to []byte, opt rangeOptions) cacheValue {
+func (s *intervalSkl) LookupTimestampRange(
+	ctx context.Context, from, to []byte, opt rangeOptions,
+) cacheValue {
 	if from == nil && to == nil {
 		panic("from and to keys cannot be nil")
 	}
 
 	// Acquire the rotation mutex read lock so that the page will not be rotated
 	// while add or lookup operations are in progress.
-	s.rotMutex.RLock()
+	s.rotMutex.TracedRLock(ctx)
 	defer s.rotMutex.RUnlock()
 
 	// Iterate over the pages, performing the lookup on each and remembering the

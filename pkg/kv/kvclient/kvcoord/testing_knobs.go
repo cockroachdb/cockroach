@@ -19,9 +19,9 @@ import (
 // ClientTestingKnobs contains testing options that dictate the behavior
 // of the key-value client.
 type ClientTestingKnobs struct {
-	// The RPC dispatcher. Defaults to grpc but can be changed here for
-	// testing purposes.
-	TransportFactory TransportFactory
+	// This is used to wrap the existing factory rather than to inject a brand
+	// new one. Otherwise, set DistSenderConfig.TransportFactory directly.
+	TransportFactory func(TransportFactory) TransportFactory
 
 	// DontConsiderConnHealth, if set, makes the GRPCTransport not take into
 	// consideration the connection health when deciding the ordering for

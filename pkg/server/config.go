@@ -228,8 +228,11 @@ type BaseConfig struct {
 	Stores base.StoreSpecList
 
 	// SharedStorage is specified to enable disaggregated shared storage.
-	SharedStorage string
-	*cloud.ExternalStorageAccessor
+	SharedStorage                    string
+	EarlyBootExternalStorageAccessor *cloud.EarlyBootExternalStorageAccessor
+	// ExternalIODirConfig is used to configure external storage
+	// access (http://, nodelocal://, etc)
+	ExternalIODirConfig base.ExternalIODirConfig
 
 	// SecondaryCache is the size of the secondary cache used for each store, to
 	// store blocks from disaggregated shared storage. For use with SharedStorage.
@@ -321,7 +324,7 @@ func (cfg *BaseConfig) SetDefaults(
 	cfg.AmbientCtx.AddLogTag("n", cfg.IDContainer)
 	cfg.Config.InitDefaults()
 	cfg.InitTestingKnobs()
-	cfg.ExternalStorageAccessor = cloud.NewExternalStorageAccessor()
+	cfg.EarlyBootExternalStorageAccessor = cloud.NewEarlyBootExternalStorageAccessor(st, cfg.ExternalIODirConfig)
 }
 
 // InitTestingKnobs sets up any testing knobs based on e.g. envvars.
@@ -502,10 +505,6 @@ type SQLConfig struct {
 	// TempStorageConfig is used to configure temp storage, which stores
 	// ephemeral data when processing large queries.
 	TempStorageConfig base.TempStorageConfig
-
-	// ExternalIODirConfig is used to configure external storage
-	// access (http://, nodelocal://, etc)
-	ExternalIODirConfig base.ExternalIODirConfig
 
 	// MemoryPoolSize is the amount of memory in bytes that can be
 	// used by SQL clients to store row data in server RAM.
@@ -802,7 +801,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 			addCfgOpt(storage.MaxSize(sizeInBytes))
 			addCfgOpt(storage.CacheSize(cfg.CacheSize))
-			addCfgOpt(storage.RemoteStorageFactory(cfg.ExternalStorageAccessor))
+			addCfgOpt(storage.RemoteStorageFactory(cfg.EarlyBootExternalStorageAccessor))
 
 			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
 		} else {
@@ -831,7 +830,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			// TODO(radu): move up all remaining settings below so they apply to in-memory stores as well.
 			addCfgOpt(storage.MaxOpenFiles(int(openFileLimitPerStore)))
 			addCfgOpt(storage.MaxWriterConcurrency(2))
-			addCfgOpt(storage.RemoteStorageFactory(cfg.ExternalStorageAccessor))
+			addCfgOpt(storage.RemoteStorageFactory(cfg.EarlyBootExternalStorageAccessor))
 			if sharedStorage != nil {
 				addCfgOpt(storage.SharedStorage(sharedStorage))
 			}

@@ -265,7 +265,7 @@ func TestAlterColumnTypeFailureRollback(t *testing.T) {
 	sqlDB.Exec(t, `INSERT INTO t.test VALUES ('1'), ('2'), ('HELLO');`)
 
 	expected := "pq: could not parse \"HELLO\" as type int: strconv.ParseInt: parsing \"HELLO\": invalid syntax"
-	sqlDB.ExpectErr(t, expected, `ALTER TABLE t.test ALTER COLUMN x TYPE INT;`)
+	sqlDB.ExpectErr(t, expected, `ALTER TABLE t.test ALTER COLUMN x TYPE INT USING x::INT8;`)
 
 	// Ensure that the add column and column swap mutations are cleaned up.
 	testutils.SucceedsSoon(t, func() error {

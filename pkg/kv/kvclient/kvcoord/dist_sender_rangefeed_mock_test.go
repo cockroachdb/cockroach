@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache/rangecachemock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb/kvpbmock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -114,7 +114,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 
 					// Once all replicas have failed, it should try to refresh the lease using
 					// the range cache. We let this succeed once.
-					rangeDB.EXPECT().FirstRange().Return(&desc, nil)
+					rangeDB.EXPECT().RangeLookup(gomock.Any(), roachpb.RKeyMin, kvpb.INCONSISTENT, false).Return([]roachpb.RangeDescriptor{desc}, nil, nil)
 
 					// It then tries the replicas again. This time we just report the
 					// transport as exhausted immediately.
@@ -122,13 +122,13 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 					transport.EXPECT().Release()
 
 					// This invalidates the cache yet again. This time we error.
-					rangeDB.EXPECT().FirstRange().Return(nil, grpcstatus.Error(spec.errorCode, ""))
+					rangeDB.EXPECT().RangeLookup(gomock.Any(), roachpb.RKeyMin, kvpb.INCONSISTENT, false).Return(nil, nil, grpcstatus.Error(spec.errorCode, ""))
 
 					// If we expect a range lookup retry, allow the retry to succeed by
 					// returning a range descriptor and a client that immediately
 					// cancels the context and closes the range feed stream.
 					if spec.expectRetry {
-						rangeDB.EXPECT().FirstRange().MinTimes(1).Return(&desc, nil)
+						rangeDB.EXPECT().RangeLookup(gomock.Any(), roachpb.RKeyMin, kvpb.INCONSISTENT, false).MinTimes(1).Return([]roachpb.RangeDescriptor{desc}, nil, nil) //.FirstRange().Return(&desc, nil)
 						client := kvpbmock.NewMockInternalClient(ctrl)
 
 						if useMuxRangeFeed {
@@ -156,13 +156,10 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 						NodeDescs:       g,
 						RPCRetryOptions: &retry.Options{MaxRetries: 10},
 						Stopper:         stopper,
-						TestingKnobs: ClientTestingKnobs{
-							TransportFactory: func(SendOptions, *nodedialer.Dialer, ReplicaSlice) (Transport, error) {
-								return transport, nil
-							},
+						TransportFactory: func(options SendOptions, slice ReplicaSlice) (Transport, error) {
+							return transport, nil
 						},
 						RangeDescriptorDB: rangeDB,
-						NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
 						Settings:          cluster.MakeTestingClusterSettings(),
 					})
 					ds.rangeCache.Insert(ctx, roachpb.RangeInfo{

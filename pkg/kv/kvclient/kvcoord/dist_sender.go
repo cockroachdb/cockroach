@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -530,10 +529,8 @@ type DistSender struct {
 	// This is not required if a RangeDescriptorDB is supplied.
 	firstRangeProvider FirstRangeProvider
 	transportFactory   TransportFactory
-	// nodeDialer allows RPC calls from the SQL layer to the KV layer.
-	nodeDialer      *nodedialer.Dialer
-	rpcRetryOptions retry.Options
-	asyncSenderSem  *quotapool.IntPool
+	rpcRetryOptions    retry.Options
+	asyncSenderSem     *quotapool.IntPool
 
 	// batchInterceptor is set for tenants; when set, information about all
 	// BatchRequests and BatchResponses are passed through this interceptor, which
@@ -590,10 +587,9 @@ type DistSenderConfig struct {
 	// NodeIDGetter, if set, provides non-gossip based implementation for
 	// obtaining the local KV node ID. The DistSender uses the node ID to
 	// preferentially route requests to a local replica (if one exists).
-	NodeIDGetter    func() roachpb.NodeID
-	RPCRetryOptions *retry.Options
-	// NodeDialer is the dialer from the SQL layer to the KV layer.
-	NodeDialer *nodedialer.Dialer
+	NodeIDGetter     func() roachpb.NodeID
+	RPCRetryOptions  *retry.Options
+	TransportFactory TransportFactory
 
 	// One of the following two must be provided, but not both.
 	//
@@ -680,10 +676,12 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 		return rangeDescriptorCacheSize.Get(&ds.st.SV)
 	}
 	ds.rangeCache = rangecache.NewRangeCache(ds.st, rdb, getRangeDescCacheSize, cfg.Stopper)
+	if cfg.TransportFactory == nil {
+		panic("no TransportFactory set")
+	}
+	ds.transportFactory = cfg.TransportFactory
 	if tf := cfg.TestingKnobs.TransportFactory; tf != nil {
-		ds.transportFactory = tf
-	} else {
-		ds.transportFactory = GRPCTransportFactory
+		ds.transportFactory = tf(ds.transportFactory)
 	}
 	ds.dontReorderReplicas = cfg.TestingKnobs.DontReorderReplicas
 	ds.dontConsiderConnHealth = cfg.TestingKnobs.DontConsiderConnHealth
@@ -693,7 +691,6 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	if cfg.RPCRetryOptions != nil {
 		ds.rpcRetryOptions = *cfg.RPCRetryOptions
 	}
-	ds.nodeDialer = cfg.NodeDialer
 	if ds.rpcRetryOptions.Closer == nil {
 		ds.rpcRetryOptions.Closer = cfg.Stopper.ShouldQuiesce()
 	}
@@ -797,6 +794,18 @@ func (ds *DistSender) RangeDescriptorCache() *rangecache.RangeCache {
 func (ds *DistSender) RangeLookup(
 	ctx context.Context, key roachpb.RKey, rc rangecache.RangeLookupConsistency, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+
+	// In this case, the requested key is stored in the cluster's first
+	// range. Return the first range, which is always gossiped and not
+	// queried from the datastore.
+	if keys.RangeMetaKey(key).Equal(roachpb.RKeyMin) {
+		desc, err := ds.firstRangeProvider.GetFirstRangeDescriptor()
+		if err != nil {
+			return nil, nil, err
+		}
+		return []roachpb.RangeDescriptor{*desc}, nil, nil
+	}
+
 	ds.metrics.RangeLookups.Inc(1)
 	switch rc {
 	case kvpb.INCONSISTENT, kvpb.READ_UNCOMMITTED:
@@ -809,18 +818,6 @@ func (ds *DistSender) RangeLookup(
 	// still find it when we scan to the next range. This addresses the issue
 	// described in #18032 and #16266, allowing us to support meta2 splits.
 	return kv.RangeLookup(ctx, ds, key.AsRawKey(), rc, RangeLookupPrefetchCount, useReverseScan)
-}
-
-// FirstRange implements the RangeDescriptorDB interface.
-//
-// It returns the RangeDescriptor for the first range in the cluster using the
-// FirstRangeProvider, which is typically implemented using the gossip protocol
-// instead of the datastore.
-func (ds *DistSender) FirstRange() (*roachpb.RangeDescriptor, error) {
-	if ds.firstRangeProvider == nil {
-		panic("with `nil` firstRangeProvider, DistSender must not use itself as RangeDescriptorDB")
-	}
-	return ds.firstRangeProvider.GetFirstRangeDescriptor()
 }
 
 // CountRanges returns the number of ranges that encompass the given key span.
@@ -2295,7 +2292,7 @@ func (ds *DistSender) sendToReplicas(
 		metrics:                &ds.metrics,
 		dontConsiderConnHealth: ds.dontConsiderConnHealth,
 	}
-	transport, err := ds.transportFactory(opts, ds.nodeDialer, replicas)
+	transport, err := ds.transportFactory(opts, replicas)
 	if err != nil {
 		return nil, err
 	}

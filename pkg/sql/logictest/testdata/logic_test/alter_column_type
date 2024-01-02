@@ -177,8 +177,11 @@ ALTER TABLE t1 ALTER COLUMN date TYPE timestamp
 statement ok
 SET enable_experimental_alter_column_type_general = true
 
-statement error pq: parsing as type timestamp: could not parse "hello"
+statement error pq: column "date" cannot be cast automatically to type TIMESTAMP\nHINT: You might need to specify "USING date::TIMESTAMP".
 ALTER TABLE t1 ALTER COLUMN date TYPE timestamp
+
+statement error pq: parsing as type timestamp: could not parse "hello"
+ALTER TABLE t1 ALTER COLUMN date TYPE timestamp USING date::TIMESTAMP
 
 # Verify ALTER COLUMN TYPE from INT to STRING works correctly.
 statement ok
@@ -281,8 +284,11 @@ CREATE TABLE t7 (x INT DEFAULT 1, y INT);
 statement ok
 INSERT INTO t7 (y) VALUES (1), (2), (3);
 
-statement error default for column "x" cannot be cast automatically to type DATE
+statement error pq: column "x" cannot be cast automatically to type DATE\nHINT: You might need to specify "USING x::DATE".
 ALTER TABLE t7 ALTER COLUMN x TYPE DATE;
+
+statement error default for column "x" cannot be cast automatically to type DATE
+ALTER TABLE t7 ALTER COLUMN x TYPE DATE USING x::DATE;
 
 # Ensure a runtime error correctly rolls back and the table is unchanged.
 statement ok
@@ -291,8 +297,11 @@ CREATE TABLE t8 (x STRING)
 statement ok
 INSERT INTO t8 VALUES ('hello')
 
-statement error pq: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
+statement error pq: column "x" cannot be cast automatically to type INT8\nHINT: You might need to specify "USING x::INT8".
 ALTER TABLE t8 ALTER COLUMN x TYPE INT
+
+statement error pq: could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax
+ALTER TABLE t8 ALTER COLUMN x TYPE INT USING x::INT8
 
 query TT
 SHOW CREATE TABLE t8
@@ -376,11 +385,17 @@ Baz
 statement ok
 CREATE TABLE t17 (x STRING DEFAULT 'HELLO', y STRING ON UPDATE 'HELLO', FAMILY f1 (x,y));
 
-statement error default for column "x" cannot be cast automatically to type INT8
+statement error pq: column "x" cannot be cast automatically to type INT8\nHINT: You might need to specify "USING x::INT8".
 ALTER TABLE t17 ALTER COLUMN x TYPE INT
 
-statement error on update for column "y" cannot be cast automatically to type INT8
+statement error default for column "x" cannot be cast automatically to type INT8
+ALTER TABLE t17 ALTER COLUMN x TYPE INT USING x::INT8
+
+statement error pq: column "y" cannot be cast automatically to type INT8\nHINT: You might need to specify "USING y::INT8".
 ALTER TABLE t17 ALTER COLUMN y TYPE INT
+
+statement error on update for column "y" cannot be cast automatically to type INT8
+ALTER TABLE t17 ALTER COLUMN y TYPE INT USING y::INT8
 
 query TT colnames
 show create table t17
@@ -527,7 +542,7 @@ SELECT x FROM t28 ORDER BY x
 10
 15
 
-# Regression 50277, ensure ColumnConversionValidate type conversion doesn't
+# Regression 50277, ensure ColumnConversionValidate type conversion does not
 # error before running the online schema change.
 statement ok
 CREATE TABLE t29 (x INT8);
@@ -565,8 +580,11 @@ CREATE TABLE t30 (x STRING);
 statement ok
 INSERT INTO t30 VALUES (e'a\\01');
 
-statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
+statement error pq: column "x" cannot be cast automatically to type BYTES\nHINT: You might need to specify "USING x::BYTES".
 ALTER TABLE t30 ALTER COLUMN x TYPE BYTES
+
+statement error pq: could not parse "a\\\\01" as type bytes: bytea encoded value ends with incomplete escape sequence
+ALTER TABLE t30 ALTER COLUMN x TYPE BYTES USING x::BYTES
 
 # Ensure that dependent views prevent column type modification.
 
@@ -605,3 +623,18 @@ ALTER TABLE t_91069 ALTER COLUMN j SET DEFAULT NULL
 
 statement ok
 ALTER TABLE t_91069 ALTER COLUMN j TYPE VARCHAR(32)
+
+# To verify that altering the data type of a column with explicit
+# casting works when the automatic cast is not possible .
+
+statement ok
+CREATE TABLE t31 (b BOOL);
+
+statement ok
+INSERT INTO t31 VALUES (true),(false);
+
+statement error pq: column "b" cannot be cast automatically to type INT8\nHINT: You might need to specify "USING b::INT8".
+ALTER TABLE t31 ALTER COLUMN b TYPE INT;
+
+statement ok
+ALTER TABLE t31 ALTER COLUMN b TYPE INT USING b::INT8;

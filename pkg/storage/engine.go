@@ -632,8 +632,10 @@ type EventuallyFileOnlyReader interface {
 	Reader
 	// WaitForFileOnly blocks the calling goroutine until this reader has
 	// transitioned to a file-only reader that does not pin any in-memory state.
-	// If an error is returned, this transition did not succeed.
-	WaitForFileOnly(context.Context) error
+	// If an error is returned, this transition did not succeed. The Duration
+	// argument specifies how long to wait for before attempting a flush to
+	// force a transition to a file-only snapshot.
+	WaitForFileOnly(ctx context.Context, gracePeriodBeforeFlush time.Duration) error
 }
 
 // Writer is the write interface to an engine's data.
@@ -1196,9 +1198,13 @@ type Metrics struct {
 	// SingleDelInvariantViolationCount counts the number of times a
 	// SingleDelete was found to violate the invariant that it should only be
 	// used when there is at most one older Set for it to delete.
+	//
+	// TODO(sumeer): remove, since can fire due to delete-only compactions.
 	SingleDelInvariantViolationCount int64
 	// SingleDelIneffectualCount counts the number of times a SingleDelete was
 	// ineffectual, i.e., it was elided without deleting anything.
+	//
+	// TODO(sumeer): remove, since can fire due to delete-only compactions.
 	SingleDelIneffectualCount int64
 	// SharedStorageWriteBytes counts the number of bytes written to shared storage.
 	SharedStorageWriteBytes int64

@@ -50,7 +50,7 @@ func (r *Replica) addToTSCacheChecked(
 			"cache after evaluating %v (resp=%v; err=%v) with lease expiration %v. The timestamp "+
 			"cache update could be lost of a non-cooperative lease change.", ts, ba, br, pErr, exp)
 	}
-	r.store.tsCache.Add(start, end, ts, txnID)
+	r.store.tsCache.Add(ctx, start, end, ts, txnID)
 }
 
 // updateTimestampCache updates the timestamp cache in order to set a low
@@ -359,7 +359,7 @@ func (r *Replica) applyTimestampCache(
 			header := args.Header()
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
-			rTS, rTxnID := r.store.tsCache.GetMax(header.Key, header.EndKey)
+			rTS, rTxnID := r.store.tsCache.GetMax(ctx, header.Key, header.EndKey)
 			var forwardedToMinReadTS bool
 			if rTS.Forward(minReadTS) {
 				forwardedToMinReadTS = true
@@ -557,7 +557,7 @@ func (r *Replica) CanCreateTxnRecord(
 	// error: if this is a re-evaluation, then the error will be transformed into
 	// an ambiguous one higher up. Otherwise, if the client is still waiting for
 	// a result, then this cannot be a "replay" of any sort.
-	tombstoneTimestamp, tombstoneTxnID := r.store.tsCache.GetMax(tombstoneKey, nil /* end */)
+	tombstoneTimestamp, tombstoneTxnID := r.store.tsCache.GetMax(ctx, tombstoneKey, nil /* end */)
 	// Compare against the minimum timestamp that the transaction could have
 	// written intents at.
 	if txnMinTS.LessEq(tombstoneTimestamp) {
@@ -620,7 +620,7 @@ func (r *Replica) MinTxnCommitTS(
 	// commit at. This is used by pushers to push the timestamp of a transaction
 	// without writing to the pushee's transaction record.
 	pushKey := transactionPushMarker(txnKey, txnID)
-	minCommitTS, _ := r.store.tsCache.GetMax(pushKey, nil /* end */)
+	minCommitTS, _ := r.store.tsCache.GetMax(ctx, pushKey, nil /* end */)
 	return minCommitTS
 }
 
@@ -654,7 +654,7 @@ func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 // GetCurrentReadSummary returns a new ReadSummary reflecting all reads served
 // by the range to this point.
 func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
-	sum := collectReadSummaryFromTimestampCache(r.store.tsCache, r.Desc())
+	sum := collectReadSummaryFromTimestampCache(ctx, r.store.tsCache, r.Desc())
 	// Forward the read summary by the range's closed timestamp, because any
 	// replica could have served reads below this time. We also return the
 	// closed timestamp separately, in case callers want it split out.
@@ -666,15 +666,17 @@ func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 // collectReadSummaryFromTimestampCache constucts a read summary for the range
 // with the specified descriptor using the timestamp cache.
 func collectReadSummaryFromTimestampCache(
-	tc tscache.Cache, desc *roachpb.RangeDescriptor,
+	ctx context.Context, tc tscache.Cache, desc *roachpb.RangeDescriptor,
 ) rspb.ReadSummary {
 	var s rspb.ReadSummary
 	s.Local.LowWater, _ = tc.GetMax(
+		ctx,
 		keys.MakeRangeKeyPrefix(desc.StartKey),
 		keys.MakeRangeKeyPrefix(desc.EndKey),
 	)
 	userKeys := desc.KeySpan()
 	s.Global.LowWater, _ = tc.GetMax(
+		ctx,
 		userKeys.Key.AsRawKey(),
 		userKeys.EndKey.AsRawKey(),
 	)
@@ -687,9 +689,10 @@ func collectReadSummaryFromTimestampCache(
 // writes in either the local or global keyspace are allowed to invalidate
 // ("write underneath") prior reads.
 func applyReadSummaryToTimestampCache(
-	tc tscache.Cache, desc *roachpb.RangeDescriptor, s rspb.ReadSummary,
+	ctx context.Context, tc tscache.Cache, desc *roachpb.RangeDescriptor, s rspb.ReadSummary,
 ) {
 	tc.Add(
+		ctx,
 		keys.MakeRangeKeyPrefix(desc.StartKey),
 		keys.MakeRangeKeyPrefix(desc.EndKey),
 		s.Local.LowWater,
@@ -697,6 +700,7 @@ func applyReadSummaryToTimestampCache(
 	)
 	userKeys := desc.KeySpan()
 	tc.Add(
+		ctx,
 		userKeys.Key.AsRawKey(),
 		userKeys.EndKey.AsRawKey(),
 		s.Global.LowWater,

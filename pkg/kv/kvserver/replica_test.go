@@ -1276,7 +1276,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 			t.Fatalf("%d: unexpected error %v", i, err)
 		}
 		// Verify expected low water mark.
-		rTS, _ := tc.repl.store.tsCache.GetMax(roachpb.Key("a"), nil /* end */)
+		rTS, _ := tc.repl.store.tsCache.GetMax(ctx, roachpb.Key("a"), nil /* end */)
 
 		if test.expLowWater == 0 {
 			continue
@@ -2189,54 +2189,52 @@ func TestRequestLeaseLimit(t *testing.T) {
 }
 
 // TestReplicaUpdateTSCache verifies that reads and ranged writes update the
-// timestamp cache. The test performs the operations with and without the use
-// of synthetic timestamps.
+// timestamp cache.
 func TestReplicaUpdateTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
-		ctx := context.Background()
-		tc := testContext{}
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
-		tc.Start(ctx, t, stopper)
 
-		startNanos := tc.Clock().Now().WallTime
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
-		// Set clock to time 1s and do the read.
-		tc.manualClock.MustAdvanceTo(timeutil.Unix(1, 0))
-		ts1 := tc.Clock().Now().WithSynthetic(synthetic)
-		gArgs := getArgs([]byte("a"))
+	startNanos := tc.Clock().Now().WallTime
 
-		if _, pErr := tc.SendWrappedWith(kvpb.Header{Timestamp: ts1}, &gArgs); pErr != nil {
-			t.Error(pErr)
-		}
-		// Set clock to time 2s for write.
-		tc.manualClock.MustAdvanceTo(timeutil.Unix(2, 0))
-		ts2 := tc.Clock().Now().WithSynthetic(synthetic)
-		key := roachpb.Key([]byte("b"))
-		drArgs := kvpb.NewDeleteRange(key, key.Next(), false /* returnKeys */)
+	// Set clock to time 1s and do the read.
+	tc.manualClock.MustAdvanceTo(timeutil.Unix(1, 0))
+	ts1 := tc.Clock().Now()
+	gArgs := getArgs([]byte("a"))
 
-		if _, pErr := tc.SendWrappedWith(kvpb.Header{Timestamp: ts2}, drArgs); pErr != nil {
-			t.Error(pErr)
-		}
-		// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
-		noID := uuid.UUID{}
-		rTS, rTxnID := tc.repl.store.tsCache.GetMax(roachpb.Key("a"), nil)
-		if rTS != ts1 || rTxnID != noID {
-			t.Errorf("expected rTS=%s but got %s; rTxnID=%s", ts1, rTS, rTxnID)
-		}
-		// Verify the timestamp cache has rTS=2s for "b".
-		rTS, rTxnID = tc.repl.store.tsCache.GetMax(roachpb.Key("b"), nil)
-		if rTS != ts2 || rTxnID != noID {
-			t.Errorf("expected rTS=%s but got %s; rTxnID=%s", ts2, rTS, rTxnID)
-		}
-		// Verify another key ("c") has 0sec in timestamp cache.
-		rTS, rTxnID = tc.repl.store.tsCache.GetMax(roachpb.Key("c"), nil)
-		if rTS.WallTime != startNanos || rTxnID != noID {
-			t.Errorf("expected rTS=0s but got %s; rTxnID=%s", rTS, rTxnID)
-		}
-	})
+	if _, pErr := tc.SendWrappedWith(kvpb.Header{Timestamp: ts1}, &gArgs); pErr != nil {
+		t.Error(pErr)
+	}
+	// Set clock to time 2s for write.
+	tc.manualClock.MustAdvanceTo(timeutil.Unix(2, 0))
+	ts2 := tc.Clock().Now()
+	key := roachpb.Key("b")
+	drArgs := kvpb.NewDeleteRange(key, key.Next(), false /* returnKeys */)
+
+	if _, pErr := tc.SendWrappedWith(kvpb.Header{Timestamp: ts2}, drArgs); pErr != nil {
+		t.Error(pErr)
+	}
+	// Verify the timestamp cache has rTS=1s and wTS=0s for "a".
+	noID := uuid.UUID{}
+	rTS, rTxnID := tc.repl.store.tsCache.GetMax(ctx, roachpb.Key("a"), nil)
+	if rTS != ts1 || rTxnID != noID {
+		t.Errorf("expected rTS=%s but got %s; rTxnID=%s", ts1, rTS, rTxnID)
+	}
+	// Verify the timestamp cache has rTS=2s for "b".
+	rTS, rTxnID = tc.repl.store.tsCache.GetMax(ctx, roachpb.Key("b"), nil)
+	if rTS != ts2 || rTxnID != noID {
+		t.Errorf("expected rTS=%s but got %s; rTxnID=%s", ts2, rTS, rTxnID)
+	}
+	// Verify another key ("c") has 0sec in timestamp cache.
+	rTS, rTxnID = tc.repl.store.tsCache.GetMax(ctx, roachpb.Key("c"), nil)
+	if rTS.WallTime != startNanos || rTxnID != noID {
+		t.Errorf("expected rTS=0s but got %s; rTxnID=%s", rTS, rTxnID)
+	}
 }
 
 // TestReplicaLatching verifies that reads/writes must wait for
@@ -3057,38 +3055,36 @@ func TestReplicaLatchingOptimisticEvaluationSkipLocked(t *testing.T) {
 }
 
 // TestReplicaUseTSCache verifies that write timestamps are upgraded based on
-// the timestamp cache. The test performs the operations with and without the
-// use of synthetic timestamps.
+// the timestamp cache.
 func TestReplicaUseTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
-		ctx := context.Background()
-		tc := testContext{}
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
-		tc.Start(ctx, t, stopper)
-		startTS := tc.Clock().Now()
 
-		// Set clock to time 1s and do the read.
-		tc.manualClock.Advance(1)
-		readTS := tc.Clock().Now().WithSynthetic(synthetic)
-		args := getArgs([]byte("a"))
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
+	startTS := tc.Clock().Now()
 
-		_, pErr := tc.SendWrappedWith(kvpb.Header{Timestamp: readTS}, &args)
-		require.Nil(t, pErr)
+	// Set clock to time 1s and do the read.
+	tc.manualClock.Advance(1)
+	readTS := tc.Clock().Now()
+	args := getArgs([]byte("a"))
 
-		// Perform a conflicting write. Should get bumped.
-		pArgs := putArgs([]byte("a"), []byte("value"))
-		ba := &kvpb.BatchRequest{}
-		ba.Add(&pArgs)
-		ba.Timestamp = startTS
+	_, pErr := tc.SendWrappedWith(kvpb.Header{Timestamp: readTS}, &args)
+	require.Nil(t, pErr)
 
-		br, pErr := tc.Sender().Send(ctx, ba)
-		require.Nil(t, pErr)
-		require.NotEqual(t, startTS, br.Timestamp)
-		require.Equal(t, readTS.Next(), br.Timestamp)
-	})
+	// Perform a conflicting write. Should get bumped.
+	pArgs := putArgs([]byte("a"), []byte("value"))
+	ba := &kvpb.BatchRequest{}
+	ba.Add(&pArgs)
+	ba.Timestamp = startTS
+
+	br, pErr := tc.Sender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotEqual(t, startTS, br.Timestamp)
+	require.Equal(t, readTS.Next(), br.Timestamp)
 }
 
 // TestReplicaTSCacheForwardsIntentTS verifies that the timestamp cache affects
@@ -3096,73 +3092,69 @@ func TestReplicaUseTSCache(t *testing.T) {
 // write is forwarded by the timestamp cache due to a more recent read, the
 // written intents must be left at the forwarded timestamp. See the comment on
 // the enginepb.TxnMeta.Timestamp field for rationale.
-//
-// The test performs the operations with and without the use of synthetic
-// timestamps.
 func TestReplicaTSCacheForwardsIntentTS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
-		ctx := context.Background()
-		tc := testContext{}
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
-		sc := TestStoreConfig(nil)
-		sc.TestingKnobs.DisableCanAckBeforeApplication = true
-		tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
-		tsOld := tc.Clock().Now()
-		tsNew := tsOld.Add(time.Millisecond.Nanoseconds(), 0).WithSynthetic(synthetic)
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	sc := TestStoreConfig(nil)
+	sc.TestingKnobs.DisableCanAckBeforeApplication = true
+	tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
-		// Read at tNew to populate the timestamp cache.
-		// DeleteRange at tNew to populate the timestamp cache.
-		txnNew := newTransaction("new", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
-		txnNew.ReadTimestamp = tsNew
-		txnNew.WriteTimestamp = tsNew
-		keyGet := roachpb.Key("get")
-		keyDeleteRange := roachpb.Key("delete-range")
-		gArgs := getArgs(keyGet)
-		drArgs := deleteRangeArgs(keyDeleteRange, keyDeleteRange.Next())
-		assignSeqNumsForReqs(txnNew, &gArgs, &drArgs)
-		ba := &kvpb.BatchRequest{}
-		ba.Header.Txn = txnNew
-		ba.Add(&gArgs, &drArgs)
-		if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
-			t.Fatal(pErr)
-		}
+	tsOld := tc.Clock().Now()
+	tsNew := tsOld.Add(time.Millisecond.Nanoseconds(), 0)
 
-		// Write under the timestamp cache within the transaction, and verify that
-		// the intents are written above the timestamp cache.
-		txnOld := newTransaction("old", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
-		txnOld.ReadTimestamp = tsOld
-		txnOld.WriteTimestamp = tsOld
-		for _, key := range []roachpb.Key{keyGet, keyDeleteRange} {
-			t.Run(string(key), func(t *testing.T) {
-				pArgs := putArgs(key, []byte("foo"))
-				assignSeqNumsForReqs(txnOld, &pArgs)
-				if _, pErr := tc.SendWrappedWith(kvpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
-					t.Fatal(pErr)
-				}
-				iter, err := tc.engine.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer iter.Close()
-				mvccKey := storage.MakeMVCCMetadataKey(key)
-				iter.SeekGE(mvccKey)
-				var keyMeta enginepb.MVCCMetadata
-				if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
-					t.Fatalf("missing mvcc metadata for %q: %+v", mvccKey, err)
-				} else if err := iter.ValueProto(&keyMeta); err != nil {
-					t.Fatalf("failed to unmarshal metadata for %q", mvccKey)
-				}
-				if tsNext := tsNew.Next(); keyMeta.Timestamp.ToTimestamp() != tsNext {
-					t.Errorf("timestamp not forwarded for %q intent: expected %s but got %s",
-						key, tsNext, keyMeta.Timestamp)
-				}
-			})
-		}
-	})
+	// Read at tNew to populate the timestamp cache.
+	// DeleteRange at tNew to populate the timestamp cache.
+	txnNew := newTransaction("new", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
+	txnNew.ReadTimestamp = tsNew
+	txnNew.WriteTimestamp = tsNew
+	keyGet := roachpb.Key("get")
+	keyDeleteRange := roachpb.Key("delete-range")
+	gArgs := getArgs(keyGet)
+	drArgs := deleteRangeArgs(keyDeleteRange, keyDeleteRange.Next())
+	assignSeqNumsForReqs(txnNew, &gArgs, &drArgs)
+	ba := &kvpb.BatchRequest{}
+	ba.Header.Txn = txnNew
+	ba.Add(&gArgs, &drArgs)
+	if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Write under the timestamp cache within the transaction, and verify that
+	// the intents are written above the timestamp cache.
+	txnOld := newTransaction("old", roachpb.Key("txn-anchor"), roachpb.NormalUserPriority, tc.Clock())
+	txnOld.ReadTimestamp = tsOld
+	txnOld.WriteTimestamp = tsOld
+	for _, key := range []roachpb.Key{keyGet, keyDeleteRange} {
+		t.Run(string(key), func(t *testing.T) {
+			pArgs := putArgs(key, []byte("foo"))
+			assignSeqNumsForReqs(txnOld, &pArgs)
+			if _, pErr := tc.SendWrappedWith(kvpb.Header{Txn: txnOld}, &pArgs); pErr != nil {
+				t.Fatal(pErr)
+			}
+			iter, err := tc.engine.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{Prefix: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer iter.Close()
+			mvccKey := storage.MakeMVCCMetadataKey(key)
+			iter.SeekGE(mvccKey)
+			var keyMeta enginepb.MVCCMetadata
+			if ok, err := iter.Valid(); !ok || !iter.UnsafeKey().Equal(mvccKey) {
+				t.Fatalf("missing mvcc metadata for %q: %+v", mvccKey, err)
+			} else if err := iter.ValueProto(&keyMeta); err != nil {
+				t.Fatalf("failed to unmarshal metadata for %q", mvccKey)
+			}
+			if tsNext := tsNew.Next(); keyMeta.Timestamp.ToTimestamp() != tsNext {
+				t.Errorf("timestamp not forwarded for %q intent: expected %s but got %s",
+					key, tsNext, keyMeta.Timestamp)
+			}
+		})
+	}
 }
 
 func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
@@ -6067,45 +6059,44 @@ func TestPushTxnPriorities(t *testing.T) {
 func TestPushTxnPushTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testutils.RunTrueAndFalse(t, "synthetic", func(t *testing.T, synthetic bool) {
-		ctx := context.Background()
-		tc := testContext{}
-		stopper := stop.NewStopper()
-		defer stopper.Stop(ctx)
-		tc.Start(ctx, t, stopper)
 
-		pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
-		pushee := newTransaction("test", roachpb.Key("b"), 1, tc.Clock())
-		pusher.Priority = enginepb.MaxTxnPriority
-		pushee.Priority = enginepb.MinTxnPriority // pusher will win
-		now := tc.Clock().Now()
-		pusher.WriteTimestamp = now.Add(50, 25).WithSynthetic(synthetic)
-		pushee.WriteTimestamp = now.Add(5, 1)
+	ctx := context.Background()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.Start(ctx, t, stopper)
 
-		key := roachpb.Key("a")
-		put := putArgs(key, key)
-		assignSeqNumsForReqs(pushee, &put)
-		if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), kvpb.Header{Txn: pushee}, &put); pErr != nil {
-			t.Fatal(pErr)
-		}
+	pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
+	pushee := newTransaction("test", roachpb.Key("b"), 1, tc.Clock())
+	pusher.Priority = enginepb.MaxTxnPriority
+	pushee.Priority = enginepb.MinTxnPriority // pusher will win
+	now := tc.Clock().Now()
+	pusher.WriteTimestamp = now.Add(50, 25)
+	pushee.WriteTimestamp = now.Add(5, 1)
 
-		// Now, push the transaction using a PUSH_TIMESTAMP push request.
-		args := pushTxnArgs(pusher, pushee, kvpb.PUSH_TIMESTAMP)
+	key := roachpb.Key("a")
+	put := putArgs(key, key)
+	assignSeqNumsForReqs(pushee, &put)
+	if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), kvpb.Header{Txn: pushee}, &put); pErr != nil {
+		t.Fatal(pErr)
+	}
 
-		resp, pErr := tc.SendWrappedWith(kvpb.Header{Timestamp: args.PushTo}, &args)
-		if pErr != nil {
-			t.Fatalf("unexpected error on push: %s", pErr)
-		}
-		expTS := pusher.WriteTimestamp
-		expTS.Logical++
-		reply := resp.(*kvpb.PushTxnResponse)
-		if reply.PusheeTxn.WriteTimestamp != expTS {
-			t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PusheeTxn.WriteTimestamp)
-		}
-		if reply.PusheeTxn.Status != roachpb.PENDING {
-			t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
-		}
-	})
+	// Now, push the transaction using a PUSH_TIMESTAMP push request.
+	args := pushTxnArgs(pusher, pushee, kvpb.PUSH_TIMESTAMP)
+
+	resp, pErr := tc.SendWrappedWith(kvpb.Header{Timestamp: args.PushTo}, &args)
+	if pErr != nil {
+		t.Fatalf("unexpected error on push: %s", pErr)
+	}
+	expTS := pusher.WriteTimestamp
+	expTS.Logical++
+	reply := resp.(*kvpb.PushTxnResponse)
+	if reply.PusheeTxn.WriteTimestamp != expTS {
+		t.Errorf("expected timestamp to be pushed to %+v; got %+v", expTS, reply.PusheeTxn.WriteTimestamp)
+	}
+	if reply.PusheeTxn.Status != roachpb.PENDING {
+		t.Errorf("expected pushed txn to have status PENDING; got %s", reply.PusheeTxn.Status)
+	}
 }
 
 // TestPushTxnPushTimestampAlreadyPushed verifies that pushing
@@ -10425,7 +10416,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		snap := tc.engine.NewSnapshot()
 		defer snap.Close()
 		res, err := CalcReplicaDigest(ctx, *tc.repl.Desc(), tc.engine, kvpb.ChecksumMode_CHECK_FULL,
-			quotapool.NewRateLimiter("test", quotapool.Inf(), 0))
+			quotapool.NewRateLimiter("test", quotapool.Inf(), 0), nil /* settings */)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
@@ -13511,7 +13502,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				ba.Add(putReq(keyA))
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
-				r.store.tsCache.Add(keyA, keyA, minReadTS.Next(), uuid.MakeV4())
+				r.store.tsCache.Add(ctx, keyA, keyA, minReadTS.Next(), uuid.MakeV4())
 				require.True(t, r.applyTimestampCache(ctx, ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
@@ -13526,7 +13517,7 @@ func TestReplicaTelemetryCounterForPushesDueToClosedTimestamp(t *testing.T) {
 				ba.Timestamp = r.store.Clock().Now()
 				minReadTS := ba.Timestamp.Next()
 				t.Log(ba.Timestamp, minReadTS, minReadTS.Next())
-				r.store.tsCache.Add(keyAA, keyAA, minReadTS.Next(), uuid.MakeV4())
+				r.store.tsCache.Add(ctx, keyAA, keyAA, minReadTS.Next(), uuid.MakeV4())
 				require.True(t, r.applyTimestampCache(ctx, ba, minReadTS))
 				require.Equal(t, int32(0), telemetry.Read(batchesPushedDueToClosedTimestamp))
 			},
@@ -14455,13 +14446,13 @@ func TestResolveIntentReplicatedLocksBumpsTSCache(t *testing.T) {
 			expTs = bumpedTs
 		}
 
-		rTS, _ := tc.store.tsCache.GetMax(roachpb.Key("a"), nil)
+		rTS, _ := tc.store.tsCache.GetMax(ctx, roachpb.Key("a"), nil)
 		require.Equal(t, expTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("b"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("b"), nil)
 		require.Equal(t, expTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("c"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("c"), nil)
 		require.Equal(t, expTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("d"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("d"), nil)
 		require.Equal(t, notBumpedTs, rTS)
 	}
 
@@ -14571,7 +14562,7 @@ func TestResolveIntentRangeReplicatedLocksBumpsTSCache(t *testing.T) {
 		}
 
 		for _, keyStr := range []string{"a", "b", "c", "d"} {
-			rTS, _ := tc.store.tsCache.GetMax(roachpb.Key(keyStr), nil)
+			rTS, _ := tc.store.tsCache.GetMax(ctx, roachpb.Key(keyStr), nil)
 			require.Equal(t, expTs, rTS)
 		}
 	}
@@ -14669,13 +14660,13 @@ func TestEndTxnReplicatedLocksBumpsTSCache(t *testing.T) {
 			expTs = bumpedTs
 		}
 
-		rTS, _ := tc.store.tsCache.GetMax(roachpb.Key("a"), nil)
+		rTS, _ := tc.store.tsCache.GetMax(ctx, roachpb.Key("a"), nil)
 		require.Equal(t, expTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("b"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("b"), nil)
 		require.Equal(t, notBumpedTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("c"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("c"), nil)
 		require.Equal(t, expTs, rTS)
-		rTS, _ = tc.store.tsCache.GetMax(roachpb.Key("d"), nil)
+		rTS, _ = tc.store.tsCache.GetMax(ctx, roachpb.Key("d"), nil)
 		require.Equal(t, expTs, rTS)
 	}
 

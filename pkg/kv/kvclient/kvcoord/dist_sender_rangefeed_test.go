@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -168,23 +167,21 @@ func (c *countConnectionsTransport) Release() {
 
 func makeTransportFactory(
 	rfStreamEnabled bool, counts *internalClientCounts, wrapFn wrapRangeFeedClientFn,
-) kvcoord.TransportFactory {
-	return func(
-		options kvcoord.SendOptions,
-		dialer *nodedialer.Dialer,
-		slice kvcoord.ReplicaSlice,
-	) (kvcoord.Transport, error) {
-		transport, err := kvcoord.GRPCTransportFactory(options, dialer, slice)
-		if err != nil {
-			return nil, err
+) func(kvcoord.TransportFactory) kvcoord.TransportFactory {
+	return func(factory kvcoord.TransportFactory) kvcoord.TransportFactory {
+		return func(options kvcoord.SendOptions, slice kvcoord.ReplicaSlice) (kvcoord.Transport, error) {
+			transport, err := factory(options, slice)
+			if err != nil {
+				return nil, err
+			}
+			countingTransport := &countConnectionsTransport{
+				wrapped:             transport,
+				rfStreamEnabled:     rfStreamEnabled,
+				counts:              counts,
+				wrapRangeFeedClient: wrapFn,
+			}
+			return countingTransport, nil
 		}
-		countingTransport := &countConnectionsTransport{
-			wrapped:             transport,
-			rfStreamEnabled:     rfStreamEnabled,
-			counts:              counts,
-			wrapRangeFeedClient: wrapFn,
-		}
-		return countingTransport, nil
 	}
 }
 

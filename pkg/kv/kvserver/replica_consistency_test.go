@@ -275,7 +275,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 
 	// Hash the empty state.
 	unlim := quotapool.NewRateLimiter("test", quotapool.Inf(), 0)
-	rd, err := CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
+	rd, err := CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 	require.NoError(t, err)
 	fmt.Fprintf(sb, "checksum0: %x\n", rd.SHA512)
 
@@ -314,7 +314,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
+		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 		require.NoError(t, err)
 		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rd.SHA512)
 	}
@@ -335,13 +335,13 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 		txn := &roachpb.Transaction{TxnMeta: enginepb.TxnMeta{ID: txnID}}
 		require.NoError(t, storage.MVCCAcquireLock(ctx, eng, txn, l.str, roachpb.Key(l.key), nil, 0))
 
-		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
+		rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 		require.NoError(t, err)
 		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rd.SHA512)
 	}
 
 	// Run another check to obtain stats for the final state.
-	rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim)
+	rd, err = CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, nil /* settings */)
 	require.NoError(t, err)
 	jsonpb := protoutil.JSONPb{Indent: "  "}
 	json, err := jsonpb.Marshal(&rd.RecomputedMS)

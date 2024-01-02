@@ -832,8 +832,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
 	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
 	s.externalStorageBuilder.init(
-		ctx,
-		s.sqlCfg.ExternalIODirConfig,
+		s.cfg.EarlyBootExternalStorageAccessor,
+		s.cfg.ExternalIODirConfig,
 		s.sqlServer.cfg.Settings,
 		s.sqlServer.sqlIDContainer,
 		s.kvNodeDialer,
@@ -1183,6 +1183,7 @@ func makeTenantSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
+	registry.AddMetricStruct(costController.Metrics())
 
 	dsCfg := kvcoord.DistSenderConfig{
 		AmbientCtx:        baseCfg.AmbientCtx,
@@ -1193,7 +1194,7 @@ func makeTenantSQLServerArgs(
 		RPCRetryOptions:   &rpcRetryOptions,
 		Stopper:           stopper,
 		LatencyFunc:       rpcContext.RemoteClocks.Latency,
-		NodeDialer:        kvNodeDialer,
+		TransportFactory:  kvcoord.GRPCTransportFactory(kvNodeDialer),
 		RangeDescriptorDB: tenantConnect,
 		Locality:          baseCfg.Locality,
 		KVInterceptor:     costController,
@@ -1478,4 +1479,8 @@ func (noopTenantSideCostController) GetCPUMovingAvg() float64 {
 
 func (noopTenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
 	return nil
+}
+
+func (noopTenantSideCostController) Metrics() metric.Struct {
+	return emptyMetricStruct{}
 }

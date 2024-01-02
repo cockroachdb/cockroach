@@ -57,7 +57,6 @@ go_library(
         "//pkg/kv/kvserver/diskmap",
         "//pkg/kv/kvserver/uncertainty",
         "//pkg/roachpb",
-        "//pkg/security/username",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/fetchpb",
@@ -143,7 +142,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":storage"],
     exec_properties = {"Pool": "large"},
-    shard_count = 2,
+    shard_count = 4,
     deps = [
         "//pkg/base",
         "//pkg/clusterversion",

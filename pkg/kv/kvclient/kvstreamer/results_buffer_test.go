@@ -173,9 +173,8 @@ func makeResultWithGetResp(rng *rand.Rand, empty bool) Result {
 		r.GetResp.Value = &roachpb.Value{
 			RawBytes: rawBytes,
 			Timestamp: hlc.Timestamp{
-				WallTime:  rng.Int63(),
-				Logical:   rng.Int31(),
-				Synthetic: rng.Float64() < 0.5,
+				WallTime: rng.Int63(),
+				Logical:  rng.Int31(),
 			},
 		}
 	}

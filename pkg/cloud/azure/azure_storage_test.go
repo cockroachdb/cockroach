@@ -208,7 +208,7 @@ func TestParseAzureURL(t *testing.T) {
 		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AZURE_ACCOUNT_KEY=key")
 		require.NoError(t, err)
 
-		sut, err := parseAzureURL(cloud.ExternalStorageURIContext{}, u)
+		sut, err := parseAzureURL(u)
 		require.NoError(t, err)
 
 		require.Equal(t, azure.PublicCloud.Name, sut.AzureConfig.Environment)
@@ -218,7 +218,7 @@ func TestParseAzureURL(t *testing.T) {
 		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AZURE_CLIENT_ID=client&AZURE_CLIENT_SECRET=secret&AZURE_TENANT_ID=tenant")
 		require.NoError(t, err)
 
-		_, err = parseAzureURL(cloud.ExternalStorageURIContext{}, u)
+		_, err = parseAzureURL(u)
 		require.NoError(t, err)
 	})
 
@@ -226,7 +226,7 @@ func TestParseAzureURL(t *testing.T) {
 		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AZURE_ACCOUNT_KEY=key&AZURE_CLIENT_ID=client&AZURE_CLIENT_SECRET=secret&AZURE_TENANT_ID=tenant")
 		require.NoError(t, err)
 
-		_, err = parseAzureURL(cloud.ExternalStorageURIContext{}, u)
+		_, err = parseAzureURL(u)
 		require.Error(t, err)
 
 	})
@@ -235,7 +235,7 @@ func TestParseAzureURL(t *testing.T) {
 		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AUTH=implicit")
 		require.NoError(t, err)
 
-		_, err = parseAzureURL(cloud.ExternalStorageURIContext{}, u)
+		_, err = parseAzureURL(u)
 		require.NoError(t, err)
 	})
 
@@ -243,7 +243,7 @@ func TestParseAzureURL(t *testing.T) {
 		u, err := url.Parse("azure-storage://container/path?AZURE_ACCOUNT_NAME=account&AZURE_ACCOUNT_KEY=key&AZURE_ENVIRONMENT=AzureUSGovernmentCloud")
 		require.NoError(t, err)
 
-		sut, err := parseAzureURL(cloud.ExternalStorageURIContext{}, u)
+		sut, err := parseAzureURL(u)
 		require.NoError(t, err)
 
 		require.Equal(t, azure.USGovernmentCloud.Name, sut.AzureConfig.Environment)
@@ -259,7 +259,7 @@ func TestMakeAzureStorageURLFromEnvironment(t *testing.T) {
 		{environment: azure.USGovernmentCloud.Name, expected: "https://account.blob.core.usgovcloudapi.net/container"},
 	} {
 		t.Run(tt.environment, func(t *testing.T) {
-			sut, err := makeAzureStorage(context.Background(), cloud.ExternalStorageContext{}, cloudpb.ExternalStorage{
+			sut, err := makeAzureStorage(context.Background(), cloud.EarlyBootExternalStorageContext{}, cloudpb.ExternalStorage{
 				AzureConfig: &cloudpb.ExternalStorage_Azure{
 					Container:   "container",
 					Prefix:      "path",

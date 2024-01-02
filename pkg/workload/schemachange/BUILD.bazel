@@ -22,7 +22,6 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/roachpb",
-        "//pkg/security/username",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/parser",

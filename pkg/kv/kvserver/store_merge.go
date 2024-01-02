@@ -180,7 +180,7 @@ func (s *Store) MergeRange(
 			} else {
 				sum = rspb.FromTimestamp(freezeStart.ToTimestamp())
 			}
-			applyReadSummaryToTimestampCache(s.tsCache, &rightDesc, sum)
+			applyReadSummaryToTimestampCache(ctx, s.tsCache, &rightDesc, sum)
 		}
 		// When merging ranges, the closed timestamp of the RHS can regress. It's
 		// possible that, at subsumption time, the RHS had a high closed timestamp.
@@ -193,7 +193,7 @@ func (s *Store) MergeRange(
 		// is frequently (but not necessarily) redundant with the bumping to the
 		// freeze time done above.
 		sum := rspb.FromTimestamp(rightClosedTS)
-		applyReadSummaryToTimestampCache(s.tsCache, &rightDesc, sum)
+		applyReadSummaryToTimestampCache(ctx, s.tsCache, &rightDesc, sum)
 	}
 
 	// Update the subsuming range's descriptor, atomically widening it while
