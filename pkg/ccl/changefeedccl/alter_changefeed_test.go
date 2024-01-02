@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -1205,13 +1206,7 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		}()
 
 		// Ensure initial backfill completes
-		testutils.SucceedsSoon(t, func() error {
-			prog := loadProgress(t, jobFeed, jobRegistry)
-			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() {
-				return nil
-			}
-			return errors.New("waiting for highwater")
-		})
+		waitForHighwater(t, jobFeed, jobRegistry)
 
 		// Pause job and setup overrides to force a checkpoint
 		require.NoError(t, jobFeed.Pause())
@@ -1237,6 +1232,8 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 		var backfillTimestamp hlc.Timestamp
 		var initialCheckpoint roachpb.SpanGroup
 		var foundCheckpoint int32
+		progressBackoff := jobRecordPollFrequency
+		var nextProgressCheck time.Time
 		knobs.FilterSpanWithMutation = func(r *jobspb.ResolvedSpan) (bool, error) {
 			// Stop resolving anything after checkpoint set to avoid eventually resolving the full span
 			if initialCheckpoint.Len() > 0 {
@@ -1252,12 +1249,18 @@ func TestAlterChangefeedAddTargetsDuringSchemaChangeError(t *testing.T) {
 				return false, nil
 			}
 
-			// Check if we've set a checkpoint yet
-			progress := loadProgress(t, jobFeed, jobRegistry)
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-				initialCheckpoint.Add(p.Checkpoint.Spans...)
-				atomic.StoreInt32(&foundCheckpoint, 1)
-				t.Logf("found checkpoint %v", p.Checkpoint.Spans)
+			// Avoid reading for the job progress too frequently. Attempting
+			// to read the job record continuously in a loop may continuously
+			// abort the transaction which is trying to write the job record.
+			if nextProgressCheck.IsZero() || nextProgressCheck.Before(timeutil.Now()) {
+				// Check if we've set a checkpoint yet
+				progress := loadProgress(t, jobFeed, jobRegistry)
+				if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
+					initialCheckpoint.Add(p.Checkpoint.Spans...)
+					atomic.StoreInt32(&foundCheckpoint, 1)
+					t.Logf("found checkpoint %v", p.Checkpoint.Spans)
+				}
+				nextProgressCheck = timeutil.Now().Add(progressBackoff)
 			}
 
 			// Filter non-backfill-related spans
@@ -1393,13 +1396,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 		jobFeed := testFeed.(cdctest.EnterpriseTestFeed)
 
 		// Wait for non-nil checkpoint.
-		testutils.SucceedsSoon(t, func() error {
-			progress := loadProgress(t, jobFeed, registry)
-			if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-				return nil
-			}
-			return errors.New("waiting for checkpoint")
-		})
+		waitForCheckpoint(t, jobFeed, registry)
 
 		// Pause the job and read and verify the latest checkpoint information.
 		require.NoError(t, jobFeed.Pause())
@@ -1429,14 +1426,7 @@ func TestAlterChangefeedAddTargetsDuringBackfill(t *testing.T) {
 
 		require.NoError(t, jobFeed.Resume())
 
-		// Wait for the high water mark to be non-zero.
-		testutils.SucceedsSoon(t, func() error {
-			prog := loadProgress(t, jobFeed, registry)
-			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() {
-				return nil
-			}
-			return errors.New("waiting for highwater")
-		})
+		waitForHighwater(t, jobFeed, registry)
 
 		// At this point, highwater mark should be set, and previous checkpoint should be gone.
 		progress = loadProgress(t, jobFeed, registry)
