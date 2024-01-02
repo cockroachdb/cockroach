@@ -621,7 +621,7 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 		// Determine when to read.
 		readTS := tc.Servers[0].Clock().Now()
 		if futureRead {
-			readTS = readTS.Add(500*time.Millisecond.Nanoseconds(), 0).WithSynthetic(true)
+			readTS = readTS.Add(500*time.Millisecond.Nanoseconds(), 0)
 		}
 
 		// Read the key at readTS.
@@ -651,7 +651,6 @@ func TestStoreLeaseTransferTimestampCacheRead(t *testing.T) {
 		require.Nil(t, pErr)
 		require.NotEqual(t, readTS, br.Timestamp)
 		require.True(t, readTS.Less(br.Timestamp))
-		require.Equal(t, readTS.Synthetic, br.Timestamp.Synthetic)
 	})
 }
 
