@@ -155,6 +155,7 @@ go_test(
         "log_decoder_test.go",
         "main_test.go",
         "redact_test.go",
+        "registry_test.go",
         "secondary_log_test.go",
         "test_log_scope_test.go",
         "trace_client_test.go",
