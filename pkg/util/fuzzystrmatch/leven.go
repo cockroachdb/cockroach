@@ -80,7 +80,9 @@ func LevenshteinLessEqualDistance(source, target string, maxD int) int {
 // 'Iterative with two matrix rows' approach within https://en.wikipedia.org/wiki/Levenshtein_distance.
 // A couple of optimizations have been added for tightening the bounds and for handling
 // impossibly tight bound case where the result is definitely greater than given maxDist.
-func LevenshteinLessEqualDistanceWithCost(source, target string, insCost, delCost, subCost, maxDist int) int {
+func LevenshteinLessEqualDistanceWithCost(
+	source, target string, insCost, delCost, subCost, maxDist int,
+) int {
 	// Converting to a slice of runes allows us to count multi-byte characters
 	// properly.
 	s, t := []rune(source), []rune(target)

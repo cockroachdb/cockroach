@@ -2538,7 +2538,7 @@ var builtinOidsArray = []string{
 	2570: `array_position(array: refcursor[], elem: refcursor, start: int) -> int`,
 	2571: `bit_count(val: bytes) -> int`,
 	2572: `bit_count(val: varbit) -> int`,
-  2573: `levenshtein_less_equal(source: string, target: string, max_d: int) -> int`,
+	2573: `levenshtein_less_equal(source: string, target: string, max_d: int) -> int`,
 	2574: `levenshtein_less_equal(source: string, target: string, ins_cost: int, del_cost: int, sub_cost: int, max_d: int) -> int`,
 }
 
