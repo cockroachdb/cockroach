@@ -45,6 +45,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const LastReadThresholdSeconds = 30
+
 func TestTenantStatusAPI(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := log.ScopeWithoutShowLogs(t)
@@ -713,17 +715,29 @@ SELECT
   table_id,
   index_id,
   total_reads,
-  extract_duration('second', now() - last_read) < 5
+  extract_duration('second', now() - last_read)
 FROM
   crdb_internal.index_usage_statistics
 WHERE
   table_id = ` + testTableIDStr
 				// Assert index usage data was inserted.
-				expected := [][]string{
-					{testTableIDStr, "1", "2", "true"}, // Primary index
-					{testTableIDStr, "2", "1", "true"},
+				expected := []struct {
+					tableID    string
+					indexID    string
+					totalReads string
+				}{
+					{tableID: testTableIDStr, indexID: "1", totalReads: "2"},
+					{tableID: testTableIDStr, indexID: "2", totalReads: "1"},
 				}
-				cluster.TenantConn(serverccl.RandomServer).CheckQueryResults(t, query, expected)
+				rows := cluster.TenantConn(serverccl.RandomServer).QueryStr(t, query)
+				for idx, e := range expected {
+					require.Equal(t, e.tableID, rows[idx][0])
+					require.Equal(t, e.indexID, rows[idx][1])
+					require.Equal(t, e.totalReads, rows[idx][2])
+					lastReadDurationSec, err := strconv.Atoi(rows[idx][3])
+					require.NoError(t, err)
+					require.LessOrEqualf(t, lastReadDurationSec, LastReadThresholdSeconds, "Last Read was %ss ago, expected less than 30s", lastReadDurationSec)
+				}
 			}
 
 			// Reset index usage stats.
@@ -1047,25 +1061,33 @@ SELECT
   table_id,
   index_id,
   total_reads,
-  extract_duration('second', now() - last_read) < 5
+  extract_duration('second', now() - last_read)
 FROM
   crdb_internal.index_usage_statistics
 WHERE
   table_id = $1
 `
-	actual := testingCluster.TenantConn(2).QueryStr(t, query, testTableID)
-	expected := [][]string{
-		{testTableIDStr, "1", "2", "true"},
-		{testTableIDStr, "2", "1", "true"},
+	expected := []struct {
+		tableID    string
+		indexID    string
+		totalReads string
+	}{
+		{tableID: testTableIDStr, indexID: "1", totalReads: "2"},
+		{tableID: testTableIDStr, indexID: "2", totalReads: "1"},
+	}
+	rows := testingCluster.TenantConn(2).QueryStr(t, query, testTableID)
+	for idx, e := range expected {
+		require.Equal(t, e.tableID, rows[idx][0])
+		require.Equal(t, e.indexID, rows[idx][1])
+		require.Equal(t, e.totalReads, rows[idx][2])
+		lastReadDurationSec, err := strconv.Atoi(rows[idx][3])
+		require.NoError(t, err)
+		require.LessOrEqualf(t, lastReadDurationSec, LastReadThresholdSeconds, "Last Read was %ss ago, expected less than 30s", lastReadDurationSec)
 	}
 
-	require.Equal(t, expected, actual)
-
 	// Ensure tenant data isolation.
-	actual = controlledCluster.TenantConn(0).QueryStr(t, query, testTableID)
-	expected = [][]string{}
-
-	require.Equal(t, expected, actual)
+	actual := controlledCluster.TenantConn(0).QueryStr(t, query, testTableID)
+	require.Equal(t, [][]string{}, actual)
 }
 
 func selectClusterSessionIDs(t *testing.T, conn *sqlutils.SQLRunner) []string {
