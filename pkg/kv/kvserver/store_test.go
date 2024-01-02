@@ -2034,11 +2034,11 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	}
 
 	// Verify the timestamp cache has been set for "b".Next(), but not for "c".
-	rTS, _ := store.tsCache.GetMax(roachpb.Key("b").Next(), nil)
+	rTS, _ := store.tsCache.GetMax(ctx, roachpb.Key("b").Next(), nil)
 	if a, e := rTS, makeTS(t1.UnixNano(), 0); a != e {
 		t.Errorf("expected timestamp cache for \"b\".Next() set to %s; got %s", e, a)
 	}
-	rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
+	rTS, _ = store.tsCache.GetMax(ctx, roachpb.Key("c"), nil)
 	if a, lt := rTS, makeTS(t1.UnixNano(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"c\" set less than %s; got %s", lt, a)
 	}
@@ -2062,11 +2062,11 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	}
 
 	// Verify the timestamp cache has been set for "a".Next(), but not for "a".
-	rTS, _ = store.tsCache.GetMax(roachpb.Key("a").Next(), nil)
+	rTS, _ = store.tsCache.GetMax(ctx, roachpb.Key("a").Next(), nil)
 	if a, e := rTS, makeTS(t2.UnixNano(), 0); a != e {
 		t.Errorf("expected timestamp cache for \"a\".Next() set to %s; got %s", e, a)
 	}
-	rTS, _ = store.tsCache.GetMax(roachpb.Key("a"), nil)
+	rTS, _ = store.tsCache.GetMax(ctx, roachpb.Key("a"), nil)
 	if a, lt := rTS, makeTS(t2.UnixNano(), 0); lt.LessEq(a) {
 		t.Errorf("expected timestamp cache for \"a\" set less than %s; got %s", lt, a)
 	}
@@ -2096,11 +2096,11 @@ func TestStoreScanResumeTSCache(t *testing.T) {
 	}
 
 	// Verify the timestamp cache has been set for "a" and "b", but not for "c".
-	rTS, _ = store.tsCache.GetMax(roachpb.Key("a"), nil)
+	rTS, _ = store.tsCache.GetMax(ctx, roachpb.Key("a"), nil)
 	require.Equal(t, makeTS(t3.UnixNano(), 0), rTS)
-	rTS, _ = store.tsCache.GetMax(roachpb.Key("b"), nil)
+	rTS, _ = store.tsCache.GetMax(ctx, roachpb.Key("b"), nil)
 	require.Equal(t, makeTS(t3.UnixNano(), 0), rTS)
-	rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
+	rTS, _ = store.tsCache.GetMax(ctx, roachpb.Key("c"), nil)
 	require.Equal(t, makeTS(t2.UnixNano(), 0), rTS)
 }
 
@@ -2168,11 +2168,11 @@ func TestStoreSkipLockedTSCache(t *testing.T) {
 
 			// Verify the timestamp cache has been set for "a" and "c", but not for "b".
 			t2TS := makeTS(t2.UnixNano(), 0)
-			rTS, _ := store.tsCache.GetMax(roachpb.Key("a"), nil)
+			rTS, _ := store.tsCache.GetMax(ctx, roachpb.Key("a"), nil)
 			require.True(t, rTS.EqOrdering(t2TS))
-			rTS, _ = store.tsCache.GetMax(roachpb.Key("b"), nil)
+			rTS, _ = store.tsCache.GetMax(ctx, roachpb.Key("b"), nil)
 			require.True(t, rTS.Less(t2TS))
-			rTS, _ = store.tsCache.GetMax(roachpb.Key("c"), nil)
+			rTS, _ = store.tsCache.GetMax(ctx, roachpb.Key("c"), nil)
 			require.True(t, rTS.EqOrdering(t2TS))
 		})
 	}

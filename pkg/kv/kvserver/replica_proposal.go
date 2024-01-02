@@ -426,7 +426,7 @@ func (r *Replica) leasePostApplyLocked(
 		} else {
 			sum = rspb.FromTimestamp(newLease.Start.ToTimestamp())
 		}
-		applyReadSummaryToTimestampCache(r.store.tsCache, r.descRLocked(), sum)
+		applyReadSummaryToTimestampCache(ctx, r.store.tsCache, r.descRLocked(), sum)
 
 		// Reset the request counts used to make lease placement decisions and
 		// load-based splitting/merging decisions whenever starting a new lease.

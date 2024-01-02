@@ -132,7 +132,26 @@ func newUninitializedReplicaWithoutRaftGroup(
 	r.mu.proposalBuf.Init((*replicaProposer)(r), tracker.NewLockfreeTracker(), r.Clock(), r.ClusterSettings())
 	r.mu.proposalBuf.testing.allowLeaseProposalWhenNotLeader = store.cfg.TestingKnobs.AllowLeaseRequestProposalsWhenNotLeader
 	r.mu.proposalBuf.testing.dontCloseTimestamps = store.cfg.TestingKnobs.DontCloseTimestamps
-	r.mu.proposalBuf.testing.submitProposalFilter = store.cfg.TestingKnobs.TestingProposalSubmitFilter
+	if filter := store.cfg.TestingKnobs.TestingProposalSubmitFilter; filter != nil {
+		r.mu.proposalBuf.testing.submitProposalFilter = func(p *ProposalData) (bool, error) {
+			var seedID kvserverbase.CmdIDKey
+			if p.seedProposal != nil {
+				seedID = p.seedProposal.idKey
+			}
+			// Expose proposal data for external test packages.
+			return store.cfg.TestingKnobs.TestingProposalSubmitFilter(kvserverbase.ProposalFilterArgs{
+				Ctx:        p.ctx,
+				RangeID:    rangeID,
+				StoreID:    store.StoreID(),
+				ReplicaID:  replicaID,
+				Cmd:        p.command,
+				QuotaAlloc: p.quotaAlloc,
+				CmdID:      p.idKey,
+				SeedID:     seedID,
+				Req:        *p.Request,
+			})
+		}
+	}
 	r.mu.proposalBuf.testing.leaseIndexFilter = store.cfg.TestingKnobs.LeaseIndexFilter
 
 	if leaseHistoryMaxEntries > 0 {

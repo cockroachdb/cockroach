@@ -1195,7 +1195,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 				// future.
 				if !sp.status.IsFinalized() {
 					tombstoneTimestamp, _ := tc.store.tsCache.GetMax(
-						txnTombstoneTSCacheKey, nil /* end */)
+						ctx, txnTombstoneTSCacheKey, nil /* end */)
 					if min := (hlc.Timestamp{WallTime: sp.orig.UnixNano()}); tombstoneTimestamp.Less(min) {
 						return fmt.Errorf("%s: expected tscache entry for tombstone key to be >= %s, "+
 							"but found %s", strKey, min, tombstoneTimestamp)

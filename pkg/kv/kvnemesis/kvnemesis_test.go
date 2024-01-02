@@ -23,6 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -110,6 +113,10 @@ func (cfg kvnemesisTestCfg) testClusterArgs(tr *SeqTracker) base.TestClusterArgs
 			if !ok {
 				return 0
 			}
+			// Lease requests never assign a LAI.
+			if pd.Request.IsSingleRequestLeaseRequest() {
+				return 0
+			}
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -124,6 +131,28 @@ func (cfg kvnemesisTestCfg) testClusterArgs(tr *SeqTracker) base.TestClusterArgs
 			//
 			// [^1]: https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1433244880
 			return 1
+		}
+	}
+
+	if cfg.assertRaftApply {
+		asserter := apply.NewAsserter()
+		storeKnobs.TestingProposalSubmitFilter = func(args kvserverbase.ProposalFilterArgs) (bool, error) {
+			asserter.Propose(args.RangeID, args.ReplicaID, args.CmdID, args.SeedID, args.Cmd, args.Req)
+			return false /* drop */, nil
+		}
+		storeKnobs.TestingApplyCalledTwiceFilter = func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+			if !args.Ephemeral {
+				asserter.Apply(args.RangeID, args.ReplicaID, args.CmdID, args.Entry, args.Cmd.MaxLeaseIndex,
+					*args.Cmd.ClosedTimestamp)
+			}
+			return 0, nil
+		}
+		storeKnobs.AfterSnapshotApplication = func(
+			desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState, snap kvserver.IncomingSnapshot,
+		) {
+			asserter.ApplySnapshot(snap.Desc.RangeID, desc.ReplicaID, snap.FromReplica.ReplicaID,
+				state.RaftAppliedIndex, state.RaftAppliedIndexTerm, state.LeaseAppliedIndex,
+				state.RaftClosedTimestamp)
 		}
 	}
 
@@ -224,6 +253,10 @@ type kvnemesisTestCfg struct {
 	// considered truly random, but is random enough for the desired purpose.
 	invalidLeaseAppliedIndexProb float64 // [0,1)
 	injectReproposalErrorProb    float64 // [0,1)
+	// If enabled, track Raft proposals and command application, and assert
+	// invariants (in particular that we don't double-apply a request or
+	// proposal).
+	assertRaftApply bool
 }
 
 func TestKVNemesisSingleNode(t *testing.T) {
@@ -237,6 +270,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 		seedOverride:                 0,
 		invalidLeaseAppliedIndexProb: 0.2,
 		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
 	})
 }
 
@@ -251,6 +285,7 @@ func TestKVNemesisSingleNode_ReproposalChaos(t *testing.T) {
 		seedOverride:                 0,
 		invalidLeaseAppliedIndexProb: 0.9,
 		injectReproposalErrorProb:    0.5,
+		assertRaftApply:              true,
 	})
 }
 
@@ -265,6 +300,7 @@ func TestKVNemesisMultiNode(t *testing.T) {
 		seedOverride:                 0,
 		invalidLeaseAppliedIndexProb: 0.2,
 		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
 	})
 }
 

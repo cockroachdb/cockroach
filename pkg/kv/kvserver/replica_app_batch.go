@@ -110,7 +110,7 @@ func (b *replicaAppBatch) Stage(
 
 	// Then, maybe override the result with testing knobs.
 	if b.r.store.TestingKnobs() != nil {
-		fr = replicaApplyTestingFilters(ctx, b.r, cmd, fr)
+		fr = replicaApplyTestingFilters(ctx, b.r, cmd, fr, false /* ephemeral */)
 	}
 
 	// Now update cmd. We'll either put the lease index in it or zero out
@@ -797,7 +797,7 @@ func (mb *ephemeralReplicaAppBatch) Stage(
 	fr := kvserverbase.CheckForcedErr(
 		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &mb.state,
 	)
-	fr = replicaApplyTestingFilters(ctx, mb.r, cmd, fr)
+	fr = replicaApplyTestingFilters(ctx, mb.r, cmd, fr, true /* ephemeral */)
 	cmd.ForcedErrResult = fr
 	if !cmd.Rejected() && cmd.LeaseIndex > mb.state.LeaseAppliedIndex {
 		mb.state.LeaseAppliedIndex = cmd.LeaseIndex
