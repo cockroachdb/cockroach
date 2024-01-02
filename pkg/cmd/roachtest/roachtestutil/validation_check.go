@@ -14,7 +14,6 @@ package roachtestutil
 import (
 	"context"
 	gosql "database/sql"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -23,16 +22,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // CheckReplicaDivergenceOnDB runs a consistency check via the provided DB. It
 // ignores transient errors that can result from the implementation of
 // crdb_internal.check_consistency, so a nil result does not prove anything.
 //
+// This will take storage checkpoints and terminate nodes if an inconsistency is
+// found, since all roachtests set COCKROACH_INTERNAL_CHECK_CONSISTENCY_FATAL.
+// These checkpoints will be collected in the test artifacts under
+// "checkpoints". An error is also returned in this case.
+//
 // The consistency check may not get enough time to complete, but will return
 // any inconsistencies that it did find before timing out.
 func CheckReplicaDivergenceOnDB(ctx context.Context, l *logger.Logger, db *gosql.DB) error {
+	// Cancel context if we error out, so the check doesn't keep running.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// Speed up consistency checks. The test is done, so let's go full throttle.
 	_, err := db.ExecContext(ctx, "SET CLUSTER SETTING server.consistency_check.max_rate = '1GB'")
 	if err != nil {
@@ -64,34 +71,19 @@ FROM crdb_internal.check_consistency(false, '', '') as t;`)
 	logEvery := log.Every(time.Minute)
 	logEvery.ShouldLog() // don't immediately log
 
-	const maxReport = 10 // max number of inconsistencies to report
-	var finalErr error
-	var ranges, inconsistent int
+	var ranges int
 	for rows.Next() {
 		var rangeID int32
 		var prettyKey, status, detail string
 		if scanErr := rows.Scan(&rangeID, &prettyKey, &status, &detail); scanErr != nil {
 			l.Printf("consistency check failed with %v; ignoring", scanErr)
-			return finalErr // return partial finalErr
+			return nil
 		}
 		// Only detect replica inconsistencies, and ignore MVCC stats mismatches
 		// since these can happen in rare cases due to lease requests not respecting
 		// latches: https://github.com/cockroachdb/cockroach/issues/93896
-		//
-		// TODO(erikgrinaker): We should take storage checkpoints for inconsistent
-		// ranges as well, up to maxReport. This requires support in
-		// check_consistency() such that we take the checkpoints at the same Raft
-		// log index across nodes.
 		if status == kvpb.CheckConsistencyResponse_RANGE_INCONSISTENT.String() {
-			inconsistent++
-			msg := fmt.Sprintf("r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail)
-			l.Printf(msg)
-			if inconsistent <= maxReport {
-				finalErr = errors.CombineErrors(finalErr, errors.Newf("%s", redact.SafeString(msg)))
-			} else if inconsistent == maxReport+1 {
-				finalErr = errors.CombineErrors(finalErr,
-					errors.Newf("max number of inconsistencies %d exceeded", maxReport))
-			}
+			return errors.Newf("r%d (%s) is inconsistent: %s %s\n", rangeID, prettyKey, status, detail)
 		}
 
 		ranges++
@@ -99,14 +91,13 @@ FROM crdb_internal.check_consistency(false, '', '') as t;`)
 			l.Printf("consistency checked %d ranges (at key %s)", ranges, prettyKey)
 		}
 	}
-	l.Printf("consistency checked %d ranges in %s, found %d inconsistent ranges",
-		ranges, timeutil.Since(started).Round(time.Second), inconsistent)
+	l.Printf("consistency checked %d ranges in %s",
+		ranges, timeutil.Since(started).Round(time.Second))
 
 	if err := rows.Err(); err != nil {
 		l.Printf("consistency check failed with %v; ignoring", err)
-		return finalErr // return partial finalErr
 	}
-	return finalErr
+	return nil
 }
 
 // CheckInvalidDescriptors returns an error if there exists any descriptors in
