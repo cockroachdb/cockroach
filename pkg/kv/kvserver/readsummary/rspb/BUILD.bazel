@@ -28,22 +28,31 @@ go_proto_library(
 
 go_library(
     name = "rspb",
-    srcs = ["summary.go"],
+    srcs = [
+        "merge_spans.go",
+        "summary.go",
+    ],
     embed = [":rspb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/buildutil",
         "//pkg/util/hlc",
+        "//pkg/util/uuid",
     ],
 )
 
 go_test(
     name = "rspb_test",
-    srcs = ["summary_test.go"],
+    srcs = [
+        "merge_spans_test.go",
+        "summary_test.go",
+    ],
     embed = [":rspb"],
     deps = [
         "//pkg/util/hlc",
+        "//pkg/util/randutil",
+        "//pkg/util/uuid",
         "@com_github_stretchr_testify//require",
     ],
 )
