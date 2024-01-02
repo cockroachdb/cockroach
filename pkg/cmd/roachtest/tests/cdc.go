@@ -258,7 +258,9 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			mon:   ct.mon,
 		}
 		kafka.install(ct.ctx)
-		kafka.start(ct.ctx, "kafka", getAzureEnvVars())
+		str := getAzureEnvVars()
+		kafka.start(ct.ctx, "kafka", str)
+		fmt.Println(str)
 		if err := kafka.installAzureCli(ct.ctx); err != nil {
 			kafka.t.Fatal(err)
 		}
