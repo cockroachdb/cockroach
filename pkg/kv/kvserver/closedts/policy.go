@@ -121,8 +121,7 @@ func TargetForPolicy(
 			leadTimeAtSender = leadTargetOverride
 		}
 
-		// Mark as synthetic, because this time is in the future.
-		res = now.ToTimestamp().Add(leadTimeAtSender.Nanoseconds(), 0).WithSynthetic(true)
+		res = now.ToTimestamp().Add(leadTimeAtSender.Nanoseconds(), 0)
 	default:
 		panic("unexpected RangeClosedTimestampPolicy")
 	}

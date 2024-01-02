@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -44,6 +45,7 @@ type tpcc struct {
 	numConns         int
 	idleConns        int
 	isoLevel         string
+	txnRetries       bool
 
 	// Used in non-uniform random data generation. cLoad is the value of C at load
 	// time. cCustomerID is the value of C for the customer id generator. cItemID
@@ -171,6 +173,7 @@ var tpccMeta = workload.Meta{
 			`conns`:                    {RuntimeOnly: true},
 			`idle-conns`:               {RuntimeOnly: true},
 			`isolation-level`:          {RuntimeOnly: true},
+			`txn-retries`:              {RuntimeOnly: true},
 			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`local-warehouses`:         {RuntimeOnly: true},
 			`regions`:                  {RuntimeOnly: true},
@@ -199,6 +202,7 @@ var tpccMeta = workload.Meta{
 		))
 		g.flags.IntVar(&g.idleConns, `idle-conns`, 0, `Number of idle connections. Defaults to 0`)
 		g.flags.StringVar(&g.isoLevel, `isolation-level`, ``, `Isolation level to run workload transactions under [serializable, snapshot, read_committed]. If unset, the workload will run with the default isolation level of the database.`)
+		g.flags.BoolVar(&g.txnRetries, `txn-retries`, true, `Run transactions in a retry loop`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
 		g.flags.IntVar(&g.clientPartitions, `client-partitions`, 0, `Make client behave as if the tables are partitioned, but does not actually partition underlying data. Requires --partition-affinity.`)
 		g.flags.IntSliceVar(&g.affinityPartitions, `partition-affinity`, nil, `Run load generator against specific partition (requires partitions). `+
@@ -895,6 +899,27 @@ func (w *tpcc) Ops(
 		return nil
 	}
 	return ql, nil
+}
+
+// executeTx runs fn inside a transaction with retries, if enabled. On
+// non-retryable failures, the transaction is aborted and rolled back; on
+// success, the transaction is committed.
+func (w *tpcc) executeTx(ctx context.Context, conn crdbpgx.Conn, fn func(pgx.Tx) error) error {
+	txOpts := pgx.TxOptions{}
+	if w.txnRetries {
+		return crdbpgx.ExecuteTx(ctx, conn, txOpts, fn)
+	}
+
+	tx, err := conn.BeginTx(ctx, txOpts)
+	if err != nil {
+		return err
+	}
+	err = fn(tx)
+	if err != nil {
+		_ = tx.Rollback(ctx)
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (w *tpcc) partitionAndScatter(urls []string) error {

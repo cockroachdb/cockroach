@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	crdbpgx "github.com/cockroachdb/cockroach-go/v2/crdb/crdbpgxv5"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
@@ -211,8 +210,8 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 
 	d.oEntryD = timeutil.Now()
 
-	err := crdbpgx.ExecuteTx(
-		ctx, n.mcp.Get(), pgx.TxOptions{},
+	err := n.config.executeTx(
+		ctx, n.mcp.Get(),
 		func(tx pgx.Tx) error {
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int
