@@ -42,8 +42,8 @@ func (c *ReadSummary) Clone() *ReadSummary {
 // reflects the combination of all reads in each original summary. The merge
 // operation is commutative and idempotent.
 func (c *ReadSummary) Merge(o ReadSummary) {
-	c.Local.merge(o.Local)
-	c.Global.merge(o.Global)
+	c.Local.Merge(o.Local)
+	c.Global.Merge(o.Global)
 }
 
 // AddReadSpan adds a read span to the segment. The span must be sorted after
@@ -82,6 +82,51 @@ func (c *Segment) Clone() Segment {
 	return res
 }
 
-func (c *Segment) merge(o Segment) {
-	c.LowWater.Forward(o.LowWater)
+// Merge combines two segments, resulting in a single segment that reflects the
+// combination of all reads in each original segment. The merge operation is
+// commutative and idempotent.
+func (c *Segment) Merge(o Segment) {
+	// Forward the low water mark.
+	if !c.LowWater.EqOrdering(o.LowWater) {
+		if c.LowWater.Less(o.LowWater) {
+			// o.LowWater > c.LowWater, filter c.ReadSpans.
+			c.ReadSpans = filterSpans(c.ReadSpans, o.LowWater)
+			c.LowWater = o.LowWater
+		} else {
+			// o.LowWater > c.LowWater, filter c.ReadSpans.
+			o.ReadSpans = filterSpans(o.ReadSpans, c.LowWater)
+		}
+	}
+	// Merge the read spans.
+	if len(o.ReadSpans) == 0 {
+		// Fast-path #1: nothing to merge.
+		return
+	}
+	if len(c.ReadSpans) == 0 {
+		// Fast-path #2: copy o.ReadSpans directly.
+		c.ReadSpans = o.ReadSpans
+		return
+	}
+	// General case: merge the (individually sorted) c.ReadSpans and o.ReadSpans.
+	c.ReadSpans = mergeSpans[readSpanVal, ReadSpan, *ReadSpan](c.ReadSpans, o.ReadSpans)
+}
+
+// filterSpans filters the read spans in spans by the provided timestamp. Any
+// read span equal to or less than minTs is discarded. May mutate spans in the
+// process.
+func filterSpans(spans []ReadSpan, minTs hlc.Timestamp) []ReadSpan {
+	res := spans
+	cpy := false // don't copy unless necessary
+	for i, s := range spans {
+		if s.Timestamp.LessEq(minTs) {
+			// Filter out span.
+			if !cpy {
+				cpy = true
+				res = spans[:i]
+			}
+		} else if cpy {
+			res = append(res, s)
+		}
+	}
+	return res
 }

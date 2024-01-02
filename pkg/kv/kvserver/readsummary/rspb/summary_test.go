@@ -11,22 +11,27 @@
 package rspb
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 var (
-	keyA = []byte("a")
-	keyB = []byte("b")
-	keyC = []byte("c")
-	keyD = []byte("d")
-	keyE = []byte("e")
-	ts10 = hlc.Timestamp{WallTime: 10}
-	ts20 = hlc.Timestamp{WallTime: 20}
-	ts30 = hlc.Timestamp{WallTime: 30}
-	ts40 = hlc.Timestamp{WallTime: 40}
+	keyA    = []byte("a")
+	keyB    = []byte("b")
+	keyC    = []byte("c")
+	keyD    = []byte("d")
+	keyE    = []byte("e")
+	ts10    = hlc.Timestamp{WallTime: 10}
+	ts20    = hlc.Timestamp{WallTime: 20}
+	ts30    = hlc.Timestamp{WallTime: 30}
+	ts40    = hlc.Timestamp{WallTime: 40}
+	uuidNil = uuid.Nil
+	uuid1   = uuid.NamespaceDNS
+	uuid2   = uuid.NamespaceURL
 )
 
 func TestSegmentAddReadSpan(t *testing.T) {
@@ -101,4 +106,117 @@ func TestSegmentClone(t *testing.T) {
 	// Assert clone has not changed.
 	require.NotEqual(t, orig, clone)
 	requireOrig(clone)
+}
+
+func TestSegmentMerge(t *testing.T) {
+	testCases := []struct {
+		a, b Segment
+		exp  Segment
+	}{
+		// Test empty segments.
+		{
+			a:   Segment{},
+			b:   Segment{},
+			exp: Segment{},
+		},
+		// Test forward low water mark.
+		{
+			a:   Segment{LowWater: ts20},
+			b:   Segment{LowWater: ts30},
+			exp: Segment{LowWater: ts30},
+		},
+		// Test filter spans on new low water mark.
+		{
+			a: Segment{
+				LowWater:  ts10,
+				ReadSpans: []ReadSpan{{Timestamp: ts20}, {Timestamp: ts30}, {Timestamp: ts40}},
+			},
+			b: Segment{LowWater: ts30},
+			exp: Segment{
+				LowWater:  ts30,
+				ReadSpans: []ReadSpan{{Timestamp: ts40}},
+			},
+		},
+		// Test merge spans.
+		// NOTE: there's more comprehensive testing of span merging in
+		// merge_spans_test.go.
+		{
+			a: Segment{
+				LowWater: ts10,
+				ReadSpans: []ReadSpan{
+					{Key: keyA, Timestamp: ts30},
+					{Key: keyC, Timestamp: ts30, TxnID: uuid1},
+					{Key: keyD, Timestamp: ts40, TxnID: uuid1},
+				},
+			},
+			b: Segment{
+				LowWater: ts20,
+				ReadSpans: []ReadSpan{
+					{Key: keyB, Timestamp: ts30},
+					{Key: keyC, Timestamp: ts30, TxnID: uuid2},
+					{Key: keyD, Timestamp: ts30, TxnID: uuid2},
+				},
+			},
+			exp: Segment{
+				LowWater: ts20,
+				ReadSpans: []ReadSpan{
+					{Key: keyA, Timestamp: ts30},
+					{Key: keyB, Timestamp: ts30},
+					{Key: keyC, Timestamp: ts30, TxnID: uuidNil},
+					{Key: keyD, Timestamp: ts40, TxnID: uuid1},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			for _, reverse := range []bool{false, true} {
+				t.Run(fmt.Sprintf("reverse=%t", reverse), func(t *testing.T) {
+					a, b := tc.a, tc.b
+					if reverse {
+						a, b = b, a
+					}
+					res := a.Clone()
+					res.Merge(b)
+					require.Equal(t, tc.exp, res)
+				})
+			}
+		})
+	}
+}
+
+func TestFilterSpans(t *testing.T) {
+	orig := []ReadSpan{
+		{Key: keyA, Timestamp: ts20},
+		{Key: keyB, Timestamp: ts30},
+		{Key: keyC, Timestamp: ts40},
+		{Key: keyD, Timestamp: ts30},
+		{Key: keyE, Timestamp: ts20},
+	}
+
+	// Nothing to filter.
+	filter10 := filterSpans(orig, ts10)
+	exp10 := orig
+	require.Equal(t, exp10, filter10)
+
+	// Filter out some.
+	filter20 := filterSpans(orig, ts20)
+	exp20 := []ReadSpan{
+		{Key: keyB, Timestamp: ts30},
+		{Key: keyC, Timestamp: ts40},
+		{Key: keyD, Timestamp: ts30},
+	}
+	require.Equal(t, exp20, filter20)
+
+	// Filter out some more.
+	filter30 := filterSpans(orig, ts30)
+	exp30 := []ReadSpan{
+		{Key: keyC, Timestamp: ts40},
+	}
+	require.Equal(t, exp30, filter30)
+
+	// Filter out all.
+	filter40 := filterSpans(orig, ts40)
+	exp40 := []ReadSpan{}
+	require.Equal(t, exp40, filter40)
 }
