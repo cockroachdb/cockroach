@@ -169,13 +169,15 @@ func (t *lockfreeTracker) Track(ctx context.Context, ts hlc.Timestamp) RemovalTo
 func (t *lockfreeTracker) Untrack(ctx context.Context, tok RemovalToken) {
 	b := tok.(lockfreeToken).b
 	// Note that atomic ops are not required here, as we hold the exclusive lock.
-	b.refcnt--
-	if b.refcnt < 0 {
-		log.Fatalf(ctx, "negative bucket refcount: %d", b.refcnt)
+	// We use them here anyway because they are required by the atomic int wrapper
+	// types.
+	refcnt := b.refcnt.Add(-1)
+	if refcnt < 0 {
+		log.Fatalf(ctx, "negative bucket refcount: %d", refcnt)
 	}
-	if b.refcnt == 0 {
+	if refcnt == 0 {
 		// Reset the bucket, so that future Track() calls can create a new one.
-		b.ts = 0
+		b.ts.Store(0)
 		// If we reset b1, swap the pointers, so that, if b2 is currently
 		// initialized, it becomes b1. If a single bucket is initialized, we want it
 		// to be b1.
@@ -202,7 +204,7 @@ func (t *lockfreeTracker) LowerBound(ctx context.Context) hlc.Timestamp {
 
 // Count is part of the Tracker interface.
 func (t *lockfreeTracker) Count() int {
-	return int(t.b1.refcnt) + int(t.b2.refcnt)
+	return int(t.b1.refcnt.Load()) + int(t.b2.refcnt.Load())
 }
 
 // bucket represent a Tracker bucket: a data structure that coalesces a number
@@ -211,23 +213,23 @@ func (t *lockfreeTracker) Count() int {
 // A bucket can be initialized or uninitialized. It's initialized when the ts is
 // set.
 type bucket struct {
-	ts     int64 // atomic, nanos
-	refcnt int32 // atomic
+	ts     atomic.Int64 // nanos
+	refcnt atomic.Int32
 }
 
 func (b *bucket) String() string {
-	ts := atomic.LoadInt64(&b.ts)
+	ts := b.ts.Load()
 	if ts == 0 {
 		return "uninit"
 	}
-	refcnt := atomic.LoadInt32(&b.refcnt)
+	refcnt := b.refcnt.Load()
 	return fmt.Sprintf("%d requests, lower bound: %s", refcnt, timeutil.Unix(0, ts))
 }
 
 // timestamp returns the bucket's timestamp. The bool retval is true if the
 // bucket is initialized. If false, the timestamp is 0.
 func (b *bucket) timestamp() (int64, bool) {
-	ts := atomic.LoadInt64(&b.ts)
+	ts := b.ts.Load()
 	return ts, ts != 0
 }
 
@@ -241,15 +243,15 @@ func (b *bucket) extendAndJoin(ctx context.Context, ts int64) lockfreeToken {
 	// an even lower value.
 	var t int64
 	for {
-		t = atomic.LoadInt64(&b.ts)
+		t = b.ts.Load()
 		if t != 0 && t <= ts {
 			break
 		}
-		if atomic.CompareAndSwapInt64(&b.ts, t, ts) {
+		if b.ts.CompareAndSwap(t, ts) {
 			break
 		}
 	}
-	atomic.AddInt32(&b.refcnt, 1)
+	b.refcnt.Add(1)
 	return lockfreeToken{b: b}
 }
 
