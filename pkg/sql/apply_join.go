@@ -291,18 +291,13 @@ func runPlanInsidePlan(
 	// we make sure to unset pausablePortal field on the planner.
 	plannerCopy.pausablePortal = nil
 
+	// planner object embeds the extended eval context, so we will modify that
+	// (which won't affect the outer planner's extended eval context), and we'll
+	// use it as the golden version going forward.
+	plannerCopy.extendedEvalCtx.Planner = &plannerCopy
+	plannerCopy.extendedEvalCtx.StreamManagerFactory = &plannerCopy
 	plannerCopy.extendedEvalCtx.RoutineSender = deferredRoutineSender
-	serialEvalCtx := plannerCopy.ExtendedEvalContextCopyAndReset()
-	evalCtxFactory := func(usedConcurrently bool) *extendedEvalContext {
-		// Reuse the same object if this factory is not used concurrently.
-		evalCtx := serialEvalCtx
-		if usedConcurrently {
-			evalCtx = plannerCopy.ExtendedEvalContextCopyAndReset()
-		}
-		evalCtx.Planner = &plannerCopy
-		evalCtx.StreamManagerFactory = &plannerCopy
-		return evalCtx
-	}
+	evalCtxFactory := plannerCopy.ExtendedEvalContextCopy
 
 	if len(plan.subqueryPlans) != 0 {
 		// We currently don't support cases when both the "inner" and the
@@ -322,9 +317,7 @@ func runPlanInsidePlan(
 		if !execCfg.DistSQLPlanner.PlanAndRunSubqueries(
 			ctx,
 			&plannerCopy,
-			func() *extendedEvalContext {
-				return evalCtxFactory(false /* usedConcurrently */)
-			},
+			evalCtxFactory,
 			plan.subqueryPlans,
 			recv,
 			&subqueryResultMemAcc,
@@ -353,7 +346,7 @@ func runPlanInsidePlan(
 	if distributePlan.WillDistribute() {
 		distributeType = DistributionTypeAlways
 	}
-	evalCtx := evalCtxFactory(false /* usedConcurrently */)
+	evalCtx := evalCtxFactory()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
 	planCtx.stmtType = recv.stmtType
 	planCtx.mustUseLeafTxn = params.p.mustUseLeafTxn()
@@ -377,7 +370,13 @@ func runPlanInsidePlan(
 
 	plannerCopy.autoCommit = false
 	execCfg.DistSQLPlanner.PlanAndRunCascadesAndChecks(
-		ctx, &plannerCopy, evalCtxFactory, &plannerCopy.curPlan.planComponents, recv,
+		ctx,
+		&plannerCopy,
+		func(usedConcurrently bool) *extendedEvalContext {
+			return evalCtxFactory()
+		},
+		&plannerCopy.curPlan.planComponents,
+		recv,
 	)
 	// We might have appended some cascades or checks to the plannerCopy, so we
 	// need to update the plan for cleanup purposes before proceeding.

@@ -56,6 +56,7 @@ go_test(
         "//pkg/kv/kvbase",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security/securityassets",

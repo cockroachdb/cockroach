@@ -22,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -156,8 +158,15 @@ func TestMultiRegionDataDriven(t *testing.T) {
 							{Key: "zone", Value: localityName + "a"},
 						},
 					}
+					st := cluster.MakeClusterSettings()
+					// Prevent rebalancing from happening automatically (i.e., make it
+					// exceedingly unlikely).
+					// TODO(rafi): use more explicit cluster setting once it's available;
+					// see https://github.com/cockroachdb/cockroach/issues/110740.
+					allocatorimpl.LeaseRebalanceThreshold.Override(ctx, &st.SV, 10.0)
 					serverArgs[i] = base.TestServerArgs{
 						Locality: localityCfg,
+						Settings: st,
 						Knobs: base.TestingKnobs{
 							SQLExecutor: &sql.ExecutorTestingKnobs{
 								WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
